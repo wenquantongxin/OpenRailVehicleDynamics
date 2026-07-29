@@ -26,9 +26,6 @@ CTestTestfile.cmake
 /results/
 /logs/
 
-# Golden binary assets: tracked deliberately under tests/golden/ via git-lfs or
-# explicit force-add. NOTE: unlike wheel-rail-lab, ORVD must be able to freeze
-# startup snapshots and golden vectors as versioned artifacts (design basis §C),
-# so DO NOT blanket-ignore *.npz. Ignore them only outside the golden tree:
+# Numeric archives are never committed: no golden vectors, snapshots or hashes
+# take part in acceptance.
 *.npz
-!tests/golden/**/*.npz

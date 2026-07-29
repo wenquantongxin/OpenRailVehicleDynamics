@@ -1,17 +1,12 @@
 # libs/systems
 
-**职责**：mini-LeafSystem 运行时——保留 LeafSystem 等价的整车组装层（约束 C6），
-便于车型模板化与 CVODE 单点耦合，但不含 Drake 依赖追踪图的通用机制。
+**职责**：模型中立的系统组装层。
 
-支持的框架特性（GZ18 实际子集，接口按跨车型超集设计）：
-- 端口：Vector/Abstract 的 Input/Output
-- 状态：Discrete / Abstract / **Continuous**（GZ18 仅 3 处连续状态，展平进 CVODE `N_Vector`）
-- 事件：Periodic / Initialization 的 UnrestrictedUpdate、Periodic Publish
-- 缓存条目、数值参数
+把多体运行时、力元与推进器组装成一个可推进的整体，接口不含任何车辆概念。
 
-**里程碑**：M2。
+**对应 Goal**：G40–G42。
 
-**必须复现的陷阱**：同刻事件稳定序、x⁻/x⁺ 可见性、试算/提交/回滚事务性（B4 七项，见 ADR-0003）。
-`motor_pid` / `motor_bridge_proxy` / `torque_applier` 属 IRW 线，GZ18 首版按需实现。
+准入的能力集合由这些 Goal 逐项确定。未准入的能力在编译期不存在，不设占位、不留
+兼容入口——一个"暂时什么也不做"的接口，与一个已实现的接口在调用点上无法区分。
 
-`include/orvd/systems/` = public 头；`src/` = 实现。
+`include/orvd/systems/` 为公开头，`src/` 为实现。

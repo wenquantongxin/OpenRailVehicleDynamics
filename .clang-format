@@ -3,7 +3,7 @@
 ---
 Language: Cpp
 BasedOnStyle: Google
-Standard: c++20
+Standard: Latest
 ColumnLimit: 100
 IndentWidth: 4
 TabWidth: 4

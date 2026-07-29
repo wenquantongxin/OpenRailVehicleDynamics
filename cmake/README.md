@@ -1,10 +1,13 @@
 # cmake/
 
-CMake 辅助模块，预实施占位。规划内容：
+CMake 辅助模块，尚为空。
 
-- `FindSUNDIALS.cmake` — CVODE 定位（wheel-rail-lab 因 SuiteSparse/KLU 链在 macOS 上 config 失败，故手写 find；须钉 7.7.0 / double / int32）。
-- `orvd_warnings.cmake` — 统一告警选项；集中定义 parity 构建对 `-ffast-math` / `-march=native` 的**禁用**守卫。
-- `toolchains/` — 交叉/平台工具链（`linux-gcc.cmake`、`windows-msvc.cmake`）。
-- `orvd_no_drake_guard.cmake` — release 构建断言产物不链接 Drake 的辅助。
+规划中的内容由后续 Goal 建立：
+
+- **G04**：构建入口与目标级编译策略——统一告警选项，且第一方告警不污染 vendored 或
+  第三方代码；预设格式与 CMake 最低版本的一致性也在此解决。
+- **G05**：Eigen 接口目标与 CTest 注册入口。其余依赖定位模块（SUNDIALS、Ceres）留到
+  第一个真实消费者出现时再建立。
+- **G19**：vendor 边界闸门——禁入头检查与"产品目标不链接 `libdrake`"检查。
 
 `CMAKE_MODULE_PATH` 已在顶层 CMakeLists 指向本目录。

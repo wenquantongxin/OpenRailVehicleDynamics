@@ -1,7 +1,8 @@
 # 架构决策记录（ADR）
 
 每份 ADR 记录一个有长期影响、且有替代方案被否决的决策。格式：背景 / 决策 / 后果 / 状态。
-决策一旦 `Accepted` 不原地改写；要推翻则新增一条并把旧条标 `Superseded by ADR-NNNN`。
+已接受的架构决策若被推翻，则新增 ADR 并把旧条标为已取代；不改变决策的事实纠错与澄清
+可以原地修正，由 Git 历史追溯。
 
 ## 索引
 
@@ -11,4 +12,5 @@
 | [0002](0002-single-authoritative-context.md) | 单一权威 Context，树与子系统均为零复制视图 | Accepted |
 | [0003](0003-abstract-advancer-cvode-first.md) | 抽象推进器接口 + 首版只实现 CVODE 后端 | Accepted |
 
-这三条决策的详尽论证、被否方案与复测证据见 [../design/DESIGN_BASIS.md](../design/DESIGN_BASIS.md)。
+早期调研背景见 [../design/DESIGN_BASIS.md](../design/DESIGN_BASIS.md)；它不是现行证据，
+其中承重事实使用前必须按当前源码重新验证。
