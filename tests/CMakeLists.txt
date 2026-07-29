@@ -82,4 +82,16 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
     add_test(NAME verify_cross_process_observation_comparison
              COMMAND verify_cross_process_observation_comparison
                      $<TARGET_FILE:emit_drake_reference_observations>)
+
+    # Measures the reference's kinematics cache invalidation semantics on the
+    # pinned Drake. Reference-only probe: the cache-entry accessors are Drake
+    # public API but must not shape any ORVD interface.
+    add_executable(verify_drake_multibody_kinematics_cache_invalidation
+        drake_reference/verify_drake_multibody_kinematics_cache_invalidation.cc)
+    orvd_configure_first_party_target(
+        verify_drake_multibody_kinematics_cache_invalidation)
+    target_link_libraries(verify_drake_multibody_kinematics_cache_invalidation
+        PRIVATE drake::drake)
+    add_test(NAME verify_drake_multibody_kinematics_cache_invalidation
+             COMMAND verify_drake_multibody_kinematics_cache_invalidation)
 endif()

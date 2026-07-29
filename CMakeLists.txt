@@ -55,7 +55,7 @@ endforeach()
 # include(CTest) defines BUILD_TESTING (default ON) and configures CTest.
 include(CTest)
 option(ORVD_BUILD_DRAKE_REFERENCE_TESTS
-       "Build the Drake-backed reference emitter and comparison tests" OFF)
+       "Build the Drake-backed reference tests" OFF)
 if(ORVD_BUILD_DRAKE_REFERENCE_TESTS AND NOT BUILD_TESTING)
     message(FATAL_ERROR
         "ORVD_BUILD_DRAKE_REFERENCE_TESTS requires BUILD_TESTING=ON")

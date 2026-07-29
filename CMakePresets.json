@@ -30,7 +30,7 @@
     },
     {
       "name": "drake-reference",
-      "displayName": "drake-reference — Drake-backed reference comparison",
+      "displayName": "drake-reference — Drake-backed reference tests",
       "inherits": "dev",
       "cacheVariables": {
         "BUILD_TESTING": "ON",

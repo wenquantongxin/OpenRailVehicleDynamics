@@ -51,7 +51,7 @@ OpenRailVehicleDynamics/
 └── tests/
     ├── comparison/       必需观测与容差判定
     ├── contract/         模型中立场景与观测语义
-    ├── drake_reference/  Drake 参考发射器与跨进程比较（默认不构建）
+    ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```
