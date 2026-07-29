@@ -1,0 +1,34 @@
+# Build
+/build/
+/out/
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+compile_commands.json
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+
+# IDE / editor
+.vscode/
+.idea/
+.cache/
+*.swp
+
+# Results / scratch
+/results/
+/logs/
+
+# Golden binary assets: tracked deliberately under tests/golden/ via git-lfs or
+# explicit force-add. NOTE: unlike wheel-rail-lab, ORVD must be able to freeze
+# startup snapshots and golden vectors as versioned artifacts (design basis §C),
+# so DO NOT blanket-ignore *.npz. Ignore them only outside the golden tree:
+*.npz
+!tests/golden/**/*.npz

@@ -1,0 +1,60 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "parity",
+      "displayName": "parity (bit-exact oracle; fast-math/native OFF)",
+      "description": "The canonical build for reproducing Drake. NEVER enables -ffast-math or -march=native.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "ORVD_FAST_MATH": "OFF",
+        "ORVD_MARCH_NATIVE": "OFF",
+        "ORVD_BUILD_TESTS": "ON",
+        "ORVD_ENABLE_DRAKE_ORACLE": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "dev (debug, assertions on)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ORVD_FAST_MATH": "OFF",
+        "ORVD_MARCH_NATIVE": "OFF",
+        "ORVD_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "release (production, no Drake)",
+      "description": "Post-C1 production build. Drake oracle OFF; must not link libdrake.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ORVD_FAST_MATH": "OFF",
+        "ORVD_MARCH_NATIVE": "OFF",
+        "ORVD_ENABLE_DRAKE_ORACLE": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "parity",  "configurePreset": "parity" },
+    { "name": "dev",     "configurePreset": "dev" },
+    { "name": "release", "configurePreset": "release" }
+  ],
+  "testPresets": [
+    { "name": "parity", "configurePreset": "parity", "output": { "outputOnFailure": true } }
+  ]
+}
