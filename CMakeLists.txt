@@ -1,14 +1,13 @@
 # OpenRailVehicleDynamics (ORVD) — top-level build
 #
-# STATUS: infrastructure stage. This file declares the project, the language
-# standard and the intended module graph, but produces NO targets yet: every
-# module src/ directory is still empty, and add_subdirectory() is gated on a
-# module actually having a CMakeLists.txt. Wire each module in as it is
-# implemented; the order is set by
+# STATUS: infrastructure stage. No product library or executable exists yet.
+# With BUILD_TESTING enabled, the build contains one Eigen and C++23 toolchain
+# self-check. Product modules are wired in only when they gain a CMakeLists.txt;
+# their order is set by
 # docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
 #
 # The first-party compile policy lives in cmake/OrvdFirstPartyTargetPolicy.cmake
-# and is applied per target; the dependency and test foundation is G05.
+# and is applied per target. Eigen and the CTest entry point are configured below.
 
 cmake_minimum_required(VERSION 3.24)
 
@@ -17,10 +16,9 @@ project(OpenRailVehicleDynamics
     DESCRIPTION "Model-neutral, double-only C++ multibody runtime with no Drake runtime dependency"
     LANGUAGES CXX)
 
-# The C++ standard is declared per target by orvd_configure_first_party_target,
-# not through CMAKE_CXX_STANDARD: a global variable would also apply to vendored
-# and third-party targets, which must keep the standard their own sources expect.
-set(CMAKE_CXX_EXTENSIONS OFF)
+# The C++ standard and extension mode are declared per target by
+# orvd_configure_first_party_target. Global CMAKE_CXX_* defaults would also
+# affect vendored and third-party targets.
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -33,8 +31,9 @@ include(OrvdFirstPartyTargetPolicy)
 # --- External dependencies ---
 # Eigen is required outright: every multibody pass is Eigen arithmetic, so a
 # build without it cannot produce anything useful and should fail at configure
-# time rather than at the first compile error. Eigen3::Eigen marks its include
-# directories SYSTEM, which keeps its diagnostics out of first-party output.
+# time rather than at the first compile error. CMake treats include directories
+# from the imported Eigen3::Eigen target as SYSTEM by default, which keeps its
+# diagnostics out of first-party output.
 # SUNDIALS CVODE and Ceres have no consumer yet and are therefore not searched
 # for, not made optional, and given no target.
 find_package(Eigen3 3.4 CONFIG REQUIRED)

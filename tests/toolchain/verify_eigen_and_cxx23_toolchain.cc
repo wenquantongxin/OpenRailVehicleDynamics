@@ -4,18 +4,22 @@
 //
 // This is not a placeholder. If it fails, nothing built after it can be trusted,
 // because every multibody pass is Eigen arithmetic written in C++23.
+#include <cmath>
 #include <cstdio>
 #include <expected>
+#include <initializer_list>
 #include <string_view>
+#include <utility>
 
 #include <Eigen/Dense>
 
 namespace {
 
-// std::expected is C++23 and is how this project reports a failed check: the
-// error carries what went wrong, so the caller cannot ignore it by accident the
-// way an ignored bool return would be.
-std::expected<void, std::string_view> VerifyDenseSolveRecoversKnownSolution() {
+// std::expected verifies the required C++23 library support while carrying a
+// specific failure reason. [[nodiscard]] makes an accidentally ignored check
+// visible to the compiler.
+[[nodiscard]] std::expected<void, std::string_view>
+VerifyDenseSolveRecoversKnownSolution() {
     Eigen::Matrix3d coefficients;
     coefficients << 2.0, -1.0, 0.0,
                     -1.0, 2.0, -1.0,
@@ -25,6 +29,8 @@ std::expected<void, std::string_view> VerifyDenseSolveRecoversKnownSolution() {
 
     const Eigen::Vector3d computed_solution =
         coefficients.colPivHouseholderQr().solve(right_hand_side);
+    if (!computed_solution.allFinite())
+        return std::unexpected("dense linear solve produced non-finite values");
 
     // The matrix is well conditioned and the scale is order one, so a solve that
     // is working at all lands far inside this bound; a solve that is broken
@@ -35,7 +41,8 @@ std::expected<void, std::string_view> VerifyDenseSolveRecoversKnownSolution() {
     return {};
 }
 
-std::expected<void, std::string_view> VerifySelfAdjointEigenvaluesOfKnownMatrix() {
+[[nodiscard]] std::expected<void, std::string_view>
+VerifySelfAdjointEigenvaluesOfKnownMatrix() {
     Eigen::Matrix2d symmetric;
     symmetric << 2.0, 1.0,
                  1.0, 2.0;
@@ -43,10 +50,14 @@ std::expected<void, std::string_view> VerifySelfAdjointEigenvaluesOfKnownMatrix(
     if (solver.info() != Eigen::Success)
         return std::unexpected("self-adjoint eigen decomposition reported failure");
 
+    const Eigen::Vector2d computed_eigenvalues = solver.eigenvalues();
+    if (!computed_eigenvalues.allFinite())
+        return std::unexpected("self-adjoint eigenvalues are non-finite");
+
     // Eigenvalues of [[2,1],[1,2]] are exactly 1 and 3.
     constexpr double kEigenvalueTolerance = 1e-12;
-    if (std::abs(solver.eigenvalues()(0) - 1.0) > kEigenvalueTolerance ||
-        std::abs(solver.eigenvalues()(1) - 3.0) > kEigenvalueTolerance)
+    if (std::abs(computed_eigenvalues(0) - 1.0) > kEigenvalueTolerance ||
+        std::abs(computed_eigenvalues(1) - 3.0) > kEigenvalueTolerance)
         return std::unexpected("self-adjoint eigenvalues are wrong");
     return {};
 }

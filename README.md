@@ -31,7 +31,7 @@
 
 ```text
 OpenRailVehicleDynamics/
-├── CMakeLists.txt        顶层构建（骨架，尚不产出目标）
+├── CMakeLists.txt        顶层构建（当前仅产出工具链自检）
 ├── CMakePresets.json     构建预设：dev / release
 ├── cmake/                CMake 辅助模块
 ├── docs/

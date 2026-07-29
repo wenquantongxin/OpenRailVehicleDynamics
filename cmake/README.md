@@ -2,7 +2,7 @@
 
 | 模块 | 内容 |
 |---|---|
-| `OrvdFirstPartyTargetPolicy.cmake` | `orvd_configure_first_party_target(<target>)`：按目标声明 C++23 与第一方告警 |
+| `OrvdFirstPartyTargetPolicy.cmake` | `orvd_configure_first_party_target(<target>)`：按目标声明 C++23、关闭语言扩展并设置第一方告警 |
 
 ## 为什么按目标而不是全局
 
