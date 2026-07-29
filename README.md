@@ -49,6 +49,7 @@ OpenRailVehicleDynamics/
 │   ├── forces/           力元
 │   └── equilibrium/      静平衡
 └── tests/
+    ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```
 
@@ -57,8 +58,8 @@ OpenRailVehicleDynamics/
 
 ## 外置第三方
 
-Eigen、SUNDIALS CVODE、Ceres。构建入口由 G04 建立，Eigen 在 G05 引入；SUNDIALS
-CVODE 与 Ceres 留到首个真实消费者出现时再引入。
+Eigen 是必需依赖，缺失时配置立即失败。SUNDIALS CVODE 与 Ceres 尚无消费者，因此不查找、
+不设选项、不建目标，留到首个真实消费者出现时再引入。
 
 ## GZ18
 

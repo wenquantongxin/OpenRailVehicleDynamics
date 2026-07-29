@@ -15,8 +15,7 @@
 
 ## 由后续 Goal 建立
 
-- **G05**：Eigen 与 CTest 地基。其余依赖定位模块（SUNDIALS、Ceres）留到第一个真实
-  消费者出现时再建立。
+- 依赖定位模块（SUNDIALS、Ceres）留到第一个真实消费者出现时再建立。
 - **G19**：vendor 边界闸门——禁入头检查与"产品目标不链接 `libdrake`"检查。
 
 `CMAKE_MODULE_PATH` 已在顶层 CMakeLists 指向本目录。

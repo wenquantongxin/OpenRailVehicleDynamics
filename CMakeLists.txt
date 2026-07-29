@@ -31,9 +31,13 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(OrvdFirstPartyTargetPolicy)
 
 # --- External dependencies ---
-# This skeleton configures without third-party packages. G05 introduces Eigen
-# with its first real consumer; SUNDIALS CVODE and Ceres follow only when their
-# first real consumers are implemented.
+# Eigen is required outright: every multibody pass is Eigen arithmetic, so a
+# build without it cannot produce anything useful and should fail at configure
+# time rather than at the first compile error. Eigen3::Eigen marks its include
+# directories SYSTEM, which keeps its diagnostics out of first-party output.
+# SUNDIALS CVODE and Ceres have no consumer yet and are therefore not searched
+# for, not made optional, and given no target.
+find_package(Eigen3 3.4 CONFIG REQUIRED)
 
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: external -> core -> {systems, forces} -> integrators
@@ -49,5 +53,11 @@ foreach(_dir
         add_subdirectory(${_dir})
     endif()
 endforeach()
+
+# include(CTest) defines BUILD_TESTING (default ON) and configures CTest.
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
 
 message(STATUS "ORVD ${PROJECT_VERSION} — infrastructure stage")
