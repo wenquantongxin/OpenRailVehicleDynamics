@@ -5,7 +5,7 @@
 
 ## 当前状态
 
-- 工作分支：`codex/model-neutral-multibody-runtime`
+- 工作分支：`main`
 - 当前阶段：正式实施前的基础设施收口
 - 当前 Goal：`G02`
 - 产品代码状态：尚未开始
