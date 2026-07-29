@@ -27,6 +27,15 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "drake-reference",
+      "displayName": "drake-reference — Drake-backed reference comparison",
+      "inherits": "dev",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "ORVD_BUILD_DRAKE_REFERENCE_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -37,12 +46,23 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "drake-reference",
+      "configurePreset": "drake-reference"
     }
   ],
   "testPresets": [
     {
       "name": "dev",
       "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "drake-reference",
+      "configurePreset": "drake-reference",
       "output": {
         "outputOnFailure": true
       }

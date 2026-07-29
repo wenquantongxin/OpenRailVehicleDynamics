@@ -24,3 +24,62 @@ target_link_libraries(verify_scenario_and_observation_contract
     PRIVATE orvd_test_contract)
 add_test(NAME verify_scenario_and_observation_contract
          COMMAND verify_scenario_and_observation_contract)
+
+# The comparison judge: it holds the required observation set and the tolerance
+# rule, so that neither side of a comparison can certify itself.
+add_library(orvd_test_comparison STATIC
+    comparison/observation_comparator.cc
+    comparison/required_observations.cc)
+orvd_configure_first_party_target(orvd_test_comparison)
+target_link_libraries(orvd_test_comparison PUBLIC orvd_test_contract)
+
+add_executable(verify_observation_comparator
+    comparison/verify_observation_comparator.cc)
+orvd_configure_first_party_target(verify_observation_comparator)
+target_link_libraries(verify_observation_comparator
+    PRIVATE orvd_test_comparison)
+add_test(NAME verify_observation_comparator
+         COMMAND verify_observation_comparator)
+
+# Drake-backed reference. Off by default: Drake is a comparison reference for the
+# migration, not a dependency of anything this project ships. Turning it on must
+# really find Drake, really build the targets and really register the test.
+if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
+    if(NOT UNIX)
+        message(FATAL_ERROR
+            "Drake reference tests currently require POSIX process primitives")
+    endif()
+    # Location comes from the standard CMAKE_PREFIX_PATH; no machine path is
+    # written into the repository.
+    #
+    # PATH-derived prefixes are excluded for this search: an unrelated toolchain
+    # on PATH (a conda environment, say) otherwise supplies its own build of a
+    # dependency Drake also needs, whose directory then lands in the executable's
+    # RUNPATH and takes the C++ runtime with it. The result is a binary that
+    # links cleanly and cannot start.
+    set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
+    find_package(drake CONFIG REQUIRED)
+    unset(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH)
+    if(drake_FOUND AND NOT drake_VERSION VERSION_EQUAL "1.54.0")
+        message(FATAL_ERROR
+            "Drake reference tests require Drake 1.54.0; found ${drake_VERSION}")
+    endif()
+
+    add_executable(emit_drake_reference_observations
+        drake_reference/emit_drake_reference_observations.cc)
+    orvd_configure_first_party_target(emit_drake_reference_observations)
+    target_link_libraries(emit_drake_reference_observations
+        PRIVATE orvd_test_contract drake::drake)
+
+    add_executable(verify_cross_process_observation_comparison
+        drake_reference/verify_cross_process_observation_comparison.cc)
+    orvd_configure_first_party_target(verify_cross_process_observation_comparison)
+    # The comparison never links Drake: it starts the reference as a separate
+    # process and reads what it wrote.
+    target_link_libraries(verify_cross_process_observation_comparison
+        PRIVATE orvd_test_comparison)
+
+    add_test(NAME verify_cross_process_observation_comparison
+             COMMAND verify_cross_process_observation_comparison
+                     $<TARGET_FILE:emit_drake_reference_observations>)
+endif()

@@ -1,6 +1,5 @@
 #include "contract/scenario_definition.h"
 
-#include <cmath>
 #include <stdexcept>
 #include <string_view>
 
@@ -12,14 +11,13 @@ constexpr double kLowerLinkLengthMeters = 0.3;
 constexpr double kUpperLinkMassKilograms = 1.3;
 constexpr double kLowerLinkMassKilograms = 0.7;
 constexpr double kFloatingLinkMassKilograms = 2.1;
-constexpr double kGravityAcceleration = 9.81;
+constexpr double kGravityAccelerationMetersPerSecondSquared = 9.81;
 
 // Layout produced by this topology, in Drake's depth-first coordinate order:
 //   positions  [0]=shoulder angle, [1]=elbow angle,
 //              [2..5]=floating quaternion, [6..8]=floating translation
 //   velocities [0]=shoulder rate,  [1]=elbow rate,
 //              [2..4]=floating angular rate, [5..7]=floating linear rate
-constexpr int kPositionCount = 9;
 constexpr int kVelocityCount = 8;
 constexpr int kFirstFloatingLinearVelocityIndex = 5;
 
@@ -28,9 +26,8 @@ constexpr int kFirstFloatingLinearVelocityIndex = 5;
 ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
     std::string_view excitation) {
     ScenarioDefinition scenario;
-    scenario.name = std::string("revolute_chain_with_floating_body.") +
-                    std::string(excitation);
-    scenario.gravity_acceleration_meters_per_second_squared = kGravityAcceleration;
+    scenario.gravity_acceleration_meters_per_second_squared =
+        kGravityAccelerationMetersPerSecondSquared;
 
     scenario.links = {
         {"upper_link", kUpperLinkMassKilograms,
@@ -49,7 +46,24 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
         {"elbow_joint", "upper_link", "lower_link",
          {0.0, -kUpperLinkLengthMeters, 0.0}, Eigen::Vector3d::UnitX()},
     };
-    scenario.free_floating_link_name = "floating_link";
+    scenario.generalized_position_observation_kinds = {
+        ObservationKind::kAngleRadians,
+        ObservationKind::kAngleRadians,
+        ObservationKind::kUnitQuaternionComponent,
+        ObservationKind::kUnitQuaternionComponent,
+        ObservationKind::kUnitQuaternionComponent,
+        ObservationKind::kUnitQuaternionComponent,
+        ObservationKind::kTranslationMeters,
+        ObservationKind::kTranslationMeters,
+        ObservationKind::kTranslationMeters,
+    };
+    scenario.generalized_force_component_kinds.assign(
+        kVelocityCount, GeneralizedForceComponentKind::kTorqueNewtonMetres);
+    for (int velocity_index = kFirstFloatingLinearVelocityIndex;
+         velocity_index < kVelocityCount; ++velocity_index) {
+        scenario.generalized_force_component_kinds[velocity_index] =
+            GeneralizedForceComponentKind::kForceNewtons;
+    }
 
     // A legal unit quaternion. How an implementation handles a non-unit
     // quaternion is a separate question about normalization, and mixing it in
@@ -78,41 +92,13 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
     }
 
     const double reach_meters = kUpperLinkLengthMeters + kLowerLinkLengthMeters;
-    const double characteristic_angular_acceleration = kGravityAcceleration / reach_meters;
-
-    scenario.mass_matrix_excitation_scales.assign(
-        kFirstFloatingLinearVelocityIndex, characteristic_angular_acceleration);
-    scenario.mass_matrix_excitation_scales.resize(kVelocityCount, kGravityAcceleration);
-
-    ComparisonScales& scales = scenario.comparison_scales;
-    scales.angle_radians = 1.0;
-    scales.translation_meters = reach_meters;
-
-    // Rotational velocity indices carry torque; translational ones carry force.
-    // Each entry is the gravitational moment or weight the corresponding degree
-    // of freedom actually works against, built from the masses and lengths above.
-    const double revolute_torque_scale =
-        (kUpperLinkMassKilograms + kLowerLinkMassKilograms) * kGravityAcceleration *
-        reach_meters;
-    const double floating_torque_scale =
-        kFloatingLinkMassKilograms * kGravityAcceleration * reach_meters;
-    const double floating_force_scale =
-        kFloatingLinkMassKilograms * kGravityAcceleration;
-
-    scales.generalized_torque_component_newton_metres.assign(kVelocityCount, 0.0);
-    scales.generalized_force_component_newtons.assign(kVelocityCount, 0.0);
-    for (int velocity_index = 0; velocity_index < kVelocityCount; ++velocity_index) {
-        if (velocity_index < 2) {
-            scales.generalized_torque_component_newton_metres[velocity_index] =
-                revolute_torque_scale;
-        } else if (velocity_index < kFirstFloatingLinearVelocityIndex) {
-            scales.generalized_torque_component_newton_metres[velocity_index] =
-                floating_torque_scale;
-        } else {
-            scales.generalized_force_component_newtons[velocity_index] =
-                floating_force_scale;
-        }
-    }
+    const double angular_acceleration_radians_per_second_squared =
+        kGravityAccelerationMetersPerSecondSquared / reach_meters;
+    scenario.mass_matrix_column_generalized_accelerations.assign(
+        kFirstFloatingLinearVelocityIndex,
+        angular_acceleration_radians_per_second_squared);
+    scenario.mass_matrix_column_generalized_accelerations.resize(
+        kVelocityCount, kGravityAccelerationMetersPerSecondSquared);
     return scenario;
 }
 

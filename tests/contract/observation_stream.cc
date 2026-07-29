@@ -1,17 +1,21 @@
 #include "contract/observation_stream.h"
 
+#include <algorithm>
+#include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
-#include <cstring>
+#include <limits>
 #include <sstream>
 
 namespace orvd_contract {
 namespace {
 
 std::string FormatBinary64Payload(double value) {
-    std::uint64_t payload;
-    std::memcpy(&payload, &value, sizeof(payload));
+    static_assert(sizeof(double) == sizeof(std::uint64_t));
+    static_assert(std::numeric_limits<double>::is_iec559);
+    const std::uint64_t payload = std::bit_cast<std::uint64_t>(value);
     char text[17];
     std::snprintf(text, sizeof(text), "%016llx",
                   static_cast<unsigned long long>(payload));
@@ -24,29 +28,18 @@ bool ParseBinary64Payload(std::string_view text, double* value) {
         std::from_chars(text.data(), text.data() + text.size(), payload, 16);
     if (result.ec != std::errc{} || result.ptr != text.data() + text.size())
         return false;
-    std::memcpy(value, &payload, sizeof(*value));
+    *value = std::bit_cast<double>(payload);
     return true;
 }
 
-}  // namespace
-
-bool ParseObservationKind(std::string_view name, ObservationKind* kind) {
-    constexpr ObservationKind kAllKinds[] = {
-        ObservationKind::kAngleRadians,
-        ObservationKind::kUnitQuaternionComponent,
-        ObservationKind::kTranslationMeters,
-        ObservationKind::kForceNewtons,
-        ObservationKind::kTorqueNewtonMetres,
-        ObservationKind::kRotationMatrixElement,
-    };
-    for (const ObservationKind candidate : kAllKinds) {
-        if (ObservationKindName(candidate) == name) {
-            *kind = candidate;
-            return true;
-        }
-    }
-    return false;
+template <typename Record>
+void EraseRecordNamed(std::vector<Record>* records, std::string_view name) {
+    std::erase_if(*records, [name](const Record& record) {
+        return record.name == name;
+    });
 }
+
+}  // namespace
 
 const Observation* ObservationStream::FindObservation(std::string_view name) const {
     for (const Observation& observation : observations)
@@ -60,19 +53,25 @@ const TopologyFact* ObservationStream::FindTopologyFact(std::string_view name) c
     return nullptr;
 }
 
+const UnusableObservation* ObservationStream::FindUnusableObservation(
+    std::string_view name) const {
+    for (const UnusableObservation& observation : unusable_observations)
+        if (observation.name == name) return &observation;
+    return nullptr;
+}
+
 std::string FormatObservationStream(const ObservationStream& stream) {
     std::string text;
     for (const TopologyFact& fact : stream.topology_facts)
         text += "@topology " + fact.name + " " + std::to_string(fact.value) + "\n";
     for (const Observation& observation : stream.observations)
         text += "@observation " + observation.name + " " +
-                std::string(ObservationKindName(observation.kind)) + " " +
                 FormatBinary64Payload(observation.value) + "\n";
     return text;
 }
 
-bool ParseObservationStream(std::string_view text, ObservationStream* stream,
-                            std::string* parse_error) {
+ObservationStream ParseObservationStream(std::string_view text) {
+    ObservationStream stream;
     std::istringstream lines{std::string(text)};
     std::string line;
     while (std::getline(lines, line)) {
@@ -83,45 +82,39 @@ bool ParseObservationStream(std::string_view text, ObservationStream* stream,
         if (directive == "@topology") {
             std::string name;
             long long value = 0;
-            // A topology fact that does not parse is a fact we cannot compare,
-            // so it is dropped rather than guessed at; a required one missing is
-            // caught by the comparator, which knows which ones it needs.
-            if (!(fields >> name >> value)) continue;
+            if (!(fields >> name)) continue;
+            EraseRecordNamed(&stream.topology_facts, name);
+            if (!(fields >> value)) continue;
             TopologyFact fact{name, value};
-            bool replaced = false;
-            for (TopologyFact& existing : stream->topology_facts) {
-                if (existing.name == name) { existing = fact; replaced = true; break; }
-            }
-            if (!replaced) stream->topology_facts.push_back(fact);
+            stream.topology_facts.push_back(std::move(fact));
         } else if (directive == "@observation") {
-            std::string name, kind_name, payload_text;
-            if (!(fields >> name >> kind_name >> payload_text)) continue;
+            std::string name;
+            if (!(fields >> name)) continue;
+            EraseRecordNamed(&stream.observations, name);
+            EraseRecordNamed(&stream.unusable_observations, name);
 
-            ObservationKind kind{};
-            if (!ParseObservationKind(kind_name, &kind)) {
-                *parse_error = "observation '" + name + "' declares unknown kind '" +
-                               kind_name + "'";
-                return false;
+            std::string payload_text;
+            if (!(fields >> payload_text)) {
+                stream.unusable_observations.push_back(
+                    {std::move(name), "payload is missing"});
+                continue;
             }
             double value = 0.0;
             if (!ParseBinary64Payload(payload_text, &value)) {
-                *parse_error = "observation '" + name + "' has a malformed payload";
-                return false;
+                stream.unusable_observations.push_back(
+                    {std::move(name), "payload is malformed"});
+                continue;
             }
             if (!std::isfinite(value)) {
-                *parse_error = "observation '" + name + "' is not finite";
-                return false;
+                stream.unusable_observations.push_back(
+                    {std::move(name), "value is not finite"});
+                continue;
             }
-            Observation observation{name, kind, value};
-            bool replaced = false;
-            for (Observation& existing : stream->observations) {
-                if (existing.name == name) { existing = observation; replaced = true; break; }
-            }
-            if (!replaced) stream->observations.push_back(observation);
+            stream.observations.push_back({std::move(name), value});
         }
         // Any other directive belongs to something this reader does not consume.
     }
-    return true;
+    return stream;
 }
 
 }  // namespace orvd_contract

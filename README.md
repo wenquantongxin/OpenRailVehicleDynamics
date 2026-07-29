@@ -31,8 +31,8 @@
 
 ```text
 OpenRailVehicleDynamics/
-├── CMakeLists.txt        顶层构建（当前仅产出工具链自检）
-├── CMakePresets.json     构建预设：dev / release
+├── CMakeLists.txt        顶层构建（当前仅产出模型中立自检）
+├── CMakePresets.json     构建预设：dev / release / drake-reference
 ├── cmake/                CMake 辅助模块
 ├── docs/
 │   ├── planning/         唯一实施路书
@@ -49,7 +49,9 @@ OpenRailVehicleDynamics/
 │   ├── forces/           力元
 │   └── equilibrium/      静平衡
 └── tests/
+    ├── comparison/       必需观测与容差判定
     ├── contract/         模型中立场景与观测语义
+    ├── drake_reference/  Drake 参考发射器与跨进程比较（默认不构建）
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```

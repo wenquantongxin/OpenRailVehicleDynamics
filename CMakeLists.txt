@@ -1,10 +1,9 @@
 # OpenRailVehicleDynamics (ORVD) — top-level build
 #
 # STATUS: infrastructure stage. No product library or executable exists yet.
-# With BUILD_TESTING enabled, the build contains one Eigen and C++23 toolchain
-# self-check. Product modules are wired in only when they gain a CMakeLists.txt;
-# their order is set by
-# docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
+# With BUILD_TESTING enabled, the build contains only model-neutral self-checks.
+# Product modules are wired in only when they gain a CMakeLists.txt; their order
+# is set by docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
 #
 # The first-party compile policy lives in cmake/OrvdFirstPartyTargetPolicy.cmake
 # and is applied per target. Eigen and the CTest entry point are configured below.
@@ -55,6 +54,12 @@ endforeach()
 
 # include(CTest) defines BUILD_TESTING (default ON) and configures CTest.
 include(CTest)
+option(ORVD_BUILD_DRAKE_REFERENCE_TESTS
+       "Build the Drake-backed reference emitter and comparison tests" OFF)
+if(ORVD_BUILD_DRAKE_REFERENCE_TESTS AND NOT BUILD_TESTING)
+    message(FATAL_ERROR
+        "ORVD_BUILD_DRAKE_REFERENCE_TESTS requires BUILD_TESTING=ON")
+endif()
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()

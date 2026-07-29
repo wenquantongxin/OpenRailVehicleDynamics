@@ -7,10 +7,8 @@
 // concept here and none is coming: a scenario that knew about wheelsets would
 // shape the runtime interfaces around one consumer.
 //
-// Comparison scales live with the scenario because they are derived from the
-// same inputs that build the model: link lengths, masses and gravity. A scale
-// recovered by looking at output would be fitted to whatever the reference
-// happened to produce, which is why the judge never computes one.
+// The scenario declares the physical kind of each generalized-force component,
+// while the judge owns the corresponding tolerance.
 #pragma once
 
 #include <string>
@@ -18,52 +16,47 @@
 
 #include <Eigen/Dense>
 
+#include "contract/observation_semantics.h"
+
 namespace orvd_contract {
 
 struct LinkDefinition {
     std::string name;
-    double mass_kilograms{1.0};
-    Eigen::Vector3d center_of_mass_in_link_frame{Eigen::Vector3d::Zero()};
-    Eigen::Vector3d solid_box_full_extents_meters{Eigen::Vector3d::Ones()};
+    double mass_kilograms;
+    Eigen::Vector3d center_of_mass_in_link_frame_meters;
+    Eigen::Vector3d solid_box_full_extents_meters;
 };
 
 struct RevoluteJointDefinition {
     std::string name;
     std::string parent_link_name;  // empty means the world link
     std::string child_link_name;
-    Eigen::Vector3d parent_frame_offset_in_parent{Eigen::Vector3d::Zero()};
-    Eigen::Vector3d axis_in_parent{Eigen::Vector3d::UnitZ()};
+    Eigen::Vector3d parent_frame_translation_in_parent_meters;
+    Eigen::Vector3d axis_in_parent;
 };
 
-// Per-component reference magnitudes. Rotational and translational entries are
-// kept apart because they carry different dimensions; one shared scale would let
-// an error in the smaller component hide behind the larger one.
-struct ComparisonScales {
-    double angle_radians{1.0};
-    double translation_meters{0.0};
-    std::vector<double> generalized_force_component_newtons;         // per velocity index
-    std::vector<double> generalized_torque_component_newton_metres;  // per velocity index
+enum class GeneralizedForceComponentKind {
+    kForceNewtons,
+    kTorqueNewtonMetres,
 };
 
 struct ScenarioDefinition {
-    std::string name;
-    double gravity_acceleration_meters_per_second_squared{9.81};
+    double gravity_acceleration_meters_per_second_squared;
     std::vector<LinkDefinition> links;
     std::vector<RevoluteJointDefinition> revolute_joints;
-    std::string free_floating_link_name;
 
     // Prescribed state and excitation. Both sides are driven from these exact
     // numbers rather than from each implementation's own defaults.
     std::vector<double> generalized_positions;
     std::vector<double> generalized_velocities;
     std::vector<double> generalized_accelerations;
+    std::vector<ObservationKind> generalized_position_observation_kinds;
+    std::vector<GeneralizedForceComponentKind> generalized_force_component_kinds;
 
-    // Strictly positive in every entry: a column of the mass matrix excited by
-    // zero is never observed at all. This is separate from the prescribed
-    // accelerations above, which drive inverse dynamics and may be zero.
-    std::vector<double> mass_matrix_excitation_scales;
-
-    ComparisonScales comparison_scales;
+    // One generalized acceleration per mass-matrix column. Rotational entries
+    // are rad/s² and translational entries are m/s². Every entry is non-zero so
+    // every column produces an observable generalized-force response.
+    std::vector<double> mass_matrix_column_generalized_accelerations;
 };
 
 // A two-link revolute chain plus one free-floating body. The joint axes are
