@@ -4,7 +4,8 @@
 # standard, options and the intended module graph, but produces NO targets yet
 # (module src/ directories are empty). add_subdirectory() calls are gated on the
 # presence of a CMakeLists.txt in each module so configuration stays clean until
-# code lands. Wire each module in as it is implemented (see docs/planning/PROJECT_PHASES.md).
+# code lands. Wire each module in as it is implemented (see
+# docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md).
 
 cmake_minimum_required(VERSION 3.24)
 

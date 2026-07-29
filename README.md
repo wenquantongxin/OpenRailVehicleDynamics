@@ -36,7 +36,7 @@ OpenRailVehicleDynamics/
 ├── docs/
 │   ├── README.md              # 文档索引
 │   ├── planning/
-│   │   └── PROJECT_PHASES.md  # ★ 规划书：分阶段难点 / 测试点 / 工时
+│   │   └── DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md  # 当前唯一实施路书
 │   ├── design/
 │   │   └── DESIGN_BASIS.md    # ★ 设计基线 + 两轮对抗审查记录（REV2）
 │   ├── adr/                   # 架构决策记录（已锁定的关键决策）
@@ -87,7 +87,8 @@ cmake --build build/parity
 | **M3** | 快照 / 静平衡 / 输出契约 / CLI / Linux+MSVC 打包 | 13–20 pw |
 | M4（可选） | 逐 pass 自研化，摆脱 vendored 源码 | +25–40 pw |
 
-完整的难点 / 测试点 / 摆动因子见 **[docs/planning/PROJECT_PHASES.md](docs/planning/PROJECT_PHASES.md)**。
+当前实施顺序与逐项完成门见
+**[Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)**。
 
 ## 关键设计决策（已锁定，详见 docs/adr/）
 

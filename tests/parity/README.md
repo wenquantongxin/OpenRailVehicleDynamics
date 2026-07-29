@@ -28,4 +28,6 @@ M0 验收门：Drake **自重放**跨进程逐位一致（同平台同构建）�
 
 同平台同构建身份逐位；跨平台仅工程容差回归。parity 构建强制 `-ffast-math` / `-march=native` 关闭。
 
-详见 [../../docs/planning/PROJECT_PHASES.md](../../docs/planning/PROJECT_PHASES.md) M0、设计基线 §10.2（硬约束 5、6）。
+后续改造按
+[Drake 多体运行时脱耦路书](../../docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)
+中的 G06–G08 执行。
