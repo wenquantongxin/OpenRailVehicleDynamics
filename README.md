@@ -36,6 +36,7 @@ OpenRailVehicleDynamics/
 ├── cmake/                CMake 辅助模块
 ├── docs/
 │   ├── planning/         唯一实施路书
+│   ├── engineering/      第一方工程约束
 │   ├── adr/              架构决策记录
 │   ├── design/           历史调研输入（非现行依据）
 │   └── review/           历史审查往来（非现行依据）

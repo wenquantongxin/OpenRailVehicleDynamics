@@ -5,6 +5,7 @@
 | 文档 | 内容 |
 |---|---|
 | [planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) | **唯一实施路书**：18 个子目标、50 个原子 Goal、依赖关系与完成门。 |
+| [engineering/FIRST_PARTY_ENGINEERING_RULES.md](engineering/FIRST_PARTY_ENGINEERING_RULES.md) | **第一方工程约束**：命名、兼容层、输入解析、检查深度、热路径与验收依据；即刻生效。 |
 | [adr/](adr/) | **架构决策记录**：方案 B、单一 Context、CVODE 优先等已接受决策。 |
 
 ## 调研输入
@@ -17,8 +18,9 @@
 ## 阅读顺序
 
 1. 开始工作前读唯一实施路书，确认当前 Goal、前置产物和明确不做事项。
-2. 遇到长期架构取舍时读对应 ADR。
-3. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
+2. 写第一方代码前读第一方工程约束；它即刻生效，不随 Goal 变化。
+3. 遇到长期架构取舍时读对应 ADR。
+4. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
 
 ## 文档纪律
 
