@@ -7,7 +7,7 @@
 
 - 工作分支：`main`
 - 当前阶段：正式实施前的基础设施收口
-- 当前 Goal：`G12`
+- 当前 Goal：`G13`
 - 产品代码状态：尚未开始
 - 仓库外探针：只作一次性研究输入，不直接复制进产品
 
@@ -16,7 +16,7 @@
 - 采用方案 B：先 vendor Drake 刚性多体树与拓扑，再逐步替换。
 - 产品只支持 `double`；运行期不保留自动微分或符号标量。
 - 最终产品不链接 `libdrake`。
-- Eigen、SUNDIALS CVODE、Ceres 是允许的外置第三方。
+- Eigen、fmt、SUNDIALS CVODE、Ceres 是允许的外置第三方。
 - 保留模型中立的系统组装层；首个推进后端是 CVODE。
 - GZ18 在模型中立运行时稳定后接入，不参与底层接口塑形。
 - 连续量以工程相对误差 `1e-3` 为主；近零量使用按单位声明的绝对限；旋转使用 SO(3) 角度。
@@ -134,9 +134,10 @@ Goal GNN — <明确的功能名称>
 
 ## 子目标 5：落地 topology 与必要支撑
 
-- [ ] **G12 — 提供必需生成头与第三方边界**
-  - 产物：Drake 源码树缺失的配置头及明确的 Eigen/fmt/Abseil/Highway 处置。
+- [x] **G12 — 裁决生成头需求与第三方边界**
+  - 产物：现场裁决准入源码的生成头需求（仅在实际闭包需要时提供），以及 Eigen/fmt/Abseil/Highway 的明确处置。
   - 完成门：只提供准入源码实际需要的定义；Highway 不准入首版产品，四个位姿组合函数由 G15 按数学定义独立实现；未使用功能不进入构建；缺定义在配置或编译阶段暴露。
+  - 实测结论：当前生成头需求为**零**——闭包中唯一源码树缺失的头 `common/autodiff_config.h` 只经已裁 `discard` 的标量机制抵达，因此不造 shim、空头、空目录或占位声明；G16 之后若真实的 double-only 闭包重新触达缺失头，再随真实消费者处理。准入源码不直接使用 Abseil；在当前准入闭包中，Highway 随 `fast_pose_composition_functions` 裁为 `first_party` 而离开闭包。产品中 vendored topology 目标对 fmt 的显式查找与直接链接在 G13 随第一个真实目标落地，此处不建空目标、选项或能力探针。
 
 - [ ] **G13 — vendor 刚性 topology 源码**
   - 产物：可编译的 `multibody/topology` 源码目标。

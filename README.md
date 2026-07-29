@@ -63,8 +63,9 @@ OpenRailVehicleDynamics/
 
 ## 外置第三方
 
-Eigen 是必需依赖，缺失时配置立即失败。SUNDIALS CVODE 与 Ceres 尚无消费者，因此不查找、
-不设选项、不建目标，留到首个真实消费者出现时再引入。
+Eigen 是必需依赖，缺失时配置立即失败。fmt 已准入，将随 G13 的首个 vendored topology
+目标引入；当前产品构建尚不直接查找或链接它。SUNDIALS CVODE 与 Ceres 尚无消费者，
+因此不查找、不设选项、不建目标，留到首个真实消费者出现时再引入。
 
 ## GZ18
 
