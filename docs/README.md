@@ -1,19 +1,27 @@
 # ORVD 文档索引
 
+## 当前权威文件
+
 | 文档 | 内容 |
 |---|---|
-| [design/DESIGN_BASIS.md](design/DESIGN_BASIS.md) | **设计基线**：目标与硬约束、Drake/仓库侧第一手观察、路线判断（方案 B）、代码落地方案、保真陷阱清册，以及两轮对抗审查的完整裁决记录（§10 REV2）。这是项目的权威依据。 |
-| [planning/PROJECT_PHASES.md](planning/PROJECT_PHASES.md) | **规划书**：M0–M4 分阶段的难点、测试点、工时与摆动因子。 |
-| [adr/](adr/) | **架构决策记录**：已锁定的关键决策，每条一份，含背景、决策、后果、状态。 |
-| [review/](review/) | 对抗审查往来存档（供追溯，不作为当前依据；当前结论已并入设计基线 §10）。 |
+| [planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) | **唯一实施路书**：18 个子目标、50 个原子 Goal、依赖关系与完成门。 |
+| [adr/](adr/) | **架构决策记录**：方案 B、单一 Context、CVODE 优先等已接受决策。 |
+
+## 调研输入
+
+| 文档 | 内容 |
+|---|---|
+| [design/DESIGN_BASIS.md](design/DESIGN_BASIS.md) | 早期对抗审查请求、源码观察与旧 REV2 裁决；仅作调研输入，不是现行计划或验收依据。 |
+| [review/](review/) | 审查往来说明；不作为实现依据。 |
 
 ## 阅读顺序
 
-1. 新加入者：先读根 [README.md](../README.md) 建立全局，再读 `design/DESIGN_BASIS.md` §0–§6。
-2. 要动手实施：读 `planning/PROJECT_PHASES.md` 定位当前里程碑，再回设计基线 §5（落地方案）与 §8（陷阱）。
-3. 要理解某个架构取舍：读对应 `adr/` 条目。
+1. 开始工作前读唯一实施路书，确认当前 Goal、前置产物和明确不做事项。
+2. 遇到长期架构取舍时读对应 ADR。
+3. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
 
 ## 文档纪律
 
-- 设计基线中所有承重数字都标注了出处（path:line）。修改基线时，新数字须第一手复测，并在 §10 记分表登记。
-- 决策变更走 ADR：新增一条 `adr/NNNN-*.md`（状态 `Proposed`→`Accepted`），旧决策标 `Superseded by ADR-NNNN`，不原地改写历史。
+- 任何实施状态、顺序和完成门只写在唯一实施路书中，不建立平行规划。
+- 决策改变走新 ADR；Git 历史承担旧内容追溯，不保留废弃兼容说明。
+- 不把文件数、符号数、哈希、历史输出或某次性能结果写成永久验收依据。
