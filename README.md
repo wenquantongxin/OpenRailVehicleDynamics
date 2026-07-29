@@ -41,7 +41,9 @@ OpenRailVehicleDynamics/
 │   ├── design/           历史调研输入（非现行依据）
 │   └── review/           历史审查往来（非现行依据）
 ├── external/
-│   └── drake_mbtree/     vendored Drake 刚性多体树与拓扑的落位（尚未 vendor）
+│   └── drake_mbtree/     vendored Drake 源码的落位（尚未 vendor）与逐文件处置清单
+├── tools/
+│   └── drake_source_boundary/  源码闭包解析工具（开发期，Python 标准库）
 ├── libs/
 │   ├── core/             运行时地基：Context、缓存、求值调度
 │   ├── systems/          模型中立组装层

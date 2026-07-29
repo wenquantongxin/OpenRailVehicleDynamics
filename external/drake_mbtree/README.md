@@ -1,10 +1,8 @@
 # external/drake_mbtree
 
-本目录**尚为空**。它是 vendored Drake 刚性多体树与拓扑源码的落位。
+本目录尚未放入 vendored Drake 源码；当前只有边界与来源说明。
 
 ## 来源与逐文件处置
-
-上游是 Robot Locomotion Group @ CSAIL 的 Drake，许可证 BSD-3-Clause（宽松、非传染）。
 
 **确切的 commit、tag、许可证标识与每个候选文件的处置，唯一权威是
 [`SOURCE_DISPOSITION.txt`](SOURCE_DISPOSITION.txt)。** 本文件不复述这些值——同一事实
@@ -25,11 +23,12 @@ contact、solver 与 deformable。
 
 ## 分发义务（放置源码时一并完成，G18）
 
-1. 保留上游 `LICENSE.TXT`。Drake 不写逐文件版权头，因此履约靠随附仓库级许可证，
-   不给源码人工补写上游本来不存在的版权声明。
+1. 保留上游 `LICENSE.TXT`，并原样保留准入支撑文件已有的逐文件版权与许可证声明；
+   tree/topology 候选文件没有的声明不人工补写。
 2. 逐文件清单：每个 vendored 文件可追溯到上游路径与来源 commit。
 3. 修改记录：改了哪些行、为什么改。
-4. `NOTICE`：BSD-3 版权声明，以及源码中标注的其他第三方许可证。
+4. `NOTICE`：仓库级 BSD-3 版权声明、清单记录的 Apache-2.0 支撑文件，以及其他实际
+   进入产品的第三方许可证。
 
 源码与二进制分发都须携带上述材料。
 

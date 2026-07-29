@@ -1,3 +1,11 @@
+# The source-boundary analyzer is a development tool, not a shipped artifact, so
+# Python is only ever required when testing is enabled. It builds its own
+# synthetic source trees, so this check needs neither Drake nor a Drake clone.
+find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+add_test(NAME verify_source_closure_analyzer
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_source_closure_analyzer.py)
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain
