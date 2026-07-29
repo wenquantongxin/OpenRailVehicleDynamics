@@ -6,6 +6,18 @@ add_test(NAME verify_source_closure_analyzer
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_source_closure_analyzer.py)
 
+# The source-boundary probe is a development tool with a GNU-style compiler
+# command line, not a product target. Its self-check uses the same native
+# compiler executable as this build. Cross builds and MSVC-style frontends are
+# left to the CMake-native product build exercised later in the roadmap.
+if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
+   CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+    add_test(NAME verify_admitted_translation_unit_compile_probe
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_admitted_translation_unit_compile_probe.py
+                     --compiler ${CMAKE_CXX_COMPILER})
+endif()
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain
