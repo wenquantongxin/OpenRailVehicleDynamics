@@ -49,6 +49,7 @@ OpenRailVehicleDynamics/
 │   ├── forces/           力元
 │   └── equilibrium/      静平衡
 └── tests/
+    ├── contract/         模型中立场景与观测语义
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```
