@@ -7,7 +7,12 @@
 不记行号:行号随任何一次上游同步而漂移,漂移后的记录比没有记录更坏。每条记的是
 **改了哪个符号、改成什么、为什么**,这些在源码里可以直接搜到。
 
-未列入本文件的差异即为缺陷。G18 的分发义务以本文件为准。
+未列入本文件的差异即为缺陷。**任何对 vendored 源码的修改,必须在同一次提交里更新本
+文件**——分两次做,中间那段历史就是一份说谎的记录。
+
+本文件是 vendored 源码**修改说明**的权威,不承载全部分发义务:许可证正文、逐文件处置与
+来源事实见 [`SOURCE_DISPOSITION.txt`](SOURCE_DISPOSITION.txt),第三方与再分发说明见仓库
+根的 [`NOTICE`](../../NOTICE)。
 
 ## G13 — vendor 刚性 topology 源码
 
@@ -294,6 +299,30 @@ C++23 的 `std::numbers` 是标准途径,不需要为编译器差异建宏兼容
 能脱离运行时的翻译单元产出对象;其余翻译单元的首个错误均是缺少
 `drake/multibody/tree/multibody_tree_system.h`,即 G20–G28 要处理的 systems 运行时依赖。
 标量相关的错误一个不剩。该次编译是一次性探针,结论吸收后即删,不留归档。
+
+## G18 — 分发义务
+
+### `common/nice_type_name.cc`
+
+**新增**位于原 Stanford / Apache-2.0 声明**正下方**的一段改动声明:
+
+```
+/* This file has been modified by the OpenRailVehicleDynamics project.
+   See external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md for details. */
+```
+
+**原因**:该文件带 Apache-2.0 条款,而 G16 修改了它(删除了把 Eigen AutoDiff 类型名改写成
+`drake::AutoDiffXd` 的两条正则)。Apache-2.0 第 4(b) 条要求"被修改的文件须携带显著声明,
+说明你改动了它"。这与本文件末尾"没有添加逐文件版权头"那条不冲突:那条禁止的是给**本无
+声明**的文件凭空发明版权头(误述来源);这里是一个**已经带着 Apache-2.0** 的文件按其自身
+条款欠下的声明。原声明一字未改,也没有添加任何 ORVD 版权归属。
+
+`common/copyable_unique_ptr.h` 同为 Apache-2.0 但与上游逐字节相同,因此不欠这项声明。
+BSD-3-Clause 没有对应条款,故另外 133 个被修改的文件在文件内无须任何声明,其义务由随仓库
+携带的 `LICENSE.TXT` 承担。
+
+这项义务由 `tools/drake_source_boundary/verify_landed_drake_source_provenance.py` 对着
+钉死的上游现场核验,不靠人记住。
 
 ## 未作的修改
 

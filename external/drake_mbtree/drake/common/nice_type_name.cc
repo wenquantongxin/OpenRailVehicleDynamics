@@ -5,6 +5,9 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may
 not use this file except in compliance with the License. You may obtain a
 copy of the License at http://www.apache.org/licenses/LICENSE-2.0. */
 
+/* This file has been modified by the OpenRailVehicleDynamics project.
+   See external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md for details. */
+
 #include "drake/common/nice_type_name.h"
 
 #include <algorithm>

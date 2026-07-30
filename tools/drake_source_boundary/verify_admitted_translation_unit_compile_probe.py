@@ -84,6 +84,7 @@ def run_probe(
 
 
 LEDGER_HEADER = """\
+source_repository https://example.invalid/synthetic/upstream.git
 source_commit 0123456789abcdef0123456789abcdef01234567
 source_tag v0.0.0
 license_spdx BSD-3-Clause

@@ -28,6 +28,7 @@
 # upstream adds to it later, which is exactly the case the unclassified-edge
 # failure exists to catch.
 
+source_repository https://github.com/RobotLocomotion/drake.git
 source_commit 231c260201ee2f7d101a8d9ccede78626f7ca13a
 source_tag v1.54.0
 license_spdx BSD-3-Clause
@@ -37,8 +38,15 @@ candidate_directory multibody/topology
 
 # The repository-level Drake license is BSD-3-Clause. The candidate tree/topology
 # files carry no per-file notice, but two admitted support files retain existing
-# Stanford copyright and Apache-2.0 notices. G18 must ship the corresponding
-# license text; no new notice is invented.
+# Stanford copyright and Apache-2.0 notices, and the corresponding license text
+# ships with them.
+#
+# No copyright header is invented for a file that never had one: doing so would
+# misstate provenance rather than preserve it. That is a different matter from a
+# notice a license the file already carries requires of us. Apache-2.0 section
+# 4(b) obliges a modified file to say that we modified it, so an admitted
+# Apache-2.0 file that ORVD changes carries such a notice below its original
+# header, with the original untouched and no ORVD copyright claim added.
 file_license common/copyable_unique_ptr.h Apache-2.0
 file_license common/nice_type_name.cc Apache-2.0
 

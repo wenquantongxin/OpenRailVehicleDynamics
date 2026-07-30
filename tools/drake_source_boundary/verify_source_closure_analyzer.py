@@ -74,6 +74,7 @@ ACCEPTED_TREE = {
 }
 
 ACCEPTED_LEDGER = """\
+source_repository https://example.invalid/synthetic/upstream.git
 source_commit 0123456789abcdef0123456789abcdef01234567
 source_tag v0.0.0
 license_spdx BSD-3-Clause
@@ -230,6 +231,7 @@ def case_include_edge_supersedes_implementation_edge(work: Path) -> None:
     ledger = work / "arrival_order_ledger.txt"
     ledger.write_text(
         """\
+source_repository https://example.invalid/synthetic/upstream.git
 source_commit 0123456789abcdef0123456789abcdef01234567
 source_tag v0.0.0
 license_spdx BSD-3-Clause
@@ -389,6 +391,7 @@ def case_empty_admission_is_rejected(work: Path) -> None:
     ledger = work / "empty_admission_ledger.txt"
     ledger.write_text(
         """\
+source_repository https://example.invalid/synthetic/upstream.git
 source_commit 0123456789abcdef0123456789abcdef01234567
 source_tag v0.0.0
 license_spdx BSD-3-Clause
@@ -446,6 +449,27 @@ def case_reason_is_required(work: Path) -> None:
     record_failure_unless(
         "carries no reason" in result.stderr,
         f"the reasonless entry must be named; got:\n{result.stderr}",
+    )
+
+
+def case_source_repository_is_required(work: Path) -> None:
+    # A commit without a repository is not provenance: the same forty digits
+    # exist in every fork and mirror, and none of them is named.
+    source_root = work / "repository_metadata_source"
+    write_source_tree(source_root, ACCEPTED_TREE)
+    ledger = work / "repository_metadata_ledger.txt"
+    ledger.write_text(
+        ACCEPTED_LEDGER.replace(
+            "source_repository https://example.invalid/synthetic/upstream.git\n", ""
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_analyzer(source_root, ledger)
+    record_failure_unless(
+        result.returncode == 2 and "declares no source_repository" in result.stderr,
+        f"a ledger without a source repository must be unusable; got:\n"
+        f"{result.stderr}",
     )
 
 
@@ -637,6 +661,7 @@ def main() -> int:
         case_empty_admission_is_rejected,
         case_unrecognized_include_operand_is_rejected,
         case_reason_is_required,
+        case_source_repository_is_required,
         case_license_file_is_required,
         case_unreached_vendor_is_rejected,
         case_conflicting_disposition_is_rejected,

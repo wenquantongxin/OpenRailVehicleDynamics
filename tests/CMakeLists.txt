@@ -18,6 +18,15 @@ if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
                      --compiler ${CMAKE_CXX_COMPILER})
 endif()
 
+# The provenance audit. Only its synthetic self-check is registered: the real
+# audit needs a clone of the pinned upstream, which is a large working copy of
+# someone else's repository whose location is a fact about a machine, not about
+# this project. Its path is passed on the command line; see
+# tools/drake_source_boundary/README.md.
+add_test(NAME verify_landed_drake_source_provenance_audit
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_drake_source_provenance_audit.py)
+
 # The landed compile frontier tool. Only its synthetic self-check is registered:
 # running the tool against the real landed tree exits non-zero today, because the
 # translation units that still need the runtime cannot compile until G20-G28

@@ -55,6 +55,7 @@ class LedgerError(Exception):
 class Ledger:
     """Everything the disposition file says, in the form the closure needs."""
 
+    source_repository: str = ""
     source_commit: str = ""
     source_tag: str = ""
     license_spdx: str = ""
@@ -123,7 +124,9 @@ def parse_ledger(text: str) -> Ledger:
                 )
             return payload
 
-        if directive == "source_commit":
+        if directive == "source_repository":
+            ledger.source_repository = require(1, "a repository URL")[0]
+        elif directive == "source_commit":
             ledger.source_commit = require(1, "a commit")[0]
         elif directive == "source_tag":
             ledger.source_tag = require(1, "a tag")[0]
@@ -165,6 +168,8 @@ def parse_ledger(text: str) -> Ledger:
             # this tool does not read would be brittle for no gain.
             continue
 
+    if not ledger.source_repository:
+        raise LedgerError("the ledger declares no source_repository")
     if not ledger.source_commit:
         raise LedgerError("the ledger declares no source_commit")
     if re.fullmatch(r"[0-9a-f]{40}", ledger.source_commit) is None:

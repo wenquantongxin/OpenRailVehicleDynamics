@@ -1,0 +1,95 @@
+OpenRailVehicleDynamics (ORVD)
+==============================
+
+This file records the third-party material this repository redistributes or
+builds against, and where each one's licence text lives. It is a notice, not a
+grant.
+
+This NOTICE does not grant a license to ORVD first-party code.
+
+ORVD's own licence has not been chosen yet; see the "许可证" section of README.md.
+Until the project owner selects one, default copyright applies to the
+first-party sources in this repository, and nothing here should be read as
+permission to use, modify or redistribute them. Publishing a repository does not
+by itself grant those permissions.
+
+
+Redistributed source
+--------------------
+
+Drake — a subset of the rigid multibody tree and topology sources.
+
+    Licence   BSD-3-Clause
+    Text      external/drake_mbtree/LICENSE.TXT
+    Copyright 2012-2025 Robot Locomotion Group @ CSAIL
+
+  The upstream repository, the pinned revision and tag, and the disposition of
+  every individual file are recorded in
+  external/drake_mbtree/SOURCE_DISPOSITION.txt, which is the sole authority for
+  those facts. They are deliberately not repeated here: the same fact written
+  twice drifts, and the drifted copy gets used as truth.
+
+  The landed sources have been modified. What was changed and why is recorded in
+  external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md. BSD-3-Clause does not
+  require a per-file modification notice; it requires that redistributions
+  retain the copyright notice, the conditions and the disclaimer, which the
+  licence text above carries.
+
+  Two admitted support files came into Drake from Simbody and carry their own
+  Stanford copyright and Apache-2.0 notices. Those notices are preserved
+  verbatim in the files themselves; the files are identified by the
+  `file_license` records in the disposition ledger.
+
+    Licence   Apache-2.0
+    Text      external/drake_mbtree/LICENSE.Apache-2.0.txt
+
+  Apache-2.0 section 4(b) requires a modified file to carry a prominent notice
+  saying it was modified. Where ORVD has modified such a file, that notice sits
+  directly below the original header, which is left untouched, and no ORVD
+  copyright is claimed. tools/drake_source_boundary/verify_landed_drake_source_provenance.py
+  checks this obligation against the pinned upstream.
+
+
+Build and link dependencies
+---------------------------
+
+These are resolved by find_package at configure time. This repository does not
+contain their source, but their code does reach the binaries this project
+produces, so a distributed build must carry their licences.
+
+Eigen
+
+    Licence   primarily MPL-2.0; individual files carry their own terms, and
+              Eigen's own COPYING.README is the authority on which
+    Reached by header inclusion, so Eigen code is compiled into ORVD objects
+
+  Eigen 3.4 is not uniformly MPL-2.0. Most of it is, some files are BSD-3-Clause,
+  and some optional backends are offered under LGPL-2.1+ or MPL-2. Upstream
+  provides EIGEN_MPL2_ONLY for projects that must exclude the non-MPL2 parts;
+  this build does not define it, so the accurate statement is the one above
+  rather than a blanket claim. A release that bundles or statically embeds Eigen
+  must determine the terms of the files it actually ships.
+
+fmt
+
+    Licence   MIT (Expat)
+    Reached by dynamic linking against libfmt
+
+  A package that bundles libfmt must carry the licence text of the fmt version
+  it bundles.
+
+
+Not dependencies
+----------------
+
+SUNDIALS CVODE and Ceres appear in the design documents as future work. They are
+not searched for, not built and not linked today, and are listed here only so
+that their absence is not mistaken for an omission.
+
+
+Release
+-------
+
+Roadmap goal G50 gates release on a complete dependency licence collection made
+against what is actually packaged, and on the project owner having chosen a
+first-party licence. This file is the current state, not the release manifest.

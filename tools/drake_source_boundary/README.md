@@ -10,6 +10,8 @@
 | `verify_admitted_translation_unit_compile_probe.py` | 用合成源码树检验上面那支探针 |
 | `compile_landed_double_multibody_translation_units.py` | 编译**已落位**的 double-only 源码，报告编译前沿、源码层运行时依赖表面与禁忌标量符号 |
 | `verify_landed_double_compile_frontier.py` | 用合成源码树检验上面那支工具 |
+| `verify_landed_drake_source_provenance.py` | 对着钉死的上游现场核验落位源码的来源与许可证义务 |
+| `verify_landed_drake_source_provenance_audit.py` | 用合成源码树检验上面那支审计 |
 
 只用 Python 3 标准库，不引第三方包。
 
@@ -123,6 +125,32 @@ python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_
 临时对象放在 `TMPDIR` 指向的位置（本机指向外置卷），运行结束即消失。工具不落盘通过数、
 符号表或允许列表：今天记下的数字，明天会变成一道因错误理由而通过的门。它输出的是
 **源码层**运行时依赖表面，不宣称完整 ABI，也不宣称最小实现契约。
+
+## 来源审计
+
+`verify_landed_drake_source_provenance.py` 回答的是分发义务里的**可追溯性**:任取落位树
+中的一个文件，读者能否说出它来自哪个上游仓库、哪个修订、哪个路径。账本持有这三件事实，
+该工具核验账本、落位树与上游克隆三者是否仍然一致，并另外核验许可证正文在位、以及被修改
+且其许可证要求改动声明的文件确实带着声明。
+
+**身份用路径，不用哈希。** 哈希只说两个文件是否逐字节相同，不说任何一个来自哪里；它在我们
+行使许可证授予的修改权那一刻就失效；而一份今天提交的哈希清单，明天会因为正确的理由在错误
+的日子失败。路径经得起修改，这正是来源追溯需要的性质。
+
+与上游有差异**不是**本工具报错的理由:落位树经过了记录在案的 double-only 手术。它检查的
+是——那些既有差异、其许可证又要求改动声明的文件，是否真的带着声明。Apache-2.0 第 4(b) 条
+要求被修改的文件声明自己被改过;BSD-3-Clause 没有这一条，因此被修改的 BSD 文件只需随仓库
+携带许可证正文，文件内无须任何声明。合成自检里有一条专门的负控守着这个区别。
+
+上游克隆只经命令行给出。它很大，是别人仓库的工作副本，某台机器把它放在哪里不是本项目的
+事实。CTest 只注册合成自检；真实审计是开发期命令:
+
+```bash
+python3 tools/drake_source_boundary/verify_landed_drake_source_provenance.py \
+    --landed-root external/drake_mbtree \
+    --upstream-clone <钉死修订的上游克隆> \
+    --disposition-ledger external/drake_mbtree/SOURCE_DISPOSITION.txt
+```
 
 ## 第三方依赖按参数传入
 

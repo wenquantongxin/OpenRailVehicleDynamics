@@ -49,7 +49,7 @@
 
 - 源仓库：`/home/yaoyao/Documents/myProjects/wheel-rail-lab`，HEAD `9355d17`（**只读引用**）
 - Drake 安装：`/opt/drake`，版本 1.54.0
-- Drake 源码：`/home/yaoyao/Documents/myProjects/drake-extraction-study/drake-src`，commit `231c260201ee2f7d101a8d9ccede78626f7ca13a`（与安装版一致，浅克隆）
+- Drake 源码：上游仓库、固定 commit 与 tag 的唯一权威是 `external/drake_mbtree/SOURCE_DISPOSITION.txt`；本文件不复述这些值，克隆位置按机器提供、不写入仓库
 
 ---
 
