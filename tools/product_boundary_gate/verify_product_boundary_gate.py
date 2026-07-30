@@ -45,7 +45,7 @@ include(OrvdProductBoundaryGate)
 
 # A fabricated Drake, so the gate is exercised on the target graph rather than on
 # whatever happens to be installed here.
-add_library(fabricated_drake SHARED IMPORTED)
+add_library(fabricated_drake UNKNOWN IMPORTED)
 set_target_properties(fabricated_drake PROPERTIES
     IMPORTED_LOCATION "@WORK@/libdrake.so")
 add_library(drake::drake ALIAS fabricated_drake)
@@ -315,8 +315,19 @@ def case_wrapped_and_configuration_link_options_are_checked(work: Path) -> None:
         "cmake_linker_wrapper": (
             "target_link_options(product_library PRIVATE LINKER:-l,drake)\n"
         ),
+        "gnu_long_library_selector": (
+            "target_link_options(product_library PRIVATE --library=drake)\n"
+        ),
         "windows_default_library": (
             "target_link_options(product_library PRIVATE /DEFAULTLIB:Drake.lib)\n"
+        ),
+        "compiler_driver_whole_archive": (
+            'target_link_options(product_library PRIVATE '
+            '"-Wl,--whole-archive,/somewhere/libdrake.a,--no-whole-archive")\n'
+        ),
+        "windows_whole_archive": (
+            "target_link_options(product_library PRIVATE "
+            "/WHOLEARCHIVE:drake.lib)\n"
         ),
         "compound_link_flags": (
             'set_property(TARGET product_library PROPERTY LINK_FLAGS "-pthread -ldrake")\n'
@@ -335,9 +346,47 @@ def case_wrapped_and_configuration_link_options_are_checked(work: Path) -> None:
         )
         result = configure(case_root)
         record_failure_unless(
-            result.returncode != 0 and "selects a Drake library" in result.stdout,
+            result.returncode != 0
+            and (
+                "selects a Drake library" in result.stdout
+                or "names a Drake library file" in result.stdout
+            ),
             f"{case_name} must not hide a Drake link option\n" + result.stdout,
         )
+
+
+def case_directory_link_options_do_not_name_a_library(work: Path) -> None:
+    case_root = write_case(
+        work,
+        "directory_link_options",
+        "add_library(product_library STATIC product.cc)\n"
+        'target_link_options(product_library PRIVATE "-L/opt/drake")\n'
+        'target_link_options(product_library PRIVATE "-Wl,-rpath,/opt/drake")\n'
+        'target_link_options(product_library PRIVATE "/LIBPATH:C:/third_party/drake")\n',
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode == 0,
+        "library search and runtime paths are machine locations, not Drake "
+        "library identities\n" + result.stdout,
+    )
+
+
+def case_unrelated_target_namespace_configures(work: Path) -> None:
+    case_root = write_case(
+        work,
+        "unrelated_target_namespace",
+        "add_library(mandrake_core INTERFACE IMPORTED GLOBAL)\n"
+        "add_library(mandrake::core ALIAS mandrake_core)\n"
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE mandrake::core)\n",
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode == 0,
+        "an unrelated target whose namespace merely contains 'drake' must "
+        "configure\n" + result.stdout,
+    )
 
 
 def case_imported_generator_expressions_cannot_hide_drake(work: Path) -> None:
@@ -416,6 +465,8 @@ def main() -> int:
         case_directory_scoped_imported_target_is_refused,
         case_imported_configuration_and_libname_are_checked,
         case_wrapped_and_configuration_link_options_are_checked,
+        case_directory_link_options_do_not_name_a_library,
+        case_unrelated_target_namespace_configures,
         case_imported_generator_expressions_cannot_hide_drake,
     )
     with tempfile.TemporaryDirectory(prefix="orvd_verify_boundary_gate.") as work:

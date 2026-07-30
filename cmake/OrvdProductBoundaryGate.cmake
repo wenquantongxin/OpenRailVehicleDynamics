@@ -36,13 +36,24 @@ set(ORVD_DRAKE_LIBRARY_BASENAME_PATTERN "^(lib)?drake([._-]|$)")
 # Library-selection options, as opposed to directory options: `-ldrake` names a
 # library, `-L/opt/drake/lib` names a place to look and is not a dependency.
 set(ORVD_DRAKE_LINK_OPTION_PATTERN
-    "(^|[,;: =<>])(-l(:|,)?|/defaultlib:)(lib)?drake([._-]|[,;: =<>]|$)")
+    "(^|[,;: =<>])(-l(:|,)?|--library(=|,)|/defaultlib:)(lib)?drake([._-]|[,;: =<>]|$)")
 
 # A file name may be wrapped in a generator expression or a linker-driver option.
 # Match a path component, not an installation directory: `/some/drake/libfmt.so`
 # is not Drake, while `/somewhere/libdrake.so` is.
 set(ORVD_DRAKE_LIBRARY_TEXT_PATTERN
     "(^|[/\\\\,;:=<> ])(lib)?drake([._-][^/\\\\,;:=<> ]*)?([,;:=<> ]|$)")
+
+# Link options may also carry literal library files, for example as an argument
+# to `--whole-archive` or `-force_load`. Requiring a library suffix keeps search
+# and runtime paths such as `-L/opt/drake` from being mistaken for dependencies.
+set(ORVD_DRAKE_LIBRARY_FILE_TEXT_PATTERN
+    "(^|[/\\\\,;:=<> ])(lib)?drake([^/\\\\,;:=<> ]*)\\.(a|so(\\.[0-9]+)*|dylib|lib|dll)([,;:=<> ]|$)")
+
+# A target namespace must start at a target-token boundary. In particular,
+# `mandrake::core` is unrelated, while a target inside a generator expression
+# still has `:` immediately before `drake::`.
+set(ORVD_DRAKE_TARGET_TEXT_PATTERN "(^|[,;: =<>])drake::")
 
 function(_orvd_record_boundary_violation product_target detail)
     set_property(GLOBAL APPEND PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS
@@ -125,6 +136,10 @@ function(_orvd_check_link_options product_target target is_first_party)
             if(normalized_option MATCHES "${ORVD_DRAKE_LINK_OPTION_PATTERN}")
                 _orvd_record_boundary_violation("${product_target}"
                     "${target} carries the link option '${option}', which selects a Drake library")
+            elseif(normalized_option MATCHES
+                    "${ORVD_DRAKE_LIBRARY_FILE_TEXT_PATTERN}")
+                _orvd_record_boundary_violation("${product_target}"
+                    "${target} carries the link option '${option}', which names a Drake library file")
             elseif(option MATCHES "\\$<" AND is_first_party)
                 _orvd_record_boundary_violation("${product_target}"
                     "${target} has a generator expression in ${option_property} ('${option}') that this gate cannot evaluate; a first-party product target must not hide its link options from the boundary check")
@@ -160,7 +175,8 @@ function(_orvd_walk_link_closure product_target item is_first_party)
     # it resolves to a target. This also catches an identity nested inside an
     # imported target's conditional generator expression.
     string(TOLOWER "${item}" normalized_item)
-    if(normalized_item MATCHES "drake::" OR normalized_item STREQUAL "drake")
+    if(normalized_item MATCHES "${ORVD_DRAKE_TARGET_TEXT_PATTERN}" OR
+       normalized_item STREQUAL "drake")
         _orvd_record_boundary_violation("${product_target}"
             "it depends on the Drake target '${item}'")
         return()

@@ -42,7 +42,19 @@ from calculate_required_drake_source_closure import (
     read_drake_includes,
 )
 
-SOURCE_SUFFIXES = HEADER_SUFFIXES + IMPLEMENTATION_SUFFIXES
+# The upstream closure only needs the suffixes Drake uses. Product source is a
+# wider boundary: first-party C++ may use any of these conventional header,
+# template-implementation, or translation-unit suffixes, and every one must be
+# inspected rather than silently falling outside the gate.
+PRODUCT_SOURCE_SUFFIXES = HEADER_SUFFIXES + IMPLEMENTATION_SUFFIXES + (
+    ".hh",
+    ".hxx",
+    ".inl",
+    ".inc",
+    ".ipp",
+    ".tcc",
+    ".cxx",
+)
 
 
 class ProductSourceBoundaryInputError(Exception):
@@ -59,12 +71,12 @@ def product_source_files(product_roots: list[Path]) -> list[tuple[Path, Path]]:
             )
         for path in sorted(root.rglob("*")):
             if path.is_symlink() and (
-                path.is_dir() or path.suffix in SOURCE_SUFFIXES
+                path.is_dir() or path.suffix in PRODUCT_SOURCE_SUFFIXES
             ):
                 raise ProductSourceBoundaryInputError(
                     f"product source traversal reaches a symbolic link: {path}"
                 )
-            if path.is_file() and path.suffix in SOURCE_SUFFIXES:
+            if path.is_file() and path.suffix in PRODUCT_SOURCE_SUFFIXES:
                 found.append((root, path))
     return found
 

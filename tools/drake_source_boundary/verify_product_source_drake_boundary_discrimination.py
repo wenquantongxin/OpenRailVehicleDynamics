@@ -180,6 +180,25 @@ def case_runtime_source_crossing_fails(work: Path) -> None:
     )
 
 
+def case_common_cpp_source_suffixes_are_scanned(work: Path) -> None:
+    for suffix in (".hh", ".hxx", ".inl", ".inc", ".ipp", ".tcc", ".cxx"):
+        root = work / f"runtime_source_suffix_{suffix[1:]}"
+        crossing_path = f"multibody_runtime/forbidden_crossing{suffix}"
+        ledger = build_repository(
+            root,
+            CLEAN_TREE,
+            runtime_files={
+                crossing_path: '#include "drake/geometry/query_object.h"\n'
+            },
+        )
+        result = run_tool(root, ledger)
+        record_failure_unless(
+            result.returncode == 1 and crossing_path in result.stdout,
+            f"first-party C++ source with suffix {suffix} must be scanned\n"
+            + result.stdout,
+        )
+
+
 def case_vendor_cannot_override_forbidden_prefix(work: Path) -> None:
     # A per-file line must not be able to license an architectural crossing.
     root = work / "vendor_override"
@@ -297,9 +316,19 @@ def case_symbolic_linked_source_is_rejected(work: Path) -> None:
     (hidden_source / "hidden.cc").write_text(
         '#include "drake/geometry/query_object.h"\n', encoding="utf-8"
     )
-    (root / "libs" / "linked_source").symlink_to(
-        hidden_source, target_is_directory=True
-    )
+    try:
+        (root / "libs" / "linked_source").symlink_to(
+            hidden_source, target_is_directory=True
+        )
+    except OSError as error:
+        # A Windows host without Developer Mode or symbolic-link privilege
+        # cannot construct this negative fixture. The production check still
+        # rejects links when they exist; only this one discrimination case is
+        # unavailable on that host, and the remaining cases continue to run.
+        if sys.platform == "win32" and getattr(error, "winerror", None) == 1314:
+            print("SKIPPED: symbolic-link fixture requires Windows link privilege")
+            return
+        raise
     result = run_tool(root, ledger)
     record_failure_unless(
         result.returncode == 2 and "symbolic link" in result.stdout,
@@ -329,6 +358,7 @@ def main() -> int:
         case_landed_forbidden_file_fails,
         case_first_party_implementation_crossing_fails,
         case_runtime_source_crossing_fails,
+        case_common_cpp_source_suffixes_are_scanned,
         case_vendor_cannot_override_forbidden_prefix,
         case_discarded_include_is_not_a_crossing,
         case_unclassified_include_is_not_a_crossing,
