@@ -11,8 +11,10 @@
 // checks cannot be satisfied by a store that simply refuses everything unusual.
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include <Eigen/Dense>
 
@@ -30,6 +32,15 @@ using orvd::multibody_runtime::MultibodyStateLayout;
 using orvd::multibody_runtime::MultibodyStateLayoutDescription;
 using orvd::multibody_runtime::RevoluteSpringParameters;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
+
+static_assert(
+    !std::is_constructible_v<MultibodyStateInstance, MultibodyStateLayout&&>);
+static_assert(!std::is_constructible_v<MultibodyStateInstance,
+                                       const MultibodyStateLayout&&>);
+static_assert(!std::is_copy_constructible_v<MultibodyStateInstance>);
+static_assert(!std::is_copy_assignable_v<MultibodyStateInstance>);
+static_assert(!std::is_move_constructible_v<MultibodyStateInstance>);
+static_assert(!std::is_move_assignable_v<MultibodyStateInstance>);
 
 int failure_count = 0;
 
@@ -61,9 +72,9 @@ void ExpectAccepted(bool refused, const std::string& what) {
 
 MultibodyStateLayoutDescription SampleDescription() {
     MultibodyStateLayoutDescription description;
-    // A quaternion floating body plus two revolute joints: seven-plus-two
-    // positions against six-plus-two velocities, which is the case where a
-    // store that assumed q and v have the same length would fail.
+    // Dimensions shaped like a quaternion floating body plus two revolute
+    // joints: seven-plus-two positions against six-plus-two velocities. This
+    // layer uses only the dimensional mismatch; it has no joint segmentation.
     description.generalized_position_count = 9;
     description.generalized_velocity_count = 8;
     description.rigid_body_count = 3;
@@ -82,6 +93,15 @@ RigidBodyInertiaParameters ValidInertia() {
     parameters.unit_inertia_moments = Eigen::Vector3d(0.4, 0.5, 0.6);
     parameters.unit_inertia_products = Eigen::Vector3d(0.01, -0.02, 0.03);
     return parameters;
+}
+
+bool SameInertia(const RigidBodyInertiaParameters& first,
+                 const RigidBodyInertiaParameters& second) {
+    return first.mass_kilograms == second.mass_kilograms &&
+           first.center_of_mass_in_body_frame ==
+               second.center_of_mass_in_body_frame &&
+           first.unit_inertia_moments == second.unit_inertia_moments &&
+           first.unit_inertia_products == second.unit_inertia_products;
 }
 
 // --- Layout -----------------------------------------------------------------
@@ -123,6 +143,8 @@ void CheckLayoutRefusesNegativeCounts() {
 void CheckCoordinatesStartAtZeroAndRoundTrip() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
+    ExpectTrue(&state.layout() == &layout,
+               "the state remains bound to the exact layout object");
     ExpectTrue(state.generalized_positions().size() == 9 &&
                    state.generalized_positions().isZero(),
                "a new state's positions are the layout's length and zero");
@@ -162,9 +184,9 @@ void CheckRefusedWriteLeavesTheStateAlone() {
 }
 
 void CheckNonUnitQuaternionIsNeitherRefusedNorRepaired() {
-    // This layer does not know which entries are a quaternion, so it must not
-    // act as if it did. Whether a non-unit quaternion is an error, and what to
-    // do about it, is settled where the joints are known.
+    // This raw store does not know which entries are a quaternion, so it must
+    // not act as if it did. The model-aware adapter checks the non-zero
+    // precondition before evaluation, without normalizing the stored value.
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
     Eigen::VectorXd positions = Eigen::VectorXd::Zero(9);
@@ -205,6 +227,20 @@ void CheckInertiaValidation() {
                    }),
                    "a body with zero mass and zero inertia");
 
+    // A point mass one metre from the body origin has G_BBo =
+    // diag(0, 1, 1); shifting to its centre of mass leaves zero inertia.
+    RigidBodyInertiaParameters offset_point_mass;
+    offset_point_mass.mass_kilograms = 1.0;
+    offset_point_mass.center_of_mass_in_body_frame =
+        Eigen::Vector3d(1.0, 0.0, 0.0);
+    offset_point_mass.unit_inertia_moments =
+        Eigen::Vector3d(0.0, 1.0, 1.0);
+    ExpectAccepted(WasRefused([&] {
+                       state.set_rigid_body_inertia_parameters(
+                           1, offset_point_mass);
+                   }),
+                   "a point mass expressed about an offset body origin");
+
     // Products of inertia are signed; refusing a negative one would forbid most
     // real bodies.
     RigidBodyInertiaParameters negative_product = ValidInertia();
@@ -234,12 +270,54 @@ void CheckInertiaValidation() {
         WasRefused([&] { state.set_rigid_body_inertia_parameters(0, impossible); }),
         "moments of inertia that violate the triangle inequality");
 
-    ExpectTrue(state.rigid_body_inertia_parameters(0).mass_kilograms == 2.5,
+    // The diagonal moments alone look valid, but the full symmetric matrix has
+    // principal moments (-1, 1, 3).
+    RigidBodyInertiaParameters impossible_products;
+    impossible_products.mass_kilograms = 1.0;
+    impossible_products.unit_inertia_moments =
+        Eigen::Vector3d(1.0, 1.0, 1.0);
+    impossible_products.unit_inertia_products =
+        Eigen::Vector3d(2.0, 0.0, 0.0);
+    ExpectRefused(WasRefused([&] {
+                      state.set_rigid_body_inertia_parameters(
+                          0, impossible_products);
+                  }),
+                  "products that make a principal moment negative");
+
+    // This one is positive semidefinite, but its principal moments (1, 1, 3)
+    // still cannot be a real mass distribution.
+    RigidBodyInertiaParameters impossible_principal_triangle;
+    impossible_principal_triangle.mass_kilograms = 1.0;
+    impossible_principal_triangle.unit_inertia_moments =
+        Eigen::Vector3d::Constant(5.0 / 3.0);
+    impossible_principal_triangle.unit_inertia_products =
+        Eigen::Vector3d::Constant(2.0 / 3.0);
+    ExpectRefused(WasRefused([&] {
+                      state.set_rigid_body_inertia_parameters(
+                          0, impossible_principal_triangle);
+                  }),
+                  "principal moments that violate the triangle inequality");
+
+    // The about-origin inertia is zero, but shifting it to a non-zero centre of
+    // mass produces negative central moments.
+    RigidBodyInertiaParameters impossible_centre_of_mass;
+    impossible_centre_of_mass.mass_kilograms = 1.0;
+    impossible_centre_of_mass.center_of_mass_in_body_frame =
+        Eigen::Vector3d(1.0, 0.0, 0.0);
+    ExpectRefused(WasRefused([&] {
+                      state.set_rigid_body_inertia_parameters(
+                          0, impossible_centre_of_mass);
+                  }),
+                  "an about-origin inertia that is impossible at the centre "
+                  "of mass");
+
+    ExpectTrue(SameInertia(state.rigid_body_inertia_parameters(0), ValidInertia()),
                "every refused inertia left the stored one alone");
 
-    ExpectRefused(
-        WasRefused([&] { state.set_rigid_body_inertia_parameters(3, ValidInertia()); }),
-        "a rigid body index past the end");
+    ExpectRefused(WasRefused([&] {
+                      state.set_rigid_body_inertia_parameters(3, ValidInertia());
+                  }),
+                  "a rigid body index past the end");
 }
 
 // --- Fixed frame pose --------------------------------------------------------
@@ -264,6 +342,15 @@ void CheckFixedFramePoseValidation() {
     ExpectTrue(state.fixed_frame_pose_parameters(0).R_PF.isApprox(pose.R_PF),
                "the refused rotation left the stored pose alone");
 
+    FixedFramePoseParameters outside_rotation_contract = pose;
+    outside_rotation_contract.R_PF = Eigen::Matrix3d::Identity();
+    outside_rotation_contract.R_PF(0, 0) += 1e-13;
+    ExpectRefused(WasRefused([&] {
+                      state.set_fixed_frame_pose_parameters(
+                          0, outside_rotation_contract);
+                  }),
+                  "a matrix outside the rotation representation's tolerance");
+
     // A reflection: orthonormal, but with determinant -1. It passes an
     // orthonormality test alone, which is why the determinant is checked too.
     FixedFramePoseParameters reflected = pose;
@@ -278,6 +365,11 @@ void CheckFixedFramePoseValidation() {
                       state.set_fixed_frame_pose_parameters(0, infinite_translation);
                   }),
                   "a non-finite translation");
+    ExpectTrue(
+        state.fixed_frame_pose_parameters(0).R_PF.isApprox(pose.R_PF) &&
+            state.fixed_frame_pose_parameters(0).p_PoFo_P.isApprox(
+                pose.p_PoFo_P),
+        "every refused fixed-frame pose left the complete stored pose alone");
 }
 
 // --- Joint damping, actuators, springs, bushings ------------------------------
@@ -291,8 +383,10 @@ void CheckJointDampingValidation() {
                    "a six-entry damping vector for a six-velocity joint");
     ExpectTrue(state.joint_damping(0).isApprox(six),
                "the damping reads back from its own segment");
-    ExpectTrue(state.joint_damping(1).size() == 1 && state.joint_damping(1)[0] == 0.0,
+    ExpectTrue(state.joint_damping(1).size() == 1 &&
+                   state.joint_damping(1)[0] == 0.0,
                "writing one joint's damping does not disturb the next joint's");
+    state.set_joint_damping(1, Eigen::VectorXd::Constant(1, 0.25));
 
     ExpectRefused(WasRefused([&] {
                       state.set_joint_damping(1, Eigen::VectorXd::Constant(2, 1.0));
@@ -302,8 +396,9 @@ void CheckJointDampingValidation() {
                       state.set_joint_damping(1, Eigen::VectorXd::Constant(1, -1.0));
                   }),
                   "a negative damping coefficient");
-    ExpectTrue(state.joint_damping(0).isApprox(six),
-               "the refused damping writes left the earlier joint alone");
+    ExpectTrue(state.joint_damping(0).isApprox(six) &&
+                   state.joint_damping(1)[0] == 0.25,
+               "the refused damping writes left both stored segments alone");
 }
 
 void CheckElementParameterValidation() {
@@ -320,8 +415,14 @@ void CheckElementParameterValidation() {
     JointActuatorParameters negative_rotor = actuator;
     negative_rotor.rotor_inertia = -1.0;
     ExpectRefused(
-        WasRefused([&] { state.set_joint_actuator_parameters(0, negative_rotor); }),
+        WasRefused(
+            [&] { state.set_joint_actuator_parameters(0, negative_rotor); }),
         "a negative rotor inertia");
+    ExpectTrue(state.joint_actuator_parameters(0).rotor_inertia ==
+                       actuator.rotor_inertia &&
+                   state.joint_actuator_parameters(0).gear_ratio ==
+                       actuator.gear_ratio,
+               "the refused actuator write left the stored parameters alone");
 
     RevoluteSpringParameters spring;
     spring.stiffness = 12.0;
@@ -336,6 +437,11 @@ void CheckElementParameterValidation() {
                       state.set_revolute_spring_parameters(0, negative_stiffness);
                   }),
                   "a negative spring stiffness");
+    ExpectTrue(state.revolute_spring_parameters(0).stiffness ==
+                       spring.stiffness &&
+                   state.revolute_spring_parameters(0).nominal_angle_radians ==
+                       spring.nominal_angle_radians,
+               "the refused spring write left the stored parameters alone");
 
     LinearBushingRollPitchYawParameters bushing;
     bushing.torque_stiffness = Eigen::Vector3d(1.0, 2.0, 3.0);

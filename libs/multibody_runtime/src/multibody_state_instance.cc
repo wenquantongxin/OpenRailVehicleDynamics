@@ -1,9 +1,13 @@
 #include "orvd/multibody_runtime/multibody_state_instance.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+
+#include <Eigen/Eigenvalues>
 
 namespace orvd::multibody_runtime {
 namespace {
@@ -13,7 +17,8 @@ namespace {
 // admits that and rejects anything that is not a rotation by any margin that
 // matters — a transposed sign, a scaled axis, a shear. It is not a repair
 // threshold: nothing is orthonormalised, the value is simply refused.
-constexpr double kRotationOrthonormalityTolerance = 1e-12;
+constexpr double kRotationOrthonormalityTolerance =
+    128 * std::numeric_limits<double>::epsilon();
 
 [[noreturn]] void Reject(const std::string& detail) {
     throw std::invalid_argument("multibody state: " + detail);
@@ -33,10 +38,10 @@ void RequireFinite(double value, const std::string& what) {
 }
 
 void RequireFinite(const Eigen::Ref<const Eigen::VectorXd>& values,
-                   const std::string& what) {
+                   std::string_view what) {
     for (Eigen::Index i = 0; i < values.size(); ++i) {
         if (!std::isfinite(values[i])) {
-            Reject(what + " entry " + std::to_string(i) + " is " +
+            Reject(std::string(what) + " entry " + std::to_string(i) + " is " +
                    std::to_string(values[i]) + ", which is not finite");
         }
     }
@@ -62,10 +67,10 @@ void RequireNonNegative(const Eigen::Vector3d& values, const std::string& what) 
     }
 }
 
-void RequireSize(Eigen::Index actual, int expected, const std::string& what) {
+void RequireSize(Eigen::Index actual, int expected, std::string_view what) {
     if (actual != expected) {
-        Reject(what + " has " + std::to_string(actual) + " entries, but the " +
-               "layout says " + std::to_string(expected));
+        Reject(std::string(what) + " has " + std::to_string(actual) +
+               " entries, but the layout says " + std::to_string(expected));
     }
 }
 
@@ -78,10 +83,10 @@ void RequireRotation(const Eigen::Matrix3d& rotation, const std::string& what) {
         }
     }
     const Eigen::Matrix3d deviation =
-        rotation.transpose() * rotation - Eigen::Matrix3d::Identity();
+        rotation * rotation.transpose() - Eigen::Matrix3d::Identity();
     const double orthonormality_error = deviation.cwiseAbs().maxCoeff();
     if (orthonormality_error > kRotationOrthonormalityTolerance) {
-        Reject(what + " is not orthonormal: max|RᵀR - I| is " +
+        Reject(what + " is not orthonormal: max|RRᵀ - I| is " +
                std::to_string(orthonormality_error) + ", above " +
                std::to_string(kRotationOrthonormalityTolerance));
     }
@@ -93,38 +98,61 @@ void RequireRotation(const Eigen::Matrix3d& rotation, const std::string& what) {
     }
 }
 
-// Mass properties every real body obeys, checked to the depth this layer can
-// justify. Finiteness, non-negative mass and moments, and the triangle
-// inequality are necessary conditions that cost three comparisons. Full
-// positive-semidefiniteness needs an eigen decomposition, and the vendored
-// rotational inertia already performs that check where it constructs the value;
-// duplicating it here would be a second implementation of the same physics with
-// its own opportunity to disagree.
-void RequireRealisableInertia(const RigidBodyInertiaParameters& parameters,
-                              int rigid_body_index) {
+// Checks the complete spatial-inertia condition at the boundary where the
+// first-party value becomes live state. Checking only the three diagonal
+// entries misses impossible products of inertia; checking about the body origin
+// misses an inertia that becomes impossible after shifting to the centre of
+// mass. The adapter must not be relied upon to reject a value after this store
+// has already committed it.
+void RequirePhysicallyValidSpatialInertia(
+    const RigidBodyInertiaParameters& parameters, int rigid_body_index) {
     const std::string body =
         "rigid body " + std::to_string(rigid_body_index) + "'s ";
     RequireNonNegative(parameters.mass_kilograms, body + "mass");
     RequireFinite(parameters.center_of_mass_in_body_frame,
                   body + "centre of mass");
-    RequireNonNegative(parameters.unit_inertia_moments,
-                       body + "unit inertia moment");
+    RequireFinite(parameters.unit_inertia_moments,
+                  body + "unit inertia moment");
     RequireFinite(parameters.unit_inertia_products, body + "unit inertia product");
 
     const Eigen::Vector3d& moments = parameters.unit_inertia_moments;
-    // Zero moments satisfy this, which is intended: a massless frame carrier is
-    // a normal modelling device and must not be refused.
-    for (int i = 0; i < 3; ++i) {
-        const int j = (i + 1) % 3;
-        const int k = (i + 2) % 3;
-        if (moments[i] + moments[j] < moments[k]) {
-            Reject(body + "unit inertia moments (" +
-                   std::to_string(moments[0]) + ", " +
-                   std::to_string(moments[1]) + ", " +
-                   std::to_string(moments[2]) +
-                   ") violate the triangle inequality, so no real mass "
-                   "distribution has them");
-        }
+    const Eigen::Vector3d& products = parameters.unit_inertia_products;
+    Eigen::Matrix3d unit_inertia_about_body_origin;
+    unit_inertia_about_body_origin << moments[0], products[0], products[1],
+        products[0], moments[1], products[2], products[1], products[2],
+        moments[2];
+
+    const Eigen::Vector3d& center_of_mass =
+        parameters.center_of_mass_in_body_frame;
+    const Eigen::Matrix3d point_mass_unit_inertia =
+        center_of_mass.squaredNorm() * Eigen::Matrix3d::Identity() -
+        center_of_mass * center_of_mass.transpose();
+    const Eigen::Matrix3d central_rotational_inertia =
+        parameters.mass_kilograms *
+        (unit_inertia_about_body_origin - point_mass_unit_inertia);
+    if (!central_rotational_inertia.allFinite()) {
+        Reject(body + "central rotational inertia is not finite");
+    }
+
+    const Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> principal_moment_solver(
+        central_rotational_inertia, Eigen::EigenvaluesOnly);
+    if (principal_moment_solver.info() != Eigen::Success) {
+        Reject(body + "central principal moments could not be computed");
+    }
+    const Eigen::Vector3d principal_moments =
+        principal_moment_solver.eigenvalues();
+    const double scale =
+        std::max(1.0, 0.5 * std::abs(central_rotational_inertia.trace()));
+    const double tolerance =
+        16 * std::numeric_limits<double>::epsilon() * scale;
+    if (principal_moments[0] < -tolerance ||
+        principal_moments[0] + principal_moments[1] + tolerance <
+            principal_moments[2]) {
+        Reject(body + "central principal moments (" +
+               std::to_string(principal_moments[0]) + ", " +
+               std::to_string(principal_moments[1]) + ", " +
+               std::to_string(principal_moments[2]) +
+               ") are negative or violate the triangle inequality");
     }
 }
 
@@ -178,7 +206,7 @@ void MultibodyStateInstance::set_rigid_body_inertia_parameters(
     int rigid_body_index, const RigidBodyInertiaParameters& parameters) {
     RequireIndexInRange(rigid_body_index, layout_->rigid_body_count(),
                         "rigid body");
-    RequireRealisableInertia(parameters, rigid_body_index);
+    RequirePhysicallyValidSpatialInertia(parameters, rigid_body_index);
     rigid_body_inertia_parameters_[static_cast<std::size_t>(rigid_body_index)] =
         parameters;
 }

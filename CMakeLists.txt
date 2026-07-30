@@ -102,4 +102,4 @@ orvd_verify_product_targets_have_no_drake_dependency(
     ${ORVD_PRODUCT_MODULE_DIRECTORIES})
 
 message(STATUS
-    "ORVD ${PROJECT_VERSION} — vendored double-only frontier targets configured")
+    "ORVD ${PROJECT_VERSION} — product targets configured")

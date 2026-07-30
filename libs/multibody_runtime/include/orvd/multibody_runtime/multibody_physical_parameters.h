@@ -38,8 +38,8 @@ struct RigidBodyInertiaParameters {
 
     /// Diagonal of the unit inertia (inertia per unit mass) about the body
     /// origin, expressed in the body frame: Gxx, Gyy, Gzz, in square metres.
-    /// Non-negative, and each pair must sum to at least the third — the
-    /// triangle inequality every real body's moments obey.
+    /// Physical validity is checked after the complete symmetric inertia is
+    /// shifted to the centre of mass and reduced to its principal moments.
     Eigen::Vector3d unit_inertia_moments{Eigen::Vector3d::Zero()};
 
     /// Off-diagonal of the same unit inertia: Gxy, Gxz, Gyz, in square metres.
@@ -59,18 +59,6 @@ struct FixedFramePoseParameters {
 
     /// Position of F's origin from P's origin, expressed in P, in metres.
     Eigen::Vector3d p_PoFo_P{Eigen::Vector3d::Zero()};
-};
-
-/// Viscous damping of one joint, one coefficient per joint velocity.
-///
-/// Variable length, so the values live in the instance's flat damping storage
-/// and this record is the view onto one joint's segment. Coefficients are
-/// non-negative: negative damping injects energy, which is a modelling error
-/// rather than a supported configuration.
-struct JointDampingParameters {
-    /// One coefficient per joint velocity, in N·s/m or N·m·s/rad depending on
-    /// the joint's degree of freedom.
-    Eigen::VectorXd damping_per_joint_velocity{};
 };
 
 /// Reflected inertia contribution of one joint actuator.

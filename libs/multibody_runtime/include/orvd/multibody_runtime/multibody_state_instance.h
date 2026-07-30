@@ -24,6 +24,8 @@
 
 #include <Eigen/Dense>
 
+#include <vector>
+
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
 #include "orvd/multibody_runtime/multibody_state_layout.h"
 
@@ -33,10 +35,27 @@ class MultibodyStateInstance {
    public:
     /// Builds a zero-initialised state against `layout`.
     ///
-    /// The layout must outlive this state, and the state is bound to that exact
-    /// layout object: see `MultibodyStateLayout` for why identity rather than
-    /// equal contents.
+    /// `layout` must be a stable lvalue and must outlive this state. The state
+    /// is bound to that exact layout object: see `MultibodyStateLayout` for why
+    /// identity rather than equal contents.
+    ///
+    /// Zero initialization establishes storage, not a model-valid default
+    /// configuration. This layer does not know mobilizer position segments; the
+    /// model-aware adapter must install the finalized model's default positions
+    /// before the state can be evaluated.
     explicit MultibodyStateInstance(const MultibodyStateLayout& layout);
+    MultibodyStateInstance(MultibodyStateLayout&&) = delete;
+    MultibodyStateInstance(const MultibodyStateLayout&&) = delete;
+
+    // Assignment could silently rebind an instance to a different model and
+    // bypass versioned setters. A default move would leave its source bound to
+    // the old layout but without layout-sized storage, while a copy has no
+    // explicit snapshot-version contract. Introduce those operations by name
+    // if a real consumer needs them; do not inherit member-wise semantics.
+    MultibodyStateInstance(const MultibodyStateInstance&) = delete;
+    MultibodyStateInstance& operator=(const MultibodyStateInstance&) = delete;
+    MultibodyStateInstance(MultibodyStateInstance&&) = delete;
+    MultibodyStateInstance& operator=(MultibodyStateInstance&&) = delete;
 
     /// The layout this state is bound to.
     const MultibodyStateLayout& layout() const { return *layout_; }
@@ -53,10 +72,10 @@ class MultibodyStateInstance {
     /// @throws std::invalid_argument if the size does not match the layout, or
     /// if any value is not finite. Nothing is written unless everything passes.
     ///
-    /// Which entries are a quaternion, and what should happen when one is not a
-    /// unit quaternion, are questions about the model's joints. This layer does
-    /// not know the joints, so it does not guess: it neither rejects nor
-    /// silently normalises.
+    /// Which entries are quaternion segments is a property of the finalized
+    /// model. This raw store does not guess those segments and does not silently
+    /// normalize them; the model-aware adapter validates their non-zero
+    /// precondition before evaluation.
     void set_generalized_positions(const Eigen::Ref<const Eigen::VectorXd>& positions);
 
     /// @throws std::invalid_argument on a size mismatch or a non-finite value.
@@ -67,9 +86,9 @@ class MultibodyStateInstance {
     const RigidBodyInertiaParameters& rigid_body_inertia_parameters(
         int rigid_body_index) const;
     /// @throws std::invalid_argument if the index is out of range, a value is
-    /// not finite, the mass or a unit-inertia moment is negative, or the
-    /// moments violate the triangle inequality. Zero mass and zero inertia pass:
-    /// a massless frame carrier is a normal modelling device.
+    /// not finite, the mass is negative, or the central principal moments are
+    /// negative or violate the triangle inequality. Zero mass and zero inertia
+    /// pass: a massless frame carrier is a normal modelling device.
     void set_rigid_body_inertia_parameters(
         int rigid_body_index, const RigidBodyInertiaParameters& parameters);
 

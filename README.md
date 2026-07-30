@@ -59,13 +59,15 @@ OpenRailVehicleDynamics/
     ├── contract/         模型中立场景与观测语义
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
     ├── math/             double 位姿组合的代数与输出重叠契约
+    ├── multibody_runtime/ 多体状态布局、类型化参数与原子写入契约
     ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```
 
-模块的 `include/orvd/<module>/` 为公开头，`src/` 为实现；多体运行时下游 include 形如
-`#include "orvd/multibody_runtime/multibody_runtime_context.h"`。各模块 `src/` 目前为空。
+已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如
+`#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、
+不导出，终端公共 API 由 G29 与 G46 收口。尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 
