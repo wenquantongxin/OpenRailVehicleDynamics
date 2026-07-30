@@ -36,8 +36,8 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 
 ## 一轮六步(G := 路书当前 Goal)
 
-0. **前置**:`git status --porcelain` 为空;路书当前 Goal 与本轮一致;上一轮 Codex 的
-   全部改动(含被 amend 的提交)都已审读消化。
+0. **前置**:`git status --porcelain` 为空;路书当前 Goal 与本轮一致;上一轮的全部线性
+   提交都已审读消化。
 1. **侦查**:通读 G 的产物/完成门/明确不做;通读将触及的文件与相邻代码;必要时做只读
    探针。产出四件:已核实事实、困惑点与我的倾向、实施草案、完成门清单。
 2. **裁决请求**:按模板 A 写 `GXX_ruling.stage.txt`,后台发送,等完成,取最后一个
