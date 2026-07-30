@@ -177,12 +177,25 @@ MultibodyStateInstance::MultibodyStateInstance(const MultibodyStateLayout& layou
       linear_bushing_parameters_(
           static_cast<std::size_t>(layout.linear_bushing_count())) {}
 
+// Every versioned write runs in the same four steps, in this order:
+//
+//   1. validate the whole input;
+//   2. compute the successor version, which fails if the counter is exhausted;
+//   3. store the data;
+//   4. commit the version.
+//
+// Step 2 sits before step 3 so that an exhausted counter cannot leave data
+// written under a version that never advanced — the one state in which a stale
+// cache reads as fresh. Step 4 sits after step 3 so that no reader can observe
+// the new version while the old data is still in place.
 void MultibodyStateInstance::set_generalized_positions(
     const Eigen::Ref<const Eigen::VectorXd>& positions) {
     RequireSize(positions.size(), layout_->generalized_position_count(),
                 "the generalized position vector");
     RequireFinite(positions, "generalized position");
+    const MultibodyStateVersion next = generalized_positions_version_.Next();
     generalized_positions_ = positions;
+    generalized_positions_version_ = next;
 }
 
 void MultibodyStateInstance::set_generalized_velocities(
@@ -190,7 +203,9 @@ void MultibodyStateInstance::set_generalized_velocities(
     RequireSize(velocities.size(), layout_->generalized_velocity_count(),
                 "the generalized velocity vector");
     RequireFinite(velocities, "generalized velocity");
+    const MultibodyStateVersion next = generalized_velocities_version_.Next();
     generalized_velocities_ = velocities;
+    generalized_velocities_version_ = next;
 }
 
 const RigidBodyInertiaParameters&
@@ -207,8 +222,10 @@ void MultibodyStateInstance::set_rigid_body_inertia_parameters(
     RequireIndexInRange(rigid_body_index, layout_->rigid_body_count(),
                         "rigid body");
     RequirePhysicallyValidSpatialInertia(parameters, rigid_body_index);
+    const MultibodyStateVersion next = rigid_body_inertias_version_.Next();
     rigid_body_inertia_parameters_[static_cast<std::size_t>(rigid_body_index)] =
         parameters;
+    rigid_body_inertias_version_ = next;
 }
 
 const FixedFramePoseParameters&
@@ -228,8 +245,10 @@ void MultibodyStateInstance::set_fixed_frame_pose_parameters(
         "fixed frame " + std::to_string(fixed_frame_index) + "'s ";
     RequireRotation(parameters.R_PF, frame + "rotation R_PF");
     RequireFinite(parameters.p_PoFo_P, frame + "translation p_PoFo_P");
+    const MultibodyStateVersion next = fixed_frame_poses_version_.Next();
     fixed_frame_pose_parameters_[static_cast<std::size_t>(fixed_frame_index)] =
         parameters;
+    fixed_frame_poses_version_ = next;
 }
 
 Eigen::Ref<const Eigen::VectorXd> MultibodyStateInstance::joint_damping(
@@ -269,8 +288,10 @@ void MultibodyStateInstance::set_joint_actuator_parameters(
         "joint actuator " + std::to_string(joint_actuator_index) + "'s ";
     RequireNonNegative(parameters.rotor_inertia, actuator + "rotor inertia");
     RequireFinite(parameters.gear_ratio, actuator + "gear ratio");
+    const MultibodyStateVersion next = joint_actuator_parameters_version_.Next();
     joint_actuator_parameters_[static_cast<std::size_t>(joint_actuator_index)] =
         parameters;
+    joint_actuator_parameters_version_ = next;
 }
 
 const RevoluteSpringParameters&
