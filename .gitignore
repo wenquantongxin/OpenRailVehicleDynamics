@@ -16,6 +16,10 @@ CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
 
+# Local build configuration. Points build trees at this machine's external volume,
+# so it is per-machine by definition and must not be tracked.
+CMakeUserPresets.json
+
 # IDE / editor
 .vscode/
 .idea/
