@@ -67,7 +67,8 @@ class FixedOffsetFrame final : public Frame<T> {
   ~FixedOffsetFrame() override;
 
   /// Sets the pose of `this` frame F in its parent frame P.
-  /// @param[in,out] context of the multibody plant associated with this frame.
+  /// @param[in,out] state of the finalized multibody tree associated with this
+  /// frame.
   /// @param[in] X_PF Rigid transform that characterizes `this` frame F's pose
   ///   (orientation and position) in its parent frame P.
   void SetPoseInParentFrame(orvd::multibody_runtime::MultibodyStateInstance* state,
@@ -75,7 +76,8 @@ class FixedOffsetFrame final : public Frame<T> {
 
   /// Returns the rigid transform X_PF that characterizes `this` frame F's pose
   /// in its parent frame P.
-  /// @param[in] context of the multibody plant associated with this frame.
+  /// @param[in] state of the finalized multibody tree associated with this
+  /// frame.
   math::RigidTransform<T> GetPoseInParentFrame(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 

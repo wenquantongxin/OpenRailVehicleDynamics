@@ -81,42 +81,42 @@ class PrismaticMobilizer : public MobilizerImpl<T, 1, 1> {
   // translation axis for the PrismaticJoint this is implementing.
   const Vector3<double>& translation_axis() const { return axis_; }
 
-  // Gets the translational distance for `this` mobilizer from `context`. See
+  // Gets the translational distance for `this` mobilizer from `state`. See
   // class documentation for sign convention details.
-  // @param[in] context The context of the MultibodyTree this mobilizer
+  // @param[in] state The state of the MultibodyTree this mobilizer
   //                    belongs to.
-  // @returns The translation coordinate of `this` mobilizer in the `context`.
-  const T& get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  // @returns The translation coordinate of `this` mobilizer in the `state`.
+  const T& get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets `context` so that the generalized coordinate corresponding to the
+  // Sets `state` so that the generalized coordinate corresponding to the
   // translation for `this` mobilizer equals `translation`.
-  // @param[in] context The context of the MultibodyTree this mobilizer
+  // @param[in] state The state of the MultibodyTree this mobilizer
   //                    belongs to.
   // @param[in] translation The desired translation in meters.
   // @returns a constant reference to `this` mobilizer.
-  const PrismaticMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const PrismaticMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                               const T& translation) const;
 
   // Gets the rate of change, in meters per second, of `this` mobilizer's
-  // translation (see get_translation()) from `context`. See class
+  // translation (see get_translation()) from `state`. See class
   // documentation for the translation sign convention.
-  // @param[in] context The context of the MultibodyTree this mobilizer
+  // @param[in] state The state of the MultibodyTree this mobilizer
   //                    belongs to.
   // @returns The rate of change of `this` mobilizer's translation in the
-  // `context`.
-  const T& get_translation_rate(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  // `state`.
+  const T& get_translation_rate(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // Sets the rate of change, in meters per second, of `this` mobilizer's
   // translation to `translation_dot`. The new rate of change `translation_dot`
-  // gets stored in `context`.
+  // gets stored in `state`.
   // See class documentation for the translation sign convention.
-  // @param[in] context The context of the MultibodyTree this mobilizer
+  // @param[in] state The state of the MultibodyTree this mobilizer
   //                    belongs to.
   // @param[in] translation_dot The desired rate of change of `this`
   // mobilizer's translation in meters per second.
   // @returns a constant reference to `this` mobilizer.
   const PrismaticMobilizer<T>& SetTranslationRate(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation_dot) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const T& translation_dot) const;
 
   bool is_velocity_equal_to_qdot() const final { return true; }
 
@@ -128,37 +128,37 @@ class PrismaticMobilizer : public MobilizerImpl<T, 1, 1> {
                      const Frame<T>& inboard_frame_F,
                      const Frame<T>& outboard_frame_M, int axis);
 
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
   // Maps vdot to qddot, which for this mobilizer is q̈ = v̇.
-  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
   // Maps qddot to vdot, which for this mobilizer is v̇ = q̈.
-  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
@@ -187,23 +187,23 @@ class PrismaticMobilizerAxial final : public PrismaticMobilizer<T> {
       const BodyNode<T>* parent_node, const RigidBody<T>* body,
       const Mobilizer<T>* mobilizer) const final;
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration `A_FM(q, v, v̇)` of the
   // outboard frame M in the inboard frame F.
   // By definition `A_FM = d_F(V_FM)/dt`. The acceleration `A_FM` will be a
   // function of the translation distance q, its rate of change v for the
-  // current state in `context` and of the input generalized acceleration
+  // current state in `state` and of the input generalized acceleration
   // `v̇ = dv/dt`, the rate of change of v.
   // See class documentation for the translation sign convention.
   // This method aborts in Debug builds if `vdot.size()` is not one.
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const final;
 
   // Projects the spatial force `F_Mo_F` on `this` mobilizer's outboard
@@ -214,7 +214,7 @@ class PrismaticMobilizerAxial final : public PrismaticMobilizer<T> {
   // Therefore, the result of this method is the scalar value of the linear
   // force along the axis of `this` mobilizer.
   // This method aborts in Debug builds if `tau.size()` is not one.
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const final;
 

@@ -76,23 +76,6 @@ class RigidMultibodyTreeEvaluationContext {
     const multibody_runtime::MultibodyStateInstance& state() const {
         return state_;
     }
-
-    /// A context reads as the state it owns.
-    ///
-    /// Most of the tree only reads q, v or a physical parameter, and says so by
-    /// asking for a state. A context is a state plus the workspace of things
-    /// computed from it, so handing one to a reader of state is exactly right,
-    /// and requiring `.state()` at every such call would be punctuation rather
-    /// than information.
-    ///
-    /// Const only, deliberately. Nothing can reach the mutable state through
-    /// this conversion, so a function that declared itself a reader cannot
-    /// quietly become a writer — and the versions, which are what make a cache
-    /// safe, cannot be advanced behind the evaluator's back.
-    operator const multibody_runtime::MultibodyStateInstance&()  // NOLINT
-        const {
-        return state_;
-    }
     multibody_runtime::MultibodyStateInstance& mutable_state() {
         return state_;
     }

@@ -380,3 +380,30 @@ finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的�
 **因移除 framework 头而失去的传递包含,改为直接写出。** `<Eigen/SparseCore>`、
 `drake/common/unused.h` 与 `block_system_jacobian_cache.h` 原先都经
 `systems/framework/context.h` 间接到达。
+
+### G26 复核收口
+
+后续复核没有恢复任何 systems 兼容表面，而是补齐了类型化接入本身缺失的承重链：
+
+- `MultibodyTree::Finalize()` 在 forest、mobilizer 与元素拓扑稳定后按元素稳定顺序分配
+  各物理类别的参数槽，并一次构造模型拥有的不可变 `MultibodyStateLayout`。
+  `SetDefaultParameters()` 与 `SetDefaultState()` 分别安装模型参数和 q/v 默认值；World
+  的 NaN 惯量仍是模型 sentinel，不写入只接受有限物理量的状态存储。
+- 删除求值上下文到状态的隐式转换。只读状态调用必须显式写 `.state()`，只在真正可能
+  求值缓存的入口保留 `RigidMultibodyTreeEvaluationContext`。不再把迁移时的函数数目或
+  调用图收敛轮数当成接口事实。
+- tree、element、mobilizer 和 force-element 的公开状态/求值入口均按 layout 对象身份
+  拒绝同尺寸异树状态；校验发生在捷径返回或输出改写之前。Mobilizer pose、velocity、
+  pose-read 与算子入口以及 ForceElement 能量入口改为 NVI，使派生实现不能绕过身份门。
+- Quaternion、RPY 和 planar pose setter 都先组装完整 q 段再提交一次；状态指针在读取或
+  改写前先判空。四个标量 damping getter 改为按值返回，消除对临时参数记录成员的悬空引用。
+- 删除已经裁定为直接计算的 joint-damping cache API、无定义的旧 free-body setter 声明和
+  未使用的状态形参。参数槽分配与默认写入 NVI 保持 tree 私有，避免最终化后重分配或向
+  同尺寸异树状态写默认值。
+- `common/pointer_cast.h` 的唯一 admitted 消费方是已删除的 systems
+  `CreateDefaultContext()` 路径；同步删除两个悬空 include，将该支撑文件改判为
+  `discard`，不为已经消失的兼容入口保留无人消费的工具头。`multibody_tree.h` 自身使用
+  `NiceTypeName`，因此把此前经该工具头传递到达的 `nice_type_name.h` 改为直接 include。
+
+这些修改只收紧所有权、事务与入口边界；没有更改刚体动力学公式。完整缓存绑定、纯 landed
+构建和数值验证仍分别由 G27、G28 与 G39 承担。

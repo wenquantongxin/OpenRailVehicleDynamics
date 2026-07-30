@@ -7,7 +7,7 @@
 #include "drake/multibody/tree/force_element.h"
 #include "drake/multibody/tree/revolute_joint.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context_fwd.h"
 
 namespace drake {
 namespace multibody {
@@ -55,6 +55,7 @@ class RevoluteSpring final : public ForceElement<T> {
   /// @retval returns the nominal angle θ₀ in radians.
   const T& GetNominalAngle(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.revolute_spring_parameters(spring_parameter_slot_)
         .nominal_angle_radians;
   }
@@ -65,6 +66,8 @@ class RevoluteSpring final : public ForceElement<T> {
   /// record, and the store takes whole records.
   void SetNominalAngle(orvd::multibody_runtime::MultibodyStateInstance* state,
                        const T& nominal_angle) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::RevoluteSpringParameters parameters =
         state->revolute_spring_parameters(spring_parameter_slot_);
     parameters.nominal_angle_radians = nominal_angle;
@@ -75,6 +78,7 @@ class RevoluteSpring final : public ForceElement<T> {
   /// @retval returns the stiffness k in N⋅m/rad.
   const T& GetStiffness(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.revolute_spring_parameters(spring_parameter_slot_).stiffness;
   }
 
@@ -85,6 +89,8 @@ class RevoluteSpring final : public ForceElement<T> {
   /// too; this check is kept so the refusal names the caller's argument.
   void SetStiffness(orvd::multibody_runtime::MultibodyStateInstance* state,
                     const T& stiffness) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     DRAKE_THROW_UNLESS(stiffness >= 0);
     orvd::multibody_runtime::RevoluteSpringParameters parameters =
         state->revolute_spring_parameters(spring_parameter_slot_);
@@ -92,16 +98,16 @@ class RevoluteSpring final : public ForceElement<T> {
     state->set_revolute_spring_parameters(spring_parameter_slot_, parameters);
   }
 
-  T CalcPotentialEnergy(
+  T DoCalcPotentialEnergy(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc) const override;
 
-  T CalcConservativePower(
+  T DoCalcConservativePower(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
 
-  T CalcNonConservativePower(
+  T DoCalcNonConservativePower(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;

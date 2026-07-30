@@ -10,7 +10,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/planar_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -91,112 +90,113 @@ class PlanarJoint final : public Joint<T> {
   /// @name Context-dependent value access
   /// @{
 
-  /// Gets the position of `this` joint from `context`.
+  /// Gets the position of `this` joint from `state`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @retval p_FoMo_F The position of `this` joint stored in the `context`
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @retval p_FoMo_F The position of `this` joint stored in the `state`
   ///                  ordered as (x, y). See class documentation for details.
-  Vector2<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translations(context);
+  Vector2<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translations(state);
   }
 
-  /// Sets the `context` so that the position of `this` joint equals `p_FoMo_F`.
+  /// Sets the `state` so that the position of `this` joint equals `p_FoMo_F`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] p_FoMo_F The desired position in meters to be stored in
-  ///                     `context` ordered as (x, y). See class documentation
+  ///                     `state` ordered as (x, y). See class documentation
   ///                     for details.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const PlanarJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                         const Vector2<T>& p_FoMo_F) const {
-    get_mobilizer().set_translations(context, p_FoMo_F);
+    get_mobilizer().set_translations(state, p_FoMo_F);
     return *this;
   }
 
-  /// Gets the angle θ of `this` joint from `context`.
+  /// Gets the angle θ of `this` joint from `state`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @retval theta The angle of `this` joint stored in the `context`. See class
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @retval theta The angle of `this` joint stored in the `state`. See class
   ///               documentation for details.
-  const T& get_rotation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angle(context);
+  const T& get_rotation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angle(state);
   }
 
-  /// Sets the `context` so that the angle θ of `this` joint equals `theta`.
+  /// Sets the `state` so that the angle θ of `this` joint equals `theta`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @param[in] theta The desired angle in radians to be stored in `context`.
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @param[in] theta The desired angle in radians to be stored in `state`.
   ///                  See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_rotation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const PlanarJoint<T>& set_rotation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                      const T& theta) const {
-    get_mobilizer().SetAngle(context, theta);
+    get_mobilizer().SetAngle(state, theta);
     return *this;
   }
 
-  /// Sets the `context` so that the position of `this` joint equals `p_FoMo_F`
+  /// Sets the `state` so that the position of `this` joint equals `p_FoMo_F`
   /// and its angle equals `theta`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] p_FoMo_F The desired position in meters to be stored in
-  ///                     `context` ordered as (x, y). See class documentation
+  ///                     `state` ordered as (x, y). See class documentation
   ///                     for details.
-  /// @param[in] theta The desired angle in radians to be stored in `context`.
+  /// @param[in] theta The desired angle in radians to be stored in `state`.
   ///                  See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_pose(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const PlanarJoint<T>& set_pose(orvd::multibody_runtime::MultibodyStateInstance* state,
                                  const Vector2<T>& p_FoMo_F,
                                  const T& theta) const {
-    get_mobilizer().set_translations(context, p_FoMo_F);
-    get_mobilizer().SetAngle(context, theta);
+    Vector3<T> positions;
+    positions << p_FoMo_F, theta;
+    this->SetPositions(state, positions);
     return *this;
   }
 
   /// Gets the translational velocity v_FoMo_F, in meters per second, of `this`
-  /// joint's Mo measured and expressed in frame F from `context`.
-  /// @param[in] context The context of the model this joint belongs to.
+  /// joint's Mo measured and expressed in frame F from `state`.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @retval v_FoMo_F The translational velocity of `this` joint as stored in
-  ///                  the `context`.
+  ///                  the `state`.
   Vector2<T> get_translational_velocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translation_rates(context);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translation_rates(state);
   }
 
   /// Sets the translational velocity, in meters per second, of this `this`
   /// joint's Mo measured and expressed in frame F  to `v_FoMo_F`. The new
-  /// translational velocity gets stored in `context`.
-  /// @param[in] context The context of the model this joint belongs to.
+  /// translational velocity gets stored in `state`.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] v_FoMo_F The desired translational velocity of `this` joint in
   ///                     meters per second.
   /// @returns a constant reference to `this` joint.
   const PlanarJoint<T>& set_translational_velocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector2<T>& v_FoMo_F) const {
-    get_mobilizer().SetTranslationRates(context, v_FoMo_F);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector2<T>& v_FoMo_F) const {
+    get_mobilizer().SetTranslationRates(state, v_FoMo_F);
     return *this;
   }
 
   /// Gets the rate of change, in radians per second, of `this` joint's angle
-  /// θ from `context`.  See class documentation for the definition of this
+  /// θ from `state`.  See class documentation for the definition of this
   /// angle.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @retval theta_dot The rate of change of `this` joint's angle θ as
-  ///                   stored in the `context`.
-  const T& get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_rate(context);
+  ///                   stored in the `state`.
+  const T& get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_rate(state);
   }
 
   /// Sets the rate of change, in radians per second, of `this` joint's angle
   /// θ (see class documentation) to `theta_dot`. The new rate of change gets
-  /// stored in `context`.
+  /// stored in `state`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] theta_dot The desired rates of change of `this` joint's
   ///                      angle in radians per second.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const PlanarJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* state,
                                              const T& theta_dot) const {
-    get_mobilizer().SetAngularRate(context, theta_dot);
+    get_mobilizer().SetAngularRate(state, theta_dot);
     return *this;
   }
 
@@ -266,14 +266,15 @@ class PlanarJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative force according to the
   /// viscous law `f = -d⋅v`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> tau =
         get_mobilizer().get_mutable_generalized_forces_from_array(
             &forces->mutable_generalized_forces());
-    const Vector2<T>& v_translation = get_translational_velocity(context);
-    const T& v_angular = get_angular_velocity(context);
-    const Vector3<T> damping_coeff = this->GetDampingVector(context);
+    const Vector2<T>& v_translation = get_translational_velocity(state);
+    const T& v_angular = get_angular_velocity(state);
+    const Vector3<T> damping_coeff = this->GetDampingVector(state);
     tau[0] -= damping_coeff[0] * v_translation[0];
     tau[1] -= damping_coeff[1] * v_translation[1];
     tau[2] -= damping_coeff[2] * v_angular;

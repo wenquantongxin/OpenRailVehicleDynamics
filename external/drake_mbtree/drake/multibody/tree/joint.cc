@@ -40,9 +40,9 @@ void Joint<T>::set_default_positions(const VectorX<double>& default_positions) {
 
 template <typename T>
 void Joint<T>::SetPositions(
-    orvd::multibody_runtime::MultibodyStateInstance* context,
+    orvd::multibody_runtime::MultibodyStateInstance* state,
     const Eigen::Ref<const VectorX<T>>& positions) const {
-  DRAKE_THROW_UNLESS(context != nullptr);
+  DRAKE_THROW_UNLESS(state != nullptr);
   DRAKE_THROW_UNLESS(positions.size() == num_positions());
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetPositions");
@@ -51,42 +51,42 @@ void Joint<T>::SetPositions(
   // takes the result: one validation and one version advance. The array helper
   // still does the segmenting, but now on a vector the caller owns rather than
   // on the live state.
-  VectorX<T> all_q = this->get_parent_tree().get_positions(*context);
+  VectorX<T> all_q = this->get_parent_tree().get_positions(*state);
   mobilizer_->get_mutable_positions_from_array(&all_q) = positions;
-  this->get_parent_tree().SetPositions(context, all_q);
+  this->get_parent_tree().SetPositions(state, all_q);
 }
 
 template <typename T>
 Eigen::Ref<const VectorX<T>> Joint<T>::GetPositions(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetPositions");
   DRAKE_DEMAND(has_mobilizer());
-  const VectorX<T>& all_q = this->get_parent_tree().get_positions(context);
+  const VectorX<T>& all_q = this->get_parent_tree().get_positions(state);
   return mobilizer_->get_positions_from_array(all_q);
 }
 
 template <typename T>
 void Joint<T>::SetVelocities(
-    orvd::multibody_runtime::MultibodyStateInstance* context,
+    orvd::multibody_runtime::MultibodyStateInstance* state,
     const Eigen::Ref<const VectorX<T>>& velocities) const {
-  DRAKE_THROW_UNLESS(context != nullptr);
+  DRAKE_THROW_UNLESS(state != nullptr);
   DRAKE_THROW_UNLESS(velocities.size() == num_velocities());
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetVelocities");
   DRAKE_DEMAND(has_mobilizer());
-  VectorX<T> all_v = this->get_parent_tree().get_velocities(*context);
+  VectorX<T> all_v = this->get_parent_tree().get_velocities(*state);
   mobilizer_->get_mutable_velocities_from_array(&all_v) = velocities;
-  this->get_parent_tree().SetVelocities(context, all_v);
+  this->get_parent_tree().SetVelocities(state, all_v);
 }
 
 template <typename T>
 Eigen::Ref<const VectorX<T>> Joint<T>::GetVelocities(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetVelocities");
   DRAKE_DEMAND(has_mobilizer());
-  const VectorX<T>& all_v = this->get_parent_tree().get_velocities(context);
+  const VectorX<T>& all_v = this->get_parent_tree().get_velocities(state);
   return mobilizer_->get_velocities_from_array(all_v);
 }
 
@@ -136,14 +136,14 @@ std::string Joint<T>::MakeUniqueOffsetFrameName(
 }
 
 template <typename T>
-void Joint<T>::SetSpatialVelocityImpl(orvd::multibody_runtime::MultibodyStateInstance* context,
+void Joint<T>::SetSpatialVelocityImpl(orvd::multibody_runtime::MultibodyStateInstance* state,
                                       const SpatialVelocity<T>& V_FM,
                                       const char* func) const {
-  DRAKE_THROW_UNLESS(context != nullptr);
+  DRAKE_THROW_UNLESS(state != nullptr);
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetSpatialVelocity");
   DRAKE_DEMAND(has_mobilizer());
-  if (!mobilizer_->SetSpatialVelocity(V_FM, context)) {
+  if (!mobilizer_->SetSpatialVelocity(V_FM, state)) {
     throw std::logic_error(
         fmt::format("{}(): {} joint does not implement this function "
                     "(joint '{}')",
@@ -153,22 +153,22 @@ void Joint<T>::SetSpatialVelocityImpl(orvd::multibody_runtime::MultibodyStateIns
 
 template <typename T>
 SpatialVelocity<T> Joint<T>::GetSpatialVelocity(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetSpatialVelocity");
   DRAKE_DEMAND(has_mobilizer());
-  return mobilizer_->GetSpatialVelocity(context);
+  return mobilizer_->GetSpatialVelocity(state);
 }
 
 template <typename T>
-void Joint<T>::SetPosePairImpl(orvd::multibody_runtime::MultibodyStateInstance* context,
+void Joint<T>::SetPosePairImpl(orvd::multibody_runtime::MultibodyStateInstance* state,
                                const Quaternion<T>& q_FM,
                                const Vector3<T>& p_FM, const char* func) const {
-  DRAKE_THROW_UNLESS(context != nullptr);
+  DRAKE_THROW_UNLESS(state != nullptr);
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetPosePair");
   DRAKE_DEMAND(has_mobilizer());
-  if (!mobilizer_->SetPosePair(q_FM, p_FM, context)) {
+  if (!mobilizer_->SetPosePair(q_FM, p_FM, state)) {
     throw std::logic_error(
         fmt::format("{}(): {} joint does not implement this function "
                     "(joint '{}')",
@@ -178,11 +178,11 @@ void Joint<T>::SetPosePairImpl(orvd::multibody_runtime::MultibodyStateInstance* 
 
 template <typename T>
 std::pair<Eigen::Quaternion<T>, Vector3<T>> Joint<T>::GetPosePair(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetPosePair");
   DRAKE_DEMAND(has_mobilizer());
-  return mobilizer_->GetPosePair(context);
+  return mobilizer_->GetPosePair(state);
 }
 
 }  // namespace multibody

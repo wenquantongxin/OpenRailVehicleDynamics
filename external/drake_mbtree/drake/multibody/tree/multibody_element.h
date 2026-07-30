@@ -44,28 +44,6 @@ class MultibodyElement {
   /// element belongs.
   ModelInstanceIndex model_instance() const { return model_instance_; }
 
-  /// Claims this element's typed parameter slot during the finalize-time
-  /// traversal. NVI to the virtual method DoAssignParameterSlots().
-  ///
-  /// An element that has no context-mutable parameters does not override the
-  /// virtual and therefore claims nothing.
-  /// @pre allocator != nullptr
-  void AssignParameterSlots(
-      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
-          allocator);
-
-  /// Writes this element's model default parameters into a newly created state.
-  /// NVI to the virtual method DoWriteDefaultParameters().
-  ///
-  /// This is not optional decoration. A freshly built state holds each record's
-  /// own defaults — zero mass, an identity pose, no damping — which are not the
-  /// model's defaults, and evaluating a model whose bodies are all massless
-  /// would produce answers rather than errors.
-  /// @pre state != nullptr, and its layout came from the same finalization that
-  /// assigned this element's slot.
-  void WriteDefaultParameters(
-      orvd::multibody_runtime::MultibodyStateInstance* state) const;
-
   /// Returns `true` if this %MultibodyElement was added during Finalize()
   /// rather than something a user added. (See class comments.)
   bool is_ephemeral() const { return is_ephemeral_; }
@@ -116,6 +94,17 @@ class MultibodyElement {
     return *parent_tree_;
   }
 
+  /// Rejects a typed state that was not built from this element's finalized
+  /// parent tree. Equal dimensions are not sufficient: two models can have the
+  /// same-sized state while assigning different meanings to every slot.
+  void ValidateStateInstance(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    if (parent_tree_ == nullptr) {
+      ThrowNoParentTree();
+    }
+    parent_tree_->ValidateStateInstance(state);
+  }
+
   /// Returns a constant reference to the parent MultibodyTreeSystem that
   /// owns the parent MultibodyTree that owns this element.
   /// @throws std::exception if has_parent_tree() is false.
@@ -162,6 +151,19 @@ class MultibodyElement {
   friend class internal::MultibodyTree<T>;
   // Give unit tests access to the tree.
   friend class MultibodyElementTester;
+
+  /// Claims this element's typed parameter slot during the tree's one
+  /// finalize-time traversal. Kept private so no caller can reassign slots
+  /// after the layout has been frozen.
+  void AssignParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator);
+
+  /// Writes this element's model defaults during model-aware state creation.
+  /// Kept private so an element cannot be used to write its defaults into a
+  /// same-sized state that belongs to another tree.
+  void WriteDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const;
 
   // Index and ordinal are given the same numerical value here. The ordinal
   // can be overridden with set_ordinal().

@@ -36,7 +36,7 @@ namespace internal {
 // orientation of M in I as an elemental rotation of amount θ₁ about the y-axis
 // of frame I (also the y-axis of frame M).
 // Zero θ₀, θ₁ angles define the "zero configuration" which corresponds to
-// frames F, I, and M being coincident, see SetZeroState(). Angles (θ₀, θ₁)
+// frames F, I, and M being coincident. Angles (θ₀, θ₁)
 // are defined to be positive according to the right-hand-rule with the thumb
 // aligned in the direction of their respective axes. The generalized
 // velocities for this mobilizer are the rate of change of the angles, v = q̇.
@@ -84,45 +84,45 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   bool can_rotate() const final { return true; }
   bool can_translate() const final { return false; }
 
-  // Retrieves from `context` the two angles, (θ₀, θ₁) which describe the state
+  // Retrieves from `state` the two angles, (θ₀, θ₁) which describe the state
   // for `this` mobilizer as documented in this class's documentation.
   //
-  // @param[in] context The context of the model this mobilizer belongs to.
+  // @param[in] state The state of the model this mobilizer belongs to.
   // @returns angles The two angles (θ₀, θ₁) packed and returned as a vector
   //                 with entries `angles(0) = θ₀`, `angles(1) = θ₁`.
-  Vector2<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector2<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets in `context` the state for `this` mobilizer to the angles (θ₀, θ₁)
+  // Sets in `state` the state for `this` mobilizer to the angles (θ₀, θ₁)
   // provided in the input argument `angles`, which stores them with the format
   // `angles = [θ₀, θ₁]`.
   //
-  // @param[in] context The context of the model this mobilizer belongs to.
+  // @param[in] state The state of the model this mobilizer belongs to.
   // @param[in] angles A vector which must pack values for the angles (θ₀, θ₁)
   //                   described in this class's documentation, at entries
   //                   `angles(0)` and `angles(1)`, respectively.
   // @returns a constant reference to `this` mobilizer.
-  const UniversalMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const UniversalMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* state,
                                          const Vector2<T>& angles) const;
 
-  // Retrieves from `context` the rate of change, in radians per second, of
+  // Retrieves from `state` the rate of change, in radians per second, of
   // `this` mobilizer's angles (see get_angles()).
-  // @param[in] context The context of the model this mobilizer belongs to.
+  // @param[in] state The state of the model this mobilizer belongs to.
   // @returns angles_dot The rate of change of the two angles (ω₁, ω₂) returned
   //                     as the vector [ω₁, ω₂].
-  Vector2<T> get_angular_rates(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector2<T> get_angular_rates(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets in `context` the rate of change, in radians per second, of this
+  // Sets in `state` the rate of change, in radians per second, of this
   // `this` mobilizer's angles (see get_angles()) to `angles_dot`.
-  // @param[in] context The context of the model this mobilizer belongs to.
+  // @param[in] state The state of the model this mobilizer belongs to.
   // @param[in] angles_dot The desired rate of change, ω₁, ω₂, packed as the
   //                       vector [ω₁, ω₂].
   // @returns a constant reference to `this` mobilizer.
   const UniversalMobilizer<T>& SetAngularRates(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector2<T>& angles_dot) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector2<T>& angles_dot) const;
 
   // Computes the across-mobilizer transform `X_FM(q)` between the inboard
   // frame F and the outboard frame M as a function of the angles (θ₀, θ₁)
-  // stored in `context`.
+  // stored in `state`.
   math::RigidTransform<T> calc_X_FM(const T* q) const {
     const T s0 = sin(q[0]), c0 = cos(q[0]);
     const T s1 = sin(q[1]), c1 = cos(q[1]);
@@ -146,7 +146,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
 
   // Computes the across-mobilizer velocity V_FM(q, v) of the outboard frame
   // M measured and expressed in frame F as a function of the angles (θ₀, θ₁)
-  // stored in context and of the input angular rates v, formatted as
+  // stored in state and of the input angular rates v, formatted as
   // in get_angular_rates().
   // TODO(sherm1) Should not have to recalculate H_FM(q) here.
   SpatialVelocity<T> calc_V_FM(const T* q, const T* v) const {
@@ -178,22 +178,22 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
     tau_as_vector = Hw_FM.transpose() * t_B_F;
   }
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration `A_FM(q, v, v̇)` of the
   // outboard frame M in the inboard frame F.
   // By definition `A_FM = d_F(V_FM)/dt = H_FM(q) * v̇ + Ḣ_FM * v`.
   // The acceleration `A_FM` will be a function of the rotation angles q (θ₀,
-  // θ₁) and their rates of change v (ω₁, ω₂) from the `context` as well as the
+  // θ₁) and their rates of change v (ω₁, ω₂) from the `state` as well as the
   // generalized accelerations `v̇ = dv/dt`, the rates of change of v.
   // This method aborts in Debug builds if `vdot.size()` is not two.
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
   // Projects the spatial force `F_Mo = [τ_Mo, f_Mo]` on `this` mobilizer's
@@ -205,34 +205,34 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   // Therefore, the result of this method is the vector of torques about each
   // rotation axis of `this` mobilizer.
   // This method aborts in Debug builds if `tau.size()` is not two.
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
   bool is_velocity_equal_to_qdot() const override { return true; }
 
  protected:
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 

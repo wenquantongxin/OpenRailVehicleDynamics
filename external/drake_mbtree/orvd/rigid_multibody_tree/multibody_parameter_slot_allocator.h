@@ -9,10 +9,12 @@
 /// three-vectors at four separate indices; whether two indices referred to
 /// comparable things was not a question the type could answer.
 ///
-/// Here each category has its own counter, and an element receives an ordinal
-/// within its category — the third rigid body's inertia, the first bushing's
-/// parameters. The ordinal means something on its own, and an ordinal from one
-/// category cannot be handed to another by accident of both being `int`.
+/// Here each category has its own named allocation path and counter, and an
+/// element receives an ordinal within its category — the third rigid body's
+/// inertia, the first bushing's parameters. The stored ordinal remains an
+/// integer because it indexes compact vectors; category safety comes from the
+/// allocator and element APIs, not from pretending those integers are distinct
+/// C++ types.
 ///
 /// Two of upstream's splits are closed while doing this. An actuator's rotor
 /// inertia and gear ratio were two one-wide parameters; they are one

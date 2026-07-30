@@ -22,25 +22,25 @@ std::unique_ptr<BodyNode<T>> WeldMobilizer<T>::CreateBodyNode(
 }
 
 template <typename T>
-math::RigidTransform<T> WeldMobilizer<T>::CalcAcrossMobilizerTransform(
+math::RigidTransform<T> WeldMobilizer<T>::DoCalcAcrossMobilizerTransform(
     const orvd::multibody_runtime::MultibodyStateInstance&) const {
   return math::RigidTransform<T>();  // Identity
 }
 
 template <typename T>
-SpatialVelocity<T> WeldMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
+SpatialVelocity<T> WeldMobilizer<T>::DoCalcAcrossMobilizerSpatialVelocity(
     const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>&) const {
   return SpatialVelocity<T>::Zero();
 }
 
 template <typename T>
-SpatialAcceleration<T> WeldMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
+SpatialAcceleration<T> WeldMobilizer<T>::DoCalcAcrossMobilizerSpatialAcceleration(
     const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>&) const {
   return SpatialAcceleration<T>::Zero();
 }
 
 template <typename T>
-void WeldMobilizer<T>::ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
+void WeldMobilizer<T>::DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
                                            const SpatialForce<T>&,
                                            Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);

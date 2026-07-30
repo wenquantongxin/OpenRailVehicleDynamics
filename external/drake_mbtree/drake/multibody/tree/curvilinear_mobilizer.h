@@ -98,32 +98,32 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
   bool can_translate() const final { return true; }
 
   /* Gets the distance of travel along the path of the mobilizer from
-   the provided context in meters.
-   @param context The context of the model this mobilizer belongs to.
-   @returns The distance coordinate of the mobilizer in the context. */
-  const T& get_distance(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+   the provided state in meters.
+   @param state The state of the model this mobilizer belongs to.
+   @returns The distance coordinate of the mobilizer in the state. */
+  const T& get_distance(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   /* Sets the distance of travel along the path of the mobilizer from
-   the provided context in meters.
-   @param context The context of the model this mobilizer belongs to.
+   the provided state in meters.
+   @param state The state of the model this mobilizer belongs to.
    @param distance The desired distance coordinate of the mobilizer.
    @returns a const reference to this mobilizer */
-  const CurvilinearMobilizer<T>& SetDistance(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const CurvilinearMobilizer<T>& SetDistance(orvd::multibody_runtime::MultibodyStateInstance* state,
                                              const T& distance) const;
 
-  /* Gets the tangential velocity of the mobilizer from the provided context in
+  /* Gets the tangential velocity of the mobilizer from the provided state in
    meters per second.
-   @param context The context of the model this mobilizer belongs to.
-   @returns The velocity coordinate of the mobilizer in the context. */
-  const T& get_tangential_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+   @param state The state of the model this mobilizer belongs to.
+   @returns The velocity coordinate of the mobilizer in the state. */
+  const T& get_tangential_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  /* Sets the tangential velocity of the mobilizer from the provided context in
+  /* Sets the tangential velocity of the mobilizer from the provided state in
    meters per second.
-   @param context The context of the model this mobilizer belongs to.
+   @param state The state of the model this mobilizer belongs to.
    @param tangential_velocity The desired velocity coordinate of the mobilizer.
    @returns a const reference to this mobilizer */
   const CurvilinearMobilizer<T>& SetTangentialVelocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const T& tangential_velocity) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const T& tangential_velocity) const;
 
   /* Computes the across-mobilizer transform X_FM(q) as a function of the
    distance traveled along the mobilizer's path.
@@ -185,45 +185,45 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
   void calc_tau_from_M(const math::RigidTransform<T>&, const T* q,
                        const SpatialForce<T>& F_BMo_M, T* tau) const;
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_BMo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
   bool is_velocity_equal_to_qdot() const override { return true; }
 
  protected:
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 

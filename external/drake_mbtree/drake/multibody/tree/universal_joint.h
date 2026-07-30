@@ -10,7 +10,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/universal_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -100,48 +99,48 @@ class UniversalJoint final : public Joint<T> {
   /// @name Context-dependent value access
   /// @{
 
-  /// Gets the rotation angles of `this` joint from `context`. See class
+  /// Gets the rotation angles of `this` joint from `state`. See class
   /// documentation for the definition of these angles.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @returns The angle coordinates of `this` joint stored in the `context`
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @returns The angle coordinates of `this` joint stored in the `state`
   ///          ordered as (θ₁, θ₂).
-  Vector2<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angles(context);
+  Vector2<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angles(state);
   }
 
-  /// Sets the `context` so that the generalized coordinates corresponding to
+  /// Sets the `state` so that the generalized coordinates corresponding to
   /// the rotation angles of `this` joint equals `angles`.
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @param[in] angles The desired angles in radians to be stored in `context`
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @param[in] angles The desired angles in radians to be stored in `state`
   ///                   ordered as (θ₁, θ₂). See class documentation for
   ///                   details.
   /// @returns a constant reference to `this` joint.
-  const UniversalJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const UniversalJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* state,
                                       const Vector2<T>& angles) const {
-    get_mobilizer().SetAngles(context, angles);
+    get_mobilizer().SetAngles(state, angles);
     return *this;
   }
 
   /// Gets the rates of change, in radians per second, of `this` joint's
-  /// angles (see class documentation) from `context`.
-  /// @param[in] context The context of the model this joint belongs to.
+  /// angles (see class documentation) from `state`.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @returns The rates of change of `this` joint's angles as stored in the
-  ///          `context`.
-  Vector2<T> get_angular_rates(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_rates(context);
+  ///          `state`.
+  Vector2<T> get_angular_rates(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_rates(state);
   }
 
   /// Sets the rates of change, in radians per second, of this `this` joint's
   /// angles (see class documentation) to `theta_dot`. The new rates of change
-  /// get stored in `context`.
-  /// @param[in] context The context of the model this joint belongs to.
+  /// get stored in `state`.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] theta_dot The desired rates of change of `this` joints's angles
   ///                      in radians per second.
   /// @returns a constant reference to `this` joint.
   const UniversalJoint<T>& set_angular_rates(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector2<T>& theta_dot) const {
-    get_mobilizer().SetAngularRates(context, theta_dot);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector2<T>& theta_dot) const {
+    get_mobilizer().SetAngularRates(state, theta_dot);
     return *this;
   }
 
@@ -189,13 +188,14 @@ class UniversalJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative torque according to the
   /// viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> tau =
         get_mobilizer().get_mutable_generalized_forces_from_array(
             &forces->mutable_generalized_forces());
-    const Vector2<T>& theta_dot = get_angular_rates(context);
-    tau = -this->GetDampingVector(context)[0] * theta_dot;
+    const Vector2<T>& theta_dot = get_angular_rates(state);
+    tau = -this->GetDampingVector(state)[0] * theta_dot;
   }
 
  private:

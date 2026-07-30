@@ -18,7 +18,7 @@
 #include "drake/multibody/tree/velocity_kinematics_cache.h"
 #include "orvd/rigid_multibody_tree/spatial_inertia_parameter_conversion.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context_fwd.h"
 
 namespace drake {
 namespace multibody {
@@ -369,11 +369,20 @@ class RigidBody : public MultibodyElement<T> {
     return default_spatial_inertia_;
   }
 
-  /// Gets this body's mass from the given context.
-  /// @param[in] context contains the state of the multibody system.
-  /// @pre the context makes sense for use by this RigidBody.
+  /// Gets this body's mass from the given state.
+  /// @param[in] state contains the state of the multibody system.
+  /// @pre the state was created for this RigidBody's finalized tree.
   const T& get_mass(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
+    if (inertia_parameter_slot_ ==
+        orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot) {
+      // World deliberately has no mutable inertia record. Preserve its
+      // upstream NaN modelling sentinel for reads without admitting that
+      // sentinel into the finite-only runtime store.
+      DRAKE_DEMAND(this->index() == world_index());
+      return default_spatial_inertia_.get_mass();
+    }
     return state.rigid_body_inertia_parameters(inertia_parameter_slot_)
         .mass_kilograms;
   }
@@ -417,7 +426,7 @@ class RigidBody : public MultibodyElement<T> {
   /// Gets the SpatialForce on this %RigidBody B from `forces` as F_BBo_W:
   /// applied at body B's origin Bo and expressed in world frame W.
   const SpatialForce<T>& GetForceInWorld(
-      const orvd::multibody_runtime::MultibodyStateInstance&, const MultibodyForces<T>& forces) const {
+      const MultibodyForces<T>& forces) const {
     ThrowIfNotFinalized(__func__);
     DRAKE_ASSERT(this->has_parent_tree());
     DRAKE_THROW_UNLESS(
@@ -427,8 +436,7 @@ class RigidBody : public MultibodyElement<T> {
 
   /// Adds the SpatialForce on this %RigidBody B, applied at body B's origin Bo
   /// and expressed in the world frame W into `forces`.
-  void AddInForceInWorld(const orvd::multibody_runtime::MultibodyStateInstance&,
-                         const SpatialForce<T>& F_Bo_W,
+  void AddInForceInWorld(const SpatialForce<T>& F_Bo_W,
                          MultibodyForces<T>* forces) const {
     DRAKE_THROW_UNLESS(forces != nullptr);
     ThrowIfNotFinalized(__func__);
@@ -457,13 +465,19 @@ class RigidBody : public MultibodyElement<T> {
                   const SpatialForce<T>& F_Bp_E, const Frame<T>& frame_E,
                   MultibodyForces<T>* forces) const;
 
-  /// Gets this body's center of mass position from the given context.
-  /// @param[in] context contains the state of the multibody system.
+  /// Gets this body's center of mass position from the given state.
+  /// @param[in] state contains the state of the multibody system.
   /// @returns p_BoBcm_B position vector from Bo (this rigid body B's origin)
   /// to Bcm (B's center of mass), expressed in B.
-  /// @pre the context makes sense for use by this %RigidBody.
+  /// @pre the state was created for this %RigidBody's finalized tree.
   Vector3<T> CalcCenterOfMassInBodyFrame(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
+    if (inertia_parameter_slot_ ==
+        orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot) {
+      DRAKE_DEMAND(this->index() == world_index());
+      return default_spatial_inertia_.get_com();
+    }
     return state.rigid_body_inertia_parameters(inertia_parameter_slot_)
         .center_of_mass_in_body_frame;
   }
@@ -485,29 +499,39 @@ class RigidBody : public MultibodyElement<T> {
   Vector3<T> CalcCenterOfMassTranslationalAccelerationInWorld(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
-  /// Gets this body's spatial inertia about its origin from the given context.
-  /// @param[in] context contains the state of the multibody system.
+  /// Gets this body's spatial inertia about its origin from the given state.
+  /// @param[in] state contains the state of the multibody system.
   /// @returns M_BBo_B spatial inertia of this rigid body B about Bo (B's
   /// origin), expressed in B. M_BBo_B contains properties related to B's mass,
   /// the position vector from Bo to Bcm (B's center of mass), and G_BBo_B
   /// (B's unit inertia about Bo expressed in B).
-  /// @pre the context makes sense for use by this %RigidBody.
+  /// @pre the state was created for this %RigidBody's finalized tree.
   SpatialInertia<T> CalcSpatialInertiaInBodyFrame(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
+    if (inertia_parameter_slot_ ==
+        orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot) {
+      DRAKE_DEMAND(this->index() == world_index());
+      return default_spatial_inertia_;
+    }
     return orvd::rigid_multibody_tree::internal::ToSpatialInertia(
         state.rigid_body_inertia_parameters(inertia_parameter_slot_));
   }
 
-  /// For this %RigidBody B, sets its mass stored in @p context to @p mass.
-  /// @param[out] context contains the state of the multibody system.
+  /// For this %RigidBody B, sets its mass stored in @p state to @p mass.
+  /// @param[out] state contains the state of the multibody system.
   /// @param[in] mass mass of this rigid body B.
   /// @note This function changes this body B's mass and appropriately scales
   /// I_BBo_B (B's rotational inertia about Bo, expressed in B).
-  /// @pre the context makes sense for use by this RigidBody.
-  /// @throws std::exception if context is null.
+  /// @pre the state was created for this RigidBody's finalized tree.
+  /// @throws std::exception if state is null.
   void SetMass(orvd::multibody_runtime::MultibodyStateInstance* state,
                const T& mass) const {
     DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
+    DRAKE_THROW_UNLESS(
+        inertia_parameter_slot_ !=
+        orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot);
     orvd::multibody_runtime::RigidBodyInertiaParameters parameters =
         state->rigid_body_inertia_parameters(inertia_parameter_slot_);
     parameters.mass_kilograms = mass;
@@ -517,7 +541,7 @@ class RigidBody : public MultibodyElement<T> {
 
   /// (Advanced) Sets this body's center of mass position while preserving its
   /// inertia about its body origin.
-  /// @param[in, out] context contains the state of the multibody system. It is
+  /// @param[in, out] state contains the state of the multibody system. It is
   /// modified to store the updated com (center of mass position).
   /// @param[in] com position vector from Bo (this body B's origin) to Bcm
   /// (B's center of mass), expressed in B.
@@ -525,8 +549,8 @@ class RigidBody : public MultibodyElement<T> {
   /// modifying G_BBo_B (B's unit inertia about Bo, expressed in B). Since this
   /// use case is very unlikely, consider using SetSpatialInertiaInBodyFrame()
   /// or SetCenterOfMassInBodyFrameAndPreserveCentralInertia().
-  /// @pre the context makes sense for use by this %RigidBody.
-  /// @throws std::exception if context is null.
+  /// @pre the state was created for this %RigidBody's finalized tree.
+  /// @throws std::exception if state is null.
   /// @warning Do not use this function unless it is needed (think twice).
   // TODO(Mitiguy) Consider deprecating this function.
   void SetCenterOfMassInBodyFrame(
@@ -537,7 +561,7 @@ class RigidBody : public MultibodyElement<T> {
 
   /// Sets this body's center of mass position while preserving its inertia
   /// about its center of mass.
-  /// @param[in, out] context contains the state of the multibody system. It is
+  /// @param[in, out] state contains the state of the multibody system. It is
   /// modified to store the updated center_of_mass_position and the updated
   /// G_BBo_B (this body B's unit inertia about B's origin Bo, expressed in B).
   /// @param[in] center_of_mass_position position vector from Bo to Bcm
@@ -547,25 +571,29 @@ class RigidBody : public MultibodyElement<T> {
   /// mostly near) a single point, it has **questionable** utility to generally
   /// account for inertia changes due to arbitrary center of mass changes.
   /// Consider using SetSpatialInertiaInBodyFrame() instead.
-  /// @pre the context makes sense for use by this RigidBody.
-  /// @throws std::exception if context is null.
+  /// @pre the state was created for this RigidBody's finalized tree.
+  /// @throws std::exception if state is null.
   void SetCenterOfMassInBodyFrameAndPreserveCentralInertia(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& center_of_mass_position) const;
 
   /// For this %RigidBody B, sets its SpatialInertia that is stored in
-  /// @p context to @p M_Bo_B.
-  /// @param[out] context contains the state of the multibody system.
+  /// @p state to @p M_Bo_B.
+  /// @param[out] state contains the state of the multibody system.
   /// @param[in] M_Bo_B spatial inertia of this rigid body B about Bo (B's
   /// origin), expressed in B. M_Bo_B contains properties related to B's mass,
   /// the position vector from Bo to Bcm (B's center of mass), and G_Bo_B
   /// (B's unit inertia about Bo expressed in B).
-  /// @pre the context makes sense for use by this %RigidBody.
-  /// @throws std::exception if context is null.
+  /// @pre the state was created for this %RigidBody's finalized tree.
+  /// @throws std::exception if state is null.
   void SetSpatialInertiaInBodyFrame(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const SpatialInertia<T>& M_Bo_B) const {
     DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
+    DRAKE_THROW_UNLESS(
+        inertia_parameter_slot_ !=
+        orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot);
     state->set_rigid_body_inertia_parameters(
         inertia_parameter_slot_,
         orvd::rigid_multibody_tree::internal::ToInertiaParameters(M_Bo_B));
@@ -724,9 +752,9 @@ class RigidBody : public MultibodyElement<T> {
     }
   }
 
-  // For this RigidBody B, set its center of mass position stored in context
+  // For this RigidBody B, set its center of mass position stored in state
   // to center_of_mass_position, but does not modify other inertia properties.
-  // @param[in, out] context contains the state of the multibody system.
+  // @param[in, out] state contains the state of the multibody system.
   // @param[in] center_of_mass_position position vector from Bo (B's origin) to
   // Bcm (B's center of mass), expressed in B.
   // @note G_BBo_B and I_BBo_B (B's unit inertia and rotational inertia about
@@ -735,22 +763,22 @@ class RigidBody : public MultibodyElement<T> {
   // if changing center of mass position also changes G_BBo_B and necessitates
   // a call to SetUnitInertiaAboutBodyOrigin(). B's inertia properties can be
   // checked via CalcSpatialInertiaInBodyFrame().IsPhysicallyValid().
-  // @pre the context makes sense for use by this %RigidBody.
-  // @throws std::exception if context is null.
+  // @pre the state was created for this %RigidBody's finalized tree.
+  // @throws std::exception if state is null.
   void SetCenterOfMassInBodyFrameNoModifyInertia(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& center_of_mass_position) const;
 
   // For this RigidBody B, sets the unit inertia about B's origin stored in
-  // @p context to @p G_BBo_B.
-  // @param[in, out] context contains the state of the multibody system.
+  // @p state to @p G_BBo_B.
+  // @param[in, out] state contains the state of the multibody system.
   // @param[in] G_BBo_B B's unit inertia about Bo (B's origin), expressed in B.
   // @note To avoid invalid inertia properties, consider if changing G_BBo_B
   // also changes B's center of mass and necessitates a call to
   // SetCenterOfMassInBodyFrameNoModifyInertia(). B's inertia properties can be
   // checked via CalcSpatialInertiaInBodyFrame().IsPhysicallyValid().
-  // @pre the context makes sense for use by this %RigidBody.
-  // @throws std::exception if context is null.
+  // @pre the state was created for this %RigidBody's finalized tree.
+  // @throws std::exception if state is null.
   void SetUnitInertiaAboutBodyOrigin(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const UnitInertia<T>& G_BBo_B) const;

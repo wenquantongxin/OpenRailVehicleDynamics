@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "drake/common/drake_copyable.h"
-#include "drake/common/pointer_cast.h"
+#include "drake/common/nice_type_name.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/topology/graph.h"
 #include <Eigen/SparseCore>
@@ -30,6 +30,7 @@
 #include "drake/multibody/tree/spatial_inertia.h"
 #include "drake/multibody/tree/velocity_kinematics_cache.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/multibody_runtime/multibody_state_layout.h"
 #include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
@@ -53,6 +54,8 @@ template <typename T>
 class ForceElement;
 template <typename T>
 class UniformGravityFieldElement;
+template <typename T>
+class MultibodyElement;
 
 /// Enumeration that indicates whether the Jacobian is partial differentiation
 /// with respect to q̇ (time-derivatives of generalized positions) or
@@ -989,10 +992,24 @@ class MultibodyTree {
   // @throws std::exception if called post-finalize.
   void Finalize();
 
-  // (Advanced) Allocates a new context for this MultibodyTree uniquely
-  // identifying the state of the multibody system.
-  //
-  // @throws std::exception if this is not owned by a MultibodyPlant /
+  /// The immutable state and parameter layout assigned by Finalize().
+  ///
+  /// Its object identity belongs to this model. A state built against an
+  /// otherwise identical layout from another tree is not interchangeable.
+  /// @throws std::exception if called before Finalize().
+  const orvd::multibody_runtime::MultibodyStateLayout& state_layout() const {
+    DRAKE_MBT_THROW_IF_NOT_FINALIZED();
+    DRAKE_DEMAND(state_layout_ != nullptr);
+    return *state_layout_;
+  }
+
+  /// Installs the finalized model's context-mutable physical parameter
+  /// defaults into `state`.
+  ///
+  /// This is separate from SetDefaultState(), which installs q and v. A
+  /// model-aware context creation path calls both exactly once.
+  void SetDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const;
 
   // See MultibodyPlant method.
   // Installs the finalized model's default configuration into `state`: one
@@ -1007,7 +1024,8 @@ class MultibodyTree {
 
   // See MultibodyPlant::GetFreeBodyPose.
   math::RigidTransform<T> GetFreeBodyPoseOrThrow(
-      const orvd::multibody_runtime::MultibodyStateInstance& context, const RigidBody<T>& body) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const RigidBody<T>& body) const;
 
   // See MultibodyPlant::SetDefaultFloatingBaseBodyPose.
   void SetDefaultFloatingBaseBodyPose(const RigidBody<T>& body,
@@ -1020,24 +1038,14 @@ class MultibodyTree {
   // See MultibodyPlant::SetFreeBodyPose.
   void SetFreeBodyPoseOrThrow(const RigidBody<T>& body,
                               const math::RigidTransform<T>& X_WB,
-                              orvd::multibody_runtime::MultibodyStateInstance* context) const;
+                              orvd::multibody_runtime::MultibodyStateInstance*
+                                  state) const;
 
   // See MultibodyPlant::SetFreeBodySpatialVelocity.
   void SetFreeBodySpatialVelocityOrThrow(const RigidBody<T>& body,
                                          const SpatialVelocity<T>& V_WB,
-                                         orvd::multibody_runtime::MultibodyStateInstance* context) const;
-
-  // See MultibodyPlant::SetFreeBodyPose.
-  void SetFreeBodyPoseOrThrow(const RigidBody<T>& body,
-                              const math::RigidTransform<T>& X_WB,
-                              const orvd::multibody_runtime::MultibodyStateInstance& context,
-                              orvd::multibody_runtime::MultibodyStateInstance* state) const;
-
-  // See MultibodyPlant::SetFreeBodySpatialVelocity.
-  void SetFreeBodySpatialVelocityOrThrow(const RigidBody<T>& body,
-                                         const SpatialVelocity<T>& V_WB,
-                                         const orvd::multibody_runtime::MultibodyStateInstance& context,
-                                         orvd::multibody_runtime::MultibodyStateInstance* state) const;
+                                         orvd::multibody_runtime::
+                                             MultibodyStateInstance* state) const;
 
   // Kinematic computations
 
@@ -1086,10 +1094,11 @@ class MultibodyTree {
                             EigenPtr<MatrixX<T>> v_AQi_E) const;
 
   // See MultibodyPlant method.
-  T CalcTotalMass(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  T CalcTotalMass(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // See MultibodyPlant method.
-  T CalcTotalMass(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  T CalcTotalMass(const orvd::multibody_runtime::MultibodyStateInstance& state,
                   const std::vector<ModelInstanceIndex>& model_instances) const;
 
   // See MultibodyPlant method.
@@ -1294,7 +1303,7 @@ class MultibodyTree {
   // Computes the spatial inertia M_B_W(q) for each body B in the model about
   // its frame origin Bo and expressed in the world frame W.
   // @param[in] context
-  //   The context storing the state of the model.
+  //   The evaluation context storing the state of the model.
   // @param[out] M_B_W_all
   //   For each body in the model, entry RigidBody::mobod_index() in M_B_W_all
   //   contains the updated spatial inertia `M_B_W(q)` for that body. On input
@@ -1306,29 +1315,20 @@ class MultibodyTree {
       std::vector<SpatialInertia<T>>* M_B_W_all) const;
 
   // Computes the reflected inertia Irefl for each velocity index.
-  // @param[in] context
-  //   The context storing the state of the model.
+  // @param[in] state
+  //   The typed state of the finalized model.
   // @param[out] reflected_inertia
   //   For each degree of freedom, reflected_inertia[i] contains the reflected
   //   inertia value for the i-th degree of freedom.
   // @throws std::exception if reflected_inertia is nullptr or if its size is
   // not num_velocities().
-  void CalcReflectedInertia(const orvd::multibody_runtime::MultibodyStateInstance& context,
-                            VectorX<T>* reflected_inertia) const;
+  void CalcReflectedInertia(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      VectorX<T>* reflected_inertia) const;
 
-  // Computes the joint damping for each velocity index.
-  // @param[in] context
-  //  The context storing the state of the model.
-  // @param[out] joint_damping
-  //  For each degree of freedom, joint_damping[i] contains the viscous damping
-  //  coefficient for the i-th degree of freedom.
-  // @throws std::exception if joint_damping is nullptr or if its size is not
-  // num_velocities().
-  void CalcJointDamping(const orvd::multibody_runtime::MultibodyStateInstance& context,
-                        VectorX<T>* joint_damping) const;
-
-  void CalcFrameBodyPoses(const orvd::multibody_runtime::MultibodyStateInstance& context,
-                          FrameBodyPoseCache<T>* frame_body_poses) const;
+  void CalcFrameBodyPoses(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      FrameBodyPoseCache<T>* frame_body_poses) const;
 
   // Computes the composite body inertia K_BBo_W(q) for each body B in the
   // model about its frame origin Bo and expressed in the world frame W.
@@ -1568,22 +1568,24 @@ class MultibodyTree {
   bool IsVelocityEqualToQDot() const;
 
   // See MultibodyPlant method.
-  void MapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
-                         const Eigen::Ref<const VectorX<T>>& v,
-                         EigenPtr<VectorX<T>> qdot) const;
+  void MapVelocityToQDot(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& v,
+      EigenPtr<VectorX<T>> qdot) const;
 
   // See MultibodyPlant method.
-  void MapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
-                         const Eigen::Ref<const VectorX<T>>& qdot,
-                         EigenPtr<VectorX<T>> v) const;
+  void MapQDotToVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& qdot,
+      EigenPtr<VectorX<T>> v) const;
 
   // See MultibodyPlant method.
   Eigen::SparseMatrix<T> MakeVelocityToQDotMap(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // See MultibodyPlant method.
   Eigen::SparseMatrix<T> MakeQDotToVelocityMap(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   /* @anchor internal_forward_dynamics
   Articulated Body Algorithm Forward Dynamics
@@ -2012,6 +2014,7 @@ class MultibodyTree {
   // @returns a reference to the now-up-to-date cache entry
   const FrameBodyPoseCache<T>& EvalFrameBodyPoses(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalFrameBodyPoses(context);
   }
@@ -2022,6 +2025,7 @@ class MultibodyTree {
   // @return Reference to the PositionKinematicsCache of context.
   const PositionKinematicsCache<T>& EvalPositionKinematics(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalPositionKinematics(context);
   }
@@ -2033,6 +2037,7 @@ class MultibodyTree {
   // @return Reference to the VelocityKinematicsCache of context.
   const VelocityKinematicsCache<T>& EvalVelocityKinematics(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalVelocityKinematics(context);
   }
@@ -2044,6 +2049,7 @@ class MultibodyTree {
   // @return Reference to the AccelerationKinematicsCache of context.
   const AccelerationKinematicsCache<T>& EvalAccelerationKinematics(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalForwardDynamics(context);
   }
@@ -2051,6 +2057,8 @@ class MultibodyTree {
   // Evaluate the cache entry storing articulated body inertias in `context`.
   const ArticulatedBodyInertiaCache<T>& EvalArticulatedBodyInertiaCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
+    DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalArticulatedBodyInertiaCache(context);
   }
 
@@ -2058,6 +2066,8 @@ class MultibodyTree {
   // `context`.
   const std::vector<Vector6<T>>& EvalAcrossNodeJacobianWrtVExpressedInWorld(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
+    DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalAcrossNodeJacobianWrtVExpressedInWorld(context);
   }
 
@@ -2074,19 +2084,22 @@ class MultibodyTree {
   // Returns the generalized positions q held by `state`.
   const VectorX<T>& get_positions(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    ValidateStateInstance(state);
     return state.generalized_positions();
   }
 
   // Returns the generalized velocities v held by `state`.
   const VectorX<T>& get_velocities(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    ValidateStateInstance(state);
     return state.generalized_velocities();
   }
 
   // Writes the whole of q, as one transaction.
   void SetPositions(orvd::multibody_runtime::MultibodyStateInstance* state,
                     const Eigen::Ref<const VectorX<T>>& positions) const {
-    DRAKE_ASSERT(state != nullptr);
+    DRAKE_DEMAND(state != nullptr);
+    ValidateStateInstance(*state);
     state->set_generalized_positions(positions);
   }
 
@@ -2098,7 +2111,8 @@ class MultibodyTree {
   // that is half of what the caller asked for and no way to tell.
   void SetVelocities(orvd::multibody_runtime::MultibodyStateInstance* state,
                      const Eigen::Ref<const VectorX<T>>& velocities) const {
-    DRAKE_ASSERT(state != nullptr);
+    DRAKE_DEMAND(state != nullptr);
+    ValidateStateInstance(*state);
     state->set_generalized_velocities(velocities);
   }
 
@@ -2114,6 +2128,7 @@ class MultibodyTree {
   template <int length>
   Eigen::VectorBlock<const VectorX<T>, length> get_position_segment(
       const orvd::multibody_runtime::MultibodyStateInstance& state, int start) const {
+    ValidateStateInstance(state);
     return state.generalized_positions().template segment<length>(start);
   }
 
@@ -2122,6 +2137,7 @@ class MultibodyTree {
   template <int length>
   Eigen::VectorBlock<const VectorX<T>, length> get_velocity_segment(
       const orvd::multibody_runtime::MultibodyStateInstance& state, int start) const {
+    ValidateStateInstance(state);
     return state.generalized_velocities().template segment<length>(start);
   }
 
@@ -2130,6 +2146,7 @@ class MultibodyTree {
   Eigen::VectorBlock<const VectorX<T>> get_position_segment(
       const orvd::multibody_runtime::MultibodyStateInstance& state, int start,
       int length) const {
+    ValidateStateInstance(state);
     return state.generalized_positions().segment(start, length);
   }
 
@@ -2138,6 +2155,7 @@ class MultibodyTree {
   Eigen::VectorBlock<const VectorX<T>> get_velocity_segment(
       const orvd::multibody_runtime::MultibodyStateInstance& state, int start,
       int length) const {
+    ValidateStateInstance(state);
     return state.generalized_velocities().segment(start, length);
   }
 
@@ -2156,7 +2174,8 @@ class MultibodyTree {
   void SetPositionSegment(orvd::multibody_runtime::MultibodyStateInstance* state,
                           int start,
                           const Eigen::Ref<const VectorX<T>>& segment) const {
-    DRAKE_ASSERT(state != nullptr);
+    DRAKE_DEMAND(state != nullptr);
+    ValidateStateInstance(*state);
     VectorX<T> positions = state->generalized_positions();
     positions.segment(start, segment.size()) = segment;
     state->set_generalized_positions(positions);
@@ -2167,7 +2186,8 @@ class MultibodyTree {
   void SetVelocitySegment(orvd::multibody_runtime::MultibodyStateInstance* state,
                           int start,
                           const Eigen::Ref<const VectorX<T>>& segment) const {
-    DRAKE_ASSERT(state != nullptr);
+    DRAKE_DEMAND(state != nullptr);
+    ValidateStateInstance(*state);
     VectorX<T> velocities = state->generalized_velocities();
     velocities.segment(start, segment.size()) = segment;
     state->set_generalized_velocities(velocities);
@@ -2233,6 +2253,9 @@ class MultibodyTree {
  private:
   // Friend class to facilitate testing.
   friend class MultibodyTreeTester;
+  // Elements use their parent tree as the authority for deciding whether a
+  // typed state belongs to this finalized model.
+  friend class ::drake::multibody::MultibodyElement<T>;
 
   // (Internal use only) Adds a Joint to the MultibodyPlant corresponding to
   // joints that were added to the LinkJointGraph during modeling (elements
@@ -2416,6 +2439,7 @@ class MultibodyTree {
   // M_Bo_W(q) for each body in the system. These will be updated as needed.
   const std::vector<SpatialInertia<T>>& EvalSpatialInertiaInWorldCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalSpatialInertiaInWorldCache(context);
   }
@@ -2424,20 +2448,14 @@ class MultibodyTree {
   // each degree of freedom in the system. These will be updated as needed.
   const VectorX<T>& EvalReflectedInertiaCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalReflectedInertiaCache(context);
   }
 
-  // Evaluates the cache entry stored in context with the joint damping for each
-  // degree of freedom in the system. These will be updated as needed.
-  const VectorX<T>& EvalJointDampingCache(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalJointDampingCache(context);
-  }
-
   const std::vector<SpatialInertia<T>>& EvalCompositeBodyInertiaInWorldCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalCompositeBodyInertiaInWorldCache(context);
   }
@@ -2446,6 +2464,7 @@ class MultibodyTree {
   // Fb_Bo_W(q, v) for each body. These will be updated as needed.
   const std::vector<SpatialForce<T>>& EvalDynamicBiasCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalDynamicBiasCache(context);
   }
@@ -2453,6 +2472,7 @@ class MultibodyTree {
   // See CalcSpatialAccelerationBiasCache() for details.
   const std::vector<SpatialAcceleration<T>>& EvalSpatialAccelerationBiasCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalSpatialAccelerationBiasCache(context);
   }
@@ -2460,6 +2480,7 @@ class MultibodyTree {
   // See CalcArticulatedBodyForceBiasCache() for details.
   const std::vector<SpatialForce<T>>& EvalArticulatedBodyForceBiasCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateEvaluationContext(context);
     DRAKE_ASSERT(tree_system_ != nullptr);
     return tree_system_->EvalArticulatedBodyForceBiasCache(context);
   }
@@ -2538,8 +2559,18 @@ class MultibodyTree {
   //  Jacobian for general force models. That would allow us to implement
   //  implicit schemes for any forces using a more general infrastructure rather
   //  than having to deal with damping in a special way.
-  void AddJointDampingForces(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
-                             MultibodyForces<T>* forces) const;
+  void AddJointDampingForces(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      MultibodyForces<T>* forces) const;
+
+  void ValidateStateInstance(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
+
+  void ValidateEvaluationContext(
+      const orvd::rigid_multibody_tree::internal::
+          RigidMultibodyTreeEvaluationContext& context) const {
+    ValidateStateInstance(context.state());
+  }
 
   void CreateBodyNode(MobodIndex mobod_index);
 
@@ -2616,6 +2647,12 @@ class MultibodyTree {
 
   // Back pointer to the owning MultibodyTreeSystem.
   const MultibodyTreeSystem<T>* tree_system_{};
+
+  // Constructed once during Finalize() after every element has claimed its
+  // typed parameter slot. Its stable address is the model identity carried by
+  // every MultibodyStateInstance built for this tree.
+  std::unique_ptr<const orvd::multibody_runtime::MultibodyStateLayout>
+      state_layout_;
 
   // True only if we get all the way through Finalize().
   bool is_finalized_{false};

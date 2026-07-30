@@ -49,14 +49,14 @@ const Joint<T>& JointActuator<T>::joint() const {
 }
 
 template <typename T>
-void JointActuator<T>::AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+void JointActuator<T>::AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                      int joint_dof, const T& joint_tau,
                                      MultibodyForces<T>* forces) const {
   DRAKE_DEMAND(forces != nullptr);
   DRAKE_DEMAND(0 <= joint_dof && joint_dof < num_inputs());
   DRAKE_DEMAND(this->has_parent_tree());
   DRAKE_DEMAND(forces->CheckHasRightSizeForModel(this->get_parent_tree()));
-  joint().AddInOneForce(context, joint_dof, joint_tau, forces);
+  joint().AddInOneForce(state, joint_dof, joint_tau, forces);
 }
 
 template <typename T>

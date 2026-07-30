@@ -57,6 +57,10 @@ void RigidBody<T>::SetCenterOfMassInBodyFrameNoModifyInertia(
     orvd::multibody_runtime::MultibodyStateInstance* state,
     const Vector3<T>& center_of_mass_position) const {
   DRAKE_THROW_UNLESS(state != nullptr);
+  this->ValidateStateInstance(*state);
+  DRAKE_THROW_UNLESS(
+      inertia_parameter_slot_ !=
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot);
   orvd::multibody_runtime::RigidBodyInertiaParameters parameters =
       state->rigid_body_inertia_parameters(inertia_parameter_slot_);
   parameters.center_of_mass_in_body_frame = center_of_mass_position;
@@ -68,6 +72,10 @@ void RigidBody<T>::SetUnitInertiaAboutBodyOrigin(
     orvd::multibody_runtime::MultibodyStateInstance* state,
     const UnitInertia<T>& G_BBo_B) const {
   DRAKE_THROW_UNLESS(state != nullptr);
+  this->ValidateStateInstance(*state);
+  DRAKE_THROW_UNLESS(
+      inertia_parameter_slot_ !=
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot);
   orvd::multibody_runtime::RigidBodyInertiaParameters parameters =
       state->rigid_body_inertia_parameters(inertia_parameter_slot_);
   parameters.unit_inertia_moments = G_BBo_B.get_moments();
@@ -80,6 +88,10 @@ void RigidBody<T>::SetCenterOfMassInBodyFrameAndPreserveCentralInertia(
     orvd::multibody_runtime::MultibodyStateInstance* state,
     const Vector3<T>& center_of_mass_position) const {
   DRAKE_THROW_UNLESS(state != nullptr);
+  this->ValidateStateInstance(*state);
+  DRAKE_THROW_UNLESS(
+      inertia_parameter_slot_ !=
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot);
 
   // Get pi_BoBcm_B position from Bo to Bcm before Bcm changes location, and
   // Gi_BBo_B (B's initial unit inertia about Bo, before Bcm changes).
@@ -124,7 +136,7 @@ void RigidBody<T>::AddInForce(const orvd::rigid_multibody_tree::internal::RigidM
       frame_E.CalcRotationMatrixInWorld(context);
   const Vector3<T> p_PB_W = -(R_WE * p_BP_E);
   const SpatialForce<T> F_Bo_W = (R_WE * F_Bp_E).Shift(p_PB_W);
-  AddInForceInWorld(context, F_Bo_W, forces);
+  AddInForceInWorld(F_Bo_W, forces);
 }
 
 template <typename T>
@@ -138,7 +150,8 @@ Vector3<T> RigidBody<T>::CalcCenterOfMassTranslationalVelocityInWorld(
       body_B.EvalSpatialVelocityInWorld(context);
 
   // Form v_WBcm_W, Bcm's translational velocity in frame W, expressed in W.
-  const Vector3<T> p_BoBcm_B = CalcCenterOfMassInBodyFrame(context);
+  const Vector3<T> p_BoBcm_B =
+      CalcCenterOfMassInBodyFrame(context.state());
   const math::RotationMatrix<T> R_WB =
       frame_B.CalcRotationMatrixInWorld(context);
   const Vector3<T> p_BoBcm_W = R_WB * p_BoBcm_B;
@@ -157,7 +170,8 @@ Vector3<T> RigidBody<T>::CalcCenterOfMassTranslationalAccelerationInWorld(
       body_B.EvalSpatialAccelerationInWorld(context);
 
   // Form Bcm's position from Bo, expressed in world W (for shift calculation).
-  const Vector3<T> p_BoBcm_B = CalcCenterOfMassInBodyFrame(context);
+  const Vector3<T> p_BoBcm_B =
+      CalcCenterOfMassInBodyFrame(context.state());
   const math::RotationMatrix<T> R_WB =
       frame_B.CalcRotationMatrixInWorld(context);
   const Vector3<T> p_BoBcm_W = R_WB * p_BoBcm_B;

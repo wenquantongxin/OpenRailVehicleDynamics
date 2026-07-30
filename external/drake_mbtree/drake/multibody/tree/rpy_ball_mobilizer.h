@@ -34,7 +34,7 @@ namespace internal {
 // where Rx(θ), Ry(θ) and Rz(θ) correspond to the elemental rotations in amount
 // of θ about the Fx, Fy and Fz axes respectively. Zero θ₀, θ₁, θ₂ angles define
 // the "zero configuration" which corresponds to frames F and M being
-// coincident, see SetZeroState(). Angles θ₀, θ₁, θ₂ are defined to be
+// coincident. Angles θ₀, θ₁, θ₂ are defined to be
 // positive according to the right-hand-rule with the thumb aligned in the
 // direction of their respective axes.
 //
@@ -99,48 +99,48 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   bool can_rotate() const final { return true; }
   bool can_translate() const final { return false; }
 
-  // Retrieves from context the three roll-pitch-yaw angles θ₀, θ₁, θ₂ which
+  // Retrieves from state the three roll-pitch-yaw angles θ₀, θ₁, θ₂ which
   // describe the state for this mobilizer as documented in this class's
   // documentation.
   //
-  // @param[in] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @retval angles
   //   The three roll-pitch-yaw angles θ₀, θ₁, θ₂, associated with the sequence
   //   of rotations about the space fixed axes x̂, ŷ, ẑ, respectively packed and
   //   returned as a Vector3 with entries angles(0) = θ₀, angles(1) = θ₁,
   //   angles(2) = θ₂.
-  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets in context the state for this mobilizer to have the roll-pitch-yaw
+  // Sets in state the state for this mobilizer to have the roll-pitch-yaw
   // angles θ₀, θ₁, θ₂, provided in the input argument angles, which stores
   // them with the format angles = [θ₀, θ₁, θ₂].
   //
-  // @param[out] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[out] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[in] angles
   //   A Vector3 which must pack values for the roll-pitch-yaw angles θ₀, θ₁,
   //   θ₂, described in this class's documentation, at entries angles(0),
   //   angles(1) and angles(2), respectively.
   // @returns a constant reference to this mobilizer.
-  const RpyBallMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RpyBallMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* state,
                                        const Vector3<T>& angles) const;
 
-  // Sets context so this mobilizer's generalized coordinates (roll-pitch-yaw
+  // Sets state so this mobilizer's generalized coordinates (roll-pitch-yaw
   // angles θ₀, θ₁, θ₂) are consistent with the given R_FM rotation matrix.
-  // @param[in] context
-  //   The context of the MultibodyTree that this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree that this mobilizer belongs to.
   // @param[in] R_FM
   //   The rotation matrix relating the orientation of frame F and frame M.
   // @returns a constant reference to this mobilizer.
   const RpyBallMobilizer<T>& SetFromRotationMatrix(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RotationMatrix<T>& R_FM) const;
 
-  // Retrieves from context the angular velocity w_FM of the outboard frame
+  // Retrieves from state the angular velocity w_FM of the outboard frame
   // M in the inboard frame F, expressed in F.
   //
-  // @param[in] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @retval w_FM
   //   A vector in ℝ³ with the angular velocity of the outboard frame M in the
   //   inboard frame F, expressed in F.
@@ -148,24 +148,24 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // @note Many dynamicists follow the convention of expressing angular
   // velocity in the outboard frame M; we return it expressed in the inboard
   // frame F. That is, this method returns W_FM_F.
-  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets in context the state for this mobilizer so that the angular
+  // Sets in state the state for this mobilizer so that the angular
   // velocity of the outboard frame M in the inboard frame F is w_FM.
-  // @param[out] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[out] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[in] w_FM
   //   A vector in ℝ³ with the desired angular velocity of the outboard frame M
   //   in the inboard frame F, expressed in F.
   // @returns a constant reference to this mobilizer.
-  const RpyBallMobilizer<T>& SetAngularVelocity(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RpyBallMobilizer<T>& SetAngularVelocity(orvd::multibody_runtime::MultibodyStateInstance* state,
                                                 const Vector3<T>& w_FM) const;
 
   // Stores in state the angular velocity w_FM of the outboard frame
   // M in the inboard frame F corresponding to this mobilizer.
   //
-  // @param[in] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[out] state
   //   On return, state will store the angular velocity w_FM of frame F in
   //   frame M.
@@ -175,7 +175,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // @returns a constant reference to this mobilizer.
   // Computes the across-mobilizer transform X_FM(q) between the inboard
   // frame F and the outboard frame M as a function of the roll-pitch-yaw angles
-  // θ₀, θ₁, θ₂ stored in context.
+  // θ₀, θ₁, θ₂ stored in state.
   math::RigidTransform<T> calc_X_FM(const T* q) const {
     return math::RigidTransform<T>(math::RollPitchYaw<T>(q[0], q[1], q[2]),
                                    Vector3<T>::Zero());
@@ -213,27 +213,27 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
     tau_as_vector = t_BMo_F;
   }
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration A_FM(q, v, v̇) of the
   // outboard frame M in the inboard frame F.
   // The acceleration A_FM will be a function of the generalized positions q
-  // (roll-pitch-yaw angles) stored in context, of the generalized velocities
-  // v (angular velocity w_FM) also stored in context and of the supplied
+  // (roll-pitch-yaw angles) stored in state, of the generalized velocities
+  // v (angular velocity w_FM) also stored in state and of the supplied
   // generalized accelerations vdot, which in this case correspond to angular
   // acceleration of M in F alpha_FM = Dt_F(w_FM) (see
   // @ref Dt_multibody_quantities for our notation of time derivatives in
   // different reference frames).
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
@@ -255,25 +255,25 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // Returns a struct with calculated sin(pitch), cos(pitch), sin(yaw),
   // cos(yaw).
   SinCosPitchYaw CalcSinPitchCosPitchSinYawCosYaw(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
-  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
-  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps the generalized velocity v, which corresponds to the angular velocity
   // w_FM, to time derivatives of roll-pitch-yaw angles θ₀, θ₁, θ₂ in qdot.
   //
-  // @param[in] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[in] v
   //   A vector of generalized velocities for this Mobilizer which should
   //   correspond to a vector in ℝ³ for an angular velocity w_FM of M in F.
@@ -287,7 +287,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // in large errors for qdot), this method aborts when the absolute value of
   // the cosine of θ₁ is smaller than 10⁻³, a number arbitrarily chosen to this
   // end.
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
@@ -302,38 +302,38 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // the generalized velocity v, which corresponds to the angular velocity
   // w_FM.
   //
-  // @param[in] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[in] qdot
   //   A vector containing the time derivatives of the roll-pitch-yaw angles
   //   θ₀, θ₁, θ₂ in qdot(0), qdot(1) and qdot(2), respectively.
   // @param[out] v
   //   A vector of generalized velocities for this Mobilizer which should
   //   correspond to a vector in ℝ³ for an angular velocity w_FM of M in F.
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
   // Maps vdot to qddot, which for this mobilizer is q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇.
   // For simple mobilizers q̈ = v̇. This mobilizer's N and Ṅ are more elaborate.
-  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
   // Maps qddot to vdot, which for this mobilizer is v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈.
   // For simple mobilizers v̇ = q̈. This mobilizer's N and Ṅ⁺ are more elaborate.
-  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
   // Calculate the term Ṅ⁺(q,q̇)⋅q̇ which appears in v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈.
-  Vector3<T> CalcAccelerationBiasForQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  Vector3<T> CalcAccelerationBiasForQDDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                           const char* function_name) const;
 
   // Implements CalcAccelerationBiasForQDDot() with pre-computed values of
   // sin(pitch), cos(pitch), sin(yaw), cos(yaw), 1/cos(pitch).
   Vector3<T> CalcAccelerationBiasForQDDotImpl(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const SinCosPitchYaw& sin_cos_pitch_yaw, const T& cpi) const;
 
   // Certain roll pitch yaw calculations (e.g., calculating the N(q) matrix)
@@ -341,17 +341,17 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // The tolerance 1.0e-3 is used to test whether the cosine of the pitch angle
   // is near zero, which occurs when the pitch angle ≈ π/2 ± n π (n=0, 1 2, …).
   // Throw an exception if a pitch angle is within ≈ 0.057° of a singularity.
-  void ThrowIfCosPitchNearZero(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void ThrowIfCosPitchNearZero(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                const T& cos_pitch,
                                const char* function_name) const {
     using std::abs;
     if (abs(cos_pitch) < 1.0e-3)
-      ThrowSinceCosPitchNearZero(context, function_name);
+      ThrowSinceCosPitchNearZero(state, function_name);
   }
 
   // Ideally, ThrowIfCosPitchNearZero() is inlined by separating this function.
   [[noreturn]] void ThrowSinceCosPitchNearZero(
-      const orvd::multibody_runtime::MultibodyStateInstance& context, const char* function_name) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state, const char* function_name) const;
 
 };
 

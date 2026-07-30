@@ -2,7 +2,8 @@
 
 本目录已落位刚性 topology、tree 与必要支撑源码。common support、topology 与 double
 位姿数学已有独立构建目标；其余 tree 已完成 G16 的 `double`-only 裁剪并由 G17 界定
-编译前沿，G28 建立完整 tree 目标。
+编译前沿，G26 已用类型化状态替换 systems 状态表面；当前纯 landed 编译前沿只剩
+`multibody_tree_system.h`，由 G27 删除反向指针与接入具体缓存，G28 建立完整 tree 目标。
 
 ## 来源与逐文件处置
 

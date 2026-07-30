@@ -51,37 +51,39 @@ std::string CurvilinearMobilizer<T>::velocity_suffix(
 
 template <typename T>
 const T& CurvilinearMobilizer<T>::get_distance(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
 }
 
 template <typename T>
 const CurvilinearMobilizer<T>& CurvilinearMobilizer<T>::SetDistance(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& distance) const {
-  QVector<T> q = this->get_positions(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& distance) const {
+  DRAKE_DEMAND(state != nullptr);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = distance;
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 const T& CurvilinearMobilizer<T>::get_tangential_velocity(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == kNv);
   return v.coeffRef(0);
 }
 
 template <typename T>
 const CurvilinearMobilizer<T>& CurvilinearMobilizer<T>::SetTangentialVelocity(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& tangential_velocity) const {
-  VVector<T> v = this->get_velocities(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& tangential_velocity) const {
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = tangential_velocity;
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
@@ -146,39 +148,39 @@ void CurvilinearMobilizer<T>::calc_tau_from_M(const math::RigidTransform<T>&,
 }
 
 template <typename T>
-math::RigidTransform<T> CurvilinearMobilizer<T>::CalcAcrossMobilizerTransform(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& q = this->get_positions(context);
+math::RigidTransform<T> CurvilinearMobilizer<T>::DoCalcAcrossMobilizerTransform(
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
 }
 
 template <typename T>
-SpatialVelocity<T> CurvilinearMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const orvd::multibody_runtime::MultibodyStateInstance& context,
+SpatialVelocity<T> CurvilinearMobilizer<T>::DoCalcAcrossMobilizerSpatialVelocity(
+    const orvd::multibody_runtime::MultibodyStateInstance& state,
     const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
-  const auto& q = this->get_positions(context);
+  const auto& q = this->get_positions(state);
   return calc_V_FM(q.data(), v.data());
 }
 
 template <typename T>
 SpatialAcceleration<T>
-CurvilinearMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const orvd::multibody_runtime::MultibodyStateInstance& context,
+CurvilinearMobilizer<T>::DoCalcAcrossMobilizerSpatialAcceleration(
+    const orvd::multibody_runtime::MultibodyStateInstance& state,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
-  const auto& q = this->get_positions(context);
-  const auto& v = this->get_velocities(context);
+  const auto& q = this->get_positions(state);
+  const auto& v = this->get_velocities(state);
   return calc_A_FM(q.data(), v.data(), vdot.data());
 }
 
 template <typename T>
-void CurvilinearMobilizer<T>::ProjectSpatialForce(
-    const orvd::multibody_runtime::MultibodyStateInstance& context, const SpatialForce<T>& F_BMo_F,
+void CurvilinearMobilizer<T>::DoProjectSpatialForce(
+    const orvd::multibody_runtime::MultibodyStateInstance& state, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);
-  const auto& q = this->get_positions(context);
+  const auto& q = this->get_positions(state);
   calc_tau(q.data(), F_BMo_F, tau.data());
 }
 

@@ -10,7 +10,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/rpy_floating_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -120,7 +119,7 @@ class RpyFloatingJoint final : public Joint<T> {
   only be called after MultibodyPlant::Finalize(). */
   /**@{*/
 
-  /** Gets the roll-pitch-yaw rotation angles of this joint from `context`.
+  /** Gets the roll-pitch-yaw rotation angles of this joint from `state`.
 
   The orientation `R_FM` of the child frame M in parent frame F is
   parameterized with roll-pitch-yaw angles (also known as space-fixed
@@ -140,108 +139,106 @@ class RpyFloatingJoint final : public Joint<T> {
   @note Space `x-y-z` angles (extrinsic) are equivalent to Body `z-y-x`
   angles (intrinsic).
 
-  @param[in] context
+  @param[in] state
     A Context for the MultibodyPlant this joint belongs to.
-  @retval angles The angle coordinates of this joint stored in the `context`
+  @retval angles The angle coordinates of this joint stored in the `state`
     ordered as θr, θp, θy. */
-  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angles(context);
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angles(state);
   }
 
-  /** Sets the `context` so that the generalized coordinates corresponding to
+  /** Sets the `state` so that the generalized coordinates corresponding to
   the roll-pitch-yaw rotation angles of this joint equals `angles`.
-  @param[in,out] context
+  @param[in,out] state
     A Context for the MultibodyPlant this joint belongs to.
   @param[in] angles
-    Angles in radians to be stored in `context` ordered as θr, θp, θy.
+    Angles in radians to be stored in `state` ordered as θr, θp, θy.
   @warning See class documentation for discussion of singular configurations.
   @returns a constant reference to this joint.
   @see get_angles() for details */
-  const RpyFloatingJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RpyFloatingJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* state,
                                         const Vector3<T>& angles) const {
-    get_mobilizer().SetAngles(context, angles);
+    get_mobilizer().SetAngles(state, angles);
     return *this;
   }
 
-  /** Sets the roll-pitch-yaw angles in `context` so this Joint's orientation
+  /** Sets the roll-pitch-yaw angles in `state` so this Joint's orientation
   is consistent with the given `R_FM` rotation matrix.
-  @param[in,out] context
+  @param[in,out] state
     A Context for the MultibodyPlant this joint belongs to.
   @param[in] R_FM
     The rotation matrix giving the orientation of frame M in frame F.
   @warning See class documentation for discussion of singular configurations.
   @returns a constant reference to this joint. */
   const RpyFloatingJoint<T>& SetOrientation(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const {
-    return set_angles(context, math::RollPitchYaw(R_FM).vector());
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RotationMatrix<T>& R_FM) const {
+    return set_angles(state, math::RollPitchYaw(R_FM).vector());
   }
 
   /** Returns the translation (position vector) `p_FM` of the child frame M's
   origin Mo as measured and expressed in the parent frame F. Refer to the
   class documentation for details.
-  @param[in] context
+  @param[in] state
     A Context for the MultibodyPlant this joint belongs to.
   @retval p_FM The position vector of frame M's origin in frame F. */
-  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translation(context);
+  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translation(state);
   }
 
-  /** Sets `context` to store the translation (position vector) `p_FM` of frame
+  /** Sets `state` to store the translation (position vector) `p_FM` of frame
   M's origin Mo measured and expressed in frame F.
-  @param[in,out] context
+  @param[in,out] state
     A Context for the MultibodyPlant this joint belongs to.
   @param[in] p_FM
     The desired position of frame M's origin in frame F, to be stored in
-    `context`.
+    `state`.
   @returns a constant reference to this joint. */
-  const RpyFloatingJoint<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RpyFloatingJoint<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                             const Vector3<T>& p_FM) const {
-    get_mobilizer().SetTranslation(context, p_FM);
+    get_mobilizer().SetTranslation(state, p_FM);
     return *this;
   }
 
   /** Returns the pose `X_FM` of the outboard frame M as measured and expressed
   in the inboard frame F. Refer to the documentation for this class for
   details.
-  @param[in] context
+  @param[in] state
     A Context for the MultibodyPlant this joint belongs to.
   @retval X_FM The pose of frame M in frame F. */
-  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return math::RigidTransform<T>(math::RollPitchYaw<T>(get_angles(context)),
-                                   get_translation(context));
+  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return math::RigidTransform<T>(math::RollPitchYaw<T>(get_angles(state)),
+                                   get_translation(state));
   }
 
-  /** Sets `context` to store `X_FM` the pose of frame M measured and expressed
+  /** Sets `state` to store `X_FM` the pose of frame M measured and expressed
   in frame F.
-  @param[in,out] context
+  @param[in,out] state
     A Context for the MultibodyPlant this joint belongs to.
   @param[in] X_FM
-    The desired pose of frame M in frame F to be stored in `context`.
+    The desired pose of frame M in frame F to be stored in `state`.
   @warning See class documentation for discussion of singular configurations.
   @returns a constant reference to `this` joint. */
   const RpyFloatingJoint<T>& SetPose(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RigidTransform<T>& X_FM) const {
-    const math::RotationMatrix<T>& R_FM = X_FM.rotation();
-    get_mobilizer().SetAngles(context, math::RollPitchYaw<T>(R_FM).vector());
-    get_mobilizer().SetTranslation(context, X_FM.translation());
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RigidTransform<T>& X_FM) const {
+    get_mobilizer().SetFromRigidTransform(state, X_FM);
     return *this;
   }
 
-  /** Retrieves from `context` the angular velocity `w_FM` of the child frame
+  /** Retrieves from `state` the angular velocity `w_FM` of the child frame
   M in the parent frame F, expressed in F.
-  @param[in] context
+  @param[in] state
     A Context for the MultibodyPlant this joint belongs to.
   @retval w_FM
     A vector in ℝ³ with the angular velocity of the child frame M in the
     parent frame F, expressed in F. Refer to this class's documentation for
     further details and definitions of these frames. */
-  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_velocity(context);
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_velocity(state);
   }
 
-  /** Sets in `context` the state for this joint so that the angular velocity
+  /** Sets in `state` the state for this joint so that the angular velocity
   of the child frame M in the parent frame F is `w_FM`.
-  @param[in,out] context
+  @param[in,out] state
     A Context for the MultibodyPlant this joint belongs to.
   @param[in] w_FM
     A vector in ℝ³ with the angular velocity of the child frame M in the
@@ -249,27 +246,27 @@ class RpyFloatingJoint final : public Joint<T> {
     further details and definitions of these frames.
   @returns a constant reference to this joint. */
   const RpyFloatingJoint<T>& set_angular_velocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const {
-    get_mobilizer().SetAngularVelocity(context, w_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& w_FM) const {
+    get_mobilizer().SetAngularVelocity(state, w_FM);
     return *this;
   }
 
-  /** Retrieves from `context` the translational velocity `v_FM` of
+  /** Retrieves from `state` the translational velocity `v_FM` of
   the child frame M's origin as measured and expressed in the parent frame F.
-  @param[in] context
+  @param[in] state
     A Context for the MultibodyPlant this joint belongs to.
   @retval v_FM
     A vector in ℝ³ with the translational velocity of the origin of child
     frame M in the parent frame F, expressed in F. Refer to this class's
     documentation for further details and definitions of these frames. */
   Vector3<T> get_translational_velocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translational_velocity(context);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translational_velocity(state);
   }
 
-  /** Sets in `context` the state for this joint so that the translational
+  /** Sets in `state` the state for this joint so that the translational
   velocity of the child frame M's origin in the parent frame F is `v_FM`.
-  @param[in,out] context
+  @param[in,out] state
     A Context for the MultibodyPlant this joint belongs to.
   @param[in] v_FM
     A vector in ℝ³ with the translational velocity of the child frame M's
@@ -277,8 +274,8 @@ class RpyFloatingJoint final : public Joint<T> {
     documentation for further details and definitions of these frames.
   @returns a constant reference to this joint. */
   const RpyFloatingJoint<T>& set_translational_velocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const {
-    get_mobilizer().SetTranslationalVelocity(context, v_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& v_FM) const {
+    get_mobilizer().SetTranslationalVelocity(state, v_FM);
     return *this;
   }
   /**@}*/
@@ -339,15 +336,16 @@ class RpyFloatingJoint final : public Joint<T> {
   component of `forces` for `this` joint a dissipative torque according to the
   viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   default_angular_damping()). */
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> t_BMo_F =
         get_mobilizer().get_mutable_generalized_forces_from_array(
             &forces->mutable_generalized_forces());
-    const Vector3<T>& w_FM = get_angular_velocity(context);
-    const Vector3<T>& v_FM = get_translational_velocity(context);
-    const T& angular_damping = this->GetDampingVector(context)[0];
-    const T& translational_damping = this->GetDampingVector(context)[3];
+    const Vector3<T>& w_FM = get_angular_velocity(state);
+    const Vector3<T>& v_FM = get_translational_velocity(state);
+    const T angular_damping = this->GetDampingVector(state)[0];
+    const T translational_damping = this->GetDampingVector(state)[3];
     t_BMo_F.template head<3>() = -angular_damping * w_FM;
     t_BMo_F.template tail<3>() = -translational_damping * v_FM;
   }

@@ -446,10 +446,10 @@ class BodyNode : public MultibodyElement<T> {
   // this node's articulated body inertia quantities that depend only on the
   // generalized positions.
   //
-  // @param[in] context
-  //   The context with the state of the MultibodyTree model.
+  // @param[in] state
+  //   The state with the state of the MultibodyTree model.
   // @param[in] pc
-  //   An already updated position kinematics cache in sync with `context`.
+  //   An already updated position kinematics cache in sync with `state`.
   // @param[in] H_PB_W
   //   The `6 x nm` hinge matrix that relates `V_PB_W` (body B's spatial
   //   velocity in its parent body P, expressed in world W) to this node's `nm`
@@ -460,7 +460,7 @@ class BodyNode : public MultibodyElement<T> {
   //   A pointer to a valid, non nullptr, articulated body cache.
   //
   // @pre The position kinematics cache `pc` was already updated to be in sync
-  // with `context` by MultibodyTree::CalcPositionKinematicsCache().
+  // with `state` by MultibodyTree::CalcPositionKinematicsCache().
   // @pre CalcArticulatedBodyInertiaCache_TipToBase() must have already been
   // called for all the child nodes of `this` node (and, by recursive
   // precondition, all successor nodes in the tree.)
@@ -488,18 +488,18 @@ class BodyNode : public MultibodyElement<T> {
   // "Articulated Body Algorithm Forward Dynamics" for further mathematical
   // background and implementation details.
   //
-  // @param[in] context
-  //   The context with the state of the MultibodyTree model.
+  // @param[in] state
+  //   The state with the state of the MultibodyTree model.
   // @param[in] pc
-  //   An already updated position kinematics cache in sync with `context`.
+  //   An already updated position kinematics cache in sync with `state`.
   // @param[in] vc
-  //   An already updated velocity kinematics cache in sync with `context`.
+  //   An already updated velocity kinematics cache in sync with `state`.
   //   All velocities are assumed to be zero if vc is nullptr.
   // @param[in] Fb_Bo_W
   //   Force bias for this node's body B, at Bo, expressed in the world frame.
   // @param[in] abic
   //   An already updated articulated body inertia cache in sync with
-  //   `context`.
+  //   `state`.
   // @param[in] Zb_Bo_W
   //   Articulated body bias `Zb_Bo_W = Pplus_PB_W * Ab_WB`.
   // @param[in] Fapplied_Bo_W
@@ -517,7 +517,7 @@ class BodyNode : public MultibodyElement<T> {
   // @param[out] aba_force_cache
   //   A pointer to a valid, non nullptr, force bias cache.
   //
-  // @pre pc, vc, and abic previously computed to be in sync with `context`.
+  // @pre pc, vc, and abic previously computed to be in sync with `state`.
   // @pre CalcArticulatedBodyForceCache_TipToBase() must have already been
   // called for all the child nodes of `this` node (and, by recursive
   // precondition, all successor nodes in the tree.)
@@ -540,16 +540,16 @@ class BodyNode : public MultibodyElement<T> {
   // "Articulated Body Algorithm Forward Dynamics" for further mathematical
   // background and implementation details.
   //
-  // @param[in] context
-  //   The context with the state of the MultibodyTree model.
+  // @param[in] state
+  //   The state with the state of the MultibodyTree model.
   // @param[in] pc
-  //   An already updated position kinematics cache in sync with `context`.
+  //   An already updated position kinematics cache in sync with `state`.
   // @param[in] abic
   //   An already updated articulated body inertia cache in sync with
-  //   `context`.
+  //   `state`.
   // @param[in] aba_force_cache
   //   An already updated articulated body algorithm cache in sync with
-  //   `context`.
+  //   `state`.
   // @param[in] H_PB_W
   //   The hinge mapping matrix that relates to the spatial velocity `V_PB_W`
   //   of this node's body B in its parent node body P, expressed in the world
@@ -563,7 +563,7 @@ class BodyNode : public MultibodyElement<T> {
   // @param[out] ac
   //   A pointer to a valid, non nullptr, acceleration kinematics cache.
   //
-  // @pre pc, vc, and abic previously computed to be in sync with `context`.
+  // @pre pc, vc, and abic previously computed to be in sync with `state`.
   // @pre CalcArticulatedBodyAccelerations_BaseToTip() must have already been
   // called for the parent node (and, by recursive precondition, all
   // predecessor nodes in the tree.)
@@ -659,13 +659,13 @@ class BodyNode : public MultibodyElement<T> {
   // Helpers to access the state.
   // Returns an Eigen expression of the vector of generalized velocities.
   Eigen::VectorBlock<const VectorX<T>> get_mobilizer_velocities(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
     DRAKE_ASSERT(this->has_parent_tree());
     const MultibodyTree<T>& tree = this->get_parent_tree();
     // Straight into v at this node's own offset. Upstream had to write
     // `num_positions() + v_start()` because it indexed one concatenated
     // `[q; v]`; that addition is gone with the concatenation.
-    return tree.get_velocity_segment(context, mobod().v_start(), mobod().nv());
+    return tree.get_velocity_segment(state, mobod().v_start(), mobod().nv());
   }
 
   // Helper to get an Eigen expression of the vector of generalized velocities

@@ -45,22 +45,24 @@ void PrismaticSpring<T>::DoCalcAndAddForceContribution(
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&,
     MultibodyForces<T>* forces) const {
-  const T delta = nominal_position_ - joint().get_translation(context);
+  const T delta =
+      nominal_position_ - joint().get_translation(context.state());
   const T force = stiffness_ * delta;
-  joint().AddInForce(context, force, forces);
+  joint().AddInForce(context.state(), force, forces);
 }
 
 template <typename T>
-T PrismaticSpring<T>::CalcPotentialEnergy(
+T PrismaticSpring<T>::DoCalcPotentialEnergy(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&) const {
-  const T delta = nominal_position_ - joint().get_translation(context);
+  const T delta =
+      nominal_position_ - joint().get_translation(context.state());
 
   return 0.5 * stiffness_ * delta * delta;
 }
 
 template <typename T>
-T PrismaticSpring<T>::CalcConservativePower(
+T PrismaticSpring<T>::DoCalcConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
@@ -69,13 +71,14 @@ T PrismaticSpring<T>::CalcConservativePower(
   // The conservative power is defined as:
   //  Pc = -d(V)/dt = -[k⋅(x₀-x)⋅(-dx/dt)] = k⋅(x₀-x)⋅dx/dt
   // being positive when the potential energy decreases.
-  const T delta = nominal_position_ - joint().get_translation(context);
-  const T x_dot = joint().get_translation_rate(context);
+  const T delta =
+      nominal_position_ - joint().get_translation(context.state());
+  const T x_dot = joint().get_translation_rate(context.state());
   return stiffness_ * delta * x_dot;
 }
 
 template <typename T>
-T PrismaticSpring<T>::CalcNonConservativePower(
+T PrismaticSpring<T>::DoCalcNonConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // Purely conservative spring

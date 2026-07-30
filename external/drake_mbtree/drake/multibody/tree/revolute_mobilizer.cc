@@ -44,37 +44,39 @@ std::string RevoluteMobilizer<T>::velocity_suffix(
 
 template <typename T>
 const T& RevoluteMobilizer<T>::get_angle(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
 }
 
 template <typename T>
 const RevoluteMobilizer<T>& RevoluteMobilizer<T>::SetAngle(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& angle) const {
-  QVector<T> q = this->get_positions(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& angle) const {
+  DRAKE_DEMAND(state != nullptr);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = angle;
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 const T& RevoluteMobilizer<T>::get_angular_rate(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == kNv);
   return v.coeffRef(0);
 }
 
 template <typename T>
 const RevoluteMobilizer<T>& RevoluteMobilizer<T>::SetAngularRate(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& theta_dot) const {
-  VVector<T> v = this->get_velocities(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& theta_dot) const {
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = theta_dot;
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
@@ -85,9 +87,9 @@ RevoluteMobilizerAxial<T, axis>::~RevoluteMobilizerAxial() = default;
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 math::RigidTransform<T>
-RevoluteMobilizerAxial<T, axis>::CalcAcrossMobilizerTransform(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& q = this->get_positions(context);
+RevoluteMobilizerAxial<T, axis>::DoCalcAcrossMobilizerTransform(
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == this->kNq);
   return calc_X_FM(q.data());
 }
@@ -95,7 +97,7 @@ RevoluteMobilizerAxial<T, axis>::CalcAcrossMobilizerTransform(
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 SpatialVelocity<T>
-RevoluteMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialVelocity(
+RevoluteMobilizerAxial<T, axis>::DoCalcAcrossMobilizerSpatialVelocity(
     const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == this->kNv);
   return calc_V_FM(nullptr, v.data());
@@ -104,7 +106,7 @@ RevoluteMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 SpatialAcceleration<T>
-RevoluteMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialAcceleration(
+RevoluteMobilizerAxial<T, axis>::DoCalcAcrossMobilizerSpatialAcceleration(
     const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == this->kNv);
@@ -113,7 +115,7 @@ RevoluteMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialAcceleration(
 
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
-void RevoluteMobilizerAxial<T, axis>::ProjectSpatialForce(
+void RevoluteMobilizerAxial<T, axis>::DoProjectSpatialForce(
     const orvd::multibody_runtime::MultibodyStateInstance&, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == this->kNv);

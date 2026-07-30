@@ -34,6 +34,8 @@ template <typename T>
 void FixedOffsetFrame<T>::SetPoseInParentFrame(
     orvd::multibody_runtime::MultibodyStateInstance* state,
     const math::RigidTransform<T>& X_PF) const {
+  DRAKE_THROW_UNLESS(state != nullptr);
+  this->ValidateStateInstance(*state);
   orvd::multibody_runtime::FixedFramePoseParameters parameters;
   parameters.R_PF = X_PF.rotation().matrix();
   parameters.p_PoFo_P = X_PF.translation();
@@ -43,6 +45,7 @@ void FixedOffsetFrame<T>::SetPoseInParentFrame(
 template <typename T>
 math::RigidTransform<T> FixedOffsetFrame<T>::GetPoseInParentFrame(
     const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  this->ValidateStateInstance(state);
   const orvd::multibody_runtime::FixedFramePoseParameters& parameters =
       state.fixed_frame_pose_parameters(pose_parameter_slot_);
   return math::RigidTransform<T>(

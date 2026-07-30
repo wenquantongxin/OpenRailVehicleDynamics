@@ -10,7 +10,7 @@ template <typename T, int nq, int nv>
 MobilizerImpl<T, nq, nv>::~MobilizerImpl() = default;
 
 template <typename T, int nq, int nv>
-bool MobilizerImpl<T, nq, nv>::SetPosePair(
+bool MobilizerImpl<T, nq, nv>::DoSetPosePair(
     const Eigen::Quaternion<T> q_FM, const Vector3<T>& p_FM,
     orvd::multibody_runtime::MultibodyStateInstance* state) const {
   // The pose becomes this mobilizer's whole q, committed once. A mobilizer that
@@ -22,7 +22,7 @@ bool MobilizerImpl<T, nq, nv>::SetPosePair(
 }
 
 template <typename T, int nq, int nv>
-bool MobilizerImpl<T, nq, nv>::SetSpatialVelocity(
+bool MobilizerImpl<T, nq, nv>::DoSetSpatialVelocity(
     const SpatialVelocity<T>& V_FM,
     orvd::multibody_runtime::MultibodyStateInstance* state) const {
   const std::optional<VVector<T>> v = DoSpatialVelocityToVelocities(V_FM);

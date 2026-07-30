@@ -81,7 +81,7 @@ void LinearSpringDamper<T>::DoCalcAndAddForceContribution(
 }
 
 template <typename T>
-T LinearSpringDamper<T>::CalcPotentialEnergy(
+T LinearSpringDamper<T>::DoCalcPotentialEnergy(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& pc) const {
   const math::RigidTransform<T>& X_WA = pc.get_X_WB(bodyA().mobod_index());
@@ -100,7 +100,7 @@ T LinearSpringDamper<T>::CalcPotentialEnergy(
 }
 
 template <typename T>
-T LinearSpringDamper<T>::CalcConservativePower(
+T LinearSpringDamper<T>::DoCalcConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc) const {
   // Since the potential energy is:
@@ -131,7 +131,7 @@ T LinearSpringDamper<T>::CalcConservativePower(
 }
 
 template <typename T>
-T LinearSpringDamper<T>::CalcNonConservativePower(
+T LinearSpringDamper<T>::DoCalcNonConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc) const {
   // The rate at which the length of the spring changes.

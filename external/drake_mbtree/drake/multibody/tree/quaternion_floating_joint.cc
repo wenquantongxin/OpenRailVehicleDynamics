@@ -5,7 +5,6 @@
 
 #include "drake/multibody/tree/multibody_tree.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -50,14 +49,15 @@ void QuaternionFloatingJoint<T>::DoAddInOneForce(const orvd::multibody_runtime::
 
 template <typename T>
 void QuaternionFloatingJoint<T>::DoAddInDamping(
-    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, MultibodyForces<T>* forces) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state,
+    MultibodyForces<T>* forces) const {
   Eigen::Ref<VectorX<T>> t_BMo_F =
       get_mobilizer().get_mutable_generalized_forces_from_array(
           &forces->mutable_generalized_forces());
-  const Vector3<T>& w_FM = get_angular_velocity(context);
-  const Vector3<T>& v_FM = get_translational_velocity(context);
-  const T& angular_damping = this->GetDampingVector(context)[0];
-  const T& translational_damping = this->GetDampingVector(context)[3];
+  const Vector3<T>& w_FM = get_angular_velocity(state);
+  const Vector3<T>& v_FM = get_translational_velocity(state);
+  const T angular_damping = this->GetDampingVector(state)[0];
+  const T translational_damping = this->GetDampingVector(state)[3];
   t_BMo_F.template head<3>() -= angular_damping * w_FM;
   t_BMo_F.template tail<3>() -= translational_damping * v_FM;
 }

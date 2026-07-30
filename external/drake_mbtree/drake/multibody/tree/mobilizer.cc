@@ -13,8 +13,16 @@ Mobilizer<T>::~Mobilizer() = default;
 
 template <typename T>
 std::pair<Eigen::Quaternion<T>, Vector3<T>> Mobilizer<T>::GetPosePair(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const math::RigidTransform<T> X_FM = CalcAcrossMobilizerTransform(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  this->ValidateStateInstance(state);
+  return DoGetPosePair(state);
+}
+
+template <typename T>
+std::pair<Eigen::Quaternion<T>, Vector3<T>> Mobilizer<T>::DoGetPosePair(
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const math::RigidTransform<T> X_FM =
+      DoCalcAcrossMobilizerTransform(state);
   return std::pair(X_FM.rotation().ToQuaternion(), X_FM.translation());
 }
 

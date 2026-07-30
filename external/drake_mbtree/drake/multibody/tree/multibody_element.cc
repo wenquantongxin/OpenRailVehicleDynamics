@@ -28,6 +28,7 @@ template <typename T>
 void MultibodyElement<T>::WriteDefaultParameters(
     orvd::multibody_runtime::MultibodyStateInstance* state) const {
   DRAKE_DEMAND(state != nullptr);
+  ValidateStateInstance(*state);
   DoWriteDefaultParameters(state);
 }
 

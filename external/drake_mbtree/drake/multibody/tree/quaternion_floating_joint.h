@@ -11,7 +11,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/quaternion_floating_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -129,56 +128,56 @@ class QuaternionFloatingJoint final : public Joint<T> {
   /// Gets the quaternion `q_FM` that represents the orientation of outboard
   /// frame M in the inboard frame F. Refer to the documentation for this class
   /// for details.
-  /// @param[in] context
+  /// @param[in] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @retval q_FM The quaternion representing the orientation of frame M in F.
-  Quaternion<T> get_quaternion(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_quaternion(context);
+  Quaternion<T> get_quaternion(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_quaternion(state);
   }
 
   /// Returns the position vector p_FoMo_F from Fo (inboard frame F's origin)
   /// to Mo (outboard frame M's origin), expressed in inboard frame F.
-  /// @param[in] context contains the state of the multibody system.
+  /// @param[in] state contains the state of the multibody system.
   /// @note Class documentation describes inboard frame F and outboard frame M.
   /// @retval p_FM The position vector from Fo (frame F's origin) to Mo (frame
   /// M's origin), expressed in frame F.
-  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translation(context);
+  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translation(state);
   }
 
   /// Returns the pose `X_FM` of the outboard frame M as measured and expressed
   /// in the inboard frame F. Refer to the documentation for this class for
   /// details.
-  /// @param[in] context A Context for the MultibodyPlant this joint belongs to.
+  /// @param[in] state A Context for the MultibodyPlant this joint belongs to.
   /// @retval X_FM The pose of frame M in frame F.
-  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return math::RigidTransform<T>(get_quaternion(context),
-                                   get_translation(context));
+  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return math::RigidTransform<T>(get_quaternion(state),
+                                   get_translation(state));
   }
 
-  /// Retrieves from `context` the angular velocity `w_FM` of the child frame
+  /// Retrieves from `state` the angular velocity `w_FM` of the child frame
   /// M in the parent frame F, expressed in F.
-  /// @param[in] context
+  /// @param[in] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @retval w_FM
   ///   A vector in ℝ³ with the angular velocity of the child frame M in the
   ///   parent frame F, expressed in F. Refer to this class's documentation for
   ///   further details and definitions of these frames.
-  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_velocity(context);
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_velocity(state);
   }
 
-  /// Retrieves from `context` the translational velocity `v_FM` of the
+  /// Retrieves from `state` the translational velocity `v_FM` of the
   /// child frame M's origin as measured and expressed in the parent frame F.
-  /// @param[in] context
+  /// @param[in] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @retval v_FM
   ///   A vector in ℝ³ with the translational velocity of the origin of child
   ///   frame M in the parent frame F, expressed in F. Refer to this class's
   ///   documentation for further details and definitions of these frames.
   Vector3<T> get_translational_velocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translational_velocity(context);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translational_velocity(state);
   }
 
   /// @}
@@ -186,60 +185,61 @@ class QuaternionFloatingJoint final : public Joint<T> {
   /// @name Context-dependent value setters
   /// @{
 
-  /// Sets `context` so that the orientation of frame M in F is given by the
+  /// Sets `state` so that the orientation of frame M in F is given by the
   /// input quaternion `q_FM`.
-  /// @param[in,out] context
+  /// @param[in,out] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @param[in] q_FM
-  ///   Quaternion relating frames F and M to be stored in `context`.
+  ///   Quaternion relating frames F and M to be stored in `state`.
   /// @returns a constant reference to `this` joint.
   const QuaternionFloatingJoint<T>& SetQuaternion(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Quaternion<T>& q_FM) const {
-    get_mobilizer().SetQuaternion(context, q_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Quaternion<T>& q_FM) const {
+    get_mobilizer().SetQuaternion(state, q_FM);
     return *this;
   }
 
-  /// Sets the quaternion in `context` so this joint's orientation is consistent
+  /// Sets the quaternion in `state` so this joint's orientation is consistent
   /// with the given `R_FM` rotation matrix.
-  /// @param[in,out] context
+  /// @param[in,out] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @param[in] R_FM
   ///   The rotation matrix relating the orientation of frame F and frame M.
   /// @returns a constant reference to `this` joint.
   const QuaternionFloatingJoint<T>& SetOrientation(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const {
-    get_mobilizer().SetOrientation(context, R_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RotationMatrix<T>& R_FM) const {
+    get_mobilizer().SetOrientation(state, R_FM);
     return *this;
   }
 
-  /// For this joint, stores the position vector `p_FM` in `context`.
-  /// @param[in,out] context
+  /// For this joint, stores the position vector `p_FM` in `state`.
+  /// @param[in,out] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @param[in] p_FM position vector p_FoMo_F from Fo (inboard frame F's
   /// origin) to Mo (outboard frame M's origin), expressed in frame F.
   /// @returns a constant reference to `this` joint.
   const QuaternionFloatingJoint<T>& SetTranslation(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& p_FM) const {
-    get_mobilizer().SetTranslation(context, p_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& p_FM) const {
+    get_mobilizer().SetTranslation(state, p_FM);
     return *this;
   }
 
-  /// Sets `context` to store `X_FM` the pose of frame M measured and expressed
+  /// Sets `state` to store `X_FM` the pose of frame M measured and expressed
   ///   in frame F.
-  /// @param[in,out] context
+  /// @param[in,out] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @param[in] X_FM
-  ///   The desired pose of frame M in frame F to be stored in `context`.
+  ///   The desired pose of frame M in frame F to be stored in `state`.
   /// @returns a constant reference to `this` joint.
   const QuaternionFloatingJoint<T>& SetPose(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RigidTransform<T>& X_FM) const {
-    SetTranslation(context, X_FM.translation());
-    return SetOrientation(context, X_FM.rotation());
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RigidTransform<T>& X_FM) const {
+    this->SetPosePair(state, X_FM.rotation().ToQuaternion(),
+                      X_FM.translation());
+    return *this;
   }
 
-  /// Sets in `context` the state for `this` joint so that the angular velocity
+  /// Sets in `state` the state for `this` joint so that the angular velocity
   /// of the child frame M in the parent frame F is `w_FM`.
-  /// @param[in,out] context
+  /// @param[in,out] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @param[in] w_FM
   ///   A vector in ℝ³ with the angular velocity of the child frame M in the
@@ -247,14 +247,14 @@ class QuaternionFloatingJoint final : public Joint<T> {
   ///   further details and definitions of these frames.
   /// @returns a constant reference to `this` joint.
   const QuaternionFloatingJoint<T>& set_angular_velocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const {
-    get_mobilizer().SetAngularVelocity(context, w_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& w_FM) const {
+    get_mobilizer().SetAngularVelocity(state, w_FM);
     return *this;
   }
 
-  /// Sets in `context` the state for `this` joint so that the translational
+  /// Sets in `state` the state for `this` joint so that the translational
   /// velocity of the child frame M's origin in the parent frame F is `v_FM`.
-  /// @param[in,out] context
+  /// @param[in,out] state
   ///   A Context for the MultibodyPlant this joint belongs to.
   /// @param[in] v_FM
   ///   A vector in ℝ³ with the translational velocity of the child frame M's
@@ -262,8 +262,8 @@ class QuaternionFloatingJoint final : public Joint<T> {
   ///   documentation for further details and definitions of these frames.
   /// @returns a constant reference to `this` joint.
   const QuaternionFloatingJoint<T>& set_translational_velocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const {
-    get_mobilizer().SetTranslationalVelocity(context, v_FM);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& v_FM) const {
+    get_mobilizer().SetTranslationalVelocity(state, v_FM);
     return *this;
   }
 
@@ -330,7 +330,8 @@ class QuaternionFloatingJoint final : public Joint<T> {
   /// also adds into the angular component of `forces` for `this` joint a
   /// dissipative torque according to the viscous law `τ = -d⋅ω`, with d the
   /// damping coefficient (see default_angular_damping()).
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final;
 
  private:

@@ -424,6 +424,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   /// Returns the torque stiffness constants `[k₀ k₁ k₂]` (units of N*m/rad).
   Vector3<T> GetTorqueStiffnessConstants(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.linear_bushing_parameters(bushing_parameter_slot_)
         .torque_stiffness;
   }
@@ -431,6 +432,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   /// Returns the torque damping constants `[d₀ d₁ d₂]` (units of N*m*s/rad).
   Vector3<T> GetTorqueDampingConstants(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.linear_bushing_parameters(bushing_parameter_slot_)
         .torque_damping;
   }
@@ -438,6 +440,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   /// Returns the force stiffness constants `[kx ky kz]` (units of N/m).
   Vector3<T> GetForceStiffnessConstants(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.linear_bushing_parameters(bushing_parameter_slot_)
         .force_stiffness;
   }
@@ -445,6 +448,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   /// Returns the force damping constants `[dx dy dz]` (units of N*s/m).
   Vector3<T> GetForceDampingConstants(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.linear_bushing_parameters(bushing_parameter_slot_)
         .force_damping;
   }
@@ -457,6 +461,8 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   void SetTorqueStiffnessConstants(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& torque_stiffness) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
         state->linear_bushing_parameters(bushing_parameter_slot_);
     parameters.torque_stiffness = torque_stiffness;
@@ -467,6 +473,8 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   void SetTorqueDampingConstants(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& torque_damping) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
         state->linear_bushing_parameters(bushing_parameter_slot_);
     parameters.torque_damping = torque_damping;
@@ -477,6 +485,8 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   void SetForceStiffnessConstants(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& force_stiffness) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
         state->linear_bushing_parameters(bushing_parameter_slot_);
     parameters.force_stiffness = force_stiffness;
@@ -487,6 +497,8 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   void SetForceDampingConstants(
       orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& force_damping) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
         state->linear_bushing_parameters(bushing_parameter_slot_);
     parameters.force_damping = force_damping;
@@ -552,20 +564,20 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
 
   // TODO(Mitiguy) Per issue #12982, implement the following method.
   //  Currently it has not been implemented and throws an exception.
-  T CalcPotentialEnergy(
+  T DoCalcPotentialEnergy(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc) const override;
 
   // TODO(Mitiguy) Per issue #12982, implement the following method.
   //  Currently it has not been implemented and throws an exception
-  T CalcConservativePower(
+  T DoCalcConservativePower(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
 
   // TODO(Mitiguy) Per issue #12982, implement the following method.
   //  Currently it has not been implemented and throws an exception
-  T CalcNonConservativePower(
+  T DoCalcNonConservativePower(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
@@ -694,7 +706,8 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   Vector3<T> TorqueStiffnessConstantsTimesAngles(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const math::RollPitchYaw<T> rpy = CalcBushingRollPitchYawAngles(context);
-    return GetTorqueStiffnessConstants(context).cwiseProduct(rpy.vector());
+    return GetTorqueStiffnessConstants(context.state())
+        .cwiseProduct(rpy.vector());
   }
 
   // Calculate τᴅ = [d₀q̇₀, d₁q̇₁, d₂q̇₂], element-wise multiplication of the
@@ -704,7 +717,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const math::RollPitchYaw<T> rpy = CalcBushingRollPitchYawAngles(context);
     const Vector3<T> rpyDt = CalcBushingRollPitchYawAngleRates(context, rpy);
-    return GetTorqueDampingConstants(context).cwiseProduct(rpyDt);
+    return GetTorqueDampingConstants(context.state()).cwiseProduct(rpyDt);
   }
 
   // Calculate the 3x1 array (not a vector) containing τ = τᴋ + τᴅ = [τ₀ τ₁ τ₂].
@@ -734,7 +747,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   Vector3<T> ForceStiffnessConstantsTimesDisplacement(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const Vector3<T> xyz = Calcp_AoCo_B(context);  // [x y z]ʙ
-    return GetForceStiffnessConstants(context).cwiseProduct(xyz);
+    return GetForceStiffnessConstants(context.state()).cwiseProduct(xyz);
   }
 
   // Calculate `𝐟ᴅ = [dx ẋ, dy ẏ, dz ż]ʙ`, element-wise multiplication of the
@@ -743,7 +756,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   Vector3<T> ForceDampingConstantsTimesDisplacementRate(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const Vector3<T> xyzDt = CalcBushing_xyzDt(context);
-    return GetForceDampingConstants(context).cwiseProduct(xyzDt);
+    return GetForceDampingConstants(context.state()).cwiseProduct(xyzDt);
   }
 
   // Calculate `𝐟 = 𝐟ᴋ + 𝐟ᴅ = f_C_B  = [fx fy fz]ʙ`, the resultant bushing

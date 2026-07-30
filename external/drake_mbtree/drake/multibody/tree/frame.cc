@@ -3,7 +3,6 @@
 #include "drake/common/nice_type_name.h"
 #include "drake/multibody/tree/rigid_body.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {

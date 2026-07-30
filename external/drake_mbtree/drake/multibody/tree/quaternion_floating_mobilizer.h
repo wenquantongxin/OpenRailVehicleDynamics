@@ -87,96 +87,96 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
   // Gets the quaternion `q_FM` that represents the orientation of outboard
   // frame M in the inboard frame F. Refer to the documentation for this class
   // for details.
-  // @param[in] context
-  //   The context storing the state of the MultibodyTree this mobilizer
+  // @param[in] state
+  //   The state storing the state of the MultibodyTree this mobilizer
   //   belongs to.
   // @retval q_FM
   //   The quaternion representing the orientation of frame M in F.
-  Quaternion<T> get_quaternion(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Quaternion<T> get_quaternion(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // Returns the position `p_FM` of the outboard frame M's origin as measured
   // and expressed in the inboard frame F. Refer to the documentation for this
   // class for details.
-  // @param[in] context
-  //   The context storing the state of the MultibodyTree this mobilizer
+  // @param[in] state
+  //   The state storing the state of the MultibodyTree this mobilizer
   //   belongs to.
   // @retval p_FM
   //   The position vector of frame M's origin in frame F.
-  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets `context` so that the orientation of frame M in F is given by the
+  // Sets `state` so that the orientation of frame M in F is given by the
   // input quaternion `q_FM`.
-  // @param[out] context
-  //   The context storing the state of the MultibodyTree this mobilizer
+  // @param[out] state
+  //   The state storing the state of the MultibodyTree this mobilizer
   //   belongs to.
   // @param[in] q_FM
-  //   The desired orientation of M in F to be stored in `context`.
+  //   The desired orientation of M in F to be stored in `state`.
   // @returns a constant reference to `this` mobilizer.
   const QuaternionFloatingMobilizer<T>& SetQuaternion(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Quaternion<T>& q_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Quaternion<T>& q_FM) const;
 
-  // Sets `context` to store the position `p_FM` of frame M's origin `Mo`
+  // Sets `state` to store the position `p_FM` of frame M's origin `Mo`
   // measured and expressed in frame F.
-  // @param[out] context
-  //   The context storing the state of the MultibodyTree this mobilizer
+  // @param[out] state
+  //   The state storing the state of the MultibodyTree this mobilizer
   //   belongs to.
   // @param[in] p_FM
-  //   The desired position of frame M in F to be stored in `context`.
+  //   The desired position of frame M in F to be stored in `state`.
   // @returns a constant reference to `this` mobilizer.
   const QuaternionFloatingMobilizer<T>& SetTranslation(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& p_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& p_FM) const;
 
-  // Sets `context` so this mobilizer's generalized coordinates (its quaternion
+  // Sets `state` so this mobilizer's generalized coordinates (its quaternion
   // q_FM) are consistent with the given `R_FM` rotation matrix.
-  // @param[in] context
-  //   The context of the MultibodyTree that this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree that this mobilizer belongs to.
   // @param[in] R_FM
   //   The rotation matrix relating the orientation of frame F and frame M.
   // @returns a constant reference to `this` mobilizer.
   const QuaternionFloatingMobilizer<T>& SetOrientation(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const {
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RotationMatrix<T>& R_FM) const {
     const Eigen::Quaternion<T> q_FM = R_FM.ToQuaternion();
-    return SetQuaternion(context, q_FM);
+    return SetQuaternion(state, q_FM);
   }
 
-  // Returns the angular velocity `w_FM` of frame M in F stored in `context`.
-  // @param[in] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // Returns the angular velocity `w_FM` of frame M in F stored in `state`.
+  // @param[in] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @retval w_FM
   //   The angular velocity of the outboard frame M in the inboard frame F.
-  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets `context` to store the angular velocity `w_FM` of frame M in frame F.
-  // @param[out] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // Sets `state` to store the angular velocity `w_FM` of frame M in frame F.
+  // @param[out] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[in] w_FM
   //   The desired angular velocity of frame M in F, expressed in F.
   // @returns a constant reference to `this` mobilizer.
   const QuaternionFloatingMobilizer<T>& SetAngularVelocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& w_FM) const;
 
-  // Retrieves and returns from `context` the translational velocity `v_FM` of
+  // Retrieves and returns from `state` the translational velocity `v_FM` of
   // frame M's origin as measured and expressed in frame F.
-  // @param[in] context
-  //   The context of the MultibodyTree to which this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the MultibodyTree to which this mobilizer belongs to.
   // @retval v_FM
   //   The translational velocity of the outboard frame M in the inboard
   //   frame F, expressed in F.
   Vector3<T> get_translational_velocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Sets `context` to store the translational velocity `v_FM` of frame M in
+  // Sets `state` to store the translational velocity `v_FM` of frame M in
   // frame F.
-  // @param[out] context
-  //   The context of the MultibodyTree this mobilizer belongs to.
+  // @param[out] state
+  //   The state of the MultibodyTree this mobilizer belongs to.
   // @param[in] v_FM
   //   The desired translational velocity of frame M in F, expressed in F.
   // @returns a constant reference to `this` mobilizer.
   const QuaternionFloatingMobilizer<T>& SetTranslationalVelocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& v_FM) const;
 
   // @}
-  // End of Doxygen section on methods to get/set from a context.
+  // End of Doxygen section on methods to get/set from a state.
 
   // @name Mobilizer overrides
   // Refer to the Mobilizer class documentation for details.
@@ -218,30 +218,31 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
     tau_as_vector = F_BMo_F.get_coeffs();
   }
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const final;
 
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const final;
 
   bool is_velocity_equal_to_qdot() const final { return false; }
 
-  // This mobilizer can't use the default implementation because it is
-  // required to preserve bit-identical state.
-  std::pair<Eigen::Quaternion<T>, Vector3<T>> GetPosePair(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
   // @}
 
  protected:
+  // This mobilizer can't use the default implementation because it is
+  // required to preserve bit-identical state.
+  std::pair<Eigen::Quaternion<T>, Vector3<T>> DoGetPosePair(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
+
   // Sets `state` to store a configuration in which M coincides with F (i.e.
   // q_FM is the identity quaternion).
   QVector<double> get_zero_position() const final;
@@ -256,13 +257,13 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
   }
 
   // This function calculates this mobilizer's N matrix using the quaternion in
-  // context, _without_ normalization, which differs from DoCalcNplusMatrix()
-  // which uses the quaternion in context _with_ normalization.
+  // state, _without_ normalization, which differs from DoCalcNplusMatrix()
+  // which uses the quaternion in state _with_ normalization.
   // This mobilizer's N(q) matrix relates q̇ (time derivatives of 7 generalized
   // positions) to v (6 generalized velocities) as q̇ = N(q)⋅v, where
   // N(q) = ⎡ Nᵣ(q)  0₄₃ ⎤   Nᵣ(q) is a 4x3 matrix. 0₄₃ is the 4x3 zero matrix.
   //        ⎣ 0₃₃    I₃₃ ⎦   I₃₃ is the 3x3 identity matrix.
-  // Lemma: If q̇ᵣ (the time-derivative of the quaternion qᵣ in context) are
+  // Lemma: If q̇ᵣ (the time-derivative of the quaternion qᵣ in state) are
   // calculated as q̇ᵣ = Nᵣ(q) vᵣ, where vᵣ are the rotational generalized
   // velocities, then q̇ᵣ satisfies the "orthogonality constraint" qᵣ ⋅ q̇ᵣ = 0.
   // Proof: qᵣ ⋅ q̇ᵣ = qᵣ ⋅ Nᵣ(qᵣ) vᵣ
@@ -278,17 +279,17 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
   //
   // Lemma: If qᵣ ⋅ q̇ᵣ = 0, |qᵣ| (and hence |qᵣ|² = qᵣ ⋅ qᵣ) are constant.
   // Proof: 2 qᵣ ⋅ q̇ᵣ = d/dt(qᵣ ⋅ qᵣ) = 0, so qᵣ ⋅ qᵣ = |qᵣ|² is constant.
-  // Summary: When the time derivative q̇ᵣ of the quaternion qᵣ in context is
+  // Summary: When the time derivative q̇ᵣ of the quaternion qᵣ in state is
   // calculated as q̇ᵣ = Nᵣ(qᵣ) vᵣ = |qᵣ| Nᵣ(q̂ᵣ) vᵣ, then q̇ᵣ is orthogonal
   // (perpendicular) to qᵣ (i.e., qᵣ ⋅ q̇ᵣ = 0) and a perfect numerical
   // integrator would ensure |qᵣ| would stay constant.
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
   // This function calculates this mobilizer's N⁺ matrix using the quaternion qᵣ
-  // in context, _with_ normalization, which differs from DoCalcNMatrix() which
-  // uses the quaternion in context _without_ normalization. That is, if qᵣ is
-  // the unnormalized quaternion taken directly from context and if q̇ᵣ is
+  // in state, _with_ normalization, which differs from DoCalcNMatrix() which
+  // uses the quaternion in state _without_ normalization. That is, if qᵣ is
+  // the unnormalized quaternion taken directly from state and if q̇ᵣ is
   // perpendicular to qᵣ (meaning qᵣ ⋅ q̇ᵣ = 0), we calculate Nᵣ⁺(qᵣ) so that
   // w_FM_F = Nᵣ⁺(qᵣ) * q̇ᵣ is the angular velocity of the mobilizer's M frame in
   // the mobilizer's F frame, expressed in the F frame. If q̇ᵣ is perpendicular
@@ -309,28 +310,28 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
   // Reminder: although the N+(q) notation typically denotes a pseudoinverse of
   // this mobilizer's N(q) matrix, if q̇ᵣ is not perpendicular to qᵣ, then N+(q)
   // differs from a true pseudoinverse as explained above.
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
-  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
-  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
-  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
-  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 

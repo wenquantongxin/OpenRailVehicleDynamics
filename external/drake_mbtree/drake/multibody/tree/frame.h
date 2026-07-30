@@ -105,6 +105,7 @@ class Frame : public MultibodyElement<T> {
   /// %Frame are very fast.
   const math::RigidTransform<T>& EvalPoseInBodyFrame(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
+    this->ValidateStateInstance(context.state());
     const internal::FrameBodyPoseCache<T>& frame_body_poses =
         this->GetParentTreeSystem().EvalFrameBodyPoses(context);
     return get_X_LF(frame_body_poses);
@@ -113,22 +114,25 @@ class Frame : public MultibodyElement<T> {
   /// Returns the pose `X_LF` of `this` frame F in the LinkFrame
   /// (RigidBodyFrame) L of this %Frame's Link (RigidBody). In particular, if
   /// `this` **is** the link frame L, this method directly returns the
-  /// identity transformation. Note that this ONLY depends on the Parameters
-  /// in the context; it does not depend on time, input, state, etc.
+  /// identity transformation. Note that this ONLY depends on the typed
+  /// physical parameters in the state; it does not depend on time, input, or
+  /// generalized state.
   math::RigidTransform<T> CalcPoseInBodyFrame(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return DoCalcPoseInBodyFrame(context);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
+    return DoCalcPoseInBodyFrame(state);
   }
 
   /// Returns the rotation matrix `R_LF` that relates link frame L to `this`
   /// frame F (L is the LinkFrame of the Link (RigidBody) to which `this`
   /// frame F is  attached).
   /// @note If `this` is L, this method returns the identity RotationMatrix.
-  /// Note that this ONLY depends on the Parameters in the context; it does
-  /// not depend on time, input, state, etc.
+  /// Note that this ONLY depends on the typed physical parameters in the
+  /// state; it does not depend on time, input, or generalized state.
   math::RotationMatrix<T> CalcRotationMatrixInBodyFrame(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return DoCalcRotationMatrixInBodyFrame(context);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
+    return DoCalcRotationMatrixInBodyFrame(state);
   }
 
   /// Variant of CalcPoseInBodyFrame() that returns the fixed pose `X_LF` of
@@ -173,9 +177,10 @@ class Frame : public MultibodyElement<T> {
   /// returns `X_FQ`. Specific frame subclasses can override this method to
   /// provide faster implementations if needed.
   math::RigidTransform<T> CalcOffsetPoseInBody(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const math::RigidTransform<T>& X_FQ) const {
-    return DoCalcOffsetPoseInBody(context, X_FQ);
+    this->ValidateStateInstance(state);
+    return DoCalcOffsetPoseInBody(state, X_FQ);
   }
 
   /// Calculates and returns the rotation matrix `R_LQ` that relates link frame
@@ -184,9 +189,10 @@ class Frame : public MultibodyElement<T> {
   /// attached).
   /// @param[in] R_FQ rotation matrix that relates frame F to frame Q.
   math::RotationMatrix<T> CalcOffsetRotationMatrixInBody(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const math::RotationMatrix<T>& R_FQ) const {
-    return DoCalcOffsetRotationMatrixInBody(context, R_FQ);
+    this->ValidateStateInstance(state);
+    return DoCalcOffsetRotationMatrixInBody(state, R_FQ);
   }
 
   /// Variant of CalcOffsetPoseInBody() that given the offset pose `X_FQ` of a

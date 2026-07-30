@@ -41,8 +41,8 @@ T GetScrewRotationFromTranslation(const T& z, double screw_pitch) {
  The generalized coordinate for this mobilizer, θ corresponds to
  rotation about axis â of frame F.
  Zero θ defines the "zero configuration", which corresponds to frames F and
- M being coincident (axes are aligned and origins are co-located),
- see SetZeroState(). The translation along â depends on and is proportional
+ M being coincident (axes are aligned and origins are co-located). The
+ translation along â depends on and is proportional
  to the rotation θ. Their relation is defined by a screw pitch.
  The translation is defined to be positive in the direction of
  frame F's axis â and the rotation θ is defined to be positive according
@@ -119,80 +119,80 @@ class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
    in this class's documentation. */
   double screw_pitch() const;
 
-  /* Retrieves from `context` the translation (z) which describes the
+  /* Retrieves from `state` the translation (z) which describes the
    position for `this` mobilizer as documented in this class's documentation.
 
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @returns The translation (z) of the mobilizer */
-  T get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  T get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  /* Sets in `context` the position for `this` mobilizer to the translation z
+  /* Sets in `state` the position for `this` mobilizer to the translation z
    provided by the input argument `translation`.
    The generalized coordinate θ will change proportionally, depending on
    screw_pitch.
 
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @param[in] translation The desired translation in meters.
    @returns A constant reference to `this` mobilizer.
    @throws std::exception if the screw_pitch is very near zero and
            |translation| > kEpsilon. */
-  const ScrewMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                           const T& translation) const;
 
-  /* Retrieves from `context` the angle θ which describes the orientation for
+  /* Retrieves from `state` the angle θ which describes the orientation for
    `this` mobilizer as documented in this class's documentation.
 
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @returns The angle θ of the mobilizer. */
-  const T& get_angle(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  const T& get_angle(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  /* Sets in `context` the orientation for `this` mobilizer to the angle θ
+  /* Sets in `state` the orientation for `this` mobilizer to the angle θ
    provided by the input argument `angle`.
 
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @param[in] angle The desired angle in radians.
    @returns a constant reference to `this` mobilizer. */
-  const ScrewMobilizer<T>& SetAngle(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewMobilizer<T>& SetAngle(orvd::multibody_runtime::MultibodyStateInstance* state,
                                     const T& angle) const;
 
-  /* Retrieves from `context` the rate of change, in meters per second, of
+  /* Retrieves from `state` the rate of change, in meters per second, of
    `this` mobilizer's translation (see get_translation()).
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @returns The rate of change of the translation (ż)*/
-  T get_translation_rate(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  T get_translation_rate(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  /* Sets in `context` the rate of change, in meters per second, of `this`
+  /* Sets in `state` the rate of change, in meters per second, of `this`
    mobilizer's translation (see get_translation()) to `vz`.
    The generalized velocity ˙θ (θ_dot) will change proportionally, depending on
    screw_pitch.
 
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @param[in] vz The desired rate of change of `this` mobilizer's
                  translation, ż.
    @returns A constant reference to `this` mobilizer.
    @throws std::exception if the screw_pitch is very near zero and
            |vz| > kEpsilon. */
-  const ScrewMobilizer<T>& SetTranslationRate(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewMobilizer<T>& SetTranslationRate(orvd::multibody_runtime::MultibodyStateInstance* state,
                                               const T& vz) const;
 
-  /* Retrieves from `context` the rate of change, in radians per second, of
+  /* Retrieves from `state` the rate of change, in radians per second, of
    `this` mobilizer's angle (see get_angle()).
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @returns The rate of change of `this` mobilizer's angle. */
-  const T& get_angular_rate(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  const T& get_angular_rate(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  /* Sets in `context` the rate of change, in radians per second, of `this`
+  /* Sets in `state` the rate of change, in radians per second, of `this`
    mobilizer's angle (see angle()) to `theta_dot`.
-   @param[in] context The context of the model this mobilizer belongs to.
+   @param[in] state The state of the model this mobilizer belongs to.
    @param[in] theta_dot The desired rate of change of `this` mobilizer's angle
                         in radians per second.
    @returns A constant reference to `this` mobilizer. */
-  const ScrewMobilizer<T>& SetAngularRate(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewMobilizer<T>& SetAngularRate(orvd::multibody_runtime::MultibodyStateInstance* state,
                                           const T& theta_dot) const;
 
   /* Computes the across-mobilizer transform `X_FM(q)` between the inboard
    frame F and the outboard frame M as a function of the configuration q stored
-   in `context`. */
+   in `state`. */
   math::RigidTransform<T> calc_X_FM(const T* q) const {
     DRAKE_ASSERT(q != nullptr);
     const Vector3<T> p_FM(axis_ *
@@ -235,23 +235,23 @@ class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
     tau[0] = axis_.dot(t_B_F) + f * axis_.dot(f_BMo_F);
   }
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   /* Computes the across-mobilizer acceleration `A_FM(q, v, v̇)` of the outboard
    frame M in the inboard frame F.
    By definition `A_FM = d_F(V_FM)/dt = H_FM(q) * v̇ + Ḣ_FM * v`. The
    acceleration `A_FM` will be a function of the configuration q and the
-   velocity v from the `context` as well as the generalized accelerations
+   velocity v from the `state` as well as the generalized accelerations
    `v̇ = dv/dt`, the rates of change of v.
    This method aborts in Debug builds if `vdot.size()` is not one.
    @pre vdot.size() == 1. */
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const final;
 
   /* Projects the spatial force `F_Mo = [τ_Mo, f_Mo]` on `this` mobilizer's
@@ -263,44 +263,44 @@ class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
    each degree of freedom of `this` mobilizer.
    This method aborts in Debug builds if `tau.size()` is not one.
    @pre tau.size() == 1 */
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const final;
 
   bool is_velocity_equal_to_qdot() const override { return true; }
 
  protected:
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
   // Maps vdot to qddot, which for this mobilizer is q̈ = v̇.
-  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
   // Maps qddot to vdot, which for this mobilizer is v̇ = q̈.
-  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 

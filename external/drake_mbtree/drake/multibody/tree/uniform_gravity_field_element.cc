@@ -6,7 +6,6 @@
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -136,7 +135,7 @@ void UniformGravityFieldElement<T>::DoCalcAndAddForceContribution(
 }
 
 template <typename T>
-T UniformGravityFieldElement<T>::CalcPotentialEnergy(
+T UniformGravityFieldElement<T>::DoCalcPotentialEnergy(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& pc) const {
   // Add the potential energy due to gravity for each body in the model.
@@ -168,7 +167,7 @@ T UniformGravityFieldElement<T>::CalcPotentialEnergy(
 }
 
 template <typename T>
-T UniformGravityFieldElement<T>::CalcConservativePower(
+T UniformGravityFieldElement<T>::DoCalcConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc) const {
@@ -210,7 +209,7 @@ T UniformGravityFieldElement<T>::CalcConservativePower(
 }
 
 template <typename T>
-T UniformGravityFieldElement<T>::CalcNonConservativePower(
+T UniformGravityFieldElement<T>::DoCalcNonConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // A uniform gravity field is conservative. Therefore return zero power.

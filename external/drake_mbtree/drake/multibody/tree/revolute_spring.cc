@@ -44,22 +44,24 @@ void RevoluteSpring<T>::DoCalcAndAddForceContribution(
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&,
     MultibodyForces<T>* forces) const {
-  const T delta = this->GetNominalAngle(context) - joint().get_angle(context);
-  const T torque = this->GetStiffness(context) * delta;
-  joint().AddInTorque(context, torque, forces);
+  const T delta = this->GetNominalAngle(context.state()) -
+                  joint().get_angle(context.state());
+  const T torque = this->GetStiffness(context.state()) * delta;
+  joint().AddInTorque(context.state(), torque, forces);
 }
 
 template <typename T>
-T RevoluteSpring<T>::CalcPotentialEnergy(
+T RevoluteSpring<T>::DoCalcPotentialEnergy(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&) const {
-  const T delta = this->GetNominalAngle(context) - joint().get_angle(context);
+  const T delta = this->GetNominalAngle(context.state()) -
+                  joint().get_angle(context.state());
 
-  return 0.5 * this->GetStiffness(context) * delta * delta;
+  return 0.5 * this->GetStiffness(context.state()) * delta * delta;
 }
 
 template <typename T>
-T RevoluteSpring<T>::CalcConservativePower(
+T RevoluteSpring<T>::DoCalcConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
@@ -68,13 +70,14 @@ T RevoluteSpring<T>::CalcConservativePower(
   // The conservative power is defined as:
   //  Pc = -d(V)/dt = -[k⋅(θ₀-θ)⋅-dθ/dt] = k⋅(θ₀-θ)⋅dθ/dt
   // being positive when the potential energy decreases.
-  const T delta = this->GetNominalAngle(context) - joint().get_angle(context);
-  const T theta_dot = joint().get_angular_rate(context);
-  return this->GetStiffness(context) * delta * theta_dot;
+  const T delta = this->GetNominalAngle(context.state()) -
+                  joint().get_angle(context.state());
+  const T theta_dot = joint().get_angular_rate(context.state());
+  return this->GetStiffness(context.state()) * delta * theta_dot;
 }
 
 template <typename T>
-T RevoluteSpring<T>::CalcNonConservativePower(
+T RevoluteSpring<T>::DoCalcNonConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // Purely conservative spring

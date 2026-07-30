@@ -10,7 +10,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/revolute_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -157,68 +156,68 @@ class RevoluteJoint final : public Joint<T> {
   /// @name Context-dependent value access
   /// @{
 
-  /// Gets the rotation angle of `this` mobilizer from `context`.
-  /// @param[in] context
-  ///   The context of the MultibodyTree this joint belongs to.
-  /// @returns The angle coordinate of `this` joint stored in the `context`.
-  const T& get_angle(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angle(context);
+  /// Gets the rotation angle of `this` mobilizer from `state`.
+  /// @param[in] state
+  ///   The state of the MultibodyTree this joint belongs to.
+  /// @returns The angle coordinate of `this` joint stored in the `state`.
+  const T& get_angle(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angle(state);
   }
 
-  /// Sets the `context` so that the generalized coordinate corresponding to the
+  /// Sets the `state` so that the generalized coordinate corresponding to the
   /// rotation angle of `this` joint equals `angle`.
-  /// @param[in] context
-  ///   The context of the MultibodyTree this joint belongs to.
+  /// @param[in] state
+  ///   The state of the MultibodyTree this joint belongs to.
   /// @param[in] angle
-  ///   The desired angle in radians to be stored in `context`.
+  ///   The desired angle in radians to be stored in `state`.
   /// @returns a constant reference to `this` joint.
-  const RevoluteJoint<T>& set_angle(orvd::multibody_runtime::MultibodyStateInstance* context, const T& angle) const {
-    get_mobilizer().SetAngle(context, angle);
+  const RevoluteJoint<T>& set_angle(orvd::multibody_runtime::MultibodyStateInstance* state, const T& angle) const {
+    get_mobilizer().SetAngle(state, angle);
     return *this;
   }
 
   /// Gets the rate of change, in radians per second, of `this` joint's
-  /// angle (see get_angle()) from `context`.
-  /// @param[in] context
-  ///   The context of the MultibodyTree this joint belongs to.
+  /// angle (see get_angle()) from `state`.
+  /// @param[in] state
+  ///   The state of the MultibodyTree this joint belongs to.
   /// @returns The rate of change of `this` joint's angle as stored in the
-  /// `context`.
-  const T& get_angular_rate(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_rate(context);
+  /// `state`.
+  const T& get_angular_rate(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_rate(state);
   }
 
   /// Sets the rate of change, in radians per second, of this `this` joint's
   /// angle to `angle`. The new rate of change `angle` gets stored in
-  /// `context`.
-  /// @param[in] context
-  ///   The context of the MultibodyTree this joint belongs to.
+  /// `state`.
+  /// @param[in] state
+  ///   The state of the MultibodyTree this joint belongs to.
   /// @param[in] angle
   ///   The desired rate of change of `this` joints's angle in radians per
   ///   second. (Should have been named `rate` or `angular_rate`.)
   /// @returns a constant reference to `this` joint.
-  const RevoluteJoint<T>& set_angular_rate(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RevoluteJoint<T>& set_angular_rate(orvd::multibody_runtime::MultibodyStateInstance* state,
                                            const T& angle) const {
-    get_mobilizer().SetAngularRate(context, angle);
+    get_mobilizer().SetAngularRate(state, angle);
     return *this;
   }
 
   /// Returns the Context dependent damping coefficient stored as a parameter in
-  /// `context`. Refer to default_damping() for details.
-  /// @param[in] context The context storing the state and parameters for the
+  /// `state`. Refer to default_damping() for details.
+  /// @param[in] state The state storing the state and parameters for the
   /// model to which `this` joint belongs.
-  const T& GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return this->GetDampingVector(context)[0];
+  T GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return this->GetDampingVector(state)[0];
   }
 
   /// Sets the value of the viscous damping coefficient for this joint, stored
-  /// as a parameter in `context`. Refer to default_damping() for details.
-  /// @param[out] context The context storing the state and parameters for the
+  /// as a parameter in `state`. Refer to default_damping() for details.
+  /// @param[out] state The state storing the state and parameters for the
   /// model to which `this` joint belongs.
   /// @param[in] damping The damping value.
   /// @throws std::exception if `damping` is negative.
-  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* context, const T& damping) const {
+  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* state, const T& damping) const {
     DRAKE_THROW_UNLESS(damping >= 0);
-    this->SetDampingVector(context, Vector1<T>(damping));
+    this->SetDampingVector(state, Vector1<T>(damping));
   }
 
   /// @}
@@ -242,12 +241,12 @@ class RevoluteJoint final : public Joint<T> {
   /// acceleration according to the right-hand-rule around the joint's axis.
   ///
   /// @note A torque is the moment of a set of forces whose resultant is zero.
-  void AddInTorque(const orvd::multibody_runtime::MultibodyStateInstance& context, const T& torque,
+  void AddInTorque(const orvd::multibody_runtime::MultibodyStateInstance& state, const T& torque,
                    MultibodyForces<T>* forces) const {
     DRAKE_DEMAND(forces != nullptr);
     DRAKE_DEMAND(this->has_parent_tree());
     DRAKE_DEMAND(forces->CheckHasRightSizeForModel(this->get_parent_tree()));
-    this->AddInOneForce(context, 0, torque, forces);
+    this->AddInOneForce(state, 0, torque, forces);
   }
 
  protected:
@@ -280,11 +279,12 @@ class RevoluteJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative torque according to the
   /// viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     const T damping_torque =
-        -this->GetDamping(context) * get_angular_rate(context);
-    AddInTorque(context, damping_torque, forces);
+        -this->GetDamping(state) * get_angular_rate(state);
+    AddInTorque(state, damping_torque, forces);
   }
 
  private:
@@ -315,12 +315,12 @@ class RevoluteJoint final : public Joint<T> {
     }
   }
 
-  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
-    return get_angle(context);
+  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& state) const final {
+    return get_angle(state);
   }
 
-  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
-    return get_angular_rate(context);
+  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const final {
+    return get_angular_rate(state);
   }
 
   // Joint<T> overrides:

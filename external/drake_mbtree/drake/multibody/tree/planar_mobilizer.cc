@@ -54,88 +54,92 @@ std::string PlanarMobilizer<T>::velocity_suffix(
 
 template <typename T>
 Vector2<T> PlanarMobilizer<T>::get_translations(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return q.head(2);
 }
 
 template <typename T>
 const PlanarMobilizer<T>& PlanarMobilizer<T>::set_translations(
-    orvd::multibody_runtime::MultibodyStateInstance* context,
+    orvd::multibody_runtime::MultibodyStateInstance* state,
     const Eigen::Ref<const Vector2<T>>& translations) const {
-  QVector<T> q = this->get_positions(*context);
+  DRAKE_DEMAND(state != nullptr);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q.head(2) = translations;
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 const T& PlanarMobilizer<T>::get_angle(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(2);
 }
 
 template <typename T>
 const PlanarMobilizer<T>& PlanarMobilizer<T>::SetAngle(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& angle) const {
-  QVector<T> q = this->get_positions(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& angle) const {
+  DRAKE_DEMAND(state != nullptr);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q[2] = angle;
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 Vector2<T> PlanarMobilizer<T>::get_translation_rates(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == kNv);
   return v.head(2);
 }
 
 template <typename T>
 const PlanarMobilizer<T>& PlanarMobilizer<T>::SetTranslationRates(
-    orvd::multibody_runtime::MultibodyStateInstance* context,
+    orvd::multibody_runtime::MultibodyStateInstance* state,
     const Eigen::Ref<const Vector2<T>>& v_FM_F) const {
-  VVector<T> v = this->get_velocities(*context);
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v.head(2) = v_FM_F;
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
 template <typename T>
 const T& PlanarMobilizer<T>::get_angular_rate(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == kNv);
   return v.coeffRef(2);
 }
 
 template <typename T>
 const PlanarMobilizer<T>& PlanarMobilizer<T>::SetAngularRate(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& theta_dot) const {
-  VVector<T> v = this->get_velocities(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& theta_dot) const {
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v[2] = theta_dot;
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
 template <typename T>
-math::RigidTransform<T> PlanarMobilizer<T>::CalcAcrossMobilizerTransform(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& q = this->get_positions(context);
+math::RigidTransform<T> PlanarMobilizer<T>::DoCalcAcrossMobilizerTransform(
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
 }
 
 template <typename T>
-SpatialVelocity<T> PlanarMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
+SpatialVelocity<T> PlanarMobilizer<T>::DoCalcAcrossMobilizerSpatialVelocity(
     const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   return calc_V_FM(nullptr, v.data());
@@ -143,7 +147,7 @@ SpatialVelocity<T> PlanarMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 
 template <typename T>
 SpatialAcceleration<T>
-PlanarMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
+PlanarMobilizer<T>::DoCalcAcrossMobilizerSpatialAcceleration(
     const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
@@ -151,7 +155,7 @@ PlanarMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
 }
 
 template <typename T>
-void PlanarMobilizer<T>::ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
+void PlanarMobilizer<T>::DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
                                              const SpatialForce<T>& F_BMo_F,
                                              Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);

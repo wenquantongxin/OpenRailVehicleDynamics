@@ -174,6 +174,22 @@ G26 要同时删掉元素级空声明与 tree 级离散分支。
 模型"这一正确性条件不能静默消失。G21 的状态布局记录最终化模型身份,G26–G27 在接收状态
 或求值上下文的入口核对该身份；不建立代际句柄或回退路径。
 
+### G26 已落地的模型—状态接缝
+
+最终化 tree 是布局的单一所有者。forest、mobilizer 与所有元素拓扑稳定后，tree 按稳定
+元素顺序分配各物理类别的参数槽，再一次构造不可变的
+`MultibodyStateLayout`；World 的 NaN 惯量是模型 sentinel，不进入有限值运行时存储。
+状态与求值入口按 layout **对象身份**验归属，不能用尺寸相等代替模型身份。
+
+只读状态函数明确接收 `MultibodyStateInstance`，缓存求值函数明确接收
+`RigidMultibodyTreeEvaluationContext`；二者没有隐式转换，调用点必须显式投影
+`.state()`。公开入口在捷径返回或改写输出之前完成身份校验，派生 mobilizer 与
+force-element 通过 NVI 接入，不能绕开该校验。
+
+G27 的模型感知 context 工厂必须以 `tree.state_layout()` 构造私有状态，依次调用
+`SetDefaultParameters()` 和 `SetDefaultState()` 后才发布 context。G26 的直接构造器只是
+尚未接入缓存时的阶段性搭桥，不能成为允许原始零填充状态直接参与求值的长期公共入口。
+
 ## 五、计算输入的四类来源
 
 不能只审计 `Context`。落位树的计算输入必须分成四类,它们的生命周期与所有权都不同:

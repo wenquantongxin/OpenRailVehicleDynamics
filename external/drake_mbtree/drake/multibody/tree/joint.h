@@ -14,7 +14,6 @@
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 #include "drake/multibody/tree/rigid_body.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 #include "drake/common/unused.h"
 
 namespace drake {
@@ -280,18 +279,18 @@ class Joint : public MultibodyElement<T> {
   /// freedom.
   /// @throws std::exception if the joint does not have a single degree of
   /// freedom.
-  const T& GetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+  const T& GetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
     DRAKE_THROW_UNLESS(num_positions() == 1);
-    return DoGetOnePosition(context);
+    return DoGetOnePosition(state);
   }
 
   /// Returns the velocity coordinate for joints with a single degree of
   /// freedom.
   /// @throws std::exception if the joint does not have a single degree of
   /// freedom.
-  const T& GetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+  const T& GetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
     DRAKE_THROW_UNLESS(num_velocities() == 1);
-    return DoGetOneVelocity(context);
+    return DoGetOneVelocity(state);
   }
 
   /// Adds into `forces` a force along the one of the joint's degrees of
@@ -304,8 +303,8 @@ class Joint : public MultibodyElement<T> {
   /// the documentation provided by specific joint sub-classes regarding the
   /// meaning of `joint_dof`.
   ///
-  /// @param[in] context
-  ///   The context storing the state and parameters for the model to which
+  /// @param[in] state
+  ///   The state storing the state and parameters for the model to which
   ///   `this` joint belongs.
   /// @param[in] joint_dof
   ///   Index specifying one of the degrees of freedom for this joint. The index
@@ -320,19 +319,20 @@ class Joint : public MultibodyElement<T> {
   ///   `forces` is `nullptr` or if `forces` doest not have the right sizes to
   ///   accommodate a set of forces for the model to which this joint belongs.
   // NVI to DoAddInOneForce().
-  void AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& context, int joint_dof,
+  void AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& state, int joint_dof,
                      const T& joint_tau, MultibodyForces<T>* forces) const {
     DRAKE_DEMAND(forces != nullptr);
     DRAKE_DEMAND(0 <= joint_dof && joint_dof < num_velocities());
     DRAKE_DEMAND(this->has_parent_tree());
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(forces->CheckHasRightSizeForModel(this->get_parent_tree()));
-    DoAddInOneForce(context, joint_dof, joint_tau, forces);
+    DoAddInOneForce(state, joint_dof, joint_tau, forces);
   }
 
   /// Adds into `forces` the force due to damping within `this` joint.
   ///
-  /// @param[in] context
-  ///   The context storing the state and parameters for the model to which
+  /// @param[in] state
+  ///   The state storing the state and parameters for the model to which
   ///   `this` joint belongs.
   /// @param[out] forces
   ///   On return, this method will add the force due to damping within `this`
@@ -340,12 +340,14 @@ class Joint : public MultibodyElement<T> {
   ///   not have the right sizes to accommodate a set of forces for the model
   ///   to which this joint belongs.
   // NVI to DoAddInOneForce().
-  void AddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void AddInDamping(
+                    const orvd::multibody_runtime::MultibodyStateInstance& state,
                     MultibodyForces<T>* forces) const {
     DRAKE_DEMAND(forces != nullptr);
     DRAKE_DEMAND(this->has_parent_tree());
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(forces->CheckHasRightSizeForModel(this->get_parent_tree()));
-    DoAddInDamping(context, forces);
+    DoAddInDamping(state, forces);
   }
 
   /// @name            Methods to get and set limits
@@ -474,7 +476,7 @@ class Joint : public MultibodyElement<T> {
     return default_positions_;
   }
 
-  /// Sets in the given `context` the generalized position coordinates q for
+  /// Sets in the given `state` the generalized position coordinates q for
   /// this joint to `positions`.
   /// @note The values in `positions` are NOT constrained to be within
   ///   position_lower_limits() and position_upper_limits().
@@ -482,18 +484,18 @@ class Joint : public MultibodyElement<T> {
   ///   num_positions().
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   ///   finalized.
-  /// @pre `context` is not null.
-  void SetPositions(orvd::multibody_runtime::MultibodyStateInstance* context,
+  /// @pre `state` is not null.
+  void SetPositions(orvd::multibody_runtime::MultibodyStateInstance* state,
                     const Eigen::Ref<const VectorX<T>>& positions) const;
 
-  /// Returns the current value in the given `context` of the generalized
+  /// Returns the current value in the given `state` of the generalized
   /// coordinates q for this joint.
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   ///   finalized.
   Eigen::Ref<const VectorX<T>> GetPositions(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  /// Sets in the given `context` the generalized velocity coordinates v for
+  /// Sets in the given `state` the generalized velocity coordinates v for
   /// this joint to `velocities`.
   /// @note The values in `velocities` are NOT constrained to be within
   ///   velocity_lower_limits() and velocity_upper_limits().
@@ -501,16 +503,16 @@ class Joint : public MultibodyElement<T> {
   ///   num_velocities().
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   ///   finalized.
-  /// @pre `context` is not null.
-  void SetVelocities(orvd::multibody_runtime::MultibodyStateInstance* context,
+  /// @pre `state` is not null.
+  void SetVelocities(orvd::multibody_runtime::MultibodyStateInstance* state,
                      const Eigen::Ref<const VectorX<T>>& velocities) const;
 
-  /// Returns the current value in the given `context` of the generalized
+  /// Returns the current value in the given `state` of the generalized
   /// velocities v for this joint.
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   /// finalized.
   Eigen::Ref<const VectorX<T>> GetVelocities(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   /// Sets this joint's default generalized positions q₀ such that the pose
   /// of the child frame M in the parent frame F best matches the given pose.
@@ -540,7 +542,7 @@ class Joint : public MultibodyElement<T> {
     return math::RigidTransform(pose_pair.first, pose_pair.second);
   }
 
-  /// Sets in the given `context` this joint's generalized positions q such
+  /// Sets in the given `state` this joint's generalized positions q such
   /// that the pose of the child frame M in the parent frame F best matches the
   /// given pose. The pose is given by a RigidTransform X_FM, but a joint
   /// will represent pose differently. Drake's "floating" (6 dof) joints can
@@ -553,17 +555,17 @@ class Joint : public MultibodyElement<T> {
   ///   implement this function.
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   ///   finalized.
-  /// @pre `context` is not null.
+  /// @pre `state` is not null.
   /// @see GetPositions() to see the resulting q after this call.
   /// @see SetPosePair() for an alternative using a quaternion.
-  void SetPose(orvd::multibody_runtime::MultibodyStateInstance* context,
+  void SetPose(orvd::multibody_runtime::MultibodyStateInstance* state,
                const math::RigidTransform<T>& X_FM) const {
-    SetPosePairImpl(context, X_FM.rotation().ToQuaternion(), X_FM.translation(),
+    SetPosePairImpl(state, X_FM.rotation().ToQuaternion(), X_FM.translation(),
                     __func__);
   }
 
   /// Returns this joint's current pose using its position coordinates q taken
-  /// from the given `context` and converting that to a RigidTransform X_FM(q).
+  /// from the given `state` and converting that to a RigidTransform X_FM(q).
   ///
   /// @note The returned pose may not match the transform that was supplied to
   ///   SetPose() since in general joints (other than 6 dof joints) cannot
@@ -574,12 +576,12 @@ class Joint : public MultibodyElement<T> {
   /// @retval X_FM The current pose as a rigid transform.
   /// @see GetPositions() to see the generalized positions q that this
   ///   joint used to generate the returned transform.
-  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    const auto& [q_FM, p_FM] = GetPosePair(context);
+  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    const auto& [q_FM, p_FM] = GetPosePair(state);
     return math::RigidTransform(q_FM, p_FM);
   }
 
-  /// Sets in the given `context` this joint's generalized velocities v such
+  /// Sets in the given `state` this joint's generalized velocities v such
   /// that the spatial velocity of the child frame M in the parent frame F best
   /// matches the given spatial velocity. The velocity is provided as a spatial
   /// velocity V_FM, but a joint may represent velocity differently. Drake's
@@ -592,15 +594,15 @@ class Joint : public MultibodyElement<T> {
   ///   implement this function.
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   ///   finalized.
-  /// @pre `context` is not null.
+  /// @pre `state` is not null.
   /// @see GetVelocities() to see the resulting v after this call.
-  void SetSpatialVelocity(orvd::multibody_runtime::MultibodyStateInstance* context,
+  void SetSpatialVelocity(orvd::multibody_runtime::MultibodyStateInstance* state,
                           const SpatialVelocity<T>& V_FM) const {
-    SetSpatialVelocityImpl(&*context, V_FM, __func__);
+    SetSpatialVelocityImpl(state, V_FM, __func__);
   }
 
   /// Given the generalized positions q and generalized velocities v for this
-  /// joint in the given `context`, returns the cross-joint spatial velocity
+  /// joint in the given `state`, returns the cross-joint spatial velocity
   /// V_FM.
   /// @note All joint types support this function.
   /// @retval V_FM the spatial velocity across this joint.
@@ -609,7 +611,7 @@ class Joint : public MultibodyElement<T> {
   /// @see GetVelocities() to see the generalized velocities v that this
   ///   joint used to generate the returned spatial velocity.
   SpatialVelocity<T> GetSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // BTW These are implemented with a (quaternion,vector) pair rather than a
   // rigid transform so that we can guarantee to preserve bit-perfect results
@@ -658,15 +660,16 @@ class Joint : public MultibodyElement<T> {
   ///   implement this function.
   /// @throws std::exception if the containing MultibodyPlant has not yet been
   ///   finalized.
-  /// @pre `context` is not null.
+  /// @pre `state` is not null.
   /// @see SetPose()
-  void SetPosePair(orvd::multibody_runtime::MultibodyStateInstance* context, const Quaternion<T>& q_FM,
-                   const Vector3<T>& p_FM) const {
-    SetPosePairImpl(&*context, q_FM, p_FM, __func__);
+  void SetPosePair(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Quaternion<T>& q_FM, const Vector3<T>& p_FM) const {
+    SetPosePairImpl(state, q_FM, p_FM, __func__);
   }
 
   /// (Advanced) This is the same as GetPose() except it returns this joint's
-  /// pose in the given `context` as a (quaternion, translation vector) pair.
+  /// pose in the given `state` as a (quaternion, translation vector) pair.
   /// @note All joint types support this function.
   /// @note For a QuaternionFloatingJoint the return will be bit-identical to
   ///   the pose provided to SetPosePair(). For any other floating (6 dof)
@@ -677,7 +680,7 @@ class Joint : public MultibodyElement<T> {
   ///   finalized.
   /// @see GetPose()
   std::pair<Eigen::Quaternion<T>, Vector3<T>> GetPosePair(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   /// @}
 
@@ -701,6 +704,7 @@ class Joint : public MultibodyElement<T> {
   /// allocation per joint per call.
   Eigen::Ref<const VectorX<T>> GetDampingVector(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.joint_damping(damping_parameter_slot_);
   }
 
@@ -720,8 +724,8 @@ class Joint : public MultibodyElement<T> {
   }
 
   /// Sets the value of the viscous damping coefficients for this joint, stored
-  /// as parameters in `context`. Refer to default_damping_vector() for details.
-  /// @param[out] context The context storing the state and parameters for the
+  /// as parameters in `state`. Refer to default_damping_vector() for details.
+  /// @param[out] state The state storing the state and parameters for the
   /// model to which `this` joint belongs.
   /// @param[in] damping The vector of damping values.
   /// @throws std::exception if damping.size() != num_velocities().
@@ -735,6 +739,8 @@ class Joint : public MultibodyElement<T> {
   /// information.
   void SetDampingVector(orvd::multibody_runtime::MultibodyStateInstance* state,
                         const VectorX<T>& damping) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     DRAKE_THROW_UNLESS(damping.size() == num_velocities());
     DRAKE_THROW_UNLESS((damping.array() >= 0).all());
     state->set_joint_damping(damping_parameter_slot_, damping);
@@ -879,7 +885,7 @@ class Joint : public MultibodyElement<T> {
   /// This method is only called by the public NVI AddInOneForce() and therefore
   /// input arguments were checked to be valid.
   /// @see The public NVI AddInOneForce() for details.
-  virtual void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                int joint_dof, const T& joint_tau,
                                MultibodyForces<T>* forces) const = 0;
 
@@ -889,7 +895,8 @@ class Joint : public MultibodyElement<T> {
   /// constraint) and therefore specific %Joint subclasses must provide a
   /// definition for this method.
   /// The default implementation is a no-op for joints with no damping.
-  virtual void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
+  virtual void DoAddInDamping(
+                              const orvd::multibody_runtime::MultibodyStateInstance&,
                               MultibodyForces<T>*) const {}
 
   // Implements MultibodyElement::DoSetTopology(). Joints have no topology
@@ -999,10 +1006,10 @@ class Joint : public MultibodyElement<T> {
     state->set_joint_damping(damping_parameter_slot_, damping_);
   }
 
-  void SetPosePairImpl(orvd::multibody_runtime::MultibodyStateInstance* context, const Quaternion<T>& q_FM,
+  void SetPosePairImpl(orvd::multibody_runtime::MultibodyStateInstance* state, const Quaternion<T>& q_FM,
                        const Vector3<T>& p_FM, const char* func) const;
 
-  void SetSpatialVelocityImpl(orvd::multibody_runtime::MultibodyStateInstance* context,
+  void SetSpatialVelocityImpl(orvd::multibody_runtime::MultibodyStateInstance* state,
                               const SpatialVelocity<T>& V_FM,
                               const char* func) const;
 

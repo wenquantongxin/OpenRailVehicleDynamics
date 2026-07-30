@@ -45,94 +45,98 @@ double ScrewMobilizer<T>::screw_pitch() const {
 }
 
 template <typename T>
-T ScrewMobilizer<T>::get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+T ScrewMobilizer<T>::get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return GetScrewTranslationFromRotation(q[0], screw_pitch_);
 }
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetTranslation(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation) const {
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& translation) const {
+  DRAKE_DEMAND(state != nullptr);
   const double kEpsilon = std::sqrt(std::numeric_limits<double>::epsilon());
   using std::abs;
   DRAKE_THROW_UNLESS(abs(screw_pitch_) > kEpsilon ||
                      abs(translation) < kEpsilon);
-  QVector<T> q = this->get_positions(*context);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = GetScrewRotationFromTranslation(translation, screw_pitch_);
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 const T& ScrewMobilizer<T>::get_angle(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
 }
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetAngle(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& angle) const {
-  QVector<T> q = this->get_positions(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& angle) const {
+  DRAKE_DEMAND(state != nullptr);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = angle;
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 T ScrewMobilizer<T>::get_translation_rate(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == kNv);
   return GetScrewTranslationFromRotation(v[0], screw_pitch_);
 }
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetTranslationRate(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& vz) const {
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& vz) const {
+  DRAKE_DEMAND(state != nullptr);
   const double kEpsilon = std::sqrt(std::numeric_limits<double>::epsilon());
   using std::abs;
   DRAKE_THROW_UNLESS(abs(screw_pitch_) > kEpsilon || abs(vz) < kEpsilon);
 
-  VVector<T> v = this->get_velocities(*context);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = GetScrewRotationFromTranslation(vz, screw_pitch_);
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
 template <typename T>
 const T& ScrewMobilizer<T>::get_angular_rate(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == kNv);
   return v.coeffRef(0);
 }
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetAngularRate(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& theta_dot) const {
-  VVector<T> v = this->get_velocities(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& theta_dot) const {
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = theta_dot;
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
 template <typename T>
-math::RigidTransform<T> ScrewMobilizer<T>::CalcAcrossMobilizerTransform(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& q = this->get_positions(context);
+math::RigidTransform<T> ScrewMobilizer<T>::DoCalcAcrossMobilizerTransform(
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
 }
 
 template <typename T>
-SpatialVelocity<T> ScrewMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
+SpatialVelocity<T> ScrewMobilizer<T>::DoCalcAcrossMobilizerSpatialVelocity(
     const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   return calc_V_FM(nullptr, v.data());
@@ -140,7 +144,7 @@ SpatialVelocity<T> ScrewMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 
 template <typename T>
 SpatialAcceleration<T>
-ScrewMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
+ScrewMobilizer<T>::DoCalcAcrossMobilizerSpatialAcceleration(
     const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
@@ -148,7 +152,7 @@ ScrewMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
 }
 
 template <typename T>
-void ScrewMobilizer<T>::ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
+void ScrewMobilizer<T>::DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
                                             const SpatialForce<T>& F_BMo_F,
                                             Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);

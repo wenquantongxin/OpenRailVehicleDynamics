@@ -115,7 +115,7 @@ void LinearBushingRollPitchYaw<T>::DoCalcAndAddForceContribution(
   const RigidTransform<T>& X_WL0 = link0().EvalPoseInWorld(context);
   const RotationMatrix<T>& R_WL0 = X_WL0.rotation();
   const Vector3<T> p_L0Ao_L0 =
-      frameA().CalcPoseInBodyFrame(context).translation();
+      frameA().CalcPoseInBodyFrame(context.state()).translation();
   const Vector3<T> p_AoL0_W = -(R_WL0 * p_L0Ao_L0);
 
   // Form the spatial force F_L0_W by shifting the spatial force F_Ao_W from
@@ -303,7 +303,7 @@ void LinearBushingRollPitchYaw<T>::ThrowPitchAngleViolatesGimbalLockTolerance(
 }
 
 template <typename T>
-T LinearBushingRollPitchYaw<T>::CalcPotentialEnergy(
+T LinearBushingRollPitchYaw<T>::DoCalcPotentialEnergy(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& /* pc */) const {
   // TODO(Mitiguy) Per issues #12982 and #12752, implement this method.
@@ -314,7 +314,7 @@ T LinearBushingRollPitchYaw<T>::CalcPotentialEnergy(
 }
 
 template <typename T>
-T LinearBushingRollPitchYaw<T>::CalcConservativePower(
+T LinearBushingRollPitchYaw<T>::DoCalcConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& /* pc */,
     const internal::VelocityKinematicsCache<T>& /* vc */) const {
@@ -326,7 +326,7 @@ T LinearBushingRollPitchYaw<T>::CalcConservativePower(
 }
 
 template <typename T>
-T LinearBushingRollPitchYaw<T>::CalcNonConservativePower(
+T LinearBushingRollPitchYaw<T>::DoCalcNonConservativePower(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& /* pc */,
     const internal::VelocityKinematicsCache<T>& /* vc */) const {

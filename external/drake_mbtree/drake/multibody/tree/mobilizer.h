@@ -173,7 +173,7 @@ class BodyNode;
 // Post-multiplying both sides of the previous equation by R_FM gives <pre>
 //  [w_FM] * R_FM = ∂R/∂q * N(q) * v
 // </pre>
-// `Hw_FM` is the first three rows in `H_FM`, defined by context as <pre>
+// `Hw_FM` is the first three rows in `H_FM`, defined by state as <pre>
 //  Hw_FM * R_FM = ∂R/∂q * N(q)
 // </pre>
 //
@@ -208,26 +208,14 @@ class BodyNode;
 // - [Featherstone 2008] Featherstone, R., 2008. Rigid body dynamics
 //                       algorithms. Springer.
 //
-// <h3>Interaction with the Context</h3>
+// <h3>Interaction with typed multibody state</h3>
 //
-// Some member functions of a Mobilizer take a `const Context& context` as an
-// input argument. To ensure correctness of the MultibodyTreeSystem's cache
-// entry dependencies, it is essential that such functions only access an
-// appropriate subset the Context.
-//
-// A mobilizer's generalized positions q and generalized velocities v exist as
-// State in the context. The mobilizer is FORBIDDEN from using any State from
-// the context other than its own q and v data. Some functions are documented
-// to be only a function of q (not v); those functions must not access v.
-//
-// A mobilizer is allowed to access any Parameters in the context that it has
-// declared, from any method that takes a Context, without any further comment.
-// We always conservatively assume that all Mobilizer methods depend on all of a
-// Mobilizer's Parameters.
-//
-// A mobilizer is FORBIDDEN from being time- or input-dependent. (The context
-// provides access to the current simulation time and input port values, but
-// the mobilizer must not use that information.)
+// Mobilizer methods that accept a `MultibodyStateInstance` may read only this
+// mobilizer's generalized positions and velocities and its explicitly typed
+// physical parameters. Methods documented as functions of q alone must not
+// inspect v. A mobilizer is not time-, input-, discrete-state-, or
+// event-dependent; none of those framework concepts exists in this state
+// boundary.
 template <typename T>
 class Mobilizer : public MultibodyElement<T> {
  public:
@@ -364,49 +352,29 @@ class Mobilizer : public MultibodyElement<T> {
   // APIs of the concrete mobilizers.
   // @{
 
-  // Sets the `state` to what will be considered to be the _zero_ state
-  // (position and velocity) for `this` mobilizer. For most mobilizers the
-  // _zero_ position corresponds to the value of generalized positions at
-  // which the inboard frame F and the outboard frame coincide or, in other
-  // words, when `X_FM = Id` is the identity pose. In the general case
-  // however, the zero position will correspond to a value of the
-  // generalized positions for which `X_FM = X_FM_ref` where `X_FM_ref` may
-  // generally be different from the identity transformation.
-  // In other words, `X_FM_ref = CalcAcrossMobilizerTransform(ref_context)`
-  // where `ref_context` is a Context storing a State set to the zero
-  // configuration with SetZeroState().
-  // In addition, all generalized velocities are set to zero in the _zero_
-  // state.
-  //
-  // Most often the _zero_ position will correspond to setting
-  // the vector of generalized positions related to this mobilizer to zero.
-  // However, in the general case, setting all generalized coordinates to zero
-  // does not correspond to the _zero_ position and it might even not
-  // represent a mathematically valid one. Consider for instance a quaternion
-  // mobilizer, for which its _zero_ position corresponds to the quaternion
-  // [1, 0, 0, 0].
-  //
-  // Note that the zero state may fall outside of the limits for any joints
-  // associated with this type of mobilizer.
-  // Sets the state for this mobilizer in the given State to some
-  // approximation of this pose. It's up to the concrete mobilizer to figure out
-  // what to do. (Only QuaternionFloatingMobilizer can represent this pose
-  // bit-exactly.)
+  // Sets this mobilizer's complete position segment to an approximation of the
+  // supplied pose. The concrete mobilizer decides how to represent it;
+  // QuaternionFloatingMobilizer alone can preserve the pair bit-exactly.
+  // Orientation and translation are presented together so an implementation
+  // can commit q once without exposing a mixed intermediate pose.
   // Returns false if this mobilizer doesn't implement this feature.
   // TODO(sherm1) Currently this is only implemented for 6dof mobilizers.
   //  It's still useful for other joints; broaden support.
-  virtual bool SetPosePair(const Eigen::Quaternion<T> q_FM,
-                           const Vector3<T>& p_FM,
-                           orvd::multibody_runtime::MultibodyStateInstance* state)
-      const = 0;
+  bool SetPosePair(const Eigen::Quaternion<T> q_FM, const Vector3<T>& p_FM,
+                   orvd::multibody_runtime::MultibodyStateInstance* state)
+      const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
+    return DoSetPosePair(q_FM, p_FM, state);
+  }
 
   // Given the generalized positions q for this Mobilizer in the given
-  // `context`, returns the cross-mobilizer pose X_FM as a (quaternion, vec3)
+  // `state`, returns the cross-mobilizer pose X_FM as a (quaternion, vec3)
   // pair. Most mobilizers can use the default implementation here, but
   // quaternion floating mobilizer is required to return bit-identical data
   // so must override.
   // @returns (q_FM, p_FM)
-  virtual std::pair<Eigen::Quaternion<T>, Vector3<T>> GetPosePair(
+  std::pair<Eigen::Quaternion<T>, Vector3<T>> GetPosePair(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // Sets the velocity state v for this mobilizer in the given State to some
@@ -417,12 +385,16 @@ class Mobilizer : public MultibodyElement<T> {
   // Returns false if this mobilizer doesn't implement this feature.
   // TODO(sherm1) Currently this is only implemented for 6dof mobilizers.
   //  It's still useful for other joints; broaden support.
-  virtual bool SetSpatialVelocity(
+  bool SetSpatialVelocity(
       const SpatialVelocity<T>& V_FM,
-      orvd::multibody_runtime::MultibodyStateInstance* state) const = 0;
+      orvd::multibody_runtime::MultibodyStateInstance* state) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
+    return DoSetSpatialVelocity(V_FM, state);
+  }
 
   // Given the generalized positions q and generalized velocities v for this
-  // Mobilizer in the given `context`, returns the cross-mobilizer spatial
+  // Mobilizer in the given `state`, returns the cross-mobilizer spatial
   // velocity V_FM. (Not virtual)
   SpatialVelocity<T> GetSpatialVelocity(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
@@ -450,19 +422,22 @@ class Mobilizer : public MultibodyElement<T> {
   // frame F and the outboard frame M as a function of the vector of
   // generalized positions `q`.
   // %Mobilizer subclasses implementing this method can retrieve the fixed-size
-  // vector of generalized positions for `this` mobilizer from `context` with:
+  // vector of generalized positions for `this` mobilizer from `state` with:
   //
   // @code
-  // auto q = this->get_positions(context);
+  // auto q = this->get_positions(state);
   // @endcode
   //
-  // Additionally, `context` can provide any other parameters the mobilizer
+  // Additionally, `state` can provide any other parameters the mobilizer
   // could depend on.
 
   // TODO(sherm1) Consider getting rid of this function altogether and
   //  making use only of the concrete mobilizer's calc_X_FM() method.
-  virtual math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const = 0;
+  math::RigidTransform<T> CalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
+    return DoCalcAcrossMobilizerTransform(state);
+  }
 
   // Computes the across-mobilizer spatial velocity `V_FM(q, v)` of the
   // outboard frame M in the inboard frame F.
@@ -478,15 +453,18 @@ class Mobilizer : public MultibodyElement<T> {
   // This method aborts in Debug builds if the dimension of the input vector of
   // generalized velocities has a size different from num_velocities().
   //
-  // @param[in] context The context of the parent tree that owns this
+  // @param[in] state The state of the parent tree that owns this
   // mobilizer. This mobilizer's generalized positions q are inferred from this
-  // context.
+  // state.
   // @param[in] v A vector of generalized velocities. It must live in ℝⁿᵛ.
   // @retval V_FM The across-mobilizer spatial velocity of the outboard frame
   // M measured and expressed in the inboard frame F.
-  virtual SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
-      const Eigen::Ref<const VectorX<T>>& v) const = 0;
+  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& v) const {
+    this->ValidateStateInstance(state);
+    return DoCalcAcrossMobilizerSpatialVelocity(state, v);
+  }
 
   // Computes the across-mobilizer spatial accelerations `A_FM(q, v, v̇)` of the
   // outboard frame M in the inboard frame F.
@@ -501,19 +479,22 @@ class Mobilizer : public MultibodyElement<T> {
   // This method aborts in Debug builds if the dimension of the input vector of
   // generalized accelerations has a size different from num_velocities().
   //
-  // @param[in] context
-  //   The context of the parent tree that owns this mobilizer. This
+  // @param[in] state
+  //   The state of the parent tree that owns this mobilizer. This
   //   mobilizer's generalized positions q and generalized velocities v are
-  //   taken from this context.
+  //   taken from this state.
   // @param[in] vdot
   //   The vector of generalized velocities' time derivatives v̇. It must live
   //   in ℝⁿᵛ.
   // @retval A_FM
   //   The across-mobilizer spatial acceleration of the outboard frame M
   //   measured and expressed in the inboard frame F.
-  virtual SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
-      const Eigen::Ref<const VectorX<T>>& vdot) const = 0;
+  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& vdot) const {
+    this->ValidateStateInstance(state);
+    return DoCalcAcrossMobilizerSpatialAcceleration(state, vdot);
+  }
 
   // Calculates a mobilizer's generalized forces `tau = H_FMᵀ(q) ⋅ F_Mo_F`,
   // where `H_FMᵀ` is the transpose of frame M's mobilizer hinge matrix and
@@ -533,138 +514,149 @@ class Mobilizer : public MultibodyElement<T> {
   // This method aborts in Debug builds if the dimension of the output vector
   // of generalized forces has a size different from num_velocities().
   //
-  // @param[in] context
-  //   The context of the parent tree that owns this mobilizer. This
-  //   mobilizer's generalized positions q are stored in this context.
+  // @param[in] state
+  //   The state of the parent tree that owns this mobilizer. This
+  //   mobilizer's generalized positions q are stored in this state.
   // @param[in] F_Mo_F
   //   A SpatialForce applied at `this` mobilizer's outboard frame origin `Mo`,
   //   expressed in the inboard frame F.
   // @retval tau
   //   The vector of generalized forces. It must live in ℝⁿᵛ.
-  virtual void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
-                                   const SpatialForce<T>& F_Mo_F,
-                                   Eigen::Ref<VectorX<T>> tau) const = 0;
+  void ProjectSpatialForce(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const SpatialForce<T>& F_Mo_F, Eigen::Ref<VectorX<T>> tau) const {
+    this->ValidateStateInstance(state);
+    DoProjectSpatialForce(state, F_Mo_F, tau);
+  }
 
   // Computes the kinematic mapping matrix `N(q)` that maps generalized
   // velocities for this mobilizer to time derivatives of the generalized
   // positions for this mobilizer according to `q̇ = N(q)⋅v`.
-  // @param[in] context
-  //   The context for the parent tree that owns this mobilizer storing the
+  // @param[in] state
+  //   The state for the parent tree that owns this mobilizer storing the
   //   generalized positions q.
   // @param[out] N
   //   The kinematic mapping matrix `N(q)`. On input it must have size
   //   `nq x nv` with nq and nv the number of generalized positions and the
   //   number of generalized velocities for this mobilizer, respectively.
   // @see MapVelocityToQDot().
-  void CalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void CalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                    EigenPtr<MatrixX<T>> N) const {
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(N != nullptr);
     DRAKE_DEMAND(N->rows() == num_positions());
     DRAKE_DEMAND(N->cols() == num_velocities());
-    DoCalcNMatrix(context, N);
+    DoCalcNMatrix(state, N);
   }
 
   // Computes the kinematic mapping matrix `N⁺(q)` that maps time
   // derivatives of the generalized positions to generalized velocities
   // according to `v = N⁺(q)⋅q̇`. `N⁺(q)` is the left pseudoinverse of the
   // kinematic mapping `N(q)`, see CalcNMatrix().
-  // @param[in] context
-  //   The context for the parent tree that owns this mobilizer storing the
+  // @param[in] state
+  //   The state for the parent tree that owns this mobilizer storing the
   //   generalized positions q.
   // @param[out] Nplus
   //   The kinematic mapping matrix `N⁺(q)`. On input it must have size
   //   `nv x nq` with nq the number of generalized positions and nv the
   //   number of generalized velocities.
   // @see MapVelocityToQDot().
-  void CalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void CalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                        EigenPtr<MatrixX<T>> Nplus) const {
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(Nplus != nullptr);
     DRAKE_DEMAND(Nplus->rows() == num_velocities());
     DRAKE_DEMAND(Nplus->cols() == num_positions());
-    DoCalcNplusMatrix(context, Nplus);
+    DoCalcNplusMatrix(state, Nplus);
   }
 
   // Computes the matrix Ṅ(q,q̇) that helps relate q̈ (2ⁿᵈ time derivative of the
   // generalized positions) to v̇ (1ˢᵗ time derivative of generalized velocities)
   // via q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇, where N(q) is formed by CalcNMatrix().
-  // @param[in] context stores generalized positions q and velocities v.
+  // @param[in] state stores generalized positions q and velocities v.
   // @param[out] Ndot The matrix Ṅ(q,q̇). On input Ndot must have size
   //   nq x nv where nq is the number of generalized positions and
   //   nv is the number of generalized velocities for this mobilizer.
-  void CalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void CalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                       EigenPtr<MatrixX<T>> Ndot) const {
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(Ndot != nullptr);
     DRAKE_DEMAND(Ndot->rows() == num_positions());
     DRAKE_DEMAND(Ndot->cols() == num_velocities());
-    DoCalcNDotMatrix(context, Ndot);
+    DoCalcNDotMatrix(state, Ndot);
   }
 
   // Computes the matrix Ṅ⁺(q,q̇) that helps relate v̇ (1ˢᵗ time derivative of
   // generalized velocities) to q̈ (2ⁿᵈ time derivative of generalized positions)
   // via v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈, where N⁺(q) is formed by CalcNPlusMatrix().
-  // @param[in] context stores generalized positions q and velocities v.
+  // @param[in] state stores generalized positions q and velocities v.
   // @param[out] NplusDot The matrix Ṅ(q,q̇). On input NplusDot must have size
   //   nv x nq where nv is the number of generalized velocities and
   //   nq is the number of generalized positions for this mobilizer.
-  void CalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void CalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                           EigenPtr<MatrixX<T>> NplusDot) const {
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(NplusDot != nullptr);
     DRAKE_DEMAND(NplusDot->rows() == num_velocities());
     DRAKE_DEMAND(NplusDot->cols() == num_positions());
-    DoCalcNplusDotMatrix(context, NplusDot);
+    DoCalcNplusDotMatrix(state, NplusDot);
   }
 
   virtual bool is_velocity_equal_to_qdot() const = 0;
 
   // Computes the kinematic mapping `q̇ = N(q)⋅v` between generalized
   // velocities v and time derivatives of the generalized positions `qdot`.
-  // The generalized positions vector is stored in `context`.
-  void MapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  // The generalized positions vector is stored in `state`.
+  void MapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          const Eigen::Ref<const VectorX<T>>& v,
                          EigenPtr<VectorX<T>> qdot) const {
+    this->ValidateStateInstance(state);
     DRAKE_ASSERT(v.size() == num_velocities());
     DRAKE_ASSERT(qdot != nullptr);
     DRAKE_ASSERT(qdot->size() == num_positions());
-    DoMapVelocityToQDot(context, v, qdot);
+    DoMapVelocityToQDot(state, v, qdot);
   }
 
   // Computes the mapping `v = N⁺(q)⋅q̇` from time derivatives of the
   // generalized positions `qdot` to generalized velocities v, where `N⁺(q)` is
   // the left pseudo-inverse of `N(q)` defined by MapVelocityToQDot().
-  // The generalized positions vector is stored in `context`.
-  void MapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  // The generalized positions vector is stored in `state`.
+  void MapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          const Eigen::Ref<const VectorX<T>>& qdot,
                          EigenPtr<VectorX<T>> v) const {
+    this->ValidateStateInstance(state);
     DRAKE_ASSERT(qdot.size() == num_positions());
     DRAKE_ASSERT(v != nullptr);
     DRAKE_ASSERT(v->size() == num_velocities());
-    DoMapQDotToVelocity(context, qdot, v);
+    DoMapQDotToVelocity(state, qdot, v);
   }
 
   // Calculates q̈ from v̇, v, q using q̈ = N(q)⋅v̇ + Ṅ(q,v)⋅v.
-  // @param[in] context stores generalized positions q and velocities v.
+  // @param[in] state stores generalized positions q and velocities v.
   // @param[in] vdot (v̇) 1ˢᵗ time derivatives of generalized velocities.
   // @param[out] qddot (q̈) 2ⁿᵈ time derivatives of the generalized positions.
-  void MapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void MapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                               const Eigen::Ref<const VectorX<T>>& vdot,
                               EigenPtr<VectorX<T>> qddot) const {
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(vdot.size() == num_velocities());
     DRAKE_DEMAND(qddot != nullptr);
     DRAKE_DEMAND(qddot->size() == num_positions());
-    DoMapAccelerationToQDDot(context, vdot, qddot);
+    DoMapAccelerationToQDDot(state, vdot, qddot);
   }
 
   // Calculates v̇ from q̈, v, q using v̇ = N⁺(q)⋅q̈ + Ṅ⁺(q,v)⋅q̇ where q̇ = N(q)⋅v.
-  // @param[in] context stores generalized positions q and velocities v.
+  // @param[in] state stores generalized positions q and velocities v.
   // @param[in] qddot (q̈) 2ⁿᵈ time derivatives of the generalized positions.
   // @param[out] vdot (v̇) 1ˢᵗ time derivatives of generalized velocities.
-  void MapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void MapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& state,
                               const Eigen::Ref<const VectorX<T>>& qddot,
                               EigenPtr<VectorX<T>> vdot) const {
+    this->ValidateStateInstance(state);
     DRAKE_DEMAND(qddot.size() == num_positions());
     DRAKE_DEMAND(vdot != nullptr);
     DRAKE_DEMAND(vdot->size() == num_velocities());
-    DoMapQDDotToAcceleration(context, qddot, vdot);
+    DoMapQDDotToAcceleration(state, qddot, vdot);
   }
   // @}
 
@@ -750,39 +742,68 @@ class Mobilizer : public MultibodyElement<T> {
   }
 
  protected:
+  virtual std::pair<Eigen::Quaternion<T>, Vector3<T>> DoGetPosePair(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
+
+  virtual bool DoSetPosePair(
+      Eigen::Quaternion<T> q_FM, const Vector3<T>& p_FM,
+      orvd::multibody_runtime::MultibodyStateInstance* state) const = 0;
+
+  virtual bool DoSetSpatialVelocity(
+      const SpatialVelocity<T>& V_FM,
+      orvd::multibody_runtime::MultibodyStateInstance* state) const = 0;
+
+  // NVI implementations for the operator-form mobilizer calculations. The
+  // public wrappers verify that `state` belongs to this mobilizer's finalized
+  // tree before dispatching here.
+  virtual math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const = 0;
+
+  virtual SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& v) const = 0;
+
+  virtual SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& vdot) const = 0;
+
+  virtual void DoProjectSpatialForce(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const SpatialForce<T>& F_Mo_F, Eigen::Ref<VectorX<T>> tau) const = 0;
+
   // NVI to CalcNMatrix(). Implementations can safely assume that N is not the
   // nullptr and that N has the proper size.
-  virtual void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                              EigenPtr<MatrixX<T>> N) const = 0;
 
   // NVI to CalcNplusMatrix(). Implementations can safely assume that Nplus is
   // not the nullptr and that Nplus has the proper size.
-  virtual void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                  EigenPtr<MatrixX<T>> Nplus) const = 0;
 
   // NVI to CalcNDotMatrix(). Implementations can safely assume that Ndot is
   // not the nullptr and that Ndot has the proper size.
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
-  virtual void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                 EigenPtr<MatrixX<T>> Ndot) const;
 
   // NVI to CalcNplusDotMatrix(). Implementations can safely assume that
   // NplusDot is not the nullptr and that NplusDot has the proper size.
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
-  virtual void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                     EigenPtr<MatrixX<T>> NplusDot) const;
 
   // NVI to MapVelocityToQDot(). Implementations can safely assume that
   // v has size kNv, qdot is not the nullptr, and qdot has size kNq.
-  virtual void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                    const Eigen::Ref<const VectorX<T>>& v,
                                    EigenPtr<VectorX<T>> qdot) const = 0;
 
   // NVI to MapQDotToVelocity(). Implementations can safely assume that
   // qdot has size kNq, v is not the nullptr, and v has size kNv
-  virtual void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  virtual void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                                    const Eigen::Ref<const VectorX<T>>& qdot,
                                    EigenPtr<VectorX<T>> v) const = 0;
 
@@ -791,7 +812,7 @@ class Mobilizer : public MultibodyElement<T> {
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
   virtual void DoMapAccelerationToQDDot(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot,
       EigenPtr<VectorX<T>> qddot) const;
 
@@ -800,7 +821,7 @@ class Mobilizer : public MultibodyElement<T> {
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
   virtual void DoMapQDDotToAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& qddot,
       EigenPtr<VectorX<T>> vdot) const;
 

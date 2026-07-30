@@ -10,7 +10,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/screw_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -126,111 +125,111 @@ class ScrewJoint final : public Joint<T> {
   /// @name Context-dependent value access
   /// @{
 
-  /// Gets the translation of `this` joint from `context`.
+  /// Gets the translation of `this` joint from `state`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @retval z The translation of `this` joint stored in the `context` as (z).
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @retval z The translation of `this` joint stored in the `state` as (z).
   ///           See class documentation for details.
-  T get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translation(context);
+  T get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translation(state);
   }
 
-  /// Sets the `context` so that the translation of `this` joint equals to (z).
+  /// Sets the `state` so that the translation of `this` joint equals to (z).
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @param[in] z The desired translation in meters to be stored in `context`
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @param[in] z The desired translation in meters to be stored in `state`
   ///              as (z). See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* context, const T& z) const {
-    get_mobilizer().SetTranslation(context, z);
+  const ScrewJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* state, const T& z) const {
+    get_mobilizer().SetTranslation(state, z);
     return *this;
   }
 
-  /// Gets the angle θ of `this` joint from `context`.
+  /// Gets the angle θ of `this` joint from `state`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @retval theta The angle of `this` joint stored in the `context`. See class
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @retval theta The angle of `this` joint stored in the `state`. See class
   ///               documentation for details.
-  const T& get_rotation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angle(context);
+  const T& get_rotation(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angle(state);
   }
 
-  /// Sets the `context` so that the angle θ of `this` joint equals `theta`.
+  /// Sets the `state` so that the angle θ of `this` joint equals `theta`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
-  /// @param[in] theta The desired angle in radians to be stored in `context`.
+  /// @param[in] state The state of the model this joint belongs to.
+  /// @param[in] theta The desired angle in radians to be stored in `state`.
   ///                  See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_rotation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewJoint<T>& set_rotation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                     const T& theta) const {
-    get_mobilizer().SetAngle(context, theta);
+    get_mobilizer().SetAngle(state, theta);
     return *this;
   }
 
   /// Gets the translational velocity vz, in meters per second, of `this`
-  /// joint's Mo measured and expressed in frame F from `context`.
-  /// @param[in] context The context of the model this joint belongs to.
+  /// joint's Mo measured and expressed in frame F from `state`.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @retval vz The translational velocity of `this` joint as stored in the
-  ///            `context`.
-  T get_translational_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_translation_rate(context);
+  ///            `state`.
+  T get_translational_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_translation_rate(state);
   }
 
   /// Sets the translational velocity, in meters per second, of this `this`
   /// joint's Mo along frame F's â-axis to `vz`. The new
-  /// translational velocity gets stored in `context`.
-  /// @param[in] context The context of the model this joint belongs to.
+  /// translational velocity gets stored in `state`.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] vz The desired translational velocity of `this` joint in meters
   ///               per second along F frame's â-axis.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_translational_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewJoint<T>& set_translational_velocity(orvd::multibody_runtime::MultibodyStateInstance* state,
                                                   const T& vz) const {
-    get_mobilizer().SetTranslationRate(context, vz);
+    get_mobilizer().SetTranslationRate(state, vz);
     return *this;
   }
 
   /// Gets the rate of change, in radians per second, of `this` joint's angle
-  /// θ from `context`.  See class documentation for the definition of this
+  /// θ from `state`.  See class documentation for the definition of this
   /// angle.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @retval theta_dot The rate of change of `this` joint's angle θ as
-  ///                   stored in the `context`.
-  const T& get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_rate(context);
+  ///                   stored in the `state`.
+  const T& get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_rate(state);
   }
 
   /// Sets the rate of change, in radians per second, of `this` joint's angle
   /// θ (see class documentation) to `theta_dot`. The new rate of change gets
-  /// stored in `context`.
+  /// stored in `state`.
   ///
-  /// @param[in] context The context of the model this joint belongs to.
+  /// @param[in] state The state of the model this joint belongs to.
   /// @param[in] theta_dot The desired rates of change of `this` joint's
   ///                      angle in radians per second.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const ScrewJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* state,
                                             const T& theta_dot) const {
-    get_mobilizer().SetAngularRate(context, theta_dot);
+    get_mobilizer().SetAngularRate(state, theta_dot);
     return *this;
   }
 
   /// Returns the Context dependent damping coefficient stored as a parameter in
-  /// `context`. Refer to default_damping() for details.
-  /// @param[in] context The context storing the state and parameters for the
+  /// `state`. Refer to default_damping() for details.
+  /// @param[in] state The state storing the state and parameters for the
   /// model to which `this` joint belongs.
-  const T& GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return this->GetDampingVector(context)[0];
+  T GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return this->GetDampingVector(state)[0];
   }
 
   /// Sets the value of the viscous damping coefficient for this joint, stored
-  /// as a parameter in `context`. Refer to default_damping() for details.
-  /// @param[out] context The context storing the state and parameters for the
+  /// as a parameter in `state`. Refer to default_damping() for details.
+  /// @param[out] state The state storing the state and parameters for the
   /// model to which `this` joint belongs.
   /// @param[in] damping The damping value.
   /// @throws std::exception if `damping` is negative.
-  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* context, const T& damping) const {
+  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* state, const T& damping) const {
     DRAKE_THROW_UNLESS(damping >= 0);
-    this->SetDampingVector(context, Vector1<T>(damping));
+    this->SetDampingVector(state, Vector1<T>(damping));
   }
 
   /// @}
@@ -292,13 +291,14 @@ class ScrewJoint final : public Joint<T> {
     This method adds into `forces` a dissipative force according to the
     viscous law `f = -d⋅v`, with d the damping coefficient (see
     default_damping()). */
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> tau =
         get_mobilizer().get_mutable_generalized_forces_from_array(
             &forces->mutable_generalized_forces());
-    const T& v_angular = get_angular_velocity(context);
-    tau[0] -= this->GetDamping(context) * v_angular;
+    const T& v_angular = get_angular_velocity(state);
+    tau[0] -= this->GetDamping(state) * v_angular;
   }
 
   int do_get_velocity_start() const final {
@@ -328,12 +328,12 @@ class ScrewJoint final : public Joint<T> {
     }
   }
 
-  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
-    return get_rotation(context);
+  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& state) const final {
+    return get_rotation(state);
   }
 
-  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
-    return get_angular_velocity(context);
+  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const final {
+    return get_angular_velocity(state);
   }
 
   // Joint<T> overrides:

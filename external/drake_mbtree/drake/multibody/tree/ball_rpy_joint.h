@@ -10,7 +10,6 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/rpy_ball_mobilizer.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -83,7 +82,7 @@ class BallRpyJoint final : public Joint<T> {
   /// @name Context-dependent value access
   /// @{
 
-  /// Gets the rotation angles of `this` joint from `context`.
+  /// Gets the rotation angles of `this` joint from `state`.
   ///
   /// The orientation `R_FM` of the child frame M in parent frame F is
   /// parameterized with space `x-y-z` Euler angles (also known as extrinsic
@@ -108,53 +107,53 @@ class BallRpyJoint final : public Joint<T> {
   /// dynamicists. They are also known as the Tait-Bryan angles or Cardan
   /// angles.
   ///
-  /// @param[in] context
-  ///   The context of the model this joint belongs to.
-  /// @returns The angle coordinates of `this` joint stored in the `context`
+  /// @param[in] state
+  ///   The state of the model this joint belongs to.
+  /// @returns The angle coordinates of `this` joint stored in the `state`
   ///          ordered as θr, θp, θy.
-  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angles(context);
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angles(state);
   }
 
-  /// Sets the `context` so that the generalized coordinates corresponding to
+  /// Sets the `state` so that the generalized coordinates corresponding to
   /// the rotation angles of `this` joint equals `angles`.
-  /// @param[in] context
-  ///   The context of the model this joint belongs to.
+  /// @param[in] state
+  ///   The state of the model this joint belongs to.
   /// @param[in] angles
-  ///   The desired angles in radians to be stored in `context` ordered as θr,
+  ///   The desired angles in radians to be stored in `state` ordered as θr,
   ///   θp, θy. See get_angles() for details.
   /// @returns a constant reference to `this` joint.
-  const BallRpyJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const BallRpyJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* state,
                                     const Vector3<T>& angles) const {
-    get_mobilizer().SetAngles(context, angles);
+    get_mobilizer().SetAngles(state, angles);
     return *this;
   }
 
-  /// Retrieves from `context` the angular velocity `w_FM` of the child frame
+  /// Retrieves from `state` the angular velocity `w_FM` of the child frame
   /// M in the parent frame F, expressed in F.
   ///
-  /// @param[in] context
-  ///   The context of the model this joint belongs to.
+  /// @param[in] state
+  ///   The state of the model this joint belongs to.
   /// @retval w_FM
   ///   A vector in ℝ³ with the angular velocity of the child frame M in the
   ///   parent frame F, expressed in F. Refer to this class's documentation for
   ///   further details and definitions of these frames.
-  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_angular_velocity(context);
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_angular_velocity(state);
   }
 
-  /// Sets in `context` the state for `this` joint so that the angular velocity
+  /// Sets in `state` the state for `this` joint so that the angular velocity
   /// of the child frame M in the parent frame F is `w_FM`.
-  /// @param[out] context
-  ///   The context of the model this joint belongs to.
+  /// @param[out] state
+  ///   The state of the model this joint belongs to.
   /// @param[in] w_FM
   ///   A vector in ℝ³ with the angular velocity of the child frame M in the
   ///   parent frame F, expressed in F. Refer to this class's documentation for
   ///   further details and definitions of these frames.
   /// @returns a constant reference to `this` joint.
-  const BallRpyJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const BallRpyJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* state,
                                               const Vector3<T>& w_FM) const {
-    get_mobilizer().SetAngularVelocity(context, w_FM);
+    get_mobilizer().SetAngularVelocity(state, w_FM);
     return *this;
   }
 
@@ -190,13 +189,14 @@ class BallRpyJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative torque according to the
   /// viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> t_BMo_F =
         get_mobilizer().get_mutable_generalized_forces_from_array(
             &forces->mutable_generalized_forces());
-    const Vector3<T>& w_FM = get_angular_velocity(context);
-    t_BMo_F = -this->GetDampingVector(context)[0] * w_FM;
+    const Vector3<T>& w_FM = get_angular_velocity(state);
+    t_BMo_F = -this->GetDampingVector(state)[0] * w_FM;
   }
 
  private:

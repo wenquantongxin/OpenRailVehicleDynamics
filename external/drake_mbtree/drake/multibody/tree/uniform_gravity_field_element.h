@@ -7,7 +7,7 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context_fwd.h"
 
 namespace drake {
 namespace multibody {
@@ -113,7 +113,7 @@ class UniformGravityFieldElement : public ForceElement<T> {
   /// energy height to be the same as the World origin height. That is, a
   /// body will have zero gravitational potential energy when the height
   /// of the body's center of mass in the World is zero.
-  T CalcPotentialEnergy(
+  T DoCalcPotentialEnergy(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc) const final;
 
@@ -122,13 +122,13 @@ class UniformGravityFieldElement : public ForceElement<T> {
   /// gravity forces `tau_g` and the generalized velocities `v`, the
   /// gravitational power is `v ⋅ tau_g`.
   /// @see CalcGravityGeneralizedForces()
-  T CalcConservativePower(
+  T DoCalcConservativePower(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const final;
 
   /// Returns zero always since gravity is conservative.
-  T CalcNonConservativePower(
+  T DoCalcNonConservativePower(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const final;

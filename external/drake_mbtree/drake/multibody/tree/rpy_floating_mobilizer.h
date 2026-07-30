@@ -31,7 +31,7 @@ namespace internal {
 // amount of θ about the Fx, Fy and Fz axes respectively. Refer to
 // math::RollPitchYaw for further details on this representation. Zero θ₀, θ₁,
 // θ₂ angles and zero position p_FM define the "zero configuration" which
-// corresponds to frames F and M being coincident, see SetZeroState(). Angles
+// corresponds to frames F and M being coincident. Angles
 // θ₀, θ₁, θ₂ are defined to be positive according to the right-hand-rule with
 // the thumb aligned in the direction of their respective axes.
 //
@@ -97,115 +97,115 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   bool can_rotate() const final { return true; }
   bool can_translate() const final { return true; }
 
-  // Returns the generalized positions for this mobilizer stored in context.
+  // Returns the generalized positions for this mobilizer stored in state.
   // Generalized positions q for this mobilizer are packed in exactly the
   // following order: q = [θ₀, θ₁, θ₂, px_FM, py_FM, pz_FM] that is, rpy
   // angles are stored in the first three entries of the configuration vector,
   // followed by the three translational coordinates.
   Vector6<T> get_generalized_positions(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Returns the generalized velocities for this mobilizer stored in context.
+  // Returns the generalized velocities for this mobilizer stored in state.
   // Generalized velocities v for this mobilizer are packed in exactly the
   // following order: v = [wx_FM, wy_FM, wz_FM, vx_FM, vy_FM, vz_FM] that is,
   // the components of the angular velocity w_FM are stored in the first three
   // entries of the generalized velocities vector, followed by the three
   // components of the translational velocity v_FM.
   Vector6<T> get_generalized_velocities(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Retrieves the three roll-pitch-yaw angles θ₀, θ₁, θ₂ stored in context,
+  // Retrieves the three roll-pitch-yaw angles θ₀, θ₁, θ₂ stored in state,
   // which describe the state for this mobilizer as documented in this class's
   // documentation.
   //
-  // @param[in] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the model this mobilizer belongs to.
   // @retval angles
   //   The three roll-pitch-yaw angles θ₀, θ₁, θ₂, associated with the sequence
   //   of rotations about the space fixed axes x̂, ŷ, ẑ, respectively packed and
   //   returned as a Vector3 with entries angles(0) = θ₀, angles(1) = θ₁,
   //   angles(2) = θ₂. There are no range limits for the angular values.
-  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Retrieves the position p_FM stored in context.
+  // Retrieves the position p_FM stored in state.
   //
-  // @param[in] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the model this mobilizer belongs to.
   // @retval p_FM
   //   The position of M in F.
-  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Retrieves from context the angular velocity w_FM of the outboard frame
+  // Retrieves from state the angular velocity w_FM of the outboard frame
   // M in the inboard frame F, expressed in F.
   //
-  // @param[in] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the model this mobilizer belongs to.
   // @retval w_FM
   //   A vector in ℝ³ with the angular velocity of the outboard frame M in the
   //   inboard frame F, expressed in F.
-  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Retrieves from context the translational velocity v_FM of the outboard
+  // Retrieves from state the translational velocity v_FM of the outboard
   // frame M in the inboard frame F, expressed in F.
   //
-  // @param[in] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the model this mobilizer belongs to.
   // @retval v_FM
   //   A vector in ℝ³ with the translational velocity of the outboard frame M in
   //   the inboard frame F, expressed in F.
   Vector3<T> get_translational_velocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
-  // Stores in context the roll-pitch-yaw angles θ₀, θ₁, θ₂, provided in the
+  // Stores in state the roll-pitch-yaw angles θ₀, θ₁, θ₂, provided in the
   // input argument angles, which stores the with the format angles = [θ₀,
   // θ₁, θ₂].
   //
-  // @param[in,out] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in,out] state
+  //   The state of the model this mobilizer belongs to.
   // @param[in] angles
   //   A Vector3 which must pack values for the roll-pitch-yaw angles
   //   θ₀, θ₁, θ₂, described in this class's documentation, at entries
   //   angles(0), angles(1) and angles(2), respectively.
   // @returns a constant reference to this mobilizer.
-  const RpyFloatingMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RpyFloatingMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* state,
                                            const Vector3<T>& angles) const;
 
-  // Stores in context the position p_FM of M in F.
+  // Stores in state the position p_FM of M in F.
   //
-  // @param[in,out] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in,out] state
+  //   The state of the model this mobilizer belongs to.
   // @param[in] p_FM
   //   Position of F in M.
   // @returns a constant reference to this mobilizer.
-  const RpyFloatingMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const RpyFloatingMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* state,
                                                 const Vector3<T>& p_FM) const;
 
-  // Sets in context the state for this mobilizer so that the angular
+  // Sets in state the state for this mobilizer so that the angular
   // velocity of the outboard frame M in the inboard frame F is w_FM.
-  // @param[in,out] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in,out] state
+  //   The state of the model this mobilizer belongs to.
   // @param[in] w_FM
   //   A vector in ℝ³ with the desired angular velocity of the outboard frame M
   //   in the inboard frame F, expressed in F.
   // @returns a constant reference to this mobilizer.
   const RpyFloatingMobilizer<T>& SetAngularVelocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& w_FM) const;
 
-  // Stores in context the translational velocity v_FM of M in F.
+  // Stores in state the translational velocity v_FM of M in F.
   //
-  // @param[in,out] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in,out] state
+  //   The state of the model this mobilizer belongs to.
   // @param[in] v_FM
   //   Translational velocity of F in M.
   // @returns a constant reference to this mobilizer.
   const RpyFloatingMobilizer<T>& SetTranslationalVelocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const Vector3<T>& v_FM) const;
 
-  // Sets context so this mobilizer's generalized coordinates (roll-pitch-yaw
+  // Sets state so this mobilizer's generalized coordinates (roll-pitch-yaw
   // angles θ₀, θ₁, θ₂ and position p_FM) represent the given rigid
   // transform X_FM.
-  // @param[in,out] context
-  //   The context of the model that this mobilizer belongs to.
+  // @param[in,out] state
+  //   The state of the model that this mobilizer belongs to.
   // @param[in] X_FM
   //   Pose of M in F.
   // @returns a constant reference to this mobilizer.
@@ -213,11 +213,11 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // θ₁, θ₂, this specific method will generate roll-pitch-yaw angles in the
   // range -π <= θ₀ <= π, -π/2 <= θ₁ <= π/2, -π <= θ₂ <= π.
   const RpyFloatingMobilizer<T>& SetFromRigidTransform(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RigidTransform<T>& X_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* state, const math::RigidTransform<T>& X_FM) const;
 
   // Computes the across-mobilizer transform X_FM(q) between the inboard
   // frame F and the outboard frame M as a function of the configuration q
-  // stored in context.
+  // stored in state.
   math::RigidTransform<T> calc_X_FM(const T* q) const {
     return math::RigidTransform<T>(math::RollPitchYaw<T>(q[0], q[1], q[2]),
                                    Vector3<T>(q[3], q[4], q[5]));
@@ -252,17 +252,17 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
     tau_as_vector = F_BMo_F.get_coeffs();
   }
 
-  math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
+  math::RigidTransform<T> DoCalcAcrossMobilizerTransform(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const final;
 
-  SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialVelocity<T> DoCalcAcrossMobilizerSpatialVelocity(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration A_FM(q, v, v̇) of the
   // outboard frame M in the inboard frame F.
   // The acceleration A_FM will be a function of the generalized positions q
-  // and generalized velocities v stored in context and of the supplied
+  // and generalized velocities v stored in state and of the supplied
   // generalized accelerations vdot. vdot must contain the rates of change
   // of each of the generalized velocities components packed in the order
   // documented in get_generalized_velocities(). For this mobilizer this
@@ -270,12 +270,12 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // a_FM the angular and translational accelerations of M in F, respectively
   // (see @ref Dt_multibody_quantities for our notation of time derivatives in
   // different reference frames.)
-  SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const orvd::multibody_runtime::MultibodyStateInstance& context,
+  SpatialAcceleration<T> DoCalcAcrossMobilizerSpatialAcceleration(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const Eigen::Ref<const VectorX<T>>& vdot) const final;
 
   // See Mobilizer::ProjectSpatialForce() for details.
-  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const final;
 
@@ -297,18 +297,18 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // working close to this singularity (which could potentially result in large
   // errors for qdot), this method aborts when the absolute value of the
   // cosine of θ₁ is smaller than 10⁻³, a number arbitrarily chosen to this end.
-  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                      EigenPtr<MatrixX<T>> N) const final;
 
   // Implements Mobilizer's NVI, see Mobilizer::DoCalcNplusMatrix() for details.
-  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& state,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Maps the generalized velocity v to time derivatives of configuration
   // qdot.
   //
-  // @param[in] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the model this mobilizer belongs to.
   // @param[in] v
   //   A vector of generalized velocities for this mobilizer, packed as
   //   documented in get_generalized_velocities().
@@ -321,22 +321,22 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // working close to this singularity (which could potentially result in large
   // errors for qdot), this method aborts when the absolute value of the
   // cosine of θ₁ is smaller than 10⁻³, a number arbitrarily chosen to this end.
-  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps time derivatives of the configuration in qdot to
   // the generalized velocities v.
   //
-  // @param[in] context
-  //   The context of the model this mobilizer belongs to.
+  // @param[in] state
+  //   The state of the model this mobilizer belongs to.
   // @param[in] qdot
   //   Rates of the generalized positions, packed as documented in
   //   get_generalized_positions().
   // @param[out] v
   //   A vector of generalized velocities for this mobilizer, packed as
   //   documented in get_generalized_velocities().
-  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 

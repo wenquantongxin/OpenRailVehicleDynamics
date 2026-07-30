@@ -11,7 +11,6 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
-#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -166,59 +165,59 @@ class CurvilinearJoint final : public Joint<T> {
     return this->acceleration_upper_limits()[0];
   }
 
-  /** Gets the travel distance of the joint from the provided context.
-   @param[in] context The context of the model this joint belongs to.
-   @returns The distance coordinate of the joint stored in the context. */
-  const T& get_distance(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_distance(context);
+  /** Gets the travel distance of the joint from the provided state.
+   @param[in] state The state of the model this joint belongs to.
+   @returns The distance coordinate of the joint stored in the state. */
+  const T& get_distance(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_distance(state);
   }
 
-  /** Sets the travel distance of the joint from the provided context.
-   @param[in] context The context of the model this joint belongs to.
-   @param[in] distance The travel distance to be set in the context.
+  /** Sets the travel distance of the joint from the provided state.
+   @param[in] state The state of the model this joint belongs to.
+   @param[in] distance The travel distance to be set in the state.
    @returns const reference to this joint. */
-  const CurvilinearJoint<T>& set_distance(orvd::multibody_runtime::MultibodyStateInstance* context,
+  const CurvilinearJoint<T>& set_distance(orvd::multibody_runtime::MultibodyStateInstance* state,
                                           const T& distance) const {
-    get_mobilizer().SetDistance(context, distance);
+    get_mobilizer().SetDistance(state, distance);
     return *this;
   }
 
   /** Gets the tangential velocity in meters per second, i.e. the rate of change
    of this joint's travel distance (see get_distance()) from the provided
-   context.
-   @param[in] context The context of the model this joint belongs to.
-   @returns The tangential velocity as stored in the provided context. */
-  const T& get_tangential_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return get_mobilizer().get_tangential_velocity(context);
+   state.
+   @param[in] state The state of the model this joint belongs to.
+   @returns The tangential velocity as stored in the provided state. */
+  const T& get_tangential_velocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return get_mobilizer().get_tangential_velocity(state);
   }
 
-  /** Sets the tangential velocity of the joint from the provided context.
-   @param[in] context The context of the model this joint belongs to.
+  /** Sets the tangential velocity of the joint from the provided state.
+   @param[in] state The state of the model this joint belongs to.
    @param[in] tangential_velocity The tangential velocity to be set in the
-   context.
+   state.
    @returns const reference to this joint. */
   const CurvilinearJoint<T>& set_tangential_velocity(
-      orvd::multibody_runtime::MultibodyStateInstance* context, const T& tangential_velocity) const {
-    get_mobilizer().SetTangentialVelocity(context, tangential_velocity);
+      orvd::multibody_runtime::MultibodyStateInstance* state, const T& tangential_velocity) const {
+    get_mobilizer().SetTangentialVelocity(state, tangential_velocity);
     return *this;
   }
 
   /** Returns the Context dependent damping coefficient stored as a parameter in
-  `context`. Refer to default_damping() for details.
-   @param[in] context The context of the model this joint belongs to.
-   @returns The damping coefficient stored in the context, in N⋅s/m. */
-  const T& GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-    return this->GetDampingVector(context)[0];
+  `state`. Refer to default_damping() for details.
+   @param[in] state The state of the model this joint belongs to.
+   @returns The damping coefficient stored in the state, in N⋅s/m. */
+  T GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return this->GetDampingVector(state)[0];
   }
 
   /**  Sets the value of the viscous damping coefficient for this joint, stored
-   as a parameter in `context`. Refer to default_damping() for details.
-   @param[out] context The context of the model this joint belongs to.
+   as a parameter in `state`. Refer to default_damping() for details.
+   @param[out] state The state of the model this joint belongs to.
    @param[in] damping The damping coefficient to be set in N⋅s/m.
    @throws std::exception if `damping` is negative. */
-  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* context, const T& damping) const {
+  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* state, const T& damping) const {
     DRAKE_THROW_UNLESS(damping >= 0);
-    this->SetDampingVector(context, Vector1<T>(damping));
+    this->SetDampingVector(state, Vector1<T>(damping));
   }
 
   /** Gets the default travel distance along the path. */
@@ -234,16 +233,18 @@ class CurvilinearJoint final : public Joint<T> {
 
    A generalized force for a curvilinear joint is equivalent to a force in
    Newtons applied along the path tangent direction (x-axis of frame M).
-   @param[in] context The context of the model this joint belongs to.
+   @param[in] state The state of the model this joint belongs to.
    @param[in] force The force to be applied, in Newtons.
    @param[out] forces The MultibodyForces object to which the generalized force
    is added. */
-  void AddInForce(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const T& force,
+  void AddInForce(
+                  const orvd::multibody_runtime::MultibodyStateInstance& state,
+                  const T& force,
                   MultibodyForces<T>* forces) const {
     DRAKE_DEMAND(forces != nullptr);
     DRAKE_DEMAND(this->has_parent_tree());
     DRAKE_DEMAND(forces->CheckHasRightSizeForModel(this->get_parent_tree()));
-    this->AddInOneForce(context, 0, force, forces);
+    this->AddInOneForce(state, 0, force, forces);
   }
 
   /** @returns A reference to the underlying trajectory. */
@@ -278,14 +279,15 @@ class CurvilinearJoint final : public Joint<T> {
    d is the damping coefficient (see default_damping()) and v the tangential
    velocity along the path.
 
-   @param[in] context The context of the model this joint belongs to.
+   @param[in] state The state of the model this joint belongs to.
    @param[out] forces The MultibodyForces object to which the damping force is
    added. */
-  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+  void DoAddInDamping(
+                      const orvd::multibody_runtime::MultibodyStateInstance& state,
                       MultibodyForces<T>* forces) const final {
     const T damping_force =
-        -this->GetDamping(context) * get_tangential_velocity(context);
-    AddInForce(context, damping_force, forces);
+        -this->GetDamping(state) * get_tangential_velocity(state);
+    AddInForce(state, damping_force, forces);
   }
 
  private:
@@ -316,12 +318,12 @@ class CurvilinearJoint final : public Joint<T> {
     }
   }
 
-  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
-    return get_distance(context);
+  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& state) const final {
+    return get_distance(state);
   }
 
-  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
-    return get_tangential_velocity(context);
+  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& state) const final {
+    return get_tangential_velocity(state);
   }
 
   // Joint<T> overrides:

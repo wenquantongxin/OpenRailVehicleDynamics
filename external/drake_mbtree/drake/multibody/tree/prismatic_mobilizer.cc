@@ -44,37 +44,39 @@ std::string PrismaticMobilizer<T>::velocity_suffix(
 
 template <typename T>
 const T& PrismaticMobilizer<T>::get_translation(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  auto q = this->get_positions(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  auto q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
 }
 
 template <typename T>
 const PrismaticMobilizer<T>& PrismaticMobilizer<T>::SetTranslation(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation) const {
-  QVector<T> q = this->get_positions(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& translation) const {
+  DRAKE_DEMAND(state != nullptr);
+  QVector<T> q = this->get_positions(*state);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = translation;
-  this->SetPositions(context, q);
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 const T& PrismaticMobilizer<T>::get_translation_rate(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& v = this->get_velocities(context);
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& v = this->get_velocities(state);
   DRAKE_ASSERT(v.size() == this->kNv);
   return v.coeffRef(0);
 }
 
 template <typename T>
 const PrismaticMobilizer<T>& PrismaticMobilizer<T>::SetTranslationRate(
-    orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation_dot) const {
-  VVector<T> v = this->get_velocities(*context);
+    orvd::multibody_runtime::MultibodyStateInstance* state, const T& translation_dot) const {
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == this->kNv);
   v[0] = translation_dot;
-  this->SetVelocities(context, v);
+  this->SetVelocities(state, v);
   return *this;
 }
 
@@ -85,9 +87,9 @@ PrismaticMobilizerAxial<T, axis>::~PrismaticMobilizerAxial() = default;
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 math::RigidTransform<T>
-PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerTransform(
-    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
-  const auto& q = this->get_positions(context);
+PrismaticMobilizerAxial<T, axis>::DoCalcAcrossMobilizerTransform(
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const auto& q = this->get_positions(state);
   DRAKE_ASSERT(q.size() == this->kNq);
   return calc_X_FM(q.data());
 }
@@ -95,7 +97,7 @@ PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerTransform(
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 SpatialVelocity<T>
-PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialVelocity(
+PrismaticMobilizerAxial<T, axis>::DoCalcAcrossMobilizerSpatialVelocity(
     const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == this->kNv);
   return calc_V_FM(nullptr, v.data());
@@ -104,7 +106,7 @@ PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 SpatialAcceleration<T>
-PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialAcceleration(
+PrismaticMobilizerAxial<T, axis>::DoCalcAcrossMobilizerSpatialAcceleration(
     const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == this->kNv);
@@ -113,7 +115,7 @@ PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialAcceleration(
 
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
-void PrismaticMobilizerAxial<T, axis>::ProjectSpatialForce(
+void PrismaticMobilizerAxial<T, axis>::DoProjectSpatialForce(
     const orvd::multibody_runtime::MultibodyStateInstance&, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == this->kNv);

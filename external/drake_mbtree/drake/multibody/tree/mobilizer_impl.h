@@ -113,21 +113,22 @@ class MobilizerImpl : public Mobilizer<T> {
 
   ~MobilizerImpl() override;
 
-  // Sets the elements of the `state` associated with this Mobilizer to the
-  // _zero_ state.  See Mobilizer::SetZeroState().
-  bool SetPosePair(const Eigen::Quaternion<T> q_FM, const Vector3<T>& p_FM,
-                   orvd::multibody_runtime::MultibodyStateInstance* state) const final;
+  // Writes this mobilizer's pose coordinates from the supplied orientation and
+  // translation, committing its complete q segment once.
+  bool DoSetPosePair(
+      Eigen::Quaternion<T> q_FM, const Vector3<T>& p_FM,
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final;
 
-  bool SetSpatialVelocity(
+  bool DoSetSpatialVelocity(
       const SpatialVelocity<T>& V_FM,
       orvd::multibody_runtime::MultibodyStateInstance* state) const final;
 
-  // Sets the elements of the `state` associated with this Mobilizer to the
-  // _default_ state.  See Mobilizer::set_default_state().
+  // Writes this mobilizer's default positions into a caller-owned q vector.
+  // MultibodyTree commits the complete model q only after every mobilizer has
+  // contributed.
   void WriteDefaultPositions(EigenPtr<VectorX<T>> q) const final;
 
-  // Sets the default position of this Mobilizer to be used in subsequent
-  // calls to set_default_state().
+  // Sets the default position used by subsequent model default-state writes.
   void set_default_position(const Eigen::Ref<const QVector<double>>& position) {
     default_position_.emplace(position);
   }

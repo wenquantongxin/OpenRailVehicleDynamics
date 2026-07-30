@@ -78,8 +78,8 @@ class JointActuator final : public MultibodyElement<T> {
   /// multi-dof joints please refer to the documentation provided by specific
   /// joint sub-classes regarding the meaning of `joint_dof`.
   ///
-  /// @param[in] context
-  ///   The context storing the state and parameters for the model to which
+  /// @param[in] state
+  ///   The state storing the state and parameters for the model to which
   ///   `this` joint belongs.
   /// @param[in] joint_dof
   ///   Index specifying one of the degrees of freedom for this joint. The index
@@ -96,7 +96,7 @@ class JointActuator final : public MultibodyElement<T> {
   ///   `forces` is `nullptr` or if `forces` doest not have the right sizes to
   ///   accommodate a set of forces for the model to which this actuator
   ///   belongs.
-  void AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& context, int joint_dof,
+  void AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& state, int joint_dof,
                      const T& tau, MultibodyForces<T>* forces) const;
 
   /// Gets the actuation values for `this` actuator from the actuation vector u
@@ -235,6 +235,7 @@ class JointActuator final : public MultibodyElement<T> {
   /// See @ref reflected_inertia.
   const T& rotor_inertia(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.joint_actuator_parameters(actuator_parameter_slot_)
         .rotor_inertia;
   }
@@ -244,6 +245,7 @@ class JointActuator final : public MultibodyElement<T> {
   /// See @ref reflected_inertia.
   const T& gear_ratio(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     return state.joint_actuator_parameters(actuator_parameter_slot_).gear_ratio;
   }
 
@@ -255,6 +257,8 @@ class JointActuator final : public MultibodyElement<T> {
   /// See @ref reflected_inertia.
   void SetRotorInertia(orvd::multibody_runtime::MultibodyStateInstance* state,
                        const T& rotor_inertia) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::JointActuatorParameters parameters =
         state->joint_actuator_parameters(actuator_parameter_slot_);
     parameters.rotor_inertia = rotor_inertia;
@@ -265,6 +269,8 @@ class JointActuator final : public MultibodyElement<T> {
   /// See @ref reflected_inertia.
   void SetGearRatio(orvd::multibody_runtime::MultibodyStateInstance* state,
                     const T& gear_ratio) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    this->ValidateStateInstance(*state);
     orvd::multibody_runtime::JointActuatorParameters parameters =
         state->joint_actuator_parameters(actuator_parameter_slot_);
     parameters.gear_ratio = gear_ratio;
@@ -275,6 +281,7 @@ class JointActuator final : public MultibodyElement<T> {
   /// See @ref reflected_inertia.
   T calc_reflected_inertia(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    this->ValidateStateInstance(state);
     const orvd::multibody_runtime::JointActuatorParameters& parameters =
         state.joint_actuator_parameters(actuator_parameter_slot_);
     return parameters.gear_ratio * parameters.gear_ratio *
@@ -289,7 +296,7 @@ class JointActuator final : public MultibodyElement<T> {
   /// modeling of PD controlled actuators.
   ///@{
 
-  // TODO(amcastro-tri): Place gains in the context as parameters.
+  // TODO(amcastro-tri): Place gains in the state as parameters.
 
   /// Set controller gains for this joint actuator.
   /// This enables the modeling of a simple PD controller of the form:
