@@ -6,9 +6,10 @@
 ## 当前状态
 
 - 工作分支：`main`
-- 当前阶段：刚性 tree 源码落位
-- 当前 Goal：`G15`
-- 产品代码状态：vendored topology 静态库已落位；第一方运行时尚未开始
+- 当前阶段：刚性 tree 的 `double`-only 裁剪
+- 当前 Goal：`G16`
+- 产品代码状态：vendored topology 静态库可构建；刚性 tree 源码已落位但尚未接入构建；
+  第一方运行时尚未开始
 - 仓库外探针：只作一次性研究输入，不直接复制进产品
 
 ## 不再讨论的前提
@@ -137,7 +138,7 @@ Goal GNN — <明确的功能名称>
 - [x] **G12 — 裁决生成头需求与第三方边界**
   - 产物：现场裁决准入源码的生成头需求（仅在实际闭包需要时提供），以及 Eigen/fmt/Abseil/Highway 的明确处置。
   - 完成门：只提供准入源码实际需要的定义；Highway 不准入首版产品，四个位姿组合函数由 G15 按数学定义独立实现；未使用功能不进入构建；缺定义在配置或编译阶段暴露。
-  - 实测结论：当前生成头需求为**零**——闭包中唯一源码树缺失的头 `common/autodiff_config.h` 只经已裁 `discard` 的标量机制抵达，因此不造 shim、空头、空目录或占位声明；G16 之后若真实的 double-only 闭包重新触达缺失头，再随真实消费者处理。准入源码不直接使用 Abseil；在当前准入闭包中，Highway 随 `fast_pose_composition_functions` 裁为 `first_party` 而离开闭包。产品中 vendored topology 目标对 fmt 的显式查找与直接链接已在 G13 随首个真实目标落地，G12 未建空目标、选项或能力探针。
+  - 实测结论：当前生成头需求为**零**——闭包中唯一源码树缺失的头 `common/autodiff_config.h` 只经已裁 `discard` 的标量机制抵达，因此不造 shim、空头、空目录或占位声明；G16 之后若真实的 double-only 闭包重新触达缺失头，再随真实消费者处理。准入源码不直接使用 Abseil；Highway 声明头保留，上游实现裁为 `first_party` 并由 G15 的 ORVD 实现替代。产品中 vendored topology 目标对 fmt 的显式查找与直接链接已在 G13 随首个真实目标落地，G12 未建空目标、选项或能力探针。
 
 - [x] **G13 — vendor 刚性 topology 源码**
   - 产物：可编译的 `multibody/topology` 源码目标。
@@ -152,17 +153,19 @@ Goal GNN — <明确的功能名称>
 
 ## 子目标 6：形成仅 double 的刚性树源码集
 
-- [ ] **G15 — vendor 刚性 tree 源码**
-  - 产物：按处置清单复制的**剩余**刚性 tree 与必要支撑源码（G13 已落位的 topology 闭包不重复复制）。
-  - 完成门：不用目录通配复制；不包含车辆或测试输出；按数学定义独立实现并接入四个位姿组合函数，不复制 Drake 的 Highway portable 分支；所有修改点集中且有明确原因。
+- [x] **G15 — vendor 刚性 tree 源码**
+  - 产物：按处置清单复制的**剩余**刚性 tree 与必要支撑源码（G13 已落位的 topology 闭包不重复复制），以及四个位姿组合函数的 ORVD 自研实现。
+  - 完成门：不用目录通配复制；不包含车辆或测试输出；按数学定义提供四个位姿组合函数的独立实现，不复制 Drake 的 Highway portable 分支；所有修改点集中且有明确原因。
+  - 阶段关系：本 Goal **不建立 tree 的 CMake 目标**。G16 尚未删除 `default_scalars.h` 的消费者，此刻建目标必然编译失败；实际构建接入由 G17 完成。自研实现的常驻数学与 aliasing 单测同样留到 G17，本轮以仓库外一次性运行验证四条公式与 ABO/ABA/ABB/AAA 四种输出重叠形态。
+  - 明确不做：AutoDiff、`ExtractDouble` 等标量路径的删除留到 G16 一次做完，不在本轮做半套手术。
 
 - [ ] **G16 — 删除非 double 标量路径**
   - 产物：仅实例化 `double` 的 vendored tree。
-  - 完成门：构建符号中不存在 AutoDiff、symbolic、标量转换或 CloneToScalar；同步删除仅服务 symbolic 随机状态和无人消费 quaternion helper 的声明与实现，不留下调用即缺符号的 API；不保留空重载和兼容别名。
+  - 完成门：源码与准入翻译单元不再消费 AutoDiff、symbolic、标量转换或 CloneToScalar；同步删除仅服务 symbolic 随机状态和无人消费 quaternion helper 的声明与实现，不留下调用即缺符号的 API；不保留空重载和兼容别名。
 
 - [ ] **G17 — 编译全部刚性树翻译单元**
   - 产物：vendored tree 对象库及真实未满足接口清单。
-  - 完成门：所有准入翻译单元通过；禁入类别没有重新进入闭包；剩余未解析项只属于待实现的运行时契约。
+  - 完成门：所有准入翻译单元通过；构建符号中不存在 AutoDiff、symbolic、标量转换或 CloneToScalar；四个位姿组合函数以真实符号名通过公式与输出重叠常驻测试；禁入类别没有重新进入闭包；剩余未解析项只属于待实现的运行时契约。
 
 ## 子目标 7：完成 vendor 法律与构建闸门
 

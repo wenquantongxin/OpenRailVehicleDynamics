@@ -50,24 +50,15 @@ python3 tools/drake_source_boundary/calculate_required_drake_source_closure.py -
 四者分开报，是因为要做的事完全不同。把「没决定」「决定了但没兑现」和「根本没人需要」
 报成同一句，读的人无从知道该补决定、改实现还是删掉多余准入。
 
-## 真实运行当前必然返回非零，这是正确结果
+## 真实 Drake 源码运行
 
-本阶段验收的是**分析器能发现并拒绝边界违规**，不是边界已经干净。当前真实闭包报告：
+分析器读取的是固定 commit 的**未修改上游源码**，因此它会持续报告那些后来在
+`external/drake_mbtree/drake/` 中通过源码裁剪解决的边。这个结果用于解释为什么需要某项
+处置，不能冒充 landed 源码的进度表。
 
-- **1 条禁入边**：`element_collection.cc → deformable_body.h`（include 加对
-  `DeformableBody` 的显式实例化）。由 G15 在 vendor 时消除，边界最终干净由 G19 把关。
-- **12 条未满足依赖**，它们不是噪声，而是一份精确的剩余工作清单，每条都指向某个 Goal：
-
-  | 未满足依赖 | 由谁解决 |
-  |---|---|
-  | `common/{autodiff,default_scalars}.h`、`common/symbolic/expression.h`、`math/autodiff{,_gradient}.h` | G16 删除非 double 标量路径。这五个文件的闭包合计 69 个文件，全部是 G16 要删掉的消费者所需——搬进来再删是白搬 |
-  | `systems/framework/{context,scalar_conversion_traits}.h`、`multibody/tree/{multibody_tree_system,parameter_conversion}.h` | G20–G28 用 ORVD 自己的运行时契约替换 systems 层 |
-  | `math/fast_pose_composition_functions.h` | G12 明确不准入 Highway；G15 按数学定义独立实现四个组合函数并接入，G17 编译验证。Drake 的实现会把 Highway 派发代码静态编入产品，不是独立动态库 |
-  | `common/text_logging.h` | G15：`unit_inertia.cc:4` include 了它却从不使用，复制时删掉这一行 |
-  | `common/is_approx_equal_abstol.h` | G16：与未消费的 quaternion 比较/速率 API 一起删除 |
-
-  随着这些 Goal 完成，对应的条目应当消失。**条目消失本身就是完成证据**，比任何计数门都
-  可靠：它是从源码现场重算出来的，不是记下来的。
+上游扫描会暴露三类已知工作：禁入的 deformable 边、G16 要删除的非 `double` 标量依赖，
+以及 G20–G28 要替换的 systems/runtime 依赖。G15 对 landed 源码做的禁入边清理与位姿组合
+替代不会改变未修改上游克隆的扫描结果；产品实际边界由 G19 对 landed 构建检查。
 
 只有 **include 边**会产生未满足依赖。仅经同名实现关系抵达一个清单已明确不 vendor 的
 `.cc`，不算矛盾——上游有不少 `.cc` 只是为了证明同名头自洽，一个符号都不定义；把它们

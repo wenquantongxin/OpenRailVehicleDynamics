@@ -1,7 +1,7 @@
 # external/drake_mbtree
 
-本目录已落位可独立构建的刚性多体 topology 源码及其支撑；其余刚性 tree 源码按路书后续
-Goal 继续落位。
+本目录已落位刚性 topology、tree 与必要支撑源码。topology 已有独立构建目标；tree
+正在 G16 做 `double`-only 裁剪,由 G17 接入构建。
 
 ## 来源与逐文件处置
 
@@ -11,8 +11,8 @@ Goal 继续落位。
 
 ## 准入边界
 
-只 vendor 刚性多体树与拓扑，仅 `double` 标量。明确排除 geometry、FEM、plant、
-contact、solver 与 deformable。
+只 vendor 刚性多体树与拓扑；产品边界仅支持 `double`，源码中的非 `double` 路径由
+G16 删除。明确排除 geometry、FEM、plant、contact、solver 与 deformable。
 
 准入边界由处置清单确定（G09），闭包由
 [`tools/drake_source_boundary/`](../../tools/drake_source_boundary/) 的解析工具从源码
@@ -31,11 +31,12 @@ contact、solver 与 deformable。
 | Eigen | 准入 | 每一趟多体运算都是 Eigen 算术；已由顶层 `find_package(Eigen3 3.4 CONFIG REQUIRED)` 落地 |
 | fmt | 准入 | 准入源码直接 include `fmt/format.h` 与 `fmt/ranges.h`，并用 `DRAKE_FORMATTER_AS` 特化 `fmt::formatter`；G11 探针在不提供 fmt 时链接失败 |
 | Abseil | 不查找、不构建 | 当前准入源码不直接 include 或使用它 |
-| Highway | **不准入首版产品** | 在当前准入闭包中，它只经 `math/fast_pose_composition_functions` 进入，而该文件已裁为 `first_party`；四个位姿组合函数由 G15 按数学定义独立实现，不复制上游的 portable 分支 |
+| Highway | **不准入首版产品** | 声明头作为 vendored 文件保留；上游 Highway `.cc` 裁为 `first_party`，由 G15 的 ORVD 实现按数学定义提供四个函数，不复制上游 portable 分支 |
 
 不锁定 fmt 版本。Drake 可以使用模块提供的 fmt，也可以经无版本的
 `find_package(fmt CONFIG REQUIRED)` 使用外部 fmt；参考端的 ABI 不能外推成候选端约束。
-G13/G15/G17 用真实源码验证所配置 fmt 的兼容性；只有具体 API 提供证据时才声明最低版本。
+G13 已用 topology 目标验证所配置 fmt；G17 在 tree 目标出现后验证其兼容性。只有具体 API
+提供证据时才声明最低版本。
 
 `cxxabi.h` 不在此表内：它是 GNU C++ ABI 的平台头而非第三方库，include 与调用都在
 `__GNUG__` 守卫内，非 GNU 前端直接返回原始 `typeid` 名称。

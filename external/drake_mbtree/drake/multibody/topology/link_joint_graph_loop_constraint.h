@@ -43,9 +43,6 @@ class LinkJointGraph::LoopConstraint {
   ModelInstanceIndex model_instance_;
   LinkIndex primary_link_index_;
   LinkIndex shadow_link_index_;
-
-  // TODO(sherm1) Record the ephemeral MultibodyPlant Constraint here, e.g.:
-  //  MultibodyConstraintId plant_constraint_id_;
 };
 
 }  // namespace internal

@@ -4,8 +4,8 @@
 
 ## 当前状态
 
-首个产品实现基底已经落位：可独立构建的 vendored Drake 刚性多体 topology 静态库。
-第一方 Context、缓存与动力学运行时尚未开始。
+vendored Drake 刚性 topology 已可独立构建；刚性 tree 源码已经落位,正在删除非
+`double` 路径,尚未接入产品构建。第一方 Context、缓存与动力学运行时尚未开始。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -42,7 +42,7 @@ OpenRailVehicleDynamics/
 │   ├── design/           历史调研输入（非现行依据）
 │   └── review/           历史审查往来（非现行依据）
 ├── external/
-│   └── drake_mbtree/     vendored topology 源码、逐文件处置、许可证与修改记录
+│   └── drake_mbtree/     vendored topology/tree 源码、第一方替代实现、处置与许可证
 ├── tools/
 │   └── drake_source_boundary/  源码闭包解析工具（开发期，Python 标准库）
 ├── libs/

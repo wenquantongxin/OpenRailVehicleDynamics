@@ -1,9 +1,9 @@
 # OpenRailVehicleDynamics (ORVD) — top-level build
 #
-# STATUS: vendored topology stage. The build contains the vendored Drake
-# multibody topology static library but no first-party runtime library or
-# executable yet. BUILD_TESTING adds model-neutral self-checks. Product modules
-# are wired in only when they gain a CMakeLists.txt; their order is set by
+# The vendored topology target is buildable. Rigid-tree sources are staged for
+# their later double-only target; no first-party runtime library or executable
+# exists yet. BUILD_TESTING adds model-neutral self-checks. Product modules are
+# wired in only when they gain a CMakeLists.txt; their order is set by
 # docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
 #
 # The first-party compile policy lives in cmake/OrvdFirstPartyTargetPolicy.cmake
@@ -77,4 +77,4 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-message(STATUS "ORVD ${PROJECT_VERSION} — vendored multibody topology stage")
+message(STATUS "ORVD ${PROJECT_VERSION} — vendored topology target configured")
