@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/planar_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -30,9 +32,6 @@ template <typename T>
 class PlanarJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(PlanarJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   /// The name for this Joint type.
   static constexpr char kTypeName[] = "planar";
@@ -97,7 +96,7 @@ class PlanarJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval p_FoMo_F The position of `this` joint stored in the `context`
   ///                  ordered as (x, y). See class documentation for details.
-  Vector2<T> get_translation(const Context<T>& context) const {
+  Vector2<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translations(context);
   }
 
@@ -108,7 +107,7 @@ class PlanarJoint final : public Joint<T> {
   ///                     `context` ordered as (x, y). See class documentation
   ///                     for details.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_translation(Context<T>* context,
+  const PlanarJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* context,
                                         const Vector2<T>& p_FoMo_F) const {
     get_mobilizer().set_translations(context, p_FoMo_F);
     return *this;
@@ -119,7 +118,7 @@ class PlanarJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval theta The angle of `this` joint stored in the `context`. See class
   ///               documentation for details.
-  const T& get_rotation(const systems::Context<T>& context) const {
+  const T& get_rotation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angle(context);
   }
 
@@ -129,7 +128,7 @@ class PlanarJoint final : public Joint<T> {
   /// @param[in] theta The desired angle in radians to be stored in `context`.
   ///                  See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_rotation(systems::Context<T>* context,
+  const PlanarJoint<T>& set_rotation(orvd::multibody_runtime::MultibodyStateInstance* context,
                                      const T& theta) const {
     get_mobilizer().SetAngle(context, theta);
     return *this;
@@ -145,7 +144,7 @@ class PlanarJoint final : public Joint<T> {
   /// @param[in] theta The desired angle in radians to be stored in `context`.
   ///                  See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_pose(systems::Context<T>* context,
+  const PlanarJoint<T>& set_pose(orvd::multibody_runtime::MultibodyStateInstance* context,
                                  const Vector2<T>& p_FoMo_F,
                                  const T& theta) const {
     get_mobilizer().set_translations(context, p_FoMo_F);
@@ -159,7 +158,7 @@ class PlanarJoint final : public Joint<T> {
   /// @retval v_FoMo_F The translational velocity of `this` joint as stored in
   ///                  the `context`.
   Vector2<T> get_translational_velocity(
-      const systems::Context<T>& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translation_rates(context);
   }
 
@@ -171,7 +170,7 @@ class PlanarJoint final : public Joint<T> {
   ///                     meters per second.
   /// @returns a constant reference to `this` joint.
   const PlanarJoint<T>& set_translational_velocity(
-      systems::Context<T>* context, const Vector2<T>& v_FoMo_F) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector2<T>& v_FoMo_F) const {
     get_mobilizer().SetTranslationRates(context, v_FoMo_F);
     return *this;
   }
@@ -183,7 +182,7 @@ class PlanarJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval theta_dot The rate of change of `this` joint's angle θ as
   ///                   stored in the `context`.
-  const T& get_angular_velocity(const systems::Context<T>& context) const {
+  const T& get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angular_rate(context);
   }
 
@@ -195,7 +194,7 @@ class PlanarJoint final : public Joint<T> {
   /// @param[in] theta_dot The desired rates of change of `this` joint's
   ///                      angle in radians per second.
   /// @returns a constant reference to `this` joint.
-  const PlanarJoint<T>& set_angular_velocity(systems::Context<T>* context,
+  const PlanarJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
                                              const T& theta_dot) const {
     get_mobilizer().SetAngularRate(context, theta_dot);
     return *this;
@@ -252,7 +251,7 @@ class PlanarJoint final : public Joint<T> {
   /// the selected axis. That is, a positive force causes a positive
   /// translational acceleration and a positive torque causes a positive angular
   /// acceleration (of the child body frame).
-  void DoAddInOneForce(const systems::Context<T>&, int joint_dof,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int joint_dof,
                        const T& joint_tau,
                        MultibodyForces<T>* forces) const final {
     DRAKE_DEMAND(joint_dof < 3);
@@ -267,7 +266,7 @@ class PlanarJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative force according to the
   /// viscous law `f = -d⋅v`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const systems::Context<T>& context,
+  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> tau =
         get_mobilizer().get_mutable_generalized_forces_from_array(

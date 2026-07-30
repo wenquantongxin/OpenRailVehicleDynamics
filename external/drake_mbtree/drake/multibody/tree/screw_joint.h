@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/screw_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -31,9 +33,6 @@ template <typename T>
 class ScrewJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ScrewJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   /// The name for this Joint type.
   static constexpr char kTypeName[] = "screw";
@@ -132,7 +131,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval z The translation of `this` joint stored in the `context` as (z).
   ///           See class documentation for details.
-  T get_translation(const Context<T>& context) const {
+  T get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translation(context);
   }
 
@@ -142,7 +141,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] z The desired translation in meters to be stored in `context`
   ///              as (z). See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_translation(Context<T>* context, const T& z) const {
+  const ScrewJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* context, const T& z) const {
     get_mobilizer().SetTranslation(context, z);
     return *this;
   }
@@ -152,7 +151,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval theta The angle of `this` joint stored in the `context`. See class
   ///               documentation for details.
-  const T& get_rotation(const systems::Context<T>& context) const {
+  const T& get_rotation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angle(context);
   }
 
@@ -162,7 +161,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] theta The desired angle in radians to be stored in `context`.
   ///                  See class documentation for details.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_rotation(systems::Context<T>* context,
+  const ScrewJoint<T>& set_rotation(orvd::multibody_runtime::MultibodyStateInstance* context,
                                     const T& theta) const {
     get_mobilizer().SetAngle(context, theta);
     return *this;
@@ -173,7 +172,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval vz The translational velocity of `this` joint as stored in the
   ///            `context`.
-  T get_translational_velocity(const systems::Context<T>& context) const {
+  T get_translational_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translation_rate(context);
   }
 
@@ -184,7 +183,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] vz The desired translational velocity of `this` joint in meters
   ///               per second along F frame's â-axis.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_translational_velocity(systems::Context<T>* context,
+  const ScrewJoint<T>& set_translational_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
                                                   const T& vz) const {
     get_mobilizer().SetTranslationRate(context, vz);
     return *this;
@@ -197,7 +196,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @retval theta_dot The rate of change of `this` joint's angle θ as
   ///                   stored in the `context`.
-  const T& get_angular_velocity(const systems::Context<T>& context) const {
+  const T& get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angular_rate(context);
   }
 
@@ -209,7 +208,7 @@ class ScrewJoint final : public Joint<T> {
   /// @param[in] theta_dot The desired rates of change of `this` joint's
   ///                      angle in radians per second.
   /// @returns a constant reference to `this` joint.
-  const ScrewJoint<T>& set_angular_velocity(systems::Context<T>* context,
+  const ScrewJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
                                             const T& theta_dot) const {
     get_mobilizer().SetAngularRate(context, theta_dot);
     return *this;
@@ -219,7 +218,7 @@ class ScrewJoint final : public Joint<T> {
   /// `context`. Refer to default_damping() for details.
   /// @param[in] context The context storing the state and parameters for the
   /// model to which `this` joint belongs.
-  const T& GetDamping(const Context<T>& context) const {
+  const T& GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return this->GetDampingVector(context)[0];
   }
 
@@ -229,7 +228,7 @@ class ScrewJoint final : public Joint<T> {
   /// model to which `this` joint belongs.
   /// @param[in] damping The damping value.
   /// @throws std::exception if `damping` is negative.
-  void SetDamping(Context<T>* context, const T& damping) const {
+  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* context, const T& damping) const {
     DRAKE_THROW_UNLESS(damping >= 0);
     this->SetDampingVector(context, Vector1<T>(damping));
   }
@@ -278,7 +277,7 @@ class ScrewJoint final : public Joint<T> {
    the selected axis. That is, a positive force causes a positive
    translational acceleration and a positive torque causes a positive angular
    acceleration (of the child body frame) [assuming a positive screw pitch]. */
-  void DoAddInOneForce(const systems::Context<T>&, int joint_dof,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int joint_dof,
                        const T& joint_tau,
                        MultibodyForces<T>* forces) const final {
     DRAKE_DEMAND(joint_dof < 1);
@@ -293,7 +292,7 @@ class ScrewJoint final : public Joint<T> {
     This method adds into `forces` a dissipative force according to the
     viscous law `f = -d⋅v`, with d the damping coefficient (see
     default_damping()). */
-  void DoAddInDamping(const systems::Context<T>& context,
+  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> tau =
         get_mobilizer().get_mutable_generalized_forces_from_array(
@@ -329,11 +328,11 @@ class ScrewJoint final : public Joint<T> {
     }
   }
 
-  const T& DoGetOnePosition(const systems::Context<T>& context) const final {
+  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
     return get_rotation(context);
   }
 
-  const T& DoGetOneVelocity(const systems::Context<T>& context) const final {
+  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
     return get_angular_velocity(context);
   }
 

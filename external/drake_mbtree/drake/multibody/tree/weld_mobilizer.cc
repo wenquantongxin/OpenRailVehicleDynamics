@@ -4,6 +4,7 @@
 
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -22,63 +23,63 @@ std::unique_ptr<BodyNode<T>> WeldMobilizer<T>::CreateBodyNode(
 
 template <typename T>
 math::RigidTransform<T> WeldMobilizer<T>::CalcAcrossMobilizerTransform(
-    const systems::Context<T>&) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&) const {
   return math::RigidTransform<T>();  // Identity
 }
 
 template <typename T>
 SpatialVelocity<T> WeldMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>&) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>&) const {
   return SpatialVelocity<T>::Zero();
 }
 
 template <typename T>
 SpatialAcceleration<T> WeldMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>&) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>&) const {
   return SpatialAcceleration<T>::Zero();
 }
 
 template <typename T>
-void WeldMobilizer<T>::ProjectSpatialForce(const systems::Context<T>&,
+void WeldMobilizer<T>::ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
                                            const SpatialForce<T>&,
                                            Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);
 }
 
 template <typename T>
-void WeldMobilizer<T>::DoCalcNMatrix(const systems::Context<T>&,
+void WeldMobilizer<T>::DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                      EigenPtr<MatrixX<T>>) const {}
 
 template <typename T>
-void WeldMobilizer<T>::DoCalcNplusMatrix(const systems::Context<T>&,
+void WeldMobilizer<T>::DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                          EigenPtr<MatrixX<T>>) const {}
 
 template <typename T>
-void WeldMobilizer<T>::DoCalcNDotMatrix(const systems::Context<T>&,
+void WeldMobilizer<T>::DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                         EigenPtr<MatrixX<T>>) const {}
 
 template <typename T>
-void WeldMobilizer<T>::DoCalcNplusDotMatrix(const systems::Context<T>&,
+void WeldMobilizer<T>::DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                             EigenPtr<MatrixX<T>>) const {}
 
 template <typename T>
-void WeldMobilizer<T>::DoMapVelocityToQDot(const systems::Context<T>&,
+void WeldMobilizer<T>::DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance&,
                                            const Eigen::Ref<const VectorX<T>>&,
                                            EigenPtr<VectorX<T>>) const {}
 
 template <typename T>
-void WeldMobilizer<T>::DoMapQDotToVelocity(const systems::Context<T>&,
+void WeldMobilizer<T>::DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance&,
                                            const Eigen::Ref<const VectorX<T>>&,
                                            EigenPtr<VectorX<T>>) const {}
 
 template <typename T>
 void WeldMobilizer<T>::DoMapAccelerationToQDDot(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>&,
     EigenPtr<VectorX<T>>) const {}
 
 template <typename T>
 void WeldMobilizer<T>::DoMapQDDotToAcceleration(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>&,
     EigenPtr<VectorX<T>>) const {}
 
 }  // namespace internal

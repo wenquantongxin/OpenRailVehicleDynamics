@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/rpy_ball_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -24,9 +26,6 @@ template <typename T>
 class BallRpyJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BallRpyJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   /// The name for this Joint type.  It resolves to "ball_rpy".
   static const char kTypeName[];
@@ -113,7 +112,7 @@ class BallRpyJoint final : public Joint<T> {
   ///   The context of the model this joint belongs to.
   /// @returns The angle coordinates of `this` joint stored in the `context`
   ///          ordered as θr, θp, θy.
-  Vector3<T> get_angles(const Context<T>& context) const {
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angles(context);
   }
 
@@ -125,7 +124,7 @@ class BallRpyJoint final : public Joint<T> {
   ///   The desired angles in radians to be stored in `context` ordered as θr,
   ///   θp, θy. See get_angles() for details.
   /// @returns a constant reference to `this` joint.
-  const BallRpyJoint<T>& set_angles(Context<T>* context,
+  const BallRpyJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* context,
                                     const Vector3<T>& angles) const {
     get_mobilizer().SetAngles(context, angles);
     return *this;
@@ -140,7 +139,7 @@ class BallRpyJoint final : public Joint<T> {
   ///   A vector in ℝ³ with the angular velocity of the child frame M in the
   ///   parent frame F, expressed in F. Refer to this class's documentation for
   ///   further details and definitions of these frames.
-  Vector3<T> get_angular_velocity(const systems::Context<T>& context) const {
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angular_velocity(context);
   }
 
@@ -153,7 +152,7 @@ class BallRpyJoint final : public Joint<T> {
   ///   parent frame F, expressed in F. Refer to this class's documentation for
   ///   further details and definitions of these frames.
   /// @returns a constant reference to `this` joint.
-  const BallRpyJoint<T>& set_angular_velocity(systems::Context<T>* context,
+  const BallRpyJoint<T>& set_angular_velocity(orvd::multibody_runtime::MultibodyStateInstance* context,
                                               const Vector3<T>& w_FM) const {
     get_mobilizer().SetAngularVelocity(context, w_FM);
     return *this;
@@ -179,7 +178,7 @@ class BallRpyJoint final : public Joint<T> {
   /// Joint<T> override called through public NVI, Joint::AddInForce().
   /// Adding forces per-dof makes no physical sense. Therefore, this method
   /// throws an exception if invoked.
-  void DoAddInOneForce(const systems::Context<T>&, int, const T&,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int, const T&,
                        MultibodyForces<T>*) const final {
     throw std::logic_error(
         "Ball RPY joints do not allow applying forces to individual degrees of "
@@ -191,7 +190,7 @@ class BallRpyJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative torque according to the
   /// viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const systems::Context<T>& context,
+  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> t_BMo_F =
         get_mobilizer().get_mutable_generalized_forces_from_array(

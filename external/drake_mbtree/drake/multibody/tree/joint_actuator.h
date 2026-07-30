@@ -9,7 +9,7 @@
 #include "drake/multibody/tree/multibody_element.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -96,7 +96,7 @@ class JointActuator final : public MultibodyElement<T> {
   ///   `forces` is `nullptr` or if `forces` doest not have the right sizes to
   ///   accommodate a set of forces for the model to which this actuator
   ///   belongs.
-  void AddInOneForce(const systems::Context<T>& context, int joint_dof,
+  void AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& context, int joint_dof,
                      const T& tau, MultibodyForces<T>* forces) const;
 
   /// Gets the actuation values for `this` actuator from the actuation vector u
@@ -230,47 +230,55 @@ class JointActuator final : public MultibodyElement<T> {
     return default_gear_ratio_ * default_gear_ratio_ * default_rotor_inertia_;
   }
 
-  /// Returns the associated rotor inertia value for this actuator, stored in
-  /// `context`.
+  /// Returns the associated rotor inertia value for this actuator, as stored
+  /// in `state`.
   /// See @ref reflected_inertia.
-  /// Note that this ONLY depends on the Parameters in the context; it does
-  /// not depend on time, input, state, etc.
-  const T& rotor_inertia(const systems::Context<T>& context) const {
-    return context.get_numeric_parameter(rotor_inertia_parameter_index_)[0];
+  const T& rotor_inertia(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.joint_actuator_parameters(actuator_parameter_slot_)
+        .rotor_inertia;
   }
 
-  /// Returns the associated gear ratio value for this actuator, stored in
-  /// `context`.
+  /// Returns the associated gear ratio value for this actuator, as stored in
+  /// `state`.
   /// See @ref reflected_inertia.
-  /// Note that this ONLY depends on the Parameters in the context; it does
-  /// not depend on time, input, state, etc.
-  const T& gear_ratio(const systems::Context<T>& context) const {
-    return context.get_numeric_parameter(gear_ratio_parameter_index_)[0];
+  const T& gear_ratio(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.joint_actuator_parameters(actuator_parameter_slot_).gear_ratio;
   }
 
-  /// Sets the associated rotor inertia value for this actuator in `context`.
+  /// Sets the associated rotor inertia value for this actuator in `state`.
+  ///
+  /// The gear ratio is read and written back unchanged: the two live in one
+  /// record, and the store takes whole records so that a partially updated one
+  /// is never visible and one write advances the version once.
   /// See @ref reflected_inertia.
-  void SetRotorInertia(systems::Context<T>* context,
+  void SetRotorInertia(orvd::multibody_runtime::MultibodyStateInstance* state,
                        const T& rotor_inertia) const {
-    context->get_mutable_numeric_parameter(rotor_inertia_parameter_index_)[0] =
-        rotor_inertia;
+    orvd::multibody_runtime::JointActuatorParameters parameters =
+        state->joint_actuator_parameters(actuator_parameter_slot_);
+    parameters.rotor_inertia = rotor_inertia;
+    state->set_joint_actuator_parameters(actuator_parameter_slot_, parameters);
   }
 
-  /// Sets the associated gear ratio value for this actuator in `context`.
+  /// Sets the associated gear ratio value for this actuator in `state`.
   /// See @ref reflected_inertia.
-  void SetGearRatio(systems::Context<T>* context, const T& gear_ratio) const {
-    context->get_mutable_numeric_parameter(gear_ratio_parameter_index_)[0] =
-        gear_ratio;
+  void SetGearRatio(orvd::multibody_runtime::MultibodyStateInstance* state,
+                    const T& gear_ratio) const {
+    orvd::multibody_runtime::JointActuatorParameters parameters =
+        state->joint_actuator_parameters(actuator_parameter_slot_);
+    parameters.gear_ratio = gear_ratio;
+    state->set_joint_actuator_parameters(actuator_parameter_slot_, parameters);
   }
 
-  /// Calculates the reflected inertia value for this actuator in `context`.
+  /// Calculates the reflected inertia value for this actuator in `state`.
   /// See @ref reflected_inertia.
-  /// Note that this ONLY depends on the Parameters in the context; it does
-  /// not depend on time, input, state, etc.
-  T calc_reflected_inertia(const systems::Context<T>& context) const {
-    const T& rho = gear_ratio(context);
-    const T& Ir = rotor_inertia(context);
-    return rho * rho * Ir;
+  T calc_reflected_inertia(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    const orvd::multibody_runtime::JointActuatorParameters& parameters =
+        state.joint_actuator_parameters(actuator_parameter_slot_);
+    return parameters.gear_ratio * parameters.gear_ratio *
+           parameters.rotor_inertia;
   }
   /// @} <!-- Reflected Inertia -->
 
@@ -339,28 +347,25 @@ class JointActuator final : public MultibodyElement<T> {
   // checks we can't do until then.
   void DoSetTopology() final { is_finalized_ = true; }
 
-  // Implementation for MultibodyElement::DoDeclareParameters().
-  void DoDeclareParameters(
-      internal::MultibodyTreeSystem<T>* tree_system) final {
-    // Sets model values to dummy values to indicate that the model values are
-    // not used. This class stores the the default values of the parameters.
-    rotor_inertia_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(1));
-    gear_ratio_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(1));
+  // Implementation for MultibodyElement::DoAssignParameterSlots().
+  //
+  // One slot, not two. Upstream declared the rotor inertia and the gear ratio
+  // as separate one-wide parameters; reflected inertia is computed from both
+  // and nothing reads either alone, so keeping them apart only created a way
+  // for them to be written at different moments and read in between.
+  void DoAssignParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator) final {
+    actuator_parameter_slot_ = allocator->AllocateJointActuatorSlot();
   }
 
-  // Implementation for MultibodyElement::DoSetDefaultParameters().
-  void DoSetDefaultParameters(systems::Parameters<T>* parameters) const final {
-    // Set the default rotor inertia.
-    systems::BasicVector<T>& rotor_inertia_parameter =
-        parameters->get_mutable_numeric_parameter(
-            rotor_inertia_parameter_index_);
-    rotor_inertia_parameter.set_value(Vector1<T>(default_rotor_inertia_));
-    // Set the default gear ratio.
-    systems::BasicVector<T>& gear_ratio_parameter =
-        parameters->get_mutable_numeric_parameter(gear_ratio_parameter_index_);
-    gear_ratio_parameter.set_value(Vector1<T>(default_gear_ratio_));
+  // Implementation for MultibodyElement::DoWriteDefaultParameters().
+  void DoWriteDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final {
+    orvd::multibody_runtime::JointActuatorParameters parameters;
+    parameters.rotor_inertia = default_rotor_inertia_;
+    parameters.gear_ratio = default_gear_ratio_;
+    state->set_joint_actuator_parameters(actuator_parameter_slot_, parameters);
   }
 
   // The actuator's unique name in the MultibodyTree model
@@ -386,13 +391,10 @@ class JointActuator final : public MultibodyElement<T> {
   // rotor inertia parameter.
   double default_gear_ratio_{1.0};
 
-  // System parameter index for `this` actuator's rotor inertia stored in a
-  // context.
-  systems::NumericParameterIndex rotor_inertia_parameter_index_;
-
-  // System parameter index for `this` actuator's gear ratio stored in a
-  // context.
-  systems::NumericParameterIndex gear_ratio_parameter_index_;
+  // Where this actuator's rotor inertia and gear ratio live in the state,
+  // assigned when the model was finalized.
+  int actuator_parameter_slot_{
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot};
 
   std::optional<PdControllerGains> pd_controller_gains_{std::nullopt};
 

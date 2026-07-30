@@ -10,6 +10,7 @@
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -56,52 +57,49 @@ std::string RpyBallMobilizer<T>::velocity_suffix(
 
 template <typename T>
 Vector3<T> RpyBallMobilizer<T>::get_angles(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_positions(context);
 }
 
 template <typename T>
 const RpyBallMobilizer<T>& RpyBallMobilizer<T>::SetAngles(
-    systems::Context<T>* context, const Vector3<T>& angles) const {
-  auto q = this->GetMutablePositions(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& angles) const {
+  QVector<T> q = this->get_positions(*context);
   q = angles;
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 const RpyBallMobilizer<T>& RpyBallMobilizer<T>::SetFromRotationMatrix(
-    systems::Context<T>* context, const math::RotationMatrix<T>& R_FM) const {
-  auto q = this->GetMutablePositions(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const {
+  QVector<T> q = this->get_positions(*context);
   DRAKE_ASSERT(q.size() == kNq);
   q = math::RollPitchYaw<T>(R_FM).vector();
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 Vector3<T> RpyBallMobilizer<T>::get_angular_velocity(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_velocities(context);
 }
 
 template <typename T>
 const RpyBallMobilizer<T>& RpyBallMobilizer<T>::SetAngularVelocity(
-    systems::Context<T>* context, const Vector3<T>& w_FM) const {
-  return SetAngularVelocity(*context, w_FM, &context->get_mutable_state());
-}
-
-template <typename T>
-const RpyBallMobilizer<T>& RpyBallMobilizer<T>::SetAngularVelocity(
-    const systems::Context<T>&, const Vector3<T>& w_FM,
-    systems::State<T>* state) const {
-  auto v = this->get_mutable_velocities(state);
+    orvd::multibody_runtime::MultibodyStateInstance* state,
+    const Vector3<T>& w_FM) const {
+  VVector<T> v = this->get_velocities(*state);
   DRAKE_ASSERT(v.size() == kNv);
   v = w_FM;
+  this->SetVelocities(state, v);
   return *this;
 }
 
 template <typename T>
 math::RigidTransform<T> RpyBallMobilizer<T>::CalcAcrossMobilizerTransform(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
@@ -109,7 +107,7 @@ math::RigidTransform<T> RpyBallMobilizer<T>::CalcAcrossMobilizerTransform(
 
 template <typename T>
 SpatialVelocity<T> RpyBallMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   return calc_V_FM(nullptr, v.data());
 }
@@ -117,7 +115,7 @@ SpatialVelocity<T> RpyBallMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T>
 SpatialAcceleration<T>
 RpyBallMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const systems::Context<T>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
   return calc_A_FM(nullptr, nullptr, vdot.data());
@@ -125,7 +123,7 @@ RpyBallMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
 
 template <typename T>
 void RpyBallMobilizer<T>::ProjectSpatialForce(
-    const systems::Context<T>&, const SpatialForce<T>& F_BMo_F,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);
   calc_tau(nullptr, F_BMo_F, tau.data());
@@ -133,7 +131,7 @@ void RpyBallMobilizer<T>::ProjectSpatialForce(
 
 template <typename T>
 auto RpyBallMobilizer<T>::CalcSinPitchCosPitchSinYawCosYaw(
-    const systems::Context<T>& context) const -> SinCosPitchYaw {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const -> SinCosPitchYaw {
   using std::sin, std::cos;
   const Vector3<T> angles = get_angles(context);
   return {.sin_pitch = sin(angles[1]),
@@ -143,7 +141,7 @@ auto RpyBallMobilizer<T>::CalcSinPitchCosPitchSinYawCosYaw(
 }
 
 template <typename T>
-void RpyBallMobilizer<T>::DoCalcNMatrix(const systems::Context<T>& context,
+void RpyBallMobilizer<T>::DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                         EigenPtr<MatrixX<T>> N) const {
   // The matrix N(q) relates q̇ to v as q̇ = N(q) * v, where q̇ = [ṙ, ṗ, ẏ]ᵀ and
   // v = w_FM_F = [ω0, ω1, ω2]ᵀ is the mobilizer M frame's angular velocity in
@@ -174,7 +172,7 @@ void RpyBallMobilizer<T>::DoCalcNMatrix(const systems::Context<T>& context,
 }
 
 template <typename T>
-void RpyBallMobilizer<T>::DoCalcNplusMatrix(const systems::Context<T>& context,
+void RpyBallMobilizer<T>::DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                             EigenPtr<MatrixX<T>> Nplus) const {
   // The matrix N⁺(q) relates v to q̇ as v = N⁺(q) * q̇, where q̇ = [ṙ, ṗ, ẏ]ᵀ and
   // v = w_FM_F = [ω0, ω1, ω2]ᵀ is the mobilizer M frame's angular velocity in
@@ -190,7 +188,7 @@ void RpyBallMobilizer<T>::DoCalcNplusMatrix(const systems::Context<T>& context,
 }
 
 template <typename T>
-void RpyBallMobilizer<T>::DoCalcNDotMatrix(const systems::Context<T>& context,
+void RpyBallMobilizer<T>::DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                            EigenPtr<MatrixX<T>> Ndot) const {
   // Computes the 3x3 matrix Ṅ(q,q̇) that helps relate q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇,
   // where q = [r, p, y]ᵀ contains the roll (r), pitch (p) and yaw (y) angles
@@ -246,7 +244,7 @@ void RpyBallMobilizer<T>::DoCalcNDotMatrix(const systems::Context<T>& context,
 
 template <typename T>
 void RpyBallMobilizer<T>::DoCalcNplusDotMatrix(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> NplusDot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, EigenPtr<MatrixX<T>> NplusDot) const {
   // Computes the matrix Ṅ⁺(q,q̇) that helps relate v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈,
   // where q = [r, p, y]ᵀ contains the roll (r), pitch (p) and yaw (y) angles
   // and v = [wx, wy, wz]ᵀ represents W_FM_F (the angular velocity of the
@@ -294,7 +292,7 @@ void RpyBallMobilizer<T>::DoCalcNplusDotMatrix(
 
 template <typename T>
 void RpyBallMobilizer<T>::DoMapVelocityToQDot(
-    const systems::Context<T>& context, const Eigen::Ref<const VectorX<T>>& v,
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const Eigen::Ref<const VectorX<T>>& v,
     EigenPtr<VectorX<T>> qdot) const {
   const SinCosPitchYaw sin_cos_pitch_yaw =
       CalcSinPitchCosPitchSinYawCosYaw(context);
@@ -353,7 +351,7 @@ void RpyBallMobilizer<T>::DoMapVelocityToQDotImpl(
 
 template <typename T>
 void RpyBallMobilizer<T>::DoMapQDotToVelocity(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& qdot, EigenPtr<VectorX<T>> v) const {
   // The matrix N⁺(q) relates v to q̇ as v = N⁺(q) * q̇, where q̇ = [ṙ, ṗ, ẏ]ᵀ and
   // v = w_FM_F = [ω0, ω1, ω2]ᵀ is the mobilizer M frame's angular velocity in
@@ -392,7 +390,7 @@ void RpyBallMobilizer<T>::DoMapQDotToVelocity(
 
 template <typename T>
 void RpyBallMobilizer<T>::DoMapAccelerationToQDDot(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& vdot,
     EigenPtr<VectorX<T>> qddot) const {
   // As shown in DoMapVelocityToQDot(), the time-derivatives of generalized
@@ -427,7 +425,7 @@ void RpyBallMobilizer<T>::DoMapAccelerationToQDDot(
 
 template <typename T>
 void RpyBallMobilizer<T>::DoMapQDDotToAcceleration(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& qddot,
     EigenPtr<VectorX<T>> vdot) const {
   // As seen in DoMapQDotToVelocity(), generalized velocities v = [ωx, ωy, ωz]ᵀ
@@ -457,7 +455,7 @@ void RpyBallMobilizer<T>::DoMapQDDotToAcceleration(
 
 template <typename T>
 Vector3<T> RpyBallMobilizer<T>::CalcAccelerationBiasForQDDot(
-    const systems::Context<T>& context, const char* function_name) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const char* function_name) const {
   const SinCosPitchYaw sin_cos_pitch_yaw =
       CalcSinPitchCosPitchSinYawCosYaw(context);
   const T& cos_pitch = sin_cos_pitch_yaw.cos_pitch;
@@ -468,7 +466,7 @@ Vector3<T> RpyBallMobilizer<T>::CalcAccelerationBiasForQDDot(
 
 template <typename T>
 Vector3<T> RpyBallMobilizer<T>::CalcAccelerationBiasForQDDotImpl(
-    const systems::Context<T>& context, const SinCosPitchYaw& sin_cos_pitch_yaw,
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const SinCosPitchYaw& sin_cos_pitch_yaw,
     const T& cpi) const {
   // The algorithm below calculates Ṅ⁺(q,q̇)⋅q̇. The algorithm was verified with
   // MotionGenesis. It can also be verified by-hand, e.g., with documentation
@@ -493,7 +491,7 @@ Vector3<T> RpyBallMobilizer<T>::CalcAccelerationBiasForQDDotImpl(
 
 template <typename T>
 [[noreturn]] void RpyBallMobilizer<T>::ThrowSinceCosPitchNearZero(
-    const systems::Context<T>& context, const char* function_name) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const char* function_name) const {
   const Vector3<T> angles = get_angles(context);
   const T& pitch_angle = angles[1];
   throw std::runtime_error(fmt::format(

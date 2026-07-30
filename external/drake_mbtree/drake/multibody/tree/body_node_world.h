@@ -92,14 +92,14 @@ class BodyNodeWorld final : public BodyNode<T> {
   }
 
   void CalcArticulatedBodyInertiaCache_TipToBase(
-      const systems::Context<T>&, const PositionKinematicsCache<T>&,
+      const PositionKinematicsCache<T>&,
       const Eigen::Ref<const MatrixUpTo6<T>>&, const SpatialInertia<T>&,
       const VectorX<T>&, ArticulatedBodyInertiaCache<T>*) const final {
     DRAKE_UNREACHABLE();
   }
 
   void CalcArticulatedBodyForceCache_TipToBase(
-      const systems::Context<T>&, const PositionKinematicsCache<T>&,
+      const PositionKinematicsCache<T>&,
       const VelocityKinematicsCache<T>*, const SpatialForce<T>&,
       const ArticulatedBodyInertiaCache<T>&, const SpatialForce<T>&,
       const SpatialForce<T>&, const Eigen::Ref<const VectorX<T>>&,
@@ -109,7 +109,7 @@ class BodyNodeWorld final : public BodyNode<T> {
   }
 
   void CalcArticulatedBodyAccelerations_BaseToTip(
-      const systems::Context<T>&, const PositionKinematicsCache<T>&,
+      const PositionKinematicsCache<T>&,
       const ArticulatedBodyInertiaCache<T>&,
       const ArticulatedBodyForceCache<T>&,
       const Eigen::Ref<const MatrixUpTo6<T>>&, const SpatialAcceleration<T>&,

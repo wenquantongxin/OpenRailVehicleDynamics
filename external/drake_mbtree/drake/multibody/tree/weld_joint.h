@@ -9,6 +9,7 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/weld_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -19,9 +20,6 @@ template <typename T>
 class WeldJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(WeldJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   static const char kTypeName[];
 
@@ -60,7 +58,7 @@ class WeldJoint final : public Joint<T> {
   /// Since frame F and M are welded together, it is physically not possible to
   /// apply forces between them. Therefore this method throws an exception if
   /// invoked.
-  void DoAddInOneForce(const systems::Context<T>&, int, const T&,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int, const T&,
                        MultibodyForces<T>*) const final {
     throw std::logic_error("Weld joints do not allow applying forces.");
   }

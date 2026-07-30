@@ -5,6 +5,8 @@
 
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -84,22 +86,22 @@ class LinearSpringDamper final : public ForceElement<T> {
   double damping() const { return damping_; }
 
   T CalcPotentialEnergy(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc) const override;
 
   T CalcConservativePower(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
 
   T CalcNonConservativePower(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
 
  protected:
   void DoCalcAndAddForceContribution(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const override;

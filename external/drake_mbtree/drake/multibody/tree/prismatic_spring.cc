@@ -4,6 +4,8 @@
 
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -39,7 +41,7 @@ const PrismaticJoint<T>& PrismaticSpring<T>::joint() const {
 
 template <typename T>
 void PrismaticSpring<T>::DoCalcAndAddForceContribution(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&,
     MultibodyForces<T>* forces) const {
@@ -50,7 +52,7 @@ void PrismaticSpring<T>::DoCalcAndAddForceContribution(
 
 template <typename T>
 T PrismaticSpring<T>::CalcPotentialEnergy(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&) const {
   const T delta = nominal_position_ - joint().get_translation(context);
 
@@ -59,7 +61,7 @@ T PrismaticSpring<T>::CalcPotentialEnergy(
 
 template <typename T>
 T PrismaticSpring<T>::CalcConservativePower(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // Since the potential energy is:
@@ -74,7 +76,7 @@ T PrismaticSpring<T>::CalcConservativePower(
 
 template <typename T>
 T PrismaticSpring<T>::CalcNonConservativePower(
-    const systems::Context<T>&, const internal::PositionKinematicsCache<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // Purely conservative spring
   return 0;

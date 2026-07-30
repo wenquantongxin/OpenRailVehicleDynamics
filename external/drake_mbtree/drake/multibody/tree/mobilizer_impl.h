@@ -9,7 +9,7 @@
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer.h"
 #include "drake/multibody/tree/multibody_element.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -115,21 +115,16 @@ class MobilizerImpl : public Mobilizer<T> {
 
   // Sets the elements of the `state` associated with this Mobilizer to the
   // _zero_ state.  See Mobilizer::SetZeroState().
-  void SetZeroState(const systems::Context<T>&,
-                    systems::State<T>* state) const final;
+  bool SetPosePair(const Eigen::Quaternion<T> q_FM, const Vector3<T>& p_FM,
+                   orvd::multibody_runtime::MultibodyStateInstance* state) const final;
 
-  bool SetPosePair(const systems::Context<T>&, const Eigen::Quaternion<T> q_FM,
-                   const Vector3<T>& p_FM,
-                   systems::State<T>* state) const final;
-
-  bool SetSpatialVelocity(const systems::Context<T>&,
-                          const SpatialVelocity<T>& V_FM,
-                          systems::State<T>* state) const final;
+  bool SetSpatialVelocity(
+      const SpatialVelocity<T>& V_FM,
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final;
 
   // Sets the elements of the `state` associated with this Mobilizer to the
   // _default_ state.  See Mobilizer::set_default_state().
-  void set_default_state(const systems::Context<T>&,
-                         systems::State<T>* state) const final;
+  void WriteDefaultPositions(EigenPtr<VectorX<T>> q) const final;
 
   // Sets the default position of this Mobilizer to be used in subsequent
   // calls to set_default_state().
@@ -201,78 +196,53 @@ class MobilizerImpl : public Mobilizer<T> {
     return default_position_.value_or(get_zero_position());
   }
 
-  // @name    Helper methods to retrieve entries from the Context.
+  // @name    Helper methods to reach this mobilizer's own q and v
   //@{
-  // Helper to return a const fixed-size Eigen::VectorBlock referencing the
-  // segment in the state vector corresponding to `this` mobilizer's state.
-  // @pre `context` is a valid multibody system Context.
+  // Returns this mobilizer's segment of the generalized positions.
   Eigen::VectorBlock<const VectorX<T>, kNq> get_positions(
-      const systems::Context<T>& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
     DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().template get_state_segment<kNq>(
-        context, this->position_start_in_q());
-  }
-
-  // Helper to return a mutable fixed-size Eigen::VectorBlock referencing the
-  // segment in the state vector corresponding to `this` mobilizer's state.
-  // Causes invalidation of at least q-dependent cache entries.
-  // @pre `context` is a valid multibody system Context.
-  Eigen::VectorBlock<VectorX<T>, kNq> GetMutablePositions(
-      systems::Context<T>* context) const {
-    DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().template GetMutableStateSegment<kNq>(
-        context, this->position_start_in_q());
-  }
-
-  // Helper variant to return a const fixed-size Eigen::VectorBlock referencing
-  // the segment in the `state` corresponding to `this` mobilizer's generalized
-  // positions. No cache invalidation occurs.
-  // @pre `state` is a valid multibody system State.
-  Eigen::VectorBlock<VectorX<T>, kNq> get_mutable_positions(
-      systems::State<T>* state) const {
-    DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().template get_mutable_state_segment<kNq>(
+    return this->get_parent_tree().template get_position_segment<kNq>(
         state, this->position_start_in_q());
   }
 
-  // Helper to return a const fixed-size Eigen::VectorBlock referencing the
-  // segment in the state vector corresponding to `this` mobilizer's state.
-  // @pre `context` is a valid multibody system Context.
+  // Returns this mobilizer's segment of the generalized velocities.
+  //
+  // The offset is `velocity_start_in_v()`, with nothing added to it. Upstream
+  // reached v through a concatenated `[q; v]`, so its offset had to be written
+  // `num_qs_in_state() + velocity_start_in_v()`; q and v are separate vectors
+  // now and that addition has no meaning.
   Eigen::VectorBlock<const VectorX<T>, kNv> get_velocities(
-      const systems::Context<T>& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
     DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().template get_state_segment<kNv>(
-        context, num_qs_in_state() + this->velocity_start_in_v());
+    return this->get_parent_tree().template get_velocity_segment<kNv>(
+        state, this->velocity_start_in_v());
   }
 
-  // Helper to return a mutable fixed-size Eigen::VectorBlock referencing the
-  // segment in the state vector corresponding to `this` mobilizer's state.
-  // Causes invalidation of at least v-dependent cache entries.
-  // @pre `context` is a valid multibody system Context.
-  Eigen::VectorBlock<VectorX<T>, kNv> GetMutableVelocities(
-      systems::Context<T>* context) const {
+  // Writes this mobilizer's whole segment of q, as one transaction.
+  //
+  // Whole segment, not part of one. A caller changing several parts of this
+  // mobilizer's configuration — a floating body's rotation and its translation,
+  // say — must assemble the complete segment and call this once. Calling it
+  // twice would advance the position version twice for one change and would
+  // leave the state, in between, holding a configuration nobody asked for.
+  void SetPositions(orvd::multibody_runtime::MultibodyStateInstance* state,
+                    const Eigen::Ref<const QVector<T>>& q) const {
     DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().template GetMutableStateSegment<kNv>(
-        context, num_qs_in_state() + this->velocity_start_in_v());
+    this->get_parent_tree().SetPositionSegment(state,
+                                               this->position_start_in_q(), q);
   }
 
-  // Helper variant to return a const fixed-size Eigen::VectorBlock referencing
-  // the segment in the `state` corresponding to `this` mobilizer's generalized
-  // velocities. No cache invalidation occurs.
-  // @pre `state` is a valid multibody system State.
-  Eigen::VectorBlock<VectorX<T>, kNv> get_mutable_velocities(
-      systems::State<T>* state) const {
+  // Writes this mobilizer's whole segment of v, as one transaction.
+  void SetVelocities(orvd::multibody_runtime::MultibodyStateInstance* state,
+                     const Eigen::Ref<const VVector<T>>& v) const {
     DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().template get_mutable_state_segment<kNv>(
-        state, num_qs_in_state() + this->velocity_start_in_v());
+    this->get_parent_tree().SetVelocitySegment(state,
+                                               this->velocity_start_in_v(), v);
   }
   //@}
 
  private:
-  int num_qs_in_state() const {
-    const SpanningForest& forest = this->get_parent_tree().forest();
-    return forest.num_positions();
-  }
 
   std::optional<QVector<double>> default_position_{};
 };

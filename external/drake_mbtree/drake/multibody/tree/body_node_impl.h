@@ -130,13 +130,13 @@ class BodyNodeImpl final : public BodyNode<T> {
       EigenPtr<VectorX<T>> tau) const final;
 
   void CalcArticulatedBodyInertiaCache_TipToBase(
-      const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+      const PositionKinematicsCache<T>& pc,
       const Eigen::Ref<const MatrixUpTo6<T>>& H_PB_W,
       const SpatialInertia<T>& M_B_W, const VectorX<T>& diagonal_inertias,
       ArticulatedBodyInertiaCache<T>* abic) const final;
 
   void CalcArticulatedBodyForceCache_TipToBase(
-      const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+      const PositionKinematicsCache<T>& pc,
       const VelocityKinematicsCache<T>*, const SpatialForce<T>& Fb_Bo_W,
       const ArticulatedBodyInertiaCache<T>& abic,
       const SpatialForce<T>& Zb_Bo_W, const SpatialForce<T>& Fapplied_Bo_W,
@@ -145,7 +145,7 @@ class BodyNodeImpl final : public BodyNode<T> {
       ArticulatedBodyForceCache<T>* aba_force_cache) const final;
 
   void CalcArticulatedBodyAccelerations_BaseToTip(
-      const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+      const PositionKinematicsCache<T>& pc,
       const ArticulatedBodyInertiaCache<T>& abic,
       const ArticulatedBodyForceCache<T>& aba_force_cache,
       const Eigen::Ref<const MatrixUpTo6<T>>& H_PB_W,

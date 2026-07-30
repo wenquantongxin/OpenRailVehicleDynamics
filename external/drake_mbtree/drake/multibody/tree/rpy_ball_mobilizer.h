@@ -9,7 +9,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -110,7 +110,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   //   of rotations about the space fixed axes x̂, ŷ, ẑ, respectively packed and
   //   returned as a Vector3 with entries angles(0) = θ₀, angles(1) = θ₁,
   //   angles(2) = θ₂.
-  Vector3<T> get_angles(const systems::Context<T>& context) const;
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Sets in context the state for this mobilizer to have the roll-pitch-yaw
   // angles θ₀, θ₁, θ₂, provided in the input argument angles, which stores
@@ -123,7 +123,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   //   θ₂, described in this class's documentation, at entries angles(0),
   //   angles(1) and angles(2), respectively.
   // @returns a constant reference to this mobilizer.
-  const RpyBallMobilizer<T>& SetAngles(systems::Context<T>* context,
+  const RpyBallMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* context,
                                        const Vector3<T>& angles) const;
 
   // Sets context so this mobilizer's generalized coordinates (roll-pitch-yaw
@@ -134,7 +134,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   //   The rotation matrix relating the orientation of frame F and frame M.
   // @returns a constant reference to this mobilizer.
   const RpyBallMobilizer<T>& SetFromRotationMatrix(
-      systems::Context<T>* context, const math::RotationMatrix<T>& R_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const;
 
   // Retrieves from context the angular velocity w_FM of the outboard frame
   // M in the inboard frame F, expressed in F.
@@ -148,7 +148,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // @note Many dynamicists follow the convention of expressing angular
   // velocity in the outboard frame M; we return it expressed in the inboard
   // frame F. That is, this method returns W_FM_F.
-  Vector3<T> get_angular_velocity(const systems::Context<T>& context) const;
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Sets in context the state for this mobilizer so that the angular
   // velocity of the outboard frame M in the inboard frame F is w_FM.
@@ -158,7 +158,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   //   A vector in ℝ³ with the desired angular velocity of the outboard frame M
   //   in the inboard frame F, expressed in F.
   // @returns a constant reference to this mobilizer.
-  const RpyBallMobilizer<T>& SetAngularVelocity(systems::Context<T>* context,
+  const RpyBallMobilizer<T>& SetAngularVelocity(orvd::multibody_runtime::MultibodyStateInstance* context,
                                                 const Vector3<T>& w_FM) const;
 
   // Stores in state the angular velocity w_FM of the outboard frame
@@ -173,10 +173,6 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   //   A vector in ℝ³ with the desired angular velocity of the outboard frame M
   //   in the inboard frame F, expressed in F.
   // @returns a constant reference to this mobilizer.
-  const RpyBallMobilizer<T>& SetAngularVelocity(
-      const systems::Context<T>& context, const Vector3<T>& w_FM,
-      systems::State<T>* state) const;
-
   // Computes the across-mobilizer transform X_FM(q) between the inboard
   // frame F and the outboard frame M as a function of the roll-pitch-yaw angles
   // θ₀, θ₁, θ₂ stored in context.
@@ -218,10 +214,10 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   }
 
   math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>& context) const final;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
 
   SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration A_FM(q, v, v̇) of the
@@ -234,10 +230,10 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // @ref Dt_multibody_quantities for our notation of time derivatives in
   // different reference frames).
   SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
-  void ProjectSpatialForce(const systems::Context<T>& context,
+  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
@@ -259,18 +255,18 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // Returns a struct with calculated sin(pitch), cos(pitch), sin(yaw),
   // cos(yaw).
   SinCosPitchYaw CalcSinPitchCosPitchSinYawCosYaw(
-      const systems::Context<T>& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
-  void DoCalcNMatrix(const systems::Context<T>& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const systems::Context<T>& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
-  void DoCalcNDotMatrix(const systems::Context<T>& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
-  void DoCalcNplusDotMatrix(const systems::Context<T>& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps the generalized velocity v, which corresponds to the angular velocity
@@ -291,7 +287,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // in large errors for qdot), this method aborts when the absolute value of
   // the cosine of θ₁ is smaller than 10⁻³, a number arbitrarily chosen to this
   // end.
-  void DoMapVelocityToQDot(const systems::Context<T>& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
@@ -314,30 +310,30 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // @param[out] v
   //   A vector of generalized velocities for this Mobilizer which should
   //   correspond to a vector in ℝ³ for an angular velocity w_FM of M in F.
-  void DoMapQDotToVelocity(const systems::Context<T>& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
   // Maps vdot to qddot, which for this mobilizer is q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇.
   // For simple mobilizers q̈ = v̇. This mobilizer's N and Ṅ are more elaborate.
-  void DoMapAccelerationToQDDot(const systems::Context<T>& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
   // Maps qddot to vdot, which for this mobilizer is v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈.
   // For simple mobilizers v̇ = q̈. This mobilizer's N and Ṅ⁺ are more elaborate.
-  void DoMapQDDotToAcceleration(const systems::Context<T>& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
   // Calculate the term Ṅ⁺(q,q̇)⋅q̇ which appears in v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈.
-  Vector3<T> CalcAccelerationBiasForQDDot(const systems::Context<T>& context,
+  Vector3<T> CalcAccelerationBiasForQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                           const char* function_name) const;
 
   // Implements CalcAccelerationBiasForQDDot() with pre-computed values of
   // sin(pitch), cos(pitch), sin(yaw), cos(yaw), 1/cos(pitch).
   Vector3<T> CalcAccelerationBiasForQDDotImpl(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const SinCosPitchYaw& sin_cos_pitch_yaw, const T& cpi) const;
 
   // Certain roll pitch yaw calculations (e.g., calculating the N(q) matrix)
@@ -345,7 +341,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   // The tolerance 1.0e-3 is used to test whether the cosine of the pitch angle
   // is near zero, which occurs when the pitch angle ≈ π/2 ± n π (n=0, 1 2, …).
   // Throw an exception if a pitch angle is within ≈ 0.057° of a singularity.
-  void ThrowIfCosPitchNearZero(const systems::Context<T>& context,
+  void ThrowIfCosPitchNearZero(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                const T& cos_pitch,
                                const char* function_name) const {
     using std::abs;
@@ -355,7 +351,7 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
 
   // Ideally, ThrowIfCosPitchNearZero() is inlined by separating this function.
   [[noreturn]] void ThrowSinceCosPitchNearZero(
-      const systems::Context<T>& context, const char* function_name) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& context, const char* function_name) const;
 
 };
 

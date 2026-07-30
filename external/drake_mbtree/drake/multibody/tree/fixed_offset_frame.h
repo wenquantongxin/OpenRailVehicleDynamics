@@ -6,6 +6,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -69,14 +70,14 @@ class FixedOffsetFrame final : public Frame<T> {
   /// @param[in,out] context of the multibody plant associated with this frame.
   /// @param[in] X_PF Rigid transform that characterizes `this` frame F's pose
   ///   (orientation and position) in its parent frame P.
-  void SetPoseInParentFrame(systems::Context<T>* context,
+  void SetPoseInParentFrame(orvd::multibody_runtime::MultibodyStateInstance* state,
                             const math::RigidTransform<T>& X_PF) const;
 
   /// Returns the rigid transform X_PF that characterizes `this` frame F's pose
   /// in its parent frame P.
   /// @param[in] context of the multibody plant associated with this frame.
   math::RigidTransform<T> GetPoseInParentFrame(
-      const systems::Context<T>& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   /// @returns The default fixed pose in the body frame.
   math::RigidTransform<T> GetFixedPoseInBodyFrame() const override {
@@ -98,32 +99,31 @@ class FixedOffsetFrame final : public Frame<T> {
   std::unique_ptr<Frame<T>> DoShallowClone() const override;
 
   math::RigidTransform<T> DoCalcPoseInBodyFrame(
-      const systems::Parameters<T>& parameters) const override;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const override;
 
   math::RotationMatrix<T> DoCalcRotationMatrixInBodyFrame(
-      const systems::Parameters<T>& parameters) const override;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const override;
 
  private:
-  // Implementation for Frame::DoDeclareFrameParameters().
-  // FixedOffsetFrame declares a single parameter for its RigidTransform.
-  void DoDeclareFrameParameters(
-      internal::MultibodyTreeSystem<T>* tree_system) final {
-    // Model value of this transform is set to a dummy value to indicate that
-    // the model value is not used. This class stores the default value and
-    // sets it in DoSetDefaultFrameParameters().
-    X_PF_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(12));
+  // Implementation for Frame::DoAssignFrameParameterSlots().
+  void DoAssignFrameParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator) final {
+    pose_parameter_slot_ = allocator->AllocateFixedFramePoseSlot();
   }
 
-  // Implementation for Frame::DoSetDefaultFrameParameters().
-  // FixedOffsetFrame sets a single parameter for its RigidTransform.
-  void DoSetDefaultFrameParameters(
-      systems::Parameters<T>* parameters) const final {
-    // Set default rigid transform between P and F.
-    systems::BasicVector<T>& X_PF_parameter =
-        parameters->get_mutable_numeric_parameter(X_PF_parameter_index_);
-    X_PF_parameter.set_value(Eigen::Map<const VectorX<T>>(
-        X_PF_.GetAsMatrix34().data(), 12, 1));
+  // Implementation for Frame::DoWriteDefaultFrameParameters().
+  //
+  // The pose is stored as a rotation and a translation rather than as twelve
+  // numbers in row-major order. The flattened form was a transport format: it
+  // needed a comment to say which nine entries were the rotation, and the
+  // rotation could not be validated without first knowing that.
+  void DoWriteDefaultFrameParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final {
+    orvd::multibody_runtime::FixedFramePoseParameters parameters;
+    parameters.R_PF = X_PF_.rotation().matrix();
+    parameters.p_PoFo_P = X_PF_.translation();
+    state->set_fixed_frame_pose_parameters(pose_parameter_slot_, parameters);
   }
 
   // The frame to which this frame is attached.
@@ -133,9 +133,10 @@ class FixedOffsetFrame final : public Frame<T> {
   // parent frame P.
   const math::RigidTransform<double> X_PF_;
 
-  // System parameter indices for `this` frame's RigidTransform stored in a
-  // context.
-  systems::NumericParameterIndex X_PF_parameter_index_;
+  // Where this frame's pose in its parent lives in the state, assigned when
+  // the model was finalized.
+  int pose_parameter_slot_{
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot};
 };
 
 }  // namespace multibody

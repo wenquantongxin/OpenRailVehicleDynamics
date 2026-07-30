@@ -5,6 +5,8 @@
 
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -49,7 +51,7 @@ UniformGravityFieldElement<T>::UniformGravityFieldElement(
 // to each mobilized body B's body frame origin Bo, and expressed in World.
 template <typename T>
 void UniformGravityFieldElement<T>::AccumulateGravitySpatialForces(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& pc,
     std::vector<SpatialForce<T>>* F_Bo_W_array) const {
   DRAKE_ASSERT(F_Bo_W_array != nullptr);
@@ -98,7 +100,7 @@ void UniformGravityFieldElement<T>::AccumulateGravitySpatialForces(
 
 template <typename T>
 VectorX<T> UniformGravityFieldElement<T>::CalcGravityGeneralizedForces(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   const internal::MultibodyTree<T>& model = this->get_parent_tree();
   const internal::PositionKinematicsCache<T>& pc =
@@ -124,7 +126,7 @@ VectorX<T> UniformGravityFieldElement<T>::CalcGravityGeneralizedForces(
 
 template <typename T>
 void UniformGravityFieldElement<T>::DoCalcAndAddForceContribution(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>&,
     MultibodyForces<T>* forces) const {
@@ -135,7 +137,7 @@ void UniformGravityFieldElement<T>::DoCalcAndAddForceContribution(
 
 template <typename T>
 T UniformGravityFieldElement<T>::CalcPotentialEnergy(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& pc) const {
   // Add the potential energy due to gravity for each body in the model.
   // Skip the world.
@@ -167,7 +169,7 @@ T UniformGravityFieldElement<T>::CalcPotentialEnergy(
 
 template <typename T>
 T UniformGravityFieldElement<T>::CalcConservativePower(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc) const {
   // Add the potential energy due to gravity for each body in the model.
@@ -209,7 +211,7 @@ T UniformGravityFieldElement<T>::CalcConservativePower(
 
 template <typename T>
 T UniformGravityFieldElement<T>::CalcNonConservativePower(
-    const systems::Context<T>&, const internal::PositionKinematicsCache<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // A uniform gravity field is conservative. Therefore return zero power.
   return 0.0;

@@ -3,6 +3,8 @@
 #include <utility>
 
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -38,7 +40,7 @@ const RevoluteJoint<T>& RevoluteSpring<T>::joint() const {
 
 template <typename T>
 void RevoluteSpring<T>::DoCalcAndAddForceContribution(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&,
     MultibodyForces<T>* forces) const {
@@ -49,7 +51,7 @@ void RevoluteSpring<T>::DoCalcAndAddForceContribution(
 
 template <typename T>
 T RevoluteSpring<T>::CalcPotentialEnergy(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&) const {
   const T delta = this->GetNominalAngle(context) - joint().get_angle(context);
 
@@ -58,7 +60,7 @@ T RevoluteSpring<T>::CalcPotentialEnergy(
 
 template <typename T>
 T RevoluteSpring<T>::CalcConservativePower(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // Since the potential energy is:
@@ -73,7 +75,7 @@ T RevoluteSpring<T>::CalcConservativePower(
 
 template <typename T>
 T RevoluteSpring<T>::CalcNonConservativePower(
-    const systems::Context<T>&, const internal::PositionKinematicsCache<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>&,
     const internal::VelocityKinematicsCache<T>&) const {
   // Purely conservative spring
   return 0;

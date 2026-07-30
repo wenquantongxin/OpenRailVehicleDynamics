@@ -8,6 +8,8 @@
 
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -52,7 +54,7 @@ LinearBushingRollPitchYaw<T>::~LinearBushingRollPitchYaw() = default;
 
 template <typename T>
 SpatialForce<T> LinearBushingRollPitchYaw<T>::CalcBushingSpatialForceOnFrameA(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   // Reminder: The set of all forces applied by the bushing to frame A are
   // replaced by the set's resultant force −𝐟 applied to point Ap of frame A
   // together with a torque −𝐭 equal to the moment of the set about point Ap.
@@ -79,7 +81,7 @@ SpatialForce<T> LinearBushingRollPitchYaw<T>::CalcBushingSpatialForceOnFrameA(
 
 template <typename T>
 SpatialForce<T> LinearBushingRollPitchYaw<T>::CalcBushingSpatialForceOnFrameC(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   // Reminder: The set of forces on C from the bushing can be replaced by a
   // force 𝐟 at point CAo (the point of C coincident with Ao) together with a
   // torque t_CAo equal to the moment of all bushing forces on C about CAo.
@@ -97,7 +99,7 @@ SpatialForce<T> LinearBushingRollPitchYaw<T>::CalcBushingSpatialForceOnFrameC(
 
 template <typename T>
 void LinearBushingRollPitchYaw<T>::DoCalcAndAddForceContribution(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const internal::PositionKinematicsCache<T>& /* pc */,
     const internal::VelocityKinematicsCache<T>& /* vc */,
     MultibodyForces<T>* forces) const {
@@ -213,7 +215,7 @@ void LinearBushingRollPitchYaw<T>::ThrowIfInvalidHalfAngleAxis(
 
 template <typename T>
 Vector3<T> LinearBushingRollPitchYaw<T>::CalcBushing_xyzDt(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   // Calculate V_AC_A, frame C's spatial velocity in frame A, expressed in A.
   const SpatialVelocity<T> V_AC_A =
       frameC().CalcSpatialVelocity(context, frameA(), frameA());
@@ -239,7 +241,7 @@ Vector3<T> LinearBushingRollPitchYaw<T>::CalcBushing_xyzDt(
 
 template <typename T>
 Vector3<T> LinearBushingRollPitchYaw<T>::CalcBushingTorqueOnCExpressedInA(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const Vector3<T> tau = CalcBushingTorqueTau(context);
   // The set of forces on frame C from the bushing is equivalent to a
   // torque 𝐭 on frame C and a force 𝐟 applied to a point Cp of C.
@@ -302,7 +304,7 @@ void LinearBushingRollPitchYaw<T>::ThrowPitchAngleViolatesGimbalLockTolerance(
 
 template <typename T>
 T LinearBushingRollPitchYaw<T>::CalcPotentialEnergy(
-    const systems::Context<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& /* pc */) const {
   // TODO(Mitiguy) Per issues #12982 and #12752, implement this method.
   //  Currently this method has not been implemented and throws an exception.
@@ -313,7 +315,7 @@ T LinearBushingRollPitchYaw<T>::CalcPotentialEnergy(
 
 template <typename T>
 T LinearBushingRollPitchYaw<T>::CalcConservativePower(
-    const systems::Context<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& /* pc */,
     const internal::VelocityKinematicsCache<T>& /* vc */) const {
   // TODO(Mitiguy) Per issues #12982 and #12752, implement the following method.
@@ -325,7 +327,7 @@ T LinearBushingRollPitchYaw<T>::CalcConservativePower(
 
 template <typename T>
 T LinearBushingRollPitchYaw<T>::CalcNonConservativePower(
-    const systems::Context<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& /* pc */,
     const internal::VelocityKinematicsCache<T>& /* vc */) const {
   // TODO(Mitiguy) Per issues #12982 and #12752, implement the following method.

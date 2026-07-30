@@ -654,7 +654,6 @@ void BodyNodeImpl<T, ConcreteMobilizer>::
 template <typename T, class ConcreteMobilizer>
 void BodyNodeImpl<T, ConcreteMobilizer>::
     CalcArticulatedBodyInertiaCache_TipToBase(
-        const systems::Context<T>& context,
         const PositionKinematicsCache<T>& pc,
         const Eigen::Ref<const MatrixUpTo6<T>>& H_PB_W,
         const SpatialInertia<T>& M_B_W, const VectorX<T>& diagonal_inertias,
@@ -765,10 +764,9 @@ void BodyNodeImpl<T, ConcreteMobilizer>::
 
   // We now proceed to compute Pplus_PB_W using Eq. (7):
   //   Pplus_PB_W = P_B_W - g_PB_W * U_B_W
-  // For weld joints (with kNv = 0) or locked joints, terms involving the hinge
-  // matrix H_PB_W go away and therefore Pplus_PB_W = P_B_W. We check this
-  // below.
-  if (kNv != 0 && !mobilizer_->is_locked(context)) {
+  // For weld joints (with kNv = 0) the terms involving the hinge matrix H_PB_W
+  // go away and therefore Pplus_PB_W = P_B_W. We check this below.
+  if (kNv != 0) {
     // Compute common term U_B_W.
     const MatrixUpTo6<T> U_B_W = H_PB_W.transpose() * P_B_W;
 
@@ -807,7 +805,6 @@ void BodyNodeImpl<T, ConcreteMobilizer>::
 template <typename T, class ConcreteMobilizer>
 void BodyNodeImpl<T, ConcreteMobilizer>::
     CalcArticulatedBodyForceCache_TipToBase(
-        const systems::Context<T>& context,
         const PositionKinematicsCache<T>& pc, const VelocityKinematicsCache<T>*,
         const SpatialForce<T>& Fb_Bo_W,
         const ArticulatedBodyInertiaCache<T>& abic,
@@ -845,8 +842,8 @@ void BodyNodeImpl<T, ConcreteMobilizer>::
 
   get_mutable_Zplus_PB_W(aba_force_cache) = Z_Bo_W + Zb_Bo_W;
 
-  // These terms do not show up for zero mobilities (weld or locked).
-  if (kNv != 0 && !mobilizer_->is_locked(context)) {
+  // These terms do not show up for zero mobilities (weld).
+  if (kNv != 0) {
     // Compute the articulated body inertia innovations generalized force,
     // e_B, according to (4).
     VectorUpTo6<T>& e_B = get_mutable_e_B(aba_force_cache);
@@ -863,7 +860,6 @@ void BodyNodeImpl<T, ConcreteMobilizer>::
 template <typename T, class ConcreteMobilizer>
 void BodyNodeImpl<T, ConcreteMobilizer>::
     CalcArticulatedBodyAccelerations_BaseToTip(
-        const systems::Context<T>& context,
         const PositionKinematicsCache<T>& pc,
         const ArticulatedBodyInertiaCache<T>& abic,
         const ArticulatedBodyForceCache<T>& aba_force_cache,
@@ -891,13 +887,9 @@ void BodyNodeImpl<T, ConcreteMobilizer>::
   SpatialAcceleration<T>& A_WB = get_mutable_A_WB(ac);
   A_WB = Aplus_WB + Ab_WB;
 
-  // These quantities do not contribute when nv = 0 (weld or locked joint). We
-  // skip them since Eigen does not allow certain operations on zero-sized
-  // objects. It is important to set the generalized accelerations to zero for
-  // locked mobilizers.
-  if (mobilizer_->is_locked(context)) {
-    get_mutable_accelerations(ac).setZero();
-  } else if (kNv != 0) {
+  // These quantities do not contribute when nv = 0 (a weld joint). We skip them
+  // since Eigen does not allow certain operations on zero-sized objects.
+  if (kNv != 0) {
     // Compute nu_B, the articulated body inertia innovations generalized
     // acceleration.
     const VectorUpTo6<T> nu_B =

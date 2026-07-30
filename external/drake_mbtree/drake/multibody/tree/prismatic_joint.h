@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/prismatic_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -25,9 +27,6 @@ template <typename T>
 class PrismaticJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(PrismaticJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   static const char kTypeName[];
 
@@ -131,7 +130,7 @@ class PrismaticJoint final : public Joint<T> {
   /// @param[in] context
   ///   The context of the MultibodyTree this joint belongs to.
   /// @returns The translation coordinate of `this` joint read from `context`.
-  const T& get_translation(const Context<T>& context) const {
+  const T& get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translation(context);
   }
 
@@ -142,7 +141,7 @@ class PrismaticJoint final : public Joint<T> {
   /// @param[in] translation
   ///   The desired translation in meters to be stored in `context`.
   /// @returns a constant reference to `this` joint.
-  const PrismaticJoint<T>& set_translation(Context<T>* context,
+  const PrismaticJoint<T>& set_translation(orvd::multibody_runtime::MultibodyStateInstance* context,
                                            const T& translation) const {
     get_mobilizer().SetTranslation(context, translation);
     return *this;
@@ -154,7 +153,7 @@ class PrismaticJoint final : public Joint<T> {
   ///   The context of the MultibodyTree this joint belongs to.
   /// @returns The rate of change of `this` joint's translation read from
   /// `context`.
-  const T& get_translation_rate(const Context<T>& context) const {
+  const T& get_translation_rate(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translation_rate(context);
   }
 
@@ -168,7 +167,7 @@ class PrismaticJoint final : public Joint<T> {
   ///   second.
   /// @returns a constant reference to `this` joint.
   const PrismaticJoint<T>& set_translation_rate(
-      Context<T>* context, const T& translation_dot) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation_dot) const {
     get_mobilizer().SetTranslationRate(context, translation_dot);
     return *this;
   }
@@ -177,7 +176,7 @@ class PrismaticJoint final : public Joint<T> {
   /// `context`. Refer to default_damping() for details.
   /// @param[in] context The context storing the state and parameters for the
   /// model to which `this` joint belongs.
-  const T& GetDamping(const Context<T>& context) const {
+  const T& GetDamping(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return this->GetDampingVector(context)[0];
   }
 
@@ -187,7 +186,7 @@ class PrismaticJoint final : public Joint<T> {
   /// model to which `this` joint belongs.
   /// @param[in] damping The damping value.
   /// @throws std::exception if `damping` is negative.
-  void SetDamping(Context<T>* context, const T& damping) const {
+  void SetDamping(orvd::multibody_runtime::MultibodyStateInstance* context, const T& damping) const {
     DRAKE_THROW_UNLESS(damping >= 0);
     this->SetDampingVector(context, Vector1<T>(damping));
   }
@@ -214,7 +213,7 @@ class PrismaticJoint final : public Joint<T> {
   /// positive in the direction along this joint's axis.
   /// That is, a positive force causes a positive translational acceleration
   /// along the joint's axis.
-  void AddInForce(const systems::Context<T>& context, const T& force,
+  void AddInForce(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const T& force,
                   MultibodyForces<T>* multibody_forces) const {
     DRAKE_DEMAND(multibody_forces != nullptr);
     DRAKE_DEMAND(this->has_parent_tree());
@@ -232,7 +231,7 @@ class PrismaticJoint final : public Joint<T> {
   /// child (according to the prismatic joint's constructor) at the origin of
   /// the child frame (which is coincident with the origin of the parent frame
   /// at all times).
-  void DoAddInOneForce(const systems::Context<T>&, int joint_dof,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int joint_dof,
                        const T& joint_tau,
                        MultibodyForces<T>* forces) const final {
     // Right now we assume all the forces in joint_tau go into a single
@@ -249,7 +248,7 @@ class PrismaticJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative force according to the
   /// viscous law `f = -d⋅v`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const systems::Context<T>& context,
+  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                       MultibodyForces<T>* forces) const final {
     const T damping_force =
         -this->GetDamping(context) * get_translation_rate(context);
@@ -284,11 +283,11 @@ class PrismaticJoint final : public Joint<T> {
     }
   }
 
-  const T& DoGetOnePosition(const systems::Context<T>& context) const final {
+  const T& DoGetOnePosition(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
     return get_translation(context);
   }
 
-  const T& DoGetOneVelocity(const systems::Context<T>& context) const final {
+  const T& DoGetOneVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const final {
     return get_translation_rate(context);
   }
 

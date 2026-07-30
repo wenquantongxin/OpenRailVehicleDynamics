@@ -1,4 +1,5 @@
 #include "drake/multibody/tree/joint.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -39,51 +40,53 @@ void Joint<T>::set_default_positions(const VectorX<double>& default_positions) {
 
 template <typename T>
 void Joint<T>::SetPositions(
-    systems::Context<T>* context,
+    orvd::multibody_runtime::MultibodyStateInstance* context,
     const Eigen::Ref<const VectorX<T>>& positions) const {
   DRAKE_THROW_UNLESS(context != nullptr);
   DRAKE_THROW_UNLESS(positions.size() == num_positions());
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetPositions");
   DRAKE_DEMAND(has_mobilizer());
-  const Eigen::VectorBlock<VectorX<T>> all_q =
-      this->get_parent_tree().GetMutablePositions(&*context);
+  // The whole of q is copied, this joint's segment is changed, and the store
+  // takes the result: one validation and one version advance. The array helper
+  // still does the segmenting, but now on a vector the caller owns rather than
+  // on the live state.
+  VectorX<T> all_q = this->get_parent_tree().get_positions(*context);
   mobilizer_->get_mutable_positions_from_array(&all_q) = positions;
+  this->get_parent_tree().SetPositions(context, all_q);
 }
 
 template <typename T>
 Eigen::Ref<const VectorX<T>> Joint<T>::GetPositions(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetPositions");
   DRAKE_DEMAND(has_mobilizer());
-  const Eigen::VectorBlock<const VectorX<T>> all_q =
-      this->get_parent_tree().get_positions(context);
+  const VectorX<T>& all_q = this->get_parent_tree().get_positions(context);
   return mobilizer_->get_positions_from_array(all_q);
 }
 
 template <typename T>
 void Joint<T>::SetVelocities(
-    systems::Context<T>* context,
+    orvd::multibody_runtime::MultibodyStateInstance* context,
     const Eigen::Ref<const VectorX<T>>& velocities) const {
   DRAKE_THROW_UNLESS(context != nullptr);
   DRAKE_THROW_UNLESS(velocities.size() == num_velocities());
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetVelocities");
   DRAKE_DEMAND(has_mobilizer());
-  const Eigen::VectorBlock<VectorX<T>> all_v =
-      this->get_parent_tree().GetMutableVelocities(&*context);
+  VectorX<T> all_v = this->get_parent_tree().get_velocities(*context);
   mobilizer_->get_mutable_velocities_from_array(&all_v) = velocities;
+  this->get_parent_tree().SetVelocities(context, all_v);
 }
 
 template <typename T>
 Eigen::Ref<const VectorX<T>> Joint<T>::GetVelocities(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetVelocities");
   DRAKE_DEMAND(has_mobilizer());
-  const Eigen::VectorBlock<const VectorX<T>> all_v =
-      this->get_parent_tree().get_velocities(context);
+  const VectorX<T>& all_v = this->get_parent_tree().get_velocities(context);
   return mobilizer_->get_velocities_from_array(all_v);
 }
 
@@ -133,15 +136,14 @@ std::string Joint<T>::MakeUniqueOffsetFrameName(
 }
 
 template <typename T>
-void Joint<T>::SetSpatialVelocityImpl(systems::Context<T>* context,
+void Joint<T>::SetSpatialVelocityImpl(orvd::multibody_runtime::MultibodyStateInstance* context,
                                       const SpatialVelocity<T>& V_FM,
                                       const char* func) const {
   DRAKE_THROW_UNLESS(context != nullptr);
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetSpatialVelocity");
   DRAKE_DEMAND(has_mobilizer());
-  if (!mobilizer_->SetSpatialVelocity(*context, V_FM,
-                                      &context->get_mutable_state())) {
+  if (!mobilizer_->SetSpatialVelocity(V_FM, context)) {
     throw std::logic_error(
         fmt::format("{}(): {} joint does not implement this function "
                     "(joint '{}')",
@@ -151,7 +153,7 @@ void Joint<T>::SetSpatialVelocityImpl(systems::Context<T>* context,
 
 template <typename T>
 SpatialVelocity<T> Joint<T>::GetSpatialVelocity(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetSpatialVelocity");
   DRAKE_DEMAND(has_mobilizer());
@@ -159,15 +161,14 @@ SpatialVelocity<T> Joint<T>::GetSpatialVelocity(
 }
 
 template <typename T>
-void Joint<T>::SetPosePairImpl(systems::Context<T>* context,
+void Joint<T>::SetPosePairImpl(orvd::multibody_runtime::MultibodyStateInstance* context,
                                const Quaternion<T>& q_FM,
                                const Vector3<T>& p_FM, const char* func) const {
   DRAKE_THROW_UNLESS(context != nullptr);
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::SetPosePair");
   DRAKE_DEMAND(has_mobilizer());
-  if (!mobilizer_->SetPosePair(*context, q_FM, p_FM,
-                               &context->get_mutable_state())) {
+  if (!mobilizer_->SetPosePair(q_FM, p_FM, context)) {
     throw std::logic_error(
         fmt::format("{}(): {} joint does not implement this function "
                     "(joint '{}')",
@@ -177,7 +178,7 @@ void Joint<T>::SetPosePairImpl(systems::Context<T>* context,
 
 template <typename T>
 std::pair<Eigen::Quaternion<T>, Vector3<T>> Joint<T>::GetPosePair(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   DRAKE_THROW_UNLESS(this->has_parent_tree());
   this->get_parent_tree().ThrowIfNotFinalized("Joint::GetPosePair");
   DRAKE_DEMAND(has_mobilizer());

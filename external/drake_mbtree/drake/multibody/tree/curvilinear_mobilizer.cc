@@ -5,6 +5,7 @@
 
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -50,7 +51,7 @@ std::string CurvilinearMobilizer<T>::velocity_suffix(
 
 template <typename T>
 const T& CurvilinearMobilizer<T>::get_distance(
-    const drake::systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   auto q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
@@ -58,16 +59,17 @@ const T& CurvilinearMobilizer<T>::get_distance(
 
 template <typename T>
 const CurvilinearMobilizer<T>& CurvilinearMobilizer<T>::SetDistance(
-    drake::systems::Context<T>* context, const T& distance) const {
-  auto q = this->GetMutablePositions(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& distance) const {
+  QVector<T> q = this->get_positions(*context);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = distance;
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 const T& CurvilinearMobilizer<T>::get_tangential_velocity(
-    const drake::systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& v = this->get_velocities(context);
   DRAKE_ASSERT(v.size() == kNv);
   return v.coeffRef(0);
@@ -75,10 +77,11 @@ const T& CurvilinearMobilizer<T>::get_tangential_velocity(
 
 template <typename T>
 const CurvilinearMobilizer<T>& CurvilinearMobilizer<T>::SetTangentialVelocity(
-    drake::systems::Context<T>* context, const T& tangential_velocity) const {
-  auto v = this->GetMutableVelocities(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& tangential_velocity) const {
+  VVector<T> v = this->get_velocities(*context);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = tangential_velocity;
+  this->SetVelocities(context, v);
   return *this;
 }
 
@@ -144,7 +147,7 @@ void CurvilinearMobilizer<T>::calc_tau_from_M(const math::RigidTransform<T>&,
 
 template <typename T>
 math::RigidTransform<T> CurvilinearMobilizer<T>::CalcAcrossMobilizerTransform(
-    const drake::systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
@@ -152,7 +155,7 @@ math::RigidTransform<T> CurvilinearMobilizer<T>::CalcAcrossMobilizerTransform(
 
 template <typename T>
 SpatialVelocity<T> CurvilinearMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const drake::systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   const auto& q = this->get_positions(context);
@@ -162,7 +165,7 @@ SpatialVelocity<T> CurvilinearMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T>
 SpatialAcceleration<T>
 CurvilinearMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const drake::systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
   const auto& q = this->get_positions(context);
@@ -172,7 +175,7 @@ CurvilinearMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
 
 template <typename T>
 void CurvilinearMobilizer<T>::ProjectSpatialForce(
-    const drake::systems::Context<T>& context, const SpatialForce<T>& F_BMo_F,
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);
   const auto& q = this->get_positions(context);
@@ -180,39 +183,39 @@ void CurvilinearMobilizer<T>::ProjectSpatialForce(
 }
 
 template <typename T>
-void CurvilinearMobilizer<T>::DoCalcNMatrix(const systems::Context<T>&,
+void CurvilinearMobilizer<T>::DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                             EigenPtr<MatrixX<T>> N) const {
   (*N)(0, 0) = 1.0;
 }
 
 template <typename T>
 void CurvilinearMobilizer<T>::DoCalcNplusMatrix(
-    const systems::Context<T>&, EigenPtr<MatrixX<T>> Nplus) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, EigenPtr<MatrixX<T>> Nplus) const {
   (*Nplus)(0, 0) = 1.0;
 }
 
 template <typename T>
 void CurvilinearMobilizer<T>::DoCalcNDotMatrix(
-    const systems::Context<T>&, EigenPtr<MatrixX<T>> Ndot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, EigenPtr<MatrixX<T>> Ndot) const {
   (*Ndot)(0, 0) = 0.0;
 }
 
 template <typename T>
 void CurvilinearMobilizer<T>::DoCalcNplusDotMatrix(
-    const systems::Context<T>&, EigenPtr<MatrixX<T>> NplusDot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, EigenPtr<MatrixX<T>> NplusDot) const {
   (*NplusDot)(0, 0) = 0.0;
 }
 
 template <typename T>
 void CurvilinearMobilizer<T>::DoMapVelocityToQDot(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v,
     EigenPtr<VectorX<T>> qdot) const {
   *qdot = v;
 }
 
 template <typename T>
 void CurvilinearMobilizer<T>::DoMapQDotToVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& qdot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& qdot,
     EigenPtr<VectorX<T>> v) const {
   *v = qdot;
 }

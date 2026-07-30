@@ -19,6 +19,7 @@
 #include "drake/multibody/tree/rigid_body.h"
 #include "drake/multibody/tree/spatial_inertia.h"
 #include "drake/multibody/tree/velocity_kinematics_cache.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -475,9 +476,8 @@ class BodyNode : public MultibodyElement<T> {
   //  - Prismatic: [0 0 0 x y z]
   //  - Ball: 3x3 blocks of zeroes.
 
-  // TODO(sherm1) This function should not take a context.
   virtual void CalcArticulatedBodyInertiaCache_TipToBase(
-      const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+      const PositionKinematicsCache<T>& pc,
       const Eigen::Ref<const MatrixUpTo6<T>>& H_PB_W,
       const SpatialInertia<T>& M_B_W, const VectorX<T>& diagonal_inertias,
       ArticulatedBodyInertiaCache<T>* abic) const = 0;
@@ -525,9 +525,8 @@ class BodyNode : public MultibodyElement<T> {
   // @throws when called on the _root_ node or `aba_force_cache` is
   // nullptr.
 
-  // TODO(sherm1) This function should not take a context.
   virtual void CalcArticulatedBodyForceCache_TipToBase(
-      const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+      const PositionKinematicsCache<T>& pc,
       const VelocityKinematicsCache<T>*, const SpatialForce<T>& Fb_Bo_W,
       const ArticulatedBodyInertiaCache<T>& abic,
       const SpatialForce<T>& Zb_Bo_W, const SpatialForce<T>& Fapplied_Bo_W,
@@ -570,9 +569,8 @@ class BodyNode : public MultibodyElement<T> {
   // predecessor nodes in the tree.)
   // @throws when called on the _root_ node of `ac` or `vdot` is nullptr.
 
-  // TODO(sherm1) This function should not take a context.
   virtual void CalcArticulatedBodyAccelerations_BaseToTip(
-      const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+      const PositionKinematicsCache<T>& pc,
       const ArticulatedBodyInertiaCache<T>& abic,
       const ArticulatedBodyForceCache<T>& aba_force_cache,
       const Eigen::Ref<const MatrixUpTo6<T>>& H_PB_W,
@@ -661,11 +659,13 @@ class BodyNode : public MultibodyElement<T> {
   // Helpers to access the state.
   // Returns an Eigen expression of the vector of generalized velocities.
   Eigen::VectorBlock<const VectorX<T>> get_mobilizer_velocities(
-      const systems::Context<T>& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     DRAKE_ASSERT(this->has_parent_tree());
     const MultibodyTree<T>& tree = this->get_parent_tree();
-    return tree.get_state_segment(
-        context, tree.num_positions() + mobod().v_start(), mobod().nv());
+    // Straight into v at this node's own offset. Upstream had to write
+    // `num_positions() + v_start()` because it indexed one concatenated
+    // `[q; v]`; that addition is gone with the concatenation.
+    return tree.get_velocity_segment(context, mobod().v_start(), mobod().nv());
   }
 
   // Helper to get an Eigen expression of the vector of generalized velocities

@@ -7,6 +7,7 @@
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -31,20 +32,21 @@ FixedOffsetFrame<T>::~FixedOffsetFrame() = default;
 
 template <typename T>
 void FixedOffsetFrame<T>::SetPoseInParentFrame(
-    systems::Context<T>* context, const math::RigidTransform<T>& X_PF) const {
-  systems::BasicVector<T>& X_PF_parameter =
-      context->get_mutable_numeric_parameter(X_PF_parameter_index_);
-  X_PF_parameter.set_value(
-      Eigen::Map<const VectorX<T>>(X_PF.GetAsMatrix34().data(), 12, 1));
+    orvd::multibody_runtime::MultibodyStateInstance* state,
+    const math::RigidTransform<T>& X_PF) const {
+  orvd::multibody_runtime::FixedFramePoseParameters parameters;
+  parameters.R_PF = X_PF.rotation().matrix();
+  parameters.p_PoFo_P = X_PF.translation();
+  state->set_fixed_frame_pose_parameters(pose_parameter_slot_, parameters);
 }
 
 template <typename T>
 math::RigidTransform<T> FixedOffsetFrame<T>::GetPoseInParentFrame(
-    const systems::Context<T>& context) const {
-  const systems::BasicVector<T>& X_PF_parameter =
-      context.get_numeric_parameter(X_PF_parameter_index_);
-  return math::RigidTransform<T>(Eigen::Map<const Eigen::Matrix<T, 3, 4>>(
-      X_PF_parameter.get_value().data()));
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+  const orvd::multibody_runtime::FixedFramePoseParameters& parameters =
+      state.fixed_frame_pose_parameters(pose_parameter_slot_);
+  return math::RigidTransform<T>(
+      math::RotationMatrix<T>(parameters.R_PF), parameters.p_PoFo_P);
 }
 
 template <typename T>
@@ -57,27 +59,23 @@ std::unique_ptr<Frame<T>> FixedOffsetFrame<T>::DoShallowClone() const {
 
 template <typename T>
 math::RigidTransform<T> FixedOffsetFrame<T>::DoCalcPoseInBodyFrame(
-    const systems::Parameters<T>& parameters) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   // X_BF = X_BP * X_PF
-  const systems::BasicVector<T>& X_PF_parameter =
-      parameters.get_numeric_parameter(X_PF_parameter_index_);
-  const math::RigidTransform<T> X_PF =
-      math::RigidTransform<T>(Eigen::Map<const Eigen::Matrix<T, 3, 4>>(
-          X_PF_parameter.get_value().data()));
-  return parent_frame_.CalcOffsetPoseInBody(parameters, X_PF);
+  const orvd::multibody_runtime::FixedFramePoseParameters& stored =
+      state.fixed_frame_pose_parameters(pose_parameter_slot_);
+  const math::RigidTransform<T> X_PF(math::RotationMatrix<T>(stored.R_PF),
+                                     stored.p_PoFo_P);
+  return parent_frame_.CalcOffsetPoseInBody(state, X_PF);
 }
 
 template <typename T>
 math::RotationMatrix<T> FixedOffsetFrame<T>::DoCalcRotationMatrixInBodyFrame(
-    const systems::Parameters<T>& parameters) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   // R_BF = R_BP * R_PF
-  const systems::BasicVector<T>& X_PF_parameter =
-      parameters.get_numeric_parameter(X_PF_parameter_index_);
+  const orvd::multibody_runtime::FixedFramePoseParameters& stored =
+      state.fixed_frame_pose_parameters(pose_parameter_slot_);
   return parent_frame_.CalcOffsetRotationMatrixInBody(
-      parameters,
-      math::RotationMatrix<T>(Eigen::Map<const Eigen::Matrix<T, 3, 4>>(
-                                  X_PF_parameter.get_value().data())
-                                  .template block<3, 3>(0, 0)));
+      state, math::RotationMatrix<T>(stored.R_PF));
 }
 
 }  // namespace multibody

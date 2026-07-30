@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/universal_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -42,9 +44,6 @@ template <typename T>
 class UniversalJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(UniversalJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   /// The name for this Joint type.  It resolves to "universal".
   static const char kTypeName[];
@@ -107,7 +106,7 @@ class UniversalJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @returns The angle coordinates of `this` joint stored in the `context`
   ///          ordered as (θ₁, θ₂).
-  Vector2<T> get_angles(const Context<T>& context) const {
+  Vector2<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angles(context);
   }
 
@@ -118,7 +117,7 @@ class UniversalJoint final : public Joint<T> {
   ///                   ordered as (θ₁, θ₂). See class documentation for
   ///                   details.
   /// @returns a constant reference to `this` joint.
-  const UniversalJoint<T>& set_angles(Context<T>* context,
+  const UniversalJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* context,
                                       const Vector2<T>& angles) const {
     get_mobilizer().SetAngles(context, angles);
     return *this;
@@ -129,7 +128,7 @@ class UniversalJoint final : public Joint<T> {
   /// @param[in] context The context of the model this joint belongs to.
   /// @returns The rates of change of `this` joint's angles as stored in the
   ///          `context`.
-  Vector2<T> get_angular_rates(const systems::Context<T>& context) const {
+  Vector2<T> get_angular_rates(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angular_rates(context);
   }
 
@@ -141,7 +140,7 @@ class UniversalJoint final : public Joint<T> {
   ///                      in radians per second.
   /// @returns a constant reference to `this` joint.
   const UniversalJoint<T>& set_angular_rates(
-      systems::Context<T>* context, const Vector2<T>& theta_dot) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector2<T>& theta_dot) const {
     get_mobilizer().SetAngularRates(context, theta_dot);
     return *this;
   }
@@ -175,7 +174,7 @@ class UniversalJoint final : public Joint<T> {
   /// the right-hand-rule with the thumb aligned in the direction of the
   /// selected axis. That is, a positive torque causes a positive rotational
   /// acceleration (of the child body frame).
-  void DoAddInOneForce(const systems::Context<T>&, int joint_dof,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int joint_dof,
                        const T& joint_tau,
                        MultibodyForces<T>* forces) const final {
     DRAKE_DEMAND(joint_dof < 2);
@@ -190,7 +189,7 @@ class UniversalJoint final : public Joint<T> {
   /// This method adds into `forces` a dissipative torque according to the
   /// viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   /// default_damping()).
-  void DoAddInDamping(const systems::Context<T>& context,
+  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> tau =
         get_mobilizer().get_mutable_generalized_forces_from_array(

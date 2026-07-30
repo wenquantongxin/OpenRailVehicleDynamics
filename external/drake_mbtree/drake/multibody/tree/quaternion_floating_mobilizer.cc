@@ -7,6 +7,7 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -132,7 +133,7 @@ std::string QuaternionFloatingMobilizer<T>::velocity_suffix(
 
 template <typename T>
 Quaternion<T> QuaternionFloatingMobilizer<T>::get_quaternion(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   // Note: In the context we store the quaternion's components first, followed
@@ -147,7 +148,7 @@ Quaternion<T> QuaternionFloatingMobilizer<T>::get_quaternion(
 
 template <typename T>
 Vector3<T> QuaternionFloatingMobilizer<T>::get_translation(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   // Note: In the context we store the quaternion's components first (q₀ to q₃),
@@ -157,52 +158,35 @@ Vector3<T> QuaternionFloatingMobilizer<T>::get_translation(
 
 template <typename T>
 const QuaternionFloatingMobilizer<T>&
-QuaternionFloatingMobilizer<T>::SetQuaternion(systems::Context<T>* context,
-                                              const Quaternion<T>& q_FM) const {
-  DRAKE_DEMAND(context != nullptr);
-  SetQuaternion(*context, q_FM, &context->get_mutable_state());
-  return *this;
-}
-
-template <typename T>
-const QuaternionFloatingMobilizer<T>&
-QuaternionFloatingMobilizer<T>::SetQuaternion(const systems::Context<T>&,
-                                              const Quaternion<T>& q_FM,
-                                              systems::State<T>* state) const {
+QuaternionFloatingMobilizer<T>::SetQuaternion(
+    orvd::multibody_runtime::MultibodyStateInstance* state,
+    const Quaternion<T>& q_FM) const {
   DRAKE_DEMAND(state != nullptr);
-  auto q = this->get_mutable_positions(state);
-  DRAKE_ASSERT(q.size() == kNq);
+  QVector<T> q = this->get_positions(*state);
   // Note: The storage order documented in get_quaternion() is consistent with
   // the order below, q[0] is the "scalar" part and q[1:3] is the "vector" part.
   q[0] = q_FM.w();
   q.template segment<3>(1) = q_FM.vec();
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 const QuaternionFloatingMobilizer<T>&
-QuaternionFloatingMobilizer<T>::SetTranslation(systems::Context<T>* context,
-                                               const Vector3<T>& p_FM) const {
-  DRAKE_DEMAND(context != nullptr);
-  return SetTranslation(*context, p_FM, &context->get_mutable_state());
-}
-
-template <typename T>
-const QuaternionFloatingMobilizer<T>&
-QuaternionFloatingMobilizer<T>::SetTranslation(const systems::Context<T>&,
-                                               const Vector3<T>& p_FM,
-                                               systems::State<T>* state) const {
+QuaternionFloatingMobilizer<T>::SetTranslation(
+    orvd::multibody_runtime::MultibodyStateInstance* state,
+    const Vector3<T>& p_FM) const {
   DRAKE_DEMAND(state != nullptr);
-  auto q = this->get_mutable_positions(&*state);
-  DRAKE_ASSERT(q.size() == kNq);
+  QVector<T> q = this->get_positions(*state);
   // Note: see storage order notes in get_position().
   q.template tail<3>() = p_FM;
+  this->SetPositions(state, q);
   return *this;
 }
 
 template <typename T>
 Vector3<T> QuaternionFloatingMobilizer<T>::get_angular_velocity(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   // Note: we store the components of the angular velocity w_FM first, followed
   // by the components of the position vector v_FM.
   return this->get_velocities(context).template head<3>();
@@ -211,25 +195,19 @@ Vector3<T> QuaternionFloatingMobilizer<T>::get_angular_velocity(
 template <typename T>
 const QuaternionFloatingMobilizer<T>&
 QuaternionFloatingMobilizer<T>::SetAngularVelocity(
-    systems::Context<T>* context, const Vector3<T>& w_FM) const {
-  return SetAngularVelocity(*context, w_FM, &context->get_mutable_state());
-}
-
-template <typename T>
-const QuaternionFloatingMobilizer<T>&
-QuaternionFloatingMobilizer<T>::SetAngularVelocity(
-    const systems::Context<T>&, const Vector3<T>& w_FM,
-    systems::State<T>* state) const {
+    orvd::multibody_runtime::MultibodyStateInstance* state,
+    const Vector3<T>& w_FM) const {
+  DRAKE_DEMAND(state != nullptr);
   // Note: See storage order notes in get_angular_velocity().
-  auto v = this->get_mutable_velocities(state);
-  DRAKE_ASSERT(v.size() == kNv);
+  VVector<T> v = this->get_velocities(*state);
   v.template head<3>() = w_FM;
+  this->SetVelocities(state, v);
   return *this;
 }
 
 template <typename T>
 Vector3<T> QuaternionFloatingMobilizer<T>::get_translational_velocity(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   // Note: we store the components of the angular velocity w_FM first, followed
   // by the components of the position vector v_FM.
   return this->get_velocities(context).template tail<3>();
@@ -238,20 +216,13 @@ Vector3<T> QuaternionFloatingMobilizer<T>::get_translational_velocity(
 template <typename T>
 const QuaternionFloatingMobilizer<T>&
 QuaternionFloatingMobilizer<T>::SetTranslationalVelocity(
-    systems::Context<T>* context, const Vector3<T>& v_FM) const {
-  return SetTranslationalVelocity(*context, v_FM,
-                                  &context->get_mutable_state());
-}
-
-template <typename T>
-const QuaternionFloatingMobilizer<T>&
-QuaternionFloatingMobilizer<T>::SetTranslationalVelocity(
-    const systems::Context<T>&, const Vector3<T>& v_FM,
-    systems::State<T>* state) const {
-  auto v = this->get_mutable_velocities(state);
-  DRAKE_ASSERT(v.size() == kNv);
+    orvd::multibody_runtime::MultibodyStateInstance* state,
+    const Vector3<T>& v_FM) const {
+  DRAKE_DEMAND(state != nullptr);
+  VVector<T> v = this->get_velocities(*state);
   // Note: See storage order notes in get_translational_velocity().
   v.template tail<3>() = v_FM;
+  this->SetVelocities(state, v);
   return *this;
 }
 
@@ -281,7 +252,7 @@ auto QuaternionFloatingMobilizer<T>::DoPoseToPositions(
 template <typename T>
 math::RigidTransform<T>
 QuaternionFloatingMobilizer<T>::CalcAcrossMobilizerTransform(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
@@ -290,7 +261,7 @@ QuaternionFloatingMobilizer<T>::CalcAcrossMobilizerTransform(
 template <typename T>
 SpatialVelocity<T>
 QuaternionFloatingMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   return calc_V_FM(nullptr, v.data());
 }
@@ -298,7 +269,7 @@ QuaternionFloatingMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T>
 SpatialAcceleration<T>
 QuaternionFloatingMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const systems::Context<T>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
   return calc_A_FM(nullptr, nullptr, vdot.data());
@@ -306,7 +277,7 @@ QuaternionFloatingMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
 
 template <typename T>
 void QuaternionFloatingMobilizer<T>::ProjectSpatialForce(
-    const systems::Context<T>&, const SpatialForce<T>& F_BMo_F,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   calc_tau(nullptr, F_BMo_F, tau.data());
 }
@@ -423,7 +394,7 @@ QuaternionFloatingMobilizer<T>::QuaternionRateToAngularVelocityMatrix(
 
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoCalcNMatrix(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> N) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, EigenPtr<MatrixX<T>> N) const {
   // Upper-left block (rotational part of the N matrix) is Nᵣ ≜ 0.5 Q_FM.
   // See QuaternionFloatingMobilizer::CalcQMatrix() for details.
   N->template block<4, 3>(0, 0) =
@@ -435,7 +406,7 @@ void QuaternionFloatingMobilizer<T>::DoCalcNMatrix(
 
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoCalcNplusMatrix(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> Nplus) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, EigenPtr<MatrixX<T>> Nplus) const {
   const Quaternion<T> q_FM = get_quaternion(context);
   Nplus->template block<3, 4>(0, 0) =
       QuaternionRateToAngularVelocityMatrix(q_FM);  // Upper-left block.
@@ -446,7 +417,7 @@ void QuaternionFloatingMobilizer<T>::DoCalcNplusMatrix(
 
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoCalcNDotMatrix(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> Ndot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, EigenPtr<MatrixX<T>> Ndot) const {
   // For the rotational part of this mobilizer, the time-derivatives of the
   // generalized positions q̇_FM = q̇ᵣ = [q̇w, q̇x, q̇y, q̇z]ᵀ are related to the
   // rotational generalized velocities w_FM_F = vᵣ = [ωx, ωy, ωz]ᵀ as
@@ -484,7 +455,7 @@ void QuaternionFloatingMobilizer<T>::DoCalcNDotMatrix(
 //  distortions, similar to DoCalcNplusMatrix().
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoCalcNplusDotMatrix(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> NplusDot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, EigenPtr<MatrixX<T>> NplusDot) const {
   // For the rotational part of this mobilizer, the generalized velocities
   // w_FM_F = vᵣ = [ωx, ωy, ωz]ᵀ are related to the time-derivatives of the
   // generalized positions q̇_FM = q̇ᵣ = [q̇w, q̇x, q̇y, q̇z]ᵀ as vᵣ = Nᵣ⁺(q)⋅q̇ᵣ,
@@ -523,7 +494,7 @@ void QuaternionFloatingMobilizer<T>::DoCalcNplusDotMatrix(
 
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoMapVelocityToQDot(
-    const systems::Context<T>& context, const Eigen::Ref<const VectorX<T>>& v,
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const Eigen::Ref<const VectorX<T>>& v,
     EigenPtr<VectorX<T>> qdot) const {
   const Quaternion<T> q_FM = get_quaternion(context);
   // Angular component, q̇_FM = 0.5 * Q(q_FM) ⋅ w_FM_F:
@@ -535,7 +506,7 @@ void QuaternionFloatingMobilizer<T>::DoMapVelocityToQDot(
 
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoMapQDotToVelocity(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& qdot, EigenPtr<VectorX<T>> v) const {
   const Quaternion<T> q_FM = get_quaternion(context);
   // Angular component, w_FM_F = Nᵣ⁺(q_FM)⋅q̇_FM.
@@ -549,7 +520,7 @@ void QuaternionFloatingMobilizer<T>::DoMapQDotToVelocity(
 //  distortions, similar to DoMapVelocityToQDot().
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoMapAccelerationToQDDot(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& vdot,
     EigenPtr<VectorX<T>> qddot) const {
   // This function maps vdot to qddot by calculating q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇.
@@ -583,7 +554,7 @@ void QuaternionFloatingMobilizer<T>::DoMapAccelerationToQDDot(
 //  distortions, similar to DoMapQDotToVelocity().
 template <typename T>
 void QuaternionFloatingMobilizer<T>::DoMapQDDotToAcceleration(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& qddot,
     EigenPtr<VectorX<T>> vdot) const {
   // This function maps qddot to vdot by calculating v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈.
@@ -620,7 +591,7 @@ void QuaternionFloatingMobilizer<T>::DoMapQDDotToAcceleration(
 template <typename T>
 std::pair<Eigen::Quaternion<T>, Vector3<T>>
 QuaternionFloatingMobilizer<T>::GetPosePair(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return std::pair<Eigen::Quaternion<T>, Vector3<T>>(get_quaternion(context),
                                                      get_translation(context));
 }

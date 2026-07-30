@@ -11,7 +11,7 @@
 #include "drake/multibody/math/spatial_algebra.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -101,21 +101,21 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
    the provided context in meters.
    @param context The context of the model this mobilizer belongs to.
    @returns The distance coordinate of the mobilizer in the context. */
-  const T& get_distance(const systems::Context<T>& context) const;
+  const T& get_distance(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   /* Sets the distance of travel along the path of the mobilizer from
    the provided context in meters.
    @param context The context of the model this mobilizer belongs to.
    @param distance The desired distance coordinate of the mobilizer.
    @returns a const reference to this mobilizer */
-  const CurvilinearMobilizer<T>& SetDistance(systems::Context<T>* context,
+  const CurvilinearMobilizer<T>& SetDistance(orvd::multibody_runtime::MultibodyStateInstance* context,
                                              const T& distance) const;
 
   /* Gets the tangential velocity of the mobilizer from the provided context in
    meters per second.
    @param context The context of the model this mobilizer belongs to.
    @returns The velocity coordinate of the mobilizer in the context. */
-  const T& get_tangential_velocity(const systems::Context<T>& context) const;
+  const T& get_tangential_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   /* Sets the tangential velocity of the mobilizer from the provided context in
    meters per second.
@@ -123,7 +123,7 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
    @param tangential_velocity The desired velocity coordinate of the mobilizer.
    @returns a const reference to this mobilizer */
   const CurvilinearMobilizer<T>& SetTangentialVelocity(
-      systems::Context<T>* context, const T& tangential_velocity) const;
+      orvd::multibody_runtime::MultibodyStateInstance* context, const T& tangential_velocity) const;
 
   /* Computes the across-mobilizer transform X_FM(q) as a function of the
    distance traveled along the mobilizer's path.
@@ -186,44 +186,44 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
                        const SpatialForce<T>& F_BMo_M, T* tau) const;
 
   math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>& context) const final;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
 
   SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
-  void ProjectSpatialForce(const systems::Context<T>& context,
+  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const SpatialForce<T>& F_BMo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
   bool is_velocity_equal_to_qdot() const override { return true; }
 
  protected:
-  void DoCalcNMatrix(const systems::Context<T>& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const systems::Context<T>& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const systems::Context<T>& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const systems::Context<T>& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const systems::Context<T>& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const systems::Context<T>& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 

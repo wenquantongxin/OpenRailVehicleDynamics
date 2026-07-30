@@ -5,6 +5,7 @@
 
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -43,7 +44,7 @@ std::string PrismaticMobilizer<T>::velocity_suffix(
 
 template <typename T>
 const T& PrismaticMobilizer<T>::get_translation(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   auto q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
@@ -51,16 +52,17 @@ const T& PrismaticMobilizer<T>::get_translation(
 
 template <typename T>
 const PrismaticMobilizer<T>& PrismaticMobilizer<T>::SetTranslation(
-    systems::Context<T>* context, const T& translation) const {
-  auto q = this->GetMutablePositions(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation) const {
+  QVector<T> q = this->get_positions(*context);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = translation;
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 const T& PrismaticMobilizer<T>::get_translation_rate(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& v = this->get_velocities(context);
   DRAKE_ASSERT(v.size() == this->kNv);
   return v.coeffRef(0);
@@ -68,10 +70,11 @@ const T& PrismaticMobilizer<T>::get_translation_rate(
 
 template <typename T>
 const PrismaticMobilizer<T>& PrismaticMobilizer<T>::SetTranslationRate(
-    systems::Context<T>* context, const T& translation_dot) const {
-  auto v = this->GetMutableVelocities(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation_dot) const {
+  VVector<T> v = this->get_velocities(*context);
   DRAKE_ASSERT(v.size() == this->kNv);
   v[0] = translation_dot;
+  this->SetVelocities(context, v);
   return *this;
 }
 
@@ -83,7 +86,7 @@ template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 math::RigidTransform<T>
 PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerTransform(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == this->kNq);
   return calc_X_FM(q.data());
@@ -93,7 +96,7 @@ template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 SpatialVelocity<T>
 PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == this->kNv);
   return calc_V_FM(nullptr, v.data());
 }
@@ -102,7 +105,7 @@ template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 SpatialAcceleration<T>
 PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialAcceleration(
-    const systems::Context<T>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == this->kNv);
   return calc_A_FM(nullptr, nullptr, vdot.data());
@@ -111,60 +114,60 @@ PrismaticMobilizerAxial<T, axis>::CalcAcrossMobilizerSpatialAcceleration(
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
 void PrismaticMobilizerAxial<T, axis>::ProjectSpatialForce(
-    const systems::Context<T>&, const SpatialForce<T>& F_BMo_F,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == this->kNv);
   calc_tau(nullptr, F_BMo_F, tau.data());
 }
 
 template <typename T>
-void PrismaticMobilizer<T>::DoCalcNMatrix(const systems::Context<T>&,
+void PrismaticMobilizer<T>::DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                           EigenPtr<MatrixX<T>> N) const {
   (*N)(0, 0) = 1.0;
 }
 
 template <typename T>
 void PrismaticMobilizer<T>::DoCalcNplusMatrix(
-    const systems::Context<T>&, EigenPtr<MatrixX<T>> Nplus) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, EigenPtr<MatrixX<T>> Nplus) const {
   (*Nplus)(0, 0) = 1.0;
 }
 
 template <typename T>
-void PrismaticMobilizer<T>::DoCalcNDotMatrix(const systems::Context<T>&,
+void PrismaticMobilizer<T>::DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                              EigenPtr<MatrixX<T>> Ndot) const {
   (*Ndot)(0, 0) = 0.0;
 }
 
 template <typename T>
 void PrismaticMobilizer<T>::DoCalcNplusDotMatrix(
-    const systems::Context<T>&, EigenPtr<MatrixX<T>> NplusDot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, EigenPtr<MatrixX<T>> NplusDot) const {
   (*NplusDot)(0, 0) = 0.0;
 }
 
 template <typename T>
 void PrismaticMobilizer<T>::DoMapVelocityToQDot(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v,
     EigenPtr<VectorX<T>> qdot) const {
   *qdot = v;
 }
 
 template <typename T>
 void PrismaticMobilizer<T>::DoMapQDotToVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& qdot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& qdot,
     EigenPtr<VectorX<T>> v) const {
   *v = qdot;
 }
 
 template <typename T>
 void PrismaticMobilizer<T>::DoMapAccelerationToQDDot(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& vdot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& vdot,
     EigenPtr<VectorX<T>> qddot) const {
   *qddot = vdot;
 }
 
 template <typename T>
 void PrismaticMobilizer<T>::DoMapQDDotToAcceleration(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& qddot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& qddot,
     EigenPtr<VectorX<T>> vdot) const {
   *vdot = qddot;
 }

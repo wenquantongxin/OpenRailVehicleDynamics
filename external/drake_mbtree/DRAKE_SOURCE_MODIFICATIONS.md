@@ -332,3 +332,51 @@ BSD-3-Clause 没有对应条款,故另外 133 个被修改的文件在文件内�
   误述来源,不是保全来源。支撑源码原有的 Stanford/Apache-2.0 声明原样保留。
 - **没有改写 vendored Drake 的刚体算法主体。** 边界/API/include/说明的裁剪均逐项列在
   上文；四个位姿组合函数是明确分列的 ORVD 第一方实现。
+
+## G26:用类型化多体状态替换 systems 状态表面
+
+落位树不再引用 `drake/systems/framework/` 的任何东西。改动按机制分列如下。
+
+**状态与参数表面。** `systems::Context<T>`、`systems::State<T>`、`systems::Parameters<T>`、
+`systems::BasicVector<T>` 与数值/抽象参数索引全部消失,取而代之的是第一方的
+`orvd::multibody_runtime::MultibodyStateInstance`(只读或可写)与
+`orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext`(仅用于会触发
+惰性缓存求值的入口)。签名按**消费职责**而非按「哪里都能收」来定:一个只读广义位置的函数
+说自己要一个状态,一个可能算出并留下东西的函数说自己要一个上下文。
+
+**q 与 v 分离。** 上游把两者存在一个拼接的 `[q; v]` 里,所以速度偏移必须写成
+`num_qs_in_state() + velocity_start_in_v()`。类型化存储把它们分开,那个加法与整族拼接接口
+(`get_positions_and_velocities`、两个 combined mutable 入口、通用 state segment、
+model-instance 版 `GetPositionsAndVelocities`、`SetPositionsAndVelocities`)一并删除。
+按调用方自有数组工作的 `Get/SetPositionsFromArray` 一族保留——它们不依赖 q/v 连续存储。
+
+**没有活状态的可写视图。** 上游的 `GetMutablePositions(context)` 返回可写块供原地修改。
+持有它的调用方可以在版本推进之后继续写,而记录下来的版本描述的就是一个已经变了的状态。
+改为复制整值、改段、经存储的整值 setter 提交一次。同一高层操作修改同一 mobilizer 的多个
+子段时先合成完整段再提交:`SetFromRigidTransform`、自由体 pose 设置、`SetPosePair` 都是
+一次写事务,而不是两次。
+
+**连续/离散双路径退出。** `is_state_discrete()`、离散状态索引与其 vector helper、
+`extract_qv_from_continuous` 及其可变版全部删除,并非二选一。类型化存储持有的就是 q 和 v
+本身,不该再被称作 framework 的 continuous state。
+
+**元素参数槽。** `DeclareNumericParameter`/`DeclareAbstractParameter` 与通用参数池索引改为
+finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的两处合并:执行器的转子惯量与传动比
+合为一个槽(反射惯量要同时读两者),线性衬套的四个三元组合为一个槽(衬套力要同时读四者)。
+默认参数初始化保留为类型化流程 `DoWriteDefaultParameters`;默认 q 写入调用方自有向量,
+由模型在填完全部 mobilizer 后提交一次。
+
+**元素级缓存与离散状态声明整链删除。** `DeclareCacheEntries`/`DoDeclareCacheEntries`/
+`DeclareCacheEntry` 与 `DeclareDiscreteState`/`DoDeclareDiscreteState` 在落位集合内自我闭合、
+无派生覆盖也无调用点。缓存目录改由接入层工作区以具名成员冻结。
+
+**关节锁定整链删除。** `RigidBody`/`Joint`/`Mobilizer` 的 `Lock`/`Unlock`/`is_locked`、
+锁定抽象参数与其索引,以及 `body_node_impl.cc` 的三处锁定分支全部删除;焊接的 `kNv == 0`
+行为不变。删除后三条 BodyNode 内部 pass 的 `context` 形参完全未使用,连声明、覆写与调用点
+一并删除——上游自己在那三处标着 `// TODO(sherm1) This function should not take a context.`。
+首版多体运行时不支持运行时关节锁定;将来若需要,必须作为新的证据化产品决策连同存储、API、
+算法与测试完整重引入。
+
+**因移除 framework 头而失去的传递包含,改为直接写出。** `<Eigen/SparseCore>`、
+`drake/common/unused.h` 与 `block_system_jacobian_cache.h` 原先都经
+`systems/framework/context.h` 间接到达。

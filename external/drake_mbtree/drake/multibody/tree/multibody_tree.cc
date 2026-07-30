@@ -29,6 +29,8 @@
 #include "drake/multibody/tree/uniform_gravity_field_element.h"
 #include "drake/multibody/tree/weld_joint.h"
 #include "drake/multibody/tree/weld_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -1089,79 +1091,27 @@ void MultibodyTree<T>::FinalizeModelInstances() {
 }
 
 template <typename T>
-std::unique_ptr<systems::LeafContext<T>>
-MultibodyTree<T>::CreateDefaultContext() const {
-  if (tree_system_ == nullptr) {
-    throw std::runtime_error(
-        "MultibodyTree::CreateDefaultContext(): can only be called from a "
-        "MultibodyTree that is owned by a MultibodyPlant / "
-        "MultibodyTreeSystem");
-  }
-  return dynamic_pointer_cast<systems::LeafContext<T>>(
-      tree_system_->CreateDefaultContext());
-}
-
-template <typename T>
-void MultibodyTree<T>::SetDefaultState(const systems::Context<T>& context,
-                                       systems::State<T>* state) const {
+void MultibodyTree<T>::SetDefaultState(
+    orvd::multibody_runtime::MultibodyStateInstance* state) const {
+  DRAKE_DEMAND(state != nullptr);
+  // Every mobilizer's default segment is written into one vector the caller
+  // owns, and that vector is committed once. Committing per mobilizer would
+  // advance the position version once per mobilizer — a hundred versions for
+  // one act of setting the model to its defaults — and would copy the whole of
+  // q that many times.
+  VectorX<T> q = state->generalized_positions();
   for (const auto& mobilizer : mobilizers_) {
-    mobilizer->set_default_state(context, state);
+    mobilizer->WriteDefaultPositions(&q);
   }
-}
-
-template <typename T>
-VectorX<T> MultibodyTree<T>::GetPositionsAndVelocities(
-    const systems::Context<T>& context,
-    ModelInstanceIndex model_instance) const {
-  VectorX<T> instance_state_vector(num_states(model_instance));
-
-  GetPositionsAndVelocities(context, model_instance, &instance_state_vector);
-
-  return instance_state_vector;
-}
-
-template <typename T>
-void MultibodyTree<T>::GetPositionsAndVelocities(
-    const systems::Context<T>& context, ModelInstanceIndex model_instance,
-    EigenPtr<VectorX<T>> qv_out) const {
-  DRAKE_DEMAND(qv_out != nullptr);
-
-  Eigen::VectorBlock<const VectorX<T>> state_vector =
-      get_positions_and_velocities(context);
-
-  if (qv_out->size() !=
-      num_positions(model_instance) + num_velocities(model_instance))
-    throw std::logic_error("Output array is not properly sized.");
-
-  auto qv_out_head = qv_out->head(num_positions(model_instance));
-  auto qv_out_tail = qv_out->tail(num_velocities(model_instance));
-
-  GetPositionsFromArray(model_instance, state_vector.head(num_positions()),
-                        &qv_out_head);
-  GetVelocitiesFromArray(model_instance, state_vector.tail(num_velocities()),
-                         &qv_out_tail);
-}
-
-template <typename T>
-void MultibodyTree<T>::SetPositionsAndVelocities(
-    ModelInstanceIndex model_instance,
-    const Eigen::Ref<const VectorX<T>>& instance_state,
-    systems::Context<T>* context) const {
-  Eigen::VectorBlock<VectorX<T>> state_vector =
-      GetMutablePositionsAndVelocities(context);
-  Eigen::VectorBlock<VectorX<T>> q =
-      make_mutable_block_segment(&state_vector, 0, num_positions());
-  Eigen::VectorBlock<VectorX<T>> v = make_mutable_block_segment(
-      &state_vector, num_positions(), num_velocities());
-  SetPositionsInArray(model_instance,
-                      instance_state.head(num_positions(model_instance)), &q);
-  SetVelocitiesInArray(model_instance,
-                       instance_state.tail(num_velocities(model_instance)), &v);
+  state->set_generalized_positions(q);
+  // The default velocity is zero for every mobilizer, so v needs no per-element
+  // pass at all.
+  state->set_generalized_velocities(VectorX<T>::Zero(num_velocities()));
 }
 
 template <typename T>
 RigidTransform<T> MultibodyTree<T>::GetFreeBodyPoseOrThrow(
-    const systems::Context<T>& context, const RigidBody<T>& body) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const RigidBody<T>& body) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   const Mobilizer<T>& mobilizer = GetFreeBodyMobilizerOrThrow(body);
   return mobilizer.CalcAcrossMobilizerTransform(context);
@@ -1212,45 +1162,31 @@ MultibodyTree<T>::GetDefaultFloatingBaseBodyPoseAsQuaternionVec3Pair(
 template <typename T>
 void MultibodyTree<T>::SetFreeBodyPoseOrThrow(
     const RigidBody<T>& body, const RigidTransform<T>& X_WB,
-    systems::Context<T>* context) const {
-  DRAKE_MBT_THROW_IF_NOT_FINALIZED();
-  SetFreeBodyPoseOrThrow(body, X_WB, *context, &context->get_mutable_state());
-}
-
-template <typename T>
-void MultibodyTree<T>::SetFreeBodySpatialVelocityOrThrow(
-    const RigidBody<T>& body, const SpatialVelocity<T>& V_WB,
-    systems::Context<T>* context) const {
-  DRAKE_MBT_THROW_IF_NOT_FINALIZED();
-  SetFreeBodySpatialVelocityOrThrow(body, V_WB, *context,
-                                    &context->get_mutable_state());
-}
-
-template <typename T>
-void MultibodyTree<T>::SetFreeBodyPoseOrThrow(
-    const RigidBody<T>& body, const RigidTransform<T>& X_WB,
-    const systems::Context<T>& context, systems::State<T>* state) const {
+    orvd::multibody_runtime::MultibodyStateInstance* state) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   const Mobilizer<T>& mobilizer = GetFreeBodyMobilizerOrThrow(body);
+  // The quaternion and the translation reach the mobilizer together, so the
+  // whole of this body's q is assembled and committed once. Setting the
+  // orientation and then the translation would advance the position version
+  // twice for one pose and leave a mixed configuration visible in between.
   const RotationMatrix<T>& R_WB = X_WB.rotation();
-  mobilizer.SetPosePair(context, R_WB.ToQuaternion(), X_WB.translation(),
-                        state);
+  mobilizer.SetPosePair(R_WB.ToQuaternion(), X_WB.translation(), state);
 }
 
 template <typename T>
 void MultibodyTree<T>::SetFreeBodySpatialVelocityOrThrow(
     const RigidBody<T>& body, const SpatialVelocity<T>& V_WB,
-    const systems::Context<T>& context, systems::State<T>* state) const {
+    orvd::multibody_runtime::MultibodyStateInstance* state) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   const Mobilizer<T>& mobilizer = GetFreeBodyMobilizerOrThrow(body);
-  mobilizer.SetSpatialVelocity(context, V_WB, state);
+  mobilizer.SetSpatialVelocity(V_WB, state);
 }
 
 // Note that the result is indexed by LinkIndex (BodyIndex), not MobodIndex.
 // That is, we're returning X_WL for each Link L.
 template <typename T>
 void MultibodyTree<T>::CalcAllLinkPosesInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<RigidTransform<T>>* X_WL) const {
   DRAKE_THROW_UNLESS(X_WL != nullptr);
   const int num_link_indices = links_.num_indices();
@@ -1267,7 +1203,7 @@ void MultibodyTree<T>::CalcAllLinkPosesInWorld(
 // Note that the result is indexed by LinkIndex (BodyIndex), not MobodIndex.
 template <typename T>
 void MultibodyTree<T>::CalcAllLinkSpatialVelocitiesInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialVelocity<T>>* V_WL) const {
   DRAKE_THROW_UNLESS(V_WL != nullptr);
   const int num_link_indices = links_.num_indices();
@@ -1283,13 +1219,13 @@ void MultibodyTree<T>::CalcAllLinkSpatialVelocitiesInWorld(
 
 template <typename T>
 void MultibodyTree<T>::CalcPositionKinematicsCache(
-    const systems::Context<T>& context, PositionKinematicsCache<T>* pc) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, PositionKinematicsCache<T>* pc) const {
   DRAKE_DEMAND(pc != nullptr);
 
   const FrameBodyPoseCache<T>& frame_body_pose_cache =
       EvalFrameBodyPoses(context);
 
-  const Eigen::VectorBlock<const VectorX<T>> q_block = get_positions(context);
+  const VectorX<T>& q_block = get_positions(context);
   const T* q = q_block.data();
 
   // With the kinematics information across mobilizers and the kinematics
@@ -1309,7 +1245,7 @@ void MultibodyTree<T>::CalcPositionKinematicsCache(
 
 template <typename T>
 void MultibodyTree<T>::CalcBlockSystemJacobianCache(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     BlockSystemJacobianCache<T>* sjc) const {
   DRAKE_DEMAND(sjc != nullptr);
 
@@ -1381,7 +1317,7 @@ void MultibodyTree<T>::CalcBlockSystemJacobianCache(
 
 template <typename T>
 void MultibodyTree<T>::CalcVelocityKinematicsCache(
-    const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
     VelocityKinematicsCache<T>* vc) const {
   DRAKE_DEMAND(vc != nullptr);
 
@@ -1413,7 +1349,7 @@ void MultibodyTree<T>::CalcVelocityKinematicsCache(
 // Result is indexed by MobodIndex, not LinkIndex (or BodyIndex).
 template <typename T>
 void MultibodyTree<T>::CalcSpatialInertiasInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialInertia<T>>* M_B_W_all) const {
   DRAKE_THROW_UNLESS(M_B_W_all != nullptr);
   DRAKE_THROW_UNLESS(ssize(*M_B_W_all) == num_mobods());
@@ -1444,7 +1380,7 @@ void MultibodyTree<T>::CalcSpatialInertiasInWorld(
 
 template <typename T>
 void MultibodyTree<T>::CalcReflectedInertia(
-    const systems::Context<T>& context, VectorX<T>* reflected_inertia) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, VectorX<T>* reflected_inertia) const {
   DRAKE_THROW_UNLESS(reflected_inertia != nullptr);
   DRAKE_THROW_UNLESS(ssize(*reflected_inertia) == num_velocities());
 
@@ -1460,7 +1396,7 @@ void MultibodyTree<T>::CalcReflectedInertia(
 }
 
 template <typename T>
-void MultibodyTree<T>::CalcJointDamping(const systems::Context<T>& context,
+void MultibodyTree<T>::CalcJointDamping(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                         VectorX<T>* joint_damping) const {
   DRAKE_THROW_UNLESS(joint_damping != nullptr);
   DRAKE_THROW_UNLESS(ssize(*joint_damping) == num_velocities());
@@ -1473,7 +1409,7 @@ void MultibodyTree<T>::CalcJointDamping(const systems::Context<T>& context,
 
 template <typename T>
 void MultibodyTree<T>::CalcFrameBodyPoses(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     FrameBodyPoseCache<T>* frame_body_poses) const {
   DRAKE_DEMAND(frame_body_poses != nullptr);
 
@@ -1524,7 +1460,7 @@ void MultibodyTree<T>::CalcFrameBodyPoses(
 
 template <typename T>
 void MultibodyTree<T>::CalcCompositeBodyInertiasInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialInertia<T>>* K_BBo_W_all) const {
   const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
   const std::vector<SpatialInertia<T>>& M_BBo_W_all =
@@ -1544,7 +1480,7 @@ void MultibodyTree<T>::CalcCompositeBodyInertiasInWorld(
 
 template <typename T>
 void MultibodyTree<T>::CalcSpatialAccelerationBias(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialAcceleration<T>>* Ab_WB_all) const {
   const FrameBodyPoseCache<T>& frame_body_pose_cache =
       EvalFrameBodyPoses(context);
@@ -1570,7 +1506,7 @@ void MultibodyTree<T>::CalcSpatialAccelerationBias(
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyForceBias(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const ArticulatedBodyInertiaCache<T>& abic,
     std::vector<SpatialForce<T>>* Zb_Bo_W_all) const {
   DRAKE_THROW_UNLESS(Zb_Bo_W_all != nullptr);
@@ -1597,7 +1533,7 @@ void MultibodyTree<T>::CalcArticulatedBodyForceBias(
 // Result is indexed by MobodIndex.
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyForceBias(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialForce<T>>* Zb_Bo_W_all) const {
   DRAKE_THROW_UNLESS(Zb_Bo_W_all != nullptr);
   DRAKE_THROW_UNLESS(ssize(*Zb_Bo_W_all) == num_mobods());
@@ -1609,7 +1545,7 @@ void MultibodyTree<T>::CalcArticulatedBodyForceBias(
 // Result is indexed by MobodIndex.
 template <typename T>
 void MultibodyTree<T>::CalcDynamicBiasForces(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialForce<T>>* Fb_Bo_W_all) const {
   DRAKE_THROW_UNLESS(Fb_Bo_W_all != nullptr);
   DRAKE_THROW_UNLESS(ssize(*Fb_Bo_W_all) == num_mobods());
@@ -1645,7 +1581,7 @@ void MultibodyTree<T>::CalcDynamicBiasForces(
 
 template <typename T>
 void MultibodyTree<T>::CalcSpatialAccelerationsFromVdot(
-    const systems::Context<T>& context, const PositionKinematicsCache<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>&,
     const VelocityKinematicsCache<T>&, const VectorX<T>& known_vdot,
     std::vector<SpatialAcceleration<T>>* A_WB_array) const {
   const bool ignore_velocities = false;
@@ -1655,7 +1591,7 @@ void MultibodyTree<T>::CalcSpatialAccelerationsFromVdot(
 
 template <typename T>
 void MultibodyTree<T>::CalcSpatialAccelerationsFromVdot(
-    const systems::Context<T>& context, const VectorX<T>& known_vdot,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const VectorX<T>& known_vdot,
     bool ignore_velocities,
     std::vector<SpatialAcceleration<T>>* A_WB_array) const {
   DRAKE_DEMAND(A_WB_array != nullptr);
@@ -1691,7 +1627,7 @@ void MultibodyTree<T>::CalcSpatialAccelerationsFromVdot(
 
 template <typename T>
 void MultibodyTree<T>::CalcAccelerationKinematicsCache(
-    const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
     const VelocityKinematicsCache<T>& vc, const VectorX<T>& known_vdot,
     AccelerationKinematicsCache<T>* ac) const {
   DRAKE_DEMAND(ac != nullptr);
@@ -1704,7 +1640,7 @@ void MultibodyTree<T>::CalcAccelerationKinematicsCache(
 
 template <typename T>
 VectorX<T> MultibodyTree<T>::CalcInverseDynamics(
-    const systems::Context<T>& context, const VectorX<T>& known_vdot,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const VectorX<T>& known_vdot,
     const MultibodyForces<T>& external_forces) const {
   // Temporary storage used in the computation of inverse dynamics.
   std::vector<SpatialAcceleration<T>> A_WB(num_links());
@@ -1719,7 +1655,7 @@ VectorX<T> MultibodyTree<T>::CalcInverseDynamics(
 // All argument vectors are indexed by MobodIndex.
 template <typename T>
 void MultibodyTree<T>::CalcInverseDynamics(
-    const systems::Context<T>& context, const VectorX<T>& known_vdot,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const VectorX<T>& known_vdot,
     const std::vector<SpatialForce<T>>& Fapplied_Bo_W_array,
     const Eigen::Ref<const VectorX<T>>& tau_applied_array,
     std::vector<SpatialAcceleration<T>>* A_WB_array,
@@ -1737,7 +1673,7 @@ void MultibodyTree<T>::CalcInverseDynamics(
 // (There are internal usages that take advantage of that.)
 template <typename T>
 void MultibodyTree<T>::CalcInverseDynamics(
-    const systems::Context<T>& context, const VectorX<T>& known_vdot,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const VectorX<T>& known_vdot,
     const std::vector<SpatialForce<T>>& Fapplied_Bo_W_array,
     const Eigen::Ref<const VectorX<T>>& tau_applied_array,
     bool ignore_velocities, std::vector<SpatialAcceleration<T>>* A_WB_array,
@@ -1806,7 +1742,7 @@ void MultibodyTree<T>::CalcInverseDynamics(
 
 template <typename T>
 void MultibodyTree<T>::CalcSystemJacobianTransposeTimesF(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     std::vector<SpatialForce<T>>* F_Bo_W_array,
     EigenPtr<VectorX<T>> tau) const {
   DRAKE_THROW_UNLESS(F_Bo_W_array != nullptr);
@@ -1835,7 +1771,7 @@ void MultibodyTree<T>::CalcSystemJacobianTransposeTimesF(
 
 template <typename T>
 void MultibodyTree<T>::CalcForceElementsContribution(
-    const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
     const VelocityKinematicsCache<T>& vc, MultibodyForces<T>* forces) const {
   DRAKE_DEMAND(forces != nullptr);
   DRAKE_DEMAND(forces->CheckHasRightSizeForModel(*this));
@@ -1852,7 +1788,7 @@ void MultibodyTree<T>::CalcForceElementsContribution(
 }
 
 template <typename T>
-void MultibodyTree<T>::AddJointDampingForces(const systems::Context<T>& context,
+void MultibodyTree<T>::AddJointDampingForces(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                              MultibodyForces<T>* forces) const {
   DRAKE_DEMAND(forces != nullptr);
   for (const Joint<T>* joint : joints_.elements()) {
@@ -1875,7 +1811,7 @@ bool MultibodyTree<T>::IsVelocityEqualToQDot() const {
 
 template <typename T>
 void MultibodyTree<T>::MapQDotToVelocity(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& qdot, EigenPtr<VectorX<T>> v) const {
   DRAKE_DEMAND(qdot.size() == num_positions());
   DRAKE_DEMAND(v != nullptr);
@@ -1891,7 +1827,7 @@ void MultibodyTree<T>::MapQDotToVelocity(
 }
 
 template <typename T>
-void MultibodyTree<T>::MapVelocityToQDot(const systems::Context<T>& context,
+void MultibodyTree<T>::MapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                          const Eigen::Ref<const VectorX<T>>& v,
                                          EigenPtr<VectorX<T>> qdot) const {
   DRAKE_DEMAND(v.size() == num_velocities());
@@ -1912,7 +1848,7 @@ void MultibodyTree<T>::MapVelocityToQDot(const systems::Context<T>& context,
 
 template <typename T>
 Eigen::SparseMatrix<T> MultibodyTree<T>::MakeVelocityToQDotMap(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   Eigen::SparseMatrix<T> N(num_positions(), num_velocities());
   if (IsVelocityEqualToQDot()) {
     N.setIdentity();
@@ -1947,7 +1883,7 @@ Eigen::SparseMatrix<T> MultibodyTree<T>::MakeVelocityToQDotMap(
 
 template <typename T>
 Eigen::SparseMatrix<T> MultibodyTree<T>::MakeQDotToVelocityMap(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   Eigen::SparseMatrix<T> Nplus(num_velocities(), num_positions());
   if (IsVelocityEqualToQDot()) {
     Nplus.setIdentity();
@@ -1976,7 +1912,7 @@ Eigen::SparseMatrix<T> MultibodyTree<T>::MakeQDotToVelocityMap(
 
 template <typename T>
 void MultibodyTree<T>::CalcMassMatrixViaInverseDynamics(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> M) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, EigenPtr<MatrixX<T>> M) const {
   DRAKE_DEMAND(M != nullptr);
   DRAKE_DEMAND(M->rows() == num_velocities());
   DRAKE_DEMAND(M->cols() == num_velocities());
@@ -2006,7 +1942,7 @@ void MultibodyTree<T>::CalcMassMatrixViaInverseDynamics(
 // TODO(sherm1) This needs to be reworked so the node-specific code is
 //  processed by the templatized class.
 template <typename T>
-void MultibodyTree<T>::CalcMassMatrix(const systems::Context<T>& context,
+void MultibodyTree<T>::CalcMassMatrix(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                       EigenPtr<MatrixX<T>> M) const {
   DRAKE_DEMAND(M != nullptr);
   DRAKE_DEMAND(M->rows() == num_velocities());
@@ -2056,7 +1992,7 @@ void MultibodyTree<T>::CalcMassMatrix(const systems::Context<T>& context,
 }
 
 template <typename T>
-void MultibodyTree<T>::CalcBiasTerm(const systems::Context<T>& context,
+void MultibodyTree<T>::CalcBiasTerm(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                     EigenPtr<VectorX<T>> Cv) const {
   DRAKE_DEMAND(Cv != nullptr);
   DRAKE_DEMAND(Cv->rows() == num_velocities());
@@ -2073,7 +2009,7 @@ void MultibodyTree<T>::CalcBiasTerm(const systems::Context<T>& context,
 
 template <typename T>
 VectorX<T> MultibodyTree<T>::CalcGravityGeneralizedForces(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   if (gravity_field_) {
     return gravity_field_->CalcGravityGeneralizedForces(context);
@@ -2083,7 +2019,7 @@ VectorX<T> MultibodyTree<T>::CalcGravityGeneralizedForces(
 
 template <typename T>
 RigidTransform<T> MultibodyTree<T>::CalcRelativeTransform(
-    const systems::Context<T>& context, const Frame<T>& frame_F,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_F,
     const Frame<T>& frame_G) const {
   // Shortcut: Efficiently return identity transform if frame_F == frame_G.
   if (frame_F.index() == frame_G.index()) return RigidTransform<T>::Identity();
@@ -2111,7 +2047,7 @@ RigidTransform<T> MultibodyTree<T>::CalcRelativeTransform(
 
 template <typename T>
 RotationMatrix<T> MultibodyTree<T>::CalcRelativeRotationMatrix(
-    const systems::Context<T>& context, const Frame<T>& frame_F,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_F,
     const Frame<T>& frame_G) const {
   // Shortcut: Efficiently return identity matrix if frame_F == frame_G.
   if (frame_F.index() == frame_G.index()) return RotationMatrix<T>::Identity();
@@ -2130,7 +2066,7 @@ RotationMatrix<T> MultibodyTree<T>::CalcRelativeRotationMatrix(
 
 template <typename T>
 void MultibodyTree<T>::CalcPointsPositions(
-    const systems::Context<T>& context, const Frame<T>& frame_B,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_B,
     const Eigen::Ref<const MatrixX<T>>& p_BQi, const Frame<T>& frame_A,
     EigenPtr<MatrixX<T>> p_AQi) const {
   DRAKE_THROW_UNLESS(p_BQi.rows() == 3);
@@ -2144,7 +2080,7 @@ void MultibodyTree<T>::CalcPointsPositions(
 
 template <typename T>
 void MultibodyTree<T>::CalcPointsVelocities(
-    const systems::Context<T>& context, const Frame<T>& frame_B,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_B,
     const Eigen::Ref<const MatrixX<T>>& p_BoQi_B, const Frame<T>& frame_A,
     const Frame<T>& frame_E, EigenPtr<MatrixX<T>> v_AQi_E) const {
   DRAKE_THROW_UNLESS(p_BoQi_B.rows() == 3);
@@ -2170,7 +2106,7 @@ void MultibodyTree<T>::CalcPointsVelocities(
 }
 
 template <typename T>
-T MultibodyTree<T>::CalcTotalMass(const systems::Context<T>& context) const {
+T MultibodyTree<T>::CalcTotalMass(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   T total_mass = 0;
   for (BodyIndex body_index(1); body_index < num_links(); ++body_index) {
     const RigidBody<T>& body = get_link(body_index);
@@ -2182,7 +2118,7 @@ T MultibodyTree<T>::CalcTotalMass(const systems::Context<T>& context) const {
 
 template <typename T>
 T MultibodyTree<T>::CalcTotalMass(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const std::vector<ModelInstanceIndex>& model_instances) const {
   T total_mass = 0;
   for (BodyIndex body_index(1); body_index < num_links(); ++body_index) {
@@ -2198,7 +2134,7 @@ T MultibodyTree<T>::CalcTotalMass(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcCenterOfMassPositionInWorld(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   if (num_links() <= 1) {
     std::string message = fmt::format(
         "{}(): This MultibodyPlant only contains "
@@ -2235,7 +2171,7 @@ Vector3<T> MultibodyTree<T>::CalcCenterOfMassPositionInWorld(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcCenterOfMassPositionInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<ModelInstanceIndex>& model_instances) const {
   // Reminder: MultibodyTree always declares a world body and 2 model instances
   // "world" and "default" so num_model_instances() should always be >= 2.
@@ -2294,7 +2230,7 @@ Vector3<T> MultibodyTree<T>::CalcCenterOfMassPositionInWorld(
 
 template <typename T>
 SpatialInertia<T> MultibodyTree<T>::CalcSpatialInertia(
-    const systems::Context<T>& context, const Frame<T>& frame_F,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_F,
     const std::vector<BodyIndex>& body_indexes) const {
   // Check if there are repeated BodyIndex in body_indexes by converting the
   // vector to a set (to eliminate duplicates) and see if their sizes differ.
@@ -2353,7 +2289,7 @@ SpatialInertia<T> MultibodyTree<T>::CalcSpatialInertia(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalVelocityInWorld(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   if (num_links() <= 1) {
     std::string message = fmt::format(
         "{}(): This MultibodyPlant only contains "
@@ -2394,7 +2330,7 @@ Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalVelocityInWorld(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalVelocityInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<ModelInstanceIndex>& model_instances) const {
   // Reminder: MultibodyTree always declares a world body and 2 model instances
   // "world" and "default" so num_model_instances() should always be >= 2.
@@ -2453,7 +2389,7 @@ Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalVelocityInWorld(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalAccelerationInWorld(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   if (num_links() <= 1) {
     std::string message = fmt::format(
         "{}(): This MultibodyPlant only contains "
@@ -2499,7 +2435,7 @@ Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalAccelerationInWorld(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalAccelerationInWorld(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<ModelInstanceIndex>& model_instances) const {
   if (num_links() <= 1) {
     std::string message = fmt::format(
@@ -2568,7 +2504,7 @@ Vector3<T> MultibodyTree<T>::CalcCenterOfMassTranslationalAccelerationInWorld(
 
 template <typename T>
 SpatialMomentum<T> MultibodyTree<T>::CalcSpatialMomentumInWorldAboutPoint(
-    const systems::Context<T>& context, const Vector3<T>& p_WoP_W) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Vector3<T>& p_WoP_W) const {
   // Assemble a list of ModelInstanceIndex.
   // Skip model_instance_index(0) which always contains the "world" body -- the
   // spatial momentum of the world body measured in the world is always zero.
@@ -2583,7 +2519,7 @@ SpatialMomentum<T> MultibodyTree<T>::CalcSpatialMomentumInWorldAboutPoint(
 
 template <typename T>
 SpatialMomentum<T> MultibodyTree<T>::CalcSpatialMomentumInWorldAboutPoint(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<ModelInstanceIndex>& model_instances,
     const Vector3<T>& p_WoP_W) const {
   // Assemble a list of LinkIndexes.
@@ -2612,7 +2548,7 @@ SpatialMomentum<T> MultibodyTree<T>::CalcSpatialMomentumInWorldAboutPoint(
 
 template <typename T>
 SpatialMomentum<T> MultibodyTree<T>::CalcBodiesSpatialMomentumInWorldAboutWo(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<LinkIndex>& link_indexes) const {
   // For efficiency, evaluate all bodies' spatial inertia, velocities, and pose.
   const std::vector<SpatialInertia<T>>& M_Bi_W =
@@ -2651,7 +2587,7 @@ SpatialMomentum<T> MultibodyTree<T>::CalcBodiesSpatialMomentumInWorldAboutWo(
 
 template <typename T>
 const RigidTransform<T>& MultibodyTree<T>::EvalLinkPoseInWorld(
-    const systems::Context<T>& context, const Link<T>& link_L) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Link<T>& link_L) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   link_L.HasThisParentTreeOrThrow(this);
   return EvalPositionKinematics(context).get_X_WL(link_L.ordinal());
@@ -2659,7 +2595,7 @@ const RigidTransform<T>& MultibodyTree<T>::EvalLinkPoseInWorld(
 
 template <typename T>
 const SpatialVelocity<T>& MultibodyTree<T>::EvalLinkSpatialVelocityInWorld(
-    const systems::Context<T>& context, const Link<T>& link_L) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Link<T>& link_L) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   link_L.HasThisParentTreeOrThrow(this);
   return EvalVelocityKinematics(context).get_V_WL(link_L.ordinal());
@@ -2668,7 +2604,7 @@ const SpatialVelocity<T>& MultibodyTree<T>::EvalLinkSpatialVelocityInWorld(
 template <typename T>
 const SpatialAcceleration<T>&
 MultibodyTree<T>::EvalLinkSpatialAccelerationInWorld(
-    const systems::Context<T>& context, const Link<T>& link_L) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Link<T>& link_L) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   link_L.HasThisParentTreeOrThrow(this);
   return EvalAccelerationKinematics(context).get_A_WB(link_L.mobod_index());
@@ -2676,7 +2612,7 @@ MultibodyTree<T>::EvalLinkSpatialAccelerationInWorld(
 
 template <typename T>
 void MultibodyTree<T>::CalcAcrossNodeJacobianWrtVExpressedInWorld(
-    const systems::Context<T>& context, const PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
     std::vector<Vector6<T>>* H_PB_W_cache) const {
   DRAKE_DEMAND(H_PB_W_cache != nullptr);
   DRAKE_DEMAND(static_cast<int>(H_PB_W_cache->size()) == num_velocities());
@@ -2701,7 +2637,7 @@ void MultibodyTree<T>::CalcAcrossNodeJacobianWrtVExpressedInWorld(
 
 template <typename T>
 void MultibodyTree<T>::CalcAllBodyBiasSpatialAccelerationsInWorld(
-    const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, JacobianWrtVariable with_respect_to,
     std::vector<SpatialAcceleration<T>>* AsBias_WB_all) const {
   // TODO(mitiguy) Allow with_respect_to be JacobianWrtVariable::kQDot.
   // TODO(mitiguy) Per issue #13560, cache bias acceleration computation.
@@ -2728,7 +2664,7 @@ void MultibodyTree<T>::CalcAllBodyBiasSpatialAccelerationsInWorld(
 
 template <typename T>
 SpatialAcceleration<T> MultibodyTree<T>::CalcBiasSpatialAcceleration(
-    const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, JacobianWrtVariable with_respect_to,
     const Frame<T>& frame_B, const Eigen::Ref<const Vector3<T>>& p_BoBp_B,
     const Frame<T>& frame_A, const Frame<T>& frame_E) const {
   // TODO(mitiguy) Allow with_respect_to be JacobianWrtVariable::kQDot.
@@ -2760,7 +2696,7 @@ SpatialAcceleration<T> MultibodyTree<T>::CalcBiasSpatialAcceleration(
 
 template <typename T>
 SpatialAcceleration<T> MultibodyTree<T>::CalcSpatialAccelerationHelper(
-    const systems::Context<T>& context, const Frame<T>& frame_F,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_F,
     const Eigen::Ref<const Vector3<T>>& p_FoFp_F, const RigidBody<T>& body_A,
     const Frame<T>& frame_E, const SpatialAcceleration<T>& A_WB_W,
     const SpatialAcceleration<T>& A_WA_W) const {
@@ -2912,7 +2848,7 @@ SpatialAcceleration<T> MultibodyTree<T>::ShiftSpatialAccelerationInWorld(
 
 template <typename T>
 Matrix3X<T> MultibodyTree<T>::CalcBiasTranslationalAcceleration(
-    const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, JacobianWrtVariable with_respect_to,
     const Frame<T>& frame_B, const Eigen::Ref<const Matrix3X<T>>& p_BoBi_B,
     const Frame<T>& frame_A, const Frame<T>& frame_E) const {
   // TODO(mitiguy) Allow with_respect_to be JacobianWrtVariable::kQDot.
@@ -2952,7 +2888,7 @@ Matrix3X<T> MultibodyTree<T>::CalcBiasTranslationalAcceleration(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianSpatialVelocity(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const JacobianWrtVariable with_respect_to, const Frame<T>& frame_B,
     const Eigen::Ref<const Vector3<T>>& p_BP, const Frame<T>& frame_A,
     const Frame<T>& frame_E, EigenPtr<MatrixX<T>> Js_V_ABp_E) const {
@@ -3015,7 +2951,7 @@ void MultibodyTree<T>::CalcJacobianSpatialVelocity(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianAngularVelocity(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const JacobianWrtVariable with_respect_to, const Frame<T>& frame_B,
     const Frame<T>& frame_A, const Frame<T>& frame_E,
     EigenPtr<Matrix3X<T>> Js_w_AB_E) const {
@@ -3071,7 +3007,7 @@ void MultibodyTree<T>::CalcJacobianAngularVelocity(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianTranslationalVelocityHelper(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const JacobianWrtVariable with_respect_to, const Frame<T>& frame_B,
     const Eigen::Ref<const Matrix3X<T>>& p_WoBi_W, const Frame<T>& frame_A,
     EigenPtr<MatrixX<T>> Js_v_ABi_W) const {
@@ -3116,7 +3052,7 @@ void MultibodyTree<T>::CalcJacobianTranslationalVelocityHelper(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianTranslationalVelocity(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const JacobianWrtVariable with_respect_to, const Frame<T>& frame_B,
     const Frame<T>& frame_F, const Eigen::Ref<const Matrix3X<T>>& p_FoBi_F,
     const Frame<T>& frame_A, const Frame<T>& frame_E,
@@ -3164,7 +3100,7 @@ void MultibodyTree<T>::CalcJacobianTranslationalVelocity(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianAngularAndOrTranslationalVelocityInWorld(
-    const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, JacobianWrtVariable with_respect_to,
     const Frame<T>& frame_F, const Eigen::Ref<const Matrix3X<T>>& p_WoFpi_W,
     EigenPtr<Matrix3X<T>> Js_w_WF_W, EigenPtr<MatrixX<T>> Js_v_WFpi_W) const {
   // At least one of the Jacobian output terms must be nullptr.
@@ -3303,7 +3239,7 @@ void MultibodyTree<T>::CalcJacobianAngularAndOrTranslationalVelocityInWorld(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianCenterOfMassTranslationalVelocity(
-    const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, JacobianWrtVariable with_respect_to,
     const Frame<T>& frame_A, const Frame<T>& frame_E,
     EigenPtr<Matrix3X<T>> Js_v_AScm_E) const {
   const int num_columns = (with_respect_to == JacobianWrtVariable::kQDot)
@@ -3346,7 +3282,7 @@ void MultibodyTree<T>::CalcJacobianCenterOfMassTranslationalVelocity(
 
 template <typename T>
 void MultibodyTree<T>::CalcJacobianCenterOfMassTranslationalVelocity(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<ModelInstanceIndex>& model_instances,
     JacobianWrtVariable with_respect_to, const Frame<T>& frame_A,
     const Frame<T>& frame_E, EigenPtr<Matrix3X<T>> Js_v_AScm_E) const {
@@ -3418,7 +3354,7 @@ void MultibodyTree<T>::CalcJacobianCenterOfMassTranslationalVelocity(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcBiasCenterOfMassTranslationalAcceleration(
-    const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, JacobianWrtVariable with_respect_to,
     const Frame<T>& frame_A, const Frame<T>& frame_E) const {
   // Reminder: MultibodyTree always declares a world body (0ᵗʰ body).
   if (num_links() <= 1) {
@@ -3453,7 +3389,7 @@ Vector3<T> MultibodyTree<T>::CalcBiasCenterOfMassTranslationalAcceleration(
 
 template <typename T>
 Vector3<T> MultibodyTree<T>::CalcBiasCenterOfMassTranslationalAcceleration(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const std::vector<ModelInstanceIndex>& model_instances,
     JacobianWrtVariable with_respect_to, const Frame<T>& frame_A,
     const Frame<T>& frame_E) const {
@@ -3518,7 +3454,7 @@ Vector3<T> MultibodyTree<T>::CalcBiasCenterOfMassTranslationalAcceleration(
 
 template <typename T>
 T MultibodyTree<T>::CalcPotentialEnergy(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
   T potential_energy = 0.0;
   // Add contributions from force elements.
@@ -3530,7 +3466,7 @@ T MultibodyTree<T>::CalcPotentialEnergy(
 
 template <typename T>
 T MultibodyTree<T>::CalcKineticEnergy(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const std::vector<SpatialInertia<T>>& M_Bi_W =
       EvalSpatialInertiaInWorldCache(context);
   const VelocityKinematicsCache<T>& vc = EvalVelocityKinematics(context);
@@ -3548,7 +3484,7 @@ T MultibodyTree<T>::CalcKineticEnergy(
 
   // Account for reflected inertia.
   // See JointActuator::reflected_inertia().
-  const Eigen::VectorBlock<const VectorX<T>> v = get_velocities(context);
+  const VectorX<T>& v = get_velocities(context);
 
   twice_kinetic_energy_W +=
       (v.array() * reflected_inertia.array() * v.array()).sum();
@@ -3558,7 +3494,7 @@ T MultibodyTree<T>::CalcKineticEnergy(
 
 template <typename T>
 T MultibodyTree<T>::CalcConservativePower(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
   const VelocityKinematicsCache<T>& vc = EvalVelocityKinematics(context);
   T conservative_power = 0.0;
@@ -3571,7 +3507,7 @@ T MultibodyTree<T>::CalcConservativePower(
 
 template <typename T>
 T MultibodyTree<T>::CalcNonConservativePower(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
   const VelocityKinematicsCache<T>& vc = EvalVelocityKinematics(context);
   T non_conservative_power = 0.0;
@@ -3725,7 +3661,7 @@ bool MultibodyTree<T>::AreAllDefaultRotationalInertiaZero(
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyInertiaCache(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     ArticulatedBodyInertiaCache<T>* abic) const {
   const VectorX<T>& reflected_inertia = EvalReflectedInertiaCache(context);
   CalcArticulatedBodyInertiaCache(context, reflected_inertia, abic);
@@ -3733,7 +3669,7 @@ void MultibodyTree<T>::CalcArticulatedBodyInertiaCache(
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyInertiaCache(
-    const systems::Context<T>& context, const VectorX<T>& diagonal_inertias,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const VectorX<T>& diagonal_inertias,
     ArticulatedBodyInertiaCache<T>* abic) const {
   DRAKE_DEMAND(abic != nullptr);
 
@@ -3756,7 +3692,7 @@ void MultibodyTree<T>::CalcArticulatedBodyInertiaCache(
       const SpatialInertia<T>& M_B_W =
           spatial_inertia_in_world_cache[mobod_index];
 
-      node.CalcArticulatedBodyInertiaCache_TipToBase(context, pc, H_PB_W, M_B_W,
+      node.CalcArticulatedBodyInertiaCache_TipToBase(pc, H_PB_W, M_B_W,
                                                      diagonal_inertias, abic);
     }
   }
@@ -3764,7 +3700,7 @@ void MultibodyTree<T>::CalcArticulatedBodyInertiaCache(
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyForceCache(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const ArticulatedBodyInertiaCache<T>& abic,
     const std::vector<SpatialForce<T>>& Zb_Bo_W_cache,
     const MultibodyForces<T>& forces,
@@ -3806,7 +3742,7 @@ void MultibodyTree<T>::CalcArticulatedBodyForceCache(
       const SpatialForce<T>& Zb_Bo_W = Zb_Bo_W_cache[mobod_index];
 
       node.CalcArticulatedBodyForceCache_TipToBase(
-          context, pc, &vc, Fb_B_W, abic, Zb_Bo_W, Fapplied_Bo_W, tau_applied,
+          pc, &vc, Fb_B_W, abic, Zb_Bo_W, Fapplied_Bo_W, tau_applied,
           H_PB_W, aba_force_cache);
     }
   }
@@ -3814,7 +3750,7 @@ void MultibodyTree<T>::CalcArticulatedBodyForceCache(
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyForceCache(
-    const systems::Context<T>& context, const MultibodyForces<T>& forces,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const MultibodyForces<T>& forces,
     ArticulatedBodyForceCache<T>* aba_force_cache) const {
   // Get configuration dependent articulated body inertia cache.
   const ArticulatedBodyInertiaCache<T>& abic =
@@ -3831,7 +3767,7 @@ void MultibodyTree<T>::CalcArticulatedBodyForceCache(
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyAccelerations(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const ArticulatedBodyInertiaCache<T>& abic,
     const ArticulatedBodyForceCache<T>& aba_force_cache,
     AccelerationKinematicsCache<T>* ac) const {
@@ -3854,14 +3790,14 @@ void MultibodyTree<T>::CalcArticulatedBodyAccelerations(
           node.GetJacobianFromArray(H_PB_W_cache);
 
       node.CalcArticulatedBodyAccelerations_BaseToTip(
-          context, pc, abic, aba_force_cache, H_PB_W, Ab_WB, ac);
+          pc, abic, aba_force_cache, H_PB_W, Ab_WB, ac);
     }
   }
 }
 
 template <typename T>
 void MultibodyTree<T>::CalcArticulatedBodyAccelerations(
-    const systems::Context<T>& context,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const ArticulatedBodyForceCache<T>& aba_force_cache,
     AccelerationKinematicsCache<T>* ac) const {
   const ArticulatedBodyInertiaCache<T>& abic =

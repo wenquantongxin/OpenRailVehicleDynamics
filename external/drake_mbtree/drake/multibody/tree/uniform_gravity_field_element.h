@@ -6,6 +6,8 @@
 
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -102,7 +104,7 @@ class UniformGravityFieldElement : public ForceElement<T> {
   ///   done, or heat.
 
   VectorX<T> CalcGravityGeneralizedForces(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   /// Computes the total gravitational potential energy of all bodies in this
   /// MultibodyPlant except those whose model instance has been explicitly
@@ -112,7 +114,7 @@ class UniformGravityFieldElement : public ForceElement<T> {
   /// body will have zero gravitational potential energy when the height
   /// of the body's center of mass in the World is zero.
   T CalcPotentialEnergy(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc) const final;
 
   /// Returns gravitational power acting on the system. This is positive when
@@ -121,19 +123,19 @@ class UniformGravityFieldElement : public ForceElement<T> {
   /// gravitational power is `v ⋅ tau_g`.
   /// @see CalcGravityGeneralizedForces()
   T CalcConservativePower(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const final;
 
   /// Returns zero always since gravity is conservative.
   T CalcNonConservativePower(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const final;
 
  protected:
   void DoCalcAndAddForceContribution(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const final;
@@ -149,7 +151,7 @@ class UniformGravityFieldElement : public ForceElement<T> {
   //   tip-to-base, shifting each body's accumulated force into its parent's
   //   entry of F_Bo_W_array in place to avoid allocating a scratch copy.
   void AccumulateGravitySpatialForces(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       std::vector<SpatialForce<T>>* F_Bo_W_array) const;
 

@@ -2,6 +2,7 @@
 
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -48,7 +49,7 @@ const Joint<T>& JointActuator<T>::joint() const {
 }
 
 template <typename T>
-void JointActuator<T>::AddInOneForce(const systems::Context<T>& context,
+void JointActuator<T>::AddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                      int joint_dof, const T& joint_tau,
                                      MultibodyForces<T>* forces) const {
   DRAKE_DEMAND(forces != nullptr);

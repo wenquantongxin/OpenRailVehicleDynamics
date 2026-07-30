@@ -11,6 +11,7 @@
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/multibody_element.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -387,10 +388,6 @@ class Mobilizer : public MultibodyElement<T> {
   //
   // Note that the zero state may fall outside of the limits for any joints
   // associated with this type of mobilizer.
-  // @see set_default_state().
-  virtual void SetZeroState(const systems::Context<T>& context,
-                            systems::State<T>* state) const = 0;
-
   // Sets the state for this mobilizer in the given State to some
   // approximation of this pose. It's up to the concrete mobilizer to figure out
   // what to do. (Only QuaternionFloatingMobilizer can represent this pose
@@ -398,10 +395,10 @@ class Mobilizer : public MultibodyElement<T> {
   // Returns false if this mobilizer doesn't implement this feature.
   // TODO(sherm1) Currently this is only implemented for 6dof mobilizers.
   //  It's still useful for other joints; broaden support.
-  virtual bool SetPosePair(const systems::Context<T>& context,
-                           const Eigen::Quaternion<T> q_FM,
+  virtual bool SetPosePair(const Eigen::Quaternion<T> q_FM,
                            const Vector3<T>& p_FM,
-                           systems::State<T>* state) const = 0;
+                           orvd::multibody_runtime::MultibodyStateInstance* state)
+      const = 0;
 
   // Given the generalized positions q for this Mobilizer in the given
   // `context`, returns the cross-mobilizer pose X_FM as a (quaternion, vec3)
@@ -410,7 +407,7 @@ class Mobilizer : public MultibodyElement<T> {
   // so must override.
   // @returns (q_FM, p_FM)
   virtual std::pair<Eigen::Quaternion<T>, Vector3<T>> GetPosePair(
-      const systems::Context<T>& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const;
 
   // Sets the velocity state v for this mobilizer in the given State to some
   // approximation of the given spatial velocity. It's up to the concrete
@@ -420,20 +417,19 @@ class Mobilizer : public MultibodyElement<T> {
   // Returns false if this mobilizer doesn't implement this feature.
   // TODO(sherm1) Currently this is only implemented for 6dof mobilizers.
   //  It's still useful for other joints; broaden support.
-  virtual bool SetSpatialVelocity(const systems::Context<T>& context,
-                                  const SpatialVelocity<T>& V_FM,
-                                  systems::State<T>* state) const = 0;
+  virtual bool SetSpatialVelocity(
+      const SpatialVelocity<T>& V_FM,
+      orvd::multibody_runtime::MultibodyStateInstance* state) const = 0;
 
   // Given the generalized positions q and generalized velocities v for this
   // Mobilizer in the given `context`, returns the cross-mobilizer spatial
   // velocity V_FM. (Not virtual)
   SpatialVelocity<T> GetSpatialVelocity(
-      const systems::Context<T>& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
     DRAKE_ASSERT(this->has_parent_tree());
-    const Eigen::VectorBlock<const VectorX<T>> all_v =
-        this->get_parent_tree().get_velocities(context);
-    const Eigen::Ref<const VectorX<T>> my_v = get_velocities_from_array(all_v);
-    return CalcAcrossMobilizerSpatialVelocity(context, my_v);
+    const Eigen::Ref<const VectorX<T>> my_v = get_velocities_from_array(
+        this->get_parent_tree().get_velocities(state));
+    return CalcAcrossMobilizerSpatialVelocity(state, my_v);
   }
 
   // Sets the `state` to the _default_ state (position and velocity) for
@@ -443,8 +439,12 @@ class Mobilizer : public MultibodyElement<T> {
   // support a default state (perhaps a more comfortable initial configuration
   // of the IIWA), which need not be the zero state, that describes a state of
   // the Mobilizer to be used in e.g. MultibodyPlant::SetDefaultContext().
-  virtual void set_default_state(const systems::Context<T>& context,
-                                 systems::State<T>* state) const = 0;
+  // The default configuration is written into a caller-owned q vector rather
+  // than committed here. A model installs every mobilizer's defaults and then
+  // commits q and v once each; committing per mobilizer would advance the
+  // versions once per element and copy the whole of q as many times as there
+  // are mobilizers.
+  virtual void WriteDefaultPositions(EigenPtr<VectorX<T>> q) const = 0;
 
   // Computes the across-mobilizer transform `X_FM(q)` between the inboard
   // frame F and the outboard frame M as a function of the vector of
@@ -462,7 +462,7 @@ class Mobilizer : public MultibodyElement<T> {
   // TODO(sherm1) Consider getting rid of this function altogether and
   //  making use only of the concrete mobilizer's calc_X_FM() method.
   virtual math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>& context) const = 0;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const = 0;
 
   // Computes the across-mobilizer spatial velocity `V_FM(q, v)` of the
   // outboard frame M in the inboard frame F.
@@ -485,7 +485,7 @@ class Mobilizer : public MultibodyElement<T> {
   // @retval V_FM The across-mobilizer spatial velocity of the outboard frame
   // M measured and expressed in the inboard frame F.
   virtual SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& v) const = 0;
 
   // Computes the across-mobilizer spatial accelerations `A_FM(q, v, v̇)` of the
@@ -512,7 +512,7 @@ class Mobilizer : public MultibodyElement<T> {
   //   The across-mobilizer spatial acceleration of the outboard frame M
   //   measured and expressed in the inboard frame F.
   virtual SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const = 0;
 
   // Calculates a mobilizer's generalized forces `tau = H_FMᵀ(q) ⋅ F_Mo_F`,
@@ -541,7 +541,7 @@ class Mobilizer : public MultibodyElement<T> {
   //   expressed in the inboard frame F.
   // @retval tau
   //   The vector of generalized forces. It must live in ℝⁿᵛ.
-  virtual void ProjectSpatialForce(const systems::Context<T>& context,
+  virtual void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                    const SpatialForce<T>& F_Mo_F,
                                    Eigen::Ref<VectorX<T>> tau) const = 0;
 
@@ -556,7 +556,7 @@ class Mobilizer : public MultibodyElement<T> {
   //   `nq x nv` with nq and nv the number of generalized positions and the
   //   number of generalized velocities for this mobilizer, respectively.
   // @see MapVelocityToQDot().
-  void CalcNMatrix(const systems::Context<T>& context,
+  void CalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                    EigenPtr<MatrixX<T>> N) const {
     DRAKE_DEMAND(N != nullptr);
     DRAKE_DEMAND(N->rows() == num_positions());
@@ -576,7 +576,7 @@ class Mobilizer : public MultibodyElement<T> {
   //   `nv x nq` with nq the number of generalized positions and nv the
   //   number of generalized velocities.
   // @see MapVelocityToQDot().
-  void CalcNplusMatrix(const systems::Context<T>& context,
+  void CalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                        EigenPtr<MatrixX<T>> Nplus) const {
     DRAKE_DEMAND(Nplus != nullptr);
     DRAKE_DEMAND(Nplus->rows() == num_velocities());
@@ -591,7 +591,7 @@ class Mobilizer : public MultibodyElement<T> {
   // @param[out] Ndot The matrix Ṅ(q,q̇). On input Ndot must have size
   //   nq x nv where nq is the number of generalized positions and
   //   nv is the number of generalized velocities for this mobilizer.
-  void CalcNDotMatrix(const systems::Context<T>& context,
+  void CalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                       EigenPtr<MatrixX<T>> Ndot) const {
     DRAKE_DEMAND(Ndot != nullptr);
     DRAKE_DEMAND(Ndot->rows() == num_positions());
@@ -606,7 +606,7 @@ class Mobilizer : public MultibodyElement<T> {
   // @param[out] NplusDot The matrix Ṅ(q,q̇). On input NplusDot must have size
   //   nv x nq where nv is the number of generalized velocities and
   //   nq is the number of generalized positions for this mobilizer.
-  void CalcNplusDotMatrix(const systems::Context<T>& context,
+  void CalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                           EigenPtr<MatrixX<T>> NplusDot) const {
     DRAKE_DEMAND(NplusDot != nullptr);
     DRAKE_DEMAND(NplusDot->rows() == num_velocities());
@@ -619,7 +619,7 @@ class Mobilizer : public MultibodyElement<T> {
   // Computes the kinematic mapping `q̇ = N(q)⋅v` between generalized
   // velocities v and time derivatives of the generalized positions `qdot`.
   // The generalized positions vector is stored in `context`.
-  void MapVelocityToQDot(const systems::Context<T>& context,
+  void MapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          const Eigen::Ref<const VectorX<T>>& v,
                          EigenPtr<VectorX<T>> qdot) const {
     DRAKE_ASSERT(v.size() == num_velocities());
@@ -632,7 +632,7 @@ class Mobilizer : public MultibodyElement<T> {
   // generalized positions `qdot` to generalized velocities v, where `N⁺(q)` is
   // the left pseudo-inverse of `N(q)` defined by MapVelocityToQDot().
   // The generalized positions vector is stored in `context`.
-  void MapQDotToVelocity(const systems::Context<T>& context,
+  void MapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          const Eigen::Ref<const VectorX<T>>& qdot,
                          EigenPtr<VectorX<T>> v) const {
     DRAKE_ASSERT(qdot.size() == num_positions());
@@ -645,7 +645,7 @@ class Mobilizer : public MultibodyElement<T> {
   // @param[in] context stores generalized positions q and velocities v.
   // @param[in] vdot (v̇) 1ˢᵗ time derivatives of generalized velocities.
   // @param[out] qddot (q̈) 2ⁿᵈ time derivatives of the generalized positions.
-  void MapAccelerationToQDDot(const systems::Context<T>& context,
+  void MapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                               const Eigen::Ref<const VectorX<T>>& vdot,
                               EigenPtr<VectorX<T>> qddot) const {
     DRAKE_DEMAND(vdot.size() == num_velocities());
@@ -658,7 +658,7 @@ class Mobilizer : public MultibodyElement<T> {
   // @param[in] context stores generalized positions q and velocities v.
   // @param[in] qddot (q̈) 2ⁿᵈ time derivatives of the generalized positions.
   // @param[out] vdot (v̇) 1ˢᵗ time derivatives of generalized velocities.
-  void MapQDDotToAcceleration(const systems::Context<T>& context,
+  void MapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
                               const Eigen::Ref<const VectorX<T>>& qddot,
                               EigenPtr<VectorX<T>> vdot) const {
     DRAKE_DEMAND(qddot.size() == num_positions());
@@ -745,30 +745,6 @@ class Mobilizer : public MultibodyElement<T> {
       const internal::BodyNode<T>* parent_node, const RigidBody<T>* body,
       const Mobilizer<T>* mobilizer) const = 0;
 
-  // Lock the mobilizer. Its generalized velocities will be 0 until it is
-  // unlocked.
-  void Lock(systems::Context<T>* context) const {
-    DRAKE_THROW_UNLESS(this->has_parent_tree());
-    context->get_mutable_abstract_parameter(is_locked_parameter_index_)
-        .set_value(true);
-    this->get_parent_tree()
-        .GetMutableVelocities(context)
-        .segment(this->velocity_start_in_v(), this->num_velocities())
-        .setZero();
-  }
-
-  // Unlock the mobilizer.
-  void Unlock(systems::Context<T>* context) const {
-    context->get_mutable_abstract_parameter(is_locked_parameter_index_)
-        .set_value(false);
-  }
-
-  // @return true if the mobilizer is locked, false otherwise.
-  bool is_locked(const systems::Context<T>& context) const {
-    return context.get_parameters().template get_abstract_parameter<bool>(
-        is_locked_parameter_index_);
-  }
-
   void set_is_floating_base_mobilizer(bool is_floating) {
     is_floating_base_mobilizer_ = is_floating;
   }
@@ -776,37 +752,37 @@ class Mobilizer : public MultibodyElement<T> {
  protected:
   // NVI to CalcNMatrix(). Implementations can safely assume that N is not the
   // nullptr and that N has the proper size.
-  virtual void DoCalcNMatrix(const systems::Context<T>& context,
+  virtual void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                              EigenPtr<MatrixX<T>> N) const = 0;
 
   // NVI to CalcNplusMatrix(). Implementations can safely assume that Nplus is
   // not the nullptr and that Nplus has the proper size.
-  virtual void DoCalcNplusMatrix(const systems::Context<T>& context,
+  virtual void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                  EigenPtr<MatrixX<T>> Nplus) const = 0;
 
   // NVI to CalcNDotMatrix(). Implementations can safely assume that Ndot is
   // not the nullptr and that Ndot has the proper size.
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
-  virtual void DoCalcNDotMatrix(const systems::Context<T>& context,
+  virtual void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 EigenPtr<MatrixX<T>> Ndot) const;
 
   // NVI to CalcNplusDotMatrix(). Implementations can safely assume that
   // NplusDot is not the nullptr and that NplusDot has the proper size.
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
-  virtual void DoCalcNplusDotMatrix(const systems::Context<T>& context,
+  virtual void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                     EigenPtr<MatrixX<T>> NplusDot) const;
 
   // NVI to MapVelocityToQDot(). Implementations can safely assume that
   // v has size kNv, qdot is not the nullptr, and qdot has size kNq.
-  virtual void DoMapVelocityToQDot(const systems::Context<T>& context,
+  virtual void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                    const Eigen::Ref<const VectorX<T>>& v,
                                    EigenPtr<VectorX<T>> qdot) const = 0;
 
   // NVI to MapQDotToVelocity(). Implementations can safely assume that
   // qdot has size kNq, v is not the nullptr, and v has size kNv
-  virtual void DoMapQDotToVelocity(const systems::Context<T>& context,
+  virtual void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                    const Eigen::Ref<const VectorX<T>>& qdot,
                                    EigenPtr<VectorX<T>> v) const = 0;
 
@@ -815,7 +791,7 @@ class Mobilizer : public MultibodyElement<T> {
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
   virtual void DoMapAccelerationToQDDot(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot,
       EigenPtr<VectorX<T>> qddot) const;
 
@@ -824,23 +800,9 @@ class Mobilizer : public MultibodyElement<T> {
   // TODO(Mitiguy) change this function to a pure virtual function when it has
   //  been overridden in all subclasses.
   virtual void DoMapQDDotToAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& qddot,
       EigenPtr<VectorX<T>> vdot) const;
-
-  // Implementation for MultibodyElement::DoDeclareParameters().
-  void DoDeclareParameters(
-      internal::MultibodyTreeSystem<T>* tree_system) final {
-    is_locked_parameter_index_ =
-        this->DeclareAbstractParameter(tree_system, Value<bool>(false));
-  }
-
-  // Implementation for MultibodyElement::DoSetDefaultParameters().
-  void DoSetDefaultParameters(systems::Parameters<T>* parameters) const final {
-    // TODO(joemasterjohn): Consider exposing a default locked model value.
-    parameters->template get_mutable_abstract_parameter<bool>(
-        is_locked_parameter_index_) = false;
-  }
 
  private:
   // Implementation for MultibodyElement::DoSetTopology().
@@ -851,10 +813,6 @@ class Mobilizer : public MultibodyElement<T> {
   const SpanningForest::Mobod& mobod_;  // Topology information.
   const Frame<T>& inboard_frame_;
   const Frame<T>& outboard_frame_;
-
-  // System parameter index for `this` mobilizer's lock state stored in a
-  // context.
-  systems::AbstractParameterIndex is_locked_parameter_index_;
 
   // Set according to the policy that defines a "floating base body". See
   // MultibodyTree::CreateJointImplementations() which enforces that policy.

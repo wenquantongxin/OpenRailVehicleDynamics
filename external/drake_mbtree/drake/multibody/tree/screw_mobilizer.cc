@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "drake/multibody/tree/body_node_impl.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -44,7 +45,7 @@ double ScrewMobilizer<T>::screw_pitch() const {
 }
 
 template <typename T>
-T ScrewMobilizer<T>::get_translation(const systems::Context<T>& context) const {
+T ScrewMobilizer<T>::get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   auto q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return GetScrewTranslationFromRotation(q[0], screw_pitch_);
@@ -52,20 +53,21 @@ T ScrewMobilizer<T>::get_translation(const systems::Context<T>& context) const {
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetTranslation(
-    systems::Context<T>* context, const T& translation) const {
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& translation) const {
   const double kEpsilon = std::sqrt(std::numeric_limits<double>::epsilon());
   using std::abs;
   DRAKE_THROW_UNLESS(abs(screw_pitch_) > kEpsilon ||
                      abs(translation) < kEpsilon);
-  auto q = this->GetMutablePositions(context);
+  QVector<T> q = this->get_positions(*context);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = GetScrewRotationFromTranslation(translation, screw_pitch_);
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 const T& ScrewMobilizer<T>::get_angle(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   auto q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return q.coeffRef(0);
@@ -73,16 +75,17 @@ const T& ScrewMobilizer<T>::get_angle(
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetAngle(
-    systems::Context<T>* context, const T& angle) const {
-  auto q = this->GetMutablePositions(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& angle) const {
+  QVector<T> q = this->get_positions(*context);
   DRAKE_ASSERT(q.size() == kNq);
   q[0] = angle;
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 T ScrewMobilizer<T>::get_translation_rate(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   auto v = this->get_velocities(context);
   DRAKE_ASSERT(v.size() == kNv);
   return GetScrewTranslationFromRotation(v[0], screw_pitch_);
@@ -90,20 +93,21 @@ T ScrewMobilizer<T>::get_translation_rate(
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetTranslationRate(
-    systems::Context<T>* context, const T& vz) const {
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& vz) const {
   const double kEpsilon = std::sqrt(std::numeric_limits<double>::epsilon());
   using std::abs;
   DRAKE_THROW_UNLESS(abs(screw_pitch_) > kEpsilon || abs(vz) < kEpsilon);
 
-  auto v = this->GetMutableVelocities(context);
+  VVector<T> v = this->get_velocities(*context);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = GetScrewRotationFromTranslation(vz, screw_pitch_);
+  this->SetVelocities(context, v);
   return *this;
 }
 
 template <typename T>
 const T& ScrewMobilizer<T>::get_angular_rate(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   auto v = this->get_velocities(context);
   DRAKE_ASSERT(v.size() == kNv);
   return v.coeffRef(0);
@@ -111,16 +115,17 @@ const T& ScrewMobilizer<T>::get_angular_rate(
 
 template <typename T>
 const ScrewMobilizer<T>& ScrewMobilizer<T>::SetAngularRate(
-    systems::Context<T>* context, const T& theta_dot) const {
-  auto v = this->GetMutableVelocities(context);
+    orvd::multibody_runtime::MultibodyStateInstance* context, const T& theta_dot) const {
+  VVector<T> v = this->get_velocities(*context);
   DRAKE_ASSERT(v.size() == kNv);
   v[0] = theta_dot;
+  this->SetVelocities(context, v);
   return *this;
 }
 
 template <typename T>
 math::RigidTransform<T> ScrewMobilizer<T>::CalcAcrossMobilizerTransform(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
@@ -128,7 +133,7 @@ math::RigidTransform<T> ScrewMobilizer<T>::CalcAcrossMobilizerTransform(
 
 template <typename T>
 SpatialVelocity<T> ScrewMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   return calc_V_FM(nullptr, v.data());
 }
@@ -136,14 +141,14 @@ SpatialVelocity<T> ScrewMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T>
 SpatialAcceleration<T>
 ScrewMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const systems::Context<T>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
   return calc_A_FM(nullptr, nullptr, vdot.data());
 }
 
 template <typename T>
-void ScrewMobilizer<T>::ProjectSpatialForce(const systems::Context<T>&,
+void ScrewMobilizer<T>::ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance&,
                                             const SpatialForce<T>& F_BMo_F,
                                             Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);
@@ -151,53 +156,53 @@ void ScrewMobilizer<T>::ProjectSpatialForce(const systems::Context<T>&,
 }
 
 template <typename T>
-void ScrewMobilizer<T>::DoCalcNMatrix(const systems::Context<T>&,
+void ScrewMobilizer<T>::DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                       EigenPtr<MatrixX<T>> N) const {
   *N = Eigen::Matrix<T, 1, 1>::Identity();
 }
 
 template <typename T>
-void ScrewMobilizer<T>::DoCalcNplusMatrix(const systems::Context<T>&,
+void ScrewMobilizer<T>::DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                           EigenPtr<MatrixX<T>> Nplus) const {
   *Nplus = Eigen::Matrix<T, 1, 1>::Identity();
 }
 
 template <typename T>
-void ScrewMobilizer<T>::DoCalcNDotMatrix(const systems::Context<T>&,
+void ScrewMobilizer<T>::DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance&,
                                          EigenPtr<MatrixX<T>> Ndot) const {
   (*Ndot)(0, 0) = 0.0;
 }
 
 template <typename T>
 void ScrewMobilizer<T>::DoCalcNplusDotMatrix(
-    const systems::Context<T>&, EigenPtr<MatrixX<T>> NplusDot) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, EigenPtr<MatrixX<T>> NplusDot) const {
   (*NplusDot)(0, 0) = 0.0;
 }
 
 template <typename T>
 void ScrewMobilizer<T>::DoMapVelocityToQDot(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v,
     EigenPtr<VectorX<T>> qdot) const {
   *qdot = v;
 }
 
 template <typename T>
 void ScrewMobilizer<T>::DoMapQDotToVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& qdot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& qdot,
     EigenPtr<VectorX<T>> v) const {
   *v = qdot;
 }
 
 template <typename T>
 void ScrewMobilizer<T>::DoMapAccelerationToQDDot(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& vdot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& vdot,
     EigenPtr<VectorX<T>> qddot) const {
   *qddot = vdot;
 }
 
 template <typename T>
 void ScrewMobilizer<T>::DoMapQDDotToAcceleration(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& qddot,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& qddot,
     EigenPtr<VectorX<T>> vdot) const {
   *vdot = qddot;
 }

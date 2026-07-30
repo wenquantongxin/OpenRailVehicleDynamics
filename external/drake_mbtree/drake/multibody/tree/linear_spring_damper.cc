@@ -6,6 +6,7 @@
 
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -35,7 +36,7 @@ LinearSpringDamper<T>::~LinearSpringDamper() = default;
 
 template <typename T>
 void LinearSpringDamper<T>::DoCalcAndAddForceContribution(
-    const systems::Context<T>&, const internal::PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc,
     MultibodyForces<T>* forces) const {
   using std::sqrt;
@@ -81,7 +82,7 @@ void LinearSpringDamper<T>::DoCalcAndAddForceContribution(
 
 template <typename T>
 T LinearSpringDamper<T>::CalcPotentialEnergy(
-    const systems::Context<T>&,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&,
     const internal::PositionKinematicsCache<T>& pc) const {
   const math::RigidTransform<T>& X_WA = pc.get_X_WB(bodyA().mobod_index());
   const math::RigidTransform<T>& X_WB = pc.get_X_WB(bodyB().mobod_index());
@@ -100,7 +101,7 @@ T LinearSpringDamper<T>::CalcPotentialEnergy(
 
 template <typename T>
 T LinearSpringDamper<T>::CalcConservativePower(
-    const systems::Context<T>&, const internal::PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc) const {
   // Since the potential energy is:
   //  V = 1/2⋅k⋅(ℓ-ℓ₀)²
@@ -131,7 +132,7 @@ T LinearSpringDamper<T>::CalcConservativePower(
 
 template <typename T>
 T LinearSpringDamper<T>::CalcNonConservativePower(
-    const systems::Context<T>&, const internal::PositionKinematicsCache<T>& pc,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&, const internal::PositionKinematicsCache<T>& pc,
     const internal::VelocityKinematicsCache<T>& vc) const {
   // The rate at which the length of the spring changes.
   const T length_dot = CalcLengthTimeDerivative(pc, vc);

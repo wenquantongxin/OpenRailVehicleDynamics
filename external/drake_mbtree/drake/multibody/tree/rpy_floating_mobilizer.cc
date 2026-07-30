@@ -11,6 +11,7 @@
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -69,84 +70,96 @@ std::string RpyFloatingMobilizer<T>::velocity_suffix(
 
 template <typename T>
 Vector6<T> RpyFloatingMobilizer<T>::get_generalized_positions(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_positions(context);
 }
 
 template <typename T>
 Vector6<T> RpyFloatingMobilizer<T>::get_generalized_velocities(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_velocities(context);
 }
 
 template <typename T>
 Vector3<T> RpyFloatingMobilizer<T>::get_angles(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_positions(context).template head<3>();
 }
 
 template <typename T>
 Vector3<T> RpyFloatingMobilizer<T>::get_translation(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_positions(context).template tail<3>();
 }
 
 template <typename T>
 Vector3<T> RpyFloatingMobilizer<T>::get_angular_velocity(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_velocities(context).template head<3>();
 }
 
 template <typename T>
 Vector3<T> RpyFloatingMobilizer<T>::get_translational_velocity(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   return this->get_velocities(context).template tail<3>();
 }
 
 template <typename T>
 const RpyFloatingMobilizer<T>& RpyFloatingMobilizer<T>::SetAngles(
-    systems::Context<T>* context, const Vector3<T>& angles) const {
-  auto q = this->GetMutablePositions(context).template head<3>();
-  q = angles;
+    orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& angles) const {
+  QVector<T> q = this->get_positions(*context);
+  q.template head<3>() = angles;
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 const RpyFloatingMobilizer<T>& RpyFloatingMobilizer<T>::SetTranslation(
-    systems::Context<T>* context, const Vector3<T>& p_FM) const {
-  auto q = this->GetMutablePositions(context).template tail<3>();
-  q = p_FM;
+    orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& p_FM) const {
+  QVector<T> q = this->get_positions(*context);
+  q.template tail<3>() = p_FM;
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 const RpyFloatingMobilizer<T>& RpyFloatingMobilizer<T>::SetAngularVelocity(
-    systems::Context<T>* context, const Vector3<T>& w_FM) const {
-  auto v = this->GetMutableVelocities(context).template head<3>();
-  v = w_FM;
+    orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const {
+  VVector<T> v = this->get_velocities(*context);
+  v.template head<3>() = w_FM;
+  this->SetVelocities(context, v);
   return *this;
 }
 
 template <typename T>
 const RpyFloatingMobilizer<T>&
 RpyFloatingMobilizer<T>::SetTranslationalVelocity(
-    systems::Context<T>* context, const Vector3<T>& v_FM) const {
-  auto v = this->GetMutableVelocities(context).template tail<3>();
-  v = v_FM;
+    orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const {
+  VVector<T> v = this->get_velocities(*context);
+  v.template tail<3>() = v_FM;
+  this->SetVelocities(context, v);
   return *this;
 }
 
 template <typename T>
 const RpyFloatingMobilizer<T>& RpyFloatingMobilizer<T>::SetFromRigidTransform(
-    systems::Context<T>* context, const math::RigidTransform<T>& X_FM) const {
-  SetAngles(context, math::RollPitchYaw<T>(X_FM.rotation()).vector());
-  SetTranslation(context, X_FM.translation());
+    orvd::multibody_runtime::MultibodyStateInstance* context,
+    const math::RigidTransform<T>& X_FM) const {
+  // One write, not two. Chaining SetAngles() and SetTranslation() would advance
+  // the position version twice for a single pose, and in between the state
+  // would hold this pose's orientation against the previous pose's translation
+  // — a configuration nobody asked for, which anything reading q at that moment
+  // would take at face value.
+  QVector<T> q = this->get_positions(*context);
+  q.template head<3>() = math::RollPitchYaw<T>(X_FM.rotation()).vector();
+  q.template tail<3>() = X_FM.translation();
+  this->SetPositions(context, q);
   return *this;
 }
 
 template <typename T>
 math::RigidTransform<T> RpyFloatingMobilizer<T>::CalcAcrossMobilizerTransform(
-    const systems::Context<T>& context) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context) const {
   const auto& q = this->get_positions(context);
   DRAKE_ASSERT(q.size() == kNq);
   return calc_X_FM(q.data());
@@ -154,7 +167,7 @@ math::RigidTransform<T> RpyFloatingMobilizer<T>::CalcAcrossMobilizerTransform(
 
 template <typename T>
 SpatialVelocity<T> RpyFloatingMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
-    const systems::Context<T>&, const Eigen::Ref<const VectorX<T>>& v) const {
+    const orvd::multibody_runtime::MultibodyStateInstance&, const Eigen::Ref<const VectorX<T>>& v) const {
   DRAKE_ASSERT(v.size() == kNv);
   return calc_V_FM(nullptr, v.data());
 }
@@ -162,7 +175,7 @@ SpatialVelocity<T> RpyFloatingMobilizer<T>::CalcAcrossMobilizerSpatialVelocity(
 template <typename T>
 SpatialAcceleration<T>
 RpyFloatingMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
-    const systems::Context<T>&,
+    const orvd::multibody_runtime::MultibodyStateInstance&,
     const Eigen::Ref<const VectorX<T>>& vdot) const {
   DRAKE_ASSERT(vdot.size() == kNv);
   return calc_A_FM(nullptr, nullptr, vdot.data());
@@ -170,7 +183,7 @@ RpyFloatingMobilizer<T>::CalcAcrossMobilizerSpatialAcceleration(
 
 template <typename T>
 void RpyFloatingMobilizer<T>::ProjectSpatialForce(
-    const systems::Context<T>&, const SpatialForce<T>& F_BMo_F,
+    const orvd::multibody_runtime::MultibodyStateInstance&, const SpatialForce<T>& F_BMo_F,
     Eigen::Ref<VectorX<T>> tau) const {
   DRAKE_ASSERT(tau.size() == kNv);
   calc_tau(nullptr, F_BMo_F, tau.data());
@@ -188,7 +201,7 @@ auto RpyFloatingMobilizer<T>::DoPoseToPositions(
 }
 
 template <typename T>
-void RpyFloatingMobilizer<T>::DoCalcNMatrix(const systems::Context<T>& context,
+void RpyFloatingMobilizer<T>::DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                             EigenPtr<MatrixX<T>> N) const {
   using std::abs;
   using std::cos;
@@ -244,7 +257,7 @@ void RpyFloatingMobilizer<T>::DoCalcNMatrix(const systems::Context<T>& context,
 
 template <typename T>
 void RpyFloatingMobilizer<T>::DoCalcNplusMatrix(
-    const systems::Context<T>& context, EigenPtr<MatrixX<T>> Nplus) const {
+    const orvd::multibody_runtime::MultibodyStateInstance& context, EigenPtr<MatrixX<T>> Nplus) const {
   // The linear map between q̇ and v is given by matrix E_F(q) defined by:
   //          [ cos(y) * cos(p), -sin(y), 0]
   // E_F(q) = [ sin(y) * cos(p),  cos(y), 0]
@@ -279,7 +292,7 @@ void RpyFloatingMobilizer<T>::DoCalcNplusMatrix(
 
 template <typename T>
 void RpyFloatingMobilizer<T>::DoMapVelocityToQDot(
-    const systems::Context<T>& context, const Eigen::Ref<const VectorX<T>>& v,
+    const orvd::multibody_runtime::MultibodyStateInstance& context, const Eigen::Ref<const VectorX<T>>& v,
     EigenPtr<VectorX<T>> qdot) const {
   using std::abs;
   using std::cos;
@@ -369,7 +382,7 @@ void RpyFloatingMobilizer<T>::DoMapVelocityToQDot(
 
 template <typename T>
 void RpyFloatingMobilizer<T>::DoMapQDotToVelocity(
-    const systems::Context<T>& context,
+    const orvd::multibody_runtime::MultibodyStateInstance& context,
     const Eigen::Ref<const VectorX<T>>& qdot, EigenPtr<VectorX<T>> v) const {
   using std::cos;
   using std::sin;

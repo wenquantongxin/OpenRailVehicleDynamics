@@ -8,7 +8,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -85,7 +85,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
    @param[in] context The context of the model this mobilizer belongs to.
    @returns The two translations (x, y) packed and returned as a vector with
             entries `translations(0) = x`, `translations(1) = y`. */
-  Vector2<T> get_translations(const systems::Context<T>& context) const;
+  Vector2<T> get_translations(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   /* Sets in `context` the position for `this` mobilizer to the translations
    (x, y) provided in the input argument `translations`, which stores them with
@@ -98,7 +98,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
                            respectively.
    @returns A constant reference to `this` mobilizer. */
   const PlanarMobilizer<T>& set_translations(
-      systems::Context<T>* context,
+      orvd::multibody_runtime::MultibodyStateInstance* context,
       const Eigen::Ref<const Vector2<T>>& translations) const;
 
   /* Retrieves from `context` the angle θ which describe the orientation for
@@ -106,7 +106,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
 
    @param[in] context The context of the model this mobilizer belongs to.
    @returns The angle θ of the mobilizer. */
-  const T& get_angle(const systems::Context<T>& context) const;
+  const T& get_angle(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   /* Sets in `context` the orientation for `this` mobilizer to the angle θ
    provided by the input argument `angle`.
@@ -114,7 +114,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
    @param[in] context The context of the model this mobilizer belongs to.
    @param[in] angle The desired angle in radians.
    @returns a constant reference to `this` mobilizer. */
-  const PlanarMobilizer<T>& SetAngle(systems::Context<T>* context,
+  const PlanarMobilizer<T>& SetAngle(orvd::multibody_runtime::MultibodyStateInstance* context,
                                      const T& angle) const;
 
   /* Retrieves from `context` the rate of change, in meters per second, of
@@ -122,7 +122,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
    @param[in] context The context of the model this mobilizer belongs to.
    @returns The rate of change of the two translations (ẋ, ẏ) returned as
             the vector [ẋ, ẏ], which is v_FM_F. */
-  Vector2<T> get_translation_rates(const systems::Context<T>& context) const;
+  Vector2<T> get_translation_rates(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   /* Sets in `context` the rate of change, in meters per second, of `this`
    mobilizer's translations (see get_translations()) to `v_FM_F`.
@@ -131,14 +131,14 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
                      translations, packed as the vector [ẋ, ẏ].
    @returns A constant reference to `this` mobilizer. */
   const PlanarMobilizer<T>& SetTranslationRates(
-      systems::Context<T>* context,
+      orvd::multibody_runtime::MultibodyStateInstance* context,
       const Eigen::Ref<const Vector2<T>>& v_FM_F) const;
 
   /* Retrieves from `context` the rate of change, in radians per second, of
    `this` mobilizer's angle (see get_angle()).
    @param[in] context The context of the model this mobilizer belongs to.
    @returns The rate of change of `this` mobilizer's angle. */
-  const T& get_angular_rate(const systems::Context<T>& context) const;
+  const T& get_angular_rate(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   /* Sets in `context` the rate of change, in radians per second, of `this`
    mobilizer's angle (see angle()) to `theta_dot`.
@@ -146,7 +146,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
    @param[in] theta_dot The desired rate of change of `this` mobilizer's angle
                         in radians per second.
    @returns A constant reference to `this` mobilizer. */
-  const PlanarMobilizer<T>& SetAngularRate(systems::Context<T>* context,
+  const PlanarMobilizer<T>& SetAngularRate(orvd::multibody_runtime::MultibodyStateInstance* context,
                                            const T& theta_dot) const;
 
   /* Computes the across-mobilizer transform `X_FM(q)` between the inboard
@@ -187,10 +187,10 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
   }
 
   math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>& context) const final;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
 
   SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   /* Computes the across-mobilizer acceleration `A_FM(q, v, v̇)` of the outboard
@@ -201,7 +201,7 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
    `v̇ = dv/dt`, the rates of change of v.
    This method aborts in Debug builds if `vdot.size()` is not three. */
   SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
   /* Projects the spatial force `F_Mo = [τ_Mo, f_Mo]` on `this` mobilizer's
@@ -215,44 +215,44 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
    Therefore, the result of this method is the vector of torques and forces for
    each degree of freedom of `this` mobilizer.
    This method aborts in Debug builds if `tau.size()` is not three. */
-  void ProjectSpatialForce(const systems::Context<T>& context,
+  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
   bool is_velocity_equal_to_qdot() const override { return true; }
 
  protected:
-  void DoCalcNMatrix(const systems::Context<T>& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const systems::Context<T>& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const systems::Context<T>& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const systems::Context<T>& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const systems::Context<T>& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const systems::Context<T>& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps vdot to qddot, which for this mobilizer is q̈ = v̇.
-  void DoMapAccelerationToQDDot(const systems::Context<T>& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
   // Maps qddot to vdot, which for this mobilizer is v̇ = q̈.
-  void DoMapQDDotToAcceleration(const systems::Context<T>& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 

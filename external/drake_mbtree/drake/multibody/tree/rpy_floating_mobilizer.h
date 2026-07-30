@@ -8,7 +8,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -103,7 +103,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // angles are stored in the first three entries of the configuration vector,
   // followed by the three translational coordinates.
   Vector6<T> get_generalized_positions(
-      const systems::Context<T>& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Returns the generalized velocities for this mobilizer stored in context.
   // Generalized velocities v for this mobilizer are packed in exactly the
@@ -112,7 +112,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // entries of the generalized velocities vector, followed by the three
   // components of the translational velocity v_FM.
   Vector6<T> get_generalized_velocities(
-      const systems::Context<T>& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Retrieves the three roll-pitch-yaw angles θ₀, θ₁, θ₂ stored in context,
   // which describe the state for this mobilizer as documented in this class's
@@ -125,7 +125,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   //   of rotations about the space fixed axes x̂, ŷ, ẑ, respectively packed and
   //   returned as a Vector3 with entries angles(0) = θ₀, angles(1) = θ₁,
   //   angles(2) = θ₂. There are no range limits for the angular values.
-  Vector3<T> get_angles(const systems::Context<T>& context) const;
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Retrieves the position p_FM stored in context.
   //
@@ -133,7 +133,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   //   The context of the model this mobilizer belongs to.
   // @retval p_FM
   //   The position of M in F.
-  Vector3<T> get_translation(const systems::Context<T>& context) const;
+  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Retrieves from context the angular velocity w_FM of the outboard frame
   // M in the inboard frame F, expressed in F.
@@ -143,7 +143,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // @retval w_FM
   //   A vector in ℝ³ with the angular velocity of the outboard frame M in the
   //   inboard frame F, expressed in F.
-  Vector3<T> get_angular_velocity(const systems::Context<T>& context) const;
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Retrieves from context the translational velocity v_FM of the outboard
   // frame M in the inboard frame F, expressed in F.
@@ -154,7 +154,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   //   A vector in ℝ³ with the translational velocity of the outboard frame M in
   //   the inboard frame F, expressed in F.
   Vector3<T> get_translational_velocity(
-      const systems::Context<T>& context) const;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Stores in context the roll-pitch-yaw angles θ₀, θ₁, θ₂, provided in the
   // input argument angles, which stores the with the format angles = [θ₀,
@@ -167,7 +167,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   //   θ₀, θ₁, θ₂, described in this class's documentation, at entries
   //   angles(0), angles(1) and angles(2), respectively.
   // @returns a constant reference to this mobilizer.
-  const RpyFloatingMobilizer<T>& SetAngles(systems::Context<T>* context,
+  const RpyFloatingMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* context,
                                            const Vector3<T>& angles) const;
 
   // Stores in context the position p_FM of M in F.
@@ -177,7 +177,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // @param[in] p_FM
   //   Position of F in M.
   // @returns a constant reference to this mobilizer.
-  const RpyFloatingMobilizer<T>& SetTranslation(systems::Context<T>* context,
+  const RpyFloatingMobilizer<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* context,
                                                 const Vector3<T>& p_FM) const;
 
   // Sets in context the state for this mobilizer so that the angular
@@ -189,7 +189,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   //   in the inboard frame F, expressed in F.
   // @returns a constant reference to this mobilizer.
   const RpyFloatingMobilizer<T>& SetAngularVelocity(
-      systems::Context<T>* context, const Vector3<T>& w_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const;
 
   // Stores in context the translational velocity v_FM of M in F.
   //
@@ -199,7 +199,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   //   Translational velocity of F in M.
   // @returns a constant reference to this mobilizer.
   const RpyFloatingMobilizer<T>& SetTranslationalVelocity(
-      systems::Context<T>* context, const Vector3<T>& v_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const;
 
   // Sets context so this mobilizer's generalized coordinates (roll-pitch-yaw
   // angles θ₀, θ₁, θ₂ and position p_FM) represent the given rigid
@@ -213,7 +213,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // θ₁, θ₂, this specific method will generate roll-pitch-yaw angles in the
   // range -π <= θ₀ <= π, -π/2 <= θ₁ <= π/2, -π <= θ₂ <= π.
   const RpyFloatingMobilizer<T>& SetFromRigidTransform(
-      systems::Context<T>* context, const math::RigidTransform<T>& X_FM) const;
+      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RigidTransform<T>& X_FM) const;
 
   // Computes the across-mobilizer transform X_FM(q) between the inboard
   // frame F and the outboard frame M as a function of the configuration q
@@ -253,10 +253,10 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   }
 
   math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>& context) const final;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
 
   SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration A_FM(q, v, v̇) of the
@@ -271,11 +271,11 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // (see @ref Dt_multibody_quantities for our notation of time derivatives in
   // different reference frames.)
   SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const final;
 
   // See Mobilizer::ProjectSpatialForce() for details.
-  void ProjectSpatialForce(const systems::Context<T>& context,
+  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const final;
 
@@ -297,11 +297,11 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // working close to this singularity (which could potentially result in large
   // errors for qdot), this method aborts when the absolute value of the
   // cosine of θ₁ is smaller than 10⁻³, a number arbitrarily chosen to this end.
-  void DoCalcNMatrix(const systems::Context<T>& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                      EigenPtr<MatrixX<T>> N) const final;
 
   // Implements Mobilizer's NVI, see Mobilizer::DoCalcNplusMatrix() for details.
-  void DoCalcNplusMatrix(const systems::Context<T>& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Maps the generalized velocity v to time derivatives of configuration
@@ -321,7 +321,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // working close to this singularity (which could potentially result in large
   // errors for qdot), this method aborts when the absolute value of the
   // cosine of θ₁ is smaller than 10⁻³, a number arbitrarily chosen to this end.
-  void DoMapVelocityToQDot(const systems::Context<T>& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
@@ -336,7 +336,7 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // @param[out] v
   //   A vector of generalized velocities for this mobilizer, packed as
   //   documented in get_generalized_velocities().
-  void DoMapQDotToVelocity(const systems::Context<T>& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 

@@ -4,6 +4,8 @@
 #include <stdexcept>
 
 #include "drake/multibody/tree/multibody_tree.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -38,7 +40,7 @@ QuaternionFloatingJoint<T>::MakeMobilizerForJoint(
 }
 
 template <typename T>
-void QuaternionFloatingJoint<T>::DoAddInOneForce(const systems::Context<T>&,
+void QuaternionFloatingJoint<T>::DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&,
                                                  int, const T&,
                                                  MultibodyForces<T>*) const {
   throw std::logic_error(
@@ -48,7 +50,7 @@ void QuaternionFloatingJoint<T>::DoAddInOneForce(const systems::Context<T>&,
 
 template <typename T>
 void QuaternionFloatingJoint<T>::DoAddInDamping(
-    const systems::Context<T>& context, MultibodyForces<T>* forces) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, MultibodyForces<T>* forces) const {
   Eigen::Ref<VectorX<T>> t_BMo_F =
       get_mobilizer().get_mutable_generalized_forces_from_array(
           &forces->mutable_generalized_forces());

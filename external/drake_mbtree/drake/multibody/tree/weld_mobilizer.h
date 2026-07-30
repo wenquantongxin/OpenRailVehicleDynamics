@@ -7,7 +7,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -92,21 +92,21 @@ class WeldMobilizer final : public MobilizerImpl<T, 0, 0> {
   void calc_tau(const T*, const SpatialForce<T>&, T*) const {}
 
   math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>&) const final;
+      const orvd::multibody_runtime::MultibodyStateInstance&) const final;
 
   SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>&,
+      const orvd::multibody_runtime::MultibodyStateInstance&,
       const Eigen::Ref<const VectorX<T>>&) const final;
 
   // Computes the across-mobilizer acceleration `A_FM` which for this mobilizer
   // is always zero since the outboard frame M is fixed to the inboard frame F.
   SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const final;
 
   // Since this mobilizer has no generalized velocities associated with it,
   // this override is a no-op.
-  void ProjectSpatialForce(const systems::Context<T>& context,
+  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const final;
 
@@ -116,41 +116,41 @@ class WeldMobilizer final : public MobilizerImpl<T, 0, 0> {
   bool can_translate() const final { return false; }
 
  protected:
-  void DoCalcNMatrix(const systems::Context<T>& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const systems::Context<T>& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = 0x0 matrix.
-  void DoCalcNDotMatrix(const systems::Context<T>& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = 0x0 matrix.
-  void DoCalcNplusDotMatrix(const systems::Context<T>& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // This override is a no-op since this mobilizer has no generalized
   // velocities associated with it.
-  void DoMapVelocityToQDot(const systems::Context<T>& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // This override is a no-op since this mobilizer has no generalized
   // velocities associated with it.
-  void DoMapQDotToVelocity(const systems::Context<T>& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
   // This override is a no-op since this mobilizer has no generalized
   // velocities associated with it.
-  void DoMapAccelerationToQDDot(const systems::Context<T>& context,
+  void DoMapAccelerationToQDDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 const Eigen::Ref<const VectorX<T>>& vdot,
                                 EigenPtr<VectorX<T>> qddot) const final;
 
   // This override is a no-op since this mobilizer has no generalized
   // velocities associated with it.
-  void DoMapQDDotToAcceleration(const systems::Context<T>& context,
+  void DoMapQDDotToAcceleration(const orvd::multibody_runtime::MultibodyStateInstance& context,
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 

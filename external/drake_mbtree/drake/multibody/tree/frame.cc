@@ -2,6 +2,8 @@
 
 #include "drake/common/nice_type_name.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -32,7 +34,7 @@ ScopedName Frame<T>::scoped_name() const {
 //  rigid body (not a soft body). Modify if soft bodies are possible.
 template <typename T>
 Vector3<T> Frame<T>::CalcAngularVelocity(
-    const systems::Context<T>& context, const Frame<T>& measured_in_frame,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& measured_in_frame,
     const Frame<T>& expressed_in_frame) const {
   const Frame<T>& frame_M = measured_in_frame;
   const Frame<T>& frame_E = expressed_in_frame;
@@ -54,7 +56,7 @@ Vector3<T> Frame<T>::CalcAngularVelocity(
 //  rigid body (not a soft body). Modify if soft bodies are possible.
 template <typename T>
 SpatialVelocity<T> Frame<T>::CalcSpatialVelocityInWorld(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const math::RotationMatrix<T>& R_WB =
       body().EvalPoseInWorld(context).rotation();
   const Vector3<T> p_BF_B = GetFixedPoseInBodyFrame().translation();
@@ -66,7 +68,7 @@ SpatialVelocity<T> Frame<T>::CalcSpatialVelocityInWorld(
 
 template <typename T>
 SpatialVelocity<T> Frame<T>::CalcSpatialVelocity(
-    const systems::Context<T>& context, const Frame<T>& frame_M,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& frame_M,
     const Frame<T>& frame_E) const {
   const math::RotationMatrix<T> R_WM =
       frame_M.CalcRotationMatrixInWorld(context);
@@ -95,7 +97,7 @@ SpatialVelocity<T> Frame<T>::CalcSpatialVelocity(
 //  rigid body (not a soft body). Modify if soft bodies are possible.
 template <typename T>
 SpatialAcceleration<T> Frame<T>::CalcSpatialAccelerationInWorld(
-    const systems::Context<T>& context) const {
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   // `this` frame_F is fixed to a body B.  Calculate A_WB_W, body B's spatial
   // acceleration in the world frame W, expressed in W.
   const SpatialAcceleration<T>& A_WB_W =
@@ -116,7 +118,7 @@ SpatialAcceleration<T> Frame<T>::CalcSpatialAccelerationInWorld(
 
 template <typename T>
 SpatialAcceleration<T> Frame<T>::CalcSpatialAcceleration(
-    const systems::Context<T>& context, const Frame<T>& measured_in_frame,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& measured_in_frame,
     const Frame<T>& expressed_in_frame) const {
   const Frame<T>& frame_M = measured_in_frame;
   const Frame<T>& frame_E = expressed_in_frame;

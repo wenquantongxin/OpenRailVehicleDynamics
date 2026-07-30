@@ -7,7 +7,7 @@
 
 - 工作分支：`main`
 - 当前阶段：实现单一 Context 状态所有权
-- 当前 Goal：`G26`
+- 当前 Goal：`G27`
 - 产品代码状态：vendored common support、topology 与 double pose math 三个静态库可构建，
   四个位姿组合函数有常驻契约测试；刚性 tree 源码已落位，其编译前沿受阻于三个待替换的
   运行时头；第一方运行时已落地状态布局、类型化参数存储、五个版本源、通用类型化缓存槽
@@ -413,7 +413,7 @@ Goal GNN — <明确的功能名称>
 
 ## 子目标 10：让 MultibodyTree 脱离 systems/framework
 
-- [ ] **G26 — 用类型化多体状态替换 systems 状态表面**
+- [x] **G26 — 用类型化多体状态替换 systems 状态表面**
   - 产物：landed tree 的 q/v 与物理参数访问改接 G21–G22；删除 `State`、`Parameters`、
     `BasicVector`、systems 的数值/抽象参数索引、离散状态、通用 element cache 声明和
     `parameter_conversion.h`，landed Joint 头的标量 `Context` 别名同步消失；类型化参数
@@ -428,6 +428,24 @@ Goal GNN — <明确的功能名称>
     锁定分支；`Mobilizer::Lock()` 当前还会清零速度，该入口同样整链消失，不只删布尔存储。
     未来若出现已批准需求，必须作为新的证据化产品决策，连同存储、API、算法与测试完整
     重引入。依据见契约文档第六节。
+  - 实测结论：落位树的 `systems::Context` 从 **881 降到 0**,`systems::State` 40 → 0,
+    `systems::Parameters` 29 → 0,数值/抽象参数索引 15 → 0,`is_locked` 15 → 0,
+    离散状态索引与 `is_state_discrete` 分支全部退出,`systems/framework` 的 include
+    16 个文件 → 0。`context.h` 与 `parameter_conversion.h` 不再是编译前沿缺口,
+    **唯一剩余的运行时头缺口是 `multibody_tree_system.h`**,归 G27。
+    881 处中真正取状态的入口只有 61 处,其余 601 处是形参声明、566 处是把 context 往下传——
+    这把本 Goal 的风险从「改 881 个语义点」重新定级为「改 61 个语义点加一次类型迁移」。
+  - 签名按消费职责分:只读状态、可写状态、求值上下文、删除未使用形参。求值上下文
+    `RigidMultibodyTreeEvaluationContext` 由 107 个函数收取——起点是调用 `Eval*` 的入口,
+    其余由传递闭包迭代七轮得出。它提供**只读的**隐式转换到状态,因此一个声明自己只读的
+    函数不能悄悄变成写入者,版本也无法绕过求值器被推进。
+  - **类型正确性已验证**:用一个仓库外的一次性探针补上 `multibody_tree_system.h` 的
+    13 个 `Eval` 签名后,**全部 71 个落位翻译单元零错误通过类型检查**。探针不进入仓库、
+    不落位,仓库内不存在任何伪造的 systems 头。本 Goal 不声称 ABA 数值正确性已获证明;
+    完整编译、最小运行与参考差分仍归 G28/G39。
+  - 事务约束:同一高层操作修改同一 mobilizer 的多个子段时先合成完整段再提交
+    (`SetFromRigidTransform`、自由体 pose、`SetPosePair`),默认状态由模型填完调用方自有的
+    完整 q 后提交一次。不提供 q+v 合并 setter——两次独立写入不是一次事务。
 
 - [ ] **G27 — 绑定真实缓存并切断 tree_system 反向指针**
   - 产物：有重复消费证据的 tree `Eval` 入口绑定到 G23–G25，tree 直接接收多体求值

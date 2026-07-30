@@ -9,6 +9,8 @@
 #include "drake/math/roll_pitch_yaw.h"
 #include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/force_element.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -414,83 +416,81 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
 
   /// @anchor bushing_parameters
   /// The following set of methods allow for access and modification of
-  /// torque/force stiffness/damping parameters stored in a systems::Context.
+  /// torque/force stiffness/damping parameters stored in the multibody state.
   /// Refer to @ref Basic_bushing_force_stiffness_and_damping
   ///   "How to choose force stiffness and damping constants" for more details.
   /// @{
 
-  /// Returns the torque stiffness constants `[k₀ k₁ k₂]` (units of N*m/rad)
-  /// stored in `context`.
+  /// Returns the torque stiffness constants `[k₀ k₁ k₂]` (units of N*m/rad).
   Vector3<T> GetTorqueStiffnessConstants(
-      const systems::Context<T>& context) const {
-    const systems::BasicVector<T>& torque_stiffness =
-        context.get_numeric_parameter(torque_stiffness_parameter_index_);
-    return torque_stiffness.get_value();
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.linear_bushing_parameters(bushing_parameter_slot_)
+        .torque_stiffness;
   }
 
-  /// Returns the torque damping constants `[d₀ d₁ d₂]` (units of
-  /// N*m*s/rad) stored in `context`.
+  /// Returns the torque damping constants `[d₀ d₁ d₂]` (units of N*m*s/rad).
   Vector3<T> GetTorqueDampingConstants(
-      const systems::Context<T>& context) const {
-    const systems::BasicVector<T>& torque_damping =
-        context.get_numeric_parameter(torque_damping_parameter_index_);
-    return torque_damping.get_value();
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.linear_bushing_parameters(bushing_parameter_slot_)
+        .torque_damping;
   }
 
-  /// Returns the force stiffness constants `[kx ky kz]` (units of N/m) stored
-  /// in `context`.
+  /// Returns the force stiffness constants `[kx ky kz]` (units of N/m).
   Vector3<T> GetForceStiffnessConstants(
-      const systems::Context<T>& context) const {
-    const systems::BasicVector<T>& force_stiffness =
-        context.get_numeric_parameter(force_stiffness_parameter_index_);
-    return force_stiffness.get_value();
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.linear_bushing_parameters(bushing_parameter_slot_)
+        .force_stiffness;
   }
 
-  /// Returns the force damping constants `[dx dy dz]` (units of N*s/m) stored
-  /// in `context`.
+  /// Returns the force damping constants `[dx dy dz]` (units of N*s/m).
   Vector3<T> GetForceDampingConstants(
-      const systems::Context<T>& context) const {
-    const systems::BasicVector<T>& force_damping =
-        context.get_numeric_parameter(force_damping_parameter_index_);
-    return force_damping.get_value();
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.linear_bushing_parameters(bushing_parameter_slot_)
+        .force_damping;
   }
 
-  /// Sets the torque stiffness constants `[k₀ k₁ k₂]` (units of N*m/rad)
-  /// in `context`.
-  void SetTorqueStiffnessConstants(systems::Context<T>* context,
-                                   const Vector3<T>& torque_stiffness) const {
-    systems::BasicVector<T>& torque_stiffness_parameter =
-        context->get_mutable_numeric_parameter(
-            torque_stiffness_parameter_index_);
-    torque_stiffness_parameter.SetFromVector(torque_stiffness);
+  /// Sets the torque stiffness constants `[k₀ k₁ k₂]` (units of N*m/rad).
+  ///
+  /// All four constant groups live in one record. Each setter reads the record,
+  /// changes its own group and writes the whole thing back, so the other three
+  /// keep their values and a caller never sees a half-updated bushing.
+  void SetTorqueStiffnessConstants(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Vector3<T>& torque_stiffness) const {
+    orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
+        state->linear_bushing_parameters(bushing_parameter_slot_);
+    parameters.torque_stiffness = torque_stiffness;
+    state->set_linear_bushing_parameters(bushing_parameter_slot_, parameters);
   }
 
-  /// Sets the torque damping constants `[d₀ d₁ d₂]` (units of
-  /// N*m*s/rad) in `context`.
-  void SetTorqueDampingConstants(systems::Context<T>* context,
-                                 const Vector3<T>& torque_damping) const {
-    systems::BasicVector<T>& torque_damping_parameter =
-        context->get_mutable_numeric_parameter(torque_damping_parameter_index_);
-    torque_damping_parameter.SetFromVector(torque_damping);
+  /// Sets the torque damping constants `[d₀ d₁ d₂]` (units of N*m*s/rad).
+  void SetTorqueDampingConstants(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Vector3<T>& torque_damping) const {
+    orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
+        state->linear_bushing_parameters(bushing_parameter_slot_);
+    parameters.torque_damping = torque_damping;
+    state->set_linear_bushing_parameters(bushing_parameter_slot_, parameters);
   }
 
-  /// Sets the force stiffness constants `[kx ky kz]` (units of N/m)
-  /// in `context`.
-  void SetForceStiffnessConstants(systems::Context<T>* context,
-                                  const Vector3<T>& force_stiffness) const {
-    systems::BasicVector<T>& force_stiffness_parameter =
-        context->get_mutable_numeric_parameter(
-            force_stiffness_parameter_index_);
-    force_stiffness_parameter.SetFromVector(force_stiffness);
+  /// Sets the force stiffness constants `[kx ky kz]` (units of N/m).
+  void SetForceStiffnessConstants(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Vector3<T>& force_stiffness) const {
+    orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
+        state->linear_bushing_parameters(bushing_parameter_slot_);
+    parameters.force_stiffness = force_stiffness;
+    state->set_linear_bushing_parameters(bushing_parameter_slot_, parameters);
   }
 
-  /// Sets the force damping constants `[dx dy dz]` (units of N*s/m)
-  /// in `context`.
-  void SetForceDampingConstants(systems::Context<T>* context,
-                                const Vector3<T>& force_damping) const {
-    systems::BasicVector<T>& force_damping_parameter =
-        context->get_mutable_numeric_parameter(force_damping_parameter_index_);
-    force_damping_parameter.SetFromVector(force_damping);
+  /// Sets the force damping constants `[dx dy dz]` (units of N*s/m).
+  void SetForceDampingConstants(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Vector3<T>& force_damping) const {
+    orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters =
+        state->linear_bushing_parameters(bushing_parameter_slot_);
+    parameters.force_damping = force_damping;
+    state->set_linear_bushing_parameters(bushing_parameter_slot_, parameters);
   }
   /// @}
 
@@ -502,7 +502,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   /// @throws std::exception if pitch angle is near gimbal-lock.  For more info,
   /// @see RollPitchYaw::DoesCosPitchAngleViolateGimbalLockTolerance().
   SpatialForce<T> CalcBushingSpatialForceOnFrameA(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   /// Calculate F_C_C, the bushing's spatial force on frame C expressed in C.
   /// F_C_C contains two vectors: the moment of all bushing forces on C about Co
@@ -512,49 +512,30 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   /// @throws std::exception if pitch angle is near gimbal-lock.  For more info,
   /// @see RollPitchYaw::DoesCosPitchAngleViolateGimbalLockTolerance().
   SpatialForce<T> CalcBushingSpatialForceOnFrameC(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
  private:
-  // Implementation for ForceElement::DoDeclareForceElementParameters().
-  void DoDeclareForceElementParameters(
-      internal::MultibodyTreeSystem<T>* tree_system) final {
-    // Sets model values to dummy values to indicate that the model values are
-    // not used. This class stores the the default values of the parameters.
-    torque_stiffness_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(3));
-    torque_damping_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(3));
-    force_stiffness_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(3));
-    force_damping_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(3));
+  // Implementation for ForceElement::DoAssignForceElementParameterSlots().
+  //
+  // One slot, not four. Upstream declared each stiffness and damping triple as
+  // its own numeric parameter; a bushing force reads all four together and
+  // nothing reads one alone, so four slots only bought four moments at which
+  // the set could be half updated.
+  void DoAssignForceElementParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator) final {
+    bushing_parameter_slot_ = allocator->AllocateLinearBushingSlot();
   }
 
-  // Implementation for ForceElement::DoSetDefaultForceElementParameters().
-  void DoSetDefaultForceElementParameters(
-      systems::Parameters<T>* parameters) const final {
-    // Set the default stiffness and damping parameters.
-    systems::BasicVector<T>& torque_stiffness_parameter =
-        parameters->get_mutable_numeric_parameter(
-            torque_stiffness_parameter_index_);
-    systems::BasicVector<T>& torque_damping_parameter_ =
-        parameters->get_mutable_numeric_parameter(
-            torque_damping_parameter_index_);
-    systems::BasicVector<T>& force_stiffness_parameter_ =
-        parameters->get_mutable_numeric_parameter(
-            force_stiffness_parameter_index_);
-    systems::BasicVector<T>& force_damping_parameter_ =
-        parameters->get_mutable_numeric_parameter(
-            force_damping_parameter_index_);
-
-    torque_stiffness_parameter.set_value(
-        torque_stiffness_constants_);
-    torque_damping_parameter_.set_value(
-        torque_damping_constants_);
-    force_stiffness_parameter_.set_value(
-        force_stiffness_constants_);
-    force_damping_parameter_.set_value(
-        force_damping_constants_);
+  // Implementation for ForceElement::DoWriteDefaultForceElementParameters().
+  void DoWriteDefaultForceElementParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final {
+    orvd::multibody_runtime::LinearBushingRollPitchYawParameters parameters;
+    parameters.torque_stiffness = torque_stiffness_constants_;
+    parameters.torque_damping = torque_damping_constants_;
+    parameters.force_stiffness = force_stiffness_constants_;
+    parameters.force_damping = force_damping_constants_;
+    state->set_linear_bushing_parameters(bushing_parameter_slot_, parameters);
   }
 
   // Friend class for accessing protected/private internals of this class.
@@ -572,25 +553,25 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // TODO(Mitiguy) Per issue #12982, implement the following method.
   //  Currently it has not been implemented and throws an exception.
   T CalcPotentialEnergy(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc) const override;
 
   // TODO(Mitiguy) Per issue #12982, implement the following method.
   //  Currently it has not been implemented and throws an exception
   T CalcConservativePower(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
 
   // TODO(Mitiguy) Per issue #12982, implement the following method.
   //  Currently it has not been implemented and throws an exception
   T CalcNonConservativePower(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc) const override;
 
   void DoCalcAndAddForceContribution(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const override;
@@ -599,13 +580,13 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
 
   // Calculate R_AC, the rotation matrix that relates frames A and C.
   // @param[in] context The state of the multibody system.
-  math::RotationMatrix<T> CalcR_AC(const systems::Context<T>& context) const {
+  math::RotationMatrix<T> CalcR_AC(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     return frameC().CalcRotationMatrix(context, frameA());
   }
 
   // Calculate R_AB, the rotation matrix that relates frames A and B.
   // @param[in] context The state of the multibody system.
-  math::RotationMatrix<T> CalcR_AB(const systems::Context<T>& context) const {
+  math::RotationMatrix<T> CalcR_AB(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const math::RotationMatrix<T> R_AC = CalcR_AC(context);
     const math::RotationMatrix<T> R_AB = CalcR_AB(R_AC);
     return R_AB;
@@ -637,7 +618,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // `[−π < q₀ ≤ π, −π/2 ≤ q₁ ≤ π/2, −π < q₂ ≤ π]`.
   // @param[in] context The state of the multibody system.
   math::RollPitchYaw<T> CalcBushingRollPitchYawAngles(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     return math::RollPitchYaw<T>(CalcR_AC(context));
   }
 
@@ -646,7 +627,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // @param[in] context The state of the multibody system.
   // @retval `[ṙoll ṗitch ẏaw] = [q̇₀ q̇₁ q̇₂]`
   Vector3<T> CalcBushingRollPitchYawAngleRates(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const math::RollPitchYaw<T> rpy = CalcBushingRollPitchYawAngles(context);
     return CalcBushingRollPitchYawAngleRates(context, rpy);
   }
@@ -657,7 +638,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // @param[in] rpy RollPitchYaw angles for the orientation of frames A and C.
   // @retval `[ṙoll ṗitch ẏaw] = [q̇₀ q̇₁ q̇₂]`
   Vector3<T> CalcBushingRollPitchYawAngleRates(
-      const systems::Context<T>& context,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const math::RollPitchYaw<T>& rpy) const {
     // Throw an exception with an appropriate error message if the bushing's
     // orientation is near gimbal lock.  This happens when the pitch-angle p
@@ -672,19 +653,19 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
 
   // Calculate p_AoCo_A, the position vector from Ao to Co expressed in A.
   // @param[in] context The state of the multibody system.
-  Vector3<T> Calcp_AoCo_A(const systems::Context<T>& context) const {
+  Vector3<T> Calcp_AoCo_A(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     return CalcX_AC(context).translation();
   }
 
   // Calculate X_AC, the rigid transform that relates frames A and C.
   // @param[in] context The state of the multibody system.
-  math::RigidTransform<T> CalcX_AC(const systems::Context<T>& context) const {
+  math::RigidTransform<T> CalcX_AC(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     return frameC().CalcPose(context, frameA());
   }
 
   // Calculate `p_AoCo_B = [x y z]ʙ`, the position from Ao to Co expressed in B.
   // @param[in] context The state of the multibody system.
-  Vector3<T> Calcp_AoCo_B(const systems::Context<T>& context) const {
+  Vector3<T> Calcp_AoCo_B(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const Vector3<T> p_AoCo_A = Calcp_AoCo_A(context);
     const math::RotationMatrix<T> R_BA = CalcR_AB(context).inverse();
     return R_BA * p_AoCo_A;
@@ -695,13 +676,13 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // @param[in] context The state of the multibody system.
   // @note Calcp_AoCo_B() returns `p_AoCo_B = [x y z]ʙ`.
   // @see CalcBushingRollPitchYawAngleRates() for `[q̇₀ q̇₁ q̇₂]`.
-  Vector3<T> CalcBushing_xyzDt(const systems::Context<T>& context) const;
+  Vector3<T> CalcBushing_xyzDt(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   // Calculate w_AC_A, frame C's angular velocity in frame A, expressed in A.
   // @param[in] context The state of the multibody system.
   // @note `w_AC_A ≠ [q̇₀ q̇₁ q̇₂]`
   // @see CalcBushingRollPitchYawAngleRates() for `[q̇₀ q̇₁ q̇₂]`.
-  Vector3<T> Calcw_AC_A(const systems::Context<T>& context) const {
+  Vector3<T> Calcw_AC_A(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     return frameC()
         .CalcSpatialVelocity(context, frameA(), frameA())
         .rotational();
@@ -711,7 +692,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // torque stiffness constants [k₀ k₁ k₂] and roll-pitch-yaw angles [q₀ q₁ q₂].
   // @param[in] context The state of the multibody system.
   Vector3<T> TorqueStiffnessConstantsTimesAngles(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const math::RollPitchYaw<T> rpy = CalcBushingRollPitchYawAngles(context);
     return GetTorqueStiffnessConstants(context).cwiseProduct(rpy.vector());
   }
@@ -720,7 +701,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // torque damping constants [d₀ d₁ d₂] and roll-pitch-yaw rates [q̇₀ q̇₁ q̇₂].
   // @param[in] context The state of the multibody system.
   Vector3<T> TorqueDampingConstantsTimesAngleRates(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const math::RollPitchYaw<T> rpy = CalcBushingRollPitchYawAngles(context);
     const Vector3<T> rpyDt = CalcBushingRollPitchYawAngleRates(context, rpy);
     return GetTorqueDampingConstants(context).cwiseProduct(rpyDt);
@@ -728,7 +709,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
 
   // Calculate the 3x1 array (not a vector) containing τ = τᴋ + τᴅ = [τ₀ τ₁ τ₂].
   // @param[in] context The state of the multibody system.
-  Vector3<T> CalcBushingTorqueTau(const systems::Context<T>& context) const {
+  Vector3<T> CalcBushingTorqueTau(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     // τ₀ = −(k₀ q₀ + d₀ q̇₀)
     // τ₁ = −(k₁ q₁ + d₁ q̇₁)
     // τ₂ = −(k₂ q₂ + d₂ q̇₂)
@@ -745,13 +726,13 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // @throws std::exception if pitch angle is near gimbal-lock.  For more info,
   // @see RollPitchYaw::DoesCosPitchAngleViolateGimbalLockTolerance().
   Vector3<T> CalcBushingTorqueOnCExpressedInA(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   // Calculate `𝐟ᴋ = [kx x, ky y, kz z]ʙ`, element-wise multiplication of the
   // force stiffness constants `[kx ky kz]` and displacements `[x y z]`.
   // @param[in] context The state of the multibody system.
   Vector3<T> ForceStiffnessConstantsTimesDisplacement(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const Vector3<T> xyz = Calcp_AoCo_B(context);  // [x y z]ʙ
     return GetForceStiffnessConstants(context).cwiseProduct(xyz);
   }
@@ -760,7 +741,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // force damping constants `[dx dy dz]` and displacement rates `[ẋ ẏ ż]`.
   // @param[in] context The state of the multibody system.
   Vector3<T> ForceDampingConstantsTimesDisplacementRate(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const Vector3<T> xyzDt = CalcBushing_xyzDt(context);
     return GetForceDampingConstants(context).cwiseProduct(xyzDt);
   }
@@ -769,7 +750,7 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   // force on frame C expressed in frame B.
   // @param[in] context The state of the multibody system.
   Vector3<T> CalcBushingNetForceOnCExpressedInB(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     // Calculate force `𝐟 = fx 𝐁𝐱 + fy 𝐁𝐲 + fz 𝐁𝐳`.
     // fx = −(kx x + dx ẋ)
     // fy = −(ky y + dy ẏ)
@@ -787,10 +768,10 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
   const Vector3<double> force_stiffness_constants_;
   const Vector3<double> force_damping_constants_;
 
-  systems::NumericParameterIndex torque_stiffness_parameter_index_;
-  systems::NumericParameterIndex torque_damping_parameter_index_;
-  systems::NumericParameterIndex force_stiffness_parameter_index_;
-  systems::NumericParameterIndex force_damping_parameter_index_;
+  // Where all four stiffness and damping triples live in the state, as one
+  // record, assigned when the model was finalized.
+  int bushing_parameter_slot_{
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot};
 };
 
 }  // namespace multibody

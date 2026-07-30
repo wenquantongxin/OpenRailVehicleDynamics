@@ -8,7 +8,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
 
 namespace drake {
 namespace multibody {
@@ -90,7 +90,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   // @param[in] context The context of the model this mobilizer belongs to.
   // @returns angles The two angles (θ₀, θ₁) packed and returned as a vector
   //                 with entries `angles(0) = θ₀`, `angles(1) = θ₁`.
-  Vector2<T> get_angles(const systems::Context<T>& context) const;
+  Vector2<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Sets in `context` the state for `this` mobilizer to the angles (θ₀, θ₁)
   // provided in the input argument `angles`, which stores them with the format
@@ -101,7 +101,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   //                   described in this class's documentation, at entries
   //                   `angles(0)` and `angles(1)`, respectively.
   // @returns a constant reference to `this` mobilizer.
-  const UniversalMobilizer<T>& SetAngles(systems::Context<T>* context,
+  const UniversalMobilizer<T>& SetAngles(orvd::multibody_runtime::MultibodyStateInstance* context,
                                          const Vector2<T>& angles) const;
 
   // Retrieves from `context` the rate of change, in radians per second, of
@@ -109,7 +109,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   // @param[in] context The context of the model this mobilizer belongs to.
   // @returns angles_dot The rate of change of the two angles (ω₁, ω₂) returned
   //                     as the vector [ω₁, ω₂].
-  Vector2<T> get_angular_rates(const systems::Context<T>& context) const;
+  Vector2<T> get_angular_rates(const orvd::multibody_runtime::MultibodyStateInstance& context) const;
 
   // Sets in `context` the rate of change, in radians per second, of this
   // `this` mobilizer's angles (see get_angles()) to `angles_dot`.
@@ -118,7 +118,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   //                       vector [ω₁, ω₂].
   // @returns a constant reference to `this` mobilizer.
   const UniversalMobilizer<T>& SetAngularRates(
-      systems::Context<T>* context, const Vector2<T>& angles_dot) const;
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector2<T>& angles_dot) const;
 
   // Computes the across-mobilizer transform `X_FM(q)` between the inboard
   // frame F and the outboard frame M as a function of the angles (θ₀, θ₁)
@@ -179,10 +179,10 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   }
 
   math::RigidTransform<T> CalcAcrossMobilizerTransform(
-      const systems::Context<T>& context) const final;
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const final;
 
   SpatialVelocity<T> CalcAcrossMobilizerSpatialVelocity(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& v) const final;
 
   // Computes the across-mobilizer acceleration `A_FM(q, v, v̇)` of the
@@ -193,7 +193,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   // generalized accelerations `v̇ = dv/dt`, the rates of change of v.
   // This method aborts in Debug builds if `vdot.size()` is not two.
   SpatialAcceleration<T> CalcAcrossMobilizerSpatialAcceleration(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const Eigen::Ref<const VectorX<T>>& vdot) const override;
 
   // Projects the spatial force `F_Mo = [τ_Mo, f_Mo]` on `this` mobilizer's
@@ -205,34 +205,34 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
   // Therefore, the result of this method is the vector of torques about each
   // rotation axis of `this` mobilizer.
   // This method aborts in Debug builds if `tau.size()` is not two.
-  void ProjectSpatialForce(const systems::Context<T>& context,
+  void ProjectSpatialForce(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const SpatialForce<T>& F_Mo_F,
                            Eigen::Ref<VectorX<T>> tau) const override;
 
   bool is_velocity_equal_to_qdot() const override { return true; }
 
  protected:
-  void DoCalcNMatrix(const systems::Context<T>& context,
+  void DoCalcNMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                      EigenPtr<MatrixX<T>> N) const final;
 
-  void DoCalcNplusMatrix(const systems::Context<T>& context,
+  void DoCalcNplusMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                          EigenPtr<MatrixX<T>> Nplus) const final;
 
   // Generally, q̈ = Ṅ(q,q̇)⋅v + N(q)⋅v̇. For this mobilizer, Ṅ = zero matrix.
-  void DoCalcNDotMatrix(const systems::Context<T>& context,
+  void DoCalcNDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                         EigenPtr<MatrixX<T>> Ndot) const final;
 
   // Generally, v̇ = Ṅ⁺(q,q̇)⋅q̇ + N⁺(q)⋅q̈. For this mobilizer, Ṅ⁺ = zero matrix.
-  void DoCalcNplusDotMatrix(const systems::Context<T>& context,
+  void DoCalcNplusDotMatrix(const orvd::multibody_runtime::MultibodyStateInstance& context,
                             EigenPtr<MatrixX<T>> NplusDot) const final;
 
   // Maps v to qdot, which for this mobilizer is q̇ = v.
-  void DoMapVelocityToQDot(const systems::Context<T>& context,
+  void DoMapVelocityToQDot(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& v,
                            EigenPtr<VectorX<T>> qdot) const final;
 
   // Maps qdot to v, which for this mobilizer is v = q̇.
-  void DoMapQDotToVelocity(const systems::Context<T>& context,
+  void DoMapQDotToVelocity(const orvd::multibody_runtime::MultibodyStateInstance& context,
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 

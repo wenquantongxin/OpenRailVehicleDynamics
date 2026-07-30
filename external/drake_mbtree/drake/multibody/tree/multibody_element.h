@@ -8,6 +8,8 @@
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 #include "drake/multibody/tree/multibody_tree_system.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/multibody_parameter_slot_allocator.h"
 
 namespace drake {
 namespace multibody {
@@ -42,32 +44,27 @@ class MultibodyElement {
   /// element belongs.
   ModelInstanceIndex model_instance() const { return model_instance_; }
 
-  /// Declares MultibodyTreeSystem Parameters at MultibodyTreeSystem::Finalize()
-  /// time. NVI to the virtual method DoDeclareParameters().
-  /// @param[in] tree_system A mutable copy of the parent MultibodyTreeSystem.
-  /// @pre 'tree_system' must be the same as the parent tree system (what's
-  /// returned from GetParentTreeSystem()).
-  void DeclareParameters(internal::MultibodyTreeSystem<T>* tree_system);
+  /// Claims this element's typed parameter slot during the finalize-time
+  /// traversal. NVI to the virtual method DoAssignParameterSlots().
+  ///
+  /// An element that has no context-mutable parameters does not override the
+  /// virtual and therefore claims nothing.
+  /// @pre allocator != nullptr
+  void AssignParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator);
 
-  /// Sets default values of parameters belonging to each %MultibodyElement in
-  /// `parameters` at a call to MultibodyTreeSystem::SetDefaultParameters().
-  /// @param[out] parameters A mutable collections of parameters in a context.
-  /// @pre parameters != nullptr
-  void SetDefaultParameters(systems::Parameters<T>* parameters) const;
-
-  /// Declares MultibodyTreeSystem discrete states. NVI to the virtual method
-  /// DoDeclareDiscreteState().
-  /// @param[in] tree_system A mutable copy of the parent MultibodyTreeSystem.
-  /// @pre 'tree_system' must be the same as the parent tree system (what's
-  /// returned from GetParentTreeSystem()).
-  void DeclareDiscreteState(internal::MultibodyTreeSystem<T>* tree_system);
-
-  /// (Advanced) Declares all cache entries needed by this element.
-  /// This method is called by MultibodyTree on `this` element during
-  /// MultibodyTree::Finalize(). It subsequently calls DoDeclareCacheEntries().
-  /// Custom elements that need to declare cache entries must override
-  /// DoDeclareCacheEntries().
-  void DeclareCacheEntries(internal::MultibodyTreeSystem<T>* tree_system);
+  /// Writes this element's model default parameters into a newly created state.
+  /// NVI to the virtual method DoWriteDefaultParameters().
+  ///
+  /// This is not optional decoration. A freshly built state holds each record's
+  /// own defaults — zero mass, an identity pose, no damping — which are not the
+  /// model's defaults, and evaluating a model whose bodies are all massless
+  /// would produce answers rather than errors.
+  /// @pre state != nullptr, and its layout came from the same finalization that
+  /// assigned this element's slot.
+  void WriteDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const;
 
   /// Returns `true` if this %MultibodyElement was added during Finalize()
   /// rather than something a user added. (See class comments.)
@@ -139,48 +136,22 @@ class MultibodyElement {
   /// developers implementing new MultibodyTree components.
   virtual void DoSetTopology() = 0;
 
-  /// Implementation of the NVI DeclareParameters(). MultibodyElement-derived
-  /// objects may override to declare their specific parameters.
-  virtual void DoDeclareParameters(internal::MultibodyTreeSystem<T>*);
+  /// Implementation of the NVI AssignParameterSlots(). MultibodyElement-derived
+  /// objects may override to claim the slot their parameters live in.
+  virtual void DoAssignParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*);
 
-  /// Implementation of the NVI SetDefaultParameters(). MultibodyElement-derived
-  /// objects may override to set default values of their specific parameters.
-  virtual void DoSetDefaultParameters(systems::Parameters<T>*) const;
+  /// Implementation of the NVI WriteDefaultParameters().
+  /// MultibodyElement-derived objects may override to write their model default
+  /// values into a new state.
+  virtual void DoWriteDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance*) const;
 
-  /// Implementation of the NVI DeclareDiscreteState(). MultibodyElement-derived
-  /// objects may override to declare their specific state variables.
-  virtual void DoDeclareDiscreteState(internal::MultibodyTreeSystem<T>*);
-
-  /// Derived classes must override this method to declare cache entries
-  /// needed by `this` element. The default implementation is a no-op.
-  virtual void DoDeclareCacheEntries(internal::MultibodyTreeSystem<T>*);
-
-  /// To be used by MultibodyElement-derived objects when declaring parameters
-  /// in their implementation of DoDeclareParameters(). For an example, see
-  /// RigidBody::DoDeclareParameters().
-  systems::NumericParameterIndex DeclareNumericParameter(
-      internal::MultibodyTreeSystem<T>* tree_system,
-      const systems::BasicVector<T>& model_vector);
-
-  /// To be used by MultibodyElement-derived objects when declaring parameters
-  /// in their implementation of DoDeclareParameters(). For an example, see
-  /// Joint::DoDeclareParameters().
-  systems::AbstractParameterIndex DeclareAbstractParameter(
-      internal::MultibodyTreeSystem<T>* tree_system,
-      const AbstractValue& model_value);
-
-  /// To be used by MultibodyElement-derived objects when declaring discrete
-  /// states in their implementation of DoDeclareDiscreteStates().
-  systems::DiscreteStateIndex DeclareDiscreteState(
-      internal::MultibodyTreeSystem<T>* tree_system,
-      const VectorX<T>& model_value);
-
-  /// To be used by MultibodyElement-derived objects when declaring cache
-  /// entries in their implementation of DoDeclareCacheEntries().
-  systems::CacheEntry& DeclareCacheEntry(
-      internal::MultibodyTreeSystem<T>* tree_system, std::string description,
-      systems::ValueProducer value_producer,
-      std::set<systems::DependencyTicket> prerequisites_of_calc);
+  // Discrete state and generic per-element cache entries were declared here.
+  // Both chains were dead: no landed element overrode either hook, and no
+  // landed call site invoked one. Cache entries are now named members of the
+  // adapter's workspace, which is what lets the slot layout be frozen by a type
+  // rather than by a registry that merely declines to grow.
 
   /// Returns true if this multibody element has a parent tree, otherwise false.
   bool has_parent_tree() const { return parent_tree_ != nullptr; }

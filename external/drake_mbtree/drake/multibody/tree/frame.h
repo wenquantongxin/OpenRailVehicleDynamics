@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/multibody_element.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 #include "drake/multibody/tree/scoped_name.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -102,7 +104,7 @@ class Frame : public MultibodyElement<T> {
   /// poses for all %Frames into the Context's cache; subsequent calls on any
   /// %Frame are very fast.
   const math::RigidTransform<T>& EvalPoseInBodyFrame(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const internal::FrameBodyPoseCache<T>& frame_body_poses =
         this->GetParentTreeSystem().EvalFrameBodyPoses(context);
     return get_X_LF(frame_body_poses);
@@ -114,8 +116,8 @@ class Frame : public MultibodyElement<T> {
   /// identity transformation. Note that this ONLY depends on the Parameters
   /// in the context; it does not depend on time, input, state, etc.
   math::RigidTransform<T> CalcPoseInBodyFrame(
-      const systems::Context<T>& context) const {
-    return DoCalcPoseInBodyFrame(context.get_parameters());
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+    return DoCalcPoseInBodyFrame(context);
   }
 
   /// Returns the rotation matrix `R_LF` that relates link frame L to `this`
@@ -125,8 +127,8 @@ class Frame : public MultibodyElement<T> {
   /// Note that this ONLY depends on the Parameters in the context; it does
   /// not depend on time, input, state, etc.
   math::RotationMatrix<T> CalcRotationMatrixInBodyFrame(
-      const systems::Context<T>& context) const {
-    return DoCalcRotationMatrixInBodyFrame(context.get_parameters());
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
+    return DoCalcRotationMatrixInBodyFrame(context);
   }
 
   /// Variant of CalcPoseInBodyFrame() that returns the fixed pose `X_LF` of
@@ -171,19 +173,10 @@ class Frame : public MultibodyElement<T> {
   /// returns `X_FQ`. Specific frame subclasses can override this method to
   /// provide faster implementations if needed.
   math::RigidTransform<T> CalcOffsetPoseInBody(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const math::RigidTransform<T>& X_FQ) const {
-    return DoCalcOffsetPoseInBody(context.get_parameters(), X_FQ);
+    return DoCalcOffsetPoseInBody(context, X_FQ);
   }
-
-#ifndef DRAKE_DOXYGEN_CXX
-  // (Internal use only) Overload on Parameters instead of Context.
-  math::RigidTransform<T> CalcOffsetPoseInBody(
-      const systems::Parameters<T>& parameters,
-      const math::RigidTransform<T>& X_FQ) const {
-    return DoCalcOffsetPoseInBody(parameters, X_FQ);
-  }
-#endif
 
   /// Calculates and returns the rotation matrix `R_LQ` that relates link frame
   /// L to frame Q via `this` intermediate frame F, i.e., `R_LQ = R_LF * R_FQ`
@@ -191,19 +184,10 @@ class Frame : public MultibodyElement<T> {
   /// attached).
   /// @param[in] R_FQ rotation matrix that relates frame F to frame Q.
   math::RotationMatrix<T> CalcOffsetRotationMatrixInBody(
-      const systems::Context<T>& context,
+      const orvd::multibody_runtime::MultibodyStateInstance& context,
       const math::RotationMatrix<T>& R_FQ) const {
-    return DoCalcOffsetRotationMatrixInBody(context.get_parameters(), R_FQ);
+    return DoCalcOffsetRotationMatrixInBody(context, R_FQ);
   }
-
-#ifndef DRAKE_DOXYGEN_CXX
-  // (Internal use only) Overload on Parameters instead of Context.
-  math::RotationMatrix<T> CalcOffsetRotationMatrixInBody(
-      const systems::Parameters<T>& parameters,
-      const math::RotationMatrix<T>& R_FQ) const {
-    return DoCalcOffsetRotationMatrixInBody(parameters, R_FQ);
-  }
-#endif
 
   /// Variant of CalcOffsetPoseInBody() that given the offset pose `X_FQ` of a
   /// frame Q in `this` frame F, returns the pose `X_LQ` of frame Q in the link
@@ -232,7 +216,7 @@ class Frame : public MultibodyElement<T> {
   /// @note RigidBody::EvalPoseInWorld() provides a more efficient way to obtain
   /// the pose for a RigidBodyFrame (LinkFrame).
   math::RigidTransform<T> CalcPoseInWorld(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     DRAKE_THROW_UNLESS(this->has_parent_tree());
     const internal::MultibodyTree<T>& tree = this->get_parent_tree();
     return tree.CalcRelativeTransform(context, tree.world_frame(), *this);
@@ -241,7 +225,7 @@ class Frame : public MultibodyElement<T> {
   /// Computes and returns the pose `X_MF` of `this` frame F in measured in
   /// `frame_M` as a function of the state of the model stored in `context`.
   /// @see CalcPoseInWorld().
-  math::RigidTransform<T> CalcPose(const systems::Context<T>& context,
+  math::RigidTransform<T> CalcPose(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                    const Frame<T>& frame_M) const {
     DRAKE_THROW_UNLESS(this->has_parent_tree());
     return this->get_parent_tree().CalcRelativeTransform(context, frame_M,
@@ -250,7 +234,7 @@ class Frame : public MultibodyElement<T> {
 
   /// Calculates and returns the rotation matrix `R_MF` that relates `frame_M`
   /// and `this` frame F as a function of the state stored in `context`.
-  math::RotationMatrix<T> CalcRotationMatrix(const systems::Context<T>& context,
+  math::RotationMatrix<T> CalcRotationMatrix(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                              const Frame<T>& frame_M) const {
     DRAKE_THROW_UNLESS(this->has_parent_tree());
     return this->get_parent_tree().CalcRelativeRotationMatrix(context, frame_M,
@@ -260,7 +244,7 @@ class Frame : public MultibodyElement<T> {
   /// Calculates and returns the rotation matrix `R_WF` that relates the world
   /// frame W and `this` frame F as a function of the state stored in `context`.
   math::RotationMatrix<T> CalcRotationMatrixInWorld(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     DRAKE_THROW_UNLESS(this->has_parent_tree());
     const internal::MultibodyTree<T>& tree = this->get_parent_tree();
     return tree.CalcRelativeRotationMatrix(context, tree.world_frame(), *this);
@@ -274,7 +258,7 @@ class Frame : public MultibodyElement<T> {
   /// @see CalcAngularVelocity() to calculate ω_MF_E (`this` frame F's angular
   /// velocity ω measured in a frame M and expressed in a frame E).
   const Vector3<T>& EvalAngularVelocityInWorld(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     const SpatialVelocity<T>& V_WL = link().EvalSpatialVelocityInWorld(context);
     const Vector3<T>& w_WF_W = V_WL.rotational();
     return w_WF_W;
@@ -291,7 +275,7 @@ class Frame : public MultibodyElement<T> {
   /// expressed in frame E.
   /// @see EvalAngularVelocityInWorld() to evaluate ω_WF_W (`this` frame F's
   /// angular velocity ω measured and expressed in the world frame W).
-  Vector3<T> CalcAngularVelocity(const systems::Context<T>& context,
+  Vector3<T> CalcAngularVelocity(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                  const Frame<T>& measured_in_frame,
                                  const Frame<T>& expressed_in_frame) const;
 
@@ -309,7 +293,7 @@ class Frame : public MultibodyElement<T> {
   /// @see CalcSpatialVelocity(), CalcRelativeSpatialVelocityInWorld(), and
   /// CalcSpatialAccelerationInWorld().
   SpatialVelocity<T> CalcSpatialVelocityInWorld(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   /// Calculates `this` frame F's spatial velocity measured in a frame M,
   /// expressed in a frame E.
@@ -323,7 +307,7 @@ class Frame : public MultibodyElement<T> {
   /// frame F's origin point Fo, measured in frame M, expressed in frame E).
   /// @see CalcSpatialVelocityInWorld(), CalcRelativeSpatialVelocity(), and
   /// CalcSpatialAcceleration().
-  SpatialVelocity<T> CalcSpatialVelocity(const systems::Context<T>& context,
+  SpatialVelocity<T> CalcSpatialVelocity(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                          const Frame<T>& frame_M,
                                          const Frame<T>& frame_E) const;
 
@@ -345,7 +329,7 @@ class Frame : public MultibodyElement<T> {
   /// coherent if any of `this`, other_frame, or the world frame W are the same.
   /// @see CalcSpatialVelocityInWorld() and CalcRelativeSpatialVelocity().
   SpatialVelocity<T> CalcRelativeSpatialVelocityInWorld(
-      const systems::Context<T>& context, const Frame<T>& other_frame) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& other_frame) const {
     const Frame<T>& frame_B = other_frame;
     const SpatialVelocity<T> V_WB_W =
         frame_B.CalcSpatialVelocityInWorld(context);
@@ -380,7 +364,7 @@ class Frame : public MultibodyElement<T> {
   /// @see CalcSpatialVelocityInWorld(), CalcSpatialVelocity(), and
   /// CalcRelativeSpatialVelocityInWorld().
   SpatialVelocity<T> CalcRelativeSpatialVelocity(
-      const systems::Context<T>& context, const Frame<T>& other_frame,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& other_frame,
       const Frame<T>& measured_in_frame,
       const Frame<T>& expressed_in_frame) const {
     const Frame<T>& frame_B = other_frame;
@@ -410,7 +394,7 @@ class Frame : public MultibodyElement<T> {
   /// once evaluated, successive calls to this method are inexpensive.
   /// @see CalcSpatialAcceleration() and CalcSpatialVelocityInWorld().
   SpatialAcceleration<T> CalcSpatialAccelerationInWorld(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   /// Calculates `this` frame F's spatial acceleration measured in a frame M,
   /// expressed in a frame E.
@@ -430,7 +414,7 @@ class Frame : public MultibodyElement<T> {
   /// </pre>
   /// @see CalcSpatialAccelerationInWorld() and CalcSpatialVelocity().
   SpatialAcceleration<T> CalcSpatialAcceleration(
-      const systems::Context<T>& context, const Frame<T>& measured_in_frame,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& measured_in_frame,
       const Frame<T>& expressed_in_frame) const;
 
   /// Calculates `this` frame F's spatial acceleration relative to another
@@ -455,7 +439,7 @@ class Frame : public MultibodyElement<T> {
   /// coherent if any of `this`, other_frame, or the world frame W are the same.
   /// @see CalcSpatialAccelerationInWorld(), CalcRelativeSpatialAcceleration().
   SpatialAcceleration<T> CalcRelativeSpatialAccelerationInWorld(
-      const systems::Context<T>& context, const Frame<T>& other_frame) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& other_frame) const {
     const Frame<T>& frame_B = other_frame;
     const SpatialAcceleration<T> A_WB_W =
         frame_B.CalcSpatialAccelerationInWorld(context);
@@ -491,7 +475,7 @@ class Frame : public MultibodyElement<T> {
   /// @see CalcSpatialAccelerationInWorld(), CalcSpatialAcceleration(), and
   /// CalcRelativeSpatialAccelerationInWorld().
   SpatialAcceleration<T> CalcRelativeSpatialAcceleration(
-      const systems::Context<T>& context, const Frame<T>& other_frame,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& other_frame,
       const Frame<T>& measured_in_frame,
       const Frame<T>& expressed_in_frame) const {
     const Frame<T>& frame_B = other_frame;
@@ -577,37 +561,39 @@ class Frame : public MultibodyElement<T> {
         name_(internal::DeprecateWhenEmptyName(name, "Frame")),
         link_(link) {}
 
-  /// Called by DoDeclareParameters(). Derived classes may choose to override
-  /// to declare their sub-class specific parameters.
-  virtual void DoDeclareFrameParameters(internal::MultibodyTreeSystem<T>*) {}
+  /// Called by DoAssignParameterSlots(). Derived classes may choose to
+  /// override to claim their sub-class specific slot.
+  virtual void DoAssignFrameParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*) {}
 
-  /// Called by DoSetDefaultParameters(). Derived classes may choose to override
-  /// to set their sub-class specific parameters.
-  virtual void DoSetDefaultFrameParameters(systems::Parameters<T>*) const {}
+  /// Called by DoWriteDefaultParameters(). Derived classes may choose to
+  /// override to write their sub-class specific model defaults.
+  virtual void DoWriteDefaultFrameParameters(
+      orvd::multibody_runtime::MultibodyStateInstance*) const {}
 
   /// NVI for ShallowClone().
   virtual std::unique_ptr<Frame<T>> DoShallowClone() const;
 
   // NVI for CalcPoseInBodyFrame.
   virtual math::RigidTransform<T> DoCalcPoseInBodyFrame(
-      const systems::Parameters<T>& parameters) const = 0;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const = 0;
 
   // NVI for CalcRotationMatrixInBodyFrame.
   virtual math::RotationMatrix<T> DoCalcRotationMatrixInBodyFrame(
-      const systems::Parameters<T>& parameters) const = 0;
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const = 0;
 
   // NVI for CalcOffsetPoseInBody.
   virtual math::RigidTransform<T> DoCalcOffsetPoseInBody(
-      const systems::Parameters<T>& parameters,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const math::RigidTransform<T>& X_FQ) const {
-    return DoCalcPoseInBodyFrame(parameters) * X_FQ;
+    return DoCalcPoseInBodyFrame(state) * X_FQ;
   }
 
   // NVI for CalcOffsetRotationMatrixInBody.
   virtual math::RotationMatrix<T> DoCalcOffsetRotationMatrixInBody(
-      const systems::Parameters<T>& parameters,
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
       const math::RotationMatrix<T>& R_FQ) const {
-    return DoCalcRotationMatrixInBodyFrame(parameters) * R_FQ;
+    return DoCalcRotationMatrixInBodyFrame(state) * R_FQ;
   }
 
  private:
@@ -616,15 +602,17 @@ class Frame : public MultibodyElement<T> {
     // Frame gets everything it needs at construction.
   }
 
-  // Implementation for MultibodyElement::DoDeclareParameters().
-  void DoDeclareParameters(
-      internal::MultibodyTreeSystem<T>* tree_system) final {
-    DoDeclareFrameParameters(tree_system);
+  // Implementation for MultibodyElement::DoAssignParameterSlots().
+  void DoAssignParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator) final {
+    DoAssignFrameParameterSlots(allocator);
   }
 
-  // Implementation for MultibodyElement::DoSetDefaultParameters().
-  void DoSetDefaultParameters(systems::Parameters<T>* parameters) const final {
-    DoSetDefaultFrameParameters(parameters);
+  // Implementation for MultibodyElement::DoWriteDefaultParameters().
+  void DoWriteDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final {
+    DoWriteDefaultFrameParameters(state);
   }
 
   const std::string name_;

@@ -12,12 +12,13 @@
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 #include "drake/multibody/tree/multibody_tree_system.h"
-#include "drake/multibody/tree/parameter_conversion.h"
 #include "drake/multibody/tree/position_kinematics_cache.h"
 #include "drake/multibody/tree/scoped_name.h"
 #include "drake/multibody/tree/spatial_inertia.h"
 #include "drake/multibody/tree/velocity_kinematics_cache.h"
-#include "drake/systems/framework/context.h"
+#include "orvd/rigid_multibody_tree/spatial_inertia_parameter_conversion.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -78,23 +79,23 @@ class RigidBodyFrame final : public Frame<T> {
   std::unique_ptr<Frame<T>> DoShallowClone() const override;
 
   math::RigidTransform<T> DoCalcPoseInBodyFrame(
-      const systems::Parameters<T>&) const override {
+      const orvd::multibody_runtime::MultibodyStateInstance&) const override {
     return math::RigidTransform<T>::Identity();
   }
 
   math::RotationMatrix<T> DoCalcRotationMatrixInBodyFrame(
-      const systems::Parameters<T>&) const override {
+      const orvd::multibody_runtime::MultibodyStateInstance&) const override {
     return math::RotationMatrix<T>::Identity();
   }
 
   math::RigidTransform<T> DoCalcOffsetPoseInBody(
-      const systems::Parameters<T>&,
+      const orvd::multibody_runtime::MultibodyStateInstance&,
       const math::RigidTransform<T>& X_FQ) const override {
     return X_FQ;
   }
 
   math::RotationMatrix<T> DoCalcOffsetRotationMatrixInBody(
-      const systems::Parameters<T>&,
+      const orvd::multibody_runtime::MultibodyStateInstance&,
       const math::RotationMatrix<T>& R_FQ) const override {
     return R_FQ;
   }
@@ -230,47 +231,6 @@ class RigidBody : public MultibodyElement<T> {
 
   /// (Compatibility) A synonym for link_frame().
   const LinkFrame<T>& body_frame() const { return link_frame(); }
-
-  /// For a floating base %RigidBody, lock its inboard joint. Its generalized
-  /// velocities will be 0 until it is unlocked.
-  /// @throws std::exception if this body is not a floating base body.
-  void Lock(systems::Context<T>* context) const {
-    ThrowIfNotFinalized(__func__);
-    // TODO(rpoyner-tri): consider extending the design to allow locking on
-    //  non-floating bodies.
-    if (!is_floating_base_body()) {
-      // TODO(jwnimmer-tri) This code is not supposed to be inlined (GSG).
-      throw std::logic_error(fmt::format(
-          "Attempted to call Lock() on non-floating-base rigid body {}",
-          name()));
-    }
-    mobilizer().Lock(context);
-  }
-
-  /// For a floating base %RigidBody, unlock its inboard joint.
-  /// @throws std::exception if this body is not a floating base body.
-  void Unlock(systems::Context<T>* context) const {
-    ThrowIfNotFinalized(__func__);
-    // TODO(rpoyner-tri): consider extending the design to allow locking on
-    //  non-floating bodies.
-    if (!is_floating_base_body()) {
-      // TODO(jwnimmer-tri) This code is not supposed to be inlined (GSG).
-      throw std::logic_error(fmt::format(
-          "Attempted to call Unlock() on non-floating-base rigid body {}",
-          name()));
-    }
-    mobilizer().Unlock(context);
-  }
-
-  /// Determines whether this %RigidBody is currently locked to its inboard
-  /// (parent) %RigidBody. This is not limited to floating base bodies but
-  /// generally Joint::is_locked() is preferable otherwise.
-  /// @returns true if the body is locked, false otherwise.
-  bool is_locked(const systems::Context<T>& context) const {
-    ThrowIfNotFinalized(__func__);
-    DRAKE_ASSERT(this->has_parent_tree());
-    return mobilizer().is_locked(context);
-  }
 
   /// (Advanced) Returns the index of the mobilized body ("mobod") in the
   /// computational directed forest structure of the owning MultibodyTree to
@@ -412,16 +372,16 @@ class RigidBody : public MultibodyElement<T> {
   /// Gets this body's mass from the given context.
   /// @param[in] context contains the state of the multibody system.
   /// @pre the context makes sense for use by this RigidBody.
-  const T& get_mass(const systems::Context<T>& context) const {
-    const systems::BasicVector<T>& spatial_inertia_parameter =
-        context.get_numeric_parameter(spatial_inertia_parameter_index_);
-    return internal::parameter_conversion::GetMass(spatial_inertia_parameter);
+  const T& get_mass(
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.rigid_body_inertia_parameters(inertia_parameter_slot_)
+        .mass_kilograms;
   }
 
   /// Returns the pose `X_WB` of this %RigidBody B in the world frame W as a
   /// function of the state of the model stored in `context`.
   const math::RigidTransform<T>& EvalPoseInWorld(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ThrowIfNotFinalized(__func__);
     DRAKE_ASSERT(this->has_parent_tree());
     return this->get_parent_tree().EvalLinkPoseInWorld(context, *this);
@@ -432,7 +392,7 @@ class RigidBody : public MultibodyElement<T> {
   /// @retval V_WB_W this body B's spatial velocity in the world frame W,
   /// expressed in W (for point Bo, the body frame's origin).
   const SpatialVelocity<T>& EvalSpatialVelocityInWorld(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ThrowIfNotFinalized(__func__);
     DRAKE_ASSERT(this->has_parent_tree());
     return this->get_parent_tree().EvalLinkSpatialVelocityInWorld(context,
@@ -447,7 +407,7 @@ class RigidBody : public MultibodyElement<T> {
   /// this method performs an expensive forward dynamics computation, whereas
   /// once evaluated, successive calls to this method are inexpensive.
   const SpatialAcceleration<T>& EvalSpatialAccelerationInWorld(
-      const systems::Context<T>& context) const {
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ThrowIfNotFinalized(__func__);
     DRAKE_ASSERT(this->has_parent_tree());
     return this->get_parent_tree().EvalLinkSpatialAccelerationInWorld(context,
@@ -457,7 +417,7 @@ class RigidBody : public MultibodyElement<T> {
   /// Gets the SpatialForce on this %RigidBody B from `forces` as F_BBo_W:
   /// applied at body B's origin Bo and expressed in world frame W.
   const SpatialForce<T>& GetForceInWorld(
-      const systems::Context<T>&, const MultibodyForces<T>& forces) const {
+      const orvd::multibody_runtime::MultibodyStateInstance&, const MultibodyForces<T>& forces) const {
     ThrowIfNotFinalized(__func__);
     DRAKE_ASSERT(this->has_parent_tree());
     DRAKE_THROW_UNLESS(
@@ -467,7 +427,7 @@ class RigidBody : public MultibodyElement<T> {
 
   /// Adds the SpatialForce on this %RigidBody B, applied at body B's origin Bo
   /// and expressed in the world frame W into `forces`.
-  void AddInForceInWorld(const systems::Context<T>&,
+  void AddInForceInWorld(const orvd::multibody_runtime::MultibodyStateInstance&,
                          const SpatialForce<T>& F_Bo_W,
                          MultibodyForces<T>* forces) const {
     DRAKE_THROW_UNLESS(forces != nullptr);
@@ -493,7 +453,7 @@ class RigidBody : public MultibodyElement<T> {
   ///   A multibody forces objects that on output will have `F_Bp_E` added.
   /// @throws std::exception if `forces` is nullptr or if it is not consistent
   /// with the model to which this body belongs.
-  void AddInForce(const systems::Context<T>& context, const Vector3<T>& p_BP_E,
+  void AddInForce(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Vector3<T>& p_BP_E,
                   const SpatialForce<T>& F_Bp_E, const Frame<T>& frame_E,
                   MultibodyForces<T>* forces) const;
 
@@ -503,11 +463,9 @@ class RigidBody : public MultibodyElement<T> {
   /// to Bcm (B's center of mass), expressed in B.
   /// @pre the context makes sense for use by this %RigidBody.
   Vector3<T> CalcCenterOfMassInBodyFrame(
-      const systems::Context<T>& context) const {
-    const systems::BasicVector<T>& spatial_inertia_parameter =
-        context.get_numeric_parameter(spatial_inertia_parameter_index_);
-    return internal::parameter_conversion::GetCenterOfMass(
-        spatial_inertia_parameter);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return state.rigid_body_inertia_parameters(inertia_parameter_slot_)
+        .center_of_mass_in_body_frame;
   }
 
   /// Calculates Bcm's translational velocity in the world frame W.
@@ -515,7 +473,7 @@ class RigidBody : public MultibodyElement<T> {
   /// @retval v_WBcm_W The translational velocity of Bcm (this rigid body's
   /// center of mass) in the world frame W, expressed in W.
   Vector3<T> CalcCenterOfMassTranslationalVelocityInWorld(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   /// Calculates Bcm's translational acceleration in the world frame W.
   /// @param[in] context The context contains the state of the model.
@@ -525,7 +483,7 @@ class RigidBody : public MultibodyElement<T> {
   /// this method performs an expensive forward dynamics computation, whereas
   /// once evaluated, successive calls to this method are inexpensive.
   Vector3<T> CalcCenterOfMassTranslationalAccelerationInWorld(
-      const systems::Context<T>& context) const;
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
   /// Gets this body's spatial inertia about its origin from the given context.
   /// @param[in] context contains the state of the multibody system.
@@ -535,13 +493,9 @@ class RigidBody : public MultibodyElement<T> {
   /// (B's unit inertia about Bo expressed in B).
   /// @pre the context makes sense for use by this %RigidBody.
   SpatialInertia<T> CalcSpatialInertiaInBodyFrame(
-      const systems::Context<T>& context) const {
-    // TODO(joemasterjohn): Speed this up when we can store a reference to a
-    //  SpatialInertia<T> as an abstract parameter.
-    const systems::BasicVector<T>& spatial_inertia_parameter =
-        context.get_numeric_parameter(spatial_inertia_parameter_index_);
-    return internal::parameter_conversion::ToSpatialInertia(
-        spatial_inertia_parameter);
+      const orvd::multibody_runtime::MultibodyStateInstance& state) const {
+    return orvd::rigid_multibody_tree::internal::ToSpatialInertia(
+        state.rigid_body_inertia_parameters(inertia_parameter_slot_));
   }
 
   /// For this %RigidBody B, sets its mass stored in @p context to @p mass.
@@ -551,13 +505,14 @@ class RigidBody : public MultibodyElement<T> {
   /// I_BBo_B (B's rotational inertia about Bo, expressed in B).
   /// @pre the context makes sense for use by this RigidBody.
   /// @throws std::exception if context is null.
-  void SetMass(systems::Context<T>* context, const T& mass) const {
-    DRAKE_THROW_UNLESS(context != nullptr);
-    systems::BasicVector<T>& spatial_inertia_parameter =
-        context->get_mutable_numeric_parameter(
-            spatial_inertia_parameter_index_);
-    spatial_inertia_parameter.SetAtIndex(
-        internal::parameter_conversion::SpatialInertiaIndex::k_mass, mass);
+  void SetMass(orvd::multibody_runtime::MultibodyStateInstance* state,
+               const T& mass) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    orvd::multibody_runtime::RigidBodyInertiaParameters parameters =
+        state->rigid_body_inertia_parameters(inertia_parameter_slot_);
+    parameters.mass_kilograms = mass;
+    state->set_rigid_body_inertia_parameters(inertia_parameter_slot_,
+                                             parameters);
   }
 
   /// (Advanced) Sets this body's center of mass position while preserving its
@@ -574,9 +529,10 @@ class RigidBody : public MultibodyElement<T> {
   /// @throws std::exception if context is null.
   /// @warning Do not use this function unless it is needed (think twice).
   // TODO(Mitiguy) Consider deprecating this function.
-  void SetCenterOfMassInBodyFrame(systems::Context<T>* context,
-                                  const Vector3<T>& com) const {
-    SetCenterOfMassInBodyFrameNoModifyInertia(context, com);
+  void SetCenterOfMassInBodyFrame(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Vector3<T>& com) const {
+    SetCenterOfMassInBodyFrameNoModifyInertia(state, com);
   }
 
   /// Sets this body's center of mass position while preserving its inertia
@@ -594,7 +550,7 @@ class RigidBody : public MultibodyElement<T> {
   /// @pre the context makes sense for use by this RigidBody.
   /// @throws std::exception if context is null.
   void SetCenterOfMassInBodyFrameAndPreserveCentralInertia(
-      systems::Context<T>* context,
+      orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& center_of_mass_position) const;
 
   /// For this %RigidBody B, sets its SpatialInertia that is stored in
@@ -606,14 +562,13 @@ class RigidBody : public MultibodyElement<T> {
   /// (B's unit inertia about Bo expressed in B).
   /// @pre the context makes sense for use by this %RigidBody.
   /// @throws std::exception if context is null.
-  void SetSpatialInertiaInBodyFrame(systems::Context<T>* context,
-                                    const SpatialInertia<T>& M_Bo_B) const {
-    DRAKE_THROW_UNLESS(context != nullptr);
-    systems::BasicVector<T>& spatial_inertia_parameter =
-        context->get_mutable_numeric_parameter(
-            spatial_inertia_parameter_index_);
-    spatial_inertia_parameter.SetFrom(
-        internal::parameter_conversion::ToBasicVector(M_Bo_B));
+  void SetSpatialInertiaInBodyFrame(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const SpatialInertia<T>& M_Bo_B) const {
+    DRAKE_THROW_UNLESS(state != nullptr);
+    state->set_rigid_body_inertia_parameters(
+        inertia_parameter_slot_,
+        orvd::rigid_multibody_tree::internal::ToInertiaParameters(M_Bo_B));
   }
 
   /// @name Methods to access position kinematics quantities.
@@ -739,25 +694,19 @@ class RigidBody : public MultibodyElement<T> {
         is_active_link && mobilizer_->is_floating_base_mobilizer();
   }
 
-  // Implementation for MultibodyElement::DoDeclareParameters().
-  void DoDeclareParameters(
-      internal::MultibodyTreeSystem<T>* tree_system) final {
-    // Sets model values to dummy values to indicate that the model values are
-    // not used. This class stores the the default values of the parameters.
-    // 10 numeric values are used to store mass, center of mass, moments and
-    // products of inertia packed into one basic vector.
-    spatial_inertia_parameter_index_ =
-        this->DeclareNumericParameter(tree_system, systems::BasicVector<T>(10));
+  // Implementation for MultibodyElement::DoAssignParameterSlots().
+  void DoAssignParameterSlots(
+      orvd::rigid_multibody_tree::internal::MultibodyParameterSlotAllocator*
+          allocator) final {
+    inertia_parameter_slot_ = allocator->AllocateRigidBodyInertiaSlot();
   }
 
-  // Implementation for MultibodyElement::DoSetDefaultParameters().
-  void DoSetDefaultParameters(systems::Parameters<T>* parameters) const final {
-    // Set the default spatial inertia.
-    systems::BasicVector<T>& spatial_inertia_parameter =
-        parameters->get_mutable_numeric_parameter(
-            spatial_inertia_parameter_index_);
-    spatial_inertia_parameter.SetFrom(
-        internal::parameter_conversion::ToBasicVector<T>(
+  // Implementation for MultibodyElement::DoWriteDefaultParameters().
+  void DoWriteDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const final {
+    state->set_rigid_body_inertia_parameters(
+        inertia_parameter_slot_,
+        orvd::rigid_multibody_tree::internal::ToInertiaParameters(
             default_spatial_inertia_));
   }
 
@@ -789,7 +738,7 @@ class RigidBody : public MultibodyElement<T> {
   // @pre the context makes sense for use by this %RigidBody.
   // @throws std::exception if context is null.
   void SetCenterOfMassInBodyFrameNoModifyInertia(
-      systems::Context<T>* context,
+      orvd::multibody_runtime::MultibodyStateInstance* state,
       const Vector3<T>& center_of_mass_position) const;
 
   // For this RigidBody B, sets the unit inertia about B's origin stored in
@@ -802,8 +751,9 @@ class RigidBody : public MultibodyElement<T> {
   // checked via CalcSpatialInertiaInBodyFrame().IsPhysicallyValid().
   // @pre the context makes sense for use by this %RigidBody.
   // @throws std::exception if context is null.
-  void SetUnitInertiaAboutBodyOrigin(systems::Context<T>* context,
-                                     const UnitInertia<T>& G_BBo_B) const;
+  void SetUnitInertiaAboutBodyOrigin(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const UnitInertia<T>& G_BBo_B) const;
 
   // MultibodyTree has access to the mutable LinkFrame through
   // RigidBodyAttorney.
@@ -825,8 +775,10 @@ class RigidBody : public MultibodyElement<T> {
   // Spatial inertia about the body frame origin Bo, expressed in B.
   SpatialInertia<double> default_spatial_inertia_;
 
-  // System parameter index for this body's SpatialInertia stored in a context.
-  systems::NumericParameterIndex spatial_inertia_parameter_index_;
+  // Where this body's mass properties live in the state, assigned when the
+  // model was finalized.
+  int inertia_parameter_slot_{
+      orvd::rigid_multibody_tree::internal::kUnassignedParameterSlot};
 
   // Below here, members are set at Finalize() via SetTopology().
 

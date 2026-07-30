@@ -9,6 +9,8 @@
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/rpy_floating_mobilizer.h"
+#include "orvd/multibody_runtime/multibody_state_instance.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
 
 namespace drake {
 namespace multibody {
@@ -38,9 +40,6 @@ template <typename T>
 class RpyFloatingJoint final : public Joint<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(RpyFloatingJoint);
-
-  template <typename Scalar>
-  using Context = systems::Context<Scalar>;
 
   /// The name for this Joint type.  It resolves to "rpy_floating".
   static const char kTypeName[];
@@ -145,7 +144,7 @@ class RpyFloatingJoint final : public Joint<T> {
     A Context for the MultibodyPlant this joint belongs to.
   @retval angles The angle coordinates of this joint stored in the `context`
     ordered as θr, θp, θy. */
-  Vector3<T> get_angles(const Context<T>& context) const {
+  Vector3<T> get_angles(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angles(context);
   }
 
@@ -158,7 +157,7 @@ class RpyFloatingJoint final : public Joint<T> {
   @warning See class documentation for discussion of singular configurations.
   @returns a constant reference to this joint.
   @see get_angles() for details */
-  const RpyFloatingJoint<T>& set_angles(Context<T>* context,
+  const RpyFloatingJoint<T>& set_angles(orvd::multibody_runtime::MultibodyStateInstance* context,
                                         const Vector3<T>& angles) const {
     get_mobilizer().SetAngles(context, angles);
     return *this;
@@ -173,7 +172,7 @@ class RpyFloatingJoint final : public Joint<T> {
   @warning See class documentation for discussion of singular configurations.
   @returns a constant reference to this joint. */
   const RpyFloatingJoint<T>& SetOrientation(
-      systems::Context<T>* context, const math::RotationMatrix<T>& R_FM) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RotationMatrix<T>& R_FM) const {
     return set_angles(context, math::RollPitchYaw(R_FM).vector());
   }
 
@@ -183,7 +182,7 @@ class RpyFloatingJoint final : public Joint<T> {
   @param[in] context
     A Context for the MultibodyPlant this joint belongs to.
   @retval p_FM The position vector of frame M's origin in frame F. */
-  Vector3<T> get_translation(const systems::Context<T>& context) const {
+  Vector3<T> get_translation(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translation(context);
   }
 
@@ -195,7 +194,7 @@ class RpyFloatingJoint final : public Joint<T> {
     The desired position of frame M's origin in frame F, to be stored in
     `context`.
   @returns a constant reference to this joint. */
-  const RpyFloatingJoint<T>& SetTranslation(systems::Context<T>* context,
+  const RpyFloatingJoint<T>& SetTranslation(orvd::multibody_runtime::MultibodyStateInstance* context,
                                             const Vector3<T>& p_FM) const {
     get_mobilizer().SetTranslation(context, p_FM);
     return *this;
@@ -207,7 +206,7 @@ class RpyFloatingJoint final : public Joint<T> {
   @param[in] context
     A Context for the MultibodyPlant this joint belongs to.
   @retval X_FM The pose of frame M in frame F. */
-  math::RigidTransform<T> GetPose(const systems::Context<T>& context) const {
+  math::RigidTransform<T> GetPose(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return math::RigidTransform<T>(math::RollPitchYaw<T>(get_angles(context)),
                                    get_translation(context));
   }
@@ -221,7 +220,7 @@ class RpyFloatingJoint final : public Joint<T> {
   @warning See class documentation for discussion of singular configurations.
   @returns a constant reference to `this` joint. */
   const RpyFloatingJoint<T>& SetPose(
-      systems::Context<T>* context, const math::RigidTransform<T>& X_FM) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const math::RigidTransform<T>& X_FM) const {
     const math::RotationMatrix<T>& R_FM = X_FM.rotation();
     get_mobilizer().SetAngles(context, math::RollPitchYaw<T>(R_FM).vector());
     get_mobilizer().SetTranslation(context, X_FM.translation());
@@ -236,7 +235,7 @@ class RpyFloatingJoint final : public Joint<T> {
     A vector in ℝ³ with the angular velocity of the child frame M in the
     parent frame F, expressed in F. Refer to this class's documentation for
     further details and definitions of these frames. */
-  Vector3<T> get_angular_velocity(const systems::Context<T>& context) const {
+  Vector3<T> get_angular_velocity(const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_angular_velocity(context);
   }
 
@@ -250,7 +249,7 @@ class RpyFloatingJoint final : public Joint<T> {
     further details and definitions of these frames.
   @returns a constant reference to this joint. */
   const RpyFloatingJoint<T>& set_angular_velocity(
-      systems::Context<T>* context, const Vector3<T>& w_FM) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& w_FM) const {
     get_mobilizer().SetAngularVelocity(context, w_FM);
     return *this;
   }
@@ -264,7 +263,7 @@ class RpyFloatingJoint final : public Joint<T> {
     frame M in the parent frame F, expressed in F. Refer to this class's
     documentation for further details and definitions of these frames. */
   Vector3<T> get_translational_velocity(
-      const systems::Context<T>& context) const {
+      const orvd::multibody_runtime::MultibodyStateInstance& context) const {
     return get_mobilizer().get_translational_velocity(context);
   }
 
@@ -278,7 +277,7 @@ class RpyFloatingJoint final : public Joint<T> {
     documentation for further details and definitions of these frames.
   @returns a constant reference to this joint. */
   const RpyFloatingJoint<T>& set_translational_velocity(
-      systems::Context<T>* context, const Vector3<T>& v_FM) const {
+      orvd::multibody_runtime::MultibodyStateInstance* context, const Vector3<T>& v_FM) const {
     get_mobilizer().SetTranslationalVelocity(context, v_FM);
     return *this;
   }
@@ -325,7 +324,7 @@ class RpyFloatingJoint final : public Joint<T> {
   /** Joint<T> override called through public NVI, Joint::AddInForce().
   Adding forces per-dof for this joint is not supported. Therefore, this method
   throws an exception if invoked. */
-  void DoAddInOneForce(const systems::Context<T>&, int, const T&,
+  void DoAddInOneForce(const orvd::multibody_runtime::MultibodyStateInstance&, int, const T&,
                        MultibodyForces<T>*) const final {
     throw std::logic_error(
         "RpyFloating joints do not allow applying forces to individual "
@@ -340,7 +339,7 @@ class RpyFloatingJoint final : public Joint<T> {
   component of `forces` for `this` joint a dissipative torque according to the
   viscous law `τ = -d⋅ω`, with d the damping coefficient (see
   default_angular_damping()). */
-  void DoAddInDamping(const systems::Context<T>& context,
+  void DoAddInDamping(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                       MultibodyForces<T>* forces) const final {
     Eigen::Ref<VectorX<T>> t_BMo_F =
         get_mobilizer().get_mutable_generalized_forces_from_array(
