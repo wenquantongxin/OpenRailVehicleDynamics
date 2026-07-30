@@ -18,6 +18,18 @@ if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
                      --compiler ${CMAKE_CXX_COMPILER})
 endif()
 
+# The index and ordering contract the vendored topology provides. It links only
+# the vendored target: this is a structural contract, not a comparison against
+# Drake, so libdrake must not be anywhere near it.
+add_executable(verify_vendored_drake_multibody_topology_index_assignment
+    topology/verify_vendored_drake_multibody_topology_index_assignment.cc)
+orvd_configure_first_party_target(
+    verify_vendored_drake_multibody_topology_index_assignment)
+target_link_libraries(verify_vendored_drake_multibody_topology_index_assignment
+    PRIVATE orvd_vendored_drake_multibody_topology)
+add_test(NAME verify_vendored_drake_multibody_topology_index_assignment
+         COMMAND verify_vendored_drake_multibody_topology_index_assignment)
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain
@@ -69,21 +81,36 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
         message(FATAL_ERROR
             "Drake reference tests currently require POSIX process primitives")
     endif()
-    # Location comes from the standard CMAKE_PREFIX_PATH; no machine path is
-    # written into the repository.
+    # Location comes from standard CMake package search; callers may provide
+    # CMAKE_PREFIX_PATH or drake_DIR. No machine path is written into the
+    # repository.
     #
     # PATH-derived prefixes are excluded for this search: an unrelated toolchain
     # on PATH (a conda environment, say) otherwise supplies its own build of a
     # dependency Drake also needs, whose directory then lands in the executable's
     # RUNPATH and takes the C++ runtime with it. The result is a binary that
     # links cleanly and cannot start.
-    set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
-    find_package(drake CONFIG REQUIRED)
-    unset(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH)
-    if(drake_FOUND AND NOT drake_VERSION VERSION_EQUAL "1.54.0")
-        message(FATAL_ERROR
-            "Drake reference tests require Drake 1.54.0; found ${drake_VERSION}")
-    endif()
+    # Function scope, not set/unset around the call. Two reasons, both measured:
+    # NO_SYSTEM_ENVIRONMENT_PATH as a find_package keyword constrains only the
+    # outer search — drake-config.cmake's own find_dependency(fmt) and
+    # find_dependency(spdlog) do not inherit it and resolve to whatever conda
+    # environment is on PATH, which is how the C++ runtime got swapped out in the
+    # first place. And unset() deletes the variable rather than restoring it, so a
+    # caller who had set it deliberately would silently lose their setting.
+    # Inside a function the assignment is local, transitive finds still see OFF,
+    # and the caller's value is intact on return.
+    function(orvd_find_drake_reference_package)
+        set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
+        find_package(drake CONFIG REQUIRED)
+        # Not `1.54.0 EXACT`: the installed Drake ships no drake-config-version
+        # file, so the version only becomes known after the config file has been
+        # loaded.
+        if(NOT drake_VERSION VERSION_EQUAL "1.54.0")
+            message(FATAL_ERROR
+                "Drake reference tests require Drake 1.54.0; found ${drake_VERSION}")
+        endif()
+    endfunction()
+    orvd_find_drake_reference_package()
 
     add_executable(emit_drake_reference_observations
         drake_reference/emit_drake_reference_observations.cc)

@@ -55,6 +55,7 @@ OpenRailVehicleDynamics/
     ├── comparison/       必需观测与容差判定
     ├── contract/         模型中立场景与观测语义
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
+    ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```

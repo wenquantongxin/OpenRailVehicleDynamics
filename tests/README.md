@@ -5,6 +5,7 @@
 | `toolchain/` | 工具链自检：Eigen 运算与 C++23 能力 |
 | `contract/` | 模型中立场景与观测语义，以及其自检 |
 | `comparison/` | 必需观测集合与容差判定（判定方独占） |
+| `topology/` | vendored topology 的索引与顺序结构契约 |
 | `drake_reference/` | Drake 参考发射器、跨进程比较与缓存失效语义探针，默认不构建 |
 | `unit/` | 逐模块单元测试 |
 
