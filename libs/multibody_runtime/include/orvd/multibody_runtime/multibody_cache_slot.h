@@ -12,12 +12,13 @@
 ///
 /// The dependency set is part of the type. `VersionedCacheSlot<PositionPass,
 /// kGeneralizedPositions, kFixedFramePoses>` says, in the declaration itself,
-/// exactly what makes that value stale — so the declaration and the behaviour
-/// cannot drift apart, and a slot cannot be handed a version set that does not
-/// match what it actually reads. There is no dependency graph and no ticket:
-/// with the roots enumerated, a comparison of one to five versions answers the
-/// question directly, and a graph would be an indirection over an answer that is
-/// already in hand.
+/// which declared sources make that value stale, and the slot always compares
+/// exactly those sources. The slot does not own the calculator, so it cannot
+/// prove that the declaration covers everything the calculation reads; the
+/// rigid-tree adapter must verify that mapping with the real cold/hot-context
+/// tests when it binds calculators to slots. There is no dependency graph and
+/// no ticket: with the roots enumerated, comparing one to five versions answers
+/// the freshness question directly.
 ///
 /// Reads are checked. A cold or stale slot refuses to hand out its value rather
 /// than returning whatever is currently in the buffer: a recomputation that
@@ -181,7 +182,13 @@ class VersionedCacheSlot {
     }
 
     /// Records that the value now in storage was computed from the state as it
-    /// stands. Call this only after a recomputation that completed.
+    /// stands.
+    ///
+    /// This is the success edge of recomputation, not a way to make an old
+    /// buffer current. Call it only after the value has been completely
+    /// recomputed through `mutable_value_for_recomputation()`. G25's evaluator
+    /// owns that call sequence and tests the precondition; this storage
+    /// primitive does not duplicate the evaluator with a second state machine.
     void CommitRecomputation() { committed_snapshot_ = CurrentSnapshot(); }
 
    private:

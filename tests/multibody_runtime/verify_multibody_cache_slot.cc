@@ -65,9 +65,9 @@ struct SyntheticPass {
     std::vector<double> entries;
 };
 
-// Two of the eight dependency subsets the runtime contract calls for. The full
-// set of subsets is G24's subject; what matters here is that a slot depending on
-// two sources and a slot depending on one behave independently.
+// Two representative dependency subsets. The full current runtime-contract
+// mapping is G24's subject; what matters here is that a slot depending on two
+// sources and a slot depending on one behave independently.
 using PositionPassSlot =
     VersionedCacheSlot<SyntheticPass,
                        MultibodyStateVersionSource::kGeneralizedPositions,
@@ -234,31 +234,6 @@ void CheckTheMutableEntryPointInvalidatesBeforeItHandsOverStorage() {
                "a later completed recomputation clears the abandoned one");
 }
 
-void CheckCommitStampsTheCurrentVersionsRatherThanVerifyingAnything() {
-    const MultibodyStateLayout layout(SampleDescription());
-    MultibodyStateInstance state(layout);
-    PositionPassSlot slot(state, std::in_place, 4);
-    RecomputeAndCommit(slot, 1.0);
-    state.set_generalized_positions(Eigen::VectorXd::Constant(9, 2.0));
-    ExpectTrue(!slot.is_fresh(), "the slot is stale after the position write");
-
-    // Committing without having recomputed marks the slot fresh. That is the
-    // deliberate shape of this layer: a commit is the caller asserting that the
-    // value in storage matches the state as it stands, and the slot records the
-    // assertion rather than checking it — there is nothing here that could
-    // check it. Keeping the discipline is the evaluator's job, which is why the
-    // evaluator is a separate thing with its own tests.
-    //
-    // This is pinned rather than left to chance so that a later reader who adds
-    // a guard here has to change a test that says why there isn't one.
-    slot.CommitRecomputation();
-    ExpectTrue(slot.is_fresh(),
-               "a commit records the current versions; it does not verify that "
-               "a recomputation actually happened");
-    ExpectTrue(slot.value().entries[0] == 1.0,
-               "and the storage still holds whatever was last written to it");
-}
-
 void CheckSlotsWithDifferentDependenciesMoveIndependently() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
@@ -341,7 +316,6 @@ int main() {
     CheckADeclaredSourceGoingStaleWithdrawsTheValue();
     CheckAnUndeclaredSourceLeavesTheSlotAlone();
     CheckTheMutableEntryPointInvalidatesBeforeItHandsOverStorage();
-    CheckCommitStampsTheCurrentVersionsRatherThanVerifyingAnything();
     CheckSlotsWithDifferentDependenciesMoveIndependently();
     CheckTwoSlotsOnTwoStatesDoNotShareFreshness();
     CheckTheValueObjectKeepsItsAddress();
