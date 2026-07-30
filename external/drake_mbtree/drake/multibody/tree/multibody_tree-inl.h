@@ -19,7 +19,6 @@
 #include "drake/multibody/tree/model_instance.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/multibody_tree.h"
-#include "drake/multibody/tree/multibody_tree_system.h"
 #include "drake/multibody/tree/position_kinematics_cache.h"
 #include "drake/multibody/tree/quaternion_floating_mobilizer.h"
 #include "drake/multibody/tree/rigid_body.h"

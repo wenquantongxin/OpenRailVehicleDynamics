@@ -7,7 +7,6 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/multibody_tree.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
-#include "drake/multibody/tree/multibody_tree_system.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
 #include "orvd/rigid_multibody_tree/multibody_parameter_slot_allocator.h"
 
@@ -103,16 +102,6 @@ class MultibodyElement {
       ThrowNoParentTree();
     }
     parent_tree_->ValidateStateInstance(state);
-  }
-
-  /// Returns a constant reference to the parent MultibodyTreeSystem that
-  /// owns the parent MultibodyTree that owns this element.
-  /// @throws std::exception if has_parent_tree() is false.
-  const internal::MultibodyTreeSystem<T>& GetParentTreeSystem() const {
-    if (parent_tree_ == nullptr) {
-      ThrowNoParentTree();
-    }
-    return get_parent_tree().tree_system();
   }
 
   /// (Internal use only) Gives MultibodyElement-derived objects the opportunity

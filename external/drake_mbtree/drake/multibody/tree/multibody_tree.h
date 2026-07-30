@@ -20,12 +20,12 @@
 #include <Eigen/SparseCore>
 
 #include "drake/multibody/tree/acceleration_kinematics_cache.h"
-#include "drake/multibody/tree/block_system_jacobian_cache.h"
+#include "orvd/multibody_runtime/multibody_cache_evaluation.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_cache_workspace.h"
 #include "drake/multibody/tree/articulated_body_force_cache.h"
 #include "drake/multibody/tree/articulated_body_inertia_cache.h"
 #include "drake/multibody/tree/element_collection.h"
 #include "drake/multibody/tree/multibody_forces.h"
-#include "drake/multibody/tree/multibody_tree_system.h"
 #include "drake/multibody/tree/position_kinematics_cache.h"
 #include "drake/multibody/tree/spatial_inertia.h"
 #include "drake/multibody/tree/velocity_kinematics_cache.h"
@@ -997,6 +997,71 @@ class MultibodyTree {
   /// Its object identity belongs to this model. A state built against an
   /// otherwise identical layout from another tree is not interchangeable.
   /// @throws std::exception if called before Finalize().
+  /// Creates an evaluation context holding this model's default configuration.
+  ///
+  /// The only way to obtain one. A context built any other way would hold the
+  /// state store's own defaults — zero positions, massless bodies, no damping —
+  /// and it would evaluate: what came back would be arithmetic on a model
+  /// nobody built. So the bare constructor is private and this is the door.
+  ///
+  /// Order matters and is fixed here: the model must be finalized (so the slots
+  /// are assigned and the layout is frozen), then the state and every
+  /// pre-allocated cache slot are constructed, then the model's default
+  /// parameters are installed, then its default q and v. The context is
+  /// returned only once all of that has succeeded — a half-installed context is
+  /// never handed out.
+  std::unique_ptr<
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext>
+  CreateDefaultEvaluationContext() const {
+    ThrowIfNotFinalized(__func__);
+    auto context = std::unique_ptr<orvd::rigid_multibody_tree::internal::
+                                       RigidMultibodyTreeEvaluationContext>(
+        new orvd::rigid_multibody_tree::internal::
+            RigidMultibodyTreeEvaluationContext(state_layout(), forest(),
+                                                num_links(), num_frames()));
+    SetDefaultParameters(&context->mutable_state());
+    SetDefaultState(&context->mutable_state());
+    return context;
+  }
+
+  /// Writes the whole of q into `context`, through the model-aware gate.
+  ///
+  /// This is how a caller changes a configuration. The context does not hand
+  /// out a mutable state: a caller holding one could write positions without
+  /// passing the quaternion check below, and the first kinematics evaluation
+  /// would then be computing with something that is not a rotation.
+  void SetPositions(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const Eigen::Ref<const VectorX<T>>& positions) const {
+    DRAKE_DEMAND(context != nullptr);
+    SetPositions(&context->mutable_state(), positions);
+  }
+
+  /// Writes the whole of v into `context`.
+  void SetVelocities(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const Eigen::Ref<const VectorX<T>>& velocities) const {
+    DRAKE_DEMAND(context != nullptr);
+    SetVelocities(&context->mutable_state(), velocities);
+  }
+
+  /// The context's state, for writing a physical parameter.
+  ///
+  /// Parameters do not need a model-aware gate the way positions do: the store
+  /// validates every one of them against physics it can check on its own, and
+  /// no parameter has a meaning that depends on how the model segments it. The
+  /// door is here rather than on the context so that the model layer remains
+  /// the only way in, which is what keeps the position gate from being a
+  /// convention.
+  orvd::multibody_runtime::MultibodyStateInstance& GetMutableParameters(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context) const {
+    DRAKE_DEMAND(context != nullptr);
+    return context->mutable_state();
+  }
+
   const orvd::multibody_runtime::MultibodyStateLayout& state_layout() const {
     DRAKE_MBT_THROW_IF_NOT_FINALIZED();
     DRAKE_DEMAND(state_layout_ != nullptr);
@@ -1125,15 +1190,8 @@ class MultibodyTree {
       const std::vector<ModelInstanceIndex>& model_instances) const;
 
   // See MultibodyPlant method.
-  Vector3<T> CalcCenterOfMassTranslationalAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
-
-  // See MultibodyPlant method.
-  Vector3<T> CalcCenterOfMassTranslationalAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
-      const std::vector<ModelInstanceIndex>& model_instances) const;
-
-  // See MultibodyPlant method.
+    // See MultibodyPlant method.
+    // See MultibodyPlant method.
   SpatialMomentum<T> CalcSpatialMomentumInWorldAboutPoint(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Vector3<T>& p_WoP_W) const;
 
@@ -1151,9 +1209,6 @@ class MultibodyTree {
   const SpatialVelocity<T>& EvalLinkSpatialVelocityInWorld(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Link<T>& link_L) const;
 
-  // See MultibodyPlantMethod EvalBodySpatialAccelerationInWorld().
-  const SpatialAcceleration<T>& EvalLinkSpatialAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Link<T>& link_L) const;
 
   // End of "Kinematic computations" section.
 
@@ -1279,10 +1334,6 @@ class MultibodyTree {
   void CalcPositionKinematicsCache(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                    PositionKinematicsCache<T>* pc) const;
 
-  // Computes the per-Tree block structured, World-frame System Jacobian
-  // Jv_V_WB.
-  void CalcBlockSystemJacobianCache(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
-                                    BlockSystemJacobianCache<T>* sjc) const;
 
   // Computes all the kinematic quantities that depend on the generalized
   // velocities and stores them in the velocity kinematics cache `vc`.
@@ -2015,8 +2066,10 @@ class MultibodyTree {
   const FrameBodyPoseCache<T>& EvalFrameBodyPoses(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalFrameBodyPoses(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().frame_body_poses, [&](auto& value) {
+          CalcFrameBodyPoses(context.state(), &value);
+        });
   }
 
   // Evaluates position kinematics cached in context.
@@ -2026,8 +2079,10 @@ class MultibodyTree {
   const PositionKinematicsCache<T>& EvalPositionKinematics(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalPositionKinematics(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().position_kinematics, [&](auto& value) {
+          CalcPositionKinematicsCache(context, &value);
+        });
   }
 
   // Evaluates velocity kinematics cached in context. This will also
@@ -2038,8 +2093,11 @@ class MultibodyTree {
   const VelocityKinematicsCache<T>& EvalVelocityKinematics(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalVelocityKinematics(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().velocity_kinematics, [&](auto& value) {
+          CalcVelocityKinematicsCache(context, EvalPositionKinematics(context),
+                                      &value);
+        });
   }
 
   // Evaluates acceleration kinematics cached in context. This will also
@@ -2047,19 +2105,22 @@ class MultibodyTree {
   // @param context A Context whose acceleration kinematics cache will be
   //                updated and returned.
   // @return Reference to the AccelerationKinematicsCache of context.
-  const AccelerationKinematicsCache<T>& EvalAccelerationKinematics(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
-    ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalForwardDynamics(context);
-  }
-
+    // The forward-dynamics accelerations used to be reachable here, by way of the
+  // system wrapper. They are gone rather than rebound: the accelerations depend
+  // on the forces applied on the call that asks for them — force elements,
+  // externally applied forces, actuation — and an entry that took no forces was
+  // silently answering for one particular set of them. Rebinding it to a cache
+  // would have preserved that, with a freshness stamp that said nothing about
+  // the forces the value came from. Assembling the forces and running the ABA
+  // passes is G36's; the landed passes are still here for it to use.
   // Evaluate the cache entry storing articulated body inertias in `context`.
   const ArticulatedBodyInertiaCache<T>& EvalArticulatedBodyInertiaCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalArticulatedBodyInertiaCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().articulated_body_inertia, [&](auto& value) {
+          CalcArticulatedBodyInertiaCache(context, &value);
+        });
   }
 
   // Evaluate the cache entry storing the across node Jacobian H_PB_W in
@@ -2067,8 +2128,11 @@ class MultibodyTree {
   const std::vector<Vector6<T>>& EvalAcrossNodeJacobianWrtVExpressedInWorld(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalAcrossNodeJacobianWrtVExpressedInWorld(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().across_node_jacobian, [&](auto& value) {
+          CalcAcrossNodeJacobianWrtVExpressedInWorld(
+              context, EvalPositionKinematics(context), &value);
+        });
   }
 
   // State access methods
@@ -2096,11 +2160,44 @@ class MultibodyTree {
   }
 
   // Writes the whole of q, as one transaction.
+  //
+  // This is the model's commit gate for positions. Every path that changes a
+  // position ends here — the segment writer below, the joint and mobilizer pose
+  // setters, the default-state installer — so the model-aware check lives here
+  // once rather than at each of them, where one would eventually be added
+  // without it.
   void SetPositions(orvd::multibody_runtime::MultibodyStateInstance* state,
                     const Eigen::Ref<const VectorX<T>>& positions) const {
     DRAKE_DEMAND(state != nullptr);
     ValidateStateInstance(*state);
+    ThrowIfAnyQuaternionIsZero(positions);
     state->set_generalized_positions(positions);
+  }
+
+  // Refuses a q in which some mobilizer's quaternion is exactly zero.
+  //
+  // A zero quaternion is not a rotation and cannot be normalised into one: the
+  // direction information is not merely inaccurate, it is absent. Everything
+  // downstream would take it and produce numbers.
+  //
+  // Non-unit but non-zero quaternions are accepted and stored exactly as given.
+  // Normalising here would silently answer a different question from the one
+  // the caller asked, and the caller would never learn that the value they read
+  // back is not the value they wrote. Which segments are quaternions is model
+  // knowledge, which is why this check is here and not in the state store.
+  void ThrowIfAnyQuaternionIsZero(
+      const Eigen::Ref<const VectorX<T>>& positions) const {
+    for (const auto& mobod : forest().mobods()) {
+      if (!mobod.has_quaternion()) continue;
+      // The mobod's first four positions are the quaternion, wxyz.
+      if (positions.template segment<4>(mobod.q_start()).isZero(0.0)) {
+        throw std::logic_error(fmt::format(
+            "MultibodyTree: the quaternion of mobilized body {} is exactly "
+            "zero, which is not a rotation and cannot be made into one; "
+            "nothing was written",
+            mobod.index()));
+      }
+    }
   }
 
   // Writes the whole of v, as one transaction.
@@ -2178,7 +2275,9 @@ class MultibodyTree {
     ValidateStateInstance(*state);
     VectorX<T> positions = state->generalized_positions();
     positions.segment(start, segment.size()) = segment;
-    state->set_generalized_positions(positions);
+    // Through the commit gate, not around it: a segment write that happened to
+    // zero a quaternion must be refused for the same reason a whole-q write is.
+    SetPositions(state, positions);
   }
 
   // Writes `segment` into v starting at `start`, as one transaction. See
@@ -2191,20 +2290,6 @@ class MultibodyTree {
     VectorX<T> velocities = state->generalized_velocities();
     velocities.segment(start, segment.size()) = segment;
     state->set_generalized_velocities(velocities);
-  }
-
-  // Returns the MultibodyTreeSystem that owns this MultibodyTree.
-  // @pre There is an owning MultibodyTreeSystem.
-  const MultibodyTreeSystem<T>& tree_system() const {
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return *tree_system_;
-  }
-
-  // (Internal use only) Informs the MultibodyTree how to access its resources
-  // within a Context.
-  void set_tree_system(MultibodyTreeSystem<T>* tree_system) {
-    DRAKE_DEMAND(tree_system != nullptr && tree_system_ == nullptr);
-    tree_system_ = tree_system;
   }
 
   // (Internal) For a body B, calculates the cache entry associated with
@@ -2440,8 +2525,10 @@ class MultibodyTree {
   const std::vector<SpatialInertia<T>>& EvalSpatialInertiaInWorldCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalSpatialInertiaInWorldCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().spatial_inertia_in_world, [&](auto& value) {
+          CalcSpatialInertiasInWorld(context, &value);
+        });
   }
 
   // Evaluates the cache entry stored in context with the reflected inertia for
@@ -2449,15 +2536,19 @@ class MultibodyTree {
   const VectorX<T>& EvalReflectedInertiaCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalReflectedInertiaCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().reflected_inertia, [&](auto& value) {
+          CalcReflectedInertia(context.state(), &value);
+        });
   }
 
   const std::vector<SpatialInertia<T>>& EvalCompositeBodyInertiaInWorldCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalCompositeBodyInertiaInWorldCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().composite_body_inertia_in_world, [&](auto& value) {
+          CalcCompositeBodyInertiasInWorld(context, &value);
+        });
   }
 
   // Evaluates the cache entry stored in context with the bias term
@@ -2465,24 +2556,30 @@ class MultibodyTree {
   const std::vector<SpatialForce<T>>& EvalDynamicBiasCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalDynamicBiasCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().dynamic_bias, [&](auto& value) {
+          CalcDynamicBiasForces(context, &value);
+        });
   }
 
   // See CalcSpatialAccelerationBiasCache() for details.
   const std::vector<SpatialAcceleration<T>>& EvalSpatialAccelerationBiasCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalSpatialAccelerationBiasCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().spatial_acceleration_bias, [&](auto& value) {
+          CalcSpatialAccelerationBias(context, &value);
+        });
   }
 
   // See CalcArticulatedBodyForceBiasCache() for details.
   const std::vector<SpatialForce<T>>& EvalArticulatedBodyForceBiasCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     ValidateEvaluationContext(context);
-    DRAKE_ASSERT(tree_system_ != nullptr);
-    return tree_system_->EvalArticulatedBodyForceBiasCache(context);
+    return orvd::multibody_runtime::EvaluateVersionedCacheSlot(
+        context.mutable_caches().articulated_body_force_bias, [&](auto& value) {
+          CalcArticulatedBodyForceBias(context, &value);
+        });
   }
 
   // Given the state of this model in `context` and a known vector
@@ -2645,8 +2742,6 @@ class MultibodyTree {
                                                     Vector3<double>>>>
       default_body_poses_;
 
-  // Back pointer to the owning MultibodyTreeSystem.
-  const MultibodyTreeSystem<T>* tree_system_{};
 
   // Constructed once during Finalize() after every element has claimed its
   // typed parameter slot. Its stable address is the model identity carried by

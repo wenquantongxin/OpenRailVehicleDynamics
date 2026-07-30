@@ -6,7 +6,6 @@
 namespace drake {
 namespace multibody {
 
-using internal::MultibodyTreeSystem;
 
 template <typename T>
 MultibodyElement<T>::~MultibodyElement() {

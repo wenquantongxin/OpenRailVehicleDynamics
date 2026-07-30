@@ -12,8 +12,6 @@ namespace multibody {
 namespace internal {
 template <typename T>
 class MultibodyTree;
-template <typename T>
-class MultibodyTreeSystem;
 }  // namespace internal
 
 /// A class to hold a set of forces applied to a MultibodyTree system. Forces
@@ -24,13 +22,6 @@ template <typename T>
 class MultibodyForces {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(MultibodyForces);
-
-  /// Constructs a force object to store a set of forces to be applied to
-  /// the multibody model for `plant`. Forces are initialized to zero, meaning
-  /// no forces are applied.
-  /// `plant` must have been already finalized with
-  /// MultibodyPlant::Finalize() or this constructor will abort.
-  explicit MultibodyForces(const internal::MultibodyTreeSystem<T>& plant);
 
   /// (Advanced) Tree overload.
   explicit MultibodyForces(const internal::MultibodyTree<T>& model);
@@ -73,13 +64,6 @@ class MultibodyForces {
 
   /// Adds into `this` the force contribution stored in `addend`.
   void AddInForces(const MultibodyForces<T>& addend);
-
-  /// Utility that checks that the forces stored by `this` object have the
-  /// proper sizes to represent the set of forces for the given `plant`.
-  /// @returns true if `this` forces object has the proper sizes for the given
-  /// `plant`.
-  bool CheckHasRightSizeForModel(
-      const internal::MultibodyTreeSystem<T>& plant) const;
 
   /// (Advanced) Tree overload.
   bool CheckHasRightSizeForModel(const internal::MultibodyTree<T>& model) const;

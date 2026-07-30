@@ -7,7 +7,7 @@
 
 - 工作分支：`main`
 - 当前阶段：绑定刚性树的类型化缓存工作区
-- 当前 Goal：`G27`
+- 当前 Goal：`G28`
 - 产品代码状态：vendored common support、topology 与 double pose math 三个静态库可构建，
   四个位姿组合函数有常驻契约测试；刚性 tree 源码已落位，其编译前沿只受阻于
   `multibody_tree_system.h`；第一方运行时已落地状态布局、类型化参数存储、五个版本源、
@@ -452,7 +452,7 @@ Goal GNN — <明确的功能名称>
     (`SetFromRigidTransform`、自由体 pose、`SetPosePair`),默认状态由模型填完调用方自有的
     完整 q 后提交一次。不提供 q+v 合并 setter——两次独立写入不是一次事务。
 
-- [ ] **G27 — 绑定真实缓存并切断 tree_system 反向指针**
+- [x] **G27 — 绑定真实缓存并切断 tree_system 反向指针**
   - 产物：有重复消费证据的 tree `Eval` 入口绑定到 G23–G25，tree 直接接收多体求值
     上下文；本接入层把 G22 的状态实例与具体位置、速度、惯量和跨节点 Jacobian
     `H_PB_W` 缓存工作区组合成内部求值上下文，不建立 `BlockSystemJacobianCache`；
@@ -473,6 +473,29 @@ Goal GNN — <明确的功能名称>
     结果，修改和重求值其中一个不得改变另一个的缓存值或重算计数。
     缓存工作区由 context 私有地以 `mutable` 成员承载逻辑 const 求值；不使用
     `const_cast`,也不把可变槽引用暴露到 context 生命周期之外。
+  - 实测结论：`RigidMultibodyTreeCacheWorkspace` 以 11 个具名 `VersionedCacheSlot` 成员冻结
+    缓存目录,依赖集合逐项照 G20 契约填;由 context 以 `mutable` 成员私有成对拥有,无
+    `const_cast`。11 个 `Eval` 转发已绑到槽与 G25 求值器。`tree_system_`、
+    `MultibodyTreeSystem`、`CacheEntry`、`DependencyTicket` 全树归零;
+    **编译前沿缺口归零**,全部 **70 个落位翻译单元在纯落位边界零错误编译**,且开
+    `-Wall -Wextra` 后唯一警告类别是 GCC 对返回 `const auto&` 的已知误报。
+    落位树已可**链接并运行**:建两连杆模型、最终化、经工厂创建上下文、求值位置运动学通过。
+  - 前向动力学加速度入口按裁决**删除而非重绑**:它不接受任何外力却返回加速度,等于替某一组
+    特定外力作答而不说是哪一组;绑成缓存会把这一点连同一个说不清来源的新鲜度戳一起保留。
+    连同仅依赖它的便利入口(`Frame::CalcSpatialAccelerationInWorld` 及其相对量、
+    `RigidBody::CalcCenterOfMassTranslationalAccelerationInWorld` 等 12 个)一并移除;
+    接收已知 `vdot` 的 `CalcSpatialAccelerationsFromVdot` 不受影响,落位 ABA pass 留给 G36。
+  - `BlockSystemJacobianCache` 按契约第 5 条「不预分配缓存、首版直接计算」整体退出落位集合,
+    账本由 `vendor` 改判 `discard`。
+  - 零四元数拒绝落在树的**完整 q 提交门**上:段写入、joint/mobilizer 位姿 setter、默认状态
+    写入全部汇入该门;非零但非单位的四元数按原值保存,不静默归一化。
+  - 上下文只能经 `CreateDefaultEvaluationContext()` 创建(裸构造函数私有 + tree 为友元),
+    顺序为 最终化确认 → 构造状态与全部预分配槽 → `SetDefaultParameters()` →
+    `SetDefaultState()` → 才返回。
+  - 双 Context 负控:A、B 由同一最终化模型创建,各写一次不同数值的 q,五个版本数值完全相同
+    而状态不同;预热 A、预热 B、再读 A 必须返回 A 自己的值(这一步直接抓共享工作区导致的
+    「版本相同假新鲜」);改并重算 A 后 B 的状态、版本、缓存值、新鲜度全不变;再对 A 单独改
+    惯量,惯量槽过期而位置槽保持热,B 仍不受影响。
 
 - [ ] **G28 — 链接独立刚性树静态库**
   - 产物：内部产品目标 `orvd_rigid_multibody_tree` 及最小建模程序；G29–G30 建立公共

@@ -107,7 +107,7 @@ class Frame : public MultibodyElement<T> {
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
     this->ValidateStateInstance(context.state());
     const internal::FrameBodyPoseCache<T>& frame_body_poses =
-        this->GetParentTreeSystem().EvalFrameBodyPoses(context);
+        this->get_parent_tree().EvalFrameBodyPoses(context);
     return get_X_LF(frame_body_poses);
   }
 
@@ -399,9 +399,12 @@ class Frame : public MultibodyElement<T> {
   /// this method performs an expensive forward dynamics computation, whereas
   /// once evaluated, successive calls to this method are inexpensive.
   /// @see CalcSpatialAcceleration() and CalcSpatialVelocityInWorld().
-  SpatialAcceleration<T> CalcSpatialAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
-
+    // The convenience entries that returned a spatial acceleration are gone
+  // with the forward-dynamics entry they were built on. Each of them asked
+  // for an acceleration without saying what forces produced it, which meant
+  // answering for one particular set of forces and not saying which.
+  // Assembling the forces and running the passes is G36's; entries that take
+  // a known vdot, such as CalcSpatialAccelerationsFromVdot(), are unaffected.
   /// Calculates `this` frame F's spatial acceleration measured in a frame M,
   /// expressed in a frame E.
   /// @param[in] context contains the state of the multibody system.
@@ -419,11 +422,7 @@ class Frame : public MultibodyElement<T> {
   ///  a_MFo = DtM(v_MFo)    v_MF is Fo's translational acceleration in frame M.
   /// </pre>
   /// @see CalcSpatialAccelerationInWorld() and CalcSpatialVelocity().
-  SpatialAcceleration<T> CalcSpatialAcceleration(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& measured_in_frame,
-      const Frame<T>& expressed_in_frame) const;
-
-  /// Calculates `this` frame F's spatial acceleration relative to another
+    /// Calculates `this` frame F's spatial acceleration relative to another
   /// frame B, measured and expressed in the world frame W.
   /// @param[in] context contains the state of the multibody system.
   /// @param[in] other_frame which is frame B.
@@ -444,17 +443,7 @@ class Frame : public MultibodyElement<T> {
   /// @note The method CalcSpatialAccelerationInWorld() is more efficient and
   /// coherent if any of `this`, other_frame, or the world frame W are the same.
   /// @see CalcSpatialAccelerationInWorld(), CalcRelativeSpatialAcceleration().
-  SpatialAcceleration<T> CalcRelativeSpatialAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& other_frame) const {
-    const Frame<T>& frame_B = other_frame;
-    const SpatialAcceleration<T> A_WB_W =
-        frame_B.CalcSpatialAccelerationInWorld(context);
-    const SpatialAcceleration<T> A_WF_W =
-        CalcSpatialAccelerationInWorld(context);
-    return A_WF_W - A_WB_W;
-  }
-
-  /// Calculates `this` frame F's spatial acceleration relative to another
+    /// Calculates `this` frame F's spatial acceleration relative to another
   /// frame B, measured in a frame M, expressed in a frame E.
   /// @param[in] context contains the state of the multibody system.
   /// @param[in] other_frame which is frame B.
@@ -480,21 +469,7 @@ class Frame : public MultibodyElement<T> {
   /// consider CalcRelativeSpatialAccelerationInWorld() since it is faster.
   /// @see CalcSpatialAccelerationInWorld(), CalcSpatialAcceleration(), and
   /// CalcRelativeSpatialAccelerationInWorld().
-  SpatialAcceleration<T> CalcRelativeSpatialAcceleration(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Frame<T>& other_frame,
-      const Frame<T>& measured_in_frame,
-      const Frame<T>& expressed_in_frame) const {
-    const Frame<T>& frame_B = other_frame;
-    const Frame<T>& frame_M = measured_in_frame;
-    const Frame<T>& frame_E = expressed_in_frame;
-    const SpatialAcceleration<T> A_MB_E =
-        frame_B.CalcSpatialAcceleration(context, frame_M, frame_E);
-    const SpatialAcceleration<T> A_MF_E =
-        CalcSpatialAcceleration(context, frame_M, frame_E);
-    return A_MF_E - A_MB_E;
-  }
-
-  /// (Internal use only) Returns a shallow clone (i.e., dependent elements such
+    /// (Internal use only) Returns a shallow clone (i.e., dependent elements such
   /// as bodies are aliased, not copied) that is not associated with any MbT (so
   /// the assigned index, if any, is discarded).
   std::unique_ptr<Frame<T>> ShallowClone() const;
@@ -516,7 +491,7 @@ class Frame : public MultibodyElement<T> {
 
   /// (Internal use only) Given an already up-to-date frame body pose cache,
   /// extract X_LF for this %Frame from it.
-  /// @note Be sure you have called MultibodyTreeSystem::EvalFrameBodyPoses()
+  /// @note Be sure you have called MultibodyTree::EvalFrameBodyPoses()
   ///       since the last parameter change; we can't check here.
   /// @retval X_LF pose of this frame in its Link's frame
   const math::RigidTransform<T>& get_X_LF(
@@ -527,7 +502,7 @@ class Frame : public MultibodyElement<T> {
   /// (Internal use only) Given an already up-to-date frame body pose cache,
   /// extract X_BF for this %Frame from it. Note that X_BF is F's pose on its
   /// mobilized body B which might not be the same as its link L.
-  /// @note Be sure you have called MultibodyTreeSystem::EvalFrameBodyPoses()
+  /// @note Be sure you have called MultibodyTree::EvalFrameBodyPoses()
   ///       since the last parameter change; we can't check here.
   /// @retval X_BF pose of this frame in its Mobod's frame
   const math::RigidTransform<T>& get_X_BF(
@@ -537,7 +512,7 @@ class Frame : public MultibodyElement<T> {
 
   /// (Internal use only) Given an already up-to-date frame body pose cache,
   /// extract X_FB (=X_BF⁻¹) for this %Frame from it.
-  /// @note Be sure you have called MultibodyTreeSystem::EvalFrameBodyPoses()
+  /// @note Be sure you have called MultibodyTree::EvalFrameBodyPoses()
   ///       since the last parameter change; we can't check here.
   /// @retval X_FB inverse of this frame's pose in its Mobod's frame
   const math::RigidTransform<T>& get_X_FB(
@@ -548,7 +523,7 @@ class Frame : public MultibodyElement<T> {
   /// (Internal use only) Given an already up-to-date frame body pose cache,
   /// returns whether X_BF (and thus X_FB) is exactly identity. This is
   /// precomputed in the cache so is very fast to check.
-  /// @note Be sure you have called MultibodyTreeSystem::EvalFrameBodyPoses()
+  /// @note Be sure you have called MultibodyTree::EvalFrameBodyPoses()
   ///       since the last parameter change; we can't check here.
   /// @see get_X_BF(), get_X_FB()
   bool is_X_BF_identity(

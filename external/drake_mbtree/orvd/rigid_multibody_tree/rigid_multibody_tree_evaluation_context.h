@@ -33,33 +33,21 @@
 
 #include <utility>
 
+#include "drake/multibody/topology/forest.h"
 #include "orvd/multibody_runtime/multibody_state_instance.h"
 #include "orvd/multibody_runtime/multibody_state_layout.h"
+#include "orvd/rigid_multibody_tree/rigid_multibody_tree_cache_workspace.h"
 #include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context_fwd.h"
+
+namespace drake::multibody::internal {
+template <typename T>
+class MultibodyTree;
+}  // namespace drake::multibody::internal
 
 namespace orvd::rigid_multibody_tree::internal {
 
 class RigidMultibodyTreeEvaluationContext {
    public:
-    /// Builds the state this context owns against `layout`.
-    ///
-    /// `layout` belongs to the finalized model: it is created once when the
-    /// model is finalized, outlives every context built against it, and is
-    /// shared by all of them. The state is not shared — that is the whole point
-    /// of a context.
-    ///
-    /// This constructor establishes storage only. The model-aware creation path
-    /// that writes the finalized model's default positions and default physical
-    /// parameters is G27's; a context built here and evaluated without it would
-    /// be evaluating a model whose bodies are all massless and whose joints are
-    /// all at zero.
-    explicit RigidMultibodyTreeEvaluationContext(
-        const multibody_runtime::MultibodyStateLayout& layout)
-        : state_(layout) {}
-
-    RigidMultibodyTreeEvaluationContext(
-        multibody_runtime::MultibodyStateLayout&&) = delete;
-
     // A context is one evaluation's private world. A copy would duplicate the
     // state while sharing nothing about how it came to hold what it holds; a
     // move would leave behind a context bound to a model with its state taken
@@ -76,6 +64,46 @@ class RigidMultibodyTreeEvaluationContext {
     const multibody_runtime::MultibodyStateInstance& state() const {
         return state_;
     }
+
+    /// The eleven retained caches, for reading a value that is already fresh.
+    const RigidMultibodyTreeCacheWorkspace& caches() const { return caches_; }
+
+    /// The same caches, for an evaluation that may have to compute one.
+    ///
+    /// `mutable`, and reached through a const context. Evaluating a cache is a
+    /// read as far as the model is concerned: it produces nothing the caller
+    /// did not already imply by asking, and it leaves the state untouched. That
+    /// is what logical constness means here, and it is expressed by the member
+    /// being mutable rather than by a `const_cast` at each use — a cast would
+    /// have to be written, and read, at every evaluation site, and each one
+    /// would be a place where the reasoning could be wrong.
+    RigidMultibodyTreeCacheWorkspace& mutable_caches() const { return caches_; }
+
+   private:
+    // Only the finalized tree may build one. A context that could be default
+    // constructed would hold zero-filled positions and massless bodies, and it
+    // would evaluate: the answers would be arithmetic on a model nobody built.
+    // See MultibodyTree::CreateDefaultEvaluationContext().
+    template <typename U>
+    friend class drake::multibody::internal::MultibodyTree;
+
+    RigidMultibodyTreeEvaluationContext(
+        const multibody_runtime::MultibodyStateLayout& layout,
+        const drake::multibody::internal::SpanningForest& forest,
+        int num_links, int num_frames)
+        : state_(layout),
+          caches_(state_, forest, num_links, num_frames) {}
+
+    RigidMultibodyTreeEvaluationContext(
+        multibody_runtime::MultibodyStateLayout&&,
+        const drake::multibody::internal::SpanningForest&, int, int) = delete;
+
+    /// The state, writable only from within the tree's own entry points.
+    ///
+    /// Not public. A caller holding a mutable state could write positions
+    /// without passing the model-aware gate that rejects a zero quaternion, and
+    /// the first kinematics evaluation would then be computing with a rotation
+    /// that is not one.
     multibody_runtime::MultibodyStateInstance& mutable_state() {
         return state_;
     }
@@ -90,6 +118,12 @@ class RigidMultibodyTreeEvaluationContext {
     // that a workspace cannot outlive or be separated from the state its
     // freshness snapshots refer to.
     multibody_runtime::MultibodyStateInstance state_;
+
+    // Constructed with the state and never separately: a workspace beside a
+    // different state would hold freshness snapshots referring to versions that
+    // are not the ones it would compare against, and those comparisons would
+    // succeed often enough to be believed.
+    mutable RigidMultibodyTreeCacheWorkspace caches_;
 };
 
 }  // namespace orvd::rigid_multibody_tree::internal

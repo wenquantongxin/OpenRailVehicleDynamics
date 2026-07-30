@@ -11,7 +11,6 @@
 #include "drake/multibody/tree/multibody_element.h"
 #include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
-#include "drake/multibody/tree/multibody_tree_system.h"
 #include "drake/multibody/tree/position_kinematics_cache.h"
 #include "drake/multibody/tree/scoped_name.h"
 #include "drake/multibody/tree/spatial_inertia.h"
@@ -408,32 +407,6 @@ class RigidBody : public MultibodyElement<T> {
                                                                   *this);
   }
 
-  /// Evaluates A_WB, this body B's SpatialAcceleration in the world frame W.
-  /// @param[in] context Contains the state of the model.
-  /// @retval A_WB_W this body B's spatial acceleration in the world frame W,
-  /// expressed in W (for point Bo, the body's origin).
-  /// @note When cached values are out of sync with the state stored in context,
-  /// this method performs an expensive forward dynamics computation, whereas
-  /// once evaluated, successive calls to this method are inexpensive.
-  const SpatialAcceleration<T>& EvalSpatialAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
-    ThrowIfNotFinalized(__func__);
-    DRAKE_ASSERT(this->has_parent_tree());
-    return this->get_parent_tree().EvalLinkSpatialAccelerationInWorld(context,
-                                                                      *this);
-  }
-
-  /// Gets the SpatialForce on this %RigidBody B from `forces` as F_BBo_W:
-  /// applied at body B's origin Bo and expressed in world frame W.
-  const SpatialForce<T>& GetForceInWorld(
-      const MultibodyForces<T>& forces) const {
-    ThrowIfNotFinalized(__func__);
-    DRAKE_ASSERT(this->has_parent_tree());
-    DRAKE_THROW_UNLESS(
-        forces.CheckHasRightSizeForModel(this->get_parent_tree()));
-    return forces.body_forces()[mobod_index()];
-  }
-
   /// Adds the SpatialForce on this %RigidBody B, applied at body B's origin Bo
   /// and expressed in the world frame W into `forces`.
   void AddInForceInWorld(const SpatialForce<T>& F_Bo_W,
@@ -496,9 +469,12 @@ class RigidBody : public MultibodyElement<T> {
   /// @note When cached values are out of sync with the state stored in context,
   /// this method performs an expensive forward dynamics computation, whereas
   /// once evaluated, successive calls to this method are inexpensive.
-  Vector3<T> CalcCenterOfMassTranslationalAccelerationInWorld(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
-
+    // The convenience entries that returned a spatial acceleration are gone
+  // with the forward-dynamics entry they were built on. Each of them asked
+  // for an acceleration without saying what forces produced it, which meant
+  // answering for one particular set of forces and not saying which.
+  // Assembling the forces and running the passes is G36's; entries that take
+  // a known vdot, such as CalcSpatialAccelerationsFromVdot(), are unaffected.
   /// Gets this body's spatial inertia about its origin from the given state.
   /// @param[in] state contains the state of the multibody system.
   /// @returns M_BBo_B spatial inertia of this rigid body B about Bo (B's

@@ -12,11 +12,6 @@ MultibodyForces<T>::MultibodyForces(const internal::MultibodyTree<T>& model)
 }
 
 template <typename T>
-MultibodyForces<T>::MultibodyForces(
-    const internal::MultibodyTreeSystem<T>& plant)
-    : MultibodyForces(internal::GetInternalTree(plant)) {}
-
-template <typename T>
 MultibodyForces<T>::MultibodyForces(int nb, int nv) {
   F_B_W_.resize(nb, SpatialForce<T>::Zero());
   tau_ = VectorX<T>::Zero(nv);
@@ -30,12 +25,6 @@ MultibodyForces<T>& MultibodyForces<T>::SetZero() {
   std::fill(F_B_W_.begin(), F_B_W_.end(), SpatialForce<T>::Zero());
   tau_.setZero();
   return *this;
-}
-
-template <typename T>
-bool MultibodyForces<T>::CheckHasRightSizeForModel(
-    const internal::MultibodyTreeSystem<T>& plant) const {
-  return CheckHasRightSizeForModel(internal::GetInternalTree(plant));
 }
 
 template <typename T>
