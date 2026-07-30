@@ -2,14 +2,13 @@
 
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <string>
 
 #include <Eigen/Dense>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/drake_deprecated.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/fmt.h"
 #include "drake/common/hash.h"
@@ -55,8 +54,6 @@ class RotationMatrix;
 ///
 /// @note This class does not store the frames associated with this rotation
 /// sequence.
-///
-/// @tparam_default_scalar
 template <typename T>
 class RollPitchYaw {
  public:
@@ -178,7 +175,7 @@ class RollPitchYaw {
   /// @param[in] tolerance maximum allowable absolute difference between the
   /// matrix elements in `this` and `other`.
   /// @returns `true` if `‖this - other‖∞ <= tolerance`.
-  boolean<T> IsNearlyEqualTo(const RollPitchYaw<T>& other,
+  bool IsNearlyEqualTo(const RollPitchYaw<T>& other,
                              double tolerance) const {
     const Vector3<T> difference = vector() - other.vector();
     return difference.template lpNorm<Eigen::Infinity>() <= tolerance;
@@ -190,17 +187,18 @@ class RollPitchYaw {
   /// @param[in] other %RollPitchYaw to compare to `this`.
   /// @param[in] tolerance maximum allowable absolute difference between R1, R2.
   /// @returns `true` if `‖R1 - R2‖∞ <= tolerance`.
-  boolean<T> IsNearlySameOrientation(const RollPitchYaw<T>& other,
+  bool IsNearlySameOrientation(const RollPitchYaw<T>& other,
                                      double tolerance) const;
 
   /// Returns true if roll-pitch-yaw angles `[r, p, y]` are in the range
   /// `-π <= r <= π`, `-π/2 <= p <= π/2`, `-π <= y <= π`.
-  boolean<T> IsRollPitchYawInCanonicalRange() const {
+  bool IsRollPitchYawInCanonicalRange() const {
     const T& r = roll_angle();
     const T& p = pitch_angle();
     const T& y = yaw_angle();
-    return (-M_PI <= r && r <= M_PI) && (-M_PI / 2 <= p && p <= M_PI / 2) &&
-           (-M_PI <= y && y <= M_PI);
+    constexpr double pi = std::numbers::pi;
+    return (-pi <= r && r <= pi) && (-pi / 2 <= p && p <= pi / 2) &&
+           (-pi <= y && y <= pi);
   }
 
   /// Returns true if the pitch-angle `p` is close to gimbal-lock, which means
@@ -210,7 +208,7 @@ class RollPitchYaw {
   /// @param[in] cos_pitch_angle cosine of the pitch angle, i.e., `cos(p)`.
   /// @note Pitch-angles close to gimbal-lock can cause problems with numerical
   /// precision and numerical integration.
-  static boolean<T> DoesCosPitchAngleViolateGimbalLockTolerance(
+  static bool DoesCosPitchAngleViolateGimbalLockTolerance(
       const T& cos_pitch_angle) {
     using std::abs;
     return abs(cos_pitch_angle) < kGimbalLockToleranceCosPitchAngle;
@@ -222,7 +220,7 @@ class RollPitchYaw {
   /// @note To improve efficiency when cos(pitch_angle()) is already calculated,
   /// instead use the function DoesCosPitchAngleViolateGimbalLockTolerance().
   /// @see DoesCosPitchAngleViolateGimbalLockTolerance()
-  boolean<T> DoesPitchAngleViolateGimbalLockTolerance() const {
+  bool DoesPitchAngleViolateGimbalLockTolerance() const {
     using std::cos;
     return DoesCosPitchAngleViolateGimbalLockTolerance(cos(pitch_angle()));
   }
@@ -231,13 +229,13 @@ class RollPitchYaw {
   /// pitch angle `p` to gimbal-lock, i.e., the allowable proximity of `p` to
   /// `(n*π + π/2)` where `n = 0, ±1, ±2, ...`.
   static double GimbalLockPitchAngleTolerance() {
-    return M_PI_2 - std::acos(kGimbalLockToleranceCosPitchAngle);
+    return std::numbers::pi / 2 - std::acos(kGimbalLockToleranceCosPitchAngle);
   }
 
   /// Returns true if `rpy` contains valid roll, pitch, yaw angles.
   /// @param[in] rpy allegedly valid roll, pitch, yaw angles.
   /// @note an angle is invalid if it is NaN or infinite.
-  static boolean<T> IsValid(const Vector3<T>& rpy) {
+  static bool IsValid(const Vector3<T>& rpy) {
     using std::isfinite;
     return isfinite(rpy[0]) && isfinite(rpy[1]) && isfinite(rpy[2]);
   }
@@ -428,21 +426,13 @@ class RollPitchYaw {
  private:
   // Throws an exception if rpy is not a valid %RollPitchYaw.
   // @param[in] rpy an allegedly valid rotation matrix.
-  // @note If the underlying scalar type T is non-numeric (symbolic), no
-  // validity check is made and no assertion is thrown.
-  template <typename S = T>
-  static typename std::enable_if_t<scalar_predicate<S>::is_bool>
-  ThrowIfNotValid(const Vector3<T>& rpy) {
+  static void ThrowIfNotValid(const Vector3<T>& rpy) {
     if (!RollPitchYaw<T>::IsValid(rpy)) {
       throw std::logic_error(
           "Error: One (or more) of the roll-pitch-yaw angles is infinity or "
           "NaN.");
     }
   }
-
-  template <typename S = T>
-  static typename std::enable_if_t<!scalar_predicate<S>::is_bool>
-  ThrowIfNotValid(const Vector3<S>&) {}
 
   // Throws an exception with a message that the pitch-angle `p` violates the
   // internally-defined gimbal-lock tolerance, which occurs when `cos(p) ≈ 0`,
@@ -562,17 +552,6 @@ class RollPitchYaw {
   static constexpr double kGimbalLockToleranceCosPitchAngle = 0.008;
 };
 
-/// Stream insertion operator to write an instance of RollPitchYaw into a
-/// `std::ostream`. Especially useful for debugging.
-/// @relates RollPitchYaw.
-template <typename T>
-DRAKE_DEPRECATED(
-    "2026-07-01",
-    "Use fmt functions instead (e.g., fmt::format(), fmt::to_string(), "
-    "fmt::print()). Refer to GitHub issue #17742 for more information.")
-std::ostream&
-operator<<(std::ostream& out, const RollPitchYaw<T>& rpy);
-
 /// Represents a RollPitchYaw object as a string. Especially useful for
 /// debugging.
 /// @relates RollPitchYaw.
@@ -589,5 +568,4 @@ using RollPitchYawd = RollPitchYaw<double>;
 DRAKE_FORMATTER_AS(typename T, drake::math, RollPitchYaw<T>, x,
                    drake::math::to_string(x))
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::math::RollPitchYaw);
+extern template class drake::math::RollPitchYaw<double>;

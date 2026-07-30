@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -39,8 +38,6 @@ namespace internal {
 //
 //   H_FM_M = R_MF ⋅ H_FM_F = [ R_MF   0  ]
 //                            [   0  R_MF ]
-//
-// @tparam_default_scalar
 template <typename T>
 class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
  public:
@@ -124,11 +121,6 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
       const systems::Context<T>& context, const Quaternion<T>& q_FM,
       systems::State<T>* state) const;
 
-  // Sets the distribution governing the random samples of the rotation
-  // component of the mobilizer state.
-  void set_random_quaternion_distribution(
-      const Eigen::Quaternion<symbolic::Expression>& q_FM);
-
   // Sets `context` to store the position `p_FM` of frame M's origin `Mo`
   // measured and expressed in frame F.
   // @param[out] context
@@ -145,11 +137,6 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
   const QuaternionFloatingMobilizer<T>& SetTranslation(
       const systems::Context<T>& context, const Vector3<T>& p_FM,
       systems::State<T>* state) const;
-
-  // Sets the distribution governing the random samples of the position
-  // component of the mobilizer state.
-  void set_random_translation_distribution(
-      const Vector3<symbolic::Expression>& position);
 
   // Sets `context` so this mobilizer's generalized coordinates (its quaternion
   // q_FM) are consistent with the given `R_FM` rotation matrix.
@@ -371,15 +358,6 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const final;
-
  private:
   // Helper function to form this mobilizer's Nᵣ⁺(qᵣ) matrix, to relate angular
   // velocity w_FM_F to the quaternion 1ˢᵗ time-derivative q̇ᵣ, and to relate
@@ -392,15 +370,11 @@ class QuaternionFloatingMobilizer final : public MobilizerImpl<T, 7, 6> {
   static Eigen::Matrix<T, 3, 4> QuaternionRateToAngularVelocityMatrix(
       const Quaternion<T>& q);
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::QuaternionFloatingMobilizer);
+extern template class drake::multibody::internal::
+    QuaternionFloatingMobilizer<double>;

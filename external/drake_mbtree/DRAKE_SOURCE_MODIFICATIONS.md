@@ -134,6 +134,153 @@ ComposeXinvX: R_AC = R_BAᵀ R_BC, p_AC = R_BAᵀ (p_BC - p_BA)
 公共头已经进入 topology 的真实构建边界。直接删除比为一个非必要性能提示建立编译器宏
 兼容层更轻，也避免把尚未验证的 MSVC 兼容性问题拖到交付阶段。
 
+## G16 — 删除非 double 标量路径
+
+G16 触及 138 个文件,单条列出每一处会淹没真正的语义决定。因此机械且同形的改动按**机制**
+记(改了什么构造、依据什么等价性、覆盖多少处),语义或公共边界的改动仍按**文件与符号**记。
+两类都可以在源码里直接搜到。
+
+贯穿全部机制的等价性只有一条:**`T` 恒为 `double`**。凡是仅当 `T` 是 AutoDiffXd 或
+symbolic::Expression 才会被选中的分支、重载与类型,在这棵树里不可实例化。
+
+### 机制一:标量克隆链(整链删除)
+
+**删除** `MultibodyTree::CloneToScalar()` / `Clone()` / `ToAutoDiffXd()`、六个
+`Clone*AndAdd()` 助手、`get_variant()` 的四个 const 重载与 `get_mutable_variant()`、
+基类 `Frame` / `Joint` / `Mobilizer` / `ForceElement` / `JointActuator` / `RigidBody` 的
+`CloneToScalar()` NVI 与 `DoCloneToScalar()` 纯虚三元组、`Joint::FindMobilizerToScalarClone()`,
+以及落位树中每一个派生 Frame / Joint / Mobilizer / ForceElement 类型的 `DoCloneToScalar()`
+覆盖与 `TemplatedDoCloneToScalar()` 助手。同时删除
+只为跨标量访问而存在的 `template <typename U> friend class X;`(RotationMatrix、
+RigidTransform、RotationalInertia、ArticulatedBodyInertia、RigidBodyFrame、
+LinearBushingRollPitchYaw、PrismaticSpring、RevoluteSpring、九个 Joint、MultibodyTree、
+JointActuator),以及 `JointActuator` 那个只被 `DoCloneToScalar()` 调用的私有克隆构造函数。
+
+**原因**:整条链的存在理由是把一棵树复制成**另一个标量**的树。`Clone()` 与 `ToAutoDiffXd()`
+在落位活动源码中零调用方,`Clone*AndAdd()` 只被 `CloneToScalar()` 自己调用,`get_variant()`
+只在 `TemplatedDoCloneToScalar()` 体内出现——是一条自封闭的死代码链,留下任何一段都会让
+调用方看得见一个链接期才缺符号的 API。
+
+**未删** `ShallowClone()` / `DoShallowClone()`:它是**同标量**的浅克隆,与标量转换无关。
+改动前后其声明与调用行的多重集合逐行相同(46 行)。
+
+### 机制二:符号随机状态接口(整链删除)
+
+**删除** `MobilizerImpl::random_state_distribution_`(类型
+`std::optional<Vector<symbolic::Expression, kNx>>`)及其
+`set_random_position_distribution()` / `set_random_velocity_distribution()` /
+`get_random_state_distribution()`;`Mobilizer::set_random_state()` 纯虚与
+`MobilizerImpl::set_random_state()` 实现;`QuaternionFloatingMobilizer` 与
+`RpyFloatingMobilizer` 的四个分布 setter;九个 Joint 的分布 setter;
+`MultibodyTree::SetRandomState()` 与三个 `SetFreeBodyRandom*DistributionOrThrow()`。
+
+**原因**:这条链的根是一个 symbolic 表达式向量,每一层 setter 的形参都是
+`symbolic::Expression`,而 `set_random_state()` 的全部工作就是求值那个表达式。删掉表达式
+之后 `set_random_state()` 退化为 `set_default_state()` 的别名,属于明令禁止的兼容别名。
+
+**连带出界**:`math/random_rotation.h`、`math/quaternion.h`、`common/random.h` 因此失去
+全部消费方,改判 `discard`;`quaternion_floating_mobilizer.cc` 中一条不使用其任何符号的
+`math/quaternion.h` include 一并删除。
+
+### 机制三:标量断言与分支(取 double 侧)
+
+**折叠** 16 处 `if constexpr (scalar_predicate<T>::is_bool)`(保留真分支,删除 else)、
+3 处 `if (scalar_predicate<T>::is_bool && …)` 的空守卫、4 对 `std::enable_if_t` 重载
+(保留 `is_bool` 侧并去掉 SFINAE,删除 `!is_bool` 侧):`RollPitchYaw::ThrowIfNotValid`、
+`RotationalInertia::ThrowIfMultiplyByNegativeScalar` /
+`ThrowIfDivideByZeroOrNegativeScalar`、`ArticulatedBodyInertia::IsPhysicallyValid`、
+`RotationMatrix::RotationMatrixToUnnormalizedQuaternion`。
+
+**替换** 44 处 `boolean<T>` 为 `bool`,7 处 `if_then_else(c, a, b)` 为 `c ? a : b`
+(`roll_pitch_yaw.cc` 中折角归一的四处写成 `if`,读起来更直接),
+`SpatialInertia::IsNaN` / `IsZero` 中的 `any_of` / `all_of` 写成 Eigen 自己的
+`.array().isNaN().any()` 与 `(.array() == 0.0).all()`。
+
+**原因**:`scalar_predicate<T>::is_bool` 问的是"比较两个 T 是否得到普通 `bool`",对
+`double` 恒真;`boolean<double>` 就是 `bool`;无分支的 `if_then_else` 之所以存在,是为了让
+symbolic 表达式避开控制流,对 `double` 它就是条件运算符。保留这层只会让读者以为还有第二个
+标量。**连带出界**:`common/drake_bool.h`、`common/cond.h`、`common/double_overloads.h`。
+
+**注意**:`RotationMatrix::RotationMatrixToUnnormalizedQuaternion` 的两个特化在上游即注明
+"两处数学必须保持同步"。保留的是 if-elseif 版本;被删的 `if_then_else` 版本按上游自己的说明
+与之等价,不引入数值差异。
+
+### 机制四:标量转换与提取(改写为直接表达式)
+
+**删除** `RotationMatrix` / `RigidTransform` / `RotationalInertia` / `UnitInertia` /
+`ArticulatedBodyInertia` / `SpatialInertia` 的 `cast<Scalar>()` 成员模板,以及
+`PiecewiseConstantCurvatureTrajectory` 的标量转换构造函数、`ScalarValueConverter` 别名与
+`ScalarConvertStdVector()` 助手(连同 `systems/framework/scalar_conversion_traits.h` 的
+include——该头不在准入边界内)。
+
+**改写** 13 处 `ExtractDoubleOrThrow(x)` 为 `x`、2 处 `DiscardGradient(v)` 为 `v`、16 处
+落在 double 上的恒等 `cast<T>()` 为对象本身。
+
+**原因**:`cast<U>()` 的约束 `requires is_default_scalar<U>` 直接引用已裁的
+`common/default_scalars.h`;`ExtractDoubleOrThrow` 对 `double` 实参原样返回;
+`DiscardGradient` 在没有梯度时同理。路书完成门点名不得再消费标量转换与 `ExtractDouble`。
+**连带出界**:`common/extract_double.h`。
+
+### 机制五:默认标量实例化与文档
+
+**删除** 58 行 `#include "drake/common/default_scalars.h"`、4 行
+`#include "drake/common/autodiff.h"`、1 行 `#include "drake/common/symbolic/expression.h"`
+(三个头都不在落位树内,这些 include 是 G11 编译探针报出 55 处失败的直接原因),
+60 个 `@tparam_default_scalar` 文档标签,以及 `element_collection.cc`、`mobilizer_impl.cc`、
+`body_node_impl.cc`、`body_node_impl_mass_matrix.cc`、`prismatic_mobilizer.{h,cc}`、
+`revolute_mobilizer.{h,cc}` 中 AutoDiffXd 与 symbolic 的显式实例化。
+
+**改写**三十余处描述非 double 标量行为的说明(诸如"当 T 为 symbolic 时不做校验"、
+"cast 到 AutoDiffXd 合法而反向不合法"),它们在这棵树里已经是假陈述。
+
+### 机制六:`M_PI` 改用 `std::numbers`
+
+**替换** 7 个文件中的 34 处 `M_PI` 与 6 处 `M_PI_2` 为 `std::numbers::pi` 与
+`std::numbers::pi / 2`,各文件加 `#include <numbers>`;`common/fmt_eigen.h` 的文档示例同步。
+
+**原因**:`M_PI` 不是标准 C 或 C++ 的一部分,MSVC 需要 `_USE_MATH_DEFINES` 才提供。
+C++23 的 `std::numbers` 是标准途径,不需要为编译器差异建宏兼容层。
+
+### 逐文件记:`math/linear_solve.h`(整档重写)
+
+**重写**为只保留 `LinearSolver` 类与其求解器类型别名 `internal::EigenLinearSolver`。
+**删除** `is_symbolic` / `is_symbolic_v` / `is_double_or_symbolic_v` / `is_autodiff` /
+`is_autodiff_v`、五个自由函数 `SolveLinearSystem` 重载、`GetLinearSolver()`、
+`Promoted` / `Solution` 别名、Eigen 5 的 `ColPivHouseholderQR` / `PartialPivLU` 兼容别名,
+以及 `LinearSolver` 内保存原矩阵的 `A_` 成员和 `Solve()` 里的三路 `if constexpr` 分派。
+
+**原因**:该文件的绝大部分是隐函数定理路径——当 A 或 b 含 AutoDiffScalar 时,用 double 分解
+配合 ∂x/∂zᵢ = A⁻¹(∂b/∂zᵢ − ∂A/∂zᵢ·x) 求梯度。没有 AutoDiff 就没有这条路径。落位活动源码
+只经 `body_node.cc` 与 `body_node_impl.cc` 使用 `LinearSolver<Eigen::LLT, MatrixUpTo6<T>>` 的
+默认构造、矩阵构造、`eigen_linear_solver()` 与 `Solve()`;其余全部无消费方。删除后
+`Solve()` 直接返回 `eigen_linear_solver_.solve(b)`,与原先 double 分支逐字相同。
+它原先 include 的 `math/autodiff.h` 与 `math/autodiff_gradient.h` 都不在落位树内,
+改为直接 include `<Eigen/Dense>` 使该头自足。
+
+### 逐文件记:其余语义改动
+
+- **`multibody/tree/curvilinear_mobilizer.h`**:删除 `math/wrap_to.h` 的 include。
+  该 include 自 G15 起即无用,处置账本已记明可删。
+- **`math/wrap_to.h`**:删除 `common/double_overloads.h` 的 include,其唯一用途是一段被
+  注释掉的替代实现;该注释同步改写,不再声称 fmod 受标量类型限制。
+- **`common/trajectories/piecewise_trajectory.{h,cc}`**:删除
+  `PiecewiseTrajectory<T>::RandomSegmentTimes()` 及其 `#include <random>` 与
+  `using std::uniform_real_distribution;`。它在落位树中零调用方,属完成门点名的"无人消费
+  helper"。
+- **`common/eigen_types.h`**:删除指向未落位的 `eigen_autodiff_types.h` 的 `@see`。
+- **`common/drake_assert.h`**:删除 `ConditionTraits` 说明中指向未落位的
+  `common/symbolic/expression/formula.h` 的举例。
+- **`common/nice_type_name.cc`**:删除把 Eigen AutoDiff 类型名改写成 `drake::AutoDiffXd`
+  的两条正则。产品里不存在这些类型,规则永不命中。
+- **`common/hash.h`**:删除以 `symbolic::Expression` 为例的 `std::hash` 特化说明。
+
+### G16 未声称的事
+
+本 Goal 的产物是**边界**,不是可构建的树。以钉死的 g++ 与 C++23 对落位源码逐 TU 编译,
+71 个翻译单元中 30 个通过,41 个失败——**全部 41 个的首个错误都是同一条**:缺少
+`drake/multibody/tree/multibody_tree_system.h`,即 G20–G28 要处理的 systems 运行时依赖。
+标量相关的错误一个不剩。该次编译是一次性探针,结论吸收后即删,不留归档。
+
 ## 未作的修改
 
 - **没有改写任何 `#include "drake/..."` 前缀。** 源码按上游相对路径落位在 `drake/` 下,

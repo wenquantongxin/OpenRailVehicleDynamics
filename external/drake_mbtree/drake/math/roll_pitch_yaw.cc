@@ -1,6 +1,7 @@
 #include "drake/math/roll_pitch_yaw.h"
 
-#include "drake/common/cond.h"
+#include <numbers>
+
 #include "drake/math/rotation_matrix.h"
 
 namespace drake {
@@ -106,8 +107,6 @@ RotationMatrix<T> RollPitchYaw<T>::ToRotationMatrix() const {
 template <typename T>
 Vector3<T> CalcRollPitchYawFromQuaternionAndRotationMatrix(
     const Eigen::Quaternion<T>& quaternion, const Matrix3<T>& R) {
-  // TODO(14927) This method needs testing with symbolic template type T.
-  //  Check if it works or throw a nice exception message.
   using std::abs;
   using std::atan2;
   using std::sqrt;
@@ -131,16 +130,16 @@ Vector3<T> CalcRollPitchYawFromQuaternionAndRotationMatrix(
   const T epsilon = Eigen::NumTraits<T>::epsilon();
   const auto isSingularA = abs(yA) <= epsilon && abs(xA) <= epsilon;
   const auto isSingularB = abs(yB) <= epsilon && abs(xB) <= epsilon;
-  const T zA = if_then_else(isSingularA, T{0.0}, atan2(yA, xA));
-  const T zB = if_then_else(isSingularB, T{0.0}, atan2(yB, xB));
+  const T zA = isSingularA ? T{0.0} : atan2(yA, xA);
+  const T zB = isSingularB ? T{0.0} : atan2(yB, xB);
   T q1 = zA - zB;  // First angle in rotation sequence.
   T q3 = zA + zB;  // Third angle in rotation sequence.
 
   // If necessary, modify angles q1 and/or q3 to be between -pi and pi.
-  q1 = if_then_else(q1 > M_PI, q1 - 2 * M_PI, q1);
-  q1 = if_then_else(q1 < -M_PI, q1 + 2 * M_PI, q1);
-  q3 = if_then_else(q3 > M_PI, q3 - 2 * M_PI, q3);
-  q3 = if_then_else(q3 < -M_PI, q3 + 2 * M_PI, q3);
+  if (q1 > std::numbers::pi) q1 -= 2 * std::numbers::pi;
+  if (q1 < -std::numbers::pi) q1 += 2 * std::numbers::pi;
+  if (q3 > std::numbers::pi) q3 -= 2 * std::numbers::pi;
+  if (q3 < -std::numbers::pi) q3 += 2 * std::numbers::pi;
 
   // Return in Drake/ROS conventional SpaceXYZ q1, q2, q3 (roll-pitch-yaw) order
   // (which is equivalent to BodyZYX q3, q2, q1 order).
@@ -326,8 +325,7 @@ Matrix3<T> RollPitchYaw<T>::CalcMatrixRelatingRpyDtToAngularVelocityInParent(
   const T& y = yaw_angle();
   const T sp = sin(p), cp = cos(p);
   // TODO(Mitiguy) Improve accuracy when `cos(p) ≈ 0`.
-  if (scalar_predicate<T>::is_bool &&
-      DoesCosPitchAngleViolateGimbalLockTolerance(cp)) {
+  if (DoesCosPitchAngleViolateGimbalLockTolerance(cp)) {
     ThrowPitchAngleViolatesGimbalLockTolerance(function_name, p);
   }
   const T one_over_cp = 1.0 / cp;
@@ -392,8 +390,7 @@ void RollPitchYaw<T>::SetFromQuaternionAndRotationMatrix(
   constexpr double kEpsilon = std::numeric_limits<double>::epsilon();
   const RotationMatrix<T> R_quaternion(quaternion);
   constexpr double tolerance = 20 * kEpsilon;
-  if (scalar_predicate<T>::is_bool &&
-      !R_quaternion.IsNearlyEqualTo(R, tolerance)) {
+  if (!R_quaternion.IsNearlyEqualTo(R, tolerance)) {
     std::string message = fmt::format(
         "RollPitchYaw::{}():"
         " An element of the RotationMatrix R passed to this method differs by"
@@ -420,7 +417,7 @@ void RollPitchYaw<T>::SetFromQuaternionAndRotationMatrix(
 }
 
 template <typename T>
-boolean<T> RollPitchYaw<T>::IsNearlySameOrientation(
+bool RollPitchYaw<T>::IsNearlySameOrientation(
     const RollPitchYaw<T>& other, double tolerance) const {
   // Note: When pitch is close to PI/2 or -PI/2, derivative calculations for
   // Euler angles can encounter numerical problems (dividing by nearly 0).
@@ -434,35 +431,26 @@ boolean<T> RollPitchYaw<T>::IsNearlySameOrientation(
 template <typename T>
 void RollPitchYaw<T>::ThrowPitchAngleViolatesGimbalLockTolerance(
     const char* function_name, const T& pitch_angle) {
-  const double pitch_radians = ExtractDoubleOrThrow(pitch_angle);
+  const double pitch_radians = pitch_angle;
   const double cos_pitch_angle = std::cos(pitch_radians);
   DRAKE_ASSERT(DoesCosPitchAngleViolateGimbalLockTolerance(cos_pitch_angle));
-  const double tolerance_degrees = GimbalLockPitchAngleTolerance() * 180 / M_PI;
+  const double tolerance_degrees =
+      GimbalLockPitchAngleTolerance() * 180 / std::numbers::pi;
   std::string message = fmt::format(
       "RollPitchYaw::{}():"
       " Pitch angle p = {:G} degrees is within {:G} degrees of gimbal-lock."
       " There is a divide-by-zero error (singularity) at gimbal-lock.  Pitch"
       " angles near gimbal-lock cause numerical inaccuracies.  To avoid this"
       " orientation singularity, use a quaternion -- not RollPitchYaw.",
-      function_name, pitch_radians * 180 / M_PI, tolerance_degrees);
+      function_name, pitch_radians * 180 / std::numbers::pi, tolerance_degrees);
   throw std::runtime_error(message);
 }
 
 template <typename T>
-std::ostream& operator<<(std::ostream& out, const RollPitchYaw<T>& rpy) {
-  return out << fmt::to_string(rpy);
-}
-
-template <typename T>
 std::string to_string(const RollPitchYaw<T>& rpy) {
-  // Helper to represent an angle as a terse string.  If the angle is symbolic
-  // and ends up a string that's too long, return a placeholder instead.
+  // Helper to represent an angle as a terse string.
   auto repr = [](const T& angle) {
-    std::string result = fmt::to_string(angle);
-    if (std::is_same_v<T, symbolic::Expression> && (result.size() >= 30)) {
-      result = "<symbolic>";
-    }
-    return result;
+    return fmt::to_string(angle);
   };
   const T& roll = rpy.roll_angle();
   const T& pitch = rpy.pitch_angle();
@@ -470,21 +458,9 @@ std::string to_string(const RollPitchYaw<T>& rpy) {
   return fmt::format("rpy = {} {} {}", repr(roll), repr(pitch), repr(yaw));
 }
 
-// TODO(2026-07-01): delete `operator<<` instantiation and the `#pragma`s.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-// clang-format off
-DRAKE_DEFINE_FUNCTION_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS((
-    static_cast<std::ostream&(*)(std::ostream&, const RollPitchYaw<T>&)>(
-        &operator<< ),
-    static_cast<std::string(*)(const RollPitchYaw<T>&)>(
-        &to_string)
-));
-// clang-format on
-#pragma GCC diagnostic pop
+template std::string drake::math::to_string(const RollPitchYaw<double>&);
 
 }  // namespace math
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::math::RollPitchYaw);
+template class drake::math::RollPitchYaw<double>;

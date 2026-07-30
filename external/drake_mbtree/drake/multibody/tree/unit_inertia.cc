@@ -1,5 +1,7 @@
 #include "drake/multibody/tree/unit_inertia.h"
 
+#include <numbers>
+
 #include "drake/common/fmt_eigen.h"
 #include "drake/math/unit_vector.h"
 
@@ -129,8 +131,8 @@ UnitInertia<T> UnitInertia<T>::SolidCapsule(const T& radius, const T& length,
   // Calculate vc (the volume of cylinder C) and vh (volume of half-sphere H).
   const T rsq = radius * radius;
   const T rcubed = rsq * radius;
-  const T vc = M_PI * rsq * length;        // vc = π r² L
-  const T vh = 2.0 / 3.0 * M_PI * rcubed;  // vh = 2/3 π r³
+  const T vc = std::numbers::pi * rsq * length;        // vc = π r² L
+  const T vh = 2.0 / 3.0 * std::numbers::pi * rcubed;  // vh = 2/3 π r³
 
   // Denoting mc as the mass of cylinder C and mh as the mass of half-sphere H,
   // and knowing the capsule has a uniform density and the capsule's mass is 1
@@ -295,11 +297,9 @@ std::string to_string(const UnitInertia<T>& I) {
   return fmt::to_string(static_cast<const RotationalInertia<T>&>(I));
 }
 
-DRAKE_DEFINE_FUNCTION_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    (static_cast<std::string (*)(const UnitInertia<T>&)>(&to_string)));
+template std::string to_string(const UnitInertia<double>&);
 
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::UnitInertia);
+template class drake::multibody::UnitInertia<double>;

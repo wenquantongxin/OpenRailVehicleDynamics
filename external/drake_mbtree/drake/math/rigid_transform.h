@@ -3,11 +3,8 @@
 #include <limits>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
-#include "drake/common/drake_bool.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/drake_deprecated.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/fmt.h"
 #include "drake/common/hash.h"
@@ -67,8 +64,6 @@ namespace math {
 ///
 /// @authors Paul Mitiguy (2018) Original author.
 /// @authors Drake team (see https://drake.mit.edu/credits).
-///
-/// @tparam_default_scalar
 template <typename T>
 class RigidTransform {
  public:
@@ -321,9 +316,7 @@ class RigidTransform {
   /// the algorithms in this section are permitted to _assume_ those values
   /// without looking. However, those elements are still required to have the
   /// expected values, which are the values they would have in an identity
-  /// transform (that is, 1 on the diagonal and 0 elsewhere). (Even when T is
-  /// symbolic::Expression, we insist that the inactive elements have the
-  /// correct numerical values and don't require an Environment for evaluation.)
+  /// transform (that is, 1 on the diagonal and 0 elsewhere).
   /// This ensures that general purpose (non-specialized) code can still use
   /// the resulting transforms.
   ///
@@ -569,28 +562,6 @@ class RigidTransform {
   }
   ///@}
 
-  /// Creates a %RigidTransform templatized on a scalar type U from a
-  /// %RigidTransform templatized on scalar type T.  For example,
-  /// ```
-  /// RigidTransform<double> source = RigidTransform<double>::Identity();
-  /// RigidTransform<AutoDiffXd> foo = source.cast<AutoDiffXd>();
-  /// ```
-  /// @tparam U Scalar type on which the returned %RigidTransform is templated.
-  /// @note `RigidTransform<From>::cast<To>()` creates a new
-  /// `RigidTransform<To>` from a `RigidTransform<From>` but only if type `To`
-  /// is constructible from type `From`.  This cast method works in accordance
-  /// with Eigen's cast method for Eigen's objects that underlie this
-  /// %RigidTransform.  For example, Eigen currently allows cast from type
-  /// double to AutoDiffXd, but not vice-versa.
-  template <typename U>
-  RigidTransform<U> cast() const
-    requires is_default_scalar<U>
-  {  // NOLINT(whitespace/braces)
-    const RotationMatrix<U> R = R_AB_.template cast<U>();
-    const Vector3<U> p = p_AoBo_A_.template cast<U>();
-    return RigidTransform<U>(R, p);
-  }
-
   /// Returns the identity %RigidTransform (corresponds to coincident frames).
   /// @return the %RigidTransform that corresponds to aligning the two frames so
   /// unit vectors Ax = Bx, Ay = By, Az = Bz and point Ao is coincident with Bo.
@@ -686,8 +657,8 @@ class RigidTransform {
 
   /// Returns `true` if `this` is exactly the identity %RigidTransform.
   /// @see IsNearlyIdentity().
-  boolean<T> IsExactlyIdentity() const {
-    const boolean<T> is_position_zero = (translation() == Vector3<T>::Zero());
+  bool IsExactlyIdentity() const {
+    const bool is_position_zero = (translation() == Vector3<T>::Zero());
     return is_position_zero && rotation().IsExactlyIdentity();
   }
 
@@ -700,7 +671,7 @@ class RigidTransform {
   /// RotationMatrix::IsNearlyIdentity() and if the position vector portion of
   /// `this` is equal to zero vector within `translation_tolerance`.
   /// @see IsExactlyIdentity().
-  boolean<T> IsNearlyIdentity(double translation_tolerance) const {
+  bool IsNearlyIdentity(double translation_tolerance) const {
     const T max_component = translation().template lpNorm<Eigen::Infinity>();
     return max_component <= translation_tolerance &&
            rotation().IsNearlyIdentity();
@@ -710,7 +681,7 @@ class RigidTransform {
   /// @param[in] other %RigidTransform to compare to `this`.
   /// @returns `true` if each element of `this` is exactly equal to the
   /// corresponding element of `other`.
-  boolean<T> IsExactlyEqualTo(const RigidTransform<T>& other) const {
+  bool IsExactlyEqualTo(const RigidTransform<T>& other) const {
     return rotation().IsExactlyEqualTo(other.rotation()) &&
            translation() == other.translation();
   }
@@ -724,7 +695,7 @@ class RigidTransform {
   /// @note Consider scaling tolerance with the largest of magA and magB, where
   /// magA and magB denoted the magnitudes of `this` position vector and `other`
   /// position vectors, respectively.
-  boolean<T> IsNearlyEqualTo(const RigidTransform<T>& other,
+  bool IsNearlyEqualTo(const RigidTransform<T>& other,
                              double tolerance) const {
     return GetMaximumAbsoluteDifference(other) <= tolerance;
   }
@@ -930,13 +901,6 @@ class RigidTransform {
   }
 
  private:
-  // Make RigidTransform<U> templatized on any typename U be a friend of a
-  // %RigidTransform templatized on any other typename T. This is needed for the
-  // method RigidTransform<T>::cast<U>() to be able to use the required private
-  // constructor.
-  template <typename U>
-  friend class RigidTransform;
-
   // Declares the allowable tolerance (small multiplier of double-precision
   // epsilon) used to check whether or not a matrix is homogeneous.
   static constexpr double kInternalToleranceForHomogeneousCheck{
@@ -965,7 +929,7 @@ class RigidTransform {
   // RigidTransform * Vector4 is not 0 or 1.
   [[noreturn]] static void ThrowInvalidMultiplyVector4(const Vector4<T>& vec_B);
 
-  // Throws if the translational part is not exactly zero, even for symbolic.
+  // Throws if the translational part is not exactly zero.
   void IsRotationOnlyOrThrow() const {
     DRAKE_THROW_UNLESS(translation()[0] == 0 && translation()[1] == 0 &&
                        translation()[2] == 0);
@@ -1016,17 +980,6 @@ static_assert(sizeof(RigidTransform<double>) == 12 * sizeof(double),
               "Low-level optimizations depend on RigidTransform<double> being "
               "stored as 12 sequential doubles in memory.");
 
-/// Stream insertion operator to write an instance of RigidTransform into a
-/// `std::ostream`. Especially useful for debugging.
-/// @relates RigidTransform
-template <typename T>
-DRAKE_DEPRECATED(
-    "2026-07-01",
-    "Use fmt functions instead (e.g., fmt::format(), fmt::to_string(), "
-    "fmt::print()). Refer to GitHub issue #17742 for more information.")
-std::ostream&
-operator<<(std::ostream& out, const RigidTransform<T>& X);
-
 template <typename T>
 std::string to_string(const RigidTransform<T>& X);
 
@@ -1040,5 +993,4 @@ using RigidTransformd = RigidTransform<double>;
 DRAKE_FORMATTER_AS(typename T, drake::math, RigidTransform<T>, x,
                    drake::math::to_string(x))
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::math::RigidTransform);
+extern template class drake::math::RigidTransform<double>;

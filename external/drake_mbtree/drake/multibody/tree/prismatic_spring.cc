@@ -81,40 +81,6 @@ T PrismaticSpring<T>::CalcNonConservativePower(
 }
 
 template <typename T>
-template <typename ToScalar>
-std::unique_ptr<ForceElement<ToScalar>>
-PrismaticSpring<T>::TemplatedDoCloneToScalar(
-    const internal::MultibodyTree<ToScalar>&) const {
-  // N.B. We can't use std::make_unique here since this constructor is private
-  // to std::make_unique.
-  // N.B. We use the private constructor since it doesn't rely on a valid joint
-  // reference, which might not be available during cloning.
-  std::unique_ptr<PrismaticSpring<ToScalar>> spring_clone(
-      new PrismaticSpring<ToScalar>(this->model_instance(), joint_index_,
-                                    nominal_position(), stiffness()));
-  return spring_clone;
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<double>> PrismaticSpring<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<AutoDiffXd>> PrismaticSpring<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<symbolic::Expression>>
-PrismaticSpring<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
 std::unique_ptr<ForceElement<T>> PrismaticSpring<T>::DoShallowClone() const {
   // N.B. We use the private constructor since joint() requires a MbT pointer.
   return std::unique_ptr<ForceElement<T>>(new PrismaticSpring<T>(
@@ -124,5 +90,4 @@ std::unique_ptr<ForceElement<T>> PrismaticSpring<T>::DoShallowClone() const {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::PrismaticSpring);
+template class drake::multibody::PrismaticSpring<double>;

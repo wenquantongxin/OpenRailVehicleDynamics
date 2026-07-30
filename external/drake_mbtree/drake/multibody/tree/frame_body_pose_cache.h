@@ -3,7 +3,6 @@
 #include <limits>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/math/rigid_transform.h"
@@ -48,9 +47,7 @@ Mass properties
          expressed in B. This differs from M_LLo_L when B is a composite
          mobod. Indexed by MobodIndex.
  - p_BoLcm_B: The position vector from mobilized body origin Bo to the
-         center of mass of L, expressed in B. Indexed by LinkOrdinal.
-
-@tparam_default_scalar */
+         center of mass of L, expressed in B. Indexed by LinkOrdinal. */
 template <typename T>
 class FrameBodyPoseCache {
  public:
@@ -94,7 +91,7 @@ class FrameBodyPoseCache {
   //
   // This method returns true if
   // (1) F is B's body frame (that is, F is L's LinkFrame and L≡L₀), or
-  // (2) T is nonsymbolic and F is currently coincident B's body frame.
+  // (2) F is currently coincident with B's body frame.
   //
   // This should be used only for performance optimization, so that a false
   // negative harmlessly leads to treating X_BF as a general transform.
@@ -143,22 +140,14 @@ class FrameBodyPoseCache {
     DRAKE_DEMAND(0 <= index && index < ssize(X_BF_pool_));
     X_BF_pool_[index] = X_BF;
     X_FB_pool_[index] = X_BF.inverse();
-    if constexpr (scalar_predicate<T>::is_bool) {
-      is_X_BF_identity_[index] = X_BF.IsExactlyIdentity();
-    } else {
-      is_X_BF_identity_[index] = static_cast<uint8_t>(false);
-    }
+    is_X_BF_identity_[index] = X_BF.IsExactlyIdentity();
   }
 
   void SetX_BL(LinkOrdinal ordinal, const math::RigidTransform<T>& X_BL) {
     // This method is only called when parameters change.
     DRAKE_DEMAND(0 <= ordinal && ordinal < ssize(X_BL_pool_));
     X_BL_pool_[ordinal] = X_BL;
-    if constexpr (scalar_predicate<T>::is_bool) {
-      is_X_BL_identity_[ordinal] = X_BL.IsExactlyIdentity();
-    } else {
-      is_X_BL_identity_[ordinal] = static_cast<uint8_t>(false);
-    }
+    is_X_BL_identity_[ordinal] = X_BL.IsExactlyIdentity();
   }
 
   void SetM_LLo_L(LinkOrdinal ordinal, const SpatialInertia<T>& M_LLo_L) {
@@ -202,5 +191,4 @@ class FrameBodyPoseCache {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::FrameBodyPoseCache);
+extern template class drake::multibody::internal::FrameBodyPoseCache<double>;

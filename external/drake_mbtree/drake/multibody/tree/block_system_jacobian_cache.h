@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/topology/forest.h"
 
@@ -20,9 +19,7 @@ if it has no mobilities (in that case mᵢ=0).
 
 Note that locking and unlocking mobilizers does not affect the contents here;
 the Jacobian reflects what would happen if a velocity variable changed
-regardless of whether it can currently do so.
-
-@tparam_default_scalar */
+regardless of whether it can currently do so. */
 template <typename T>
 class BlockSystemJacobianCache {
  public:
@@ -54,5 +51,5 @@ class BlockSystemJacobianCache {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::BlockSystemJacobianCache);
+extern template class drake::multibody::internal::
+    BlockSystemJacobianCache<double>;

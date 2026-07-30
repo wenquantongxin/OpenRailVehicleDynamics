@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
 #include "drake/multibody/tree/prismatic_joint.h"
@@ -24,7 +23,6 @@ namespace multibody {
 /// @note This is different from the LinearSpringDamper: this
 /// %PrismaticSpring is associated with a joint, while the LinearSpringDamper
 /// connects two bodies.
-/// @tparam_default_scalar
 template <typename T>
 class PrismaticSpring final : public ForceElement<T> {
  public:
@@ -73,30 +71,12 @@ class PrismaticSpring final : public ForceElement<T> {
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const override;
 
-  std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
-
   std::unique_ptr<ForceElement<T>> DoShallowClone() const override;
 
-  // Allow different specializations to access each other's private data for
-  // scalar conversion.
-  template <typename U>
-  friend class PrismaticSpring;
-
-  // Private constructor for internal use in TemplatedDoCloneToScalar()
+  // Private constructor used by DoShallowClone(), which cannot use the public
+  // constructor because it has no joint reference to hand it.
   PrismaticSpring(ModelInstanceIndex model_instance, JointIndex joint_index,
                   double nominal_position, double stiffness);
-
-  // Helper method to make a clone templated on ToScalar().
-  template <typename ToScalar>
-  std::unique_ptr<ForceElement<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 
   const JointIndex joint_index_;
   double nominal_position_{0};
@@ -106,5 +86,4 @@ class PrismaticSpring final : public ForceElement<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::PrismaticSpring);
+extern template class drake::multibody::PrismaticSpring<double>;

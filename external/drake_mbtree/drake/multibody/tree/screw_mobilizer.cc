@@ -202,42 +202,8 @@ void ScrewMobilizer<T>::DoMapQDDotToAcceleration(
   *vdot = qddot;
 }
 
-template <typename T>
-template <typename ToScalar>
-std::unique_ptr<Mobilizer<ToScalar>>
-ScrewMobilizer<T>::TemplatedDoCloneToScalar(
-    const MultibodyTree<ToScalar>& tree_clone) const {
-  const Frame<ToScalar>& inboard_frame_clone =
-      tree_clone.get_variant(this->inboard_frame());
-  const Frame<ToScalar>& outboard_frame_clone =
-      tree_clone.get_variant(this->outboard_frame());
-  return std::make_unique<ScrewMobilizer<ToScalar>>(
-      tree_clone.get_mobod(this->mobod().index()), inboard_frame_clone,
-      outboard_frame_clone, this->screw_axis(), this->screw_pitch());
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<double>> ScrewMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<AutoDiffXd>> ScrewMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<symbolic::Expression>>
-ScrewMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::ScrewMobilizer);
+template class drake::multibody::internal::ScrewMobilizer<double>;

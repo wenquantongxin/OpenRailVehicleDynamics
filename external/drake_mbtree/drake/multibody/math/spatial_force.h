@@ -6,7 +6,6 @@
 
 #include <limits>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -42,8 +41,6 @@ class SpatialVelocity;
 /// (@f${f^{Bp}}@f$) applied to point Bp of frame B.
 /// Details on spatial vectors and monogram notation are in sections
 /// @ref multibody_spatial_vectors and @ref multibody_quantities.
-///
-/// @tparam_default_scalar
 template <typename T>
 class SpatialForce : public SpatialVector<SpatialForce, T> {
   // We need the fully qualified class name below for the clang compiler to
@@ -243,8 +240,7 @@ inline SpatialForce<T> operator-(const SpatialForce<T>& F1_E,
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::SpatialForce);
+
 
 DRAKE_FORMATTER_AS(typename T, drake::multibody, SpatialForce<T>, x,
                    drake::multibody::to_string(x))

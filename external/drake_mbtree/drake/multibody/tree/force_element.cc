@@ -1,6 +1,5 @@
 #include "drake/multibody/tree/force_element.h"
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/nice_type_name.h"
 
 namespace drake {
@@ -25,5 +24,4 @@ std::unique_ptr<ForceElement<T>> ForceElement<T>::DoShallowClone() const {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::ForceElement);
+template class drake::multibody::ForceElement<double>;

@@ -3,11 +3,9 @@
 #include <memory>
 #include <optional>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
-#include "drake/common/random.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer.h"
 #include "drake/multibody/tree/multibody_element.h"
@@ -81,9 +79,7 @@ MobilizerImpl also provides a number of size specific methods to retrieve
 multibody quantities of interest from caching structures. These are common
 to all mobilizer implementations and therefore they live in this class.
 Users should not need to interact with this class directly unless they need
-to implement a custom Mobilizer class.
-
-@tparam_default_scalar */
+to implement a custom Mobilizer class. */
 template <typename T, int compile_time_num_positions,
           int compile_time_num_velocities>
 class MobilizerImpl : public Mobilizer<T> {
@@ -139,42 +135,6 @@ class MobilizerImpl : public Mobilizer<T> {
   // calls to set_default_state().
   void set_default_position(const Eigen::Ref<const QVector<double>>& position) {
     default_position_.emplace(position);
-  }
-
-  // Sets the elements of the `state` associated with this Mobilizer to a
-  // _random_ state.  If no random distribution has been set, then `state` is
-  // set to the _default_ state.
-  void set_random_state(const systems::Context<T>& context,
-                        systems::State<T>* state,
-                        RandomGenerator* generator) const override;
-
-  // Defines the distribution used to draw random samples from this
-  // mobilizer, using a symbolic::Expression that contains random variables.
-  void set_random_position_distribution(
-      const Eigen::Ref<const QVector<symbolic::Expression>>& position) {
-    if (!random_state_distribution_) {
-      random_state_distribution_.emplace(
-          Vector<symbolic::Expression, kNx>::Zero());
-      // Note that there is no `get_zero_velocity()`, since the zero velocity
-      // is simply zero for all mobilizers.  Setting the velocity elements of
-      // the distribution to zero here therefore maintains the default behavior
-      // for velocity.
-    }
-
-    random_state_distribution_->template head<kNq>() = position;
-  }
-
-  // Defines the distribution used to draw random samples from this
-  // mobilizer, using a symbolic::Expression that contains random variables.
-  void set_random_velocity_distribution(
-      const Eigen::Ref<const VVector<symbolic::Expression>>& velocity) {
-    if (!random_state_distribution_) {
-      random_state_distribution_.emplace(Vector<symbolic::Expression, kNx>());
-      // Maintain the default behavior for position.
-      random_state_distribution_->template head<kNq>() = get_zero_position();
-    }
-
-    random_state_distribution_->template tail<kNv>() = velocity;
   }
 
   // N.B. no default implementations possible for calc_X_FM() and update_X_FM()
@@ -239,13 +199,6 @@ class MobilizerImpl : public Mobilizer<T> {
   // MultibodyPlant::SetDefaultContext().
   QVector<double> get_default_position() const {
     return default_position_.value_or(get_zero_position());
-  }
-
-  // Returns the current distribution governing the random samples drawn
-  // for this mobilizer if one has been set.
-  const std::optional<Vector<symbolic::Expression, kNx>>&
-  get_random_state_distribution() const {
-    return random_state_distribution_;
   }
 
   // @name    Helper methods to retrieve entries from the Context.
@@ -322,11 +275,6 @@ class MobilizerImpl : public Mobilizer<T> {
   }
 
   std::optional<QVector<double>> default_position_{};
-
-  // Note: this is maintained as a concatenated vector so that the evaluation
-  // method can share the sampled values of any random variables that are
-  // shared between position and velocity.
-  std::optional<Vector<symbolic::Expression, kNx>> random_state_distribution_{};
 };
 
 }  // namespace internal

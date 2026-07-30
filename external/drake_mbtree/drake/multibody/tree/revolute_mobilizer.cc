@@ -171,45 +171,6 @@ void RevoluteMobilizer<T>::DoMapQDDotToAcceleration(
 
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
-template <typename ToScalar>
-std::unique_ptr<Mobilizer<ToScalar>>
-RevoluteMobilizerAxial<T, axis>::TemplatedDoCloneToScalar(
-    const MultibodyTree<ToScalar>& tree_clone) const {
-  const Frame<ToScalar>& inboard_frame_clone =
-      tree_clone.get_variant(this->inboard_frame());
-  const Frame<ToScalar>& outboard_frame_clone =
-      tree_clone.get_variant(this->outboard_frame());
-  return std::make_unique<RevoluteMobilizerAxial<ToScalar, axis>>(
-      tree_clone.get_mobod(this->mobod().index()), inboard_frame_clone,
-      outboard_frame_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
-std::unique_ptr<Mobilizer<double>>
-RevoluteMobilizerAxial<T, axis>::DoCloneToScalar(
-    const MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
-std::unique_ptr<Mobilizer<AutoDiffXd>>
-RevoluteMobilizerAxial<T, axis>::DoCloneToScalar(
-    const MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
-std::unique_ptr<Mobilizer<symbolic::Expression>>
-RevoluteMobilizerAxial<T, axis>::DoCloneToScalar(
-    const MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
 std::unique_ptr<BodyNode<T>> RevoluteMobilizerAxial<T, axis>::CreateBodyNode(
     const BodyNode<T>* parent_node, const RigidBody<T>* body,
     const Mobilizer<T>* mobilizer) const {
@@ -221,16 +182,11 @@ std::unique_ptr<BodyNode<T>> RevoluteMobilizerAxial<T, axis>::CreateBodyNode(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::RevoluteMobilizer);
+template class drake::multibody::internal::RevoluteMobilizer<double>;
 
-#define DRAKE_DEFINE_REVOLUTE_MOBILIZER(axis)                                 \
+#define DRAKE_DEFINE_REVOLUTE_MOBILIZER(axis)                               \
   template class ::drake::multibody::internal::RevoluteMobilizerAxial<double, \
-                                                                      axis>;  \
-  template class ::drake::multibody::internal::RevoluteMobilizerAxial<        \
-      ::drake::AutoDiffXd, axis>;                                             \
-  template class ::drake::multibody::internal::RevoluteMobilizerAxial<        \
-      ::drake::symbolic::Expression, axis>
+                                                                      axis>
 
 DRAKE_DEFINE_REVOLUTE_MOBILIZER(0);
 DRAKE_DEFINE_REVOLUTE_MOBILIZER(1);

@@ -15,11 +15,8 @@
 
 #include <Eigen/Eigenvalues>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
-#include "drake/common/drake_bool.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/drake_deprecated.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/fmt.h"
 #include "drake/math/rotation_matrix.h"
@@ -156,9 +153,6 @@ namespace multibody {
 /// @note Several methods in this class throw a std::exception for invalid
 /// rotational inertia operations in debug releases only.  This provides speed
 /// in a release build while facilitating debugging in debug builds.
-/// In addition, these validity tests are only performed for scalar types for
-/// which drake::scalar_predicate<T>::is_bool is `true`. For instance, validity
-/// checks are not performed when T is symbolic::Expression.
 ///
 /// @note The methods of this class satisfy the "basic exception guarantee": if
 /// an exception is thrown, the program will still be in a valid
@@ -166,10 +160,6 @@ namespace multibody {
 /// are intact. Be aware that RotationalInertia objects may contain invalid
 /// inertia data in cases where input checking is skipped.
 /// @see https://en.cppreference.com/w/cpp/language/exceptions
-///
-/// Various methods in this class require numerical (not symbolic) data types.
-///
-/// @tparam_default_scalar
 template <typename T>
 class RotationalInertia {
  public:
@@ -303,11 +293,7 @@ class RotationalInertia {
   /// @return `true` if the absolute value of each moment/product of inertia
   ///          in `this` is within `epsilon` of the corresponding moment/
   ///          product absolute value in `other`.  Otherwise returns `false`.
-  /// @note: This method only works if all moments of inertia with scalar type T
-  ///    in `this` and `other` can be converted to a double (discarding
-  ///    supplemental scalar data such as derivatives of an AutoDiffXd).
-  ///    It fails at runtime if type T cannot be converted to `double`.
-  boolean<T> IsNearlyEqualTo(const RotationalInertia& other,
+  bool IsNearlyEqualTo(const RotationalInertia& other,
                              double precision) const {
     using std::min;
     const T I_maxA = CalcMaximumPossibleMomentOfInertia();
@@ -500,7 +486,7 @@ class RotationalInertia {
 
   /// Returns true if all moments and products in `this` rotational inertia are
   /// finite (e.g., no NaNs or infinities), otherwise returns false.
-  boolean<T> IsFinite() const {
+  bool IsFinite() const {
     using std::isfinite;
     // Only check the lower-triangular part of this symmetric matrix for NaN.
     // The three upper off-diagonal products of inertia should be/remain NaN.
@@ -517,7 +503,7 @@ class RotationalInertia {
 
   /// Returns `true` if any moment/product in `this` rotational inertia is NaN.
   /// Otherwise returns `false`.
-  boolean<T> IsNaN() const {
+  bool IsNaN() const {
     using std::isnan;
     // Only check the lower-triangular part of this symmetric matrix for NaN.
     // The three upper off-diagonal products of inertia should be/remain NaN.
@@ -533,7 +519,7 @@ class RotationalInertia {
   }
 
   /// Returns `true` if all moments and products of inertia are exactly zero.
-  boolean<T> IsZero() const {
+  bool IsZero() const {
     // Only check the lower-triangular part of this symmetric matrix for zero.
     // The three upper off-diagonal products of inertia should be/remain NaN.
     static_assert(is_lower_triangular_order(0, 0), "Invalid indices");
@@ -547,30 +533,12 @@ class RotationalInertia {
            I_SP_E_(2, 1) == 0.0 && I_SP_E_(2, 2) == 0.0;
   }
 
-  /// Returns a new %RotationalInertia object templated on `Scalar` initialized
-  /// from the values of `this` rotational inertia's entries.
-  ///
-  /// @tparam Scalar The scalar type on which the new rotational inertia will
-  /// be templated.
-  ///
-  /// @note `RotationalInertia<From>::cast<To>()` creates a new
-  /// `RotationalInertia<To>` from a `RotationalInertia<From>` but only if
-  /// type `To` is constructible from type `From`.
-  /// This cast method works in accordance with Eigen's cast method for Eigen's
-  /// %Matrix3 that underlies this %RotationalInertia.  For example, Eigen
-  /// currently allows cast from type double to AutoDiffXd, but not vice-versa.
-  template <typename Scalar>
-  RotationalInertia<Scalar> cast() const {
-    // Skip validity check since this inertia is already valid.
-    return RotationalInertia<Scalar>(I_SP_E_.template cast<Scalar>(), true);
-  }
-
   /// Forms the 3 principal moments of inertia for `this` rotational inertia.
   /// @retval The 3 principal moments of inertia [Imin Imed Imax], sorted in
   /// ascending order (Imin ≤ Imed ≤ Imax).
   /// @throws std::exception if the elements of `this` rotational inertia cannot
   /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  /// if `this` contains an erroneous NaN.
   /// @see CalcPrincipalMomentsAndAxesOfInertia() to also calculate principal
   /// moment of inertia directions associated with `this` rotational inertia.
   Vector3<double> CalcPrincipalMomentsOfInertia() const {
@@ -593,7 +561,7 @@ class RotationalInertia {
   /// inertia are equal (i.e., Ixx = Iyy = Izz), R_EA is the identity matrix.
   /// @throws std::exception if the elements of `this` rotational inertia cannot
   /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  /// if `this` contains an erroneous NaN.
   /// @see CalcPrincipalMomentsOfInertia() to calculate the principal moments
   /// of inertia [Ixx Iyy Izz], without calculating the principal directions.
   std::pair<Vector3<double>, math::RotationMatrix<double>>
@@ -626,8 +594,8 @@ class RotationalInertia {
   /// @throws std::exception if principal moments of inertia cannot be
   ///         calculated (eigenvalue solver) or if scalar type T cannot be
   ///         converted to a double.
-  boolean<T> CouldBePhysicallyValid() const {
-    return boolean<T>(!CreateInvalidityReport().has_value());
+  bool CouldBePhysicallyValid() const {
+    return bool(!CreateInvalidityReport().has_value());
   }
 
   /// Re-expresses `this` rotational inertia `I_BP_E` in place to `I_BP_A`.
@@ -802,14 +770,6 @@ class RotationalInertia {
   }
 
  private:
-  // Make RotationalInertia<Scalar> templated on any other type Scalar be a
-  // friend of this class templated on T. That way the method
-  // RotationalInertia<T>::cast<Scalar>() can make use of the private
-  // constructor RotationalInertia<Scalar>(const Eigen::MatrixBase&) for an
-  // Eigen expression templated on Scalar.
-  template <typename>
-  friend class RotationalInertia;
-
   // Constructs a rotational inertia for a particle Q whose position vector
   // from about-point P is p_PQ_E = xx̂ + yŷ + zẑ = [x, y, z]_E, where E is the
   // expressed-in frame.  Particle Q's mass (or unit mass) is included in the
@@ -915,7 +875,7 @@ class RotationalInertia {
   // principal directions via the argument R_EA.
   // @throws std::exception if the elements of `this` rotational inertia cannot
   // be converted to a real finite double. For example, an exception is thrown
-  // if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  // if `this` contains an erroneous NaN.
   // @see CalcPrincipalMomentsOfInertia() and
   // CalcPrincipalMomentsAndAxesOfInertia().
   Vector3<double> CalcPrincipalMomentsAndMaybeAxesOfInertia(
@@ -968,7 +928,7 @@ class RotationalInertia {
   //          product absolute value in `other`.  Otherwise returns `false`.
   // @note Trace() / 2 is a rotational inertia's maximum possible element,
   // e.g., consider: epsilon = 1E-9 * Trace()  (where 1E-9 is a heuristic).
-  boolean<T> IsApproxMomentsAndProducts(const RotationalInertia& other,
+  bool IsApproxMomentsAndProducts(const RotationalInertia& other,
                                         const T& epsilon) const {
     const Vector3<T> moment_difference = get_moments() - other.get_moments();
     const Vector3<T> product_difference = get_products() - other.get_products();
@@ -984,7 +944,7 @@ class RotationalInertia {
   // The positive (near-zero) ε accounts for round-off errors, e.g., from
   // re-expressing inertia in another frame, hence very small (equal to -ε)
   // negative moments of inertia are regarded as near-enough positive.
-  boolean<T> AreMomentsOfInertiaNearPositiveAndSatisfyTriangleInequality()
+  bool AreMomentsOfInertiaNearPositiveAndSatisfyTriangleInequality()
       const;
 
   // Tests whether each moment of inertia is non-negative (to within epsilon).
@@ -995,7 +955,7 @@ class RotationalInertia {
   // @param epsilon Real positive number that is significantly smaller than the
   //        largest possible element in a valid rotational inertia.
   //        Heuristically, `epsilon` is a small multiplier of Trace() / 2.
-  static boolean<T> AreMomentsOfInertiaNearPositive(const T& Ixx, const T& Iyy,
+  static bool AreMomentsOfInertiaNearPositive(const T& Ixx, const T& Iyy,
                                                     const T& Izz,
                                                     const T& epsilon) {
     return Ixx + epsilon >= 0 && Iyy + epsilon >= 0 && Izz + epsilon >= 0;
@@ -1005,11 +965,8 @@ class RotationalInertia {
   // Note: Not returning an error string does not _guarantee_ validity.
   std::optional<std::string> CreateInvalidityReport() const;
 
-  // No exception is thrown if type T is Symbolic.
   void ThrowIfNotPhysicallyValid(const char* func_name) {
-    if constexpr (scalar_predicate<T>::is_bool) {
-      ThrowIfNotPhysicallyValidImpl(func_name);
-    }
+    ThrowIfNotPhysicallyValidImpl(func_name);
   }
 
   // Throw an exception if CreateInvalidityReport() returns an error string.
@@ -1017,15 +974,11 @@ class RotationalInertia {
 
   // ==========================================================================
   // The following set of methods, ThrowIfSomeCondition(), are used within
-  // assertions or demands. We do not try to attempt a smart way throw based on
-  // a given symbolic::Formula but instead we make these methods a no-throw
-  // for non-numeric types.
+  // assertions or demands.
 
   // Throws an exception if a rotational inertia is multiplied by a negative
   // number - which implies that the resulting rotational inertia is invalid.
-  template <typename T1 = T>
-  static typename std::enable_if_t<scalar_predicate<T1>::is_bool>
-  ThrowIfMultiplyByNegativeScalar(const T& nonnegative_scalar) {
+  static void ThrowIfMultiplyByNegativeScalar(const T& nonnegative_scalar) {
     if (nonnegative_scalar < 0) {
       throw std::logic_error(
           "Error: Rotational inertia is multiplied by a "
@@ -1033,17 +986,9 @@ class RotationalInertia {
     }
   }
 
-  // SFINAE for non-numeric types. See documentation in the implementation for
-  // numeric types.
-  template <typename T1 = T>
-  static typename std::enable_if_t<!scalar_predicate<T1>::is_bool>
-  ThrowIfMultiplyByNegativeScalar(const T&) {}
-
   // Throws an exception if a rotational inertia is divided by a non-positive
   // number - which implies that the resulting rotational inertia is invalid.
-  template <typename T1 = T>
-  static typename std::enable_if_t<scalar_predicate<T1>::is_bool>
-  ThrowIfDivideByZeroOrNegativeScalar(const T& positive_scalar) {
+  static void ThrowIfDivideByZeroOrNegativeScalar(const T& positive_scalar) {
     if (positive_scalar == 0)
       throw std::logic_error("Error: Rotational inertia is divided by 0.");
     if (positive_scalar < 0) {
@@ -1052,12 +997,6 @@ class RotationalInertia {
           "negative number");
     }
   }
-
-  // SFINAE for non-numeric types. See documentation in the implementation for
-  // numeric types.
-  template <typename T1 = T>
-  static typename std::enable_if_t<!scalar_predicate<T1>::is_bool>
-  ThrowIfDivideByZeroOrNegativeScalar(const T&) {}
 
   // The 3x3 inertia matrix is symmetric and its diagonal elements (moments of
   // inertia) and off-diagonal elements (products of inertia) are associated
@@ -1072,16 +1011,6 @@ class RotationalInertia {
       std::numeric_limits<typename Eigen::NumTraits<T>::Literal>::quiet_NaN())};
 };
 
-/// Writes an instance of RotationalInertia into a std::ostream.
-/// @relates RotationalInertia
-template <typename T>
-DRAKE_DEPRECATED(
-    "2026-07-01",
-    "Use fmt functions instead (e.g., fmt::format(), fmt::to_string(), "
-    "fmt::print()). Refer to GitHub issue #17742 for more information.")
-std::ostream&
-operator<<(std::ostream& out, const RotationalInertia<T>& I);
-
 /// Returns the string representation of a RotationalInertia object.
 /// @relates RotationalInertia
 template <typename T>
@@ -1093,5 +1022,4 @@ std::string to_string(const RotationalInertia<T>& I);
 DRAKE_FORMATTER_AS(typename T, drake::multibody, RotationalInertia<T>, x,
                    drake::multibody::to_string(x))
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::RotationalInertia);
+extern template class drake::multibody::RotationalInertia<double>;

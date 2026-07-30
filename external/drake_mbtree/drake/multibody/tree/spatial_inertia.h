@@ -10,11 +10,8 @@
 // TODO(2026-07-01): remove ostream header
 #include <ostream>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
-#include "drake/common/drake_bool.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/drake_deprecated.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/fmt.h"
 #include "drake/math/cross_product.h"
@@ -87,9 +84,6 @@ namespace multibody {
 /// @note Several methods in this class throw a std::exception for invalid
 /// rotational inertia operations in debug releases only.  This provides speed
 /// in a release build while facilitating debugging in debug builds.
-/// In addition, these validity tests are only performed for scalar types for
-/// which drake::scalar_predicate<T>::is_bool is `true`. For instance, validity
-/// checks are not performed when T is symbolic::Expression.
 ///
 /// @note The methods of this class satisfy the "basic exception guarantee": if
 /// an exception is thrown, the program will still be in a valid
@@ -110,8 +104,6 @@ namespace multibody {
 ///
 /// - [Jain 2010]  Jain, A., 2010. Robot and multibody dynamics: analysis and
 ///                algorithms. Springer Science & Business Media.
-///
-/// @tparam_default_scalar
 template <typename T>
 class SpatialInertia {
  public:
@@ -510,26 +502,6 @@ class SpatialInertia {
     }
   }
 
-  /// Returns a new %SpatialInertia object templated on `Scalar` initialized
-  /// from the value of `this` spatial inertia.
-  ///
-  /// @tparam Scalar The scalar type on which the new spatial inertia will
-  /// be templated.
-  ///
-  /// @note `SpatialInertia<From>::cast<To>()` creates a new
-  /// `SpatialInertia<To>` from a `SpatialInertia<From>` but only if
-  /// type `To` is constructible from type `From`.
-  /// This cast method works in accordance with Eigen's cast method for Eigen's
-  /// objects that underlie this %SpatialInertia.  For example, Eigen
-  /// currently allows cast from type double to AutoDiffXd, but not vice-versa.
-  template <typename Scalar>
-  SpatialInertia<Scalar> cast() const {
-    return SpatialInertia<Scalar>(
-        get_mass(), get_com().template cast<Scalar>(),
-        get_unit_inertia().template cast<Scalar>(),
-        true);  // Skip validity check since this inertia is already valid.
-  }
-
   /// Get a constant reference to the mass of this spatial inertia.
   const T& get_mass() const { return mass_; }
 
@@ -556,21 +528,16 @@ class SpatialInertia {
 
   /// Returns `true` if any of the elements in this spatial inertia is NaN
   /// and `false` otherwise.
-  boolean<T> IsNaN() const {
+  bool IsNaN() const {
     using std::isnan;
     return isnan(mass_) || G_SP_E_.IsNaN() ||
-           any_of(p_PScm_E_, [](const auto& x) {
-             return isnan(x);
-           });
+           p_PScm_E_.array().isNaN().any();
   }
 
   /// Returns `true` if all of the elements in this spatial inertia are zero
   /// and `false` otherwise.
-  boolean<T> IsZero() const {
-    return (mass_ == 0.0) && G_SP_E_.IsZero() &&
-           all_of(p_PScm_E_, [](const auto& x) {
-             return (x == 0.0);
-           });
+  bool IsZero() const {
+    return (mass_ == 0.0) && G_SP_E_.IsZero() && (p_PScm_E_.array() == 0.0).all();
   }
 
   /// Performs a number of checks to verify that this is a physically valid
@@ -590,7 +557,7 @@ class SpatialInertia {
   /// condition when performed on a rotational inertia about a body's center of
   /// mass.
   /// @see RotationalInertia::CouldBePhysicallyValid().
-  boolean<T> IsPhysicallyValid() const;
+  bool IsPhysicallyValid() const;
 
   /// (Internal use only). Returns an optional string if this SpatialInertia is
   /// invalid, otherwise returns an empty optional.
@@ -624,7 +591,7 @@ class SpatialInertia {
   /// @endcode
   /// @throws std::exception if the elements of `this` spatial inertia cannot
   /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  /// if `this` contains an erroneous NaN.
   /// @see RotationalInertia::CalcPrincipalMomentsAndAxesOfInertia() to form
   /// principal moments of inertia and their associated principal directions.
   ///@{
@@ -636,7 +603,7 @@ class SpatialInertia {
   /// "Spatial inertia equivalent shapes" for more details.
   /// @throws std::exception if the elements of `this` spatial inertia cannot
   /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  /// if `this` contains an erroneous NaN.
   std::pair<Vector3<double>, drake::math::RigidTransform<double>>
   CalcPrincipalSemiDiametersAndPoseForSolidEllipsoid() const {
     constexpr double inertia_shape_factor = 1.0 / 5.0;
@@ -651,7 +618,7 @@ class SpatialInertia {
   /// "Spatial inertia equivalent shapes" for more details.
   /// @throws std::exception if the elements of `this` spatial inertia cannot
   /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  /// if `this` contains an erroneous NaN.
   std::pair<Vector3<double>, drake::math::RigidTransform<double>>
   CalcPrincipalHalfLengthsAndPoseForSolidBox() const {
     constexpr double inertia_shape_factor = 1.0 / 3.0;
@@ -669,7 +636,7 @@ class SpatialInertia {
   /// "Spatial inertia equivalent shapes" for more details.
   /// @throws std::exception if the elements of `this` spatial inertia cannot
   /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  /// if `this` contains an erroneous NaN.
   std::pair<Vector3<double>, drake::math::RigidTransform<double>>
   CalcPrincipalHalfLengthsAndPoseForMinimumBoundingBox() const {
     constexpr double inertia_shape_factor = 1.0;
@@ -909,12 +876,7 @@ class SpatialInertia {
         typename Eigen::NumTraits<T>::Literal>::quiet_NaN();
   }
 
-  // If type T is Symbolic, validity is not checked and no exception is thrown.
-  void ThrowIfNotPhysicallyValid() {
-    if constexpr (scalar_predicate<T>::is_bool) {
-      ThrowIfNotPhysicallyValidImpl();
-    }
-  }
+  void ThrowIfNotPhysicallyValid() { ThrowIfNotPhysicallyValidImpl(); }
 
   // Throw an exception if CreateInvalidityReport() returns an error string.
   void ThrowIfNotPhysicallyValidImpl() const;
@@ -1023,16 +985,6 @@ class SpatialInertia {
       double inertia_shape_factor) const;
 };
 
-/// Writes an instance of SpatialInertia into a std::ostream.
-/// @relates SpatialInertia
-template <typename T>
-DRAKE_DEPRECATED(
-    "2026-07-01",
-    "Use fmt functions instead (e.g., fmt::format(), fmt::to_string(), "
-    "fmt::print()). Refer to GitHub issue #17742 for more information.")
-std::ostream&
-operator<<(std::ostream& out, const SpatialInertia<T>& M);
-
 /// Returns the string representation of a SpatialInertia object.
 /// @relates SpatialInertia
 template <typename T>
@@ -1044,5 +996,4 @@ std::string to_string(const SpatialInertia<T>& M);
 DRAKE_FORMATTER_AS(typename T, drake::multibody, SpatialInertia<T>, x,
                    drake::multibody::to_string(x))
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::SpatialInertia);
+extern template class drake::multibody::SpatialInertia<double>;

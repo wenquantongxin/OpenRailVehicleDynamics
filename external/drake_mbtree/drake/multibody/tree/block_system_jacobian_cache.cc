@@ -49,5 +49,4 @@ Eigen::MatrixX<T> BlockSystemJacobianCache<T>::ToFullMatrix() const {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::BlockSystemJacobianCache);
+template class drake::multibody::internal::BlockSystemJacobianCache<double>;

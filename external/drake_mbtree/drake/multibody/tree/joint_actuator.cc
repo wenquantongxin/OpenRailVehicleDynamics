@@ -79,35 +79,7 @@ int JointActuator<T>::num_inputs() const {
   return joint().num_velocities();
 }
 
-template <typename T>
-std::unique_ptr<JointActuator<double>> JointActuator<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>&) const {
-  return std::unique_ptr<JointActuator<double>>(new JointActuator<double>(
-      name_, joint_index_, actuator_dof_start_, effort_limit_,
-      default_rotor_inertia_, default_gear_ratio_));
-}
-
-template <typename T>
-std::unique_ptr<JointActuator<AutoDiffXd>> JointActuator<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>&) const {
-  return std::unique_ptr<JointActuator<AutoDiffXd>>(
-      new JointActuator<AutoDiffXd>(name_, joint_index_, actuator_dof_start_,
-                                    effort_limit_, default_rotor_inertia_,
-                                    default_gear_ratio_));
-}
-
-template <typename T>
-std::unique_ptr<JointActuator<symbolic::Expression>>
-JointActuator<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>&) const {
-  return std::unique_ptr<JointActuator<symbolic::Expression>>(
-      new JointActuator<symbolic::Expression>(
-          name_, joint_index_, actuator_dof_start_, effort_limit_,
-          default_rotor_inertia_, default_gear_ratio_));
-}
-
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::JointActuator);
+template class drake::multibody::JointActuator<double>;

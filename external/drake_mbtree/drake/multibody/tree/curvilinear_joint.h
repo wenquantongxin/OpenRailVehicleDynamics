@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/trajectories/piecewise_constant_curvature_trajectory.h"
 #include "drake/multibody/tree/curvilinear_mobilizer.h"
@@ -39,9 +38,7 @@ namespace multibody {
  By default, the joint position limits are the endpoints for aperiodic paths,
  and (-∞, ∞) for periodic paths.
 
- @see trajectories::PiecewiseConstantCurvatureTrajectory
-
- @tparam_default_scalar */
+ @see trajectories::PiecewiseConstantCurvatureTrajectory */
 template <typename T>
 class CurvilinearJoint final : public Joint<T> {
  public:
@@ -185,13 +182,6 @@ class CurvilinearJoint final : public Joint<T> {
                                           const T& distance) const {
     get_mobilizer().SetDistance(context, distance);
     return *this;
-  }
-
-  /** Sets the random distribution for the distance along the path.
-   @param[in] distance Expression defining the random distance distribution. */
-  void set_random_distance_distribution(const symbolic::Expression& distance) {
-    get_mutable_mobilizer().set_random_position_distribution(
-        Vector1<symbolic::Expression>{distance});
   }
 
   /** Gets the tangential velocity in meters per second, i.e. the rate of change
@@ -340,22 +330,7 @@ class CurvilinearJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make CurvilinearJoint templated on every other scalar type a friend of
-  // CurvilinearJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of CurvilinearJoint<T>.
-  template <typename>
-  friend class CurvilinearJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -370,11 +345,6 @@ class CurvilinearJoint final : public Joint<T> {
         internal::CurvilinearMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   trajectories::PiecewiseConstantCurvatureTrajectory<double> curvilinear_path_;
 };
 
@@ -384,5 +354,4 @@ const char CurvilinearJoint<T>::kTypeName[] = "curvilinear";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::CurvilinearJoint);
+extern template class drake::multibody::CurvilinearJoint<double>;

@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -16,8 +15,6 @@ namespace multibody {
 
 /// This Joint fixes the relative pose between two frames as if "welding" them
 /// together.
-///
-/// @tparam_default_scalar
 template <typename T>
 class WeldJoint final : public Joint<T> {
  public:
@@ -102,22 +99,7 @@ class WeldJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>& x) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make WeldJoint templated on every other scalar type a friend of
-  // WeldJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of WeldJoint<T>.
-  template <typename>
-  friend class WeldJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -131,11 +113,6 @@ class WeldJoint final : public Joint<T> {
         ->template get_mutable_mobilizer_downcast<internal::WeldMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   // The pose of frame M in F.
   const math::RigidTransform<double> X_JpJc_;
 };
@@ -146,5 +123,4 @@ const char WeldJoint<T>::kTypeName[] = "weld";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::WeldJoint);
+extern template class drake::multibody::WeldJoint<double>;

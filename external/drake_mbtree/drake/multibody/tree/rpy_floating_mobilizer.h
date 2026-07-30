@@ -4,7 +4,6 @@
 #include <optional>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
@@ -62,8 +61,6 @@ namespace internal {
 //
 //   H_FM_M = R_MF ⋅ H_FM_F = [ R_MF   0₃ₓ₃ ]
 //                            [ 0₃ₓ₃   R_MF ]
-//
-// @tparam_default_scalar
 template <typename T>
 class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
  public:
@@ -182,16 +179,6 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
   // @returns a constant reference to this mobilizer.
   const RpyFloatingMobilizer<T>& SetTranslation(systems::Context<T>* context,
                                                 const Vector3<T>& p_FM) const;
-
-  // Sets the distribution governing the random samples of the rpy angles
-  // component of the mobilizer state.
-  void set_random_angles_distribution(
-      const Vector3<symbolic::Expression>& angles);
-
-  // Sets the distribution governing the random samples of the translation
-  // component of the mobilizer state.
-  void set_random_translation_distribution(
-      const Vector3<symbolic::Expression>& p_FM);
 
   // Sets in context the state for this mobilizer so that the angular
   // velocity of the outboard frame M in the inboard frame F is w_FM.
@@ -353,25 +340,11 @@ class RpyFloatingMobilizer final : public MobilizerImpl<T, 6, 6> {
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const final;
-
  private:
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::RpyFloatingMobilizer);
+extern template class drake::multibody::internal::RpyFloatingMobilizer<double>;

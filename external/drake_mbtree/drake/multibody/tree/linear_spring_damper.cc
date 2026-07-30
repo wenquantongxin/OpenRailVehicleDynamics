@@ -43,8 +43,8 @@ void LinearSpringDamper<T>::DoCalcAndAddForceContribution(
   const math::RigidTransform<T>& X_WA = pc.get_X_WB(bodyA().mobod_index());
   const math::RigidTransform<T>& X_WB = pc.get_X_WB(bodyB().mobod_index());
 
-  const Vector3<T> p_WP = X_WA * p_AP_.template cast<T>();
-  const Vector3<T> p_WQ = X_WB * p_BQ_.template cast<T>();
+  const Vector3<T> p_WP = X_WA * p_AP_;
+  const Vector3<T> p_WQ = X_WB * p_BQ_;
 
   // Vector from P to Q. It's length is the current length of the spring.
   const Vector3<T> p_PQ_W = p_WQ - p_WP;
@@ -86,8 +86,8 @@ T LinearSpringDamper<T>::CalcPotentialEnergy(
   const math::RigidTransform<T>& X_WA = pc.get_X_WB(bodyA().mobod_index());
   const math::RigidTransform<T>& X_WB = pc.get_X_WB(bodyB().mobod_index());
 
-  const Vector3<T> p_WP = X_WA * p_AP_.template cast<T>();
-  const Vector3<T> p_WQ = X_WB * p_BQ_.template cast<T>();
+  const Vector3<T> p_WP = X_WA * p_AP_;
+  const Vector3<T> p_WQ = X_WB * p_BQ_;
 
   // Vector from P to Q. It's length is the current length of the spring.
   const Vector3<T> p_PQ_W = p_WQ - p_WP;
@@ -111,8 +111,8 @@ T LinearSpringDamper<T>::CalcConservativePower(
   const math::RigidTransform<T>& X_WA = pc.get_X_WB(bodyA().mobod_index());
   const math::RigidTransform<T>& X_WB = pc.get_X_WB(bodyB().mobod_index());
 
-  const Vector3<T> p_WP = X_WA * p_AP_.template cast<T>();
-  const Vector3<T> p_WQ = X_WB * p_BQ_.template cast<T>();
+  const Vector3<T> p_WP = X_WA * p_AP_;
+  const Vector3<T> p_WQ = X_WB * p_BQ_;
 
   // Vector from P to Q. It's length is the current length of the spring.
   const Vector3<T> p_PQ_W = p_WQ - p_WP;
@@ -140,42 +140,6 @@ T LinearSpringDamper<T>::CalcNonConservativePower(
 }
 
 template <typename T>
-template <typename ToScalar>
-std::unique_ptr<ForceElement<ToScalar>>
-LinearSpringDamper<T>::TemplatedDoCloneToScalar(
-    const internal::MultibodyTree<ToScalar>& tree_clone) const {
-  const Link<ToScalar>& linkA_clone = tree_clone.get_link(bodyA().index());
-  const Link<ToScalar>& linkB_clone = tree_clone.get_link(bodyB().index());
-
-  // Make the LinearSpringDamper<T> clone.
-  auto spring_damper_clone = std::make_unique<LinearSpringDamper<ToScalar>>(
-      linkA_clone, p_AP(), linkB_clone, p_BQ(), free_length(), stiffness(),
-      damping());
-
-  return spring_damper_clone;
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<double>> LinearSpringDamper<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<AutoDiffXd>>
-LinearSpringDamper<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<symbolic::Expression>>
-LinearSpringDamper<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
 std::unique_ptr<ForceElement<T>> LinearSpringDamper<T>::DoShallowClone() const {
   return std::make_unique<LinearSpringDamper<T>>(
       bodyA(), p_AP(), bodyB(), p_BQ(), free_length(), stiffness(), damping());
@@ -188,7 +152,7 @@ T LinearSpringDamper<T>::SafeSoftNorm(const Vector3<T>& x) const {
       std::numeric_limits<double>::epsilon() * free_length();
   const double epsilon_length_squared = epsilon_length * epsilon_length;
   const T x2 = x.squaredNorm();
-  if (scalar_predicate<T>::is_bool && (x2 < epsilon_length_squared)) {
+  if (x2 < epsilon_length_squared) {
     throw std::runtime_error(
         "The length of the spring became nearly zero. "
         "Revisit your model to avoid this situation.");
@@ -203,8 +167,8 @@ T LinearSpringDamper<T>::CalcLengthTimeDerivative(
   const math::RigidTransform<T>& X_WA = pc.get_X_WB(bodyA().mobod_index());
   const math::RigidTransform<T>& X_WB = pc.get_X_WB(bodyB().mobod_index());
 
-  const Vector3<T> p_WP = X_WA * p_AP_.template cast<T>();
-  const Vector3<T> p_WQ = X_WB * p_BQ_.template cast<T>();
+  const Vector3<T> p_WP = X_WA * p_AP_;
+  const Vector3<T> p_WQ = X_WB * p_BQ_;
 
   // Vector from P to Q. It's length is the current length of the spring.
   const Vector3<T> p_PQ_W = p_WQ - p_WP;
@@ -236,5 +200,4 @@ T LinearSpringDamper<T>::CalcLengthTimeDerivative(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::LinearSpringDamper);
+template class drake::multibody::LinearSpringDamper<double>;

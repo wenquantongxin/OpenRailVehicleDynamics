@@ -1,12 +1,12 @@
 #include "drake/math/rotation_matrix.h"
 
+#include <numbers>
 #include <string>
 
 #include <fmt/format.h>
 
 #include "drake/common/fmt_eigen.h"
 #include "drake/common/unused.h"
-#include "drake/math/autodiff.h"
 
 namespace drake {
 namespace math {
@@ -17,8 +17,6 @@ template <typename T>
 bool IsQuaternionZero(const Eigen::Quaternion<T>& quaternion) {
   // Note: This special-purpose function avoids memory allocation on the heap
   // that sometimes occurs in quaternion.coeffs().isZero().  Alternatively, the
-  // pseudo-code below uses DiscardGradient to reduce memory allocations.
-  // return math::DiscardGradient(quaternion.coeffs()).isZero(0);
   return quaternion.w() == 0.0 && quaternion.x() == 0.0 &&
          quaternion.y() == 0.0 && quaternion.z() == 0.0;
 }
@@ -26,29 +24,21 @@ bool IsQuaternionZero(const Eigen::Quaternion<T>& quaternion) {
 template <typename T>
 void ThrowIfAllElementsInQuaternionAreZero(
     const Eigen::Quaternion<T>& quaternion, const char* function_name) {
-  if constexpr (scalar_predicate<T>::is_bool) {
-    if (IsQuaternionZero(quaternion)) {
-      std::string message = fmt::format(
-          "{}(): All the elements in a quaternion are zero.", function_name);
-      throw std::logic_error(message);
-    }
-  } else {
-    unused(quaternion, function_name);
+  if (IsQuaternionZero(quaternion)) {
+    std::string message = fmt::format(
+        "{}(): All the elements in a quaternion are zero.", function_name);
+    throw std::logic_error(message);
   }
 }
 
 template <typename T>
 void ThrowIfAnyElementInQuaternionIsInfinityOrNaN(
     const Eigen::Quaternion<T>& quaternion, const char* function_name) {
-  if constexpr (scalar_predicate<T>::is_bool) {
-    if (!quaternion.coeffs().allFinite()) {
-      std::string message = fmt::format(
-          "{}(): Quaternion contains an element that is infinity or NaN.",
-          function_name);
-      throw std::logic_error(message);
-    }
-  } else {
-    unused(quaternion, function_name);
+  if (!quaternion.coeffs().allFinite()) {
+    std::string message = fmt::format(
+        "{}(): Quaternion contains an element that is infinity or NaN.",
+        function_name);
+    throw std::logic_error(message);
   }
 }
 }  // namespace
@@ -225,9 +215,6 @@ RotationMatrix<T> RotationMatrix<T>::MakeFromOneUnitVector(
   // hence uₘᵢₙ² has the range 0 ≤ uₘᵢₙ² ≤ 1/3.  Thus for √(1 - uₘᵢₙ²), the
   // argument (1 - uₘᵢₙ²) has range 2/3 ≤ (1 - uₘᵢₙ²) ≤ 1.0.
   // Hence, √(1 - uₘᵢₙ²) should not encounter √(0) or √(negative_number).
-  // Since √(0) cannot occur, the calculation √(1 - uₘᵢₙ²) is safe for type
-  // T = AutoDiffXd because we avoid NaN in derivative calculations.
-  // Reminder: ∂(√(x)/∂x = 0.5/√(x) will not have a NaN if x > 0.
   using std::sqrt;
   const T mag_a_x_u = sqrt(1 - u_A(i) * u_A(i));  // |a x u| = √(1 - uₘᵢₙ²)
   const T r = 1 / mag_a_x_u;
@@ -249,18 +236,16 @@ void RotationMatrix<T>::IsAxialRotationOrThrow() const {
   constexpr int x = axis, y = (axis + 1) % 3, z = (axis + 2) % 3;
   DRAKE_THROW_UNLESS(R_AB_(x, x) == 1 && R_AB_(x, y) == 0 && R_AB_(x, z) == 0 &&
                      R_AB_(y, x) == 0 && R_AB_(z, x) == 0);
-  if constexpr (scalar_predicate<T>::is_bool) {  // double or AutoDiffScalar
-    using std::abs;
-    // Make a reasonably tolerant check on sin(θ) and cos(θ) values.
-    const double kTol = 16 * std::numeric_limits<double>::epsilon();
-    // Here is what we expect to find in the significant elements.
-    const double s = ExtractDoubleOrThrow(R_AB_(z, y));   // sine
-    const double ns = ExtractDoubleOrThrow(R_AB_(y, z));  // -sine
-    const double c = ExtractDoubleOrThrow(R_AB_(y, y));   // cosine
-    const double c2 = ExtractDoubleOrThrow(R_AB_(z, z));  // also cosine
-    DRAKE_THROW_UNLESS(abs(c - c2) <= kTol && abs(s + ns) <= kTol);
-    DRAKE_THROW_UNLESS(std::abs(s * s + c * c - 1.0) <= kTol);
-  }
+  using std::abs;
+  // Make a reasonably tolerant check on sin(θ) and cos(θ) values.
+  const double kTol = 16 * std::numeric_limits<double>::epsilon();
+  // Here is what we expect to find in the significant elements.
+  const double s = R_AB_(z, y);   // sine
+  const double ns = R_AB_(y, z);  // -sine
+  const double c = R_AB_(y, y);   // cosine
+  const double c2 = R_AB_(z, z);  // also cosine
+  DRAKE_THROW_UNLESS(abs(c - c2) <= kTol && abs(s + ns) <= kTol);
+  DRAKE_THROW_UNLESS(std::abs(s * s + c * c - 1.0) <= kTol);
 }
 
 template <typename T>
@@ -303,37 +288,33 @@ Matrix3<T> RotationMatrix<T>::QuaternionToRotationMatrix(
 
 template <typename T>
 void RotationMatrix<T>::ThrowIfNotValid(const Matrix3<T>& R) {
-  if constexpr (scalar_predicate<T>::is_bool) {
-    if (!R.allFinite()) {
-      throw std::logic_error(
-          "Error: Rotation matrix contains an element that is infinity or"
-          " NaN.");
-    }
-    // If the matrix is not-orthogonal, try to give a detailed message.
-    // This is particularly important if matrix is very-near orthogonal.
-    if (!IsOrthonormal(R, get_internal_tolerance_for_orthonormality())) {
-      const T measure_of_orthonormality = GetMeasureOfOrthonormality(R);
-      const double measure = ExtractDoubleOrThrow(measure_of_orthonormality);
-      std::string message = fmt::format(
-          "Error: Rotation matrix is not orthonormal.\n"
-          "  Measure of orthonormality error: {}  (near-zero is good).\n"
-          "  To calculate the proper orthonormal rotation matrix closest to"
-          " the alleged rotation matrix, use the SVD (expensive) static method"
-          " RotationMatrix<T>::ProjectToRotationMatrix(), or for a less"
-          " expensive (but not necessarily closest) rotation matrix, use"
-          " RotationMatrix<T>(RotationMatrix<T>::ToQuaternion<T>(your_matrix))."
-          " Alternatively, if using quaternions, ensure the quaternion is"
-          " normalized.",
-          measure);
-      throw std::logic_error(message);
-    }
-    if (R.determinant() < 0) {
-      throw std::logic_error(
-          "Error: Rotation matrix determinant is negative."
-          " It is possible a basis is left-handed.");
-    }
-  } else {
-    unused(R);
+  if (!R.allFinite()) {
+    throw std::logic_error(
+        "Error: Rotation matrix contains an element that is infinity or"
+        " NaN.");
+  }
+  // If the matrix is not-orthogonal, try to give a detailed message.
+  // This is particularly important if matrix is very-near orthogonal.
+  if (!IsOrthonormal(R, get_internal_tolerance_for_orthonormality())) {
+    const T measure_of_orthonormality = GetMeasureOfOrthonormality(R);
+    const double measure = measure_of_orthonormality;
+    std::string message = fmt::format(
+        "Error: Rotation matrix is not orthonormal.\n"
+        "  Measure of orthonormality error: {}  (near-zero is good).\n"
+        "  To calculate the proper orthonormal rotation matrix closest to"
+        " the alleged rotation matrix, use the SVD (expensive) static method"
+        " RotationMatrix<T>::ProjectToRotationMatrix(), or for a less"
+        " expensive (but not necessarily closest) rotation matrix, use"
+        " RotationMatrix<T>(RotationMatrix<T>::ToQuaternion<T>(your_matrix))."
+        " Alternatively, if using quaternions, ensure the quaternion is"
+        " normalized.",
+        measure);
+    throw std::logic_error(message);
+  }
+  if (R.determinant() < 0) {
+    throw std::logic_error(
+        "Error: Rotation matrix determinant is negative."
+        " It is possible a basis is left-handed.");
   }
 }
 
@@ -381,25 +362,26 @@ double ProjectMatToRotMatWithAxis(const Eigen::Matrix3d& M,
   // clang-format on
   const double alpha =
       atan2(-(M.transpose() * A * A).trace(), (A.transpose() * M).trace());
+  constexpr double pi = std::numbers::pi;
   double theta{};
   // The bounds on θ + α is [angle_lb + α, angle_ub + α].
   if (std::isinf(angle_lb) && std::isinf(angle_ub)) {
-    theta = M_PI_2 - alpha;
+    theta = pi / 2 - alpha;
   } else if (std::isinf(angle_ub)) {
     // First if the angle upper bound is inf, start from the angle_lb, and
     // find the angle θ, such that θ + α = 0.5π + 2kπ
-    const int k = ceil((angle_lb + alpha - M_PI_2) / (2 * M_PI));
-    theta = (2 * k + 0.5) * M_PI - alpha;
+    const int k = ceil((angle_lb + alpha - pi / 2) / (2 * pi));
+    theta = (2 * k + 0.5) * pi - alpha;
   } else if (std::isinf(angle_lb)) {
     // If the angle lower bound is inf, start from the angle_ub, and find the
     // angle θ, such that θ + α = 0.5π + 2kπ
-    const int k = floor((angle_ub + alpha - M_PI_2) / (2 * M_PI));
-    theta = (2 * k + 0.5) * M_PI - alpha;
+    const int k = floor((angle_ub + alpha - pi / 2) / (2 * pi));
+    theta = (2 * k + 0.5) * pi - alpha;
   } else {
     // Now neither angle_lb nor angle_ub is inf. Check if there exists an
     // integer k, such that 0.5π + 2kπ ∈ [angle_lb + α, angle_ub + α]
-    const int k = floor((angle_ub + alpha - M_PI_2) / (2 * M_PI));
-    const double max_sin_angle = M_PI_2 + 2 * k * M_PI;
+    const int k = floor((angle_ub + alpha - pi / 2) / (2 * pi));
+    const double max_sin_angle = pi / 2 + 2 * k * pi;
     if (max_sin_angle >= angle_lb + alpha) {
       // 0.5π + 2kπ ∈ [angle_lb + α, angle_ub + α]
       theta = max_sin_angle - alpha;
@@ -422,7 +404,7 @@ Eigen::Quaternion<T> RotationMatrix<T>::ToQuaternion(
 
   // Since the quaternions q and -q correspond to the same rotation matrix,
   // choose to return a canonical quaternion, i.e., with q(0) >= 0.
-  const T canonical_factor = if_then_else(q.w() < 0, -1.0, 1.0);
+  const T canonical_factor = q.w() < 0 ? -1.0 : 1.0;
 
   // The quantity q calculated thus far in this algorithm is not a quaternion
   // with magnitude 1.  It differs from a quaternion in that all elements of
@@ -438,25 +420,19 @@ Eigen::Quaternion<T> RotationMatrix<T>::ToQuaternion(
 template <typename T>
 void RotationMatrix<T>::SinCosConsistencyOrThrow(const T& sin_theta,
                                                  const T& cos_theta) {
-  if constexpr (scalar_predicate<T>::is_bool) {  // double or AutoDiffScalar
-    using std::abs;
-    // Make a reasonably tolerant check on sin(θ) and cos(θ) values.
-    const double kTol = 16 * std::numeric_limits<double>::epsilon();
-    const double s = ExtractDoubleOrThrow(sin_theta);
-    const double c = ExtractDoubleOrThrow(cos_theta);
-    DRAKE_THROW_UNLESS(std::abs(s * s + c * c - 1.0) <= kTol);
-  } else {  // symbolic
-    unused(sin_theta, cos_theta);
-  }
+  using std::abs;
+  // Make a reasonably tolerant check on sin(θ) and cos(θ) values.
+  const double kTol = 16 * std::numeric_limits<double>::epsilon();
+  const double s = sin_theta;
+  const double c = cos_theta;
+  DRAKE_THROW_UNLESS(std::abs(s * s + c * c - 1.0) <= kTol);
 }
 
-DRAKE_DEFINE_FUNCTION_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    (&RotationMatrix<T>::template IsAxialRotationOrThrow<0>,
-     &RotationMatrix<T>::template IsAxialRotationOrThrow<1>,
-     &RotationMatrix<T>::template IsAxialRotationOrThrow<2>));
+template void RotationMatrix<double>::IsAxialRotationOrThrow<0>() const;
+template void RotationMatrix<double>::IsAxialRotationOrThrow<1>() const;
+template void RotationMatrix<double>::IsAxialRotationOrThrow<2>() const;
 
 }  // namespace math
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::math::RotationMatrix);
+template class drake::math::RotationMatrix<double>;

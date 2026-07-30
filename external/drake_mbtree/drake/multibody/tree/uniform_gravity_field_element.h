@@ -4,7 +4,6 @@
 #include <set>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
 
@@ -15,8 +14,6 @@ namespace multibody {
 /// felt by bodies on the surface of the Earth or elsewhere. This gravity
 /// field acts on all bodies in the MultibodyPlant except those whose
 /// ModelInstance has been explicitly excluded.
-///
-/// @tparam_default_scalar
 template <typename T>
 class UniformGravityFieldElement : public ForceElement<T> {
  public:
@@ -141,15 +138,6 @@ class UniformGravityFieldElement : public ForceElement<T> {
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const final;
 
-  std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
-
   std::unique_ptr<ForceElement<T>> DoShallowClone() const override;
 
  private:
@@ -173,5 +161,4 @@ class UniformGravityFieldElement : public ForceElement<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::UniformGravityFieldElement);
+extern template class drake::multibody::UniformGravityFieldElement<double>;

@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -34,9 +33,7 @@ singularity somewhere. In this case, the singularity occurs when the pitch angle
 (second generalized coordinate q) is at π/2 + kπ (for any integer k), and
 numerical issues may occur when near one of those configurations. If you can't
 be sure your simulation will avoid the singularities, consider using the
-singularity-free QuaternionFloatingJoint instead.
-
-@tparam_default_scalar */
+singularity-free QuaternionFloatingJoint instead. */
 template <typename T>
 class RpyFloatingJoint final : public Joint<T> {
  public:
@@ -287,33 +284,6 @@ class RpyFloatingJoint final : public Joint<T> {
   }
   /**@}*/
 
-  /** @name Random distribution setters
-  These functions can only be called after MultibodyPlant::Finalize(). */
-  /**@{*/
-
-  /** Sets the random distribution from which the roll-pitch-yaw orientation
-  angles of this joint will be randomly sampled. See the %RpyFloatingJoint class
-  documentation for details on the orientation representation. If a translation
-  distribution has already been set with stochastic variables, it will remain
-  so. Otherwise translation will be set to this joint's zero configuration.
-  @warning Watch for random pitch angles near the singular configuration for
-    this joint (see class documentation). */
-  void set_random_angles_distribution(
-      const Vector3<symbolic::Expression>& angles) {
-    get_mutable_mobilizer().set_random_angles_distribution(angles);
-  }
-
-  /** Sets the random distribution that the translation vector of this joint
-  will be randomly sampled from. See the %RpyFloatingJoint class documentation
-  for details on the translation representation. If an angles distribution has
-  has already been set with stochastic variables, it will remain so. Otherwise
-  angles will be set to this joint's zero configuration. */
-  void set_random_translation_distribution(
-      const Vector3<symbolic::Expression>& p_FM) {
-    get_mutable_mobilizer().set_random_translation_distribution(p_FM);
-  }
-  /**@}*/
-
   /** @name Default pose access
   Functions in this section set or get the default values for the pose states q
   (rpy angles and translation vector) of this %RpyFloatingJoint. These are
@@ -431,22 +401,7 @@ class RpyFloatingJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make RpyFloatingJoint templated on every other scalar type a friend of
-  // RpyFloatingJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of RpyFloatingJoint<T>.
-  template <typename>
-  friend class RpyFloatingJoint;
 
   // Returns the mobilizer implementing this joint.
   const internal::RpyFloatingMobilizer<T>& get_mobilizer() const {
@@ -459,10 +414,6 @@ class RpyFloatingJoint final : public Joint<T> {
         internal::RpyFloatingMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 template <typename T>
@@ -471,5 +422,4 @@ const char RpyFloatingJoint<T>::kTypeName[] = "rpy_floating";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::RpyFloatingJoint);
+extern template class drake::multibody::RpyFloatingJoint<double>;

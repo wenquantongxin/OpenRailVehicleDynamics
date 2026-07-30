@@ -6,7 +6,6 @@
 
 #include <limits>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -57,8 +56,6 @@ class SpatialVelocity;
 ///   h_MSP = ∫p_PQ(r) x v_MQ(r) ρ(r) d³r
 ///   l_MS  = ∫v_MQ(r) ρ(r) d³r
 /// </pre>
-///
-/// @tparam_default_scalar
 template <typename T>
 class SpatialMomentum : public SpatialVector<SpatialMomentum, T> {
   // We need the fully qualified class name below for the clang compiler to
@@ -197,8 +194,7 @@ inline SpatialMomentum<T> operator-(const SpatialMomentum<T>& L1_E,
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::SpatialMomentum);
+
 
 DRAKE_FORMATTER_AS(typename T, drake::multibody, SpatialMomentum<T>, x,
                    drake::multibody::to_string(x))

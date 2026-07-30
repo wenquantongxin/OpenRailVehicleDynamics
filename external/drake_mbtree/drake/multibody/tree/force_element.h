@@ -3,7 +3,6 @@
 #include <memory>
 #include <vector>
 
-#include "drake/common/autodiff.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/math/spatial_algebra.h"
@@ -31,8 +30,6 @@ namespace multibody {
 ///   forces.
 /// - CalcNonConservativePower(): computes the power dissipated by
 ///   non-conservative forces.
-///
-/// @tparam_default_scalar
 template <typename T>
 class ForceElement : public MultibodyElement<T> {
  public:
@@ -155,18 +152,6 @@ class ForceElement : public MultibodyElement<T> {
   //@}
 
   /// @cond
-  // For internal use only.
-  // NVI to DoCloneToScalar() templated on the scalar type of the new clone to
-  // be created. This method is intended to be called by
-  // MultibodyTree::CloneToScalar().
-  template <typename ToScalar>
-  std::unique_ptr<ForceElement<ToScalar>> CloneToScalar(
-      const internal::MultibodyTree<ToScalar>& cloned_tree) const {
-    return DoCloneToScalar(cloned_tree);
-  }
-  /// @endcond
-
-  /// @cond
   // (Internal use only) Returns a shallow clone (i.e., dependent elements such
   // as joints are aliased, not copied) that is not associated with any MbT (so
   // the assigned index, if any, is discarded).
@@ -201,71 +186,6 @@ class ForceElement : public MultibodyElement<T> {
   /// to set their sub-class specific parameters.
   virtual void DoSetDefaultForceElementParameters(
       systems::Parameters<T>*) const {}
-
-  /// @name Methods to make a clone templated on different scalar types.
-  ///
-  /// Specific force element subclasses must implement these to support scalar
-  /// conversion to other types. These methods are only called from
-  /// MultibodyTree::CloneToScalar(); users _must_ not call these explicitly
-  /// since there is no external mechanism to ensure the argument `tree_clone`
-  /// is in a valid stage of cloning. In contrast,
-  /// MultibodyTree::CloneToScalar() guarantees that by when
-  /// ForceElement::CloneToScalar() is called, all Body, Frame and Mobilizer
-  /// objects in the original tree (templated on T) to which `this`
-  /// %ForceElement<T> belongs, have a corresponding clone in the cloned tree
-  /// (argument `tree_clone` for these methods). Therefore, implementations of
-  /// ForceElement::DoCloneToScalar() can retrieve clones from `tree_clone` as
-  /// needed.
-  /// Consider the following example for a `SpringElement<T>` used to model
-  /// an elastic spring between two bodies:
-  /// @code
-  ///   template <typename T>
-  ///   class SpringElement : public ForceElement<T> {
-  ///    public:
-  ///     // Class's constructor.
-  ///     SpringElement(
-  ///       const RigidBody<T>& body1, const RigidBody<T>& body2,
-  ///       double stiffness);
-  ///     // Get the first body to which this spring is connected.
-  ///     const RigidBody<T>& get_body1() const;
-  ///     // Get the second body to which this spring is connected.
-  ///     const RigidBody<T>& get_body2() const;
-  ///     // Get the spring stiffness constant.
-  ///     double get_stiffness() const;
-  ///    protected:
-  ///     // Implementation of the scalar conversion from T to double.
-  ///     std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-  ///       const MultibodyTree<double>& tree_clone) const) {
-  ///         const RigidBody<ToScalar>& body1_clone =
-  ///           tree_clone.get_variant(get_body1());
-  ///         const RigidBody<ToScalar>& body2_clone =
-  ///           tree_clone.get_variant(get_body2());
-  ///         return std::make_unique<SpringElement<double>>(
-  ///           body1_clone, body2_clone, get_stiffness());
-  ///     }
-  /// @endcode
-  ///
-  /// MultibodyTree::get_variant() methods are available to retrieve cloned
-  /// variants from `tree_clone`, and are overloaded on different element types.
-  ///
-  /// For examples on how a MultibodyTree model can be converted to other
-  /// scalar types, please refer to the documentation for
-  /// MultibodyTree::CloneToScalar().
-  /// @{
-
-  /// Clones this %ForceElement (templated on T) to a mobilizer templated on
-  /// `double`.
-  virtual std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const = 0;
-
-  /// Clones this %ForceElement (templated on T) to a mobilizer templated on
-  /// AutoDiffXd.
-  virtual std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const = 0;
-
-  virtual std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const = 0;
-  /// @}
 
   /// NVI for ShallowClone().
   virtual std::unique_ptr<ForceElement<T>> DoShallowClone() const;

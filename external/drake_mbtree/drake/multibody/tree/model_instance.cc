@@ -183,5 +183,4 @@ void ModelInstance<T>::SetVelocitiesInArray(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::ModelInstance);
+template class drake::multibody::internal::ModelInstance<double>;

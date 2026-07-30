@@ -3,7 +3,6 @@
 #include <set>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/multibody_tree.h"
@@ -32,8 +31,6 @@ namespace multibody {
 ///     to World
 ///   - fixed offset frames added when joints are modeled by mobilizers
 ///   - all mobilizers.
-///
-/// @tparam_default_scalar
 template <typename T>
 class MultibodyElement {
  public:
@@ -244,5 +241,4 @@ class MultibodyElement {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::MultibodyElement);
+extern template class drake::multibody::MultibodyElement<double>;

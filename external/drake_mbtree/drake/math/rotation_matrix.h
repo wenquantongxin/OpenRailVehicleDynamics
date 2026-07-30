@@ -7,9 +7,7 @@
 
 #include <Eigen/Dense>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
-#include "drake/common/drake_bool.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/hash.h"
@@ -45,14 +43,10 @@ struct DoNotInitializeMemberFields {};
 /// @note When assertions are enabled, several methods in this class perform a
 /// validity check and throw std::exception if the rotation matrix is invalid.
 /// When assertions are disabled, many of these validity checks are skipped
-/// (which helps improve speed). These validity tests are only performed for
-/// scalar types for which drake::scalar_predicate<T>::is_bool is `true`. For
-/// instance, validity checks are not performed when T is symbolic::Expression.
+/// (which helps improve speed).
 ///
 /// @authors Paul Mitiguy (2018) Original author.
 /// @authors Drake team (see https://drake.mit.edu/credits).
-///
-/// @tparam_default_scalar
 template <typename T>
 class RotationMatrix {
  public:
@@ -334,9 +328,7 @@ class RotationMatrix {
   /// without looking that the inactive elements have their required values.
   /// However, those elements are still required to have the expected values,
   /// which are the values they would have in an identity rotation (that is, 1
-  /// on the diagonal and 0 off-diagonal). (Even when T is symbolic::Expression,
-  /// we insist that the inactive elements have the correct numerical values and
-  /// don't require an Environment for evaluation.) This ensures that general
+  /// on the diagonal and 0 off-diagonal). This ensures that general
   /// purpose (non-specialized) code can still use the resulting rotation
   /// matrices.
   ///
@@ -538,37 +530,6 @@ class RotationMatrix {
   void IsAxialRotationOrThrow() const;
   ///@}
 
-  /// Creates a %RotationMatrix templatized on a scalar type U from a
-  /// %RotationMatrix templatized on scalar type T.  For example,
-  /// ```
-  /// RotationMatrix<double> source = RotationMatrix<double>::Identity();
-  /// RotationMatrix<AutoDiffXd> foo = source.cast<AutoDiffXd>();
-  /// ```
-  /// @tparam U Scalar type on which the returned %RotationMatrix is templated.
-  /// @note `RotationMatrix<From>::cast<To>()` creates a new
-  /// `RotationMatrix<To>` from a `RotationMatrix<From>` but only if
-  /// type `To` is constructible from type `From`.
-  /// This cast method works in accordance with Eigen's cast method for Eigen's
-  /// %Matrix3 that underlies this %RotationMatrix.  For example, Eigen
-  /// currently allows cast from type double to AutoDiffXd, but not vice-versa.
-  template <typename U>
-  RotationMatrix<U> cast() const
-    requires is_default_scalar<U>
-  {  // NOLINT(whitespace/braces)
-    // TODO(Mitiguy) Make the RotationMatrix::cast() method more robust.  It is
-    // currently limited by Eigen's cast() for the matrix underlying this class.
-    // Consider the following logic to improve casts (and address issue #11785).
-    // 1. If relevant, use Eigen's underlying cast method.
-    // 2. Strip derivative data when casting from `<AutoDiffXd>` to `<double>`.
-    // 3. Call ExtractDoubleOrThrow() when casting from `<symbolic::Expression>`
-    //    to `<double>`.
-    // 4. The current RotationMatrix::cast() method incurs overhead due to its
-    //    underlying call to a RotationMatrix constructor. Perhaps create
-    //    specialized code to return a reference if casting to the same type,
-    //    e.g., casting from `<double>` to `<double>` should be inexpensive.
-    return RotationMatrix<U>::MakeUnchecked(R_AB_.template cast<U>());
-  }
-
   /// Sets `this` %RotationMatrix from a Matrix3.
   /// @param[in] R an allegedly valid rotation matrix.
   /// @throws std::exception in debug builds if R fails IsValid(R).
@@ -752,7 +713,7 @@ class RotationMatrix {
   /// @param[in] tolerance maximum allowable absolute difference between R * Rᵀ
   /// and the identity matrix I, i.e., checks if `‖R ⋅ Rᵀ - I‖∞ <= tolerance`.
   /// @returns `true` if R is an orthonormal matrix.
-  static boolean<T> IsOrthonormal(const Matrix3<T>& R, double tolerance) {
+  static bool IsOrthonormal(const Matrix3<T>& R, double tolerance) {
     return GetMeasureOfOrthonormality(R) <= tolerance;
   }
 
@@ -762,7 +723,7 @@ class RotationMatrix {
   /// @param[in] tolerance maximum allowable absolute difference of `R * Rᵀ`
   /// and the identity matrix I (i.e., checks if `‖R ⋅ Rᵀ - I‖∞ <= tolerance`).
   /// @returns `true` if R is a valid rotation matrix.
-  static boolean<T> IsValid(const Matrix3<T>& R, double tolerance) {
+  static bool IsValid(const Matrix3<T>& R, double tolerance) {
     return IsOrthonormal(R, tolerance) && R.determinant() > 0;
   }
 
@@ -770,18 +731,18 @@ class RotationMatrix {
   /// within the threshold of get_internal_tolerance_for_orthonormality().
   /// @param[in] R an allegedly valid rotation matrix.
   /// @returns `true` if R is a valid rotation matrix.
-  static boolean<T> IsValid(const Matrix3<T>& R) {
+  static bool IsValid(const Matrix3<T>& R) {
     return IsValid(R, get_internal_tolerance_for_orthonormality());
   }
 
   /// Tests if `this` rotation matrix R is a proper orthonormal rotation matrix
   /// to within the threshold of get_internal_tolerance_for_orthonormality().
   /// @returns `true` if `this` is a valid rotation matrix.
-  boolean<T> IsValid() const { return IsValid(matrix()); }
+  bool IsValid() const { return IsValid(matrix()); }
 
   /// Returns `true` if `this` is exactly equal to the identity matrix.
   /// @see IsNearlyIdentity().
-  boolean<T> IsExactlyIdentity() const {
+  bool IsExactlyIdentity() const {
     return matrix() == Matrix3<T>::Identity();
   }
 
@@ -789,7 +750,7 @@ class RotationMatrix {
   /// @param[in] tolerance non-negative number that is generally the default
   /// value, namely RotationMatrix::get_internal_tolerance_for_orthonormality().
   /// @see IsExactlyIdentity().
-  boolean<T> IsNearlyIdentity(
+  bool IsNearlyIdentity(
       double tolerance = get_internal_tolerance_for_orthonormality()) const {
     return IsNearlyEqualTo(matrix(), Matrix3<T>::Identity(), tolerance);
   }
@@ -801,7 +762,7 @@ class RotationMatrix {
   /// matrix elements in `this` and `other`.
   /// @returns `true` if `‖this - other‖∞ <= tolerance`.
   /// @see IsExactlyEqualTo().
-  boolean<T> IsNearlyEqualTo(const RotationMatrix<T>& other,
+  bool IsNearlyEqualTo(const RotationMatrix<T>& other,
                              double tolerance) const {
     return IsNearlyEqualTo(matrix(), other.matrix(), tolerance);
   }
@@ -812,7 +773,7 @@ class RotationMatrix {
   /// @returns true if each element of `this` is exactly equal to the
   /// corresponding element in `other`.
   /// @see IsNearlyEqualTo().
-  boolean<T> IsExactlyEqualTo(const RotationMatrix<T>& other) const {
+  bool IsExactlyEqualTo(const RotationMatrix<T>& other) const {
     return matrix() == other.matrix();
   }
 
@@ -939,13 +900,6 @@ class RotationMatrix {
   }
 
  private:
-  // Make RotationMatrix<U> templatized on any typename U be a friend of a
-  // %RotationMatrix templatized on any other typename T.
-  // This is needed for the method RotationMatrix<T>::cast<U>() to be able to
-  // use the necessary private constructor.
-  template <typename U>
-  friend class RotationMatrix;
-
   // Returns the mutable Matrix3 underlying a RotationMatrix.
   Matrix3<T>& mutable_matrix() { return R_AB_; }
 
@@ -960,8 +914,7 @@ class RotationMatrix {
   // relatively high computational cost, it is intended to be called only
   // in Debug mode (using DRAKE_ASSERT_VOID()). (It is likely that the
   // arguments were precomputed to avoid their recalculation in some
-  // performance-critical situation.) This function does nothing if T is
-  // symbolic.
+  // performance-critical situation.)
   static void SinCosConsistencyOrThrow(const T& sin_theta, const T& cos_theta);
 
   // Sets `this` %RotationMatrix `R_AB` from right-handed orthogonal unit
@@ -1015,7 +968,7 @@ class RotationMatrix {
   // @param[in] tolerance maximum allowable absolute difference between the
   // matrix elements in R and `other`.
   // @returns `true` if `‖R - `other`‖∞ <= tolerance`.
-  static boolean<T> IsNearlyEqualTo(const Matrix3<T>& R,
+  static bool IsNearlyEqualTo(const Matrix3<T>& R,
                                     const Matrix3<T>& other, double tolerance) {
     const T R_max_difference = GetMaximumAbsoluteDifference(R, other);
     return R_max_difference <= tolerance;
@@ -1023,8 +976,6 @@ class RotationMatrix {
 
   // Throws an exception if R is not a valid %RotationMatrix.
   // @param[in] R an allegedly valid rotation matrix.
-  // @note If the underlying scalar type T is non-numeric (symbolic), no
-  // validity check is made and no exception is thrown.
   static void ThrowIfNotValid(const Matrix3<T>& R);
 
   // Given an approximate rotation matrix M, finds the orthonormal matrix R
@@ -1069,18 +1020,8 @@ class RotationMatrix {
   // This is a helper method for RotationMatrix::ToQuaternion that returns a
   // Quaternion that is neither sign-canonicalized nor magnitude-normalized.
   //
-  // This method is used for scalar types where scalar_predicate<T>::is_bool is
-  // true (e.g., T = `double` and T = `AutoDiffXd`).  For types where is_bool
-  // is false (e.g., T = `symbolic::Expression`), the alternative specialization
-  // below is used instead.  We have two implementations so that this method is
-  // as fast and compact as possible when `T = double`.
-  //
-  // N.B. Keep the math in this method in sync with the other specialization,
-  // immediately below.
-  template <typename S = T>
-  static std::enable_if_t<scalar_predicate<S>::is_bool, Eigen::Quaternion<S>>
-  RotationMatrixToUnnormalizedQuaternion(
-      const Eigen::Ref<const Matrix3<S>>& M) {
+  static Eigen::Quaternion<T> RotationMatrixToUnnormalizedQuaternion(
+      const Eigen::Ref<const Matrix3<T>>& M) {
     // This implementation is adapted from simbody at
     // https://github.com/simbody/simbody/blob/master/SimTKcommon/Mechanics/src/Rotation.cpp
     T w, x, y, z;  // Elements of the quaternion, w relates to cos(theta/2).
@@ -1113,48 +1054,6 @@ class RotationMatrix {
     // Create a quantity q (which is not yet a unit quaternion).
     // Note: Eigen's Quaternion constructor does not normalize.
     return Eigen::Quaternion<T>(w, x, y, z);
-  }
-
-  // Refer to the same-named method above for comments and details about the
-  // algorithm being used, the meaning of the branches, etc.  This method is
-  // identical except that the if-elseif chain is replaced with a symbolic-
-  // conditional formulation.
-  //
-  // N.B. Keep the math in this method in sync with the other specialization,
-  // immediately above.
-  template <typename S = T>
-  static std::enable_if_t<!scalar_predicate<S>::is_bool, Eigen::Quaternion<S>>
-  RotationMatrixToUnnormalizedQuaternion(
-      const Eigen::Ref<const Matrix3<S>>& M) {
-    // clang-format off
-    const T M00 = M(0, 0); const T M01 = M(0, 1); const T M02 = M(0, 2);
-    const T M10 = M(1, 0); const T M11 = M(1, 1); const T M12 = M(1, 2);
-    const T M20 = M(2, 0); const T M21 = M(2, 1); const T M22 = M(2, 2);
-    const T trace = M00 + M11 + M22;
-    const Vector4<T> wxyz =
-        if_then_else(trace >= M00 && trace >= M11 && trace >= M22, Vector4<T>{
-          1.0 + trace,
-          M21 - M12,
-          M02 - M20,
-          M10 - M01,
-        }, if_then_else(M00 >= M11 && M00 >= M22, Vector4<T>{
-          M21 - M12,
-          1.0 - (trace - 2 * M00),
-          M01 + M10,
-          M02 + M20,
-        }, if_then_else(M11 >= M22, Vector4<T>{
-          M02 - M20,
-          M01 + M10,
-          1.0 - (trace - 2 * M11),
-          M12 + M21,
-        }, /* else */ Vector4<T>{
-          M10 - M01,
-          M02 + M20,
-          M12 + M21,
-          1.0 - (trace - 2 * M22),
-        })));
-    // clang-format on
-    return Eigen::Quaternion<T>(wxyz(0), wxyz(1), wxyz(2), wxyz(3));
   }
 
   // Constructs a 3x3 rotation matrix from a Quaternion.
@@ -1246,5 +1145,4 @@ double ProjectMatToRotMatWithAxis(const Eigen::Matrix3d& M,
 }  // namespace math
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::math::RotationMatrix);
+extern template class drake::math::RotationMatrix<double>;

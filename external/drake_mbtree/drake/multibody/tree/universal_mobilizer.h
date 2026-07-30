@@ -3,7 +3,6 @@
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -49,8 +48,6 @@ namespace internal {
 // Hdot_FM_F₆ₓ₂ = [Hwdot_FM₃ₓ₂]  Hwdot_FM_F = [ 0    0     ]  Hvdot_FM_F = 0₃ₓ₂
 //                [Hvdot_FM₃ₓ₂]               [ 0 -v₀s(q₀) ]
 //                                            [ 0  v₀c(q₀) ]
-//
-// @tparam_default_scalar
 template <typename T>
 class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
  public:
@@ -239,21 +236,7 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const override;
-
  private:
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
-
   // Calculates the rotational part of matrix H and optionally its derivative.
   // See Mobilizer documentation for notation. If you want the derivative, pass
   // both v and Hw_dot.
@@ -265,5 +248,4 @@ class UniversalMobilizer final : public MobilizerImpl<T, 2, 2> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::UniversalMobilizer);
+extern template class drake::multibody::internal::UniversalMobilizer<double>;

@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -44,8 +43,6 @@ namespace multibody {
 /// are intact. Be aware that UnitInertia objects may contain invalid inertia
 /// data in cases where input checking is skipped.
 /// @see https://en.cppreference.com/w/cpp/language/exceptions
-///
-/// @tparam_default_scalar
 template <typename T>
 class UnitInertia : public RotationalInertia<T> {
  public:
@@ -80,22 +77,6 @@ class UnitInertia : public RotationalInertia<T> {
       : RotationalInertia<T>(I) {}
 
   /// Returns a new %UnitInertia object templated on `Scalar` initialized
-  /// from the value of `this` unit inertia.
-  ///
-  /// @tparam Scalar The scalar type on which the new unit inertia will
-  /// be templated.
-  ///
-  /// @note `UnitInertia<From>::cast<To>()` creates a new
-  /// `UnitInertia<To>` from a `UnitInertia<From>` but only if
-  /// type `To` is constructible from type `From`. As an example of this,
-  /// `UnitInertia<double>::cast<AutoDiffXd>()` is valid since
-  /// `AutoDiffXd a(1.0)` is valid. However,
-  /// `UnitInertia<AutoDiffXd>::cast<double>()` is not.
-  template <typename Scalar>
-  UnitInertia<Scalar> cast() const {
-    return UnitInertia<Scalar>(RotationalInertia<T>::template cast<Scalar>());
-  }
-
   /// Sets `this` unit inertia from a generally non-unit inertia I corresponding
   /// to a body with a given `mass`.
   /// @throws std::exception if the provided `mass` is not strictly positive.
@@ -442,7 +423,7 @@ class UnitInertia : public RotationalInertia<T> {
   // stored in columns of the returned rotation matrix R_EA.
   // @throws std::exception if the elements of `this` unit inertia cannot
   // be converted to a real finite double. For example, an exception is thrown
-  // if `this` contains an erroneous NaN or if scalar type T is symbolic.
+  // if `this` contains an erroneous NaN.
   // @throws std::exception if inertia_shape_factor ≤ 0 or > 1.
   // See @ref spatial_inertia_equivalent_shapes
   // "Spatial inertia equivalent shapes" for more details.
@@ -479,5 +460,4 @@ std::string to_string(const UnitInertia<T>& I);
 DRAKE_FORMATTER_AS(typename T, drake::multibody, UnitInertia<T>, x,
                    drake::multibody::to_string(x))
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::UnitInertia);
+extern template class drake::multibody::UnitInertia<double>;

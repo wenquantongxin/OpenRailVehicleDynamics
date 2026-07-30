@@ -2,7 +2,6 @@
 
 #include <cmath>
 
-#include "drake/common/double_overloads.h"
 #include "drake/common/drake_assert.h"
 
 namespace drake {
@@ -21,11 +20,11 @@ T1 wrap_to(const T1& value, const T2& low, const T2& high) {
   const T2 range = high - low;
   return value - range * floor((value - low) / range);
   // TODO(russt): jwnimmer preferred the following implementation (which may be
-  // numerically better), but fmod is not supported yet by autodiff nor
-  // symbolic:
+  // numerically better), but fmod was not supported by the scalar types this
+  // code was originally written for:
   // using std::fmod;
   // const T1 rem = fmod(value - low, high - low);
-  // return if_then_else(rem >= T1(0), low + rem, high + rem);
+  // return rem >= T1(0) ? low + rem : high + rem;
 }
 
 }  // namespace math

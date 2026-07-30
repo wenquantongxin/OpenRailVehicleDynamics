@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/math/spatial_algebra.h"
@@ -21,8 +20,6 @@ class MultibodyTreeSystem;
 /// can include generalized forces as well as body spatial forces.
 /// MultibodyPlant::CalcGeneralizedForces() can be used to compute the _total_
 /// generalized force, combining generalized_forces() and body_forces().
-///
-/// @tparam_default_scalar
 template <typename T>
 class MultibodyForces {
  public:
@@ -101,5 +98,4 @@ class MultibodyForces {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::MultibodyForces);
+extern template class drake::multibody::MultibodyForces<double>;

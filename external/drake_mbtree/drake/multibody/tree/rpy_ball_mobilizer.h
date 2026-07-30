@@ -4,7 +4,6 @@
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -62,8 +61,6 @@ namespace internal {
 //
 //    H_FM_M = R_MF ⋅ H_FM_F = [ R_MF ]
 //                             [  0   ]
-//
-// @tparam_default_scalar
 template <typename T>
 class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
  public:
@@ -360,24 +357,10 @@ class RpyBallMobilizer final : public MobilizerImpl<T, 3, 3> {
   [[noreturn]] void ThrowSinceCosPitchNearZero(
       const systems::Context<T>& context, const char* function_name) const;
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
-
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const override;
 };
 
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::RpyBallMobilizer);
+extern template class drake::multibody::internal::RpyBallMobilizer<double>;

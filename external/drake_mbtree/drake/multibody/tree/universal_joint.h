@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -39,8 +38,6 @@ namespace multibody {
 /// Angles (θ₁, θ₂) are defined to be positive according to the
 /// right-hand-rule with the thumb aligned in the direction of their
 /// respective axes.
-///
-/// @tparam_default_scalar
 template <typename T>
 class UniversalJoint final : public Joint<T> {
  public:
@@ -164,15 +161,6 @@ class UniversalJoint final : public Joint<T> {
     this->set_default_positions(angles);
   }
 
-  /// Sets the random distribution that angles of this joint will be randomly
-  /// sampled from. See class documentation for details on the definition of the
-  /// angles.
-  void set_random_angles_distribution(
-      const Vector2<symbolic::Expression>& angles) {
-    get_mutable_mobilizer().set_random_position_distribution(
-        Vector2<symbolic::Expression>{angles});
-  }
-
  protected:
   /// Joint<T> override called through public NVI, Joint::AddInForce().
   /// Therefore arguments were already checked to be valid.
@@ -244,22 +232,7 @@ class UniversalJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make UniversalJoint templated on every other scalar type a friend of
-  // UniversalJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of UniversalJoint<T>.
-  template <typename>
-  friend class UniversalJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -274,10 +247,6 @@ class UniversalJoint final : public Joint<T> {
         internal::UniversalMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 template <typename T>
@@ -286,5 +255,4 @@ const char UniversalJoint<T>::kTypeName[] = "universal";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::UniversalJoint);
+extern template class drake::multibody::UniversalJoint<double>;

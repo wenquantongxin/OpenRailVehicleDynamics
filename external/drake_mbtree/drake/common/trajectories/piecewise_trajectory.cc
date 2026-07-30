@@ -6,7 +6,6 @@
 
 #include "drake/common/drake_assert.h"
 
-using std::uniform_real_distribution;
 using std::vector;
 
 namespace drake {
@@ -24,7 +23,7 @@ template <typename T>
 PiecewiseTrajectory<T>::~PiecewiseTrajectory() = default;
 
 template <typename T>
-boolean<T> PiecewiseTrajectory<T>::is_time_in_range(const T& time) const {
+bool PiecewiseTrajectory<T>::is_time_in_range(const T& time) const {
   return (time >= start_time() && time <= end_time());
 }
 
@@ -98,21 +97,6 @@ void PiecewiseTrajectory<T>::segment_number_range_check(
 }
 
 template <typename T>
-std::vector<T> PiecewiseTrajectory<T>::RandomSegmentTimes(
-    // TODO(#2274) Fix this NOLINTNEXTLINE(runtime/references)
-    int num_segments, std::default_random_engine& generator) {
-  vector<T> breaks;
-  uniform_real_distribution<double> uniform(kEpsilonTime, 1);
-  T t0 = uniform(generator);
-  breaks.push_back(t0);
-  for (int i = 0; i < num_segments; ++i) {
-    T duration = uniform(generator);
-    breaks.push_back(breaks[i] + duration);
-  }
-  return breaks;
-}
-
-template <typename T>
 T PiecewiseTrajectory<T>::do_start_time() const {
   return start_time(0);
 }
@@ -136,5 +120,4 @@ bool PiecewiseTrajectory<T>::SegmentTimesEqual(
 }  // namespace trajectories
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::trajectories::PiecewiseTrajectory);
+template class drake::trajectories::PiecewiseTrajectory<double>;

@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -21,8 +20,6 @@ namespace multibody {
 /// origins, Mo and Fo, of frames M and F respectively remain coincident. The
 /// orientation of M relative to F is parameterized with space `x-y-z` Euler
 /// angles.
-///
-/// @tparam_default_scalar
 template <typename T>
 class BallRpyJoint final : public Joint<T> {
  public:
@@ -134,14 +131,6 @@ class BallRpyJoint final : public Joint<T> {
     return *this;
   }
 
-  /// Sets the random distribution that angles of this joint will be randomly
-  /// sampled from. See get_angles() for details on the angle representation.
-  void set_random_angles_distribution(
-      const Vector3<symbolic::Expression>& angles) {
-    get_mutable_mobilizer().set_random_position_distribution(
-        Vector3<symbolic::Expression>{angles});
-  }
-
   /// Retrieves from `context` the angular velocity `w_FM` of the child frame
   /// M in the parent frame F, expressed in F.
   ///
@@ -244,22 +233,7 @@ class BallRpyJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make BallRpyJoint templated on every other scalar type a friend of
-  // BallRpyJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of BallRpyJoint<T>.
-  template <typename>
-  friend class BallRpyJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -273,10 +247,6 @@ class BallRpyJoint final : public Joint<T> {
         ->template get_mutable_mobilizer_downcast<internal::RpyBallMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 template <typename T>
@@ -285,5 +255,4 @@ const char BallRpyJoint<T>::kTypeName[] = "ball_rpy";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::BallRpyJoint);
+extern template class drake::multibody::BallRpyJoint<double>;

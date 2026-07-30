@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -22,8 +21,6 @@ namespace multibody {
 /// along an axis â. The translation distance is defined positive when child
 /// body C translates along the direction of â. Axis vector â is constant and
 /// has the same components in both frames Jp and Jc, that is, `â_Jp = â_Jc`.
-///
-/// @tparam_default_scalar
 template <typename T>
 class PrismaticJoint final : public Joint<T> {
  public:
@@ -212,12 +209,6 @@ class PrismaticJoint final : public Joint<T> {
     this->set_default_positions(Vector1d{translation});
   }
 
-  void set_random_translation_distribution(
-      const symbolic::Expression& translation) {
-    get_mutable_mobilizer().set_random_position_distribution(
-        Vector1<symbolic::Expression>{translation});
-  }
-
   /// Adds into `multibody_forces` a given `force`, in Newtons, for `this` joint
   /// that is to be applied along the joint's axis. The force is defined to be
   /// positive in the direction along this joint's axis.
@@ -306,22 +297,7 @@ class PrismaticJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>*) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make PrismaticJoint templated on every other scalar type a friend of
-  // PrismaticJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of PrismaticJoint<T>.
-  template <typename>
-  friend class PrismaticJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -336,11 +312,6 @@ class PrismaticJoint final : public Joint<T> {
         internal::PrismaticMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   // This is the joint's axis expressed in either M or F since axis_M = axis_F.
   // It is a unit vector.
   Vector3<double> axis_;
@@ -352,5 +323,4 @@ const char PrismaticJoint<T>::kTypeName[] = "prismatic";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::PrismaticJoint);
+extern template class drake::multibody::PrismaticJoint<double>;

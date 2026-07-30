@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -27,8 +26,6 @@ namespace multibody {
 /// respective axes and the rotation θ is defined to be positive according to
 /// the right-hand-rule with the thumb aligned in the direction of frame F's
 /// z-axis.
-///
-/// @tparam_default_scalar
 template <typename T>
 class PlanarJoint final : public Joint<T> {
  public:
@@ -240,16 +237,6 @@ class PlanarJoint final : public Joint<T> {
     this->set_default_positions(state);
   }
 
-  /// Sets the random distribution that the position and angle of this
-  /// joint will be randomly sampled from. See class documentation for details
-  /// on the definition of the position and angle.
-  void set_random_pose_distribution(
-      const Vector2<symbolic::Expression>& p_FoMo_F,
-      const symbolic::Expression& theta) {
-    Vector3<symbolic::Expression> state(p_FoMo_F[0], p_FoMo_F[1], theta);
-    get_mutable_mobilizer().set_random_position_distribution(state);
-  }
-
  private:
   /// Joint<T> override called through public NVI, Joint::AddInForce().
   /// Therefore arguments were already checked to be valid.
@@ -325,22 +312,7 @@ class PlanarJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make PlanarJoint templated on every other scalar type a friend of
-  // PlanarJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of PlanarJoint<T>.
-  template <typename>
-  friend class PlanarJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -354,14 +326,9 @@ class PlanarJoint final : public Joint<T> {
         ->template get_mutable_mobilizer_downcast<internal::PlanarMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::PlanarJoint);
+extern template class drake::multibody::PlanarJoint<double>;

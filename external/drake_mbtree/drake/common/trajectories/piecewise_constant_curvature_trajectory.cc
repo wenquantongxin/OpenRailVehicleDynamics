@@ -118,7 +118,7 @@ PiecewiseConstantCurvatureTrajectory<T>::CalcSpatialAccelerationInM(
 }
 
 template <typename T>
-boolean<T> PiecewiseConstantCurvatureTrajectory<T>::EndpointsAreNearlyEqual(
+bool PiecewiseConstantCurvatureTrajectory<T>::EndpointsAreNearlyEqual(
     double tolerance) const {
   return break_poses_.front().IsNearlyEqualTo(break_poses_.back(), tolerance);
 }
@@ -221,8 +221,8 @@ PiecewiseConstantCurvatureTrajectory<T>::MakeBreakPoses(
 }
 
 // Explicit instantiation for the types specified in the header
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::trajectories::PiecewiseConstantCurvatureTrajectory);
+template class drake::trajectories::PiecewiseConstantCurvatureTrajectory<
+    double>;
 
 }  // namespace trajectories
 }  // namespace drake

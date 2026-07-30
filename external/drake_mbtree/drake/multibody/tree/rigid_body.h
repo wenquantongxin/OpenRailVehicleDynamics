@@ -3,10 +3,8 @@
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/unused.h"
 #include "drake/multibody/tree/acceleration_kinematics_cache.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer.h"
@@ -51,8 +49,6 @@ class RigidBody;
 /// body, see RigidBody::body_frame(). This access is more than a convenience;
 /// you can use the %RigidBodyFrame to define other frames on the body and to
 /// attach other multibody elements to it.
-///
-/// @tparam_default_scalar
 template <typename T>
 class RigidBodyFrame final : public Frame<T> {
  public:
@@ -79,16 +75,6 @@ class RigidBodyFrame final : public Frame<T> {
   }
 
  protected:
-  // Frame<T>::DoCloneToScalar() overrides.
-  std::unique_ptr<Frame<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<Frame<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<Frame<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
-
   std::unique_ptr<Frame<T>> DoShallowClone() const override;
 
   math::RigidTransform<T> DoCalcPoseInBodyFrame(
@@ -119,23 +105,10 @@ class RigidBodyFrame final : public Frame<T> {
   // associated with each other.
   friend class RigidBody<T>;
 
-  // Make RigidBodyFrame templated on any other scalar type a friend of
-  // RigidBodyFrame<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private methods from RigidBodyFrame<T>.
-  template <typename>
-  friend class RigidBodyFrame;
-
   // Only RigidBody objects can create RigidBodyFrame objects since RigidBody is
   // a friend of RigidBodyFrame.
   explicit RigidBodyFrame(const RigidBody<T>& body)
       : Frame<T>(body.name(), body) {}
-
-  // Helper method to make a clone templated on any other scalar type.
-  // This method holds the common implementation for the different overrides to
-  // DoCloneToScalar().
-  template <typename ToScalar>
-  std::unique_ptr<Frame<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 /// LinkFrame is a synonym for RigidBodyFrame and should be preferred.
@@ -195,8 +168,6 @@ class RigidBodyAttorney {
 ///
 /// - [Goldstein 2001] H Goldstein, CP Poole, JL Safko, Classical Mechanics
 ///                    (3rd Edition), Addison-Wesley, 2001.
-///
-/// @tparam_default_scalar
 template <typename T>
 class RigidBody : public MultibodyElement<T> {
  public:
@@ -747,17 +718,6 @@ class RigidBody : public MultibodyElement<T> {
   }
   ///@}
 
-  /// (Advanced) This method is mostly intended to be called by
-  /// MultibodyTree::CloneToScalar(). Most users should not call this clone
-  /// method directly but rather clone the entire parent MultibodyTree if
-  /// needed.
-  /// @sa MultibodyTree::CloneToScalar()
-  template <typename ToScalar>
-  std::unique_ptr<RigidBody<ToScalar>> CloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const {
-    return TemplatedDoCloneToScalar(tree_clone);
-  }
-
  private:
   // Only friends of RigidBodyAttorney (i.e. MultibodyTree) have access to a
   // selected set of private RigidBody methods.
@@ -798,7 +758,7 @@ class RigidBody : public MultibodyElement<T> {
             spatial_inertia_parameter_index_);
     spatial_inertia_parameter.SetFrom(
         internal::parameter_conversion::ToBasicVector<T>(
-            default_spatial_inertia_.template cast<T>()));
+            default_spatial_inertia_));
   }
 
   // Helper method for throwing an exception within public methods that should
@@ -844,15 +804,6 @@ class RigidBody : public MultibodyElement<T> {
   // @throws std::exception if context is null.
   void SetUnitInertiaAboutBodyOrigin(systems::Context<T>* context,
                                      const UnitInertia<T>& G_BBo_B) const;
-
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<RigidBody<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const {
-    unused(tree_clone);
-    return std::make_unique<RigidBody<ToScalar>>(this->name(),
-                                                 default_spatial_inertia_);
-  }
 
   // MultibodyTree has access to the mutable LinkFrame through
   // RigidBodyAttorney.
@@ -902,8 +853,6 @@ using Body = RigidBody<T>;
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::RigidBodyFrame);
+extern template class drake::multibody::RigidBodyFrame<double>;
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::RigidBody);
+extern template class drake::multibody::RigidBody<double>;

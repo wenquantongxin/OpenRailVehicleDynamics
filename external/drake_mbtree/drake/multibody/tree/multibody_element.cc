@@ -122,5 +122,4 @@ void MultibodyElement<T>::HasThisParentTreeOrThrow(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::MultibodyElement);
+template class drake::multibody::MultibodyElement<double>;

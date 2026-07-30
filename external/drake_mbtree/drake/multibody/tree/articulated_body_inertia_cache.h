@@ -3,7 +3,6 @@
 #include <limits>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/math/linear_solve.h"
 #include "drake/multibody/topology/forest.h"
@@ -28,8 +27,6 @@ namespace internal {
 //   but taken about Bo and expressed in W.
 // - LLT factorization `llt_D_B` of the articulated body hinge inertia.
 // - The Kalman gain `g_PB_W = P_B_W * H_PB_W * D_B⁻¹`.
-//
-// @tparam_default_scalar
 template <typename T>
 class ArticulatedBodyInertiaCache {
  public:
@@ -131,5 +128,5 @@ class ArticulatedBodyInertiaCache {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::internal::ArticulatedBodyInertiaCache);
+extern template class drake::multibody::internal::
+    ArticulatedBodyInertiaCache<double>;

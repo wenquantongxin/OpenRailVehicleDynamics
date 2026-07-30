@@ -187,5 +187,4 @@ std::pair<Eigen::Quaternion<T>, Vector3<T>> Joint<T>::GetPosePair(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::Joint);
+template class drake::multibody::Joint<double>;

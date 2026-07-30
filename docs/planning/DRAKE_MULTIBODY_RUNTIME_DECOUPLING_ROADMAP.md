@@ -7,7 +7,7 @@
 
 - 工作分支：`main`
 - 当前阶段：刚性 tree 的 `double`-only 裁剪
-- 当前 Goal：`G16`
+- 当前 Goal：`G17`
 - 产品代码状态：vendored topology 静态库可构建；刚性 tree 源码已落位但尚未接入构建；
   第一方运行时尚未开始
 - 已验证平台：Ubuntu 24.04 + GCC 13。Clang、MSVC 与 Windows 尚未实测，不提前宣称
@@ -167,7 +167,7 @@ Goal GNN — <明确的功能名称>
     ABO/ABA/ABB/AAA 四种输出重叠形态。
     AutoDiff、`ExtractDouble` 等标量路径的删除留到 G16 一次做完，不在本轮做半套手术。
 
-- [ ] **G16 — 删除非 double 标量路径**
+- [x] **G16 — 删除非 double 标量路径**
   - 产物：只保留 `double` 执行路径的 landed 刚性 tree 源码边界；本 Goal 不声称完整 tree
     已可构建。
   - 完成门：活动源码与公共声明不再消费 AutoDiff、symbolic、默认标量实例化、标量转换、
@@ -176,6 +176,17 @@ Goal GNN — <明确的功能名称>
   - 跨平台收口：触及源码中的 `M_PI` / `M_PI_2` 改用 C++23 `std::numbers`，删除没有
     语义作用的 GNU 专用属性；不为编译器差异建立宏兼容层。四元数运动学属于 double 路径，
     不因名称里出现 scalar/quaternion 而误删。
+  - 实测结论：非 double 标量面在落位活动源码中归零——克隆链、符号随机状态接口、
+    `scalar_predicate` 分支与 SFINAE 对、六个 `cast<Scalar>()`、`ExtractDouble`、
+    `DiscardGradient`、默认标量实例化与 `@tparam_default_scalar` 全部删除，`M_PI` /
+    `M_PI_2` 改用 `std::numbers`（GNU 专用属性在 G01–G15 复核时已删完，本轮无残留）。
+    `common/random.h`、`math/random_rotation.h`、`math/quaternion.h`、`common/drake_bool.h`、
+    `common/cond.h`、`common/double_overloads.h`、`common/extract_double.h` 因此失去全部
+    消费方，改判 `discard`，落位集合 182 → 175 且与处置账本逐行一致。逐 TU 编译落位源码，
+    71 个中 30 个产出对象，其余 41 个的首个错误**全部**是缺少
+    `drake/multibody/tree/multibody_tree_system.h`（G20–G28 的运行时依赖），
+    没有一处标量相关错误。改动全貌见
+    `external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md` 的 G16 节。
 
 - [ ] **G17 — 验证 double-only 编译前沿与位姿组合契约**
   - 产物：landed 源码的真实编译前沿、剩余运行时接口清单，以及四个位姿组合函数的真名

@@ -3,7 +3,6 @@
 #include <memory>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -23,8 +22,6 @@ namespace internal {
 // - Spatial acceleration `A_WB` for each body B in the model as measured and
 //   expressed in the world frame W.
 // - Generalized accelerations `vdot` for the entire model.
-//
-// @tparam_default_scalar
 template <typename T>
 class AccelerationKinematicsCache {
  public:
@@ -120,5 +117,5 @@ class AccelerationKinematicsCache {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::AccelerationKinematicsCache);
+extern template class drake::multibody::internal::
+    AccelerationKinematicsCache<double>;

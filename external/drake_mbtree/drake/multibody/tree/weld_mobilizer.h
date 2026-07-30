@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -17,8 +16,6 @@ namespace internal {
 // This mobilizer fixes the relative pose of an outboard frame M to be
 // coincident with an inboard frame F as if "welding" them together.
 // Therefore, this mobilizer has no associated state with it.
-//
-// @tparam_default_scalar
 template <typename T>
 class WeldMobilizer final : public MobilizerImpl<T, 0, 0> {
  public:
@@ -157,25 +154,11 @@ class WeldMobilizer final : public MobilizerImpl<T, 0, 0> {
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const final;
-
  private:
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::WeldMobilizer);
+extern template class drake::multibody::internal::WeldMobilizer<double>;

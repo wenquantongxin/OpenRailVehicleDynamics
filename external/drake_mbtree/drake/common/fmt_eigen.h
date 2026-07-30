@@ -123,7 +123,7 @@ captured in the fmt_eigen instance.
 Examples:
 
 ```
-Eigen::Vector3d x{M_PI, M_SQRT2, M_E};
+Eigen::Vector3d x{std::numbers::pi, std::numbers::sqrt2, std::numbers::e};
 fmt::format("{}", fmt_eigen(x));
 // [3.141592653589793, 1.4142135623730951, 2.718281828459045]ᵀ
 // (By default, a column-vector is printed as a transposed row-vector.)

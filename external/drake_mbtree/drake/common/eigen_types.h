@@ -7,7 +7,6 @@
 /// object. While Drake uses `<T>` for scalar types across the entire code base
 /// we decided in this file to use `<Scalar>` to be more consistent with the
 /// usage of `<Scalar>` in Eigen's code base.
-/// @see also eigen_autodiff_types.h
 
 #include <iterator>
 #include <utility>

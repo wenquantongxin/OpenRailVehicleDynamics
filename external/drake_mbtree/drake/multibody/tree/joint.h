@@ -78,8 +78,6 @@ class MobilizerTester;
 /// change when the underlying internal objects change. Our release notes will
 /// say when we have made changes that might affect your Joint implementations,
 /// but we won't necessarily be able to provide a deprecation period.
-///
-/// @tparam_default_scalar
 template <typename T>
 class Joint : public MultibodyElement<T> {
  public:
@@ -767,17 +765,6 @@ class Joint : public MultibodyElement<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree);
 
-  // NVI to DoCloneToScalar() templated on the scalar type of the new clone to
-  // be created. This method is intended to be called by
-  // MultibodyTree::CloneToScalar().
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> CloneToScalar(
-      internal::MultibodyTree<ToScalar>* tree_clone) const {
-    std::unique_ptr<Joint<ToScalar>> joint_clone = DoCloneToScalar(*tree_clone);
-    joint_clone->mobilizer_ = FindMobilizerToScalarClone<ToScalar>(tree_clone);
-    return joint_clone;
-  }
-
   // (Internal use only) Returns a shallow clone (i.e., dependent elements such
   // as frames are aliased, not copied) that is not associated with any MbT (so
   // the assigned index, if any, is discarded).
@@ -926,26 +913,11 @@ class Joint : public MultibodyElement<T> {
   // though we could require them to have one in the future.
   void DoSetTopology() override {}
 
-  /// @name Methods to make a clone, optionally templated on different scalar
-  /// types.
-  /// @{
-  /// Clones this %Joint (templated on T) to a joint templated on `double`.
-  virtual std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const = 0;
-
-  /// Clones this %Joint (templated on T) to a joint templated on AutoDiffXd.
-  virtual std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const = 0;
-
-  virtual std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const = 0;
-
   /// NVI for ShallowClone(). The public Joint::ShallowClone in this base class
   /// is responsible for copying the mutable Joint data (damping, all limits,
   /// default positions, etc.) into the return value. The subclass only needs to
   /// handle subclass-specific details.
   virtual std::unique_ptr<Joint<T>> DoShallowClone() const;
-  /// @}
 
   /// Utility for concrete joint implementations to use to select the
   /// inboard/outboard frames for a tree in the spanning forest, given
@@ -1030,16 +1002,6 @@ class Joint : public MultibodyElement<T> {
   virtual std::unique_ptr<internal::Mobilizer<T>> MakeMobilizerForJoint(
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const = 0;
-
-  // Helper method to be called within Joint::CloneToScalar() to locate the
-  // cloned Mobilizer corresponding to this Joint's Mobilizer.
-  template <typename ToScalar>
-  internal::Mobilizer<ToScalar>* FindMobilizerToScalarClone(
-      internal::MultibodyTree<ToScalar>* tree_clone) const {
-    internal::Mobilizer<ToScalar>* mobilizer_clone =
-        &tree_clone->get_mutable_variant(*mobilizer_);
-    return mobilizer_clone;
-  }
 
   // Implementation for MultibodyElement::DoDeclareParameters().
   void DoDeclareParameters(

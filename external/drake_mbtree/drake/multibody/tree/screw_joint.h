@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -28,8 +27,6 @@ namespace multibody {
 /// along the direction of â, and the rotation θ is defined to be positive
 /// according to the right-hand-rule with the thumb aligned in the direction
 /// of the `â_F` axis.
-///
-/// @tparam_default_scalar
 template <typename T>
 class ScrewJoint final : public Joint<T> {
  public:
@@ -268,14 +265,6 @@ class ScrewJoint final : public Joint<T> {
     this->set_default_positions(state);
   }
 
-  /// Sets the random distribution that the angle of this
-  /// joint will be randomly sampled from. See class documentation for details
-  /// on the definition of the position and angle.
-  void set_random_pose_distribution(
-      const Vector1<symbolic::Expression>& theta) {
-    get_mutable_mobilizer().set_random_position_distribution(theta);
-  }
-
  private:
   /* Joint<T> override called through public NVI, Joint::AddInForce().
    Therefore arguments were already checked to be valid.
@@ -353,22 +342,7 @@ class ScrewJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make ScrewJoint templated on every other scalar type a friend of
-  // ScrewJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of ScrewJoint<T>.
-  template <typename>
-  friend class ScrewJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -382,11 +356,6 @@ class ScrewJoint final : public Joint<T> {
         ->template get_mutable_mobilizer_downcast<internal::ScrewMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   // This is the joint's axis expressed in either M or F since axis_M = axis_F.
   Vector3<double> axis_;
 
@@ -397,5 +366,4 @@ class ScrewJoint final : public Joint<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::ScrewJoint);
+extern template class drake::multibody::ScrewJoint<double>;

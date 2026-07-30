@@ -3,7 +3,6 @@
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -43,9 +42,7 @@ namespace internal {
           [ 0 0 1]              [ 0  0  1]
           [ c s 0]              [-s  c  0]⋅v₂
           [-s c 0]              [-c -s  0]⋅v₂
-          [ 0 0 0]              [ 0  0  0]
-
- @tparam_default_scalar */
+          [ 0 0 0]              [ 0  0  0] */
 template <typename T>
 class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
  public:
@@ -259,25 +256,11 @@ class PlanarMobilizer final : public MobilizerImpl<T, 3, 3> {
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const override;
-
  private:
-  /* Helper method to make a clone templated on ToScalar. */
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::PlanarMobilizer);
+extern template class drake::multibody::internal::PlanarMobilizer<double>;

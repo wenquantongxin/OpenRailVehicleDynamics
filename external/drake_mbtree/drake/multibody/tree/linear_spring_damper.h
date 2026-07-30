@@ -3,7 +3,6 @@
 #include <memory>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
 
@@ -38,8 +37,6 @@ class RigidBody;
 ///   - Damping always dissipates energy.
 ///   - Forces on bodies A and B are equal and opposite according to Newton's
 ///     third law.
-///
-/// @tparam_default_scalar
 template <typename T>
 class LinearSpringDamper final : public ForceElement<T> {
  public:
@@ -107,23 +104,9 @@ class LinearSpringDamper final : public ForceElement<T> {
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const override;
 
-  std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
-
   std::unique_ptr<ForceElement<T>> DoShallowClone() const override;
 
  private:
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<ForceElement<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   // To avoid a division by zero when computing a normalized vector from point P
   // on body A to point Q on body B as length of the spring approaches zero,
   // we use a "soft norm" defined by:
@@ -153,5 +136,4 @@ class LinearSpringDamper final : public ForceElement<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::LinearSpringDamper);
+extern template class drake::multibody::LinearSpringDamper<double>;

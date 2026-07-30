@@ -125,5 +125,4 @@ void BodyNode<T>::CalcArticulatedBodyHingeInertiaMatrixFactorization(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::BodyNode);
+template class drake::multibody::internal::BodyNode<double>;

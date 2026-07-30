@@ -4,10 +4,8 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/autodiff.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/random.h"
 #include "drake/multibody/math/spatial_algebra.h"
 #include "drake/multibody/topology/forest.h"
 #include "drake/multibody/tree/frame.h"
@@ -229,8 +227,6 @@ class BodyNode;
 // A mobilizer is FORBIDDEN from being time- or input-dependent. (The context
 // provides access to the current simulation time and input port values, but
 // the mobilizer must not use that information.)
-//
-// @tparam_default_scalar
 template <typename T>
 class Mobilizer : public MultibodyElement<T> {
  public:
@@ -449,19 +445,6 @@ class Mobilizer : public MultibodyElement<T> {
   // the Mobilizer to be used in e.g. MultibodyPlant::SetDefaultContext().
   virtual void set_default_state(const systems::Context<T>& context,
                                  systems::State<T>* state) const = 0;
-
-  // Sets the `state` to a (potentially) random position and velocity, by
-  // evaluating any random distributions that were declared (via e.g.
-  // MobilizerImpl::set_random_position_distribution() and/or
-  // MobilizerImpl::set_random_velocity_distribution(), or calling
-  // set_default_state() if none have been declared. Note that the intended
-  // caller of this method is `MultibodyTree::SetRandomState()` which treats
-  // the independent samples returned from this sample as an initial guess,
-  // but may change the value in order to "project" it onto a constraint
-  // manifold.
-  virtual void set_random_state(const systems::Context<T>& context,
-                                systems::State<T>* state,
-                                RandomGenerator* generator) const = 0;
 
   // Computes the across-mobilizer transform `X_FM(q)` between the inboard
   // frame F and the outboard frame M as a function of the vector of
@@ -757,18 +740,6 @@ class Mobilizer : public MultibodyElement<T> {
     return get_mutable_velocities_from_array(tau_array);
   }
 
-  // NVI to DoCloneToScalar() templated on the scalar type of the new clone to
-  // be created. This method is mostly intended to be called by
-  // MultibodyTree::CloneToScalar(). Most users should not call this clone
-  // method directly but rather clone the entire parent MultibodyTree if
-  // needed.
-  // @sa MultibodyTree::CloneToScalar()
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> CloneToScalar(
-      const MultibodyTree<ToScalar>& cloned_tree) const {
-    return DoCloneToScalar(cloned_tree);
-  }
-
   // For MultibodyTree internal use only.
   virtual std::unique_ptr<internal::BodyNode<T>> CreateBodyNode(
       const internal::BodyNode<T>* parent_node, const RigidBody<T>* body,
@@ -856,31 +827,6 @@ class Mobilizer : public MultibodyElement<T> {
       const systems::Context<T>& context,
       const Eigen::Ref<const VectorX<T>>& qddot,
       EigenPtr<VectorX<T>> vdot) const;
-
-  // @name Methods to make a clone templated on different scalar types.
-  //
-  // The only const argument to these methods is the new MultibodyTree clone
-  // under construction, which is required to already own the clones of the
-  // inboard and outboard frames of the mobilizer being cloned.
-  // @{
-
-  // Clones this %Mobilizer (templated on T) to a mobilizer templated on
-  // `double`.
-  // @pre Inboard and outboard frames for this mobilizer already have a clone
-  // in `tree_clone`.
-  virtual std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const = 0;
-
-  // Clones this %Mobilizer (templated on T) to a mobilizer templated on
-  // AutoDiffXd.
-  // @pre Inboard and outboard frames for this mobilizer already have a clone
-  // in `tree_clone`.
-  virtual std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const = 0;
-
-  virtual std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const = 0;
-  // @}
 
   // Implementation for MultibodyElement::DoDeclareParameters().
   void DoDeclareParameters(

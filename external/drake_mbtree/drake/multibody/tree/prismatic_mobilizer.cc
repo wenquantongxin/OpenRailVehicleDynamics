@@ -3,7 +3,6 @@
 #include <memory>
 #include <stdexcept>
 
-#include "drake/common/autodiff.h"
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
 
@@ -172,45 +171,6 @@ void PrismaticMobilizer<T>::DoMapQDDotToAcceleration(
 
 template <typename T, int axis>
   requires(0 <= axis && axis <= 2)
-template <typename ToScalar>
-std::unique_ptr<Mobilizer<ToScalar>>
-PrismaticMobilizerAxial<T, axis>::TemplatedDoCloneToScalar(
-    const MultibodyTree<ToScalar>& tree_clone) const {
-  const Frame<ToScalar>& inboard_frame_clone =
-      tree_clone.get_variant(this->inboard_frame());
-  const Frame<ToScalar>& outboard_frame_clone =
-      tree_clone.get_variant(this->outboard_frame());
-  return std::make_unique<PrismaticMobilizerAxial<ToScalar, axis>>(
-      tree_clone.get_mobod(this->mobod().index()), inboard_frame_clone,
-      outboard_frame_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
-std::unique_ptr<Mobilizer<double>>
-PrismaticMobilizerAxial<T, axis>::DoCloneToScalar(
-    const MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
-std::unique_ptr<Mobilizer<AutoDiffXd>>
-PrismaticMobilizerAxial<T, axis>::DoCloneToScalar(
-    const MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
-std::unique_ptr<Mobilizer<symbolic::Expression>>
-PrismaticMobilizerAxial<T, axis>::DoCloneToScalar(
-    const MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T, int axis>
-  requires(0 <= axis && axis <= 2)
 std::unique_ptr<BodyNode<T>> PrismaticMobilizerAxial<T, axis>::CreateBodyNode(
     const BodyNode<T>* parent_node, const RigidBody<T>* body,
     const Mobilizer<T>* mobilizer) const {
@@ -222,16 +182,11 @@ std::unique_ptr<BodyNode<T>> PrismaticMobilizerAxial<T, axis>::CreateBodyNode(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::PrismaticMobilizer);
+template class drake::multibody::internal::PrismaticMobilizer<double>;
 
-#define DRAKE_DEFINE_PRISMATIC_MOBILIZER(axis)                                 \
+#define DRAKE_DEFINE_PRISMATIC_MOBILIZER(axis)                               \
   template class ::drake::multibody::internal::PrismaticMobilizerAxial<double, \
-                                                                       axis>;  \
-  template class ::drake::multibody::internal::PrismaticMobilizerAxial<        \
-      ::drake::AutoDiffXd, axis>;                                              \
-  template class ::drake::multibody::internal::PrismaticMobilizerAxial<        \
-      ::drake::symbolic::Expression, axis>
+                                                                       axis>
 
 DRAKE_DEFINE_PRISMATIC_MOBILIZER(0);
 DRAKE_DEFINE_PRISMATIC_MOBILIZER(1);

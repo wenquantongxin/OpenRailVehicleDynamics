@@ -13,36 +13,6 @@ template <typename T>
 RigidBodyFrame<T>::~RigidBodyFrame() = default;
 
 template <typename T>
-template <typename ToScalar>
-std::unique_ptr<Frame<ToScalar>> RigidBodyFrame<T>::TemplatedDoCloneToScalar(
-    const internal::MultibodyTree<ToScalar>& tree_clone) const {
-  const RigidBody<ToScalar>& body_clone =
-      tree_clone.get_link(this->body().index());
-  // RigidBodyFrame's constructor cannot be called from std::make_unique since
-  // it is private and therefore we use "new".
-  return std::unique_ptr<RigidBodyFrame<ToScalar>>(
-      new RigidBodyFrame<ToScalar>(body_clone));
-}
-
-template <typename T>
-std::unique_ptr<Frame<double>> RigidBodyFrame<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Frame<AutoDiffXd>> RigidBodyFrame<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Frame<symbolic::Expression>> RigidBodyFrame<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
 std::unique_ptr<Frame<T>> RigidBodyFrame<T>::DoShallowClone() const {
   // RigidBodyFrame's constructor cannot be called from std::make_unique since
   // it is private and therefore we use "new".
@@ -219,8 +189,6 @@ Vector3<T> RigidBody<T>::CalcCenterOfMassTranslationalAccelerationInWorld(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::RigidBodyFrame);
+template class drake::multibody::RigidBodyFrame<double>;
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::RigidBody);
+template class drake::multibody::RigidBody<double>;

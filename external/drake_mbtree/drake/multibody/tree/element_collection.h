@@ -33,7 +33,6 @@ pointers is Frame -- when the Frame is a RigidBodyFrame, then it is owned by the
 RigidBody and the RigidBody is owned by the MultibodyTree. Note that other Frame
 types like FixedOffsetFrame *are* directly owned by this collection.
 
-@tparam_default_scalar
 @tparam Element The MultibodyElement type, which must be one of:
   - Frame
   - Joint

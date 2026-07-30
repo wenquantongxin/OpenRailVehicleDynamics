@@ -3,7 +3,6 @@
 #include <limits>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -41,9 +40,7 @@ Results are indexed by MobodIndex unless otherwise specified:
          its inboard frame F.
  - H_FM: Mobilizer's hinge matrix, the Jacobian ∂V_FM/∂v that maps the
          mobilizer's generalized velocities v to cross-mobilizer spatial
-         velocities V_FM = H_FM * v.
-
-@tparam_default_scalar */
+         velocities V_FM = H_FM * v. */
 
 // TODO(sherm1) X_WL mostly duplicates X_WB (they are identical if there are no
 //  composite bodies), and always contains all the X_WB transforms (for the
@@ -211,5 +208,5 @@ class PositionKinematicsCache {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::PositionKinematicsCache);
+extern template class drake::multibody::internal::
+    PositionKinematicsCache<double>;

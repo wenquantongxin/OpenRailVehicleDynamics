@@ -97,5 +97,4 @@ std::unique_ptr<Trajectory<T>> Trajectory<T>::DoMakeDerivative(
 }  // namespace trajectories
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::trajectories::Trajectory);
+template class drake::trajectories::Trajectory<double>;

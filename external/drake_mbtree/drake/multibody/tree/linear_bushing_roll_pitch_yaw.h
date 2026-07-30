@@ -4,7 +4,6 @@
 #include <memory>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/math/roll_pitch_yaw.h"
@@ -549,22 +548,17 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
             force_damping_parameter_index_);
 
     torque_stiffness_parameter.set_value(
-        torque_stiffness_constants_.template cast<T>());
+        torque_stiffness_constants_);
     torque_damping_parameter_.set_value(
-        torque_damping_constants_.template cast<T>());
+        torque_damping_constants_);
     force_stiffness_parameter_.set_value(
-        force_stiffness_constants_.template cast<T>());
+        force_stiffness_constants_);
     force_damping_parameter_.set_value(
-        force_damping_constants_.template cast<T>());
+        force_damping_constants_);
   }
 
   // Friend class for accessing protected/private internals of this class.
   friend class BushingTester;
-
-  // The following template friend is needed to facilitate use of the private
-  // constructor below for use in the method TemplatedDoCloneToScalar().
-  template <typename U>
-  friend class LinearBushingRollPitchYaw;
 
   // Many of these input parameters for this private LinearBushingRollPitchYaw
   // are described in the public constructor's documentation.
@@ -600,15 +594,6 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
       const internal::PositionKinematicsCache<T>& pc,
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const override;
-
-  std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
 
   std::unique_ptr<ForceElement<T>> DoShallowClone() const override;
 
@@ -794,11 +779,6 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
     return f_k + f_d;  // 𝐟 = 𝐟ᴋ + 𝐟ᴅ
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<ForceElement<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   const FrameIndex frameA_index_;
   const FrameIndex frameC_index_;
 
@@ -816,5 +796,4 @@ class LinearBushingRollPitchYaw final : public ForceElement<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::LinearBushingRollPitchYaw);
+extern template class drake::multibody::LinearBushingRollPitchYaw<double>;

@@ -1,5 +1,6 @@
 #include "drake/multibody/tree/spatial_inertia.h"
 
+#include <numbers>
 #include <string>
 
 #include "drake/common/fmt_eigen.h"
@@ -11,13 +12,13 @@ namespace multibody {
 namespace {
 
 template <typename T>
-const boolean<T> is_positive_finite(const T& value) {
+const bool is_positive_finite(const T& value) {
   using std::isfinite;
   return isfinite(value) && value > 0;
 }
 
 template <typename T>
-const boolean<T> is_nonnegative_finite(const T& value) {
+const bool is_nonnegative_finite(const T& value) {
   using std::isfinite;
   return isfinite(value) && value >= 0;
 }
@@ -130,7 +131,7 @@ SpatialInertia<T> SpatialInertia<T>::SolidCapsuleWithDensity(
   math::internal::ThrowIfNotUnitVector(unit_vector, __func__);
 
   // Volume = π r² L + 4/3 π r³
-  const T pi_r_squared = M_PI * radius * radius;
+  const T pi_r_squared = std::numbers::pi * radius * radius;
   const T volume = pi_r_squared * length + (4.0 / 3.0) * pi_r_squared * radius;
   const T mass = density * volume;
   return SolidCapsuleWithMass(mass, radius, length, unit_vector);
@@ -158,7 +159,7 @@ SpatialInertia<T> SpatialInertia<T>::SolidCylinderWithDensity(
   ThrowUnlessValueIsPositiveFinite(radius, "radius", __func__);
   ThrowUnlessValueIsPositiveFinite(length, "length", __func__);
   math::internal::ThrowIfNotUnitVector(unit_vector, __func__);
-  const T volume = M_PI * radius * radius * length;  // π r² l
+  const T volume = std::numbers::pi * radius * radius * length;  // π r² l
   const T mass = density * volume;
   return SolidCylinderWithMass(mass, radius, length, unit_vector);
 }
@@ -185,7 +186,7 @@ SpatialInertia<T> SpatialInertia<T>::SolidCylinderWithDensityAboutEnd(
   ThrowUnlessValueIsPositiveFinite(radius, "radius", __func__);
   ThrowUnlessValueIsPositiveFinite(length, "length", __func__);
   math::internal::ThrowIfNotUnitVector(unit_vector, __func__);
-  const T volume = M_PI * radius * radius * length;  // π r² l
+  const T volume = std::numbers::pi * radius * radius * length;  // π r² l
   const T mass = density * volume;
   return SolidCylinderWithMassAboutEnd(mass, radius, length, unit_vector);
 }
@@ -237,7 +238,7 @@ SpatialInertia<T> SpatialInertia<T>::SolidEllipsoidWithDensity(const T& density,
   ThrowUnlessValueIsPositiveFinite(a, "semi-axis a", __func__);
   ThrowUnlessValueIsPositiveFinite(b, "semi-axis b", __func__);
   ThrowUnlessValueIsPositiveFinite(c, "semi-axis c", __func__);
-  const T volume = (4.0 / 3.0) * M_PI * a * b * c;  // 4/3 π a b c
+  const T volume = (4.0 / 3.0) * std::numbers::pi * a * b * c;  // 4/3 π a b c
   const T mass = density * volume;
   return SolidEllipsoidWithMass(mass, a, b, c);
 }
@@ -261,7 +262,8 @@ SpatialInertia<T> SpatialInertia<T>::SolidSphereWithDensity(const T& density,
                                                             const T& radius) {
   ThrowUnlessValueIsPositiveFinite(density, "density", __func__);
   ThrowUnlessValueIsPositiveFinite(radius, "radius", __func__);
-  const T volume = (4.0 / 3.0) * M_PI * radius * radius * radius;  // 4/3 π r³
+  // 4/3 π r³
+  const T volume = (4.0 / 3.0) * std::numbers::pi * radius * radius * radius;
   const T mass = density * volume;
   return SolidSphereWithMass(mass, radius);
 }
@@ -281,7 +283,7 @@ SpatialInertia<T> SpatialInertia<T>::HollowSphereWithDensity(
     const T& area_density, const T& radius) {
   ThrowUnlessValueIsPositiveFinite(area_density, "area_density", __func__);
   ThrowUnlessValueIsPositiveFinite(radius, "radius", __func__);
-  const T area = 4.0 * M_PI * radius * radius;  // 4 π r²
+  const T area = 4.0 * std::numbers::pi * radius * radius;  // 4 π r²
   const T mass = area_density * area;
   return HollowSphereWithMass(mass, radius);
 }
@@ -372,8 +374,8 @@ std::optional<std::string> SpatialInertia<T>::CreateInvalidityReport() const {
 }
 
 template <typename T>
-boolean<T> SpatialInertia<T>::IsPhysicallyValid() const {
-  return boolean<T>(!CreateInvalidityReport().has_value());
+bool SpatialInertia<T>::IsPhysicallyValid() const {
+  return bool(!CreateInvalidityReport().has_value());
 }
 
 template <typename T>
@@ -394,13 +396,10 @@ SpatialInertia<T>& SpatialInertia<T>::operator+=(
 
   // For two massless bodies we just want the arithmetic mean of the COMs
   // and unit inertias. Lie about the mass properties to make this happen below.
-  // (Skip for symbolic T.)
-  if constexpr (scalar_predicate<T>::is_bool) {
-    if (total_mass == 0) {
-      DRAKE_ASSERT(this_mass == 0 && other_mass == 0);  // No negative mass!
-      this_mass = other_mass = 1;
-      total_mass = 2;
-    }
+  if (total_mass == 0) {
+    DRAKE_ASSERT(this_mass == 0 && other_mass == 0);  // No negative mass!
+    this_mass = other_mass = 1;
+    total_mass = 2;
   }
 
   const T one_over_total_mass = 1 / total_mass;             // ~6 flops
@@ -468,9 +467,9 @@ SpatialInertia<T>::CalcPrincipalHalfLengthsAndPoseForEquivalentShape(
   // Since R_EA is of type double and X_EA must also be of type double,
   // create a position vector from P to Scm that is of type double.
   const Vector3<T>& p_PScm_E = get_com();
-  const double xcm = ExtractDoubleOrThrow(p_PScm_E(0));
-  const double ycm = ExtractDoubleOrThrow(p_PScm_E(1));
-  const double zcm = ExtractDoubleOrThrow(p_PScm_E(2));
+  const double xcm = p_PScm_E(0);
+  const double ycm = p_PScm_E(1);
+  const double zcm = p_PScm_E(2);
   const Vector3<double> p_PAo_E(xcm, ycm, zcm);  // Note: Point Ao is at Scm.
   const drake::math::RigidTransform<double> X_EA(R_EA, p_PAo_E);
   return std::pair(abc, X_EA);
@@ -503,9 +502,8 @@ SpatialInertia<T>::CalcPrincipalHalfLengthsAndPoseForEquivalentShape(
 //    box with particles at its vertices. Hence the minimum space diagonal is
 //    space_diagonal² = 2 * Trace(unit_inertia) or
 //    space_diagonal = √(2 * Trace(unit_inertia))
-// This space_diagonal formula is useful when template type <T> is symbolic or
-// Autodiff. Also, this formula is more efficient than calculating the length of
-// the space-diagonal via the minimum bounding box (which uses an inherently
+// This formula is more efficient than calculating the length of the
+// space-diagonal via the minimum bounding box (which uses an inherently
 // numerical eigenvalue process).
 template <typename T>
 T SpatialInertia<T>::CalcMinimumPhysicalLength() const {
@@ -529,26 +527,19 @@ void SpatialInertia<T>::WriteExtraCentralInertiaProperties(
 
   // If `this` about-point P is not Bcm, write B's rotational inertia about Bcm.
   const Vector3<T>& p_PBcm = get_com();
-  const boolean<T> is_position_zero = (p_PBcm == Vector3<T>::Zero());
+  const bool is_position_zero = (p_PBcm == Vector3<T>::Zero());
   if (!is_position_zero) {
     *message +=
         fmt::format(" Inertia about center of mass, I_BBcm =\n{}", I_BBcm);
   }
 
   // Write B's principal moments of inertia about Bcm.
-  if constexpr (scalar_predicate<T>::is_bool) {
-    const Vector3<double> eig = I_BBcm.CalcPrincipalMomentsOfInertia();
-    const double Imin = eig(0), Imed = eig(1), Imax = eig(2);
-    *message += fmt::format(
-        " Principal moments of inertia about Bcm (center of mass) ="
-        "\n[{}  {}  {}]\n",
-        Imin, Imed, Imax);
-  }
-}
-
-template <typename T>
-std::ostream& operator<<(std::ostream& out, const SpatialInertia<T>& M) {
-  return out << fmt::to_string(M);
+  const Vector3<double> eig = I_BBcm.CalcPrincipalMomentsOfInertia();
+  const double Imin = eig(0), Imed = eig(1), Imax = eig(2);
+  *message += fmt::format(
+      " Principal moments of inertia about Bcm (center of mass) ="
+      "\n[{}  {}  {}]\n",
+      Imin, Imed, Imax);
 }
 
 template <typename T>
@@ -564,14 +555,8 @@ std::string to_string(const SpatialInertia<T>& M) {
   const T& y = p_PBcm.y();
   const T& z = p_PBcm.z();
   std::string result;
-  if constexpr (scalar_predicate<T>::is_bool) {
-    result.append(fmt::format("\n mass = {}\n Center of mass = [{}  {}  {}]\n",
-                              mass, x, y, z));
-  } else {
-    // Print symbolic results.
-    result.append(fmt::format(" mass = {}\n Center of mass = {}\n", mass,
-                              fmt_eigen(p_PBcm)));
-  }
+  result.append(fmt::format("\n mass = {}\n Center of mass = [{}  {}  {}]\n",
+                            mass, x, y, z));
 
   // Get G_BP (unit inertia about point P) and use it to calculate I_BP
   // (rotational inertia about P) without validity checks such as
@@ -586,20 +571,9 @@ std::string to_string(const SpatialInertia<T>& M) {
 }
 
 // TODO(2026-07-01): delete `operator<<` instantiation and the `#pragma`s.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-// clang-format off
-DRAKE_DEFINE_FUNCTION_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    (static_cast<std::ostream& (*)(std::ostream&, const SpatialInertia<T>&)>(
-        &operator<< ),  // clang-format would remove space lint requires
-    static_cast<std::string(*)(const SpatialInertia<T>&)>(
-            &to_string)
-));
-// clang-format on
-#pragma GCC diagnostic pop
+template std::string drake::multibody::to_string(const SpatialInertia<double>&);
 
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::SpatialInertia);
+template class drake::multibody::SpatialInertia<double>;

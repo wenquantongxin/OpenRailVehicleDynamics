@@ -3,7 +3,6 @@
 #include <memory>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/force_element.h"
 #include "drake/multibody/tree/revolute_joint.h"
@@ -22,8 +21,6 @@ namespace multibody {
 /// The k (stiffness) and θ₀ (nominal angle) specified in the constructor
 /// are kept as default values. These parameters are stored within the context
 /// and can be accessed and set by context dependent getters/setters.
-///
-/// @tparam_default_scalar
 template <typename T>
 class RevoluteSpring final : public ForceElement<T> {
  public:
@@ -115,15 +112,6 @@ class RevoluteSpring final : public ForceElement<T> {
       const internal::VelocityKinematicsCache<T>& vc,
       MultibodyForces<T>* forces) const override;
 
-  std::unique_ptr<ForceElement<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<ForceElement<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
-
   std::unique_ptr<ForceElement<T>> DoShallowClone() const override;
 
  private:
@@ -143,18 +131,10 @@ class RevoluteSpring final : public ForceElement<T> {
     spring_parameter.set_value(Vector2<T>(stiffness_, nominal_angle_));
   }
 
-  // Allow different specializations to access each other's private data for
-  // scalar conversion.
-  template <typename U>
-  friend class RevoluteSpring;
-
+  // Private constructor used by DoShallowClone(), which cannot use the public
+  // constructor because it has no joint reference to hand it.
   RevoluteSpring(ModelInstanceIndex model_instance, JointIndex joint_index,
                  double nominal_angle, double stiffness);
-
-  // Helper method to make a clone templated on ToScalar().
-  template <typename ToScalar>
-  std::unique_ptr<ForceElement<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 
   const JointIndex joint_index_;
   double nominal_angle_{};
@@ -165,5 +145,4 @@ class RevoluteSpring final : public ForceElement<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::RevoluteSpring);
+extern template class drake::multibody::RevoluteSpring<double>;

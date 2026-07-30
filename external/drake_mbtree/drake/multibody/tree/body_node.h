@@ -64,8 +64,6 @@ namespace internal {
 // mobilizer providing the pose `X_FM(q_B)` as a function of the generalized
 // coordinates `q_B` (where `_B` means these are the q's for just the unique
 // inboard mobilizer of body B.)
-//
-// @tparam_default_scalar
 template <typename T>
 class BodyNode : public MultibodyElement<T> {
  public:
@@ -730,5 +728,4 @@ SPECIALIZE_MASS_MATRIX_VIA_WORLD_DISPATCHER(6);
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::BodyNode);
+extern template class drake::multibody::internal::BodyNode<double>;

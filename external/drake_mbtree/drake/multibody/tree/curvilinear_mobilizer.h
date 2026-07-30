@@ -4,12 +4,10 @@
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/trajectories/piecewise_constant_curvature_trajectory.h"
-#include "drake/math/wrap_to.h"
 #include "drake/multibody/math/spatial_algebra.h"
 #include "drake/multibody/tree/frame.h"
 #include "drake/multibody/tree/mobilizer_impl.h"
@@ -55,9 +53,7 @@ namespace internal {
     H_FM_M(q) = [0 0 ρ(q) 1 0 0]ᵀ     Hdot_FM_M = [ 0₆ ]ᵀ
 
  The angular component of Hdot_FM is zero since ρ(q) is constant within each
- piecewise segment in PiecewiseConstantCurvatureTrajectory.
-
- @tparam_default_scalar */
+ piecewise segment in PiecewiseConstantCurvatureTrajectory. */
 template <typename T>
 class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
  public:
@@ -231,20 +227,7 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
                            const Eigen::Ref<const VectorX<T>>& qdot,
                            EigenPtr<VectorX<T>> v) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const override;
-
  private:
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
-
   trajectories::PiecewiseConstantCurvatureTrajectory<T> curvilinear_path_;
 };
 
@@ -252,5 +235,4 @@ class CurvilinearMobilizer final : public MobilizerImpl<T, 1, 1> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::CurvilinearMobilizer);
+extern template class drake::multibody::internal::CurvilinearMobilizer<double>;

@@ -10,7 +10,6 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/math/wrap_to.h"
 #include "drake/multibody/math/spatial_algebra.h"
-#include "drake/systems/framework/scalar_conversion_traits.h"
 
 namespace drake {
 namespace trajectories {
@@ -68,9 +67,7 @@ namespace trajectories {
  for externally provided values of velocity ṡ and acceleration s̈ along the
  curve.
 
- @see multibody::CurvilinearJoint
-
- @tparam_default_scalar */
+ @see multibody::CurvilinearJoint */
 template <typename T>
 class PiecewiseConstantCurvatureTrajectory final
     : public PiecewiseTrajectory<T> {
@@ -79,10 +76,6 @@ class PiecewiseConstantCurvatureTrajectory final
 
   /** An empty piecewise constant curvature trajectory. */
   PiecewiseConstantCurvatureTrajectory() = default;
-
-  template <typename U>
-  using ScalarValueConverter =
-      typename systems::scalar_conversion::template ValueConverter<T, U>;
 
   /** Constructs a piecewise constant curvature trajectory.
 
@@ -126,25 +119,6 @@ class PiecewiseConstantCurvatureTrajectory final
                                        const Vector3<T>& plane_normal,
                                        const Vector3<T>& initial_position,
                                        bool is_periodic = false);
-
-  /** Scalar conversion constructor. See @ref system_scalar_conversion. */
-  template <typename U>
-  explicit PiecewiseConstantCurvatureTrajectory(
-      const PiecewiseConstantCurvatureTrajectory<U> other)
-      : PiecewiseConstantCurvatureTrajectory(
-            ScalarConvertStdVector<U>(other.get_segment_times()),
-            ScalarConvertStdVector<U>(other.segment_turning_rates_),
-            other.get_initial_pose()
-                .rotation()
-                .col(kCurveTangentIndex)
-                .unaryExpr(ScalarValueConverter<U>{}),
-            other.get_initial_pose()
-                .rotation()
-                .col(kPlaneNormalIndex)
-                .unaryExpr(ScalarValueConverter<U>{}),
-            other.get_initial_pose().translation().unaryExpr(
-                ScalarValueConverter<U>{}),
-            other.is_periodic()) {}
 
   /** @returns the total arclength of the curve in meters. */
   T length() const { return this->end_time(); }
@@ -267,12 +241,9 @@ class PiecewiseConstantCurvatureTrajectory final
    RigidTransform::IsNearlyEqualTo() using `tolerance`.
 
    @param tolerance The tolerance for the pose equality check. */
-  boolean<T> EndpointsAreNearlyEqual(double tolerance) const;
+  bool EndpointsAreNearlyEqual(double tolerance) const;
 
  private:
-  template <typename U>
-  friend class PiecewiseConstantCurvatureTrajectory;
-
   // Trajectory overrides.
   std::unique_ptr<Trajectory<T>> DoClone() const final;
   MatrixX<T> do_value(const T& s) const final {
@@ -280,20 +251,6 @@ class PiecewiseConstantCurvatureTrajectory final
   }
   Eigen::Index do_rows() const final { return 3; }
   Eigen::Index do_cols() const final { return 1; }
-
-  /* Helper function to scalar convert a std::vector<U> into a std::vector<T>.
-   @param segment_data std::vector storing types U.
-   @returns the input vector scalar converted T. */
-  template <typename U>
-  static std::vector<T> ScalarConvertStdVector(
-      const std::vector<U>& segment_data) {
-    std::vector<T> converted_segment_data;
-    ScalarValueConverter<U> converter;
-    for (const U& segment : segment_data) {
-      converted_segment_data.push_back(converter(segment));
-    }
-    return converted_segment_data;
-  }
 
   /* If the trajectory is periodic, this helper wraps the distance coordinate s
    to the path's length. If not periodic, then it simply returns s. */
@@ -372,5 +329,5 @@ class PiecewiseConstantCurvatureTrajectory final
 }  // namespace trajectories
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::trajectories::PiecewiseConstantCurvatureTrajectory);
+extern template class drake::trajectories::
+    PiecewiseConstantCurvatureTrajectory<double>;

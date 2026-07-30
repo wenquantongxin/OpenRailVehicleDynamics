@@ -1016,11 +1016,8 @@ void BodyNodeImpl<T, ConcreteMobilizer>::CalcSpatialAccelerationBias(
   template class BodyNodeImpl<T, UniversalMobilizer<T>>;          \
   template class BodyNodeImpl<T, WeldMobilizer<T>>
 
-// Explicitly instantiates on the supported scalar types.
-// These should be kept in sync with the list in default_scalars.h.
+// double is the only scalar this tree instantiates.
 EXPLICITLY_INSTANTIATE_IMPLS(double);
-EXPLICITLY_INSTANTIATE_IMPLS(AutoDiffXd);
-EXPLICITLY_INSTANTIATE_IMPLS(symbolic::Expression);
 
 }  // namespace internal
 }  // namespace multibody

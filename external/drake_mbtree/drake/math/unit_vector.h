@@ -19,8 +19,6 @@ constexpr double kToleranceUnitVectorNorm = 1.0E-14;
 // @param[in] tolerance_unit_vector_norm allowable tolerance for ‖unit_vector‖
 // from 1.0. The default value is kToleranceUnitVectorNorm.
 // @throws std::exception if ‖unit_vector‖ is not within tolerance of 1.0.
-// @note: When type T is symbolic::Expression, this function is a no-op that
-// does not throw an exception.
 template <typename T>
 void ThrowIfNotUnitVector(
     const Vector3<T>& unit_vector, std::string_view function_name,
@@ -33,7 +31,6 @@ void ThrowIfNotUnitVector(
 // exception message (if an exception is thrown).
 // @throws std::exception if v contains nonfinite numbers (NaN or infinity)
 // or ‖v‖ < 1E-10.
-// @note: No exception is thrown when type T is symbolic::Expression.
 // TODO(Mitiguy) Consider evolving towards a consistent policy of ‖v‖ ≈ 1.0
 //  instead of ‖v‖ ≥ 1E-10, somewhat similar to ThrowIfNotUnitVector().
 template <typename T>

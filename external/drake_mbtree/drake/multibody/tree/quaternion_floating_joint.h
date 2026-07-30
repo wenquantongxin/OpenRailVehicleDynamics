@@ -5,10 +5,7 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/random.h"
-#include "drake/math/random_rotation.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -30,8 +27,6 @@ namespace multibody {
 /// vector. As generalized velocities, this Joint introduces the angular
 /// velocity `w_FM` of frame M in F and the linear velocity `v_FM` of frame M's
 /// origin in frame F, ordered `(w_FM, v_FM)`.
-///
-/// @tparam_default_scalar
 template <typename T>
 class QuaternionFloatingJoint final : public Joint<T> {
  public:
@@ -272,44 +267,6 @@ class QuaternionFloatingJoint final : public Joint<T> {
 
   /// @}
 
-  /// @name Random distribution setters
-  /// @{
-
-  /// For this joint, sets the random distribution that the translation of this
-  /// joint will be randomly sampled from. If a quaternion distribution has
-  /// already been set with stochastic variables, it will remain so. Otherwise
-  /// the quaternion will be set to this joint's zero orientation.
-  /// See get_translation() for details on the translation representation.
-  void set_random_translation_distribution(
-      const Vector3<symbolic::Expression>& p_FM) {
-    get_mutable_mobilizer().set_random_translation_distribution(p_FM);
-  }
-
-  /// (Advanced) Sets the random distribution that the orientation of this joint
-  /// will be randomly sampled from. If a translation (position) distribution
-  /// has already been set with stochastic variables, it will remain so.
-  /// Otherwise translation will be set to this joint's zero configuration.
-  /// See get_quaternion() for details on the orientation representation.
-  /// @note Use caution when setting a quaternion distribution. A naive uniform
-  /// sampling of each component will not lead to a uniform sampling of the unit
-  /// sphere. See `set_random_quaternion_distribution_to_uniform()` for the most
-  /// common case of uniformly sampling rotations.
-  void set_random_quaternion_distribution(
-      const Eigen::Quaternion<symbolic::Expression>& q_FM) {
-    get_mutable_mobilizer().set_random_quaternion_distribution(q_FM);
-  }
-
-  /// Sets the random distribution such that the orientation of this joint will
-  /// be randomly sampled using uniformly sampled rotations.
-  void set_random_quaternion_distribution_to_uniform() {
-    RandomGenerator generator;
-    auto q_FM =
-        math::UniformlyRandomQuaternion<symbolic::Expression>(&generator);
-    get_mutable_mobilizer().set_random_quaternion_distribution(q_FM);
-  }
-
-  /// @}
-
   /// @name Default value getters
   /// @{
 
@@ -421,22 +378,7 @@ class QuaternionFloatingJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make QuaternionFloatingJoint templated on every other scalar type a friend
-  // of QuaternionFloatingJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can
-  // access private members of QuaternionFloatingJoint<T>.
-  template <typename>
-  friend class QuaternionFloatingJoint;
 
   // Returns the mobilizer implementing this joint.
   // The internal implementation of this joint could change in a future version.
@@ -451,10 +393,6 @@ class QuaternionFloatingJoint final : public Joint<T> {
         internal::QuaternionFloatingMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 };
 
 template <typename T>
@@ -463,5 +401,4 @@ const char QuaternionFloatingJoint<T>::kTypeName[] = "quaternion_floating";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::QuaternionFloatingJoint);
+extern template class drake::multibody::QuaternionFloatingJoint<double>;

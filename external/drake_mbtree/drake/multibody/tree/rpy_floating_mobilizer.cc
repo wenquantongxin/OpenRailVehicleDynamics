@@ -145,32 +145,6 @@ const RpyFloatingMobilizer<T>& RpyFloatingMobilizer<T>::SetFromRigidTransform(
 }
 
 template <typename T>
-void RpyFloatingMobilizer<T>::set_random_angles_distribution(
-    const Vector3<symbolic::Expression>& angles) {
-  Vector<symbolic::Expression, 6> q;
-  if (this->get_random_state_distribution()) {
-    q = this->get_random_state_distribution()->template head<6>();
-  } else {
-    q = this->get_zero_position().template cast<symbolic::Expression>();
-  }
-  q.template head<3>() = angles;
-  MobilizerBase::set_random_position_distribution(q);
-}
-
-template <typename T>
-void RpyFloatingMobilizer<T>::set_random_translation_distribution(
-    const Vector3<symbolic::Expression>& p_FM) {
-  Vector<symbolic::Expression, 6> q;
-  if (this->get_random_state_distribution()) {
-    q = this->get_random_state_distribution()->template head<6>();
-  } else {
-    q = this->get_zero_position().template cast<symbolic::Expression>();
-  }
-  q.template tail<3>() = p_FM;
-  MobilizerBase::set_random_position_distribution(q);
-}
-
-template <typename T>
 math::RigidTransform<T> RpyFloatingMobilizer<T>::CalcAcrossMobilizerTransform(
     const systems::Context<T>& context) const {
   const auto& q = this->get_positions(context);
@@ -457,42 +431,8 @@ void RpyFloatingMobilizer<T>::DoMapQDotToVelocity(
   v->template tail<3>() = qdot.template tail<3>();
 }
 
-template <typename T>
-template <typename ToScalar>
-std::unique_ptr<Mobilizer<ToScalar>>
-RpyFloatingMobilizer<T>::TemplatedDoCloneToScalar(
-    const MultibodyTree<ToScalar>& tree_clone) const {
-  const Frame<ToScalar>& inboard_frame_clone =
-      tree_clone.get_variant(this->inboard_frame());
-  const Frame<ToScalar>& outboard_frame_clone =
-      tree_clone.get_variant(this->outboard_frame());
-  return std::make_unique<RpyFloatingMobilizer<ToScalar>>(
-      tree_clone.get_mobod(this->mobod().index()), inboard_frame_clone,
-      outboard_frame_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<double>> RpyFloatingMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<AutoDiffXd>> RpyFloatingMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<symbolic::Expression>>
-RpyFloatingMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::RpyFloatingMobilizer);
+template class drake::multibody::internal::RpyFloatingMobilizer<double>;

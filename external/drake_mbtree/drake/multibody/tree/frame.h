@@ -4,7 +4,6 @@
 #include <optional>
 #include <string>
 
-#include "drake/common/autodiff.h"
 #include "drake/common/nice_type_name.h"
 #include "drake/multibody/tree/frame_body_pose_cache.h"
 #include "drake/multibody/tree/multibody_element.h"
@@ -56,8 +55,6 @@ using Link = RigidBody<T>;
 /// consist of multiple links welded together. Those composites form a single
 /// _rigid body_ in the physics sense. Frames only know about their Links, not
 /// how they may have been combined into a composite body.
-///
-/// @tparam_default_scalar
 template <typename T>
 class Frame : public MultibodyElement<T> {
  public:
@@ -507,18 +504,6 @@ class Frame : public MultibodyElement<T> {
     return A_MF_E - A_MB_E;
   }
 
-  /// (Advanced) NVI to DoCloneToScalar() templated on the scalar type of the
-  /// new clone to be created. This method is mostly intended to be called by
-  /// MultibodyTree::CloneToScalar(). Most users should not call this clone
-  /// method directly but rather clone the entire parent MultibodyTree if
-  /// needed.
-  /// @sa MultibodyTree::CloneToScalar()
-  template <typename ToScalar>
-  std::unique_ptr<Frame<ToScalar>> CloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const {
-    return DoCloneToScalar(tree_clone);
-  }
-
   /// (Internal use only) Returns a shallow clone (i.e., dependent elements such
   /// as bodies are aliased, not copied) that is not associated with any MbT (so
   /// the assigned index, if any, is discarded).
@@ -600,33 +585,8 @@ class Frame : public MultibodyElement<T> {
   /// to set their sub-class specific parameters.
   virtual void DoSetDefaultFrameParameters(systems::Parameters<T>*) const {}
 
-  /// @name Methods to make a clone, optionally templated on different scalar
-  /// types.
-  ///
-  /// The first three are meant to be called by MultibodyTree::CloneToScalar()
-  /// when making a clone of the entire tree or a new instance templated on a
-  /// different scalar type. The only const argument to these methods is the
-  /// new MultibodyTree clone under construction. Specific %Frame subclasses
-  /// might specify a number of prerequisites on the cloned tree and therefore
-  /// require it to be at a given state of cloning. See
-  /// MultibodyTree::CloneToScalar() for a list of prerequisites that are
-  /// guaranteed to be satisfied during the cloning process.
-  /// @{
-
-  /// Clones this %Frame (templated on T) to a frame templated on `double`.
-  virtual std::unique_ptr<Frame<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const = 0;
-
-  /// Clones this %Frame (templated on T) to a frame templated on AutoDiffXd.
-  virtual std::unique_ptr<Frame<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const = 0;
-
-  virtual std::unique_ptr<Frame<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const = 0;
-
   /// NVI for ShallowClone().
   virtual std::unique_ptr<Frame<T>> DoShallowClone() const;
-  /// @}
 
   // NVI for CalcPoseInBodyFrame.
   virtual math::RigidTransform<T> DoCalcPoseInBodyFrame(

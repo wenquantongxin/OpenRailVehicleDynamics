@@ -48,37 +48,6 @@ math::RigidTransform<T> FixedOffsetFrame<T>::GetPoseInParentFrame(
 }
 
 template <typename T>
-template <typename ToScalar>
-std::unique_ptr<Frame<ToScalar>> FixedOffsetFrame<T>::TemplatedDoCloneToScalar(
-    const internal::MultibodyTree<ToScalar>& tree_clone) const {
-  const Frame<ToScalar>& parent_frame_clone =
-      tree_clone.get_variant(parent_frame_);
-  auto new_frame = std::make_unique<FixedOffsetFrame<ToScalar>>(
-      this->name(), parent_frame_clone, X_PF_, this->model_instance());
-  new_frame->set_is_ephemeral(this->is_ephemeral());
-  return new_frame;
-}
-
-template <typename T>
-std::unique_ptr<Frame<double>> FixedOffsetFrame<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Frame<AutoDiffXd>> FixedOffsetFrame<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Frame<symbolic::Expression>>
-FixedOffsetFrame<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
 std::unique_ptr<Frame<T>> FixedOffsetFrame<T>::DoShallowClone() const {
   auto new_frame = std::make_unique<FixedOffsetFrame<T>>(
       this->name(), parent_frame_, X_PF_, this->model_instance());
@@ -114,5 +83,4 @@ math::RotationMatrix<T> FixedOffsetFrame<T>::DoCalcRotationMatrixInBodyFrame(
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::FixedOffsetFrame);
+template class drake::multibody::FixedOffsetFrame<double>;

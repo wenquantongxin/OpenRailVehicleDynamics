@@ -87,11 +87,6 @@ string NiceTypeName::Canonicalize(const string& demangled) {
       SPair(std::regex("drake::(Vector|Matrix)(X|\\d+)"
                        "<((d)ouble|(f)loat|(i)nt)>"),
             "Eigen::$1$2$4$5$6"),
-      // ... AutoDiff.
-      SPair(std::regex("Eigen::AutoDiffScalar<Eigen::VectorXd>"),
-            "drake::AutoDiffXd"),
-      SPair(std::regex("drake::ad::AutoDiff"), "drake::AutoDiffXd"),
-
       // Recognize Identifier ...
       // Change e.g., "drake::Identifier<drake::package::FooTag>" to
       // "drake::package::FooId".

@@ -2,7 +2,6 @@
 
 #include <limits>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/nice_type_name.h"
@@ -88,8 +87,6 @@ namespace multibody {
 /// - [Jain 2010]  Jain, A., 2010.
 ///     Robot and multibody dynamics: analysis and algorithms.
 ///     Springer Science & Business Media.
-///
-/// @tparam_default_scalar
 template <typename T>
 class ArticulatedBodyInertia {
  public:
@@ -131,34 +128,12 @@ class ArticulatedBodyInertia {
     DRAKE_ASSERT_VOID(CheckInvariants());
   }
 
-  /// Returns a new %ArticulatedBodyInertia object templated on `Scalar` with
-  /// casted values of `this` articulated body inertia.
-  ///
-  /// @tparam Scalar The scalar type on which the new articulated body inertia
-  /// will be templated.
-  ///
-  /// @note `ArticulatedBodyInertia<From>::cast<To>()` creates a new
-  /// `ArticulatedBodyInertia<To>` from an `ArticulatedBodyInertia<From>` but
-  /// only if type `To` is constructible from type `From`. As an example of
-  /// this, `ArticulatedBodyInertia<double>::cast<AutoDiffXd>()` is valid since
-  /// `AutoDiffXd a(1.0)` is valid. However,
-  /// `ArticulatedBodyInertia<AutoDiffXd>::cast<double>()` is not.
-  template <typename Scalar>
-  ArticulatedBodyInertia<Scalar> cast() const {
-    ArticulatedBodyInertia<Scalar> P = ArticulatedBodyInertia<Scalar>();
-    P.matrix_.template triangularView<Eigen::Lower>() =
-        matrix_.template cast<Scalar>();
-    return P;
-  }
-
   /// Performs a number of checks to verify that this is a physically valid
   /// articulated body inertia.
   ///
   /// The checks performed are:
   ///   - The matrix is positive semi-definite.
-  template <typename T1 = T>
-  typename std::enable_if_t<scalar_predicate<T1>::is_bool, bool>
-  IsPhysicallyValid() const {
+  bool IsPhysicallyValid() const {
     // We estimate a (dimensional) tolerance based on the norm of the
     // eigenvalues of the articulated body inertia so that it scales with its
     // magnitude. The dimensionless constant kEta allows to tighten or loosen
@@ -180,17 +155,6 @@ class ArticulatedBodyInertia {
         -eigvals.norm() * std::numeric_limits<double>::epsilon() * kEta;
 
     return (eigvals.array() > tolerance).all();
-  }
-
-  /// IsPhysicallyValid() for non-numeric scalar types is not supported.
-  template <typename T1 = T>
-  typename std::enable_if_t<!scalar_predicate<T1>::is_bool, bool>
-  IsPhysicallyValid() const {
-    throw std::logic_error(
-        "IsPhysicallyValid() is only supported for numeric types. It is not "
-        "supported for type '" +
-        NiceTypeName::Get<T>() + "'.");
-    return false;  // Return something so that the compiler doesn't complain.
   }
 
   /// Copy to a full 6x6 matrix representation.
@@ -359,12 +323,6 @@ class ArticulatedBodyInertia {
   }
 
  private:
-  // Make ArticulatedBodyInertia templated on every other scalar type a friend
-  // of ArticulatedBodyInertia<T> so that cast<Scalar>() can access private
-  // members of ArticulatedBodyInertia<T>.
-  template <typename>
-  friend class ArticulatedBodyInertia;
-
   // Helper method for NaN initialization.
   static constexpr T nan() {
     return std::numeric_limits<
@@ -380,16 +338,11 @@ class ArticulatedBodyInertia {
   // Checks that the ArticulatedBodyInertia is physically valid and throws an
   // exception if not. This is mostly used in Debug builds to throw an
   // appropriate exception.
-  // Since this method is used within assertions or demands, we do not try to
-  // attempt a smart way throw based on a given symbolic::Formula but instead we
-  // make these methods a no-op for non-numeric types.
   void CheckInvariants() const {
-    if constexpr (scalar_predicate<T>::is_bool) {
-      if (!IsPhysicallyValid()) {
-        throw std::runtime_error(
-            "The resulting articulated body inertia is not physically valid. "
-            "See ArticulatedBodyInertia::IsPhysicallyValid()");
-      }
+    if (!IsPhysicallyValid()) {
+      throw std::runtime_error(
+          "The resulting articulated body inertia is not physically valid. "
+          "See ArticulatedBodyInertia::IsPhysicallyValid()");
     }
   }
 };
@@ -397,5 +350,4 @@ class ArticulatedBodyInertia {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::ArticulatedBodyInertia);
+extern template class drake::multibody::ArticulatedBodyInertia<double>;

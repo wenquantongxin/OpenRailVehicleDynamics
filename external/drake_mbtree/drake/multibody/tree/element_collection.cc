@@ -155,30 +155,15 @@ void ElementCollection<T, Element, Index>::ThrowInvalidIndexException(
       fmt::format("The {}Index({}) has been removed", nice_type, index));
 }
 
-using symbolic::Expression;
-
 template class ElementCollection<double, Frame, FrameIndex>;
-template class ElementCollection<AutoDiffXd, Frame, FrameIndex>;
-template class ElementCollection<Expression, Frame, FrameIndex>;
-
 template class ElementCollection<double, Joint, JointIndex>;
-template class ElementCollection<AutoDiffXd, Joint, JointIndex>;
-template class ElementCollection<Expression, Joint, JointIndex>;
-
 template class ElementCollection<double, JointActuator, JointActuatorIndex>;
-template class ElementCollection<AutoDiffXd, JointActuator, JointActuatorIndex>;
-template class ElementCollection<Expression, JointActuator, JointActuatorIndex>;
-
 template class ElementCollection<double, ModelInstance, ModelInstanceIndex>;
-template class ElementCollection<AutoDiffXd, ModelInstance, ModelInstanceIndex>;
-template class ElementCollection<Expression, ModelInstance, ModelInstanceIndex>;
 
 // `links_` in MultibodyTree uses `Link` (a template alias for RigidBody).
 // GCC substitutes through aliases, but Clang preserves the alias name in
 // mangled symbols, so we must instantiate with `Link` to match both compilers.
 template class ElementCollection<double, Link, LinkIndex>;
-template class ElementCollection<AutoDiffXd, Link, LinkIndex>;
-template class ElementCollection<Expression, Link, LinkIndex>;
 
 
 }  // namespace internal

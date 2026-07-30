@@ -41,20 +41,6 @@ void MobilizerImpl<T, nq, nv>::set_default_state(
 }
 
 template <typename T, int nq, int nv>
-void MobilizerImpl<T, nq, nv>::set_random_state(
-    const systems::Context<T>& context, systems::State<T>* state,
-    RandomGenerator* generator) const {
-  if (random_state_distribution_) {
-    const Vector<double, kNx> sample = Evaluate(
-        *random_state_distribution_, symbolic::Environment{}, generator);
-    get_mutable_positions(state) = sample.template head<kNq>();
-    get_mutable_velocities(state) = sample.template tail<kNv>();
-  } else {
-    set_default_state(context, state);
-  }
-}
-
-template <typename T, int nq, int nv>
 auto MobilizerImpl<T, nq, nv>::DoPoseToPositions(
     const Eigen::Quaternion<T> orientation, const Vector3<T>& translation) const
     -> std::optional<QVector<T>> {
@@ -78,11 +64,8 @@ auto MobilizerImpl<T, nq, nv>::DoSpatialVelocityToVelocities(
   template class MobilizerImpl<T, 6, 6>; \
   template class MobilizerImpl<T, 7, 6>;
 
-// Explicitly instantiates on the supported scalar types.
-// These should be kept in sync with the list in default_scalars.h.
+// double is the only scalar this tree instantiates.
 EXPLICITLY_INSTANTIATE_IMPLS(double);
-EXPLICITLY_INSTANTIATE_IMPLS(AutoDiffXd);
-EXPLICITLY_INSTANTIATE_IMPLS(symbolic::Expression);
 
 }  // namespace internal
 }  // namespace multibody

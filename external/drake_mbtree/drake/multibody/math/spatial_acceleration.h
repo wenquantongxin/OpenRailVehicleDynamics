@@ -6,7 +6,6 @@
 
 #include <limits>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -50,8 +49,6 @@ namespace multibody {
 /// differentiation is in section @ref Dt_multibody_quantities.
 ///
 /// [Mitiguy 2022] Mitiguy, P., 2022. Advanced Dynamics & Motion Simulation.
-///
-/// @tparam_default_scalar
 template <typename T>
 class SpatialAcceleration : public SpatialVector<SpatialAcceleration, T> {
   // We need the fully qualified class name below for the clang compiler to
@@ -352,8 +349,7 @@ inline SpatialAcceleration<T> operator-(const SpatialAcceleration<T>& A1_E,
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::SpatialAcceleration);
+
 
 DRAKE_FORMATTER_AS(typename T, drake::multibody, SpatialAcceleration<T>, x,
                    drake::multibody::to_string(x))

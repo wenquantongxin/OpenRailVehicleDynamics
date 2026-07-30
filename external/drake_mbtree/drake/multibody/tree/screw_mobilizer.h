@@ -1,10 +1,10 @@
 #pragma once
 
 #include <limits>
+#include <numbers>
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -23,14 +23,14 @@ ScrewJoint for which this is the implementation. */
 
 template <typename T>
 T GetScrewTranslationFromRotation(const T& theta, double screw_pitch) {
-  const T revolution_amount{theta / (2 * M_PI)};
+  const T revolution_amount{theta / (2 * std::numbers::pi)};
   return screw_pitch * revolution_amount;
 }
 
 template <typename T>
 T GetScrewRotationFromTranslation(const T& z, double screw_pitch) {
   const T revolution_amount{z / screw_pitch};
-  return revolution_amount * 2 * M_PI;
+  return revolution_amount * 2 * std::numbers::pi;
 }
 
 /* This Mobilizer models a screw joint between an inboard frame F and an
@@ -53,9 +53,7 @@ T GetScrewRotationFromTranslation(const T& z, double screw_pitch) {
 
  H_FM_F₆ₓ₁ = [axis_Fᵀ  f⋅axis_Fᵀ]ᵀ with f=pitch/2π    Hdot_FM_F = 0₆ₓ₁
  H_FM_M₆ₓ₁ = [axis_Mᵀ  f⋅axis_Mᵀ]ᵀ                    Hdot_FM_M = 0₆ₓ₁
-    where axis_M == axis_F
-
- @tparam_default_scalar */
+    where axis_M == axis_F */
 template <typename T>
 class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
  public:
@@ -231,7 +229,7 @@ class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
   /* Returns tau = H_FMᵀ⋅F. See above for H. 12 flops */
   void calc_tau(const T*, const SpatialForce<T>& F_BMo_F, T* tau) const {
     DRAKE_ASSERT(tau != nullptr);
-    const T f = screw_pitch_ / (2 * M_PI);
+    const T f = screw_pitch_ / (2 * std::numbers::pi);
     const Vector3<T>& t_B_F = F_BMo_F.rotational();       // torque
     const Vector3<T>& f_BMo_F = F_BMo_F.translational();  // force
     tau[0] = axis_.dot(t_B_F) + f * axis_.dot(f_BMo_F);
@@ -306,21 +304,7 @@ class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
                                 const Eigen::Ref<const VectorX<T>>& qddot,
                                 EigenPtr<VectorX<T>> vdot) const final;
 
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const final;
-
  private:
-  /* Helper method to make a clone templated on ToScalar. */
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
-
   // Default joint axis expressed in the inboard frame F.
   Vector3<double> axis_;
 
@@ -331,5 +315,4 @@ class ScrewMobilizer final : public MobilizerImpl<T, 1, 1> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::ScrewMobilizer);
+extern template class drake::multibody::internal::ScrewMobilizer<double>;

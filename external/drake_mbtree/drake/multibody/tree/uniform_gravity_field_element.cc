@@ -216,30 +216,6 @@ T UniformGravityFieldElement<T>::CalcNonConservativePower(
 }
 
 template <typename T>
-std::unique_ptr<ForceElement<double>>
-UniformGravityFieldElement<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>&) const {
-  return std::make_unique<UniformGravityFieldElement<double>>(
-      gravity_vector(), disabled_model_instances_);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<AutoDiffXd>>
-UniformGravityFieldElement<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>&) const {
-  return std::make_unique<UniformGravityFieldElement<AutoDiffXd>>(
-      gravity_vector(), disabled_model_instances_);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<symbolic::Expression>>
-UniformGravityFieldElement<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>&) const {
-  return std::make_unique<UniformGravityFieldElement<symbolic::Expression>>(
-      gravity_vector(), disabled_model_instances_);
-}
-
-template <typename T>
 std::unique_ptr<ForceElement<T>> UniformGravityFieldElement<T>::DoShallowClone()
     const {
   return std::make_unique<UniformGravityFieldElement<T>>(
@@ -249,5 +225,4 @@ std::unique_ptr<ForceElement<T>> UniformGravityFieldElement<T>::DoShallowClone()
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::UniformGravityFieldElement);
+template class drake::multibody::UniformGravityFieldElement<double>;

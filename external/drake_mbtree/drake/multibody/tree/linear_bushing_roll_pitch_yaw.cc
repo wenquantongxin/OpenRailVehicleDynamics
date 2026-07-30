@@ -1,6 +1,7 @@
 #include "drake/multibody/tree/linear_bushing_roll_pitch_yaw.h"
 
 #include <limits>
+#include <numbers>
 #include <string>
 #include <utility>
 #include <vector>
@@ -282,7 +283,7 @@ Vector3<T> LinearBushingRollPitchYaw<T>::CalcBushingTorqueOnCExpressedInA(
 template <typename T>
 void LinearBushingRollPitchYaw<T>::ThrowPitchAngleViolatesGimbalLockTolerance(
     const T& pitch_angle, const char* function_name) {
-  const double pitch_radians = ExtractDoubleOrThrow(pitch_angle);
+  const double pitch_radians = pitch_angle;
   const double pitch_tolerance =
       math::RollPitchYaw<double>::GimbalLockPitchAngleTolerance();
   std::string message = fmt::format(
@@ -295,7 +296,7 @@ void LinearBushingRollPitchYaw<T>::ThrowPitchAngleViolatesGimbalLockTolerance(
       " avoid this pitch angle problem, use a reasonable default alignment of"
       " the frames associated with this bushing and/or choose stiffness and"
       " damping properties that help avoid pitch angles near gimbal lock.",
-      function_name, pitch_radians * 180 / M_PI, pitch_tolerance);
+      function_name, pitch_radians * 180 / std::numbers::pi, pitch_tolerance);
   throw std::runtime_error(message);
 }
 
@@ -335,47 +336,6 @@ T LinearBushingRollPitchYaw<T>::CalcNonConservativePower(
 }
 
 template <typename T>
-template <typename ToScalar>
-std::unique_ptr<ForceElement<ToScalar>>
-LinearBushingRollPitchYaw<T>::TemplatedDoCloneToScalar(
-    const internal::MultibodyTree<ToScalar>&) const {
-  const Vector3<double>& k012 = torque_stiffness_constants();
-  const Vector3<double>& d012 = torque_damping_constants();
-  const Vector3<double>& kxyz = force_stiffness_constants();
-  const Vector3<double>& dxyz = force_damping_constants();
-
-  // The declaration <typename U> friend class LinearBushingRollPitchYaw
-  // is needed to facilitate the _private_ use of constructor below.
-  std::unique_ptr<LinearBushingRollPitchYaw<ToScalar>> bushing_clone(
-      new LinearBushingRollPitchYaw<ToScalar>(this->model_instance(),
-                                              frameA_index_, frameC_index_,
-                                              k012, d012, kxyz, dxyz));
-
-  return bushing_clone;
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<double>>
-LinearBushingRollPitchYaw<T>::DoCloneToScalar(
-    const internal::MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<AutoDiffXd>>
-LinearBushingRollPitchYaw<T>::DoCloneToScalar(
-    const internal::MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<ForceElement<symbolic::Expression>>
-LinearBushingRollPitchYaw<T>::DoCloneToScalar(
-    const internal::MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
 std::unique_ptr<ForceElement<T>> LinearBushingRollPitchYaw<T>::DoShallowClone()
     const {
   // N.B. We use the private constructor since the frameA() and frameC()
@@ -389,5 +349,4 @@ std::unique_ptr<ForceElement<T>> LinearBushingRollPitchYaw<T>::DoShallowClone()
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::LinearBushingRollPitchYaw);
+template class drake::multibody::LinearBushingRollPitchYaw<double>;

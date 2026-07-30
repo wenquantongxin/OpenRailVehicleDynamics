@@ -4,7 +4,6 @@
 #include <optional>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/tree/frame.h"
 
@@ -29,8 +28,6 @@ class RigidBody;
 /// For more information about spatial transforms, see
 /// @ref multibody_spatial_pose. <!-- https://drake.mit.edu/doxygen_cxx/
 ///                                   group__multibody__spatial__pose.html -->
-///
-/// @tparam_default_scalar
 template <typename T>
 class FixedOffsetFrame final : public Frame<T> {
  public:
@@ -84,31 +81,20 @@ class FixedOffsetFrame final : public Frame<T> {
   /// @returns The default fixed pose in the body frame.
   math::RigidTransform<T> GetFixedPoseInBodyFrame() const override {
     // X_BF = X_BP * X_PF
-    return parent_frame_.GetFixedOffsetPoseInBody(X_PF_.cast<T>());
+    return parent_frame_.GetFixedOffsetPoseInBody(X_PF_);
   }
 
   /// @returns The default rotation matrix of this fixed pose in the body frame.
   math::RotationMatrix<T> GetFixedRotationMatrixInBodyFrame() const override {
     // R_BF = R_BP * R_PF
     const math::RotationMatrix<double>& R_PF = X_PF_.rotation();
-    return parent_frame_.GetFixedRotationMatrixInBody(R_PF.cast<T>());
+    return parent_frame_.GetFixedRotationMatrixInBody(R_PF);
   }
 
   /// @returns The parent frame to which this frame is attached.
   const Frame<T>& parent_frame() const { return parent_frame_; }
 
  protected:
-  /// @pre The parent frame to this frame already has a clone in `tree_clone`.
-  std::unique_ptr<Frame<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const override;
-
-  /// @pre The parent frame to this frame already has a clone in `tree_clone`.
-  std::unique_ptr<Frame<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const override;
-
-  std::unique_ptr<Frame<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const override;
-
   std::unique_ptr<Frame<T>> DoShallowClone() const override;
 
   math::RigidTransform<T> DoCalcPoseInBodyFrame(
@@ -137,13 +123,8 @@ class FixedOffsetFrame final : public Frame<T> {
     systems::BasicVector<T>& X_PF_parameter =
         parameters->get_mutable_numeric_parameter(X_PF_parameter_index_);
     X_PF_parameter.set_value(Eigen::Map<const VectorX<T>>(
-        X_PF_.template cast<T>().GetAsMatrix34().data(), 12, 1));
+        X_PF_.GetAsMatrix34().data(), 12, 1));
   }
-
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Frame<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
 
   // The frame to which this frame is attached.
   const Frame<T>& parent_frame_;
@@ -160,5 +141,4 @@ class FixedOffsetFrame final : public Frame<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::FixedOffsetFrame);
+extern template class drake::multibody::FixedOffsetFrame<double>;

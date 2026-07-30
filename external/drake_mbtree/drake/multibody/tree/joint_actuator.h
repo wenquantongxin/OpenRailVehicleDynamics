@@ -5,7 +5,6 @@
 #include <optional>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/multibody_element.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -33,8 +32,6 @@ struct PdControllerGains {
 /// It helps to flag whether a given Joint is actuated or not so that
 /// MultibodyTree clients can apply forces on actuated joints through their
 /// actuators, see AddInOneForce().
-///
-/// @tparam_default_scalar
 template <typename T>
 class JointActuator final : public MultibodyElement<T> {
  public:
@@ -329,15 +326,6 @@ class JointActuator final : public MultibodyElement<T> {
 
   /// @cond
   // For internal use only.
-  // NVI to DoCloneToScalar() templated on the scalar type of the new clone to
-  // be created. This method is intended to be called by
-  // MultibodyTree::CloneToScalar().
-  template <typename ToScalar>
-  std::unique_ptr<JointActuator<ToScalar>> CloneToScalar(
-      const internal::MultibodyTree<ToScalar>& cloned_tree) const {
-    return DoCloneToScalar(cloned_tree);
-  }
-
   void set_actuator_dof_start(int actuator_dof_start) {
     DRAKE_DEMAND(actuator_dof_start >= 0);
     actuator_dof_start_ = actuator_dof_start;
@@ -345,35 +333,6 @@ class JointActuator final : public MultibodyElement<T> {
   /// @endcond
 
  private:
-  // Allow different specializations to access each other's private constructor
-  // for scalar conversion.
-  template <typename U>
-  friend class JointActuator;
-
-  // Private constructor used for cloning.
-  JointActuator(const std::string& name, JointIndex joint_index,
-                int actuator_dof_start, double effort_limit,
-                double rotor_inertia, double gear_ratio)
-      : name_(name),
-        joint_index_(joint_index),
-        actuator_dof_start_(actuator_dof_start),
-        effort_limit_(effort_limit),
-        default_rotor_inertia_(rotor_inertia),
-        default_gear_ratio_(gear_ratio) {}
-
-  // Helper to clone an actuator (templated on T) to an actuator templated on
-  // `double`.
-  std::unique_ptr<JointActuator<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const;
-
-  // Helper to clone an actuator (templated on T) to an actuator templated on
-  // `AutoDiffXd`.
-  std::unique_ptr<JointActuator<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const;
-
-  std::unique_ptr<JointActuator<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>& tree_clone) const;
-
   // Implementation for MultibodyElement::DoSetTopology().
   // This is called at the end of Finalize(). We just need to record
   // that this actuator has been finalized because there are some
@@ -443,5 +402,4 @@ class JointActuator final : public MultibodyElement<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::JointActuator);
+extern template class drake::multibody::JointActuator<double>;

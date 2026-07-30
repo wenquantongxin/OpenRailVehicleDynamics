@@ -197,13 +197,4 @@ std::unique_ptr<Frame<T>> Frame<T>::DoShallowClone() const {
 // Ideally, we'd be instantiating the entire class here, instead of just one
 // member function. However, the MultibodyTree physical design is so contrary to
 // GSG best practices that trying to do the entire class here doesn't work.
-DRAKE_DEFINE_FUNCTION_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    (&drake::multibody::Frame<T>::scoped_name,
-     &drake::multibody::Frame<T>::CalcAngularVelocity,
-     &drake::multibody::Frame<T>::CalcSpatialVelocityInWorld,
-     &drake::multibody::Frame<T>::CalcSpatialVelocity,
-     &drake::multibody::Frame<T>::CalcSpatialAccelerationInWorld,
-     &drake::multibody::Frame<T>::CalcSpatialAcceleration));
-
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::Frame);
+template class drake::multibody::Frame<double>;

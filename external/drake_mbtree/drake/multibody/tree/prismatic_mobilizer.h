@@ -4,7 +4,6 @@
 #include <memory>
 #include <string>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -44,9 +43,7 @@ w.r.t. both frames by this mobilizer's motion.
 
 H_FM_F₆ₓ₁=[0₃ axis_F]ᵀ     Hdot_FM_F₆ₓ₁ = 0₆
 H_FM_M₆ₓ₁=[0₃ axis_M]ᵀ     Hdot_FM_M₆ₓ₁ = 0₆
-   where axis_M == axis_F
-
-@tparam_default_scalar */
+   where axis_M == axis_F */
 
 // PrismaticMobilizer base class.
 // This is an abstract base class to provide high-level access to the common
@@ -292,20 +289,6 @@ class PrismaticMobilizerAxial final : public PrismaticMobilizer<T> {
   }
 
  private:
-  std::unique_ptr<Mobilizer<double>> DoCloneToScalar(
-      const MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<AutoDiffXd>> DoCloneToScalar(
-      const MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Mobilizer<symbolic::Expression>> DoCloneToScalar(
-      const MultibodyTree<symbolic::Expression>& tree_clone) const final;
-
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Mobilizer<ToScalar>> TemplatedDoCloneToScalar(
-      const MultibodyTree<ToScalar>& tree_clone) const;
-
   // Write algorithms as though the axes were x, y, and z; modular arithmetic
   // here ensures they will work correctly for axis=0, 1, or 2.
   static constexpr int kX = axis, kY = (axis + 1) % 3, kZ = (axis + 2) % 3;
@@ -315,16 +298,11 @@ class PrismaticMobilizerAxial final : public PrismaticMobilizer<T> {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::PrismaticMobilizer);
+extern template class drake::multibody::internal::PrismaticMobilizer<double>;
 
 #define DRAKE_DECLARE_PRISMATIC_MOBILIZER(axis)                                \
   extern template class ::drake::multibody::internal::PrismaticMobilizerAxial< \
-      double, axis>;                                                           \
-  extern template class ::drake::multibody::internal::PrismaticMobilizerAxial< \
-      ::drake::AutoDiffXd, axis>;                                              \
-  extern template class ::drake::multibody::internal::PrismaticMobilizerAxial< \
-      ::drake::symbolic::Expression, axis>
+      double, axis>
 
 DRAKE_DECLARE_PRISMATIC_MOBILIZER(0);
 DRAKE_DECLARE_PRISMATIC_MOBILIZER(1);

@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/multibody/tree/joint.h"
 #include "drake/multibody/tree/multibody_forces.h"
@@ -24,8 +23,6 @@ namespace multibody {
 /// in the axis direction.
 /// Axis vector â is constant and has the same components in both frames Jp and
 /// Jc, that is, `â_Jp = â_Jc`.
-///
-/// @tparam_default_scalar
 template <typename T>
 class RevoluteJoint final : public Joint<T> {
  public:
@@ -181,11 +178,6 @@ class RevoluteJoint final : public Joint<T> {
     return *this;
   }
 
-  void set_random_angle_distribution(const symbolic::Expression& angle) {
-    get_mutable_mobilizer().set_random_position_distribution(
-        Vector1<symbolic::Expression>{angle});
-  }
-
   /// Gets the rate of change, in radians per second, of `this` joint's
   /// angle (see get_angle()) from `context`.
   /// @param[in] context
@@ -337,22 +329,7 @@ class RevoluteJoint final : public Joint<T> {
       const internal::SpanningForest::Mobod& mobod,
       internal::MultibodyTree<T>* tree) const final;
 
-  std::unique_ptr<Joint<double>> DoCloneToScalar(
-      const internal::MultibodyTree<double>& tree_clone) const final;
-
-  std::unique_ptr<Joint<AutoDiffXd>> DoCloneToScalar(
-      const internal::MultibodyTree<AutoDiffXd>& tree_clone) const final;
-
-  std::unique_ptr<Joint<symbolic::Expression>> DoCloneToScalar(
-      const internal::MultibodyTree<symbolic::Expression>&) const final;
-
   std::unique_ptr<Joint<T>> DoShallowClone() const final;
-
-  // Make RevoluteJoint templated on every other scalar type a friend of
-  // RevoluteJoint<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private members of RevoluteJoint<T>.
-  template <typename>
-  friend class RevoluteJoint;
 
   // Friend class to facilitate testing.
   friend class JointTester;
@@ -369,11 +346,6 @@ class RevoluteJoint final : public Joint<T> {
         internal::RevoluteMobilizer>();
   }
 
-  // Helper method to make a clone templated on ToScalar.
-  template <typename ToScalar>
-  std::unique_ptr<Joint<ToScalar>> TemplatedDoCloneToScalar(
-      const internal::MultibodyTree<ToScalar>& tree_clone) const;
-
   // This is the joint's axis expressed in either M or F since axis_M = axis_F.
   Vector3<double> axis_;
 };
@@ -384,5 +356,4 @@ const char RevoluteJoint<T>::kTypeName[] = "revolute";
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::RevoluteJoint);
+extern template class drake::multibody::RevoluteJoint<double>;

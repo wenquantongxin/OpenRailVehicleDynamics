@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -35,9 +34,7 @@ a mobod is always coincident with the frame L₀ of its active link.
           mobod's frame P, expressed in W.
 - V_FM:   For a mobod's mobilizer, the spatial velocity of the mobilizer's
           outboard frame M (on the mobod) in its inboard frame F (on the mobod's
-          inboard ("parent") mobod), expressed in F.
-
-@tparam_default_scalar */
+          inboard ("parent") mobod), expressed in F. */
 
 // TODO(sherm1) V_WL mostly duplicates V_WB (they are identical if there are no
 //  composite bodies), and always contains all the V_WB spatial velocities (for
@@ -176,5 +173,5 @@ class VelocityKinematicsCache {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::VelocityKinematicsCache);
+extern template class drake::multibody::internal::
+    VelocityKinematicsCache<double>;

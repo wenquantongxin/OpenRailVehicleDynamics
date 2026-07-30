@@ -13,10 +13,8 @@
 #include <variant>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/pointer_cast.h"
-#include "drake/common/random.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/topology/graph.h"
 #include "drake/multibody/tree/acceleration_kinematics_cache.h"
@@ -998,11 +996,6 @@ class MultibodyTree {
   void SetDefaultState(const systems::Context<T>& context,
                        systems::State<T>* state) const;
 
-  // See MultibodyPlant method.
-  void SetRandomState(const systems::Context<T>& context,
-                      systems::State<T>* state,
-                      RandomGenerator* generator) const;
-
   // Returns a const Eigen vector reference containing the vector
   // `[q; v]` of the model with `q` the vector of generalized positions and
   // `v` the vector of generalized velocities.
@@ -1099,21 +1092,6 @@ class MultibodyTree {
                                          const SpatialVelocity<T>& V_WB,
                                          const systems::Context<T>& context,
                                          systems::State<T>* state) const;
-
-  // See MultibodyPlant::SetFreeBodyRandomTranslationDistribution.
-  void SetFreeBodyRandomTranslationDistributionOrThrow(
-      const RigidBody<T>& body,
-      const Vector3<symbolic::Expression>& translation);
-
-  // See MultibodyPlant::SetFreeBodyRandomRotationDistribution.
-  void SetFreeBodyRandomRotationDistributionOrThrow(
-      const RigidBody<T>& body,
-      const Eigen::Quaternion<symbolic::Expression>& rotation);
-
-  // See MultibodyPlant::SetFreeBodyRandomRotationDistribution.
-  void SetFreeBodyRandomAnglesDistributionOrThrow(
-      const RigidBody<T>& body,
-      const math::RollPitchYaw<symbolic::Expression>& angles);
 
   // Kinematic computations
 
@@ -2085,127 +2063,6 @@ class MultibodyTree {
 
   // Methods to retrieve multibody element variants
 
-  // Given two variants of the same MultibodyTree, these methods map an
-  // element in one variant, to its corresponding element in the other variant.
-  //
-  // A concrete case is the call to ToAutoDiffXd() to obtain a
-  // MultibodyTree variant templated on AutoDiffXd from a MultibodyTree
-  // templated on `double`. Typically, a user holding a `RigidBody<double>` (or
-  // any other multibody element in the original variant templated on `double`)
-  // would like to retrieve the corresponding `RigidBody<AutoDiffXd>` variant
-  // from the new AutoDiffXd tree variant.
-  //
-  // Consider the following code example:
-  // @code
-  //   // The user creates a model.
-  //   MultibodyTree<double> model;
-  //   // User adds a body and keeps a reference to it.
-  //   const RigidBody<double>& body = model.AddRigidBody(...);
-  //   // User creates an AutoDiffXd variant. Variants on other scalar types
-  //   // can be created with a call to CloneToScalar().
-  //   std::unique_ptr<MultibodyTree<Tvariant>> variant_model =
-  //       model.ToAutoDiffXd();
-  //   // User retrieves the AutoDiffXd variant corresponding to the original
-  //   // body added above.
-  //   const RigidBody<AutoDiffXd>&
-  //       variant_body = variant_model.get_variant(body);
-  // @endcode
-  //
-  // MultibodyTree::get_variant() is templated on the multibody element
-  // type which is deduced from its only input argument. The returned element
-  // is templated on the scalar type T of the MultibodyTree on which this
-  // method is invoked.
-
-  // Overload for Frame<T> elements.
-  template <typename Scalar>
-  const Frame<T>& get_variant(const Frame<Scalar>& element) const {
-    const FrameIndex frame_index = element.index();
-    return frames_.get_element(frame_index);
-  }
-
-  // Overload for Link<T> elements.
-  template <typename Scalar>
-  const Link<T>& get_variant(const Link<Scalar>& element) const {
-    const LinkIndex link_index = element.index();
-    return links_.get_element(link_index);
-  }
-
-  // Overload for Mobilizer<T> elements.
-  template <typename Scalar>
-  const Mobilizer<T>& get_variant(const Mobilizer<Scalar>& element) const {
-    MobodIndex mobilizer_index = element.index();
-    DRAKE_DEMAND(mobilizer_index < num_mobilizers());
-    const Mobilizer<T>* result = mobilizers_[mobilizer_index].get();
-    DRAKE_DEMAND(result != nullptr);
-    return *result;
-  }
-
-  // Overload for Mobilizer<T> elements (mutable).
-  template <typename Scalar>
-  Mobilizer<T>& get_mutable_variant(const Mobilizer<Scalar>& element) {
-    MobodIndex mobilizer_index = element.index();
-    DRAKE_DEMAND(mobilizer_index < num_mobilizers());
-    Mobilizer<T>* result = mobilizers_[mobilizer_index].get();
-    DRAKE_DEMAND(result != nullptr);
-    return *result;
-  }
-
-  // Overload for Joint<T> elements.
-  template <typename Scalar>
-  const Joint<T>& get_variant(const Joint<Scalar>& element) const {
-    const JointIndex joint_index = element.index();
-    return joints_.get_element(joint_index);
-  }
-
-  // Creates a deep copy of `this` MultibodyTree templated on the same
-  // scalar type T as `this` tree.
-  std::unique_ptr<MultibodyTree<T>> Clone() const { return CloneToScalar<T>(); }
-
-  // Creates a deep copy of `this` MultibodyTree templated on AutoDiffXd.
-  std::unique_ptr<MultibodyTree<AutoDiffXd>> ToAutoDiffXd() const {
-    return CloneToScalar<AutoDiffXd>();
-  }
-
-  // Creates a deep copy of `this` MultibodyTree templated on the scalar type
-  // `ToScalar`.
-  // The new deep copy is guaranteed to have exactly the same topology
-  // as the original tree the method is called on. This method ensures the
-  // following cloning order:
-  //
-  //   - RigidBody objects, and their corresponding RigidBodyFrame objects.
-  //   - Frame objects.
-  //   - If a Frame is attached to another frame, its parent frame is
-  //     guaranteed to be created first.
-  //   - Mobilizer objects are created last and therefore clones of the
-  //     original Frame objects are guaranteed to already be part of the cloned
-  //     tree.
-  //
-  // Consider the following code example:
-  // @code
-  //   // The user creates a model.
-  //   MultibodyTree<double> model;
-  //   // User adds a body and keeps a reference to it.
-  //   const RigidBody<double>& body = model.AddRigidBody(...);
-  //   // User creates an AutoDiffXd variant, where ToScalar = AutoDiffXd.
-  //   std::unique_ptr<MultibodyTree<AutoDiffXd>> model_autodiff =
-  //       model.CloneToScalar<AutoDiffXd>();
-  //   // User retrieves the AutoDiffXd variant corresponding to the original
-  //   // body added above.
-  //   const RigidBody<AutoDiffXd>&
-  //       body_autodiff = model_autodiff.get_variant(body);
-  // @endcode
-  //
-  // MultibodyTree::get_variant() is templated on the multibody element
-  // type which is deduced from its only input argument. The returned element
-  // is templated on the scalar type T of the MultibodyTree on which this
-  // method is invoked.
-  // In the example above, the user could have also invoked the method
-  // ToAutoDiffXd().
-  //
-  // @pre Finalize() must have already been called on this MultibodyTree.
-  template <typename ToScalar>
-  std::unique_ptr<MultibodyTree<ToScalar>> CloneToScalar() const;
-
   // Evaluates frame body poses cached in context, updating all frames'
   // body poses if parameters have changed since last update.
   // @returns a reference to the now-up-to-date cache entry
@@ -2454,12 +2311,6 @@ class MultibodyTree {
   void ThrowIfNotFinalized(const char* source_method) const;
 
  private:
-  // Make MultibodyTree templated on every other scalar type a friend of
-  // MultibodyTree<T> so that CloneToScalar<ToAnyOtherScalar>() can access
-  // private methods from MultibodyTree<T>.
-  template <typename>
-  friend class MultibodyTree;
-
   // Friend class to facilitate testing.
   friend class MultibodyTreeTester;
 
@@ -2795,36 +2646,6 @@ class MultibodyTree {
 
   void FinalizeModelInstances();
 
-  // Helper method to create a clone of `frame` and add it to `this` tree.
-  template <typename FromScalar>
-  Frame<T>* CloneFrameAndAdd(const Frame<FromScalar>& frame);
-
-  // Helper method to create a clone of `body` and add it to `this` tree.
-  // Because this method is only invoked in a controlled manner from within
-  // CloneToScalar(), it is guaranteed that the cloned body in this variant's
-  // `links_` will occupy the same position as its corresponding
-  // RigidBody in the source variant `body`.
-  template <typename FromScalar>
-  RigidBody<T>* CloneBodyAndAdd(const RigidBody<FromScalar>& body);
-
-  // Helper method to create a clone of `mobilizer` and add it to `this` tree.
-  template <typename FromScalar>
-  Mobilizer<T>* CloneMobilizerAndAdd(const Mobilizer<FromScalar>& mobilizer);
-
-  // Helper method to create a clone of `force_element` and add it to `this`
-  // tree.
-  template <typename FromScalar>
-  void CloneForceElementAndAdd(const ForceElement<FromScalar>& force_element);
-
-  // Helper method to create a clone of `joint` and add it to `this` tree.
-  template <typename FromScalar>
-  Joint<T>* CloneJointAndAdd(const Joint<FromScalar>& joint);
-
-  // Helper method to create a clone of `actuator` (which is templated on
-  // FromScalar) and add it to `this` tree (templated on T).
-  template <typename FromScalar>
-  void CloneActuatorAndAdd(const JointActuator<FromScalar>& actuator);
-
   // If there exists a unique base body (a body whose parent is the world body)
   // in the model given by `model_instance`, return the index of that body.
   // Otherwise return std::nullopt. In particular, if the given `model_instance`
@@ -2921,5 +2742,4 @@ class MultibodyTree {
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::MultibodyTree);
+extern template class drake::multibody::internal::MultibodyTree<double>;

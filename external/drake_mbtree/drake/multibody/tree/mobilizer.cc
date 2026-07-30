@@ -71,5 +71,4 @@ void Mobilizer<T>::DoCalcNplusDotMatrix(const systems::Context<T>&,
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::Mobilizer);
+template class drake::multibody::internal::Mobilizer<double>;

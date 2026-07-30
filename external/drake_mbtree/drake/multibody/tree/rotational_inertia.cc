@@ -74,12 +74,9 @@ Vector3<double> RotationalInertia<T>::CalcPrincipalMomentsAndMaybeAxesOfInertia(
     math::RotationMatrix<double>* principal_directions) const {
   Vector3<double> principal_moments;
 
-  // 1. Eigen's SelfAdjointEigenSolver does not compile for AutoDiffXd.
-  //    Therefore, convert `this` to a local copy of type Matrix3<double>.
-  // 2. Eigen's SelfAdjointEigenSolver only uses the lower-triangular part
-  //    of this symmetric matrix.
-  const Matrix3<T>& I_BP_E = get_matrix();
-  const Matrix3<double> I_double = ExtractDoubleOrThrow(I_BP_E);
+  // Eigen's SelfAdjointEigenSolver only uses the lower-triangular part of this
+  // symmetric matrix.
+  const Matrix3<double>& I_double = get_matrix();
 
   // Many calls to this function originate with a primitive such as a sphere,
   // ellipsoid, box, cylinder, or capsule that has zero products of inertia.
@@ -94,7 +91,7 @@ Vector3<double> RotationalInertia<T>::CalcPrincipalMomentsAndMaybeAxesOfInertia(
   // than generic matrix tolerances used in Eigen's eigenvalue solver.
   const double inertia_tolerance =
       4 * std::numeric_limits<double>::epsilon() *
-      ExtractDoubleOrThrow(CalcMaximumPossibleMomentOfInertia());
+      CalcMaximumPossibleMomentOfInertia();
   const bool is_diagonal = (std::abs(I_double(1, 0)) <= inertia_tolerance &&
                             std::abs(I_double(2, 0)) <= inertia_tolerance &&
                             std::abs(I_double(2, 1)) <= inertia_tolerance);
@@ -182,7 +179,7 @@ Vector3<double> RotationalInertia<T>::CalcPrincipalMomentsAndMaybeAxesOfInertia(
 }
 
 template <typename T>
-boolean<T> RotationalInertia<
+bool RotationalInertia<
     T>::AreMomentsOfInertiaNearPositiveAndSatisfyTriangleInequality() const {
   // We use a tiny multiple of max_possible_inertia_moment to guide the value
   // of ε. To avoid false negatives when max_possible_inertia_moment ≈ 0,
@@ -200,7 +197,7 @@ boolean<T> RotationalInertia<
   // TODO(Mitiguy) For now, this function is only used to test principal moments
   //  of inertia. A future PR will instead first perform the tests herein with
   //  `this` rotational inertia's diagonal moments of inertia e.g., with
-  //  ExtractDoubleOrThrow(get_moments()) and also do the product of inertia
+  //  get_moments() and also do the product of inertia
   //  inequality tests (e.g., is 2*abs(Ixy) ≤ Izz + ε).
   const Vector3<double> moments = CalcPrincipalMomentsOfInertia();
 
@@ -346,7 +343,7 @@ std::optional<std::string> RotationalInertia<T>::CreateInvalidityReport()
     error_message = fmt::format(
         "\nNon-finite moment or product of inertia "
         "detected in RotationalInertia.");
-  } else if constexpr (scalar_predicate<T>::is_bool) {
+  } else {
     if (!AreMomentsOfInertiaNearPositiveAndSatisfyTriangleInequality()) {
       const Vector3<double> p = CalcPrincipalMomentsOfInertia();
       error_message += fmt::format(
@@ -378,11 +375,6 @@ void RotationalInertia<T>::ThrowIfNotPhysicallyValidImpl(
   }
 }
 
-template <typename T>
-std::ostream& operator<<(std::ostream& out, const RotationalInertia<T>& I) {
-  return out << fmt::to_string(I);
-}
-
 // TODO(Mitiguy) Consider using this code (or code similar to this) to write
 //  most/all Drake matrices and consolidate other usages to use this.
 template <typename T>
@@ -411,20 +403,10 @@ std::string to_string(const RotationalInertia<T>& I) {
 }
 
 // TODO(2026-07-01): delete `operator<<` instantiation and the `#pragma`s.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-// clang-format off
-DRAKE_DEFINE_FUNCTION_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    (static_cast<std::ostream& (*)(std::ostream&, const RotationalInertia<T>&)>(
-        &operator<< ),  // clang-format would remove space lint requires
-    static_cast<std::string(*)(const RotationalInertia<T>&)>(
-        &to_string)
-));
-// clang-format on
-#pragma GCC diagnostic pop
+template std::string drake::multibody::to_string(
+    const RotationalInertia<double>&);
 
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class drake::multibody::RotationalInertia);
+template class drake::multibody::RotationalInertia<double>;

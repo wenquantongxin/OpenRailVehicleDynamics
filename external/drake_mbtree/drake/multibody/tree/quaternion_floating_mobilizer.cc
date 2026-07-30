@@ -4,7 +4,6 @@
 #include <string>
 
 #include "drake/common/eigen_types.h"
-#include "drake/math/quaternion.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/tree/body_node_impl.h"
 #include "drake/multibody/tree/multibody_tree.h"
@@ -201,33 +200,6 @@ QuaternionFloatingMobilizer<T>::SetTranslation(const systems::Context<T>&,
   // Note: see storage order notes in get_position().
   q.template tail<3>() = p_FM;
   return *this;
-}
-
-template <typename T>
-void QuaternionFloatingMobilizer<T>::set_random_translation_distribution(
-    const Vector3<symbolic::Expression>& p_FM) {
-  QVector<symbolic::Expression> positions;
-  if (this->get_random_state_distribution()) {
-    positions = this->get_random_state_distribution()->template head<kNq>();
-  } else {
-    positions = get_zero_position().template cast<symbolic::Expression>();
-  }
-  positions.template segment<3>(4) = p_FM;
-  MobilizerBase::set_random_position_distribution(positions);
-}
-
-template <typename T>
-void QuaternionFloatingMobilizer<T>::set_random_quaternion_distribution(
-    const Eigen::Quaternion<symbolic::Expression>& q_FM) {
-  QVector<symbolic::Expression> positions;
-  if (this->get_random_state_distribution()) {
-    positions = this->get_random_state_distribution()->template head<kNq>();
-  } else {
-    positions = get_zero_position().template cast<symbolic::Expression>();
-  }
-  positions[0] = q_FM.w();
-  positions.template segment<3>(1) = q_FM.vec();
-  MobilizerBase::set_random_position_distribution(positions);
 }
 
 template <typename T>
@@ -655,44 +627,8 @@ QuaternionFloatingMobilizer<T>::GetPosePair(
                                                      get_translation(context));
 }
 
-template <typename T>
-template <typename ToScalar>
-std::unique_ptr<Mobilizer<ToScalar>>
-QuaternionFloatingMobilizer<T>::TemplatedDoCloneToScalar(
-    const MultibodyTree<ToScalar>& tree_clone) const {
-  const Frame<ToScalar>& inboard_frame_clone =
-      tree_clone.get_variant(this->inboard_frame());
-  const Frame<ToScalar>& outboard_frame_clone =
-      tree_clone.get_variant(this->outboard_frame());
-  return std::make_unique<QuaternionFloatingMobilizer<ToScalar>>(
-      tree_clone.get_mobod(this->mobod().index()), inboard_frame_clone,
-      outboard_frame_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<double>>
-QuaternionFloatingMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<double>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<AutoDiffXd>>
-QuaternionFloatingMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<AutoDiffXd>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
-template <typename T>
-std::unique_ptr<Mobilizer<symbolic::Expression>>
-QuaternionFloatingMobilizer<T>::DoCloneToScalar(
-    const MultibodyTree<symbolic::Expression>& tree_clone) const {
-  return TemplatedDoCloneToScalar(tree_clone);
-}
-
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
-DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    class ::drake::multibody::internal::QuaternionFloatingMobilizer);
+template class drake::multibody::internal::QuaternionFloatingMobilizer<double>;
