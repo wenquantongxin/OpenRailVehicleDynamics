@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -12,6 +13,8 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include "drake/common/drake_copyable.h"
 #include "drake/common/nice_type_name.h"
@@ -42,6 +45,8 @@ template <typename T>
 using LinkFrame = RigidBodyFrame<T>;
 template <typename T>
 class Frame;
+template <typename T>
+class FixedOffsetFrame;
 template <typename T>
 class RigidBody;
 template <typename T>
@@ -1047,20 +1052,34 @@ class MultibodyTree {
     SetVelocities(&context->mutable_state(), velocities);
   }
 
-  /// The context's state, for writing a physical parameter.
+  /// Sets one body's complete spatial inertia in this context.
   ///
-  /// Parameters do not need a model-aware gate the way positions do: the store
-  /// validates every one of them against physics it can check on its own, and
-  /// no parameter has a meaning that depends on how the model segments it. The
-  /// door is here rather than on the context so that the model layer remains
-  /// the only way in, which is what keeps the position gate from being a
-  /// convention.
-  orvd::multibody_runtime::MultibodyStateInstance& GetMutableParameters(
+  /// Parameter writes are exposed by physical identity, not by returning the
+  /// whole mutable state. A mutable state would also expose q and v and would
+  /// let a caller bypass the model-aware position gate.
+  void SetRigidBodySpatialInertiaInBodyFrame(
       orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
-          context) const {
-    DRAKE_DEMAND(context != nullptr);
-    return context->mutable_state();
-  }
+          context,
+      const RigidBody<T>& body, const SpatialInertia<T>& inertia) const;
+
+  /// Sets one fixed frame's complete pose relative to its parent frame.
+  void SetFixedFramePoseInParentFrame(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const FixedOffsetFrame<T>& frame,
+      const math::RigidTransform<T>& pose_in_parent_frame) const;
+
+  /// Sets one actuator's rotor inertia without exposing the parameter store.
+  void SetJointActuatorRotorInertia(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const JointActuator<T>& actuator, const T& rotor_inertia) const;
+
+  /// Sets one actuator's gear ratio without exposing the parameter store.
+  void SetJointActuatorGearRatio(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const JointActuator<T>& actuator, const T& gear_ratio) const;
 
   const orvd::multibody_runtime::MultibodyStateLayout& state_layout() const {
     DRAKE_MBT_THROW_IF_NOT_FINALIZED();
@@ -1190,8 +1209,6 @@ class MultibodyTree {
       const std::vector<ModelInstanceIndex>& model_instances) const;
 
   // See MultibodyPlant method.
-    // See MultibodyPlant method.
-    // See MultibodyPlant method.
   SpatialMomentum<T> CalcSpatialMomentumInWorldAboutPoint(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const Vector3<T>& p_WoP_W) const;
 
@@ -2100,19 +2117,9 @@ class MultibodyTree {
         });
   }
 
-  // Evaluates acceleration kinematics cached in context. This will also
-  // force other cache entries to be updated if they haven't already.
-  // @param context A Context whose acceleration kinematics cache will be
-  //                updated and returned.
-  // @return Reference to the AccelerationKinematicsCache of context.
-    // The forward-dynamics accelerations used to be reachable here, by way of the
-  // system wrapper. They are gone rather than rebound: the accelerations depend
-  // on the forces applied on the call that asks for them — force elements,
-  // externally applied forces, actuation — and an entry that took no forces was
-  // silently answering for one particular set of them. Rebinding it to a cache
-  // would have preserved that, with a freshness stamp that said nothing about
-  // the forces the value came from. Assembling the forces and running the ABA
-  // passes is G36's; the landed passes are still here for it to use.
+  // The force-free forward-dynamics acceleration entry is deliberately absent.
+  // Assembling explicit forces and running the landed ABA passes is G36's.
+
   // Evaluate the cache entry storing articulated body inertias in `context`.
   const ArticulatedBodyInertiaCache<T>& EvalArticulatedBodyInertiaCache(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
@@ -2170,6 +2177,12 @@ class MultibodyTree {
                     const Eigen::Ref<const VectorX<T>>& positions) const {
     DRAKE_DEMAND(state != nullptr);
     ValidateStateInstance(*state);
+    if (positions.size() != num_positions()) {
+      throw std::invalid_argument(fmt::format(
+          "MultibodyTree: expected {} generalized positions, got {}; nothing "
+          "was written",
+          num_positions(), positions.size()));
+    }
     ThrowIfAnyQuaternionIsZero(positions);
     state->set_generalized_positions(positions);
   }
@@ -2274,7 +2287,17 @@ class MultibodyTree {
     DRAKE_DEMAND(state != nullptr);
     ValidateStateInstance(*state);
     VectorX<T> positions = state->generalized_positions();
-    positions.segment(start, segment.size()) = segment;
+    if (start < 0 || static_cast<Eigen::Index>(start) > positions.size() ||
+        segment.size() > positions.size() - static_cast<Eigen::Index>(start)) {
+      throw std::invalid_argument(fmt::format(
+          "MultibodyTree: position segment [{}, {}) is outside q of size {}; "
+          "nothing was written",
+          start, static_cast<Eigen::Index>(start) + segment.size(),
+          positions.size()));
+    }
+    for (Eigen::Index offset = 0; offset < segment.size(); ++offset) {
+      positions[start + offset] = segment[offset];
+    }
     // Through the commit gate, not around it: a segment write that happened to
     // zero a quaternion must be refused for the same reason a whole-q write is.
     SetPositions(state, positions);
@@ -2288,7 +2311,17 @@ class MultibodyTree {
     DRAKE_DEMAND(state != nullptr);
     ValidateStateInstance(*state);
     VectorX<T> velocities = state->generalized_velocities();
-    velocities.segment(start, segment.size()) = segment;
+    if (start < 0 || static_cast<Eigen::Index>(start) > velocities.size() ||
+        segment.size() > velocities.size() - static_cast<Eigen::Index>(start)) {
+      throw std::invalid_argument(fmt::format(
+          "MultibodyTree: velocity segment [{}, {}) is outside v of size {}; "
+          "nothing was written",
+          start, static_cast<Eigen::Index>(start) + segment.size(),
+          velocities.size()));
+    }
+    for (Eigen::Index offset = 0; offset < segment.size(); ++offset) {
+      velocities[start + offset] = segment[offset];
+    }
     state->set_generalized_velocities(velocities);
   }
 

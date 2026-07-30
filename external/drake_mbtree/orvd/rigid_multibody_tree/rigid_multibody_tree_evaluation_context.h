@@ -23,6 +23,11 @@
 /// independent by convention: there is no way to assemble one out of somebody
 /// else's state, and no way to move a workspace from one to another.
 ///
+/// The finalized tree that created a context must outlive it. The state is
+/// bound to that tree's immutable layout by object identity, and the workspace
+/// is sized from the tree's forest. A context deliberately does not own or keep
+/// the model alive.
+///
 /// Not templated. The product is double-only, and a scalar parameter here would
 /// be a slot reserved for a scalar that was decided against.
 ///
@@ -68,17 +73,6 @@ class RigidMultibodyTreeEvaluationContext {
     /// The eleven retained caches, for reading a value that is already fresh.
     const RigidMultibodyTreeCacheWorkspace& caches() const { return caches_; }
 
-    /// The same caches, for an evaluation that may have to compute one.
-    ///
-    /// `mutable`, and reached through a const context. Evaluating a cache is a
-    /// read as far as the model is concerned: it produces nothing the caller
-    /// did not already imply by asking, and it leaves the state untouched. That
-    /// is what logical constness means here, and it is expressed by the member
-    /// being mutable rather than by a `const_cast` at each use — a cast would
-    /// have to be written, and read, at every evaluation site, and each one
-    /// would be a place where the reasoning could be wrong.
-    RigidMultibodyTreeCacheWorkspace& mutable_caches() const { return caches_; }
-
    private:
     // Only the finalized tree may build one. A context that could be default
     // constructed would hold zero-filled positions and massless bodies, and it
@@ -108,7 +102,20 @@ class RigidMultibodyTreeEvaluationContext {
         return state_;
     }
 
-   private:
+    /// The same caches, for a tree evaluation that may have to compute one.
+    ///
+    /// This is private for the same reason mutable_state() is private. A caller
+    /// that could write a slot and commit its version snapshot could mark an
+    /// arbitrary or half-written value as fresh. The tree is the sole friend
+    /// because it is the layer that binds each slot to its calculator.
+    ///
+    /// `mutable`, and reached through a const context. Evaluating a cache is a
+    /// read as far as the model is concerned: it produces nothing the caller
+    /// did not already imply by asking, and it leaves the state untouched. That
+    /// is what logical constness means here, and it is expressed by the member
+    /// being mutable rather than by a `const_cast` at each use.
+    RigidMultibodyTreeCacheWorkspace& mutable_caches() const { return caches_; }
+
     // Held by value, not by reference or pointer: a context that accepted a
     // state from outside could be handed the same state as another context, and
     // then "these two contexts are independent" would be something a caller had

@@ -462,14 +462,7 @@ class RigidBody : public MultibodyElement<T> {
   Vector3<T> CalcCenterOfMassTranslationalVelocityInWorld(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
-  /// Calculates Bcm's translational acceleration in the world frame W.
-  /// @param[in] context The context contains the state of the model.
-  /// @retval a_WBcm_W The translational acceleration of Bcm (this rigid body's
-  /// center of mass) in the world frame W, expressed in W.
-  /// @note When cached values are out of sync with the state stored in context,
-  /// this method performs an expensive forward dynamics computation, whereas
-  /// once evaluated, successive calls to this method are inexpensive.
-    // The convenience entries that returned a spatial acceleration are gone
+  // The convenience entries that returned a spatial acceleration are gone
   // with the forward-dynamics entry they were built on. Each of them asked
   // for an acceleration without saying what forces produced it, which meant
   // answering for one particular set of forces and not saying which.

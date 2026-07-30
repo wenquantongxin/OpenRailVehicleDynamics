@@ -3,24 +3,30 @@
 // G24 checked the slot mechanism against a hand-written transcription of the
 // contract, with synthetic values and a synthetic calculator. This checks the
 // thing itself: the tree's own calculators, writing the tree's own cache values,
-// invalidated by writes to the tree's own state. What the type system cannot see
-// — whether a calculator reads something its slot does not declare — is what a
-// cold-versus-hot comparison can.
+// invalidated by writes to the tree's own state. Representative position,
+// velocity and inertia chains are compared cold versus hot. The full
+// calculator-input map remains the source audit in the runtime contract; this
+// test does not pretend to exhaustively compare every field of every cache.
 //
 // Two contexts appear throughout, and they are driven to the same version
 // numbers on purpose. Equal versions holding different states is exactly the
 // situation in which a workspace shared between contexts, or a freshness rule
 // that looked only at the numbers, would serve one context's value to the other
 // and look right doing it.
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
 
+#include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/multibody_tree-inl.h"
+#include "drake/multibody/tree/quaternion_floating_joint.h"
 #include "drake/multibody/tree/revolute_joint.h"
 #include "drake/multibody/tree/rigid_body.h"
 #include "drake/multibody/tree/spatial_inertia.h"
@@ -32,6 +38,100 @@ using drake::multibody::SpatialInertia;
 using drake::multibody::internal::MultibodyTree;
 using Context = orvd::rigid_multibody_tree::internal::
     RigidMultibodyTreeEvaluationContext;
+using RigidMultibodyTreeCacheWorkspace =
+    orvd::rigid_multibody_tree::internal::RigidMultibodyTreeCacheWorkspace;
+using VersionSource =
+    orvd::multibody_runtime::MultibodyStateVersionSource;
+
+inline constexpr auto kQ = VersionSource::kGeneralizedPositions;
+inline constexpr auto kV = VersionSource::kGeneralizedVelocities;
+inline constexpr auto kFramePoses = VersionSource::kFixedFramePoses;
+inline constexpr auto kInertias = VersionSource::kRigidBodyInertias;
+inline constexpr auto kActuators =
+    VersionSource::kJointActuatorParameters;
+
+template <typename Value, VersionSource... Sources>
+using ExpectedSlot =
+    orvd::multibody_runtime::VersionedCacheSlot<Value, Sources...>;
+
+template <typename Actual, typename Expected>
+inline constexpr bool IsExpectedSlot =
+    std::is_same_v<std::remove_cvref_t<Actual>, Expected>;
+
+// This table is intentionally independent of the declarations in the
+// workspace. It is the G20 contract transcribed into compile-time checks, so a
+// hand-edited source set in a real slot cannot make its own expected answer.
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .frame_body_poses),
+              ExpectedSlot<
+                  drake::multibody::internal::FrameBodyPoseCache<double>,
+                  kFramePoses, kInertias>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .position_kinematics),
+              ExpectedSlot<
+                  drake::multibody::internal::PositionKinematicsCache<double>,
+                  kQ, kFramePoses>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .across_node_jacobian),
+              ExpectedSlot<std::vector<drake::Vector6<double>>, kQ,
+                           kFramePoses>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .velocity_kinematics),
+              ExpectedSlot<
+                  drake::multibody::internal::VelocityKinematicsCache<double>,
+                  kQ, kV, kFramePoses>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .spatial_inertia_in_world),
+              ExpectedSlot<
+                  std::vector<drake::multibody::SpatialInertia<double>>, kQ,
+                  kFramePoses, kInertias>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .composite_body_inertia_in_world),
+              ExpectedSlot<
+                  std::vector<drake::multibody::SpatialInertia<double>>, kQ,
+                  kFramePoses, kInertias>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .dynamic_bias),
+              ExpectedSlot<
+                  std::vector<drake::multibody::SpatialForce<double>>, kQ, kV,
+                  kFramePoses, kInertias>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .spatial_acceleration_bias),
+              ExpectedSlot<
+                  std::vector<drake::multibody::SpatialAcceleration<double>>,
+                  kQ, kV, kFramePoses>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .reflected_inertia),
+              ExpectedSlot<drake::VectorX<double>, kActuators>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .articulated_body_inertia),
+              ExpectedSlot<
+                  drake::multibody::internal::
+                      ArticulatedBodyInertiaCache<double>,
+                  kQ, kFramePoses, kInertias, kActuators>>);
+static_assert(IsExpectedSlot<
+              decltype(std::declval<RigidMultibodyTreeCacheWorkspace&>()
+                           .articulated_body_force_bias),
+              ExpectedSlot<
+                  std::vector<drake::multibody::SpatialForce<double>>, kQ, kV,
+                  kFramePoses, kInertias, kActuators>>);
+
+template <typename T>
+concept PubliclyExposesMutableCaches =
+    requires(T& value) { value.mutable_caches(); };
+static_assert(!PubliclyExposesMutableCaches<Context>);
+static_assert(std::is_same_v<decltype(std::declval<const Context&>().caches()),
+                             const RigidMultibodyTreeCacheWorkspace&>);
 
 int failure_count = 0;
 
@@ -59,19 +159,42 @@ class TwoLinkChain {
         // with the cache.
         const drake::math::RigidTransform<double> offset(
             Eigen::Vector3d(0.3, 0.0, 0.0));
-        tree_.AddJoint<RevoluteJoint>("shoulder", tree_.world_link(), offset,
-                                      first, {}, axis);
+        const auto& shoulder =
+            tree_.AddJoint<RevoluteJoint>("shoulder", tree_.world_link(),
+                                          offset, first, {}, axis);
         tree_.AddJoint<RevoluteJoint>("elbow", first, offset, second, {}, axis);
+        // The overload above creates a FixedOffsetFrame for its non-identity
+        // parent offset. Keep that real mobilizer frame: changing it must move
+        // the kinematics, unlike an otherwise unused frame attached to a body.
+        fixed_frame_ =
+            &dynamic_cast<const drake::multibody::FixedOffsetFrame<double>&>(
+                shoulder.frame_on_parent());
+        actuator_ = &tree_.AddJointActuator("shoulder_motor", shoulder);
+        auto& mutable_actuator =
+            tree_.get_mutable_joint_actuator(actuator_->index());
+        mutable_actuator.set_default_rotor_inertia(0.2);
+        mutable_actuator.set_default_gear_ratio(2.0);
         tree_.Finalize();
     }
 
     const MultibodyTree<double>& tree() const { return tree_; }
+    const drake::multibody::RigidBody<double>& first_body() const {
+        return tree_.GetLinkByName("first");
+    }
+    const drake::multibody::FixedOffsetFrame<double>& fixed_frame() const {
+        return *fixed_frame_;
+    }
+    const drake::multibody::JointActuator<double>& actuator() const {
+        return *actuator_;
+    }
     std::unique_ptr<Context> MakeContext() const {
         return tree_.CreateDefaultEvaluationContext();
     }
 
    private:
     MultibodyTree<double> tree_;
+    const drake::multibody::FixedOffsetFrame<double>* fixed_frame_{};
+    const drake::multibody::JointActuator<double>* actuator_{};
 };
 
 /// The pose of the last body in the world, as the position pass computed it.
@@ -83,11 +206,291 @@ Eigen::Vector3d LastBodyOrigin(const MultibodyTree<double>& tree,
         .translation();
 }
 
+drake::Vector6<double> LastBodySpatialVelocity(
+    const MultibodyTree<double>& tree, const Context& context) {
+    return tree
+        .EvalVelocityKinematics(context)
+        .get_V_WB(drake::multibody::internal::MobodIndex(
+            tree.num_mobods() - 1))
+        .get_coeffs();
+}
+
+Eigen::MatrixXd MassMatrix(const MultibodyTree<double>& tree,
+                           const Context& context) {
+    Eigen::MatrixXd result(tree.num_velocities(), tree.num_velocities());
+    tree.CalcMassMatrix(context, &result);
+    return result;
+}
+
 void SetJointAngles(const MultibodyTree<double>& tree, Context* context,
                     double first, double second) {
     Eigen::VectorXd q(tree.num_positions());
     q << first, second;
     tree.SetPositions(context, q);
+}
+
+struct CacheFreshness {
+    bool frame_body_poses;
+    bool position_kinematics;
+    bool across_node_jacobian;
+    bool velocity_kinematics;
+    bool spatial_inertia_in_world;
+    bool composite_body_inertia_in_world;
+    bool dynamic_bias;
+    bool spatial_acceleration_bias;
+    bool reflected_inertia;
+    bool articulated_body_inertia;
+    bool articulated_body_force_bias;
+};
+
+void ExpectCacheFreshness(const Context& context,
+                          const CacheFreshness& expected,
+                          const std::string& reason) {
+    const auto& caches = context.caches();
+    const std::array<std::pair<bool, const char*>, 11> observations{{
+        {caches.frame_body_poses.is_fresh(), "frame/body poses"},
+        {caches.position_kinematics.is_fresh(), "position kinematics"},
+        {caches.across_node_jacobian.is_fresh(), "across-node Jacobian"},
+        {caches.velocity_kinematics.is_fresh(), "velocity kinematics"},
+        {caches.spatial_inertia_in_world.is_fresh(), "world inertias"},
+        {caches.composite_body_inertia_in_world.is_fresh(),
+         "composite inertias"},
+        {caches.dynamic_bias.is_fresh(), "dynamic bias"},
+        {caches.spatial_acceleration_bias.is_fresh(),
+         "spatial acceleration bias"},
+        {caches.reflected_inertia.is_fresh(), "reflected inertia"},
+        {caches.articulated_body_inertia.is_fresh(),
+         "articulated body inertia"},
+        {caches.articulated_body_force_bias.is_fresh(),
+         "articulated body force bias"},
+    }};
+    const std::array<bool, 11> expected_values{{
+        expected.frame_body_poses,
+        expected.position_kinematics,
+        expected.across_node_jacobian,
+        expected.velocity_kinematics,
+        expected.spatial_inertia_in_world,
+        expected.composite_body_inertia_in_world,
+        expected.dynamic_bias,
+        expected.spatial_acceleration_bias,
+        expected.reflected_inertia,
+        expected.articulated_body_inertia,
+        expected.articulated_body_force_bias,
+    }};
+    for (std::size_t index = 0; index < observations.size(); ++index) {
+        ExpectTrue(
+            observations[index].first == expected_values[index],
+            reason + ": " + observations[index].second +
+                (expected_values[index] ? " should remain fresh"
+                                        : " should be stale"));
+    }
+}
+
+void WarmEveryRetainedCache(const MultibodyTree<double>& tree,
+                            const Context& context) {
+    tree.EvalFrameBodyPoses(context);
+    tree.EvalPositionKinematics(context);
+    tree.EvalAcrossNodeJacobianWrtVExpressedInWorld(context);
+    tree.EvalVelocityKinematics(context);
+    tree.EvalArticulatedBodyInertiaCache(context);
+
+    Eigen::MatrixXd mass_matrix(tree.num_velocities(), tree.num_velocities());
+    tree.CalcMassMatrix(context, &mass_matrix);
+    Eigen::VectorXd bias(tree.num_velocities());
+    tree.CalcBiasTerm(context, &bias);
+    drake::multibody::MultibodyForces<double> forces(tree);
+    drake::multibody::internal::ArticulatedBodyForceCache<double>
+        force_workspace(tree.forest());
+    tree.CalcArticulatedBodyForceCache(context, forces, &force_workspace);
+
+    ExpectCacheFreshness(
+        context,
+        {/*frame_body_poses=*/true,
+         /*position_kinematics=*/true,
+         /*across_node_jacobian=*/true,
+         /*velocity_kinematics=*/true,
+         /*spatial_inertia_in_world=*/true,
+         /*composite_body_inertia_in_world=*/true,
+         /*dynamic_bias=*/true,
+         /*spatial_acceleration_bias=*/true,
+         /*reflected_inertia=*/true,
+         /*articulated_body_inertia=*/true,
+         /*articulated_body_force_bias=*/true},
+        "warming the complete retained directory");
+}
+
+void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
+    const TwoLinkChain model;
+
+    {
+        const std::unique_ptr<Context> context = model.MakeContext();
+        WarmEveryRetainedCache(model.tree(), *context);
+        SetJointAngles(model.tree(), context.get(), 0.3, -0.4);
+        ExpectCacheFreshness(
+            *context,
+            {/*frame_body_poses=*/true,
+             /*position_kinematics=*/false,
+             /*across_node_jacobian=*/false,
+             /*velocity_kinematics=*/false,
+             /*spatial_inertia_in_world=*/false,
+             /*composite_body_inertia_in_world=*/false,
+             /*dynamic_bias=*/false,
+             /*spatial_acceleration_bias=*/false,
+             /*reflected_inertia=*/true,
+             /*articulated_body_inertia=*/false,
+             /*articulated_body_force_bias=*/false},
+            "a generalized-position write");
+    }
+
+    {
+        const std::unique_ptr<Context> context = model.MakeContext();
+        WarmEveryRetainedCache(model.tree(), *context);
+        Eigen::VectorXd velocities(model.tree().num_velocities());
+        velocities << 0.7, -0.2;
+        model.tree().SetVelocities(context.get(), velocities);
+        ExpectCacheFreshness(
+            *context,
+            {/*frame_body_poses=*/true,
+             /*position_kinematics=*/true,
+             /*across_node_jacobian=*/true,
+             /*velocity_kinematics=*/false,
+             /*spatial_inertia_in_world=*/true,
+             /*composite_body_inertia_in_world=*/true,
+             /*dynamic_bias=*/false,
+             /*spatial_acceleration_bias=*/false,
+             /*reflected_inertia=*/true,
+             /*articulated_body_inertia=*/true,
+             /*articulated_body_force_bias=*/false},
+            "a generalized-velocity write");
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetVelocities(cold_context.get(), velocities);
+        const drake::Vector6<double> hot_value =
+            LastBodySpatialVelocity(model.tree(), *context);
+        const drake::Vector6<double> cold_value =
+            LastBodySpatialVelocity(model.tree(), *cold_context);
+        ExpectTrue(hot_value.norm() > 0.0 && hot_value.isApprox(cold_value),
+                   "the invalidated velocity cache agrees with a cold context "
+                   "at the same state");
+    }
+
+    {
+        const std::unique_ptr<Context> context = model.MakeContext();
+        WarmEveryRetainedCache(model.tree(), *context);
+        const Eigen::Vector3d origin_before =
+            LastBodyOrigin(model.tree(), *context);
+        const drake::math::RigidTransform<double> changed_pose(
+            Eigen::Vector3d(0.2, -0.1, 0.3));
+        model.tree().SetFixedFramePoseInParentFrame(
+            context.get(), model.fixed_frame(), changed_pose);
+        ExpectCacheFreshness(
+            *context,
+            {/*frame_body_poses=*/false,
+             /*position_kinematics=*/false,
+             /*across_node_jacobian=*/false,
+             /*velocity_kinematics=*/false,
+             /*spatial_inertia_in_world=*/false,
+             /*composite_body_inertia_in_world=*/false,
+             /*dynamic_bias=*/false,
+             /*spatial_acceleration_bias=*/false,
+             /*reflected_inertia=*/true,
+             /*articulated_body_inertia=*/false,
+             /*articulated_body_force_bias=*/false},
+            "a fixed-frame-pose write");
+        const auto& frame_poses = model.tree().EvalFrameBodyPoses(*context);
+        ExpectTrue(
+            frame_poses.get_X_LF(model.fixed_frame().index())
+                .translation()
+                .isApprox(changed_pose.translation()),
+            "the real frame-pose calculator reads the updated fixed frame");
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetFixedFramePoseInParentFrame(
+            cold_context.get(), model.fixed_frame(), changed_pose);
+        const Eigen::Vector3d hot_origin =
+            LastBodyOrigin(model.tree(), *context);
+        const Eigen::Vector3d cold_origin =
+            LastBodyOrigin(model.tree(), *cold_context);
+        ExpectTrue(!hot_origin.isApprox(origin_before) &&
+                       hot_origin.isApprox(cold_origin),
+                   "the frame-dependent kinematics agrees with a cold context "
+                   "and differs from its old value");
+    }
+
+    {
+        const std::unique_ptr<Context> context = model.MakeContext();
+        WarmEveryRetainedCache(model.tree(), *context);
+        const Eigen::MatrixXd mass_before =
+            MassMatrix(model.tree(), *context);
+        model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+            context.get(), model.first_body(),
+            SpatialInertia<double>::SolidBoxWithMass(3.0, 0.2, 0.1, 0.1));
+        ExpectCacheFreshness(
+            *context,
+            {/*frame_body_poses=*/false,
+             /*position_kinematics=*/true,
+             /*across_node_jacobian=*/true,
+             /*velocity_kinematics=*/true,
+             /*spatial_inertia_in_world=*/false,
+             /*composite_body_inertia_in_world=*/false,
+             /*dynamic_bias=*/false,
+             /*spatial_acceleration_bias=*/true,
+             /*reflected_inertia=*/true,
+             /*articulated_body_inertia=*/false,
+             /*articulated_body_force_bias=*/false},
+            "a rigid-body-inertia write");
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+            cold_context.get(), model.first_body(),
+            SpatialInertia<double>::SolidBoxWithMass(3.0, 0.2, 0.1, 0.1));
+        const Eigen::MatrixXd mass_hot = MassMatrix(model.tree(), *context);
+        const Eigen::MatrixXd mass_cold =
+            MassMatrix(model.tree(), *cold_context);
+        ExpectTrue(!mass_hot.isApprox(mass_before) &&
+                       mass_hot.isApprox(mass_cold),
+                   "the invalidated inertia chain agrees with a cold context "
+                   "and differs from its old value");
+    }
+
+    {
+        const std::unique_ptr<Context> context = model.MakeContext();
+        WarmEveryRetainedCache(model.tree(), *context);
+        const Eigen::MatrixXd mass_before =
+            MassMatrix(model.tree(), *context);
+        model.tree().SetJointActuatorRotorInertia(
+            context.get(), model.actuator(), 0.8);
+        model.tree().SetJointActuatorGearRatio(
+            context.get(), model.actuator(), 3.0);
+        ExpectCacheFreshness(
+            *context,
+            {/*frame_body_poses=*/true,
+             /*position_kinematics=*/true,
+             /*across_node_jacobian=*/true,
+             /*velocity_kinematics=*/true,
+             /*spatial_inertia_in_world=*/true,
+             /*composite_body_inertia_in_world=*/true,
+             /*dynamic_bias=*/true,
+             /*spatial_acceleration_bias=*/true,
+             /*reflected_inertia=*/false,
+             /*articulated_body_inertia=*/false,
+             /*articulated_body_force_bias=*/false},
+            "a joint-actuator-parameter write");
+        model.tree().EvalArticulatedBodyInertiaCache(*context);
+        ExpectTrue(context->caches().reflected_inertia.is_fresh(),
+                   "the ABI chain really recomputes reflected inertia");
+        ExpectTrue(context->caches().spatial_inertia_in_world.is_fresh(),
+                   "the ABI chain really evaluates world inertias");
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetJointActuatorRotorInertia(
+            cold_context.get(), model.actuator(), 0.8);
+        model.tree().SetJointActuatorGearRatio(
+            cold_context.get(), model.actuator(), 3.0);
+        const Eigen::MatrixXd mass_hot = MassMatrix(model.tree(), *context);
+        const Eigen::MatrixXd mass_cold =
+            MassMatrix(model.tree(), *cold_context);
+        ExpectTrue(!mass_hot.isApprox(mass_before) &&
+                       mass_hot.isApprox(mass_cold),
+                   "the actuator-dependent inertia agrees with a cold context "
+                   "and differs from its old value");
+    }
 }
 
 void CheckTheFactoryIsTheOnlyDoor() {
@@ -114,7 +517,7 @@ void CheckTheFactoryIsTheOnlyDoor() {
                "the model's default inertia was installed, not the store's");
 }
 
-void CheckColdComputesAndHotDoesNot() {
+void CheckColdAndRepeatedReadsReturnTheSameRealValue() {
     const TwoLinkChain model;
     const std::unique_ptr<Context> context = model.MakeContext();
 
@@ -130,7 +533,8 @@ void CheckColdComputesAndHotDoesNot() {
 void CheckAPositionWriteExpiresOnlyWhatReadsPositions() {
     const TwoLinkChain model;
     const std::unique_ptr<Context> context = model.MakeContext();
-    LastBodyOrigin(model.tree(), *context);
+    const Eigen::Vector3d origin_before =
+        LastBodyOrigin(model.tree(), *context);
     // The articulated body inertia is a public entry and its calculation warms
     // the reflected inertia along the way; that is the slot this check is about,
     // because it reads actuator parameters and nothing else.
@@ -146,9 +550,14 @@ void CheckAPositionWriteExpiresOnlyWhatReadsPositions() {
                "and leaves the reflected inertia alone — it reads actuator "
                "parameters and nothing else");
 
+    const std::unique_ptr<Context> cold_context = model.MakeContext();
+    SetJointAngles(model.tree(), cold_context.get(), 0.3, -0.4);
     const Eigen::Vector3d moved = LastBodyOrigin(model.tree(), *context);
-    ExpectTrue(moved.norm() > 0.0,
-               "and the recomputed pose reflects the new configuration");
+    const Eigen::Vector3d cold_value =
+        LastBodyOrigin(model.tree(), *cold_context);
+    ExpectTrue(!moved.isApprox(origin_before) && moved.isApprox(cold_value),
+               "and the recomputed pose changes and agrees with a cold "
+               "context at the same state");
 }
 
 void CheckAMassWriteExpiresInertiaButNotPosition() {
@@ -163,11 +572,9 @@ void CheckAMassWriteExpiresInertiaButNotPosition() {
     // This is the distinction the runtime contract insisted on and that the
     // upstream cache could not draw: mass properties and frame poses live in
     // one value type, but the position pass reads only the pose fields.
-    orvd::multibody_runtime::RigidBodyInertiaParameters heavier =
-        context->state().rigid_body_inertia_parameters(1);
-    heavier.mass_kilograms *= 2.0;
-    model.tree().GetMutableParameters(context.get()).set_rigid_body_inertia_parameters(
-        1, heavier);
+    model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+        context.get(), model.first_body(),
+        SpatialInertia<double>::SolidBoxWithMass(2.0, 0.2, 0.1, 0.1));
 
     ExpectTrue(context->caches().position_kinematics.is_fresh(),
                "changing a mass does not expire the position pass");
@@ -224,10 +631,21 @@ void CheckTwoContextsWithEqualVersionsStayApart() {
     // not, and B is untouched by either.
     LastBodyOrigin(model.tree(), *a);
     model.tree().EvalArticulatedBodyInertiaCache(*a);
-    orvd::multibody_runtime::RigidBodyInertiaParameters heavier =
-        a->state().rigid_body_inertia_parameters(0);
-    heavier.mass_kilograms += 1.0;
-    model.tree().GetMutableParameters(a.get()).set_rigid_body_inertia_parameters(0, heavier);
+    model.tree().EvalArticulatedBodyInertiaCache(*b);
+    const Eigen::MatrixXd b_mass_before = MassMatrix(model.tree(), *b);
+    const auto b_q_version_before =
+        b->state().generalized_positions_version();
+    const auto b_v_version_before =
+        b->state().generalized_velocities_version();
+    const auto b_frame_version_before =
+        b->state().fixed_frame_poses_version();
+    const auto b_inertia_version_before =
+        b->state().rigid_body_inertias_version();
+    const auto b_actuator_version_before =
+        b->state().joint_actuator_parameters_version();
+    model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+        a.get(), model.first_body(),
+        SpatialInertia<double>::SolidBoxWithMass(2.0, 0.2, 0.1, 0.1));
     ExpectTrue(!a->caches().spatial_inertia_in_world.is_fresh(),
                "A's world inertias expired");
     ExpectTrue(a->caches().position_kinematics.is_fresh(),
@@ -235,31 +653,139 @@ void CheckTwoContextsWithEqualVersionsStayApart() {
     ExpectTrue(b->caches().position_kinematics.is_fresh() &&
                    LastBodyOrigin(model.tree(), *b) == b_warm,
                "and B is untouched by A's inertia change");
+    ExpectTrue(b->caches().spatial_inertia_in_world.is_fresh() &&
+                   b->caches().articulated_body_inertia.is_fresh() &&
+                   MassMatrix(model.tree(), *b).isApprox(b_mass_before),
+               "B's warmed inertia chain and value remain unchanged");
+    ExpectTrue(
+        b->state().generalized_positions_version() == b_q_version_before &&
+            b->state().generalized_velocities_version() == b_v_version_before &&
+            b->state().fixed_frame_poses_version() ==
+                b_frame_version_before &&
+            b->state().rigid_body_inertias_version() ==
+                b_inertia_version_before &&
+            b->state().joint_actuator_parameters_version() ==
+                b_actuator_version_before,
+        "B's five state versions remain unchanged");
 }
 
-void CheckAZeroQuaternionIsRefusedAndNothingIsWritten() {
-    // A revolute chain has no quaternion, so the gate has nothing to reject
-    // here; what this pins is that an ordinary write still passes through the
-    // gate unharmed, and that a non-unit value is stored exactly as given
-    // rather than being normalised behind the caller's back.
-    const TwoLinkChain model;
+class QuaternionFloatingBody {
+   public:
+    explicit QuaternionFloatingBody(bool zero_default_quaternion = false) {
+        const auto& body = tree_.AddLink(
+            "floating",
+            SpatialInertia<double>::SolidBoxWithMass(1.0, 0.2, 0.1, 0.1));
+        tree_.AddJoint<drake::multibody::QuaternionFloatingJoint>(
+            "floating_joint", tree_.world_link(), {}, body, {});
+        if (zero_default_quaternion) {
+            tree_
+                .GetMutableJointByName<
+                    drake::multibody::QuaternionFloatingJoint>(
+                    "floating_joint")
+                .set_default_quaternion(Eigen::Quaterniond(0.0, 0.0, 0.0,
+                                                            0.0));
+        }
+        tree_.Finalize();
+    }
+
+    const MultibodyTree<double>& tree() const { return tree_; }
+    std::unique_ptr<Context> MakeContext() const {
+        return tree_.CreateDefaultEvaluationContext();
+    }
+
+   private:
+    MultibodyTree<double> tree_;
+};
+
+void CheckTheQuaternionCommitGate() {
+    const QuaternionFloatingBody model;
     const std::unique_ptr<Context> context = model.MakeContext();
-    Eigen::VectorXd q(model.tree().num_positions());
-    q << 0.25, 0.75;
-    model.tree().SetPositions(context.get(), q);
-    ExpectTrue(context->state().generalized_positions() == q,
-               "an ordinary position write is stored exactly as given");
+
+    Eigen::VectorXd non_unit = context->state().generalized_positions();
+    non_unit.template head<4>() << 2.0, 0.0, 0.0, 0.0;
+    non_unit.template tail<3>() << 0.3, -0.4, 0.5;
+    model.tree().SetPositions(context.get(), non_unit);
+    ExpectTrue(context->state().generalized_positions() == non_unit,
+               "a nonzero non-unit quaternion is stored exactly, not "
+               "silently normalized");
+
+    const Eigen::VectorXd before_zero =
+        context->state().generalized_positions();
+    const auto version_before_zero =
+        context->state().generalized_positions_version();
+    Eigen::VectorXd zero = before_zero;
+    zero.template head<4>().setZero();
+    bool zero_was_rejected = false;
+    try {
+        model.tree().SetPositions(context.get(), zero);
+    } catch (const std::logic_error&) {
+        zero_was_rejected = true;
+    }
+    ExpectTrue(zero_was_rejected,
+               "a real quaternion mobilizer rejects an exactly zero "
+               "quaternion");
+    ExpectTrue(context->state().generalized_positions() == before_zero &&
+                   context->state().generalized_positions_version() ==
+                       version_before_zero,
+               "a refused zero quaternion changes neither q nor its version");
+
+    Eigen::VectorXd short_positions(model.tree().num_positions() - 1);
+    short_positions.setZero();
+    bool short_vector_was_rejected = false;
+    try {
+        model.tree().SetPositions(context.get(), short_positions);
+    } catch (const std::invalid_argument&) {
+        short_vector_was_rejected = true;
+    }
+    ExpectTrue(short_vector_was_rejected,
+               "a short q is rejected before quaternion segments are read");
+    ExpectTrue(context->state().generalized_positions() == before_zero &&
+                   context->state().generalized_positions_version() ==
+                       version_before_zero,
+               "a refused short q changes neither q nor its version");
+
+    const QuaternionFloatingBody invalid_default(
+        /*zero_default_quaternion=*/true);
+    bool invalid_default_was_rejected = false;
+    try {
+        const auto invalid_context = invalid_default.MakeContext();
+        (void)invalid_context;
+    } catch (const std::logic_error&) {
+        invalid_default_was_rejected = true;
+    }
+    ExpectTrue(
+        invalid_default_was_rejected,
+        "the model-aware factory routes default q through the quaternion gate");
+}
+
+void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
+    const TwoLinkChain first_model;
+    const TwoLinkChain second_model;
+    const std::unique_ptr<Context> second_context = second_model.MakeContext();
+    bool foreign_context_was_rejected = false;
+    try {
+        first_model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+            second_context.get(), first_model.first_body(),
+            SpatialInertia<double>::SolidBoxWithMass(2.0, 0.2, 0.1, 0.1));
+    } catch (const std::invalid_argument&) {
+        foreign_context_was_rejected = true;
+    }
+    ExpectTrue(foreign_context_was_rejected,
+               "a physical parameter door rejects a context from another "
+               "finalized model");
 }
 
 }  // namespace
 
 int main() {
     CheckTheFactoryIsTheOnlyDoor();
-    CheckColdComputesAndHotDoesNot();
+    CheckColdAndRepeatedReadsReturnTheSameRealValue();
+    CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots();
     CheckAPositionWriteExpiresOnlyWhatReadsPositions();
     CheckAMassWriteExpiresInertiaButNotPosition();
     CheckTwoContextsWithEqualVersionsStayApart();
-    CheckAZeroQuaternionIsRefusedAndNothingIsWritten();
+    CheckTheQuaternionCommitGate();
+    CheckPhysicalParameterDoorsRejectAContextFromAnotherModel();
 
     if (failure_count > 0) {
         std::printf("%d rigid tree cache binding check(s) failed\n",
@@ -267,8 +793,8 @@ int main() {
         return 1;
     }
     std::printf(
-        "the tree's caches expire for exactly the state their calculators read,"
-        " and two contexts at identical version numbers keep their own answers"
-        "\n");
+        "the eleven real cache slots match the runtime contract, model-aware "
+        "writes preserve their gates, and equal-version contexts keep their "
+        "own answers\n");
     return 0;
 }

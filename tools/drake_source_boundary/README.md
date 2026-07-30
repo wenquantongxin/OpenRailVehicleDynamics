@@ -113,16 +113,19 @@ python3 tools/drake_source_boundary/calculate_required_drake_source_closure.py -
 单元，和定义了它的一样越界。编译期就消解、根本到不了符号表的构造（`default_scalars.h`
 的 include、`scalar_predicate` 分支）由另一条源码扫描负责。
 
-在 G20–G28 完成前，对完整落位树的整轮运行会返回非零：仍需运行时的翻译单元尚未编译
-得过。因此 CTest 只注册它的合成源码树自检，不用 `WILL_FAIL` 把失败伪装成绿色——一道
-允许失败的测试，很快就没人再读它了。真实运行是开发期命令：
+G27 接入第一方运行时后，真实运行须显式给出 landed 树、第一方 runtime 头与第三方头。
+CTest 仍只注册合成源码树自检；真实的逐 TU 编译约两分钟，保留为开发期命令：
 
 ```bash
 python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py \
     --landed-root external/drake_mbtree \
     --compiler <编译器> \
-    --third-party-include-directory <Eigen include 目录>
+    --admitted-include-directory libs/multibody_runtime/include \
+    --admitted-include-directory <Eigen include 目录>
 ```
+
+这里的“landed 边界”是 landed tree 加仓库内第一方 runtime 头及明确准入的 Eigen/fmt，
+不是单独一棵 `external/drake_mbtree/`。工具仍保证其他 Drake 源码树或安装树不可见。
 
 临时对象放在 `TMPDIR` 指向的位置（本机指向外置卷），运行结束即消失。工具不落盘通过数、
 符号表或允许列表：今天记下的数字，明天会变成一道因错误理由而通过的门。它输出的是

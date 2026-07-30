@@ -296,8 +296,7 @@ class Frame : public MultibodyElement<T> {
   /// @note RigidBody::EvalSpatialVelocityInWorld() provides a more efficient
   /// way to obtain a RigidBodyFrame (LinkFrame) spatial velocity measured in
   /// the world  frame.
-  /// @see CalcSpatialVelocity(), CalcRelativeSpatialVelocityInWorld(), and
-  /// CalcSpatialAccelerationInWorld().
+  /// @see CalcSpatialVelocity() and CalcRelativeSpatialVelocityInWorld().
   SpatialVelocity<T> CalcSpatialVelocityInWorld(
       const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const;
 
@@ -311,8 +310,7 @@ class Frame : public MultibodyElement<T> {
   /// ω_MF_E (frame F's angular velocity ω measured in frame M, expressed in
   /// frame E). The translational part is v_MFo_E (translational velocity v of
   /// frame F's origin point Fo, measured in frame M, expressed in frame E).
-  /// @see CalcSpatialVelocityInWorld(), CalcRelativeSpatialVelocity(), and
-  /// CalcSpatialAcceleration().
+  /// @see CalcSpatialVelocityInWorld() and CalcRelativeSpatialVelocity().
   SpatialVelocity<T> CalcSpatialVelocity(const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
                                          const Frame<T>& frame_M,
                                          const Frame<T>& frame_E) const;
@@ -383,93 +381,12 @@ class Frame : public MultibodyElement<T> {
     return V_MF_E - V_MB_E;
   }
 
-  /// Calculates `this` frame F's spatial acceleration measured and expressed in
-  /// the world frame W.
-  /// @param[in] context contains the state of the multibody system.
-  /// @return A_WF_W, `this` frame F's spatial acceleration measured and
-  /// expressed in the world frame W. The rotational part of the returned
-  /// quantity is α_WF_E (frame F's angular acceleration α measured and
-  /// expressed in the world frame W).  The translational part is a_WFo_W
-  /// (translational acceleration of frame F's origin point Fo, measured and
-  /// expressed in the world frame W).
-  /// @note RigidBody::EvalSpatialAccelerationInWorld() provides a more
-  /// efficient way to obtain a body frame's spatial acceleration measured in
-  /// the world frame.
-  /// @note When cached values are out of sync with the state stored in context,
-  /// this method performs an expensive forward dynamics computation, whereas
-  /// once evaluated, successive calls to this method are inexpensive.
-  /// @see CalcSpatialAcceleration() and CalcSpatialVelocityInWorld().
-    // The convenience entries that returned a spatial acceleration are gone
-  // with the forward-dynamics entry they were built on. Each of them asked
-  // for an acceleration without saying what forces produced it, which meant
-  // answering for one particular set of forces and not saying which.
-  // Assembling the forces and running the passes is G36's; entries that take
-  // a known vdot, such as CalcSpatialAccelerationsFromVdot(), are unaffected.
-  /// Calculates `this` frame F's spatial acceleration measured in a frame M,
-  /// expressed in a frame E.
-  /// @param[in] context contains the state of the multibody system.
-  /// @param[in] measured_in_frame which is frame M.
-  /// @param[in] expressed_in_frame which is frame E.
-  /// @return A_MF_E, `this` frame F's spatial acceleration measured in frame M,
-  /// expressed in frame E. The rotational part of the returned quantity is
-  /// α_MF_E (frame F's angular acceleration α measured in frame M, expressed in
-  /// frame E). The translational part is a_MFo_E (translational acceleration of
-  /// frame F's origin point Fo, measured in frame M, expressed in frame E).
-  /// Although α_MF is defined below in terms of DtM(ω_MF), the time-derivative
-  /// in frame M of ω_MF, the actual calculation of α_MF avoids differentiation.
-  /// Similarly for the definition vs. calculation for a_MFo. <pre>
-  ///  α_MF = DtM(ω_MF)           ω_MF is frame F's angular velocity in frame M.
-  ///  a_MFo = DtM(v_MFo)    v_MF is Fo's translational acceleration in frame M.
-  /// </pre>
-  /// @see CalcSpatialAccelerationInWorld() and CalcSpatialVelocity().
-    /// Calculates `this` frame F's spatial acceleration relative to another
-  /// frame B, measured and expressed in the world frame W.
-  /// @param[in] context contains the state of the multibody system.
-  /// @param[in] other_frame which is frame B.
-  /// @return A_W_BF_W = A_WF_W - A_WB_W, frame F's spatial acceleration
-  /// relative to frame B, measured and expressed in the world frame W.
-  ///
-  /// In general, A_W_BF = DtW(V_W_BF), the time-derivative in the world frame W
-  /// of frame F's spatial velocity relative to frame B. The rotational part of
-  /// the returned quantity is α_WF_W - α_WB_W = DtW(ω_BF)_W. For 3D analysis,
-  /// DtW(ω_BF) ≠ α_BF. The translational part of the returned quantity is
-  /// a_W_BoFo_W (Fo's translational acceleration relative to Bo, measured and
-  /// expressed in world frame W). <pre>
-  ///  α_WF_W - α_WB_W = DtW(ω_WF)_W - DtW(ω_WB)_W = DtW(ω_BF)_W
-  ///  a_W_BoFo_W = a_WFo_W - a_WBo_W = DtW(v_WFo) - DtW(v_WBo) = Dt²W(p_BoFo)_W
-  /// </pre>
-  /// where Dt²W(p_BoFo)_W is the 2ⁿᵈ time-derivative in frame W of p_BoFo (the
-  /// position vector from Bo to Fo), and this result is expressed in frame W.
-  /// @note The method CalcSpatialAccelerationInWorld() is more efficient and
-  /// coherent if any of `this`, other_frame, or the world frame W are the same.
-  /// @see CalcSpatialAccelerationInWorld(), CalcRelativeSpatialAcceleration().
-    /// Calculates `this` frame F's spatial acceleration relative to another
-  /// frame B, measured in a frame M, expressed in a frame E.
-  /// @param[in] context contains the state of the multibody system.
-  /// @param[in] other_frame which is frame B.
-  /// @param[in] measured_in_frame which is frame M.
-  /// @param[in] expressed_in_frame which is frame E.
-  /// @return A_M_BF_E = A_MF_E - A_MB_E, frame F's spatial acceleration
-  /// relative to frame B, measured in frame M, expressed in frame E.
-  ///
-  /// In general, A_M_BF = DtW(V_M_BF), the time-derivative in frame M of
-  /// frame F's spatial velocity relative to frame B. The rotational part of the
-  /// returned quantity is α_MF_E - α_MB_E = DtM(ω_BF)_E. Note: For 3D analysis,
-  /// DtM(ω_BF) ≠ α_BF. The translational part of the returned quantity is
-  /// a_M_BoFo_E (Fo's translational acceleration relative to Bo, measured in
-  /// frame M, expressed in frame E). <pre>
-  ///  α_MF_E - α_MB_E = DtM(ω_MF)_E - DtM(ω_MB)_E = DtM(ω_BF)_E
-  ///  a_M_BoFo_E = a_MFo_E - a_MBo_E = DtM(v_MFo) - DtM(v_MBo) = Dt²M(p_BoFo)_E
-  /// </pre>
-  /// where Dt²M(p_BoFo)_E is the 2ⁿᵈ time-derivative in frame M of p_BoFo (the
-  /// position vector from Bo to Fo), and this result is expressed in frame E.
-  /// @note The calculation of the 2ⁿᵈ time-derivative of the distance between
-  /// Bo and Fo can be done with relative translational acceleration, but this
-  /// calculation does not depend on the measured-in-frame, hence in this case,
-  /// consider CalcRelativeSpatialAccelerationInWorld() since it is faster.
-  /// @see CalcSpatialAccelerationInWorld(), CalcSpatialAcceleration(), and
-  /// CalcRelativeSpatialAccelerationInWorld().
-    /// (Internal use only) Returns a shallow clone (i.e., dependent elements such
+  // The forward-dynamics acceleration conveniences were removed with the
+  // force-free acceleration entry they depended on. Entries that accept a
+  // known vdot remain on MultibodyTree; assembling forces and running ABA is
+  // G36's responsibility.
+
+  /// (Internal use only) Returns a shallow clone (i.e., dependent elements such
   /// as bodies are aliased, not copied) that is not associated with any MbT (so
   /// the assigned index, if any, is discarded).
   std::unique_ptr<Frame<T>> ShallowClone() const;

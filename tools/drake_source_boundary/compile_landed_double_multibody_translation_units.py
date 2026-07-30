@@ -8,14 +8,15 @@ real compile frontier is. The two must stay separate: relaxing the G11 probe's
 pinned-revision check so it could also read the landed tree would let one tool
 confuse two source identities, and neither answer would be trustworthy again.
 
-The landed tree is the only Drake include directory the compiler gets. Any other
-Drake tree in scope — through an argument, through the environment, or through the
-compiler's own defaults — would let a header this boundary deliberately does not
-have satisfy an include, and the run would report a frontier the boundary has not
-earned. That is checked by asking the compiler what it can see, with
-`__has_include` on headers known to be absent from the landed tree, rather than by
-matching path strings: a Drake installation somewhere unexpected is exactly the
-case a string match misses.
+The landed tree is the only Drake include directory the compiler gets. Other
+explicitly admitted include roots can provide first-party runtime headers or
+third-party headers, but any other Drake tree in scope — through an argument,
+through the environment, or through the compiler's own defaults — would let a
+header this boundary deliberately does not have satisfy an include, and the run
+would report a frontier the boundary has not earned. That is checked by asking
+the compiler what it can see, with `__has_include` on headers known to be absent
+from the landed tree, rather than by matching path strings: a Drake installation
+somewhere unexpected is exactly the case a string match misses.
 
 Failures do not stop the pass. Every translation unit is attempted so that one
 blocked file cannot hide the state of the rest, and the compiler's own text is
@@ -31,9 +32,10 @@ defined and undefined symbols are examined, because a translation unit that mere
 Constructs that never reach the symbol table — a `default_scalars.h` include, a
 `scalar_predicate` branch — are caught by a separate source scan.
 
-Until G20-G28 replace the runtime, the complete landed tree has translation units
-that cannot compile and the tool returns non-zero. That is not hidden behind an
-expected-failure wrapper, because a test that is allowed to fail stops being read.
+The real landed-tree run stays outside default CTest because it recompiles every
+translation unit. It must return zero once the admitted first-party runtime and
+third-party include roots are supplied; a non-zero result is never hidden behind
+an expected-failure wrapper.
 
 Nothing is written down. No pass count, no symbol list, no allowlist: a number
 recorded today becomes a gate that passes for the wrong reason tomorrow. Objects
@@ -336,7 +338,7 @@ def report_forbidden_source_tokens(landed_root: Path) -> bool:
 def compile_landed_translation_units(
     landed_root: Path,
     compiler: str,
-    third_party_include_directories: list[str],
+    admitted_include_directories: list[str],
     show_diagnostics: bool,
 ) -> int:
     if not landed_root.is_dir():
@@ -369,7 +371,7 @@ def compile_landed_translation_units(
             file=sys.stderr,
         )
         return 2
-    for include_directory in third_party_include_directories:
+    for include_directory in admitted_include_directories:
         if drake_headers_visible_with(
             compiler,
             ["-I", include_directory],
@@ -377,7 +379,7 @@ def compile_landed_translation_units(
             headers_expected_absent,
         ):
             print(
-                "LANDED: third-party include directory reaches a Drake tree this"
+                "LANDED: admitted include directory reaches a Drake tree this"
                 f" boundary does not have: {include_directory}",
                 file=sys.stderr,
             )
@@ -389,7 +391,7 @@ def compile_landed_translation_units(
         return 2
 
     include_arguments = ["-I", str(landed_root)]
-    for include_directory in third_party_include_directories:
+    for include_directory in admitted_include_directories:
         include_arguments += ["-isystem", include_directory]
 
     outcomes: list[TranslationUnitOutcome] = []
@@ -468,11 +470,11 @@ def main(argv: list[str]) -> int:
         "--compiler", default="c++", help="GNU-compatible compiler executable"
     )
     parser.add_argument(
-        "--third-party-include-directory",
+        "--admitted-include-directory",
         action="append",
         default=[],
-        help="an include directory for an admitted dependency (Eigen, fmt);"
-        " repeatable. It must not expose a Drake tree.",
+        help="an admitted first-party or third-party include directory;"
+        " repeatable. It must not expose another Drake tree.",
     )
     parser.add_argument(
         "--show-diagnostics",
@@ -484,7 +486,7 @@ def main(argv: list[str]) -> int:
         return compile_landed_translation_units(
             Path(arguments.landed_root),
             arguments.compiler,
-            arguments.third_party_include_directory,
+            arguments.admitted_include_directory,
             arguments.show_diagnostics,
         )
     except RuntimeError as error:

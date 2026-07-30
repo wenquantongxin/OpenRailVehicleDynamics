@@ -9,7 +9,8 @@
 和本仓库改动漂移,读到对不上时以符号名为准。
 
 **不是**:防漂移机制。本轮不建长期扫描器——契约的价值在裁决内容,而防漂移由能执行的
-东西承担:G26 的纯落位编译、G27 的冷热上下文对照与重算计数。
+东西承担:G26 的 landed 边界编译、G25 的通用求值重算计数,以及 G27 的真实
+fresh/stale 矩阵与冷热上下文值对照。
 
 文中的计数是**本轮审计证据**,不是长期门槛。铁律第 7 条:数量是某次测量的结果,不是判据。
 
@@ -60,12 +61,13 @@ Drake 在该处留有自己的 TODO:**"Create more granular parameter tickets fo
 的实际输入。ORVD 内核只接收显式的调用期施力,由后续系统组装层决定这些力是否来自时间或
 端口；数值精度不进入多体树契约。
 
-### 落位侧的路由入口
+### 落位侧的路由入口（G20 证据面）
 
-`MultibodyTree` 声明 16 个 `Eval*`,其中 **13 个**转发到缓存;另外 3 个
+G20 侦查时的 landed 源码中，`MultibodyTree` 声明 16 个 `Eval*`,其中 **13 个**转发到缓存;另外 3 个
 (`EvalLinkPoseInWorld`、`EvalLinkSpatialVelocityInWorld`、
 `EvalLinkSpatialAccelerationInWorld`)是 per-link 访问器,路由到聚合缓存,**不是新的缓存
-实体**。15 条声明中未经 `MultibodyTree` 转发的两条是 system Jacobian 与 ABA force cache,
+实体**。这是 G20 用来裁决 G27 去留的历史证据面，不是 G27 后的当前 API 计数。
+15 条缓存声明中未经 `MultibodyTree` 转发的两条是 system Jacobian 与 ABA force cache,
 由其他路径访问。外层 `RigidBody` / `Frame` 的公共 API 同样只是路由。
 
 ## 二、ORVD 的目标处置
@@ -250,6 +252,7 @@ G27 的模型感知 context 工厂必须以 `tree.state_layout()` 构造私有�
 
 ## 附:G27 收口后的 `Eval` 计数
 
-落位树共 15 个 `Eval*` 入口:12 个原为 `tree_system_` 转发,3 个是 per-link 路由。
-12 个转发中只有 **11 个属于长期缓存**——第 12 个是前向动力学加速度,它依赖调用期外力,
-G27 已将其连同仅依赖它的便利入口一并删除,组装力与运行 ABA 归 G36。
+落位树当前共 13 个 `Eval*` 入口:11 个长期缓存入口，以及
+`EvalLinkPoseInWorld`、`EvalLinkSpatialVelocityInWorld` 两个 per-link 路由。
+原来的前向动力学加速度入口依赖调用期外力，G27 已将其连同只依赖它的便利入口删除；
+组装力与运行 ABA 归 G36。

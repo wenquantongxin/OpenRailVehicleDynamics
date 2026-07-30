@@ -17,6 +17,7 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/math/rotation_matrix.h"
 #include "drake/multibody/tree/body_node_world.h"
+#include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/multibody_tree-inl.h"
 #include "drake/multibody/tree/prismatic_joint.h"
 #include "drake/multibody/tree/quaternion_floating_joint.h"
@@ -1140,6 +1141,47 @@ void MultibodyTree<T>::ValidateStateInstance(
 }
 
 template <typename T>
+void MultibodyTree<T>::SetRigidBodySpatialInertiaInBodyFrame(
+    orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+        context,
+    const RigidBody<T>& body, const SpatialInertia<T>& inertia) const {
+  DRAKE_THROW_UNLESS(context != nullptr);
+  ValidateEvaluationContext(*context);
+  body.SetSpatialInertiaInBodyFrame(&context->mutable_state(), inertia);
+}
+
+template <typename T>
+void MultibodyTree<T>::SetFixedFramePoseInParentFrame(
+    orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+        context,
+    const FixedOffsetFrame<T>& frame,
+    const math::RigidTransform<T>& pose_in_parent_frame) const {
+  DRAKE_THROW_UNLESS(context != nullptr);
+  ValidateEvaluationContext(*context);
+  frame.SetPoseInParentFrame(&context->mutable_state(), pose_in_parent_frame);
+}
+
+template <typename T>
+void MultibodyTree<T>::SetJointActuatorRotorInertia(
+    orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+        context,
+    const JointActuator<T>& actuator, const T& rotor_inertia) const {
+  DRAKE_THROW_UNLESS(context != nullptr);
+  ValidateEvaluationContext(*context);
+  actuator.SetRotorInertia(&context->mutable_state(), rotor_inertia);
+}
+
+template <typename T>
+void MultibodyTree<T>::SetJointActuatorGearRatio(
+    orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+        context,
+    const JointActuator<T>& actuator, const T& gear_ratio) const {
+  DRAKE_THROW_UNLESS(context != nullptr);
+  ValidateEvaluationContext(*context);
+  actuator.SetGearRatio(&context->mutable_state(), gear_ratio);
+}
+
+template <typename T>
 void MultibodyTree<T>::SetDefaultParameters(
     orvd::multibody_runtime::MultibodyStateInstance* state) const {
   DRAKE_DEMAND(state != nullptr);
@@ -1181,10 +1223,10 @@ void MultibodyTree<T>::SetDefaultState(
   for (const auto& mobilizer : mobilizers_) {
     mobilizer->WriteDefaultPositions(&q);
   }
-  state->set_generalized_positions(q);
+  SetPositions(state, q);
   // The default velocity is zero for every mobilizer, so v needs no per-element
   // pass at all.
-  state->set_generalized_velocities(VectorX<T>::Zero(num_velocities()));
+  SetVelocities(state, VectorX<T>::Zero(num_velocities()));
 }
 
 template <typename T>

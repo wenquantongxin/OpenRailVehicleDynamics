@@ -46,7 +46,7 @@ def write_tree(root: Path, files: dict[str, str]) -> None:
 
 
 def run_tool(
-    landed_root: Path, third_party_include_directories: list[Path] | None = None
+    landed_root: Path, admitted_include_directories: list[Path] | None = None
 ) -> subprocess.CompletedProcess[str]:
     command = [
         sys.executable,
@@ -56,8 +56,8 @@ def run_tool(
         "--compiler",
         compiler_under_test,
     ]
-    for include_directory in third_party_include_directories or []:
-        command += ["--third-party-include-directory", str(include_directory)]
+    for include_directory in admitted_include_directories or []:
+        command += ["--admitted-include-directory", str(include_directory)]
     return subprocess.run(
         command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False
     )
@@ -107,7 +107,7 @@ def case_foreign_drake_include_directory_is_refused(workspace: Path) -> None:
     result = run_tool(landed_root, [foreign_root])
     record_failure_unless(
         result.returncode == 2,
-        "a third-party include directory exposing a Drake tree must be refused\n"
+        "an admitted include directory exposing a Drake tree must be refused\n"
         + result.stdout,
     )
     record_failure_unless(
