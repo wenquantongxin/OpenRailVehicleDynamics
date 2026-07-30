@@ -103,6 +103,18 @@ target_link_libraries(verify_multibody_state_instance
 add_test(NAME verify_multibody_state_instance
          COMMAND verify_multibody_state_instance)
 
+# When a cache slot will hand out its value and when it refuses. The value type
+# here is synthetic on purpose: the base layer must not name the rigid tree's
+# cache values, so what is under test is the slot mechanism rather than any
+# particular thing to put in one.
+add_executable(verify_multibody_cache_slot
+    multibody_runtime/verify_multibody_cache_slot.cc)
+orvd_configure_first_party_target(verify_multibody_cache_slot)
+target_link_libraries(verify_multibody_cache_slot
+    PRIVATE orvd_multibody_runtime)
+add_test(NAME verify_multibody_cache_slot
+         COMMAND verify_multibody_cache_slot)
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain
