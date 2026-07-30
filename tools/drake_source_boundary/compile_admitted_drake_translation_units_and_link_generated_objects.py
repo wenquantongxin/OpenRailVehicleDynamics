@@ -21,8 +21,8 @@ object that was produced goes on the link line together with a temporary `main`
 that provides nothing but an entry point, with no static archive, no
 link-time optimisation and no section garbage collection — an unreferenced
 function whose body calls a missing symbol must still break the link. That link
-covers only the subset that compiled today, and this tool says so; proving the
-whole boundary links is G17's job, using this same mechanism over all objects.
+covers only the subset that compiled today, and this tool says so; proving that
+the whole boundary compiles and links is G28's job.
 
 Nothing survives the run: objects, logs and the staged tree are temporary, and
 the report is for the decision being made now. No symbol table, count or

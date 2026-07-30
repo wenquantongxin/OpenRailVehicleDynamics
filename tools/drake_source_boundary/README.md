@@ -8,6 +8,8 @@
 | `verify_source_closure_analyzer.py` | 用现造的合成源码树检验上面那支分析器 |
 | `compile_admitted_drake_translation_units_and_link_generated_objects.py` | 把准入集合暂存后逐个真实编译，并链接产出的对象 |
 | `verify_admitted_translation_unit_compile_probe.py` | 用合成源码树检验上面那支探针 |
+| `compile_landed_double_multibody_translation_units.py` | 编译**已落位**的 double-only 源码，报告编译前沿、源码层运行时依赖表面与禁忌标量符号 |
+| `verify_landed_double_compile_frontier.py` | 用合成源码树检验上面那支工具 |
 
 只用 Python 3 标准库，不引第三方包。
 
@@ -84,8 +86,43 @@ python3 tools/drake_source_boundary/calculate_required_drake_source_closure.py -
   链接**仍然必须失败**。否则报出的"边界成立"只是因为那个符号从没被走到。
 - 不落盘符号表、符号数或允许列表。今天记下的数字，明天会变成一道因错误理由而通过的门。
 
-链接只覆盖**当次编译成功的子集**，工具会明说这一点。G17 用 landed double-only 源码
-界定真实编译前沿；整个边界的全部翻译单元编译与全对象链接由 G28 验收。
+链接只覆盖**当次编译成功的子集**，工具会明说这一点。整个边界的全部翻译单元编译与
+全对象链接由 G28 验收。
+
+## 落位前沿工具与准入探针的分工
+
+两支工具读的是**两种源码身份**，不可互相代用：
+
+- 准入探针读**钉死 commit 的未修改上游克隆**，回答"处置清单声明的准入集合能不能编译"。
+  它校验克隆 HEAD 与清单声明的 commit 一致，这道校验不得为了顺便读落位树而放宽。
+- 落位前沿工具读**仓库里已落位的源码**，回答"double-only 手术之后真实的编译前沿在哪"。
+  它不校验 commit，因为落位源码相对上游本就有记录在案的改动。
+
+落位工具把落位树作为**唯一**的 `drake/` include 目录。任何其他 Drake 树在场——经参数、
+经环境变量、或经编译器自身默认路径——都会让一个本边界故意不具备的头满足某个 include，
+于是报出一个边界并未挣得的前沿。它用 `__has_include` 问编译器"看不看得见本边界没有的头"
+来判断，而不是匹配路径字符串:装在意料之外位置的 Drake 恰恰是字符串匹配漏掉的那种。
+
+符号检查用**限定名**。裸搜 `symbolic` 会命中 `Eigen::symbolic::SymbolExpr`——那是 Eigen
+自己给 `Eigen::last` / `Eigen::seq` 索引表达式建立的命名空间，与 Drake 的符号标量无关；
+自检里有一条专门的负控守着这件事。定义与未定义符号都看：只是**调用**了被裁构造的翻译
+单元，和定义了它的一样越界。编译期就消解、根本到不了符号表的构造（`default_scalars.h`
+的 include、`scalar_predicate` 分支）由另一条源码扫描负责。
+
+真实落位树的整轮运行**今天必然返回非零**：仍需运行时的翻译单元要等 G20–G28 替换之后才
+编译得过。因此 CTest 只注册它的合成源码树自检，不用 `WILL_FAIL` 把失败伪装成绿色——
+一道允许失败的测试，很快就没人再读它了。真实运行是开发期命令：
+
+```bash
+python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py \
+    --landed-root external/drake_mbtree \
+    --compiler <编译器> \
+    --third-party-include-directory <Eigen include 目录>
+```
+
+临时对象放在 `TMPDIR` 指向的位置（本机指向外置卷），运行结束即消失。工具不落盘通过数、
+符号表或允许列表：今天记下的数字，明天会变成一道因错误理由而通过的门。它输出的是
+**源码层**运行时依赖表面，不宣称完整 ABI，也不宣称最小实现契约。
 
 ## 第三方依赖按参数传入
 

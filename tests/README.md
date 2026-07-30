@@ -6,6 +6,7 @@
 | `contract/` | 模型中立场景与观测语义，以及其自检 |
 | `comparison/` | 必需观测集合与容差判定（判定方独占） |
 | `topology/` | vendored topology 的索引与顺序结构契约 |
+| `math/` | 四个 double 位姿组合函数的代数与输出重叠契约 |
 | `drake_reference/` | Drake 参考发射器、跨进程比较与缓存失效语义探针，默认不构建 |
 | `unit/` | 逐模块单元测试 |
 
@@ -50,6 +51,21 @@ ctest --preset drake-reference --output-on-failure
 都使位置与速度缓存共同过期——Drake 当前只能整段取用可变 `q/v`，共同失效是参考实现的
 保守现状，不是 ORVD 的要求；过期条目按需分别重算，序号只在真的重算时增长；Context
 之间彼此隔离。序号只判「不变」或「严格递增」，不锁定绝对值或恰好加一。
+
+## 位姿组合契约
+
+四个位姿组合函数由 ORVD 自研以满足 vendored 声明，因此它们的正确性没有上游实现兜底。
+`math/verify_double_pose_composition_contract` 链接**真实符号**
+`drake::math::internal::Compose*`，逐一检查四条定义式，并覆盖声明允许的四种输出重叠形态：
+输出独立、输出别名第一个输入、输出别名第二个输入、三个实参同为一个对象。
+
+期望值一律先用裸 Eigen 按定义算出，且在调用之前算出——输出别名输入的调用会覆盖掉本该
+读取期望值的那份数据。期望值刻意不经 `RotationMatrix::operator*`、
+`RigidTransform::operator*` 或 `InvertAndCompose`：那些会绕回被测符号，实现与期望便会
+按构造相符，测试也就什么都证明不了。
+
+该测试的容差不是本项目的 `1e-3` 工程口径。那个口径用于跨实现比较物理量；这里是同一代数
+恒等式在同一算术下的两种算法，诚实的界是表示精度自身的小倍数，按参与量级缩放。
 
 ## 尚未建立
 

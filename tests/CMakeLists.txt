@@ -18,6 +18,20 @@ if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
                      --compiler ${CMAKE_CXX_COMPILER})
 endif()
 
+# The landed compile frontier tool. Only its synthetic self-check is registered:
+# running the tool against the real landed tree exits non-zero today, because the
+# translation units that still need the runtime cannot compile until G20-G28
+# replace it. Registering that as a test would mean either a permanently red suite
+# or a WILL_FAIL wrapper, and a test allowed to fail stops being read. The real run
+# is a development command; see tools/drake_source_boundary/README.md.
+if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
+   CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+    add_test(NAME verify_landed_double_compile_frontier
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_double_compile_frontier.py
+                     --compiler ${CMAKE_CXX_COMPILER})
+endif()
+
 # The index and ordering contract the vendored topology provides. It links only
 # the vendored target: this is a structural contract, not a comparison against
 # Drake, so libdrake must not be anywhere near it.
@@ -29,6 +43,18 @@ target_link_libraries(verify_vendored_drake_multibody_topology_index_assignment
     PRIVATE orvd_vendored_drake_multibody_topology)
 add_test(NAME verify_vendored_drake_multibody_topology_index_assignment
          COMMAND verify_vendored_drake_multibody_topology_index_assignment)
+
+# The algebra and aliasing contract of the four double pose compositions. It
+# links the real drake::math::internal::Compose* symbols out of the pose math
+# target, so it checks the shipped implementation rather than a copy. libdrake
+# is nowhere near it: the point is that ORVD's own definitions are correct.
+add_executable(verify_double_pose_composition_contract
+    math/verify_double_pose_composition_contract.cc)
+orvd_configure_first_party_target(verify_double_pose_composition_contract)
+target_link_libraries(verify_double_pose_composition_contract
+    PRIVATE orvd_vendored_drake_double_pose_math)
+add_test(NAME verify_double_pose_composition_contract
+         COMMAND verify_double_pose_composition_contract)
 
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.

@@ -7,9 +7,10 @@
 
 - 工作分支：`main`
 - 当前阶段：刚性 tree 的 `double`-only 裁剪
-- 当前 Goal：`G17`
-- 产品代码状态：vendored topology 静态库可构建；刚性 tree 源码已落位但尚未接入构建；
-  第一方运行时尚未开始
+- 当前 Goal：`G18`
+- 产品代码状态：vendored common support、topology 与 double pose math 三个静态库可构建，
+  四个位姿组合函数有常驻契约测试；刚性 tree 源码已落位，其编译前沿受阻于三个待替换的
+  运行时头；第一方运行时尚未开始
 - 已验证平台：Ubuntu 24.04 + GCC 13。Clang、MSVC 与 Windows 尚未实测，不提前宣称
   已跨平台；正式资格门仍是 G46
 - 仓库外探针：只作一次性研究输入，不直接复制进产品
@@ -190,16 +191,30 @@ Goal GNN — <明确的功能名称>
     没有一处标量相关错误。改动全貌见
     `external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md` 的 G16 节。
 
-- [ ] **G17 — 验证 double-only 编译前沿与位姿组合契约**
+- [x] **G17 — 验证 double-only 编译前沿与位姿组合契约**
   - 产物：landed 源码的真实编译前沿、剩余运行时接口清单，以及四个位姿组合函数的真名
     常驻测试。
   - 完成门：能脱离第一方运行时的翻译单元真实产出对象；其余失败逐项归因到 G20–G27
     将替换的运行时接口，而非标量机制或禁入类别；构建符号中不存在 AutoDiff、symbolic、
     标量转换或 `CloneToScalar`；四个位姿组合函数以真实符号名通过公式与
     ABO/ABA/ABB/AAA 输出重叠测试。仓库外现场比较自研位姿组合与 Drake Highway 路径，
-    输出用完即删，只判断 G47 是否需要针对性优化，不把单机纳秒数写成门槛。
+    输出用完即删，只判断是否列入 G47 专项测量，不把单机纳秒数写成门槛。
   - 明确不做：不伪造 systems 头、不写空返回替身、不建立残缺 tree 对象库，也不要求尚
     依赖 G20–G27 的全部翻译单元提前通过。完整编译、全对象强制链接与最小运行统一移到 G28。
+  - 实测结论：编译前沿由
+    `tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py`
+    现场界定，落位树是唯一的 `drake/` include 目录，`/opt/drake`、上游克隆与 `libdrake`
+    一律不得经参数、环境变量或编译器默认路径进入。能脱离运行时的翻译单元真实产出非空
+    对象；其余翻译单元的阻断只有一类，即源码层运行时依赖表面上的三个未落位头
+    `multibody/tree/multibody_tree_system.h`、`multibody/tree/parameter_conversion.h`、
+    `systems/framework/context.h`，全部落在 G20–G28 的替换范围内，没有一处归因于标量
+    机制或禁入类别。产出对象的符号检查以限定名匹配（`drake::symbolic::`、
+    `AutoDiffXd`、`CloneToScalar` 等）零命中，`Eigen::symbolic` 作为负控不误报；
+    编译期消解的构造由源码扫描另行覆盖，同样零命中。四个位姿组合函数以真实符号名
+    通过代数与四种输出重叠形态的常驻测试（`verify_double_pose_composition_contract`）。
+    与 Drake Highway 路径的仓外现场比较显示差异可重复出现，因此裁定**列入 G47 专项
+    测量**，不在本 Goal 优化，也不记录本机耗时。
+    工具与探针的分工见 `tools/drake_source_boundary/README.md`。
 
 ## 子目标 7：完成 vendor 法律与构建闸门
 
@@ -370,8 +385,11 @@ Goal GNN — <明确的功能名称>
   - 完成门：独立消费者不引用源码树或 `/opt`；Linux 与 Windows 运行同一程序化测试；不要求跨平台逐位一致。
 
 - [ ] **G47 — 建立运行时性能资格**
-  - 产物：冷/热缓存、选择性失效、运动学、动力学和 CVODE 的现场基准程序。
+  - 产物：冷/热缓存、选择性失效、运动学、动力学、CVODE 以及四个位姿组合函数的现场基准程序。
   - 完成门：报告耗时、动态分配和实际重算条目但不保存结果；先声明预算再运行；只优化实测瓶颈。
+  - 已列入的专项：位姿组合。G17 的仓外比较显示自研 double 实现与 Drake 的 Highway 分派
+    路径存在可重复的差异，是否值得针对性优化由本 Goal 在真实调用比例下判断，而不是由
+    孤立的微基准判断。
 
 ## 子目标 18：后置接入 GZ18 并交付
 
