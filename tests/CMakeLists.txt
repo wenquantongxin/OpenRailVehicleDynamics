@@ -91,6 +91,18 @@ target_link_libraries(verify_double_pose_composition_contract
 add_test(NAME verify_double_pose_composition_contract
          COMMAND verify_double_pose_composition_contract)
 
+# What the runtime state store owns, what it refuses, and what it leaves alone
+# when it refuses. It links only the runtime base layer: this layer knows nothing
+# about the rigid tree, and a test that reached for one would be testing a
+# dependency the design forbids.
+add_executable(verify_multibody_state_instance
+    multibody_runtime/verify_multibody_state_instance.cc)
+orvd_configure_first_party_target(verify_multibody_state_instance)
+target_link_libraries(verify_multibody_state_instance
+    PRIVATE orvd_multibody_runtime)
+add_test(NAME verify_multibody_state_instance
+         COMMAND verify_multibody_state_instance)
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain
