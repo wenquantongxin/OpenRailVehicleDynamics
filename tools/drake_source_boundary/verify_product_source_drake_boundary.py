@@ -7,12 +7,13 @@ do not need this today and a later goal may admit it after a fresh decision.
 contact solvers, meshcat, solvers — and reaching it is a defect, not a decision
 to revisit. This tool only enforces the second kind.
 
-That restraint is the point. An unclassified header, a `discard`, or one of the
-runtime headers G20-G28 has not replaced yet would all fail a broader check, and
-all three are things the project currently expects to see. A gate that fires on
-expected conditions is a gate somebody turns off. The compile frontier and the
-admission closure already report those; repeating them here would mean three
-tools disagreeing about which one is authoritative.
+That restraint is the point. An unclassified header, a `discard`, or a runtime
+header outside the landed tree are not `forbidden` boundary crossings. The
+compile frontier and the admission closure report those distinct conditions if
+they appear; repeating them here would mean three tools disagreeing about which
+one is authoritative. G26-G28 have removed the runtime-header gap from the
+current product, but that does not change this tool's deliberately narrower
+question.
 
 A `forbidden_prefix` outranks a per-file disposition. If someone writes
 `vendor geometry/query_object.h`, the answer is not "vendored, therefore fine" —

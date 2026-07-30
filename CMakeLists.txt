@@ -1,11 +1,11 @@
 # OpenRailVehicleDynamics (ORVD) — top-level build
 #
-# Vendored common support, rigid topology and double pose math are buildable, and
-# the first-party runtime base layer owns the multibody state. The remaining
-# rigid-tree sources have a measured double-only compile frontier, and no
-# complete tree target exists yet. BUILD_TESTING
-# adds model-neutral self-checks. Product modules are wired in only when they
-# gain a CMakeLists.txt; their order is set by the implementation roadmap.
+# Vendored common support, rigid topology, double pose math and the complete
+# double-only rigid tree are buildable. The first-party runtime owns multibody
+# state, versions and the typed cache workspace used by that internal tree
+# target. BUILD_TESTING adds model-neutral self-checks. Product modules are wired
+# in only when they gain a CMakeLists.txt; their order is set by the
+# implementation roadmap.
 #
 # The first-party compile policy lives in cmake/OrvdFirstPartyTargetPolicy.cmake
 # and is applied per target. Eigen and the CTest entry point are configured below.

@@ -2,10 +2,11 @@
 """Checks that the product source boundary distinguishes crossings from valid source.
 
 Half the cases here are negative controls, and they are the more important half.
-A boundary check that also fails on `discard`, on an unclassified header, or on a
-runtime header G20-G28 has not replaced yet would fail on conditions the project
-currently expects, and a gate that fires on expected conditions gets turned off.
-Those three cases are therefore asserted to pass, not merely left untested.
+A boundary check that also fails on `discard`, on an unclassified header, or on
+a non-forbidden runtime header would be answering the closure or compile-frontier
+tool's question instead of its own. Those three cases are therefore asserted to
+pass, not merely left untested. The current product no longer contains the
+runtime-header gap; the synthetic case preserves the distinction between tools.
 """
 
 from __future__ import annotations
@@ -245,10 +246,10 @@ def case_unclassified_include_is_not_a_crossing(work: Path) -> None:
     )
 
 
-def case_unreplaced_runtime_include_is_not_a_crossing(work: Path) -> None:
-    # Negative control: the tree still includes the runtime headers G20-G28
-    # replaces. Failing on those would make this gate red for the whole of
-    # subgoals 8 to 10, which is when it most needs to be readable.
+def case_non_forbidden_runtime_include_is_not_a_crossing(work: Path) -> None:
+    # Negative control: a systems runtime include is not automatically one of
+    # this ledger's forbidden architectural prefixes. The current product has
+    # removed this include; the synthetic case keeps the tools' scopes distinct.
     root = work / "runtime_header"
     tree = dict(CLEAN_TREE)
     tree["candidate/root.h"] = (
@@ -258,7 +259,7 @@ def case_unreplaced_runtime_include_is_not_a_crossing(work: Path) -> None:
     result = run_tool(root, ledger)
     record_failure_unless(
         result.returncode == 0,
-        "a runtime header awaiting replacement is not a forbidden crossing\n"
+        "a non-forbidden runtime header is not a forbidden crossing\n"
         + result.stdout,
     )
 
@@ -362,7 +363,7 @@ def main() -> int:
         case_vendor_cannot_override_forbidden_prefix,
         case_discarded_include_is_not_a_crossing,
         case_unclassified_include_is_not_a_crossing,
-        case_unreplaced_runtime_include_is_not_a_crossing,
+        case_non_forbidden_runtime_include_is_not_a_crossing,
         case_commented_forbidden_include_is_not_source,
         case_missing_product_root_is_rejected,
         case_empty_product_roots_are_rejected,

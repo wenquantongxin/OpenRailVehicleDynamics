@@ -9,9 +9,12 @@
 # orvd_implementations/ is a different matter and does carry the policy; see the
 # object target below.
 #
-# Source ownership is single: every translation unit belongs to exactly one
-# target. Two archives defining the same object would make link order decide
-# which definition a consumer gets.
+# Compilation ownership is single: every translation unit is compiled by
+# exactly one OBJECT target. The resulting object may be packaged both in its
+# narrow component archive and in the complete rigid-tree archive; it is still
+# the same compiled object, not a second definition produced with another set of
+# flags. Consumers use either a component archive or the complete archive, not
+# both.
 
 # The support translation units that both the topology target and the double
 # pose math target need. They are here, and not duplicated into either consumer,
@@ -70,9 +73,9 @@ target_link_libraries(orvd_vendored_drake_multibody_topology_objects
 add_library(orvd_vendored_drake_multibody_topology STATIC)
 # The object library supplies this archive's own members; the support archive is
 # a separate archive a consumer must also link. Linking an OBJECT library does
-# not carry the objects of the OBJECT libraries it in turn links — that is what
-# keeps each object in exactly one archive — so the archive-level dependency has
-# to be stated here as well.
+# not carry the objects of the OBJECT libraries it in turn links, so common
+# support does not accidentally become a member of this narrow topology
+# archive. The archive-level dependency still has to be stated here.
 target_link_libraries(orvd_vendored_drake_multibody_topology
     PUBLIC orvd_vendored_drake_multibody_topology_objects
            orvd_vendored_drake_common_support)
@@ -198,8 +201,21 @@ set_target_properties(orvd_vendored_drake_rigid_tree_objects
 target_link_libraries(orvd_vendored_drake_rigid_tree_objects
     PUBLIC orvd_vendored_drake_multibody_topology_objects
            orvd_vendored_drake_double_pose_math_objects
-           orvd_multibody_runtime
-    PRIVATE orvd_double_pose_composition)
+           orvd_multibody_runtime)
+
+# The five compilation owners are also the single source of truth for both the
+# complete archive and the all-object link test. Keeping that set in one place
+# prevents the verifier from silently omitting an owner that the archive gained,
+# or from verifying an owner the archive no longer packages.
+set(ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS
+    orvd_vendored_drake_rigid_tree_objects
+    orvd_vendored_drake_multibody_topology_objects
+    orvd_vendored_drake_double_pose_math_objects
+    orvd_vendored_drake_common_support_objects
+    orvd_double_pose_composition)
+set(ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS
+    ${ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS}
+    PARENT_SCOPE)
 
 # The internal product target: one archive holding every landed object.
 #
@@ -214,26 +230,49 @@ target_link_libraries(orvd_vendored_drake_rigid_tree_objects
 # is still being built. The vendored types in its headers are not public either.
 add_library(orvd_rigid_multibody_tree STATIC)
 target_link_libraries(orvd_rigid_multibody_tree
-    PUBLIC orvd_vendored_drake_rigid_tree_objects
-           orvd_vendored_drake_multibody_topology_objects
-           orvd_vendored_drake_double_pose_math_objects
-           orvd_vendored_drake_common_support_objects
-           orvd_double_pose_composition
+    PUBLIC ${ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS}
            orvd_multibody_runtime)
 
 # --- Single source ownership, checked ---
-# Every landed .cc must belong to exactly one object owner. Two owners compiling
-# the same file would put two definitions of the same symbol into one archive,
-# and which one a consumer got would be decided by link order.
+# Every landed .cc must belong to exactly one of the object owners that form the
+# complete archive. Read each target's actual SOURCES property rather than
+# rebuilding that fact from a second hand-written list: changing an owner target
+# must change the archive, the all-object test and this check together.
 #
 # The check compares sets, not counts: freezing a number would make an added
 # file look like a violation and a removed one look fine.
-set(_orvd_owned_sources
-    ${ORVD_VENDORED_DRAKE_COMMON_SUPPORT_SOURCES}
-    ${ORVD_VENDORED_DRAKE_MULTIBODY_TOPOLOGY_SOURCES}
-    ${ORVD_VENDORED_DRAKE_DOUBLE_POSE_MATH_SOURCES}
-    ${ORVD_VENDORED_DRAKE_RIGID_TREE_SOURCES}
-    orvd_implementations/double_rotation_and_rigid_transform_composition.cc)
+set(_orvd_owned_sources "")
+foreach(object_owner_target
+        IN LISTS ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS)
+    get_target_property(object_owner_sources ${object_owner_target} SOURCES)
+    if(NOT object_owner_sources)
+        message(FATAL_ERROR
+            "vendored source ownership: object owner "
+            "'${object_owner_target}' has no translation unit")
+    endif()
+    foreach(object_owner_source IN LISTS object_owner_sources)
+        if(object_owner_source MATCHES "\\$<")
+            message(FATAL_ERROR
+                "vendored source ownership: object owner "
+                "'${object_owner_target}' uses the generator-expression source "
+                "'${object_owner_source}', whose identity cannot be checked at "
+                "configure time")
+        endif()
+        cmake_path(ABSOLUTE_PATH object_owner_source
+            BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            NORMALIZE OUTPUT_VARIABLE absolute_object_owner_source)
+        cmake_path(RELATIVE_PATH absolute_object_owner_source
+            BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE relative_object_owner_source)
+        if(relative_object_owner_source MATCHES "^\\.\\.")
+            message(FATAL_ERROR
+                "vendored source ownership: object owner "
+                "'${object_owner_target}' compiles the source "
+                "'${object_owner_source}' outside this landed source root")
+        endif()
+        list(APPEND _orvd_owned_sources "${relative_object_owner_source}")
+    endforeach()
+endforeach()
 
 set(_orvd_duplicated_sources ${_orvd_owned_sources})
 list(REMOVE_DUPLICATES _orvd_duplicated_sources)

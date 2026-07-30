@@ -1,9 +1,10 @@
 # external/drake_mbtree
 
-本目录已落位刚性 topology、tree 与必要支撑源码。common support、topology 与 double
-位姿数学已有独立构建目标；其余 tree 已完成 G16 的 `double`-only 裁剪并由 G17 界定
-编译前沿，G26 已用类型化状态替换 systems 状态表面；当前纯 landed 编译前沿只剩
-`multibody_tree_system.h`，由 G27 删除反向指针与接入具体缓存，G28 建立完整 tree 目标。
+本目录已落位刚性 topology、tree 与必要支撑源码。五个 OBJECT owner 各自唯一编译 common
+support、topology、double 位姿数学、tree + trajectories 与第一方位姿组合实现；三个窄
+静态库继续服务各自消费者，内部产品目标 `orvd_rigid_multibody_tree` 则把全部 landed
+对象装入一个归档。G26 已用类型化状态替换 systems 状态表面，G27 已删除 tree-system
+反向指针并接入具名缓存，G28 已完成全对象链接与最小模型运行。
 
 ## 来源与逐文件处置
 
@@ -38,7 +39,7 @@ G16 删除。明确排除 geometry、FEM、plant、contact、solver 与 deformab
 不锁定 fmt 版本。Drake 可以使用模块提供的 fmt，也可以经无版本的
 `find_package(fmt CONFIG REQUIRED)` 使用外部 fmt；参考端的 ABI 不能外推成候选端约束。
 G13 已用 topology 目标验证所配置 fmt；G17 在真实编译前沿验证 tree 源码的 fmt 消费，
-G28 再以完整 tree 目标验证其兼容性。只有具体 API 提供证据时才声明最低版本。
+G28 又以完整 tree 目标及真实消费者验证其兼容性。只有具体 API 提供证据时才声明最低版本。
 
 `cxxabi.h` 不在此表内：它是 GNU C++ ABI 的平台头而非第三方库，include 与调用都在
 `__GNUG__` 守卫内，非 GNU 前端直接返回原始 `typeid` 名称。
@@ -87,11 +88,13 @@ topology 与 double 位姿数学目标。
 无法检查其真实库位置,配置会直接失败。`tests/` 不在产品模块列表中,因此 Drake 参考端可以
 正常链接 Drake;闸门本身**无条件启用**,与
 `ORVD_BUILD_DRAKE_REFERENCE_TESTS` 无关——那个选项开启时正是 Drake 在图中的时候,也正是
-最该检查的时候。G28 建成完整 tree 目标后,只要它落在产品目录里就自动进入同一道闸门。
+最该检查的时候。完整 tree 目标与其 OBJECT owners 都位于产品目录中，已经自动进入同一道
+闸门。
 
 **源码侧**由 `tools/drake_source_boundary/verify_product_source_drake_boundary.py` 把关:
 产品源码既不得**是**禁入文件,也不得**include** 禁入文件;`forbidden_prefix` 优先于逐文件
 处置,一行 `vendor` 不能为跨越架构边界背书。它**只管** `forbidden` 与 `forbidden_prefix`——
-`discard`、未分类头、以及 G20–G28 尚未替换的运行时头都不判失败,那些分别是闭包分析器与
-编译前沿工具的职责;一道会在预期状况下报警的闸门,很快就会被关掉。第一方源码采用常见的
-头、模板实现和翻译单元后缀时都进入扫描，不沿用只覆盖上游 Drake 现有文件形态的窄后缀集。
+`discard`、未分类头或其他未落位但并非禁入的 include 都不由这道门判失败，那些分别是闭包
+分析器与编译前沿工具的职责；当前完整 tree 的编译前沿已经无缺口。把不同问题混成一道会在
+预期状况下报警的门，只会让门很快被关掉。第一方源码采用常见的头、模板实现和翻译单元后缀
+时都进入扫描，不沿用只覆盖上游 Drake 现有文件形态的窄后缀集。

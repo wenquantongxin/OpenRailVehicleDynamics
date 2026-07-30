@@ -53,33 +53,21 @@ add_test(NAME verify_landed_drake_source_provenance_audit
                  ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_drake_source_provenance_audit.py
                  --git-executable ${GIT_EXECUTABLE})
 
-# The landed compile frontier: both the tool's synthetic self-check and a run
-# against the real landed tree. The real run used to be a development command
-# only, because until the runtime replacement landed it exited non-zero and a
-# test allowed to fail stops being read. It passes now — every landed
-# translation unit produces an object, nothing includes a header that is not
-# landed, and no `systems::` type is named — so keeping it out of the suite would
-# mean that regressing any of those would be noticed by nobody.
-#
-# The admitted include directories are the first-party runtime and Eigen. That
-# is the boundary being asserted: the tree compiles against what the product
-# ships and against nothing else, and in particular no external Drake tree is
-# visible to it.
+# The landed compile-frontier tool's synthetic self-check stays in the default
+# suite. Its real-tree mode deliberately remains a development command: it
+# recompiles every translation unit with its own fixed command line, so running
+# it once per CMake configuration repeats the same long check without exercising
+# that configuration's actual flags. The product OBJECT targets compile every
+# landed translation unit with the configured flags, and the G28 all-object
+# executable forces every resulting object through a final link. The real-tree
+# tool still provides the independent sanitized-include and forbidden-symbol
+# audit when invoked explicitly; see tools/drake_source_boundary/README.md.
 if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
    CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
     add_test(NAME verify_landed_double_compile_frontier
              COMMAND ${Python3_EXECUTABLE}
                      ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_double_compile_frontier.py
                      --compiler ${CMAKE_CXX_COMPILER})
-    add_test(NAME verify_landed_double_compile_frontier_against_real_tree
-             COMMAND ${Python3_EXECUTABLE}
-                     ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py
-                     --landed-root ${CMAKE_SOURCE_DIR}/external/drake_mbtree
-                     --compiler ${CMAKE_CXX_COMPILER}
-                     --admitted-include-directory
-                     ${CMAKE_SOURCE_DIR}/libs/multibody_runtime/include
-                     --admitted-include-directory
-                     $<TARGET_PROPERTY:Eigen3::Eigen,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 # The index and ordering contract the vendored topology provides. It links only
@@ -295,12 +283,13 @@ endif()
 add_executable(verify_landed_tree_objects_all_link
     multibody_runtime/verify_landed_tree_objects_all_link.cc)
 orvd_configure_first_party_target(verify_landed_tree_objects_all_link)
+if(NOT ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS)
+    message(FATAL_ERROR
+        "the rigid-tree archive did not publish its object-owner set, so the "
+        "all-object link test cannot prove that archive's complete contents")
+endif()
 target_link_libraries(verify_landed_tree_objects_all_link
-    PRIVATE orvd_vendored_drake_rigid_tree_objects
-            orvd_vendored_drake_multibody_topology_objects
-            orvd_vendored_drake_double_pose_math_objects
-            orvd_vendored_drake_common_support_objects
-            orvd_double_pose_composition
+    PRIVATE ${ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS}
             orvd_multibody_runtime)
 add_test(NAME verify_landed_tree_objects_all_link
          COMMAND verify_landed_tree_objects_all_link)

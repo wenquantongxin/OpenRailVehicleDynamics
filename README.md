@@ -4,11 +4,10 @@
 
 ## 当前状态
 
-vendored Drake common support、刚性 topology 与 double 位姿数学目标已可独立构建；
-其余刚性 tree 源码已完成 `double`-only 裁剪，并已界定受第一方运行时阻断的真实编译
-前沿。第一方运行时基础层已开始：多体状态与类型化物理参数有了单一所有者。
-五个有长期缓存消费者的状态来源已有独立版本，通用类型化缓存槽与八种依赖集合的合成矩阵
-已经落地；惰性求值、刚性树具体缓存目录、动力学求值与完整 tree 目标尚未开始。
+vendored Drake common support、刚性 topology、double 位姿数学与完整 double-only 刚性树
+均已有内部构建目标。第一方运行时拥有多体状态、类型化物理参数、五个版本源、类型化缓存槽
+与惰性求值；刚性树的十一个具名缓存已接入该运行时，并能完成最小模型最终化、独立上下文创建
+与位置运动学求值。模型中立公共门面以及完整运动学、动力学接口仍按后续 Goal 推进。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -35,7 +34,7 @@ vendored Drake common support、刚性 topology 与 double 位姿数学目标已
 
 ```text
 OpenRailVehicleDynamics/
-├── CMakeLists.txt        顶层构建（vendored 编译前沿；启用测试时另建模型中立自检）
+├── CMakeLists.txt        顶层构建（内部刚性树产品目标；启用测试时另建模型中立自检）
 ├── CMakePresets.json     构建预设：dev / release / drake-reference
 ├── cmake/                CMake 辅助模块
 ├── docs/
@@ -60,7 +59,7 @@ OpenRailVehicleDynamics/
     ├── contract/         模型中立场景与观测语义
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
     ├── math/             double 位姿组合的代数与输出重叠契约
-    ├── multibody_runtime/ 多体状态、版本隔离、类型化缓存槽与依赖矩阵契约
+    ├── multibody_runtime/ 多体状态、类型化缓存、刚性树全对象链接与最小模型契约
     ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试

@@ -7,7 +7,7 @@
 | `comparison/` | 必需观测集合与容差判定（判定方独占） |
 | `topology/` | vendored topology 的索引与顺序结构契约 |
 | `math/` | 四个 double 位姿组合函数的代数与输出重叠契约 |
-| `multibody_runtime/` | 多体状态、版本隔离、类型化缓存槽与依赖矩阵契约 |
+| `multibody_runtime/` | 多体状态、版本隔离、类型化缓存、刚性树全对象链接与最小模型契约 |
 | `drake_reference/` | Drake 参考发射器、跨进程比较与缓存失效语义探针，默认不构建 |
 | `unit/` | 逐模块单元测试 |
 
