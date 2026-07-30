@@ -19,12 +19,6 @@ T1 wrap_to(const T1& value, const T2& low, const T2& high) {
   DRAKE_ASSERT(low < high);
   const T2 range = high - low;
   return value - range * floor((value - low) / range);
-  // TODO(russt): jwnimmer preferred the following implementation (which may be
-  // numerically better), but fmod was not supported by the scalar types this
-  // code was originally written for:
-  // using std::fmod;
-  // const T1 rem = fmod(value - low, high - low);
-  // return rem >= T1(0) ? low + rem : high + rem;
 }
 
 }  // namespace math

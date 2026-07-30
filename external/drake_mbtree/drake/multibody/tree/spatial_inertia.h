@@ -7,9 +7,6 @@
 #include <string>
 #include <utility>
 
-// TODO(2026-07-01): remove ostream header
-#include <ostream>
-
 #include "drake/common/drake_assert.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -589,9 +586,7 @@ class SpatialInertia {
   ///   auto [abc, X_BA] =
   ///     M_BBo_B.CalcPrincipalSemiDiametersAndPoseForSolidEllipsoid();
   /// @endcode
-  /// @throws std::exception if the elements of `this` spatial inertia cannot
-  /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN.
+  /// @throws std::exception if `this` contains a non-finite value.
   /// @see RotationalInertia::CalcPrincipalMomentsAndAxesOfInertia() to form
   /// principal moments of inertia and their associated principal directions.
   ///@{
@@ -601,9 +596,7 @@ class SpatialInertia {
   /// whose spatial inertia is equal to `this` spatial inertia.
   /// See @ref spatial_inertia_equivalent_shapes
   /// "Spatial inertia equivalent shapes" for more details.
-  /// @throws std::exception if the elements of `this` spatial inertia cannot
-  /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN.
+  /// @throws std::exception if `this` contains a non-finite value.
   std::pair<Vector3<double>, drake::math::RigidTransform<double>>
   CalcPrincipalSemiDiametersAndPoseForSolidEllipsoid() const {
     constexpr double inertia_shape_factor = 1.0 / 5.0;
@@ -616,9 +609,7 @@ class SpatialInertia {
   /// whose spatial inertia is equal to `this` spatial inertia.
   /// See @ref spatial_inertia_equivalent_shapes
   /// "Spatial inertia equivalent shapes" for more details.
-  /// @throws std::exception if the elements of `this` spatial inertia cannot
-  /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN.
+  /// @throws std::exception if `this` contains a non-finite value.
   std::pair<Vector3<double>, drake::math::RigidTransform<double>>
   CalcPrincipalHalfLengthsAndPoseForSolidBox() const {
     constexpr double inertia_shape_factor = 1.0 / 3.0;
@@ -634,9 +625,7 @@ class SpatialInertia {
   /// bounding box for the actual geometry.
   /// See @ref spatial_inertia_equivalent_shapes
   /// "Spatial inertia equivalent shapes" for more details.
-  /// @throws std::exception if the elements of `this` spatial inertia cannot
-  /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN.
+  /// @throws std::exception if `this` contains a non-finite value.
   std::pair<Vector3<double>, drake::math::RigidTransform<double>>
   CalcPrincipalHalfLengthsAndPoseForMinimumBoundingBox() const {
     constexpr double inertia_shape_factor = 1.0;

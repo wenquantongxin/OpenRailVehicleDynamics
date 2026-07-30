@@ -6,7 +6,6 @@
 #include <fmt/format.h>
 
 #include "drake/common/fmt_eigen.h"
-#include "drake/common/unused.h"
 
 namespace drake {
 namespace math {
@@ -16,7 +15,7 @@ namespace {
 template <typename T>
 bool IsQuaternionZero(const Eigen::Quaternion<T>& quaternion) {
   // Note: This special-purpose function avoids memory allocation on the heap
-  // that sometimes occurs in quaternion.coeffs().isZero().  Alternatively, the
+  // that sometimes occurs in quaternion.coeffs().isZero().
   return quaternion.w() == 0.0 && quaternion.x() == 0.0 &&
          quaternion.y() == 0.0 && quaternion.z() == 0.0;
 }

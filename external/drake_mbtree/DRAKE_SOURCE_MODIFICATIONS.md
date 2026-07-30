@@ -136,9 +136,8 @@ ComposeXinvX: R_AC = R_BAᵀ R_BC, p_AC = R_BAᵀ (p_BC - p_BA)
 
 ## G16 — 删除非 double 标量路径
 
-G16 触及 138 个文件,单条列出每一处会淹没真正的语义决定。因此机械且同形的改动按**机制**
-记(改了什么构造、依据什么等价性、覆盖多少处),语义或公共边界的改动仍按**文件与符号**记。
-两类都可以在源码里直接搜到。
+机械且同形的改动按**机制**记(改了什么构造、依据什么等价性),语义或公共边界的改动仍按
+**文件与符号**记。两类都可以在源码里直接搜到。
 
 贯穿全部机制的等价性只有一条:**`T` 恒为 `double`**。凡是仅当 `T` 是 AutoDiffXd 或
 symbolic::Expression 才会被选中的分支、重载与类型,在这棵树里不可实例化。
@@ -155,6 +154,8 @@ symbolic::Expression 才会被选中的分支、重载与类型,在这棵树里�
 RigidTransform、RotationalInertia、ArticulatedBodyInertia、RigidBodyFrame、
 LinearBushingRollPitchYaw、PrismaticSpring、RevoluteSpring、九个 Joint、MultibodyTree、
 JointActuator),以及 `JointActuator` 那个只被 `DoCloneToScalar()` 调用的私有克隆构造函数。
+删除 `Joint` 中只为跨标量克隆开放的友元,以及 `ElementCollection::ResizeToMatch()` 和仅被
+它调用的 `AppendNull()`。
 
 **原因**:整条链的存在理由是把一棵树复制成**另一个标量**的树。`Clone()` 与 `ToAutoDiffXd()`
 在落位活动源码中零调用方,`Clone*AndAdd()` 只被 `CloneToScalar()` 自己调用,`get_variant()`
@@ -162,7 +163,7 @@ JointActuator),以及 `JointActuator` 那个只被 `DoCloneToScalar()` 调用的
 调用方看得见一个链接期才缺符号的 API。
 
 **未删** `ShallowClone()` / `DoShallowClone()`:它是**同标量**的浅克隆,与标量转换无关。
-改动前后其声明与调用行的多重集合逐行相同(46 行)。
+改动前后其非注释声明、定义与调用集合逐行相同。
 
 ### 机制二:符号随机状态接口(整链删除)
 
@@ -204,6 +205,11 @@ symbolic 表达式避开控制流,对 `double` 它就是条件运算符。保留
 **注意**:`RotationMatrix::RotationMatrixToUnnormalizedQuaternion` 的两个特化在上游即注明
 "两处数学必须保持同步"。保留的是 if-elseif 版本;被删的 `if_then_else` 版本按上游自己的说明
 与之等价,不引入数值差异。
+
+**折叠** `RotationMatrix` 与 `RigidTransform` 位姿组合运算中的六个
+`if constexpr (std::is_same_v<T, double>)` 分支,无条件调用 G15 的 `ComposeRR()` /
+`ComposeRinvR()` / `ComposeXX()` / `ComposeXinvX()`。原 else 分支是明确的非 double
+执行路径,保留它与本 Goal 的边界相冲突。
 
 ### 机制四:标量转换与提取(改写为直接表达式)
 
@@ -273,11 +279,17 @@ C++23 的 `std::numbers` 是标准途径,不需要为编译器差异建宏兼容
 - **`common/nice_type_name.cc`**:删除把 Eigen AutoDiff 类型名改写成 `drake::AutoDiffXd`
   的两条正则。产品里不存在这些类型,规则永不命中。
 - **`common/hash.h`**:删除以 `symbolic::Expression` 为例的 `std::hash` 特化说明。
+- **`common/drake_deprecated.h`**:删除。弃用流接口的声明与定义已同步移除,落位源码不再
+  消费 `DRAKE_DEPRECATED`;对应头文件、死 include 与已完成事项的 TODO 不保留。
+- **`multibody/tree/element_collection.{h,cc}`**:删除只服务跨标量树克隆的
+  `ResizeToMatch()` 与其私有依赖 `AppendNull()`。
+- **`multibody/tree/frame.cc` / `multibody_tree.{h,cc}` / `unit_inertia.h`**:删除标量
+  裁剪后已失真的实例化、variant、克隆与转换说明。
 
 ### G16 未声称的事
 
 本 Goal 的产物是**边界**,不是可构建的树。以钉死的 g++ 与 C++23 对落位源码逐 TU 编译,
-71 个翻译单元中 30 个通过,41 个失败——**全部 41 个的首个错误都是同一条**:缺少
+能脱离运行时的翻译单元产出对象;其余翻译单元的首个错误均是缺少
 `drake/multibody/tree/multibody_tree_system.h`,即 G20–G28 要处理的 systems 运行时依赖。
 标量相关的错误一个不剩。该次编译是一次性探针,结论吸收后即删,不留归档。
 

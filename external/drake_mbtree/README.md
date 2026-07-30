@@ -1,7 +1,7 @@
 # external/drake_mbtree
 
 本目录已落位刚性 topology、tree 与必要支撑源码。topology 已有独立构建目标；tree
-正在 G16 做 `double`-only 裁剪；G17 验证编译前沿，G28 建立完整 tree 目标。
+已完成 G16 的 `double`-only 裁剪；G17 验证编译前沿，G28 建立完整 tree 目标。
 
 ## 来源与逐文件处置
 

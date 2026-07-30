@@ -1034,8 +1034,7 @@ void MultibodyTree<T>::Finalize() {
   // Model each Joint with an appropriate Mobilizer.
   CreateJointImplementations();
 
-  // Perform final setup of all the MultibodyTree internals. This step is
-  // required both here and after cloning of a MultibodyTree. Actions:
+  // Perform final setup of all the MultibodyTree internals. Actions:
   // - invoke SetTopology() on all elements to give them a chance to
   //   perform any finalize-time setup,
   // - create BodyNodes corresponding to each Mobilizer and Mobod,

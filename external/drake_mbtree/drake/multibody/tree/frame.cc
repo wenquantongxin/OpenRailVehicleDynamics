@@ -194,7 +194,5 @@ std::unique_ptr<Frame<T>> Frame<T>::DoShallowClone() const {
 }  // namespace multibody
 }  // namespace drake
 
-// Ideally, we'd be instantiating the entire class here, instead of just one
-// member function. However, the MultibodyTree physical design is so contrary to
-// GSG best practices that trying to do the entire class here doesn't work.
+// The double class instantiation emits all out-of-line Frame members.
 template class drake::multibody::Frame<double>;

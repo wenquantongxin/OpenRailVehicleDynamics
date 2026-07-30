@@ -4,7 +4,6 @@
 
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
-#include "drake/common/nice_type_name.h"
 #include "drake/math/cross_product.h"
 #include "drake/multibody/math/spatial_algebra.h"
 #include "drake/multibody/tree/spatial_inertia.h"

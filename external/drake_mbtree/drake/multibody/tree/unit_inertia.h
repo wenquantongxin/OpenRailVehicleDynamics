@@ -76,7 +76,6 @@ class UnitInertia : public RotationalInertia<T> {
   explicit UnitInertia(const RotationalInertia<T>& I)
       : RotationalInertia<T>(I) {}
 
-  /// Returns a new %UnitInertia object templated on `Scalar` initialized
   /// Sets `this` unit inertia from a generally non-unit inertia I corresponding
   /// to a body with a given `mass`.
   /// @throws std::exception if the provided `mass` is not strictly positive.
@@ -421,9 +420,7 @@ class UnitInertia : public RotationalInertia<T> {
   // @returns 3 principal ½-lengths [lmax lmed lmin] sorted in descending order
   // (lmax ≥ lmed ≥ lmin) and their associated principal directions [Ax Ay Az]
   // stored in columns of the returned rotation matrix R_EA.
-  // @throws std::exception if the elements of `this` unit inertia cannot
-  // be converted to a real finite double. For example, an exception is thrown
-  // if `this` contains an erroneous NaN.
+  // @throws std::exception if `this` contains a non-finite value.
   // @throws std::exception if inertia_shape_factor ≤ 0 or > 1.
   // See @ref spatial_inertia_equivalent_shapes
   // "Spatial inertia equivalent shapes" for more details.

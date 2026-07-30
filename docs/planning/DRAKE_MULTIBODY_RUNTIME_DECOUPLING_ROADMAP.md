@@ -179,11 +179,13 @@ Goal GNN — <明确的功能名称>
   - 实测结论：非 double 标量面在落位活动源码中归零——克隆链、符号随机状态接口、
     `scalar_predicate` 分支与 SFINAE 对、六个 `cast<Scalar>()`、`ExtractDouble`、
     `DiscardGradient`、默认标量实例化与 `@tparam_default_scalar` 全部删除，`M_PI` /
-    `M_PI_2` 改用 `std::numbers`（GNU 专用属性在 G01–G15 复核时已删完，本轮无残留）。
+    `M_PI_2` 改用 `std::numbers`；弃用流接口连同其 GNU 编译指示和无人消费的属性头一并
+    删除。
     `common/random.h`、`math/random_rotation.h`、`math/quaternion.h`、`common/drake_bool.h`、
     `common/cond.h`、`common/double_overloads.h`、`common/extract_double.h` 因此失去全部
-    消费方，改判 `discard`，落位集合 182 → 175 且与处置账本逐行一致。逐 TU 编译落位源码，
-    71 个中 30 个产出对象，其余 41 个的首个错误**全部**是缺少
+    消费方，改判 `discard`；无人消费的 `common/drake_deprecated.h` 同步退出边界，落位集合
+    与处置账本逐行一致。逐 TU 编译落位源码，能脱离运行时的翻译单元产出对象，其余翻译
+    单元的首个错误**全部**是缺少
     `drake/multibody/tree/multibody_tree_system.h`（G20–G28 的运行时依赖），
     没有一处标量相关错误。改动全貌见
     `external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md` 的 G16 节。

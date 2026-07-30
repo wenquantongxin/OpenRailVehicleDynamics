@@ -121,11 +121,6 @@ void ElementCollection<T, Element, Index>::Rename(Index index,
   }
 }
 
-template <typename T, template <typename> class Element, typename Index>
-void ElementCollection<T, Element, Index>::AppendNull() {
-  elements_by_index_.push_back(nullptr);
-}
-
 namespace {
 std::string RemoveTemplates(std::string type_name) {
   const auto offset = type_name.find('<');

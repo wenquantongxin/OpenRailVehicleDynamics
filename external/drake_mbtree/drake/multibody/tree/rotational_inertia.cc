@@ -402,7 +402,6 @@ std::string to_string(const RotationalInertia<T>& I) {
   return result;
 }
 
-// TODO(2026-07-01): delete `operator<<` instantiation and the `#pragma`s.
 template std::string drake::multibody::to_string(
     const RotationalInertia<double>&);
 

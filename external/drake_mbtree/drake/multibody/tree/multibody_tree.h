@@ -2061,8 +2061,6 @@ class MultibodyTree {
   // See MultibodyPlant method.
   VectorX<double> GetEffortUpperLimits() const;
 
-  // Methods to retrieve multibody element variants
-
   // Evaluates frame body poses cached in context, updating all frames'
   // body poses if parameters have changed since last update.
   // @returns a reference to the now-up-to-date cache entry

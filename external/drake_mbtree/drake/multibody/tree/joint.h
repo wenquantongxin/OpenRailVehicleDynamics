@@ -752,7 +752,7 @@ class Joint : public MultibodyElement<T> {
   void SetDampingVector(systems::Context<T>* context,
                         const VectorX<T>& damping) const {
     DRAKE_THROW_UNLESS(damping.size() == num_velocities());
-    DRAKE_THROW_UNLESS((damping.array() >= 0).template cast<bool>().all());
+    DRAKE_THROW_UNLESS((damping.array() >= 0).all());
     context->get_mutable_numeric_parameter(damping_parameter_index_)
         .set_value(damping);
   }
@@ -958,11 +958,6 @@ class Joint : public MultibodyElement<T> {
   bool has_mobilizer() const { return mobilizer_ != nullptr; }
 
  private:
-  // Make all other Joint<U> objects a friend of Joint<T> so they can clone
-  // successfully.
-  template <typename>
-  friend class Joint;
-
   /* This method must be implemented by derived Joint classes in order to create
   a Mobilizer as the Joint's internal representation. Starting with the user's
   joint frames Jp (on parent) and Jc (on child) we must create an inboard frame

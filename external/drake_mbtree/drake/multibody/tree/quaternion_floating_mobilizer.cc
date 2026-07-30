@@ -65,8 +65,6 @@ Eigen::Matrix<T, 4, 3> CalcQMatrix(const Quaternion<T>& q) {
 // @param[in] q a generic quaternion which is not necessarily a unit
 // quaternion or a quaternion associated with a rotation matrix.
 // @see QuaternionFloatingMobilizer::CalcQMatrix().
-// @note One reason this function exists is that multiplying or dividing an
-// Eigen Quaternion by a scalar fails when type <T> is expression.
 template <typename T>
 Eigen::Matrix<T, 4, 3> CalcScaledQMatrix(double scale_factor,
                                          const Quaternion<T>& q) {

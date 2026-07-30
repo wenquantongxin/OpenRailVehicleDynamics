@@ -3,15 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <memory>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
-
-// TODO(2026-07-01): remove ostream header
-#include <ostream>
 
 #include <Eigen/Eigenvalues>
 
@@ -536,9 +531,7 @@ class RotationalInertia {
   /// Forms the 3 principal moments of inertia for `this` rotational inertia.
   /// @retval The 3 principal moments of inertia [Imin Imed Imax], sorted in
   /// ascending order (Imin ≤ Imed ≤ Imax).
-  /// @throws std::exception if the elements of `this` rotational inertia cannot
-  /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN.
+  /// @throws std::exception if `this` contains a non-finite value.
   /// @see CalcPrincipalMomentsAndAxesOfInertia() to also calculate principal
   /// moment of inertia directions associated with `this` rotational inertia.
   Vector3<double> CalcPrincipalMomentsOfInertia() const {
@@ -559,9 +552,7 @@ class RotationalInertia {
   /// parallel to principal axes associated with Iyy and Izz (the intermediate
   /// and largest principal moments of inertia). If all principal moments of
   /// inertia are equal (i.e., Ixx = Iyy = Izz), R_EA is the identity matrix.
-  /// @throws std::exception if the elements of `this` rotational inertia cannot
-  /// be converted to a real finite double. For example, an exception is thrown
-  /// if `this` contains an erroneous NaN.
+  /// @throws std::exception if `this` contains a non-finite value.
   /// @see CalcPrincipalMomentsOfInertia() to calculate the principal moments
   /// of inertia [Ixx Iyy Izz], without calculating the principal directions.
   std::pair<Vector3<double>, math::RotationMatrix<double>>
@@ -592,10 +583,9 @@ class RotationalInertia {
   /// @return `true` for a plausible rotational inertia passing the above
   ///          necessary but insufficient checks and `false` otherwise.
   /// @throws std::exception if principal moments of inertia cannot be
-  ///         calculated (eigenvalue solver) or if scalar type T cannot be
-  ///         converted to a double.
+  ///         calculated by the eigenvalue solver.
   bool CouldBePhysicallyValid() const {
-    return bool(!CreateInvalidityReport().has_value());
+    return !CreateInvalidityReport().has_value();
   }
 
   /// Re-expresses `this` rotational inertia `I_BP_E` in place to `I_BP_A`.
@@ -873,9 +863,7 @@ class RotationalInertia {
   // @returns 3 principal moments of inertia [Ixx Iyy Izz], sorted in ascending
   // order (Ixx ≤ Iyy ≤ Izz). If R_EA ≠ nullptr, also returns the 3 associated
   // principal directions via the argument R_EA.
-  // @throws std::exception if the elements of `this` rotational inertia cannot
-  // be converted to a real finite double. For example, an exception is thrown
-  // if `this` contains an erroneous NaN.
+  // @throws std::exception if `this` contains a non-finite value.
   // @see CalcPrincipalMomentsOfInertia() and
   // CalcPrincipalMomentsAndAxesOfInertia().
   Vector3<double> CalcPrincipalMomentsAndMaybeAxesOfInertia(

@@ -244,7 +244,7 @@ class Mobilizer : public MultibodyElement<T> {
   // reference the same frame object.
   // TODO(sherm1) Since the Mobod and Frames are required for all Mobilizers,
   //  the concrete classes shouldn't have to deal with them. Make the base
-  //  class take care of those for construction and scalar conversion.
+  //  class take care of those during construction.
   Mobilizer(const SpanningForest::Mobod& mobod, const Frame<T>& inboard_frame,
             const Frame<T>& outboard_frame)
       : mobod_(mobod),

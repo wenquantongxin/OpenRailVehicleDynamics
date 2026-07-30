@@ -729,12 +729,7 @@ class RigidTransform {
   RigidTransform<T> InvertAndCompose(const RigidTransform<T>& other) const {
     const RigidTransform<T>& X_AC = other;  // Nicer name.
     RigidTransform<T> X_BC(internal::DoNotInitializeMemberFields{});
-    if constexpr (std::is_same_v<T, double>) {
-      internal::ComposeXinvX(*this, X_AC, &X_BC);
-    } else {
-      const RigidTransform<T> X_BA = inverse();
-      X_BC = X_BA * X_AC;
-    }
+    internal::ComposeXinvX(*this, X_AC, &X_BC);
     return X_BC;
   }
 
@@ -764,12 +759,7 @@ class RigidTransform {
   /// @returns `this` %RigidTransform which has been multiplied by `other`.
   /// On return, `this = X_AC`, where `X_AC = X_AB * X_BC`.
   RigidTransform<T>& operator*=(const RigidTransform<T>& other) {
-    if constexpr (std::is_same_v<T, double>) {
-      internal::ComposeXX(*this, other, this);
-    } else {
-      p_AoBo_A_ = *this * other.translation();
-      R_AB_ *= other.rotation();
-    }
+    internal::ComposeXX(*this, other, this);
     return *this;
   }
 
@@ -777,11 +767,7 @@ class RigidTransform {
   /// `X_BC` and returns the %RigidTransform `X_AC = X_AB * X_BC`.
   RigidTransform<T> operator*(const RigidTransform<T>& other) const {
     RigidTransform<T> X_AC(internal::DoNotInitializeMemberFields{});
-    if constexpr (std::is_same_v<T, double>) {
-      internal::ComposeXX(*this, other, &X_AC);
-    } else {
-      X_AC.set(rotation() * other.rotation(), *this * other.translation());
-    }
+    internal::ComposeXX(*this, other, &X_AC);
     return X_AC;
   }
 

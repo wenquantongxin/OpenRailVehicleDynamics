@@ -3,7 +3,6 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
 
 #include <Eigen/Dense>
 
@@ -12,7 +11,6 @@
 #include "drake/common/eigen_types.h"
 #include "drake/common/hash.h"
 #include "drake/common/never_destroyed.h"
-#include "drake/common/unused.h"
 #include "drake/math/fast_pose_composition_functions.h"
 #include "drake/math/roll_pitch_yaw.h"
 #include "drake/math/unit_vector.h"
@@ -614,16 +612,7 @@ class RotationMatrix {
   /// @note It is possible (albeit improbable) to create an invalid rotation
   /// matrix by accumulating round-off error with a large number of multiplies.
   RotationMatrix<T>& operator*=(const RotationMatrix<T>& other) {
-    if constexpr (std::is_same_v<T, double>) {
-      internal::ComposeRR(*this, other, this);
-    } else {
-      // The result of matrix multiplication is not checked with
-      // ThrowIfNotValid() because the overhead would make this highly-used
-      // function very expensive. However, both arguments to this function and
-      // its result should be valid rotation matrices unless earlier validity
-      // checks are by-passed, e.g., with RotationMatrix::MakeUnchecked().
-      R_AB_ = matrix() * other.matrix();
-    }
+    internal::ComposeRR(*this, other, this);
     return *this;
   }
 
@@ -635,11 +624,7 @@ class RotationMatrix {
   /// matrix by accumulating round-off error with a large number of multiplies.
   RotationMatrix<T> operator*(const RotationMatrix<T>& other) const {
     RotationMatrix<T> R_AC(internal::DoNotInitializeMemberFields{});
-    if constexpr (std::is_same_v<T, double>) {
-      internal::ComposeRR(*this, other, &R_AC);
-    } else {
-      R_AC.R_AB_ = matrix() * other.matrix();
-    }
+    internal::ComposeRR(*this, other, &R_AC);
     return R_AC;
   }
 
@@ -655,12 +640,7 @@ class RotationMatrix {
   RotationMatrix<T> InvertAndCompose(const RotationMatrix<T>& other) const {
     const RotationMatrix<T>& R_AC = other;  // Nicer name.
     RotationMatrix<T> R_BC(internal::DoNotInitializeMemberFields{});
-    if constexpr (std::is_same_v<T, double>) {
-      internal::ComposeRinvR(*this, R_AC, &R_BC);
-    } else {
-      const RotationMatrix<T> R_BA = inverse();
-      R_BC = R_BA * R_AC;
-    }
+    internal::ComposeRinvR(*this, R_AC, &R_BC);
     return R_BC;
   }
 

@@ -12,13 +12,13 @@ namespace multibody {
 namespace {
 
 template <typename T>
-const bool is_positive_finite(const T& value) {
+bool is_positive_finite(const T& value) {
   using std::isfinite;
   return isfinite(value) && value > 0;
 }
 
 template <typename T>
-const bool is_nonnegative_finite(const T& value) {
+bool is_nonnegative_finite(const T& value) {
   using std::isfinite;
   return isfinite(value) && value >= 0;
 }
@@ -375,7 +375,7 @@ std::optional<std::string> SpatialInertia<T>::CreateInvalidityReport() const {
 
 template <typename T>
 bool SpatialInertia<T>::IsPhysicallyValid() const {
-  return bool(!CreateInvalidityReport().has_value());
+  return !CreateInvalidityReport().has_value();
 }
 
 template <typename T>
@@ -570,7 +570,6 @@ std::string to_string(const SpatialInertia<T>& M) {
   return result;
 }
 
-// TODO(2026-07-01): delete `operator<<` instantiation and the `#pragma`s.
 template std::string drake::multibody::to_string(const SpatialInertia<double>&);
 
 }  // namespace multibody

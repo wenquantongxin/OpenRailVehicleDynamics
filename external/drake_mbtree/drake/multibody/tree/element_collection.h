@@ -126,9 +126,6 @@ class ElementCollection final {
   borrowed from elsewhere, with no ownership transfer. */
   Element<T>& AddBorrowed(Element<T>* element);
 
-  /* Adds a null element at next_index(). */
-  void AppendNull();
-
   /* Removes an element (i.e., sets it to null).
   @pre has_element(index) is true */
   void Remove(Index index);
@@ -137,17 +134,6 @@ class ElementCollection final {
   This always calls `Element<T>::set_name(name)` on the element.
   @pre Element is a type that supports renaming (i.e., has `set_name`). */
   void Rename(Index index, std::string name);
-
-  /* In support of MbT cloning, appends nulls to this collection until it has
-  the same indexing as `other`. (Shrinking is not allowed, only growing.)
-  @pre next_index() <= other.next_index() */
-  template <typename U>
-  void ResizeToMatch(const ElementCollection<U, Element, Index>& other) {
-    DRAKE_DEMAND(next_index() <= other.next_index());
-    while (next_index() < other.next_index()) {
-      AppendNull();
-    }
-  }
 
  private:
   /* Throws an error for access to an out-of-bounds or removed element. */
