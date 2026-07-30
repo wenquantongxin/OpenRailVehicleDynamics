@@ -144,9 +144,9 @@ int main(int argc, char** argv) {
                  pose.translation()(axis_index)});
     }
 
-    // Read the state back after evaluation, so an implementation that rewrites
-    // or normalizes state in place becomes visible rather than staying hidden
-    // behind poses that happen to look right.
+    // Read generalized positions back after evaluation, so an implementation
+    // that rewrites or normalizes them in place cannot hide behind poses that
+    // happen to look right.
     const Eigen::VectorXd positions_after_evaluation = plant.GetPositions(*context);
     for (int position_index = 0; position_index < positions_after_evaluation.size();
          ++position_index) {

@@ -10,8 +10,8 @@
 路书        docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md(唯一进度权威,「当前 Goal」条目)
 Codex 线程  019f8f8b-6fb9-7291-9551-04079771d326(零 Drake 重构方案)
 Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–20 分钟)
-交接目录    ~/.codex/handoff/(仓库外、跨会话稳定;scratchpad 随会话销毁,不可用)
-交接文件    每轮四件:GXX_ruling.stage.txt / GXX_ruling.out.log / GXX_review.stage.txt / GXX_review.out.log
+交接目录    ~/.codex/handoff/(仅供当前裁决或复核请求临时传输)
+交接文件    每步两件:GXX_<step>.stage.txt / GXX_<step>.out.log；结论读完立即删除
 ```
 
 ## 不变量(任一被破坏即阻塞)
@@ -26,6 +26,8 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
   冲突即执行铁律,并在下一轮载荷中说明。
 - 向 Codex 发送前工作区必须干净:该线程以 `approval_policy=never` + danger-full-access
   运行,会直接改码、改提交(包括 amend 重写 HEAD)。
+- 不假定 scratchpad、`/tmp` 或交接日志会自动销毁。当前请求吸收结论后立即删除对应临时
+  文件；不得把它们当冷存档或历史证据。
 
 ## 一轮六步(G := 路书当前 Goal)
 
@@ -34,11 +36,11 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 1. **侦查**:通读 G 的产物/完成门/明确不做;通读将触及的文件与相邻代码;必要时做只读
    探针。产出四件:已核实事实、困惑点与我的倾向、实施草案、完成门清单。
 2. **裁决请求**:按模板 A 写 `GXX_ruling.stage.txt`,后台发送,等完成,取最后一个
-   codex 块。模板 A 明令 Codex 本轮不改码。
+   codex 块；结论进入实施决定后删除本步 stage/out。模板 A 明令 Codex 本轮不改码。
 3. **实施**:按裁决(与铁律)落码;判别力自证至少一次(故意破坏 → 必须失败 → 还原 →
    必须通过);全部完成门跑通;更新路书勾选与当前 Goal;提交 `main`。
-4. **复核请求**:按模板 B 写 `GXX_review.stage.txt`,后台发送,等完成,取结论。
-   模板 B 允许 Codex 自行最小修复。
+4. **复核请求**:按模板 B 写 `GXX_review.stage.txt`,后台发送,等完成,取结论；完成第 5 步
+   的第一手复跑后删除本步 stage/out。模板 B 允许 Codex 自行最小修复。
 5. **收尾判定**:复跑其声称的全部门与负控并两列对照;审读其每一处改动(命名违例、
    防御性堆积、兼容层 = 立即小规模重构);向用户简报;无阻塞 → G+1,回到第 0 步。
 
@@ -51,7 +53,8 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 退出时自动唤醒会话;写了 `&` 则命令立即返回,唤醒信号丢失,只能盲等。
 
 ```bash
-cd /home/yaoyao/Documents/myProjects/OpenRailVehicleDynamics && codex exec resume 019f8f8b-6fb9-7291-9551-04079771d326 -m gpt-5.6-sol -c model_reasoning_effort=ultra - < ~/.codex/handoff/GXX_ruling.stage.txt > ~/.codex/handoff/GXX_ruling.out.log 2>&1
+repository_root="$(git rev-parse --show-toplevel)"
+cd "$repository_root" && codex exec resume 019f8f8b-6fb9-7291-9551-04079771d326 -m gpt-5.6-sol -c model_reasoning_effort=ultra - < ~/.codex/handoff/GXX_ruling.stage.txt > ~/.codex/handoff/GXX_ruling.out.log 2>&1
 ```
 
 - UUID 必须写全:短前缀会被当线程名解析而失败,且 UUIDv7 带时间前缀,同秒会话会撞前缀。
@@ -60,6 +63,8 @@ cd /home/yaoyao/Documents/myProjects/OpenRailVehicleDynamics && codex exec resum
   `ps -eo pid,etime,cmd | grep '[e]xec resume 019f8f8b'`;`wc -c` 该轮 out.log。
 - 取结论:`grep -n '^codex$' <out.log>` 定位,读最后一块。`exec` 独占行是命令回显,
   不是结论。VS Code 侧 app-server 不自动刷新,也不妨碍 resume,两边互不干扰。
+- 交接文件只是传输介质。不得因为“以后也许复查”保留整份日志；需要长期成立的决定写入
+  路书、ADR 或代码测试，随后删除 stage/out。
 
 ## 模板 A — 裁决请求(Codex 只裁决,不改码)
 

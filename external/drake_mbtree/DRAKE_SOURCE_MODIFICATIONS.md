@@ -124,6 +124,16 @@ ComposeXinvX: R_AC = R_BAᵀ R_BC, p_AC = R_BAᵀ (p_BC - p_BA)
 
 **原因**:同上,该文件不构造任何 `Identifier`。
 
+## G01–G15 深度复核收口
+
+### `common/drake_assert.h`
+
+**删除** `ThrowWithValues()` 上无条件的 GNU `__attribute__((noinline, cold))`。
+
+**原因**:该属性只影响异常路径的编译布局，不参与语义；MSVC 不接受 GNU 属性语法，而该
+公共头已经进入 topology 的真实构建边界。直接删除比为一个非必要性能提示建立编译器宏
+兼容层更轻，也避免把尚未验证的 MSVC 兼容性问题拖到交付阶段。
+
 ## 未作的修改
 
 - **没有改写任何 `#include "drake/..."` 前缀。** 源码按上游相对路径落位在 `drake/` 下,

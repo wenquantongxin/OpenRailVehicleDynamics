@@ -1,4 +1,4 @@
-# libs/systems
+# libs/system_assembly
 
 **职责**：模型中立的系统组装层。
 
@@ -9,4 +9,4 @@
 准入的能力集合由这些 Goal 逐项确定。未准入的能力在编译期不存在，不设占位、不留
 兼容入口——一个"暂时什么也不做"的接口，与一个已实现的接口在调用点上无法区分。
 
-`include/orvd/systems/` 为公开头，`src/` 为实现。
+`include/orvd/system_assembly/` 为公开头，`src/` 为实现。

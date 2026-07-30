@@ -33,8 +33,8 @@ struct ComparisonRequirements {
 };
 
 // Builds the requirements for one scenario: the mass-matrix columns, the
-// inverse-dynamics generalized forces, each link pose, and the state read back
-// after evaluation.
+// inverse-dynamics generalized forces, each link pose, and generalized positions
+// read back after evaluation.
 [[nodiscard]] ComparisonRequirements MakeComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 

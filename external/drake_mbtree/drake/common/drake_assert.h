@@ -276,7 +276,7 @@ struct ThrowValuesBuf {
 // Packages the optional name-value pairs passed to DRAKE_THROW_UNLESS into a
 // buffer for Throw.
 template <typename... NamesAndValues>
-[[noreturn]] __attribute__((noinline, cold)) void ThrowWithValues(
+[[noreturn]] void ThrowWithValues(
     const char* condition, const char* func, const char* file, int line,
     NamesAndValues... names_and_values) {
   constexpr size_t N = sizeof...(names_and_values);

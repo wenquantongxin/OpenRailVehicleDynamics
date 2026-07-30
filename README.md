@@ -46,8 +46,8 @@ OpenRailVehicleDynamics/
 ├── tools/
 │   └── drake_source_boundary/  源码闭包解析工具（开发期，Python 标准库）
 ├── libs/
-│   ├── core/             运行时地基：Context、缓存、求值调度
-│   ├── systems/          模型中立组装层
+│   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
+│   ├── system_assembly/  模型中立系统组装层
 │   ├── integrators/      抽象推进器与 CVODE 后端
 │   ├── forces/           力元
 │   └── equilibrium/      静平衡
@@ -60,8 +60,8 @@ OpenRailVehicleDynamics/
     └── unit/             单元测试
 ```
 
-模块的 `include/orvd/<module>/` 为公开头，`src/` 为实现；下游 include 形如
-`#include "orvd/core/context.h"`。各模块 `src/` 目前为空。
+模块的 `include/orvd/<module>/` 为公开头，`src/` 为实现；多体运行时下游 include 形如
+`#include "orvd/multibody_runtime/multibody_runtime_context.h"`。各模块 `src/` 目前为空。
 
 ## 外置第三方
 

@@ -1,5 +1,6 @@
 #include "comparison/required_observations.h"
 
+#include <stdexcept>
 #include <string>
 
 namespace orvd_comparison {
@@ -9,9 +10,14 @@ orvd_contract::ObservationKind ObservationKindForGeneralizedForceComponent(
     orvd_contract::GeneralizedForceComponentKind component_kind) {
     using orvd_contract::GeneralizedForceComponentKind;
     using orvd_contract::ObservationKind;
-    return component_kind == GeneralizedForceComponentKind::kTorqueNewtonMetres
-               ? ObservationKind::kTorqueNewtonMetres
-               : ObservationKind::kForceNewtons;
+    switch (component_kind) {
+        case GeneralizedForceComponentKind::kForceNewtons:
+            return ObservationKind::kForceNewtons;
+        case GeneralizedForceComponentKind::kTorqueNewtonMetres:
+            return ObservationKind::kTorqueNewtonMetres;
+    }
+    throw std::logic_error(
+        "Generalized-force component has no observation dimension");
 }
 
 }  // namespace
@@ -57,9 +63,9 @@ ComparisonRequirements MakeComparisonRequirements(
                  ObservationKind::kTranslationMeters});
     }
 
-    // The state read back after evaluation. Comparing poses alone cannot show
-    // that a context was left untouched; an implementation that normalizes or
-    // rewrites state in place becomes visible here.
+    // Generalized positions read back after evaluation. Comparing poses alone
+    // cannot show that an implementation normalized or rewrote those positions
+    // in place.
     for (std::size_t position_index = 0;
          position_index < scenario.generalized_positions.size(); ++position_index) {
         requirements.scalars.push_back(

@@ -51,12 +51,14 @@ find_package(Eigen3 3.4 CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 
 # --- Module graph, wired in as each module is implemented ---
-# Dependency direction: external -> core -> {systems, forces} -> integrators
+# Dependency direction: external -> multibody_runtime
+#   -> {system_assembly, forces}
+#   -> integrators
 #   -> equilibrium ; tests last.
 foreach(_dir
         external/drake_mbtree
-        libs/core
-        libs/systems
+        libs/multibody_runtime
+        libs/system_assembly
         libs/forces
         libs/integrators
         libs/equilibrium)

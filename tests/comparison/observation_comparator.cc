@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 
 #include <Eigen/Dense>
 
@@ -28,7 +29,7 @@ double AbsoluteFloorForKind(ObservationKind kind) {
         case ObservationKind::kAngleRadians:            return kAngleAbsoluteFloorRadians;
         case ObservationKind::kUnitQuaternionComponent: return kUnitQuaternionComponentAbsoluteFloor;
     }
-    return kAngleAbsoluteFloorRadians;
+    throw std::logic_error("Observation kind has no absolute-error floor");
 }
 
 // Elements are named `<group>[row,col]`. A group missing any of its nine
