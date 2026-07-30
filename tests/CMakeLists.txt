@@ -115,6 +115,19 @@ target_link_libraries(verify_multibody_cache_slot
 add_test(NAME verify_multibody_cache_slot
          COMMAND verify_multibody_cache_slot)
 
+# The runtime contract's dependency policy, made executable: eight declared
+# dependency subsets against five state sources. The expectations are transcribed
+# from the contract by hand rather than derived from the slots' own template
+# parameters — an expectation computed the same way the slot computes freshness
+# would agree with any declaration, and the declaration is what is under test.
+add_executable(verify_multibody_cache_dependency_matrix
+    multibody_runtime/verify_multibody_cache_dependency_matrix.cc)
+orvd_configure_first_party_target(verify_multibody_cache_dependency_matrix)
+target_link_libraries(verify_multibody_cache_dependency_matrix
+    PRIVATE orvd_multibody_runtime)
+add_test(NAME verify_multibody_cache_dependency_matrix
+         COMMAND verify_multibody_cache_dependency_matrix)
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain
