@@ -11,6 +11,7 @@
 # because it is defined under a product module directory.
 
 add_library(orvd_multibody_runtime STATIC
+    src/multibody_physical_parameter_validation.cc
     src/multibody_state_instance.cc
     src/multibody_state_layout.cc)
 

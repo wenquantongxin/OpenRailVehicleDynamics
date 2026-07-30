@@ -72,6 +72,7 @@ find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 set(ORVD_PRODUCT_MODULE_DIRECTORIES
     external/drake_mbtree
     libs/multibody_runtime
+    libs/multibody_model
     libs/system_assembly
     libs/forces
     libs/integrators

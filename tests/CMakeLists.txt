@@ -304,3 +304,15 @@ target_link_libraries(verify_minimal_rigid_tree_model
     PRIVATE orvd_rigid_multibody_tree)
 add_test(NAME verify_minimal_rigid_tree_model
          COMMAND verify_minimal_rigid_tree_model)
+
+# What the modelling facade takes and what it refuses. It links only
+# `orvd_multibody_model`: that target's dependency on the rigid tree is PRIVATE,
+# so if this test compiles then the public headers really do name no vendored
+# type — the check and the boundary are the same fact.
+add_executable(verify_multibody_model_building
+    multibody_model/verify_multibody_model_building.cc)
+orvd_configure_first_party_target(verify_multibody_model_building)
+target_link_libraries(verify_multibody_model_building
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_building
+         COMMAND verify_multibody_model_building)
