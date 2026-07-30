@@ -7,7 +7,7 @@
 
 - 工作分支：`main`
 - 当前阶段：实现单一 Context 状态所有权
-- 当前 Goal：`G20`
+- 当前 Goal：`G21`
 - 产品代码状态：vendored common support、topology 与 double pose math 三个静态库可构建，
   四个位姿组合函数有常驻契约测试；刚性 tree 源码已落位，其编译前沿受阻于三个待替换的
   运行时头；第一方运行时尚未开始
@@ -265,7 +265,7 @@ Goal GNN — <明确的功能名称>
 
 ## 子目标 8：实现单一 Context 状态所有权
 
-- [ ] **G20 — 定义多体树运行时契约与实际缓存依赖映射**
+- [x] **G20 — 定义多体树运行时契约与实际缓存依赖映射**
   - 产物：逐项列明 landed tree 对 systems 类型、状态、参数和缓存入口的实际消费处，
     并为每项指定「类型化替换、直接计算、临时工作区或删除」及承接 Goal；输入只取当前
     landed 源码、G17 编译前沿和固定 Drake 来源，不依赖尚不存在的完整 tree 目标。
@@ -278,6 +278,20 @@ Goal GNN — <明确的功能名称>
     类型化参数和版本的状态实例，G27 再把该实例与具体缓存工作区组合为内部求值上下文。
     调用方向为 tree 接收上下文，依赖方向固定为「运行时状态/版本/通用类型化槽 → 刚性树
     接入层的具体缓存工作区 → 公共门面」，不预造 Diagram、事件、端口或通用依赖图。
+  - 实测结论：契约表见
+    [`docs/design/MULTIBODY_RUNTIME_CONTRACT.md`](../design/MULTIBODY_RUNTIME_CONTRACT.md)。
+    落位树里没有任何具体缓存声明，只有 `MultibodyElement::DeclareCacheEntry` 通用转发器，
+    因此声明侧取自固定来源的 `multibody_tree_system.cc`，消费侧取自落位源码，两侧对账。
+    契约把三件事分开记——Drake 声明的新鲜度先决条件、计算时实际读取的上游、ORVD 采用的
+    语义根依赖——三者不等价，混起来会得出错误的依赖结论。
+    保留的状态/参数缓存，其传递闭包都落在 q、v 与语义化参数版本上，因此新鲜度判定可以
+    只保存根版本快照，不建 ticket 图或通用依赖图；但 ABA force cache 与 Accelerations
+    真实依赖时间、精度与输入端口，改为调用期工作区，不进长期缓存。
+    参数按实际读取拆成有证据的类别：改一个刚体质量只影响坐标系/惯量一支及其传递依赖，
+    而 Drake 的 `all_parameters_ticket()` 会让全部缓存过期——上游自己在该处留有
+    「Create more granular parameter tickets」的 TODO。
+    另定：joint damping 缓存删除、阻尼力在 G35 直接计算；system Jacobian 首版直接计算，
+    不预分配缓存；重力向量归为最终化后不可变的模型数据，不建缓存版本。
 
 - [ ] **G21 — 实现连续状态与参数存储**
   - 产物：单一所有者的广义位置、广义速度，以及刚体惯量、坐标系位姿、关节/执行器和
@@ -333,6 +347,12 @@ Goal GNN — <明确的功能名称>
     `systems/framework/context.h` 与 `parameter_conversion.h` 不再是编译前沿缺口。
   - 阶段边界：本 Goal 不伪造 systems 头；完成后若仍有翻译单元受阻，唯一允许的运行时
     头缺口是下一 Goal 要消除的 `multibody_tree_system.h`。
+  - 明确不做：**首版多体运行时不支持运行时关节锁定。** 其 API、抽象参数存储以及 ABA
+    算法分支在本 Goal 整链删除——`RigidBody`/`Joint`/`Mobilizer` 的 `Lock`/`Unlock`/
+    `is_locked`、`is_locked_parameter_index_` 抽象参数，以及 `body_node_impl.cc` 中三处
+    锁定分支；`Mobilizer::Lock()` 当前还会清零速度，该入口同样整链消失，不只删布尔存储。
+    未来若出现已批准需求，必须作为新的证据化产品决策，连同存储、API、算法与测试完整
+    重引入。依据见契约文档第六节。
 
 - [ ] **G27 — 绑定真实缓存并切断 tree_system 反向指针**
   - 产物：有重复消费证据的 tree `Eval` 入口绑定到 G23–G25，tree 直接接收多体求值
