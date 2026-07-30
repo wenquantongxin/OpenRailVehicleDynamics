@@ -2,6 +2,7 @@
 # Python is only ever required when testing is enabled. It builds its own
 # synthetic source trees, so this check needs neither Drake nor a Drake clone.
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+find_package(Git REQUIRED)
 add_test(NAME verify_source_closure_analyzer
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_source_closure_analyzer.py)
@@ -25,7 +26,8 @@ endif()
 # tools/drake_source_boundary/README.md.
 add_test(NAME verify_landed_drake_source_provenance_audit
          COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_drake_source_provenance_audit.py)
+                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_drake_source_provenance_audit.py
+                 --git-executable ${GIT_EXECUTABLE})
 
 # The landed compile frontier tool. Only its synthetic self-check is registered:
 # running the tool against the real landed tree exits non-zero today, because the

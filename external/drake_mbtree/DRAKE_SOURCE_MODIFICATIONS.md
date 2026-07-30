@@ -321,8 +321,8 @@ C++23 的 `std::numbers` 是标准途径,不需要为编译器差异建宏兼容
 BSD-3-Clause 没有对应条款,故另外 133 个被修改的文件在文件内无须任何声明,其义务由随仓库
 携带的 `LICENSE.TXT` 承担。
 
-这项义务由 `tools/drake_source_boundary/verify_landed_drake_source_provenance.py` 对着
-钉死的上游现场核验,不靠人记住。
+这项义务由 `tools/drake_source_boundary/verify_landed_drake_source_provenance.py` 直接
+对固定 Git 对象核验；克隆工作区的未提交改动不会改变结论，也不靠人记住。
 
 ## 未作的修改
 

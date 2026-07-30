@@ -130,14 +130,18 @@ python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_
 
 `verify_landed_drake_source_provenance.py` 回答的是分发义务里的**可追溯性**:任取落位树
 中的一个文件，读者能否说出它来自哪个上游仓库、哪个修订、哪个路径。账本持有这三件事实，
-该工具核验账本、落位树与上游克隆三者是否仍然一致，并另外核验许可证正文在位、以及被修改
-且其许可证要求改动声明的文件确实带着声明。
+该工具从克隆中的**固定 Git 对象**读取上游内容，不读取可被未提交改动污染的工作区。它核验
+账本的 commit 与 tag、落位路径集合和固定对象树一致；Drake 的 BSD 正文除平台换行外与固定
+对象文本相同；
+Apache 正文包含标准标题、全部编号章节及第 4(b) 条；固定对象中实际带 Apache 头的文件与
+账本元数据一致；被修改的 Apache 文件保留原声明块，并在首个 include 之前带有 ORVD 改动声明。
 
-**身份用路径，不用哈希。** 哈希只说两个文件是否逐字节相同，不说任何一个来自哪里；它在我们
-行使许可证授予的修改权那一刻就失效；而一份今天提交的哈希清单，明天会因为正确的理由在错误
-的日子失败。路径经得起修改，这正是来源追溯需要的性质。
+**来源身份由仓库、commit 与路径组成，不用冻结哈希清单。** 哈希只说两个文件是否逐字节
+相同，不说任何一个来自哪里；它在我们行使许可证授予的修改权那一刻就失效；而一份今天提交的
+哈希清单，明天会因为正确的理由在错误的日子失败。路径经得起修改，这正是来源追溯需要的性质。
+本地 clone 可以是镜像，工具不把其可变 remote 配置当成来源事实；仓库 URL 由账本声明。
 
-与上游有差异**不是**本工具报错的理由:落位树经过了记录在案的 double-only 手术。它检查的
+与上游有差异**不是**本工具报错的理由：落位树经过了记录在案的 double-only 手术。它检查的
 是——那些既有差异、其许可证又要求改动声明的文件，是否真的带着声明。Apache-2.0 第 4(b) 条
 要求被修改的文件声明自己被改过;BSD-3-Clause 没有这一条，因此被修改的 BSD 文件只需随仓库
 携带许可证正文，文件内无须任何声明。合成自检里有一条专门的负控守着这个区别。
@@ -149,7 +153,8 @@ python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_
 python3 tools/drake_source_boundary/verify_landed_drake_source_provenance.py \
     --landed-root external/drake_mbtree \
     --upstream-clone <钉死修订的上游克隆> \
-    --disposition-ledger external/drake_mbtree/SOURCE_DISPOSITION.txt
+    --disposition-ledger external/drake_mbtree/SOURCE_DISPOSITION.txt \
+    --git-executable "$(command -v git)"
 ```
 
 ## 第三方依赖按参数传入

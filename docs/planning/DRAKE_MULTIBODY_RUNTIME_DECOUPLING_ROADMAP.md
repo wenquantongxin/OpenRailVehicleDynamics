@@ -224,12 +224,13 @@ Goal GNN — <明确的功能名称>
 - [x] **G18 — 完成 vendor 分发义务**
   - 产物：源码清单、来源、许可证、NOTICE 和修改说明。
   - 完成门：不使用文件哈希作身份；每个 vendored 文件可追溯到上游仓库、修订与路径；Drake 的
-    仓库级 BSD-3-Clause、支撑文件已有的 Apache-2.0 声明及其他实际第三方许可证齐全。
+    仓库级 BSD-3-Clause 与支撑文件已有的 Apache-2.0 分发材料齐全；外置构建/链接依赖的身份
+    与 G50 按实际打包内容重新收集许可证的责任已记录。
   - 实测结论：`SOURCE_DISPOSITION.txt` 增记 `source_repository`，成为解析器的必需字段——
     没有仓库的 commit 哈希不构成来源。逐文件清单不另立，账本即清单。
-    `verify_landed_drake_source_provenance.py` 对着钉死上游现场核验四件事：克隆 HEAD 与账本
-    一致、每个 vendored 路径在上游同路径存在、落位集合与准入集合精确相等、许可证正文在位，
-    并核验被修改且其许可证要求改动声明的文件确实带着声明。身份用路径不用哈希。
+    `verify_landed_drake_source_provenance.py` 直接读取固定 Git 对象而不信任克隆工作区，核验
+    HEAD、commit 与 tag 的关系、每个 vendored 路径、落位集合、固定提交中的 Drake 许可证
+    原文、Apache 文件元数据和头部改动声明。身份用仓库、commit 与路径，不建冻结哈希清单。
     `common/nice_type_name.cc` 带 Apache-2.0 条款且被 G16 修改，按第 4(b) 条在原声明下方
     补了改动声明，原声明未动、不主张 ORVD 版权；`copyable_unique_ptr.h` 与上游逐字节相同，
     不欠此项；BSD-3-Clause 无对应条款，其余被修改文件的义务由随仓库携带的许可证正文承担。

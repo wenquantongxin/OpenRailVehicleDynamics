@@ -1,9 +1,10 @@
 OpenRailVehicleDynamics (ORVD)
 ==============================
 
-This file records the third-party material this repository redistributes or
-builds against, and where each one's licence text lives. It is a notice, not a
-grant.
+This file records the third-party source this repository redistributes and the
+external libraries it currently builds against. Licence texts shipped with the
+vendored source are identified below. The exact materials required by a release
+package are collected again at G50. This file is a notice, not a grant.
 
 This NOTICE does not grant a license to ORVD first-party code.
 
@@ -53,38 +54,30 @@ Drake — a subset of the rigid multibody tree and topology sources.
 Build and link dependencies
 ---------------------------
 
-These are resolved by find_package at configure time. This repository does not
-contain their source, but their code does reach the binaries this project
-produces, so a distributed build must carry their licences.
+These are resolved by `find_package` at configure time and are not vendored in
+this repository. Their packaging form and the files actually incorporated into
+or shipped with a release determine that release's licence materials.
 
 Eigen
 
-    Licence   primarily MPL-2.0; individual files carry their own terms, and
-              Eigen's own COPYING.README is the authority on which
-    Reached by header inclusion, so Eigen code is compiled into ORVD objects
+    Licence   primarily MPL-2.0; individual files carry their own terms
+    Form      header library; included Eigen code is compiled into ORVD objects
 
-  Eigen 3.4 is not uniformly MPL-2.0. Most of it is, some files are BSD-3-Clause,
-  and some optional backends are offered under LGPL-2.1+ or MPL-2. Upstream
-  provides EIGEN_MPL2_ONLY for projects that must exclude the non-MPL2 parts;
-  this build does not define it, so the accurate statement is the one above
-  rather than a blanket claim. A release that bundles or statically embeds Eigen
-  must determine the terms of the files it actually ships.
+  Eigen is primarily MPL-2.0; some files carry BSD or additional LGPL terms.
+  The configured Eigen distribution's `COPYING.README` and individual source
+  files are authoritative. Upstream provides `EIGEN_MPL2_ONLY` to reject
+  included LGPL code; the tracked ORVD target configuration does not define it.
+  G50 must determine which Eigen files reach the release artifacts and carry the
+  corresponding terms.
 
 fmt
 
     Licence   MIT (Expat)
-    Reached by dynamic linking against libfmt
+    Form      supplied through the configured `fmt::fmt` CMake target
 
-  A package that bundles libfmt must carry the licence text of the fmt version
-  it bundles.
-
-
-Not dependencies
-----------------
-
-SUNDIALS CVODE and Ceres appear in the design documents as future work. They are
-not searched for, not built and not linked today, and are listed here only so
-that their absence is not mistaken for an omission.
+  The configured package may provide fmt as a shared library, a static library,
+  or another supported target form. A release that ships fmt material must carry
+  the licence text belonging to that fmt version.
 
 
 Release
