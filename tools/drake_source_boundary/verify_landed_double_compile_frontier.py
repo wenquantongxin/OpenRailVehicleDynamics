@@ -88,16 +88,21 @@ def case_foreign_drake_include_directory_is_refused(workspace: Path) -> None:
     write_tree(
         landed_root,
         {
-            "drake/common/kept.h": "#pragma once\nint Kept();\n",
-            "drake/common/kept.cc": '#include "drake/common/kept.h"\nint Kept() { return 1; }\n',
+            "drake/common/uses_runtime.cc": (
+                '#include "drake/multibody/tree/multibody_tree_system.h"\n'
+                "int UsesRuntime() { return 1; }\n"
+            ),
         },
     )
-    # A directory that looks like another Drake installation: it holds one of the
-    # headers this boundary deliberately does not have.
+    # The foreign directory provides exactly the header the landed source misses,
+    # not one of the fixed category canaries. The preflight must derive this name
+    # from the landed source or the compile would report an unearned success.
     foreign_root = workspace / "foreign_drake_prefix"
     write_tree(
         foreign_root,
-        {"drake/common/default_scalars.h": "#pragma once\n"},
+        {
+            "drake/multibody/tree/multibody_tree_system.h": "#pragma once\n",
+        },
     )
     result = run_tool(landed_root, [foreign_root])
     record_failure_unless(
@@ -108,6 +113,46 @@ def case_foreign_drake_include_directory_is_refused(workspace: Path) -> None:
     record_failure_unless(
         "reaches a Drake tree" in result.stdout,
         "the refusal must say that a foreign Drake tree is reachable\n" + result.stdout,
+    )
+
+
+def case_preflight_failure_is_not_treated_as_clean(workspace: Path) -> None:
+    landed_root = workspace / "failed_preflight"
+    write_tree(
+        landed_root,
+        {"drake/common/kept.cc": "int Kept() { return 1; }\n"},
+    )
+    failing_preprocessor = workspace / "compiler_with_failed_preflight.py"
+    failing_preprocessor.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "print('preprocessor intentionally failed')\n"
+        "sys.exit(7)\n",
+        encoding="utf-8",
+    )
+    failing_preprocessor.chmod(0o755)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(LANDED_FRONTIER_TOOL),
+            "--landed-root",
+            str(landed_root),
+            "--compiler",
+            str(failing_preprocessor),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    record_failure_unless(
+        result.returncode == 2,
+        "a failed isolation preflight must be an infrastructure error\n"
+        + result.stdout,
+    )
+    record_failure_unless(
+        "could not perform the foreign-Drake preflight" in result.stdout,
+        "the preflight failure must be reported by name\n" + result.stdout,
     )
 
 
@@ -143,6 +188,11 @@ def case_one_blocked_unit_does_not_mask_the_others(workspace: Path) -> None:
     record_failure_unless(
         "drake/absent/runtime.h  <- drake/common/blocked.cc:1" in result.stdout,
         "the missing header must be listed with the site that includes it\n"
+        + result.stdout,
+    )
+    record_failure_unless(
+        "does not classify compiler failures" in result.stdout,
+        "the tool must not label every compiler failure as a runtime dependency\n"
         + result.stdout,
     )
 
@@ -223,6 +273,11 @@ def case_forbidden_scalar_symbol_is_detected(workspace: Path) -> None:
     record_failure_unless(
         "FORBIDDEN SYMBOL" in result.stdout and "AutoDiffXd" in result.stdout,
         "the report must name the forbidden symbol it matched\n" + result.stdout,
+    )
+    record_failure_unless(
+        "FORBIDDEN SYMBOL drake/common/scalar.cc" in result.stdout,
+        "a forbidden symbol report must name its source translation unit\n"
+        + result.stdout,
     )
 
 
@@ -336,6 +391,35 @@ def case_a_name_in_a_comment_is_not_a_dependency(workspace: Path) -> None:
     )
 
 
+def case_a_name_in_a_string_is_not_source_machinery(workspace: Path) -> None:
+    landed_root = workspace / "string_only"
+    write_tree(
+        landed_root,
+        {
+            "drake/common/described.cc": (
+                "const char* Describe() {\n"
+                '  return "systems::Imaginary scalar_predicate";\n'
+                "}\n"
+            ),
+        },
+    )
+    result = run_tool(landed_root)
+    record_failure_unless(
+        result.returncode == 0,
+        "names inside a string literal must not become source dependencies\n"
+        + result.stdout,
+    )
+    record_failure_unless(
+        "systems::Imaginary" not in result.stdout,
+        "a systems:: name inside a string must not be reported\n" + result.stdout,
+    )
+    record_failure_unless(
+        "FORBIDDEN SOURCE TOKEN" not in result.stdout,
+        "a forbidden token inside a string must not fail the source scan\n"
+        + result.stdout,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Self-check for the landed compile frontier tool."
@@ -350,12 +434,14 @@ def main() -> int:
     cases = (
         case_self_contained_tree_compiles,
         case_foreign_drake_include_directory_is_refused,
+        case_preflight_failure_is_not_treated_as_clean,
         case_one_blocked_unit_does_not_mask_the_others,
         case_compiler_success_without_object_fails,
         case_forbidden_scalar_symbol_is_detected,
         case_eigen_symbolic_namespace_is_not_a_violation,
         case_compile_time_scalar_machinery_is_detected,
         case_a_name_in_a_comment_is_not_a_dependency,
+        case_a_name_in_a_string_is_not_source_machinery,
     )
     with tempfile.TemporaryDirectory(
         prefix="orvd_verify_landed_frontier."

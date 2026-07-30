@@ -30,10 +30,12 @@
 // 64 * epsilon scaled by the magnitudes involved. A wrong implementation — a
 // transpose in the wrong place, a missing translation term, a factor of two —
 // misses that bar by many orders of magnitude.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
 #include <string>
+#include <utility>
 
 #include <Eigen/Dense>
 
@@ -56,7 +58,7 @@ enum class AliasingForm {
   kAllArgumentsAliasSameObject,
 };
 
-const char* NameOf(AliasingForm form) {
+const char* AliasingFormName(AliasingForm form) {
   switch (form) {
     case AliasingForm::kDistinctOutput:
       return "DistinctOutput";
@@ -67,7 +69,7 @@ const char* NameOf(AliasingForm form) {
     case AliasingForm::kAllArgumentsAliasSameObject:
       return "AllArgumentsAliasSameObject";
   }
-  return "unknown";
+  std::unreachable();
 }
 
 int failure_count = 0;
@@ -81,7 +83,7 @@ double ToleranceFor(double expected_magnitude, double input_scale) {
   return kEpsilonMultiple * std::numeric_limits<double>::epsilon() * scale;
 }
 
-void ExpectMatricesMatch(const std::string& what, AliasingForm form,
+void ExpectMatricesMatch(const std::string& composition_name, AliasingForm form,
                          const Eigen::Matrix3d& actual,
                          const Eigen::Matrix3d& expected, double input_scale) {
   for (int row = 0; row < 3; ++row) {
@@ -94,15 +96,15 @@ void ExpectMatricesMatch(const std::string& what, AliasingForm form,
         std::printf(
             "FAIL %s [%s]: rotation element (%d,%d) is %.17g, expected %.17g"
             " (difference %.3e exceeds %.3e)\n",
-            what.c_str(), NameOf(form), row, column, actual(row, column),
-            expected(row, column), difference, tolerance);
+            composition_name.c_str(), AliasingFormName(form), row, column,
+            actual(row, column), expected(row, column), difference, tolerance);
         ++failure_count;
       }
     }
   }
 }
 
-void ExpectVectorsMatch(const std::string& what, AliasingForm form,
+void ExpectVectorsMatch(const std::string& composition_name, AliasingForm form,
                         const Eigen::Vector3d& actual,
                         const Eigen::Vector3d& expected, double input_scale) {
   for (int component = 0; component < 3; ++component) {
@@ -114,7 +116,8 @@ void ExpectVectorsMatch(const std::string& what, AliasingForm form,
       std::printf(
           "FAIL %s [%s]: translation component %d is %.17g, expected %.17g"
           " (difference %.3e exceeds %.3e)\n",
-          what.c_str(), NameOf(form), component, actual(component),
+          composition_name.c_str(), AliasingFormName(form), component,
+          actual(component),
           expected(component), difference, tolerance);
       ++failure_count;
     }
@@ -140,7 +143,7 @@ Eigen::Matrix3d SecondRotationMatrix() {
 Eigen::Vector3d FirstTranslation() { return {1.5, -0.25, 3.0}; }
 Eigen::Vector3d SecondTranslation() { return {-0.75, 2.25, 0.5}; }
 
-double InputScale() {
+double TranslationInputScale() {
   return std::max({FirstTranslation().cwiseAbs().maxCoeff(),
                    SecondTranslation().cwiseAbs().maxCoeff(), 1.0});
 }
@@ -254,9 +257,9 @@ void CheckComposeXX(AliasingForm form) {
     drake::math::internal::ComposeXX(X_AB, X_BC, output);
   }
   ExpectMatricesMatch("ComposeXX", form, output->rotation().matrix(),
-                      expected_rotation, InputScale());
+                      expected_rotation, 1.0);
   ExpectVectorsMatch("ComposeXX", form, output->translation(),
-                     expected_translation, InputScale());
+                     expected_translation, TranslationInputScale());
 }
 
 // R_AC = R_BAᵀ R_BC,  p_AC = R_BAᵀ (p_BC − p_BA)
@@ -300,21 +303,21 @@ void CheckComposeXinvX(AliasingForm form) {
     drake::math::internal::ComposeXinvX(X_BA, X_BC, output);
   }
   ExpectMatricesMatch("ComposeXinvX", form, output->rotation().matrix(),
-                      expected_rotation, InputScale());
+                      expected_rotation, 1.0);
   ExpectVectorsMatch("ComposeXinvX", form, output->translation(),
-                     expected_translation, InputScale());
+                     expected_translation, TranslationInputScale());
 }
 
 }  // namespace
 
 int main() {
-  constexpr AliasingForm kForms[] = {
+  constexpr AliasingForm kAliasingForms[] = {
       AliasingForm::kDistinctOutput,
       AliasingForm::kOutputAliasesFirstInput,
       AliasingForm::kOutputAliasesSecondInput,
       AliasingForm::kAllArgumentsAliasSameObject,
   };
-  for (const AliasingForm form : kForms) {
+  for (const AliasingForm form : kAliasingForms) {
     CheckComposeRR(form);
     CheckComposeRinvR(form);
     CheckComposeXX(form);

@@ -6,7 +6,7 @@
 ## 当前状态
 
 - 工作分支：`main`
-- 当前阶段：刚性 tree 的 `double`-only 裁剪
+- 当前阶段：vendor 分发义务与产品边界闸门
 - 当前 Goal：`G18`
 - 产品代码状态：vendored common support、topology 与 double pose math 三个静态库可构建，
   四个位姿组合函数有常驻契约测试；刚性 tree 源码已落位，其编译前沿受阻于三个待替换的
@@ -165,7 +165,8 @@ Goal GNN — <明确的功能名称>
   - 阶段关系：本 Goal **不建立 tree 的 CMake 目标**。G16 尚未删除
     `default_scalars.h` 的消费者，此刻建目标必然编译失败；G17 只接入能真实构建的前沿与
     位姿组合真名测试，完整 tree 目标由 G28 建立。本轮以仓库外一次性运行验证四条公式与
-    ABO/ABA/ABB/AAA 四种输出重叠形态。
+    四种输出重叠形态（输出独立、别名第一输入、别名第二输入、三实参同对象；上游简称
+    ABO/ABA/ABB/AAA）。
     AutoDiff、`ExtractDouble` 等标量路径的删除留到 G16 一次做完，不在本轮做半套手术。
 
 - [x] **G16 — 删除非 double 标量路径**
@@ -192,23 +193,25 @@ Goal GNN — <明确的功能名称>
     `external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md` 的 G16 节。
 
 - [x] **G17 — 验证 double-only 编译前沿与位姿组合契约**
-  - 产物：landed 源码的真实编译前沿、剩余运行时接口清单，以及四个位姿组合函数的真名
+  - 产物：landed 源码的真实编译前沿、源码层运行时依赖表面，以及四个位姿组合函数的真名
     常驻测试。
   - 完成门：能脱离第一方运行时的翻译单元真实产出对象；其余失败逐项归因到 G20–G27
     将替换的运行时接口，而非标量机制或禁入类别；构建符号中不存在 AutoDiff、symbolic、
-    标量转换或 `CloneToScalar`；四个位姿组合函数以真实符号名通过公式与
-    ABO/ABA/ABB/AAA 输出重叠测试。仓库外现场比较自研位姿组合与 Drake Highway 路径，
+    标量转换或 `CloneToScalar`；四个位姿组合函数以真实符号名通过公式与四种输出重叠
+    形态（输出独立、别名第一输入、别名第二输入、三实参同对象）测试。仓库外现场比较自研
+    位姿组合与 Drake Highway 路径，
     输出用完即删，只判断是否列入 G47 专项测量，不把单机纳秒数写成门槛。
   - 明确不做：不伪造 systems 头、不写空返回替身、不建立残缺 tree 对象库，也不要求尚
     依赖 G20–G27 的全部翻译单元提前通过。完整编译、全对象强制链接与最小运行统一移到 G28。
   - 实测结论：编译前沿由
     `tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py`
-    现场界定，落位树是唯一的 `drake/` include 目录，`/opt/drake`、上游克隆与 `libdrake`
-    一律不得经参数、环境变量或编译器默认路径进入。能脱离运行时的翻译单元真实产出非空
-    对象；其余翻译单元的阻断只有一类，即源码层运行时依赖表面上的三个未落位头
-    `multibody/tree/multibody_tree_system.h`、`multibody/tree/parameter_conversion.h`、
-    `systems/framework/context.h`，全部落在 G20–G28 的替换范围内，没有一处归因于标量
-    机制或禁入类别。产出对象的符号检查以限定名匹配（`drake::symbolic::`、
+    现场界定，落位树是唯一的 `drake/` include 目录，任何外部 Drake 头目录都不得经参数、
+    环境变量或编译器默认路径进入；该工具不接收库参数，也不执行链接。能脱离运行时的翻译
+    单元真实产出非空对象；其余翻译单元的阻断只有一类，即源码层运行时依赖表面上的三个
+    未落位头 `multibody/tree/multibody_tree_system.h`、
+    `multibody/tree/parameter_conversion.h`、`systems/framework/context.h`，全部由
+    G20–G27 替换并由 G28 完整验证，没有一处归因于标量机制或禁入类别。产出对象的符号
+    检查以限定名匹配（`drake::symbolic::`、
     `AutoDiffXd`、`CloneToScalar` 等）零命中，`Eigen::symbolic` 作为负控不误报；
     编译期消解的构造由源码扫描另行覆盖，同样零命中。四个位姿组合函数以真实符号名
     通过代数与四种输出重叠形态的常驻测试（`verify_double_pose_composition_contract`）。

@@ -109,9 +109,9 @@ python3 tools/drake_source_boundary/calculate_required_drake_source_closure.py -
 单元，和定义了它的一样越界。编译期就消解、根本到不了符号表的构造（`default_scalars.h`
 的 include、`scalar_predicate` 分支）由另一条源码扫描负责。
 
-真实落位树的整轮运行**今天必然返回非零**：仍需运行时的翻译单元要等 G20–G28 替换之后才
-编译得过。因此 CTest 只注册它的合成源码树自检，不用 `WILL_FAIL` 把失败伪装成绿色——
-一道允许失败的测试，很快就没人再读它了。真实运行是开发期命令：
+在 G20–G28 完成前，对完整落位树的整轮运行会返回非零：仍需运行时的翻译单元尚未编译
+得过。因此 CTest 只注册它的合成源码树自检，不用 `WILL_FAIL` 把失败伪装成绿色——一道
+允许失败的测试，很快就没人再读它了。真实运行是开发期命令：
 
 ```bash
 python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py \

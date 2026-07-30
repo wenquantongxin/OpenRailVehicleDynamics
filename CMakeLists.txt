@@ -1,10 +1,10 @@
 # OpenRailVehicleDynamics (ORVD) — top-level build
 #
-# The vendored topology target is buildable. Rigid-tree sources are staged for
-# their later double-only target; no first-party runtime library or executable
-# exists yet. BUILD_TESTING adds model-neutral self-checks. Product modules are
-# wired in only when they gain a CMakeLists.txt; their order is set by
-# docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
+# Vendored common support, rigid topology and double pose math are buildable.
+# The remaining rigid-tree sources have a measured double-only compile frontier,
+# but no complete tree or first-party runtime target exists yet. BUILD_TESTING
+# adds model-neutral self-checks. Product modules are wired in only when they
+# gain a CMakeLists.txt; their order is set by the implementation roadmap.
 #
 # The first-party compile policy lives in cmake/OrvdFirstPartyTargetPolicy.cmake
 # and is applied per target. Eigen and the CTest entry point are configured below.
@@ -79,4 +79,5 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-message(STATUS "ORVD ${PROJECT_VERSION} — vendored topology target configured")
+message(STATUS
+    "ORVD ${PROJECT_VERSION} — vendored double-only frontier targets configured")

@@ -4,8 +4,9 @@
 
 ## 当前状态
 
-vendored Drake 刚性 topology 已可独立构建；刚性 tree 源码已经落位,正在删除非
-`double` 路径,尚未接入产品构建。第一方 Context、缓存与动力学运行时尚未开始。
+vendored Drake common support、刚性 topology 与 double 位姿数学目标已可独立构建；
+其余刚性 tree 源码已完成 `double`-only 裁剪，并已界定受第一方运行时阻断的真实编译
+前沿。完整 tree 目标以及第一方 Context、缓存与动力学运行时尚未开始。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -32,7 +33,7 @@ vendored Drake 刚性 topology 已可独立构建；刚性 tree 源码已经落�
 
 ```text
 OpenRailVehicleDynamics/
-├── CMakeLists.txt        顶层构建（vendored topology；启用测试时另建模型中立自检）
+├── CMakeLists.txt        顶层构建（vendored 编译前沿；启用测试时另建模型中立自检）
 ├── CMakePresets.json     构建预设：dev / release / drake-reference
 ├── cmake/                CMake 辅助模块
 ├── docs/
@@ -55,6 +56,7 @@ OpenRailVehicleDynamics/
     ├── comparison/       必需观测与容差判定
     ├── contract/         模型中立场景与观测语义
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
+    ├── math/             double 位姿组合的代数与输出重叠契约
     ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
@@ -65,9 +67,10 @@ OpenRailVehicleDynamics/
 
 ## 外置第三方
 
-Eigen 是项目必需依赖，缺失时配置立即失败。vendored topology 目标直接依赖 fmt，缺失时
-同样在配置阶段失败。SUNDIALS CVODE 与 Ceres 尚无消费者，因此不查找、不设选项、不建
-目标，留到首个真实消费者出现时再引入。
+Eigen 是项目必需依赖，缺失时配置立即失败。vendored common support 公开传递 fmt，
+topology 与 double 位姿数学目标按其真实源码依赖消费该支持层；fmt 缺失时同样在配置
+阶段失败。SUNDIALS CVODE 与 Ceres 尚无消费者，因此不查找、不设选项、不建目标，留到
+首个真实消费者出现时再引入。
 
 ## GZ18
 

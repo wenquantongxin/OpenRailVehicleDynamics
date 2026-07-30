@@ -1,7 +1,8 @@
 # external/drake_mbtree
 
-本目录已落位刚性 topology、tree 与必要支撑源码。topology 已有独立构建目标；tree
-已完成 G16 的 `double`-only 裁剪；G17 验证编译前沿，G28 建立完整 tree 目标。
+本目录已落位刚性 topology、tree 与必要支撑源码。common support、topology 与 double
+位姿数学已有独立构建目标；其余 tree 已完成 G16 的 `double`-only 裁剪并由 G17 界定
+编译前沿，G28 建立完整 tree 目标。
 
 ## 来源与逐文件处置
 
@@ -41,7 +42,8 @@ G28 再以完整 tree 目标验证其兼容性。只有具体 API 提供证据�
 `cxxabi.h` 不在此表内：它是 GNU C++ ABI 的平台头而非第三方库，include 与调用都在
 `__GNUG__` 守卫内，非 GNU 前端直接返回原始 `typeid` 名称。
 
-产品中的 vendored topology 目标已通过 `fmt::fmt` 显式声明该依赖。
+产品中的 vendored common support 已通过 `fmt::fmt` 显式声明该依赖，并公开传递给
+topology 与 double 位姿数学目标。
 
 ## 分发义务（G18 完成收口）
 

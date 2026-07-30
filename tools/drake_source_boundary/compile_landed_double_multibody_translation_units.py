@@ -31,10 +31,9 @@ defined and undefined symbols are examined, because a translation unit that mere
 Constructs that never reach the symbol table — a `default_scalars.h` include, a
 `scalar_predicate` branch — are caught by a separate source scan.
 
-A non-zero exit is the expected outcome today: the translation units that still
-need the runtime cannot compile until G20-G28 replace it. That is reported as what
-it is, not hidden behind an expected-failure wrapper, because a test that is
-allowed to fail stops being read.
+Until G20-G28 replace the runtime, the complete landed tree has translation units
+that cannot compile and the tool returns non-zero. That is not hidden behind an
+expected-failure wrapper, because a test that is allowed to fail stops being read.
 
 Nothing is written down. No pass count, no symbol list, no allowlist: a number
 recorded today becomes a gate that passes for the wrong reason tomorrow. Objects
@@ -94,18 +93,23 @@ FORBIDDEN_SOURCE_TOKENS = (
     "@tparam_nonsymbolic_scalar",
 )
 
-DRAKE_INCLUDE_PATTERN = re.compile(r'#\s*include\s*"(drake/[^"]+)"')
+DRAKE_INCLUDE_PATTERN = re.compile(
+    r'^\s*#\s*include\s*"(drake/[^"]+)"'
+)
 SYSTEMS_TYPE_PATTERN = re.compile(r"\bsystems::([A-Za-z_][A-Za-z0-9_]*)")
 
 
-def code_lines_of(text: str) -> list[str]:
-    """Returns the source with comments blanked out, one entry per original line.
+def source_lines_without_comments(
+    text: str, *, preserve_literal_contents: bool
+) -> list[str]:
+    """Blanks comments and optionally literal contents without changing line count.
 
     Line-prefix matching is not enough: Drake writes `/** ... */` blocks whose
     continuation lines carry no marker, and a name mentioned in such a block —
     `drake::systems::MyThing` appears in one, as an example of namespace
-    stripping — would otherwise be reported as a runtime dependency. String
-    literals are left intact so that `#include "drake/..."` still reads.
+    stripping — would otherwise be reported as a runtime dependency. Include
+    scanning preserves string contents; type and forbidden-token scans blank
+    them so prose embedded in a diagnostic string is not mistaken for C++.
     """
     lines: list[str] = []
     in_block_comment = False
@@ -126,10 +130,12 @@ def code_lines_of(text: str) -> list[str]:
                     index += 1
                 continue
             if in_string or in_character:
-                kept.append(line[index])
+                kept.append(line[index] if preserve_literal_contents else " ")
                 if line[index] == "\\":
                     if index + 1 < len(line):
-                        kept.append(line[index + 1])
+                        kept.append(
+                            line[index + 1] if preserve_literal_contents else " "
+                        )
                     index += 2
                     continue
                 if in_string and line[index] == '"':
@@ -182,13 +188,14 @@ def drake_headers_visible_with(
     compiler: str,
     include_arguments: list[str],
     compiler_environment: dict[str, str],
+    headers_expected_absent: tuple[str, ...],
 ) -> bool:
     """Asks the compiler whether an absent Drake header is reachable anyway."""
     probe_source = "".join(
         f'#if __has_include("{header}")\n'
         "#error ORVD_FOREIGN_DRAKE_HEADER_VISIBLE\n"
         "#endif\n"
-        for header in ABSENT_HEADER_CANARIES
+        for header in headers_expected_absent
     )
     compiler_process = subprocess.run(
         [compiler, f"-std={LANGUAGE_STANDARD}", *include_arguments, "-E", "-x", "c++", "-"],
@@ -199,7 +206,14 @@ def drake_headers_visible_with(
         check=False,
         env=compiler_environment,
     )
-    return "ORVD_FOREIGN_DRAKE_HEADER_VISIBLE" in compiler_process.stdout
+    if "ORVD_FOREIGN_DRAKE_HEADER_VISIBLE" in compiler_process.stdout:
+        return True
+    if compiler_process.returncode != 0:
+        raise RuntimeError(
+            "the compiler could not perform the foreign-Drake preflight:\n"
+            + compiler_process.stdout.strip()
+        )
+    return False
 
 
 def landed_translation_units(landed_root: Path) -> list[Path]:
@@ -247,7 +261,7 @@ def compile_translation_unit(
     return True, compiler_process.stdout
 
 
-def symbols_of(object_paths: list[Path]) -> dict[Path, str]:
+def read_demangled_symbols(object_paths: list[Path]) -> dict[Path, str]:
     """Demangled symbol text per object, defined and undefined alike."""
     symbol_reader = shutil.which("nm")
     if symbol_reader is None:
@@ -271,30 +285,46 @@ def symbols_of(object_paths: list[Path]) -> dict[Path, str]:
     return listings
 
 
-def report_runtime_dependency_surface(landed_root: Path) -> None:
+def source_level_runtime_dependency_surface(
+    landed_root: Path,
+) -> tuple[list[tuple[str, int, str]], dict[str, list[tuple[str, int]]]]:
+    """Calculates missing Drake includes and named systems types from source."""
+    missing_includes: list[tuple[str, int, str]] = []
+    systems_types: dict[str, list[tuple[str, int]]] = {}
+    for source_path in landed_sources(landed_root):
+        relative_path = source_path.relative_to(landed_root).as_posix()
+        source_text = source_path.read_text()
+        include_lines = source_lines_without_comments(
+            source_text, preserve_literal_contents=True
+        )
+        code_only_lines = source_lines_without_comments(
+            source_text, preserve_literal_contents=False
+        )
+        for line_number, (include_line, code_only_line) in enumerate(
+            zip(include_lines, code_only_lines), start=1
+        ):
+            include_match = DRAKE_INCLUDE_PATTERN.search(include_line)
+            if include_match is not None:
+                included = include_match.group(1)
+                if not (landed_root / included).is_file():
+                    missing_includes.append((relative_path, line_number, included))
+            for type_match in SYSTEMS_TYPE_PATTERN.finditer(code_only_line):
+                systems_types.setdefault(type_match.group(1), []).append(
+                    (relative_path, line_number)
+                )
+    return missing_includes, systems_types
+
+
+def report_runtime_dependency_surface(
+    missing_includes: list[tuple[str, int, str]],
+    systems_types: dict[str, list[tuple[str, int]]],
+) -> None:
     """Prints what the landed source still needs from a runtime it does not have.
 
     Recomputed from source on every run and printed, never stored: this is the
     source-level surface, not a proven ABI or a minimum implementation contract,
     and freezing it into a file would turn today's reading into tomorrow's gate.
     """
-    missing_includes: list[tuple[str, int, str]] = []
-    systems_types: dict[str, list[tuple[str, int]]] = {}
-    for source_path in landed_sources(landed_root):
-        relative_path = source_path.relative_to(landed_root).as_posix()
-        for line_number, line in enumerate(
-            code_lines_of(source_path.read_text()), start=1
-        ):
-            include_match = DRAKE_INCLUDE_PATTERN.search(line)
-            if include_match is not None:
-                included = include_match.group(1)
-                if not (landed_root / included).is_file():
-                    missing_includes.append((relative_path, line_number, included))
-            for type_match in SYSTEMS_TYPE_PATTERN.finditer(line):
-                systems_types.setdefault(type_match.group(1), []).append(
-                    (relative_path, line_number)
-                )
-
     print("\nSOURCE-LEVEL RUNTIME DEPENDENCY SURFACE")
     print("  (recomputed from source; not an ABI or an implementation contract)")
     print("\n  headers included but not landed:")
@@ -311,20 +341,28 @@ def report_runtime_dependency_surface(landed_root: Path) -> None:
         print(f"    systems::{type_name}  first at {first_path}:{first_line}")
 
 
-def report_forbidden_symbols(listings: dict[Path, str]) -> bool:
+def report_forbidden_symbols(
+    listings: dict[Path, str], source_path_by_object: dict[Path, str]
+) -> bool:
     """Reports symbols the double-only boundary must not contain."""
     violations: list[tuple[str, str, str]] = []
     for object_path, listing in listings.items():
         for line in listing.splitlines():
             for forbidden_name in FORBIDDEN_SYMBOL_NAMES:
                 if forbidden_name in line:
-                    violations.append((object_path.name, forbidden_name, line.strip()))
+                    violations.append(
+                        (
+                            source_path_by_object[object_path],
+                            forbidden_name,
+                            line.strip(),
+                        )
+                    )
     print("\nSYMBOL CHECK")
     if not violations:
         print("  no forbidden scalar symbol in the objects produced")
         return True
-    for object_name, forbidden_name, line in violations:
-        print(f"  FORBIDDEN SYMBOL {object_name}: matched '{forbidden_name}' in {line}")
+    for source_path, forbidden_name, line in violations:
+        print(f"  FORBIDDEN SYMBOL {source_path}: matched '{forbidden_name}' in {line}")
     return False
 
 
@@ -334,7 +372,9 @@ def report_forbidden_source_tokens(landed_root: Path) -> bool:
     for source_path in landed_sources(landed_root):
         relative_path = source_path.relative_to(landed_root).as_posix()
         text = source_path.read_text()
-        code = code_lines_of(text)
+        code = source_lines_without_comments(
+            text, preserve_literal_contents=False
+        )
         for line_number, (raw_line, code_line) in enumerate(
             zip(text.splitlines(), code), start=1
         ):
@@ -371,8 +411,19 @@ def compile_landed_translation_units(
         )
         return 2
 
+    missing_includes, systems_types = source_level_runtime_dependency_surface(
+        landed_root
+    )
+    headers_expected_absent = tuple(
+        sorted(
+            set(ABSENT_HEADER_CANARIES)
+            | {included for _, _, included in missing_includes}
+        )
+    )
     compiler_environment = sanitized_compiler_environment()
-    if drake_headers_visible_with(compiler, [], compiler_environment):
+    if drake_headers_visible_with(
+        compiler, [], compiler_environment, headers_expected_absent
+    ):
         print(
             "LANDED: the compiler's default include search reaches a Drake tree"
             " this boundary does not have",
@@ -381,7 +432,10 @@ def compile_landed_translation_units(
         return 2
     for include_directory in third_party_include_directories:
         if drake_headers_visible_with(
-            compiler, ["-I", include_directory], compiler_environment
+            compiler,
+            ["-I", include_directory],
+            compiler_environment,
+            headers_expected_absent,
         ):
             print(
                 "LANDED: third-party include directory reaches a Drake tree this"
@@ -429,21 +483,26 @@ def compile_landed_translation_units(
                 for line in outcome.diagnostics.splitlines():
                     print(f"      | {line}")
 
-        produced_objects = [
-            outcome.object_path for outcome in outcomes if outcome.object_path
-        ]
-        symbols_clean = report_forbidden_symbols(symbols_of(produced_objects))
+        source_path_by_object = {
+            outcome.object_path: outcome.relative_path
+            for outcome in outcomes
+            if outcome.object_path is not None
+        }
+        symbols_clean = report_forbidden_symbols(
+            read_demangled_symbols(list(source_path_by_object)),
+            source_path_by_object,
+        )
 
     source_clean = report_forbidden_source_tokens(landed_root)
-    report_runtime_dependency_surface(landed_root)
+    report_runtime_dependency_surface(missing_includes, systems_types)
 
     blocked = [outcome for outcome in outcomes if not outcome.succeeded]
     print("\nRESULT")
     if blocked:
         print(
             f"  {len(blocked)} translation unit(s) cannot compile against the landed"
-            " boundary alone. Each is blocked on a runtime interface the roadmap"
-            " replaces in G20-G28; read the diagnostics above rather than a count."
+            " boundary alone. Read the diagnostics above; this tool deliberately"
+            " does not classify compiler failures."
         )
     else:
         print("  every landed translation unit produced an object")

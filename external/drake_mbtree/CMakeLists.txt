@@ -75,7 +75,8 @@ add_library(orvd_double_pose_composition OBJECT
 orvd_configure_first_party_target(orvd_double_pose_composition)
 target_include_directories(orvd_double_pose_composition
     SYSTEM PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-target_link_libraries(orvd_double_pose_composition PRIVATE Eigen3::Eigen)
+target_link_libraries(orvd_double_pose_composition
+    PRIVATE Eigen3::Eigen fmt::fmt)
 
 # --- Vendored double pose math ---
 # The rotation, rigid transform, roll-pitch-yaw and unit vector translation
