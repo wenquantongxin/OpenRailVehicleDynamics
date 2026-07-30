@@ -15,8 +15,8 @@
 /// copy of the cache value made against the possibility of failure. The
 /// exception simply propagates: nothing here has anything to undo.
 ///
-/// What this does add is a guard on the state. A calculator is supposed to read
-/// the state and nothing else; if it writes to it, the value comes from the
+/// What this does add is a guard on the state. A calculator may read the state
+/// but must not write it; if it does, the value comes from the
 /// state as it was and the commit stamps the state as it now is, and the result
 /// is a stale value wearing a fresh label — the exact failure the versions exist
 /// to prevent. So the versions are read before the calculation and again after,
@@ -25,16 +25,21 @@
 /// calculator quietly wrote a velocity would sail past a check that only looked
 /// at what was declared.
 ///
-/// The guard proves that no versioned source was written during the calculation.
-/// It does not prove the declaration is complete, and it says nothing about the
-/// unversioned parameters, the model constants or externally supplied forces —
-/// those are held by const binding and by the cold-versus-hot comparison the
-/// adapter runs when it binds real calculators.
+/// On a path that reaches the success edge, the guard proves that no versioned
+/// source was written between the start of the calculation and the commit. If
+/// the calculator itself throws, its exception remains authoritative: the slot
+/// is already stale and nothing is committed, but this evaluator neither
+/// diagnoses nor rolls back any state side effect the failing calculator made.
+/// The guard also does not prove the dependency declaration is complete, and it
+/// says nothing about unversioned parameters, model constants or externally
+/// supplied forces — those are held by const binding and by the cold-versus-hot
+/// comparison the adapter runs when it binds real calculators.
 ///
 /// Single-threaded. No lock and no state machine between the comparison and the
 /// commit, because there is no second thread for one to protect against.
 
 #include <array>
+#include <functional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -47,13 +52,6 @@ namespace orvd::multibody_runtime {
 
 namespace internal {
 
-struct CacheSlotEvaluationAccess {
-    template <typename Slot>
-    static const MultibodyStateInstance& BoundState(const Slot& slot) {
-        return *slot.state_;
-    }
-};
-
 /// Every versioned source, for the during-calculation guard.
 using EveryStateVersion = std::array<MultibodyStateVersion, 5>;
 
@@ -65,6 +63,14 @@ inline EveryStateVersion EveryVersionOf(const MultibodyStateInstance& state) {
             state.joint_actuator_parameters_version()};
 }
 
+struct CacheSlotEvaluationAccess {
+    template <typename Value, MultibodyStateVersionSource... Sources>
+    static EveryStateVersion VersionsForGuard(
+        const VersionedCacheSlot<Value, Sources...>& slot) {
+        return EveryVersionOf(*slot.state_);
+    }
+};
+
 }  // namespace internal
 
 /// Returns the slot's value, calculating it first if it is cold or stale.
@@ -72,20 +78,25 @@ inline EveryStateVersion EveryVersionOf(const MultibodyStateInstance& state) {
 /// `calculate` is called with the slot's storage to fill in place, and only when
 /// there is something to do: a fresh slot never reaches it. It must not write to
 /// the state — see the file comment for why, and note that this is checked
-/// rather than merely asked for.
+/// before a normally returning calculation is committed. It must not retain the
+/// mutable storage reference or recursively evaluate this same slot.
+///
+/// The returned reference is a borrow into the slot's pre-allocated storage, not
+/// an owned result. Do not retain it across a state change or another evaluation
+/// that may recompute this slot in place.
 ///
 /// @throws whatever `calculate` throws, unchanged, leaving the slot stale.
-/// @throws std::logic_error if `calculate` changed any state version, before
-/// anything is committed.
+/// @throws std::logic_error if `calculate` returns normally after changing any
+/// state version, before anything is committed.
 template <typename Value, MultibodyStateVersionSource... Sources,
           typename Calculate>
 const Value& EvaluateVersionedCacheSlot(
     VersionedCacheSlot<Value, Sources...>& slot, Calculate&& calculate) {
-    static_assert(std::is_invocable_v<Calculate&, Value&>,
+    static_assert(std::is_invocable_v<Calculate&&, Value&>,
                   "a cache calculator is called with the slot's storage to fill "
                   "in place");
     static_assert(
-        std::is_same_v<std::invoke_result_t<Calculate&, Value&>, void>,
+        std::is_same_v<std::invoke_result_t<Calculate&&, Value&>, void>,
         "a cache calculator writes into the storage it is given; a returned "
         "value would be a second place for the answer to live");
 
@@ -93,14 +104,13 @@ const Value& EvaluateVersionedCacheSlot(
         return slot.value();
     }
 
-    const MultibodyStateInstance& state =
-        internal::CacheSlotEvaluationAccess::BoundState(slot);
-    const internal::EveryStateVersion before = internal::EveryVersionOf(state);
+    const internal::EveryStateVersion before =
+        internal::CacheSlotEvaluationAccess::VersionsForGuard(slot);
 
     Value& storage = slot.mutable_value_for_recomputation();
-    calculate(storage);
+    std::invoke(std::forward<Calculate>(calculate), storage);
 
-    if (internal::EveryVersionOf(state) != before) {
+    if (internal::CacheSlotEvaluationAccess::VersionsForGuard(slot) != before) {
         throw std::logic_error(
             "multibody cache evaluation: the calculator changed the state while "
             "computing, so the value was computed from one state and would be "

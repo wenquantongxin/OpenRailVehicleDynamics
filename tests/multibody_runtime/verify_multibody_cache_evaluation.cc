@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -46,8 +47,21 @@ void ExpectTrue(bool condition, const std::string& what) {
 struct SyntheticPass {
     explicit SyntheticPass(int entry_count)
         : entries(static_cast<std::size_t>(entry_count), 0.0) {}
+
+    SyntheticPass(const SyntheticPass&) = delete;
+    SyntheticPass& operator=(const SyntheticPass&) = delete;
+    SyntheticPass(SyntheticPass&&) = delete;
+    SyntheticPass& operator=(SyntheticPass&&) = delete;
+
+    void FillFromMemberFunction() { entries[0] = 17.0; }
+
     std::vector<double> entries;
 };
+
+static_assert(!std::is_copy_constructible_v<SyntheticPass>);
+static_assert(!std::is_copy_assignable_v<SyntheticPass>);
+static_assert(!std::is_move_constructible_v<SyntheticPass>);
+static_assert(!std::is_move_assignable_v<SyntheticPass>);
 
 /// Declares two of the five sources. The other three are what makes the
 /// during-calculation guard worth testing: a guard that only looked at the
@@ -107,6 +121,19 @@ void CheckColdComputesOnceAndHotQueriesDoNot() {
     ExpectTrue(calls == 1, "nor do any number of further queries");
 }
 
+void CheckTheInvocationContractMatchesTheAcceptedCalculator() {
+    const MultibodyStateLayout layout(SampleDescription());
+    MultibodyStateInstance state(layout);
+    PositionPassSlot slot(state, std::in_place, 4);
+
+    const auto calculate = &SyntheticPass::FillFromMemberFunction;
+    const SyntheticPass& result =
+        EvaluateVersionedCacheSlot(slot, calculate);
+    ExpectTrue(result.entries[0] == 17.0,
+               "a member-function calculator accepted by the invocation "
+               "constraint is invoked with the slot value as its object");
+}
+
 void CheckRecomputationHappensOnRequestAndNotOnWrite() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
@@ -147,8 +174,10 @@ void CheckAThrowingCalculatorLeavesNothingReadable() {
     // a possibility — so what has to hold is that the half-written buffer cannot
     // be read.
     bool propagated_unchanged = false;
+    int failed_calculation_calls = 0;
     try {
-        EvaluateVersionedCacheSlot(slot, [](SyntheticPass& storage) {
+        EvaluateVersionedCacheSlot(slot, [&](SyntheticPass& storage) {
+            ++failed_calculation_calls;
             storage.entries[0] = 99.0;
             throw CalculatorGaveUp();
         });
@@ -159,6 +188,8 @@ void CheckAThrowingCalculatorLeavesNothingReadable() {
     }
     ExpectTrue(propagated_unchanged,
                "the calculator's own exception reaches the caller unchanged");
+    ExpectTrue(failed_calculation_calls == 1,
+               "one failed query makes exactly one calculation attempt");
     ExpectTrue(!slot.is_fresh(), "and leaves the slot stale");
     bool refused = false;
     try {
@@ -219,16 +250,24 @@ void CheckACalculatorThatWritesTheStateIsRefused() {
         PositionPassSlot slot(state, std::in_place, 4);
         const std::string what =
             std::string("a calculator that writes ") + one.what;
+        const std::array<std::uint64_t, 5> versions_before =
+            AllRevisions(state);
 
         bool refused = false;
+        bool disturbance_completed = false;
         try {
             EvaluateVersionedCacheSlot(slot, [&](SyntheticPass& storage) {
                 storage.entries[0] = 42.0;
                 one.disturb(state);
+                disturbance_completed = true;
             });
         } catch (const std::logic_error&) {
             refused = true;
         }
+        ExpectTrue(disturbance_completed,
+                   what + ": the state write itself completed successfully");
+        ExpectTrue(AllRevisions(state) != versions_before,
+                   what + ": advanced a version before the evaluator refused");
         ExpectTrue(refused, what + ": is refused");
         ExpectTrue(!slot.is_fresh(), what + ": leaves the slot stale");
 
@@ -240,7 +279,53 @@ void CheckACalculatorThatWritesTheStateIsRefused() {
         }
         ExpectTrue(value_refused,
                    what + ": leaves the value it computed unreadable");
+
+        int retry_calls = 0;
+        const SyntheticPass& retried = EvaluateVersionedCacheSlot(
+            slot, [&](SyntheticPass& storage) {
+                ++retry_calls;
+                storage.entries[0] = 84.0;
+            });
+        ExpectTrue(retry_calls == 1 && retried.entries[0] == 84.0,
+                   what + ": can be followed by one successful clean retry");
     }
+}
+
+void CheckCalculatorExceptionTakesPrecedenceOverTheStateGuard() {
+    const MultibodyStateLayout layout(SampleDescription());
+    MultibodyStateInstance state(layout);
+    PositionPassSlot slot(state, std::in_place, 4);
+    const std::array<std::uint64_t, 5> versions_before = AllRevisions(state);
+
+    bool original_exception_observed = false;
+    try {
+        EvaluateVersionedCacheSlot(slot, [&](SyntheticPass& storage) {
+            storage.entries[0] = 31.0;
+            state.set_generalized_velocities(
+                Eigen::VectorXd::Constant(8, 2.0));
+            throw CalculatorGaveUp();
+        });
+    } catch (const CalculatorGaveUp&) {
+        original_exception_observed = true;
+    } catch (...) {
+    }
+
+    ExpectTrue(original_exception_observed,
+               "a calculator that writes state and then throws keeps its own "
+               "exception rather than being replaced by the state guard");
+    ExpectTrue(AllRevisions(state) != versions_before,
+               "the evaluator does not pretend to roll back the calculator's "
+               "state side effect");
+    ExpectTrue(!slot.is_fresh(),
+               "but the exceptional path still leaves the slot stale");
+    bool value_refused = false;
+    try {
+        (void)slot.value();
+    } catch (const std::logic_error&) {
+        value_refused = true;
+    }
+    ExpectTrue(value_refused,
+               "and never exposes the partially computed value");
 }
 
 void CheckEvaluationDoesNotDisturbAnyVersion() {
@@ -256,25 +341,27 @@ void CheckEvaluationDoesNotDisturbAnyVersion() {
     state.set_generalized_positions(Eigen::VectorXd::Constant(9, 1.0));
     const std::array<std::uint64_t, 5> before = AllRevisions(state);
 
-    EvaluateVersionedCacheSlot(slot, fill);                 // cold
-    EvaluateVersionedCacheSlot(slot, fill);                 // hot
-    try {
-        EvaluateVersionedCacheSlot(slot, fill);
-    } catch (...) {
-    }
+    EvaluateVersionedCacheSlot(slot, fill);  // cold
+    EvaluateVersionedCacheSlot(slot, fill);  // hot
+    EvaluateVersionedCacheSlot(slot, fill);  // hot again
     ExpectTrue(AllRevisions(state) == before,
                "a legitimate evaluation advances no state version — evaluating "
                "is a read of the state, whatever it costs");
 
     state.set_generalized_positions(Eigen::VectorXd::Constant(9, 2.0));
     const std::array<std::uint64_t, 5> after_write = AllRevisions(state);
+    bool failure_observed = false;
     try {
         EvaluateVersionedCacheSlot(slot, [](SyntheticPass& storage) {
             storage.entries[0] = 5.0;
             throw CalculatorGaveUp();
         });
     } catch (const CalculatorGaveUp&) {
+        failure_observed = true;
     }
+    ExpectTrue(failure_observed,
+               "the failed-evaluation version check observed the intended "
+               "calculator failure");
     ExpectTrue(AllRevisions(state) == after_write,
                "and neither does a failed one");
 }
@@ -319,9 +406,11 @@ void CheckTwoStatesEvaluateIndependently() {
 
 int main() {
     CheckColdComputesOnceAndHotQueriesDoNot();
+    CheckTheInvocationContractMatchesTheAcceptedCalculator();
     CheckRecomputationHappensOnRequestAndNotOnWrite();
     CheckAThrowingCalculatorLeavesNothingReadable();
     CheckACalculatorThatWritesTheStateIsRefused();
+    CheckCalculatorExceptionTakesPrecedenceOverTheStateGuard();
     CheckEvaluationDoesNotDisturbAnyVersion();
     CheckTwoStatesEvaluateIndependently();
 
