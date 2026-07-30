@@ -2,14 +2,10 @@
 
 #include "orvd/multibody_runtime/multibody_physical_parameter_validation.h"
 
-#include <algorithm>
 #include <cmath>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-
-#include <Eigen/Eigenvalues>
 
 namespace orvd::multibody_runtime {
 namespace {
@@ -38,12 +34,6 @@ void RequireFinite(const Eigen::Ref<const Eigen::VectorXd>& values,
             Reject(std::string(what) + " entry " + std::to_string(i) + " is " +
                    std::to_string(values[i]) + ", which is not finite");
         }
-    }
-}
-
-void RequireFinite(const Eigen::Vector3d& values, const std::string& what) {
-    for (int i = 0; i < 3; ++i) {
-        RequireFinite(values[i], what + " component " + std::to_string(i));
     }
 }
 
@@ -155,10 +145,8 @@ void MultibodyStateInstance::set_fixed_frame_pose_parameters(
     int fixed_frame_index, const FixedFramePoseParameters& parameters) {
     RequireIndexInRange(fixed_frame_index, layout_->fixed_frame_count(),
                         "fixed frame");
-    const std::string frame =
-        "fixed frame " + std::to_string(fixed_frame_index) + "'s ";
-    ThrowIfNotARotation(parameters.R_PF, frame + "rotation R_PF");
-    RequireFinite(parameters.p_PoFo_P, frame + "translation p_PoFo_P");
+    ThrowIfNotAValidFixedFramePose(
+        parameters, "fixed frame " + std::to_string(fixed_frame_index));
     const MultibodyStateVersion next = fixed_frame_poses_version_.Next();
     fixed_frame_pose_parameters_[static_cast<std::size_t>(fixed_frame_index)] =
         parameters;

@@ -12,6 +12,7 @@
 // relation is stated here rather than inferred, and stating it twice, or stating
 // it for a body already related, is itself refused.
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -36,6 +37,9 @@ using orvd::multibody_runtime::RigidBodyInertiaParameters;
 static_assert(!std::is_convertible_v<RigidBodyHandle, int>);
 static_assert(!std::is_convertible_v<int, RigidBodyHandle>);
 static_assert(!std::is_constructible_v<RigidBodyHandle, int>);
+static_assert(!std::is_constructible_v<
+              RigidBodyHandle,
+              orvd::multibody_model::internal::ModelIdentity, int>);
 template <typename T>
 concept HasArithmetic = requires(T a, T b) { a + b; };
 static_assert(!HasArithmetic<RigidBodyHandle>);
@@ -109,28 +113,19 @@ const Eigen::Vector3d kZAxis = Eigen::Vector3d::UnitZ();
 
 void CheckAModelCanBeDescribed() {
     MultibodyModel model;
-    ExpectTrue(model.num_rigid_bodies() == 1,
-               "a new model has the world and nothing else");
-    ExpectTrue(model.num_joints() == 0, "and no relations");
 
     const RigidBodyHandle first = model.AddRigidBody("first", SolidishBody(1.0));
     const RigidBodyHandle second =
         model.AddRigidBody("second", SolidishBody(2.0));
-    ExpectTrue(model.num_rigid_bodies() == 3, "two bodies were added");
-    ExpectTrue(model.name_of(first) == "first" &&
-                   model.name_of(second) == "second",
-               "and each answers to the name it was given");
+    ExpectTrue(first.is_valid() && second.is_valid(),
+               "adding bodies returns usable semantic handles");
 
     const JointHandle shoulder = model.AddRevoluteJoint(
         "shoulder", model.world_frame(), model.body_frame(first), kZAxis);
     const JointHandle elbow = model.AddRevoluteJoint(
         "elbow", model.body_frame(first), model.body_frame(second), kZAxis);
-    ExpectTrue(model.num_joints() == 2, "two joints were added");
-    ExpectTrue(model.name_of(shoulder) == "shoulder" &&
-                   model.name_of(elbow) == "elbow",
-               "and each answers to its name");
-    ExpectTrue(model.is_related(first) && model.is_related(second),
-               "both bodies now reach the world");
+    ExpectTrue(shoulder.is_valid() && elbow.is_valid(),
+               "adding joints returns usable semantic handles");
 }
 
 void CheckNamesMustBeUsableAndUnique() {
@@ -148,6 +143,14 @@ void CheckNamesMustBeUsableAndUnique() {
             model.AddFixedFrame("link", body, pose);
         }),
         "a frame taking a name a body already brought");
+
+    FixedFramePoseParameters pose;
+    model.AddFixedFrame("future_body", body, pose);
+    ExpectTrue(
+        RefusalMentions(
+            [&] { model.AddRigidBody("future_body", SolidishBody(1.0)); },
+            "frame named 'future_body'"),
+        "a later body cannot bring a second frame with an existing name");
 
     model.AddRevoluteJoint("j", model.world_frame(), model.body_frame(body),
                            kZAxis);
@@ -178,8 +181,6 @@ void CheckHandlesFromElsewhereAreRefused() {
                                "different model"),
                "a body handle from another model is refused as foreign, not as "
                "out of range");
-    ExpectRefused(WasRefused([&] { (void)second.name_of(in_first); }),
-                  "a foreign handle passed to a query");
 
     const RigidBodyHandle names_nothing;
     ExpectTrue(!names_nothing.is_valid(), "a default handle names nothing");
@@ -272,8 +273,22 @@ void CheckBranchingAndRepeatedBodiesAreFine() {
                            backwards.world_frame(), kZAxis);
                    }),
                    "a joint declared with the world as its child");
-    ExpectTrue(backwards.is_related(body),
-               "and the body reaches the world through it");
+}
+
+void CheckPublicNamesDoNotCollideWithImplementationFrames() {
+    // The landed tree's body-plus-offset convenience overload would create
+    // hidden frames named after the joint. A public FrameHandle must instead
+    // denote the one real frame in the tree, or this otherwise valid body name
+    // collides with an implementation detail.
+    MultibodyModel model;
+    const RigidBodyHandle child =
+        model.AddRigidBody("hinge_child", SolidishBody(1.0));
+    ExpectAccepted(
+        WasRefused([&] {
+            model.AddRevoluteJoint("hinge", model.world_frame(),
+                                   model.body_frame(child), kZAxis);
+        }),
+        "a body name that resembles an implementation joint-frame name");
 }
 
 void CheckFreedomIsStatedRatherThanInferred() {
@@ -283,11 +298,7 @@ void CheckFreedomIsStatedRatherThanInferred() {
     const RigidBodyHandle jointed =
         model.AddRigidBody("jointed", SolidishBody(1.0));
 
-    ExpectTrue(!model.is_related(floating),
-               "a body nobody has related does not reach the world");
     model.DeclareFreeBody(floating);
-    ExpectTrue(model.is_related(floating),
-               "declaring it free relates it to the world");
 
     ExpectRefused(WasRefused([&] { model.DeclareFreeBody(floating); }),
                   "declaring the same body free twice");
@@ -307,6 +318,19 @@ void CheckFreedomIsStatedRatherThanInferred() {
                                               kZAxis);
                    }),
                    "a joint outboard of a free body");
+
+    // An internal quaternion relation has no public JointHandle and therefore
+    // cannot reserve a caller's joint name. This component is not yet attached
+    // to World, so declaring its root free is topologically valid.
+    MultibodyModel collision;
+    const RigidBodyHandle root =
+        collision.AddRigidBody("root", SolidishBody(1.0));
+    const RigidBodyHandle child =
+        collision.AddRigidBody("child", SolidishBody(1.0));
+    collision.AddRevoluteJoint("free_root", collision.body_frame(root),
+                               collision.body_frame(child), kZAxis);
+    ExpectAccepted(WasRefused([&] { collision.DeclareFreeBody(root); }),
+                   "a free declaration after a caller used its obvious name");
 }
 
 void CheckPhysicallyImpossibleDescriptionsAreRefused() {
@@ -327,6 +351,40 @@ void CheckPhysicallyImpossibleDescriptionsAreRefused() {
     ExpectRefused(
         WasRefused([&] { model.AddFixedFrame("f", body, not_a_rotation); }),
         "a fixed frame whose rotation is not a rotation");
+
+    FixedFramePoseParameters infinite_translation;
+    infinite_translation.p_PoFo_P.x() =
+        std::numeric_limits<double>::infinity();
+    ExpectRefused(
+        WasRefused(
+            [&] { model.AddFixedFrame("infinite", body, infinite_translation); }),
+        "a fixed frame with a non-finite translation");
+}
+
+void CheckEveryFiniteNonzeroAxisIsAUsableDirection() {
+    MultibodyModel model;
+    const RigidBodyHandle large_axis_body =
+        model.AddRigidBody("large_axis_body", SolidishBody(1.0));
+    const RigidBodyHandle small_axis_body =
+        model.AddRigidBody("small_axis_body", SolidishBody(1.0));
+    const double largest = std::numeric_limits<double>::max();
+    ExpectAccepted(
+        WasRefused([&] {
+            model.AddRevoluteJoint(
+                "large_axis", model.world_frame(),
+                model.body_frame(large_axis_body),
+                Eigen::Vector3d(largest, largest, 0.0));
+        }),
+        "a large finite nonzero axis whose direct norm would overflow");
+    const double smallest = std::numeric_limits<double>::denorm_min();
+    ExpectAccepted(
+        WasRefused([&] {
+            model.AddPrismaticJoint(
+                "small_axis", model.world_frame(),
+                model.body_frame(small_axis_body),
+                Eigen::Vector3d(smallest, 0.0, 0.0));
+        }),
+        "a small finite nonzero axis whose direct norm would underflow");
 }
 
 void CheckAFixedFrameIsUsableAsAJointEndpoint() {
@@ -335,7 +393,7 @@ void CheckAFixedFrameIsUsableAsAJointEndpoint() {
     FixedFramePoseParameters offset;
     offset.p_PoFo_P = Eigen::Vector3d(0.3, 0.0, 0.0);
     const FrameHandle mount = model.AddFixedFrame("mount", body, offset);
-    ExpectTrue(model.name_of(mount) == "mount", "the frame answers to its name");
+    ExpectTrue(mount.is_valid(), "adding a fixed frame returns a usable handle");
 
     ExpectAccepted(WasRefused([&] {
                        model.AddRevoluteJoint("at_the_mount",
@@ -343,8 +401,6 @@ void CheckAFixedFrameIsUsableAsAJointEndpoint() {
                                               kZAxis);
                    }),
                    "a joint attached at a fixed frame");
-    ExpectTrue(model.is_related(body),
-               "and it relates the frame's body to the world");
 }
 
 }  // namespace
@@ -355,8 +411,10 @@ int main() {
     CheckHandlesFromElsewhereAreRefused();
     CheckRelationsThatNoModelCanMean();
     CheckBranchingAndRepeatedBodiesAreFine();
+    CheckPublicNamesDoNotCollideWithImplementationFrames();
     CheckFreedomIsStatedRatherThanInferred();
     CheckPhysicallyImpossibleDescriptionsAreRefused();
+    CheckEveryFiniteNonzeroAxisIsAUsableDirection();
     CheckAFixedFrameIsUsableAsAJointEndpoint();
 
     if (failure_count > 0) {

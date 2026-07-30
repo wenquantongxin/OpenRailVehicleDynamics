@@ -28,7 +28,6 @@
 /// the caller never described.
 
 #include <memory>
-#include <string>
 #include <string_view>
 
 #include <Eigen/Dense>
@@ -57,7 +56,7 @@ class MultibodyModel {
     /// Adds a rigid body with the given mass properties.
     ///
     /// @throws std::invalid_argument if the name is empty or already names a
-    /// body, or if the mass properties are not ones a body can have.
+    /// body or frame, or if the mass properties are not ones a body can have.
     RigidBodyHandle AddRigidBody(
         std::string_view name,
         const multibody_runtime::RigidBodyInertiaParameters& inertia);
@@ -80,8 +79,8 @@ class MultibodyModel {
     /// every use, and the first consumer that wanted one could say so.
     ///
     /// @throws std::invalid_argument if the name is empty or already names a
-    /// frame, if the handle is invalid or foreign, or if the rotation is not a
-    /// rotation.
+    /// frame, if the handle is invalid or foreign, or if the pose contains a
+    /// non-finite translation or a matrix that is not a rotation.
     FrameHandle AddFixedFrame(
         std::string_view name, RigidBodyHandle body,
         const multibody_runtime::FixedFramePoseParameters& pose_in_body);
@@ -130,22 +129,23 @@ class MultibodyModel {
     /// caller meant, and the model cannot tell which.
     void DeclareFreeBody(RigidBodyHandle body);
 
-    // --- What has been described so far -------------------------------------
-
-    [[nodiscard]] int num_rigid_bodies() const;
-    [[nodiscard]] int num_frames() const;
-    [[nodiscard]] int num_joints() const;
-
-    /// Whether `body` has been given a relation: a joint, a weld, or a free
-    /// declaration. Bodies without one are what finalization refuses.
-    [[nodiscard]] bool is_related(RigidBodyHandle body) const;
-
-    /// The name the element was added under, for diagnostics.
-    [[nodiscard]] const std::string& name_of(RigidBodyHandle body) const;
-    [[nodiscard]] const std::string& name_of(FrameHandle frame) const;
-    [[nodiscard]] const std::string& name_of(JointHandle joint) const;
-
    private:
+    template <typename Handle>
+    static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {
+        return handle.model_;
+    }
+
+    template <typename Handle>
+    static int HandleOrdinal(const Handle& handle) {
+        return handle.ordinal_;
+    }
+
+    template <typename Handle>
+    static Handle MakeHandle(internal::ModelIdentity model_identity,
+                             int ordinal) {
+        return Handle(model_identity, ordinal);
+    }
+
     class Implementation;
     std::unique_ptr<Implementation> implementation_;
 };

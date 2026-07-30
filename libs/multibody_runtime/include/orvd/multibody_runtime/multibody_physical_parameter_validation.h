@@ -9,10 +9,9 @@
 /// equal — and the day they diverged, which one was consulted would depend on
 /// which entry point the caller happened to use.
 ///
-/// These throw. They are not assertions: the vendored layer below checks the
-/// same things with assertions, and assertions are compiled out in a release
-/// build, so a caller who described an impossible body would be told in Debug
-/// and quietly obliged in Release.
+/// These throw. They are not assertions: some vendored constructors only check
+/// in Debug, while adapter conversions intentionally skip a check already made
+/// at this boundary. Neither is an acceptance contract for first-party input.
 
 #include <string>
 
@@ -22,12 +21,13 @@
 
 namespace orvd::multibody_runtime {
 
-/// @throws std::invalid_argument if `rotation` is not a rotation: not
-/// orthonormal within a few units of round-off, or left-handed. It is validated
-/// and never repaired — orthonormalising a caller's matrix turns a modelling
-/// mistake into a plausible answer they will never be told about.
-void ThrowIfNotARotation(const Eigen::Matrix3d& rotation,
-                         const std::string& what);
+/// @throws std::invalid_argument if `pose` contains a non-finite translation or
+/// if its rotation is not orthonormal within a few units of round-off and
+/// right-handed. It is validated and never repaired — orthonormalising a
+/// caller's matrix turns a modelling mistake into a plausible answer they will
+/// never be told about.
+void ThrowIfNotAValidFixedFramePose(
+    const FixedFramePoseParameters& pose, const std::string& what);
 
 /// @throws std::invalid_argument if no real distribution of mass has these
 /// properties: a negative mass, a non-finite entry, or central principal moments

@@ -8,12 +8,7 @@
 - 工作分支：`main`
 - 当前阶段：提供模型中立拓扑门面
 - 当前 Goal：`G30`
-- 产品代码状态：刚性树已成内部产品目标 `orvd_rigid_multibody_tree`——一个归档,
-  其对象集合与全部落位翻译单元动态一致且各一次;编译前沿无缺口,`systems::`、`CacheEntry`、
-  `DependencyTicket`、`MultibodyTreeSystem` 全树归零。第一方运行时已落地状态布局、
-  类型化参数存储、五个版本源、类型化缓存槽、惰性求值与十一个具名缓存槽的真实绑定;
-  最小建模程序可最终化模型、创建独立求值上下文并求值运动学。
-  公共门面尚未开始,vendored 类型仍不对外;安装与导出归 G29–G30 与 G46。
+- 产品代码状态：刚性树已成内部产品目标 `orvd_rigid_multibody_tree`，其对象集合与全部落位翻译单元动态一致且各一次；编译前沿无缺口，`systems::`、`CacheEntry`、`DependencyTicket`、`MultibodyTreeSystem` 全树归零。第一方运行时已落地状态布局、类型化参数存储、五个版本源、类型化缓存槽、惰性求值与十一个具名缓存槽的真实绑定；最小建模程序可最终化模型、创建独立求值上下文并求值运动学。G29 已建立零 Drake 公共类型的程序化建模门面，最终化与稳定查询归 G30，安装与导出归 G46。
 - 已验证平台：Ubuntu 24.04 + GCC 13。Clang、MSVC 与 Windows 尚未实测，不提前宣称
   已跨平台；正式资格门仍是 G46
 - 仓库外探针：只作一次性研究输入，不直接复制进产品
@@ -561,8 +556,7 @@ Goal GNN — <明确的功能名称>
   - 自由关系**显式声明**而非推断。底层会在最终化时给未连接分量补浮动关系,那是六个没人
     要过的自由度；`DeclareFreeBody` 自己建立显式的世界关系,重复声明或与已有关节冲突都
     明确拒绝。**底层不会自动补浮动**这一承重结论由 G30 的最终化测试正式证明,G29 不声称。
-  - 只提供 `AddRevoluteJoint`、`AddPrismaticJoint`、`AddWeldJoint`，不建字符串式通用
-    Joint API、回退或兼容别名；落位树的其余七种关节当前无消费者,不进公共门面。
+  - 只提供 `AddRevoluteJoint`、`AddPrismaticJoint`、`AddWeldJoint`，不建字符串式通用 Joint API、回退或兼容别名；quaternion-floating 只作为 `DeclareFreeBody` 的私有实现，其余六种关节当前无消费者，不进公共门面。
   - **Release 抓出的实质缺陷**：vendored 层用断言校验惯量与旋转,断言在 Release 被编译掉,
     门面于是静默接受了不可能的惯量与非旋转矩阵。G21 的第一方校验器已提取为
     `multibody_physical_parameter_validation`，由状态存储与门面共用——一份物理实现,
@@ -570,6 +564,8 @@ Goal GNN — <明确的功能名称>
   - 判别力：7 项注入全部被抓——成环、模型身份、自由/关节冲突、自由体不加关节、第一方惯量
     校验去掉、第一方旋转校验去掉、自连接。其中后两项最初**因错误的原因通过**(拦下它们的
     分别是越界检查与成环检查),已把测试改成只能被目标检查拦下。
+  - 复核收口：公共 `FrameHandle` 现与 landed tree 的真实 frame 一一映射，关节直接消费该 frame，不再复制 pose 生成隐藏的 joint frame；固定 frame 的完整 pose 在 Debug/Release 共用同一第一方校验；极大有限轴先缩放再归一化，不因直接求范数溢出而污染模型。句柄只允许 `MultibodyModel` 的私有表示助手构造，公共命名空间不留下可由消费者补全的友元桥。自由关系的内部 quaternion joint 不进入公共 joint 名称、句柄或计数面。
+  - G29 不提前占用 G30 的稳定查询范围：构建期只返回后续加入操作必需的语义句柄；元素计数、名称查询、World 是否计入范围及自由关系的最终查询形态由 G30 在模型冻结后一次定义。
 
 - [ ] **G30 — 实现最终化与稳定索引查询**
   - 产物：只允许一次的模型最终化、不可变最终拓扑，以及刚体、坐标系、关节和广义
@@ -582,6 +578,7 @@ Goal GNN — <明确的功能名称>
   - 公共边界：不暴露 `MobodIndex`、`LinkOrdinal`、`q_start`、`v_start` 等 vendored
     内部术语；句柄在所属模型生命周期内稳定，跨模型句柄和越界值在最早可判定处明确失败，
     不为不存在的删除/重建语义引入代际句柄系统或备用查询路径。
+  - 自由体语义以 G29 的显式声明为权威，不读取上游 `is_floating_base_body()`：该上游标志专指由 `BuildForest()` 自动加入 ephemeral 关节的基体，而 ORVD 的显式 quaternion 关系按设计不是 ephemeral。
 
 ## 子目标 12：接通运动学能力
 

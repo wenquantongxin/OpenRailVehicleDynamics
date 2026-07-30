@@ -42,10 +42,8 @@ void RequireNonNegative(double value, const std::string& what) {
     }
 }
 
-}  // namespace
-
-void ThrowIfNotARotation(const Eigen::Matrix3d& rotation,
-                         const std::string& what) {
+void RequireRotation(const Eigen::Matrix3d& rotation,
+                     const std::string& what) {
     for (int row = 0; row < 3; ++row) {
         for (int column = 0; column < 3; ++column) {
             RequireFinite(rotation(row, column),
@@ -67,6 +65,14 @@ void ThrowIfNotARotation(const Eigen::Matrix3d& rotation,
                "; a rotation's determinant is +1, and a negative one means the "
                "basis is left-handed");
     }
+}
+
+}  // namespace
+
+void ThrowIfNotAValidFixedFramePose(
+    const FixedFramePoseParameters& pose, const std::string& what) {
+    RequireRotation(pose.R_PF, what + "'s rotation");
+    RequireFinite(pose.p_PoFo_P, what + "'s translation");
 }
 
 // Checks the complete spatial-inertia condition. Checking only the three

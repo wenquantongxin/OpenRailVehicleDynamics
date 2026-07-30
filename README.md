@@ -50,6 +50,7 @@ OpenRailVehicleDynamics/
 │   └── product_boundary_gate/  链接边界闸门的判别力自检（开发期）
 ├── libs/
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
+│   ├── multibody_model/   模型中立的程序化多体建模门面
 │   ├── system_assembly/  模型中立系统组装层
 │   ├── integrators/      抽象推进器与 CVODE 后端
 │   ├── forces/           力元
@@ -59,15 +60,14 @@ OpenRailVehicleDynamics/
     ├── contract/         模型中立场景与观测语义
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
     ├── math/             double 位姿组合的代数与输出重叠契约
+    ├── multibody_model/  程序化建模门面的加入与拒绝语义
     ├── multibody_runtime/ 多体状态、类型化缓存、刚性树全对象链接与最小模型契约
     ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
 ```
 
-已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如
-`#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、
-不导出，终端公共 API 由 G29 与 G46 收口。尚未开工的模块仍只保留职责骨架。
+已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、不导出；G29 已建立程序化建模门面，稳定最终化查询归 G30，安装与交付边界归 G46。尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 

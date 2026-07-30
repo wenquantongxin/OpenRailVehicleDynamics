@@ -22,9 +22,9 @@
 #include <cstdint>
 
 namespace orvd::multibody_model {
-namespace internal {
+class MultibodyModel;
 
-struct HandleAccess;
+namespace internal {
 
 /// The identity of one model, for catching handles that came from another.
 ///
@@ -55,10 +55,10 @@ class ElementHandle {
         default;
 
    private:
-    // The one way in. Friendship does not extend to a class's nested classes,
-    // and the model's implementation is one, so the access point is a type of
-    // its own rather than the model itself.
-    friend struct HandleAccess;
+    // The one way in. MultibodyModel keeps its representation helpers private,
+    // so a consumer cannot complete a publicly named "access" type and thereby
+    // manufacture a handle for an arbitrary in-range ordinal.
+    friend class ::orvd::multibody_model::MultibodyModel;
 
     constexpr ElementHandle(ModelIdentity model, int ordinal)
         : model_(model), ordinal_(ordinal) {}
@@ -70,26 +70,6 @@ class ElementHandle {
 struct RigidBodyTag {};
 struct FrameTag {};
 struct JointTag {};
-
-/// Reads and builds handles, for the model and nobody else.
-///
-/// In `internal` and undocumented outside this file's purpose: a caller who
-/// found it could manufacture a handle naming any ordinal of any model, which is
-/// precisely what the handle exists to prevent.
-struct HandleAccess {
-    template <typename Handle>
-    static constexpr ModelIdentity model_of(const Handle& handle) {
-        return handle.model_;
-    }
-    template <typename Handle>
-    static constexpr int ordinal_of(const Handle& handle) {
-        return handle.ordinal_;
-    }
-    template <typename Handle>
-    static constexpr Handle Make(ModelIdentity model, int ordinal) {
-        return Handle(model, ordinal);
-    }
-};
 
 }  // namespace internal
 

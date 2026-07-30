@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/multibody_tree-inl.h"
 #include "drake/multibody/tree/prismatic_joint.h"
 #include "drake/multibody/tree/quaternion_floating_joint.h"
@@ -52,7 +53,7 @@ class MultibodyModel::Implementation {
         frame_names_.emplace_back("world");
         frame_by_name_.emplace("world", 0);
         frame_body_.push_back(0);
-        frame_pose_.emplace_back();
+        tree_frame_.push_back(tree_.world_frame().index());
         body_frame_.push_back(0);
         related_root_.push_back(0);
         is_free_.push_back(false);
@@ -61,7 +62,7 @@ class MultibodyModel::Implementation {
 
     template <typename Handle>
     Handle MakeHandle(int ordinal) const {
-        return internal::HandleAccess::Make<Handle>(identity_, ordinal);
+        return MultibodyModel::MakeHandle<Handle>(identity_, ordinal);
     }
 
     /// The ordinal behind a handle, once it is this model's and names something.
@@ -71,12 +72,12 @@ class MultibodyModel::Implementation {
             Reject(std::string("a ") + what +
                    " handle that names nothing was given");
         }
-        if (internal::HandleAccess::model_of(handle) != identity_) {
+        if (MultibodyModel::HandleModelIdentity(handle) != identity_) {
             Reject(std::string("a ") + what +
                    " handle from a different model was given; a handle names "
                    "one model's elements and means nothing in another");
         }
-        const int ordinal = internal::HandleAccess::ordinal_of(handle);
+        const int ordinal = MultibodyModel::HandleOrdinal(handle);
         if (ordinal < 0 || ordinal >= count) {
             Reject(std::string("a ") + what + " handle names element " +
                    std::to_string(ordinal) + " of a model that has " +
@@ -85,7 +86,9 @@ class MultibodyModel::Implementation {
         return ordinal;
     }
 
-    // Union-find over bodies, rooted at the world.
+    // Union-find over bodies. Its representative is arbitrary; membership in
+    // the world's component is tested by comparing with Root(0), never by
+    // assuming that the representative itself remains zero.
     //
     // Every explicit relation is one undirected edge. Which side the caller
     // called the parent fixes the joint's coordinate and the sign of its angle;
@@ -122,6 +125,10 @@ class MultibodyModel::Implementation {
         if (joint_by_name_.contains(joint_name)) {
             Reject("there is already a joint named '" + joint_name + "'");
         }
+        if (tree_.HasJointNamed(joint_name)) {
+            Reject("joint name '" + joint_name +
+                   "' is already used by an internal model relation");
+        }
         const int parent_frame =
             Resolve(parent, static_cast<int>(frame_names_.size()), "frame");
         const int child_frame =
@@ -144,9 +151,11 @@ class MultibodyModel::Implementation {
         return {parent_body, child_body};
     }
 
-    void RecordJoint(const std::string& name, int parent_body, int child_body) {
+    void RecordJoint(const std::string& name, int parent_body, int child_body,
+                     drake::multibody::JointIndex tree_joint) {
         joint_by_name_.emplace(name, static_cast<int>(joint_names_.size()));
         joint_names_.push_back(name);
+        tree_joint_.push_back(tree_joint);
         Connect(parent_body, child_body);
     }
 
@@ -159,9 +168,8 @@ class MultibodyModel::Implementation {
     std::unordered_map<std::string, int> frame_by_name_;
     std::unordered_map<std::string, int> joint_by_name_;
 
-    /// For each frame: the body it is fixed to, and where on that body.
+    /// For each frame: the body it is fixed to.
     std::vector<int> frame_body_;
-    std::vector<multibody_runtime::FixedFramePoseParameters> frame_pose_;
     /// For each body: its own frame.
     std::vector<int> body_frame_;
 
@@ -175,6 +183,8 @@ class MultibodyModel::Implementation {
     /// who cannot see the arrangement cannot come to depend on it.
     drake::multibody::internal::MultibodyTree<double> tree_;
     std::vector<drake::multibody::BodyIndex> tree_body_;
+    std::vector<drake::multibody::FrameIndex> tree_frame_;
+    std::vector<drake::multibody::JointIndex> tree_joint_;
 };
 
 MultibodyModel::MultibodyModel()
@@ -196,20 +206,14 @@ RigidBodyHandle MultibodyModel::AddRigidBody(
     if (model.body_by_name_.contains(body_name)) {
         Reject("there is already a rigid body named '" + body_name + "'");
     }
+    if (model.frame_by_name_.contains(body_name)) {
+        Reject("there is already a frame named '" + body_name +
+               "'; a rigid body brings a body frame with its own name");
+    }
 
-    // Converting validates: mass properties no real distribution of mass can
-    // have are refused here rather than at the first evaluation, where the
-    // wrongness would surface as a dynamics discrepancy a long way from the
-    // description that caused it.
-    //
-    // The layer below reports that as its own exception type and describes the
-    // matrix it rejected, not the body. Both are converted here: what this
-    // header promises is one exception type, and what a caller needs first is
-    // which body they mis-described.
-    // Checked by the first-party validator, not by the layer below. That layer
-    // checks the same condition with an assertion, and assertions are compiled
-    // out in a release build — a caller who described an impossible body would
-    // be told in Debug and quietly obliged in Release.
+    // Validate once at the first-party boundary, then convert without a second
+    // check. The adapter conversion deliberately skips repeated validation;
+    // vendored Debug assertions are not an acceptance contract for this API.
     multibody_runtime::ThrowIfNotRealisableInertia(
         inertia, "rigid body '" + body_name + "'");
     const auto spatial_inertia =
@@ -228,7 +232,7 @@ RigidBodyHandle MultibodyModel::AddRigidBody(
     model.frame_names_.push_back(body_name);
     model.frame_by_name_.emplace(body_name, frame_ordinal);
     model.frame_body_.push_back(ordinal);
-    model.frame_pose_.emplace_back();
+    model.tree_frame_.push_back(link.link_frame().index());
     model.body_frame_.push_back(frame_ordinal);
 
     return model.MakeHandle<RigidBodyHandle>(ordinal);
@@ -261,18 +265,21 @@ FrameHandle MultibodyModel::AddFixedFrame(
     const int body_ordinal = model.Resolve(
         body, static_cast<int>(model.body_names_.size()), "rigid body");
 
-    // The rotation is validated and never repaired: orthonormalising a
-    // caller's matrix turns a modelling mistake into a plausible answer they
-    // will never be told about. By the first-party validator, for the same
-    // reason as the inertia above.
-    multibody_runtime::ThrowIfNotARotation(
-        pose_in_body.R_PF, "frame '" + frame_name + "''s rotation");
+    // The whole pose is validated and never repaired. The same first-party
+    // validator guards context writes, so Debug and Release accept exactly the
+    // same finite translations and rotations.
+    multibody_runtime::ThrowIfNotAValidFixedFramePose(
+        pose_in_body, "frame '" + frame_name + "'");
+    const auto& tree_frame =
+        model.tree_.AddFrame<drake::multibody::FixedOffsetFrame>(
+            frame_name, model.tree_.get_link(model.tree_body_[body_ordinal]),
+            ToRigidTransform(pose_in_body));
 
     const int ordinal = static_cast<int>(model.frame_names_.size());
     model.frame_names_.push_back(frame_name);
     model.frame_by_name_.emplace(frame_name, ordinal);
     model.frame_body_.push_back(body_ordinal);
-    model.frame_pose_.push_back(pose_in_body);
+    model.tree_frame_.push_back(tree_frame.index());
     return model.MakeHandle<FrameHandle>(ordinal);
 }
 
@@ -286,13 +293,17 @@ Eigen::Vector3d RequireUsableAxis(const Eigen::Vector3d& axis,
     if (!axis.allFinite()) {
         Reject("joint '" + joint_name + "' was given an axis that is not finite");
     }
-    const double norm = axis.norm();
-    if (norm == 0.0) {
+    const double scale = axis.cwiseAbs().maxCoeff();
+    if (scale == 0.0) {
         Reject("joint '" + joint_name +
                "' was given a zero axis, which is not a direction and cannot be "
                "made into one");
     }
-    return axis / norm;
+    // Dividing by the largest component first keeps the norm in [1, sqrt(3)].
+    // A direct norm can overflow for a perfectly usable finite direction such
+    // as (max_double, max_double, 0), after which axis / inf becomes zero.
+    const Eigen::Vector3d scaled = axis / scale;
+    return scaled / scaled.norm();
 }
 
 }  // namespace
@@ -306,16 +317,14 @@ JointHandle MultibodyModel::AddRevoluteJoint(
         model.PrepareRelation(parent, child, joint_name);
     const Eigen::Vector3d axis = RequireUsableAxis(axis_in_parent, joint_name);
 
-    const int parent_frame = internal::HandleAccess::ordinal_of(parent);
-    const int child_frame = internal::HandleAccess::ordinal_of(child);
-    model.tree_.AddJoint<drake::multibody::RevoluteJoint>(
-        joint_name,
-        model.tree_.get_link(model.tree_body_[parent_body]),
-        ToRigidTransform(model.frame_pose_[parent_frame]),
-        model.tree_.get_link(model.tree_body_[child_body]),
-        ToRigidTransform(model.frame_pose_[child_frame]), axis);
+    const int parent_frame = HandleOrdinal(parent);
+    const int child_frame = HandleOrdinal(child);
+    const auto& joint = model.tree_.AddJoint<drake::multibody::RevoluteJoint>(
+        std::make_unique<drake::multibody::RevoluteJoint<double>>(
+            joint_name, model.tree_.get_frame(model.tree_frame_[parent_frame]),
+            model.tree_.get_frame(model.tree_frame_[child_frame]), axis));
 
-    model.RecordJoint(joint_name, parent_body, child_body);
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index());
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -329,16 +338,14 @@ JointHandle MultibodyModel::AddPrismaticJoint(
         model.PrepareRelation(parent, child, joint_name);
     const Eigen::Vector3d axis = RequireUsableAxis(axis_in_parent, joint_name);
 
-    const int parent_frame = internal::HandleAccess::ordinal_of(parent);
-    const int child_frame = internal::HandleAccess::ordinal_of(child);
-    model.tree_.AddJoint<drake::multibody::PrismaticJoint>(
-        joint_name,
-        model.tree_.get_link(model.tree_body_[parent_body]),
-        ToRigidTransform(model.frame_pose_[parent_frame]),
-        model.tree_.get_link(model.tree_body_[child_body]),
-        ToRigidTransform(model.frame_pose_[child_frame]), axis);
+    const int parent_frame = HandleOrdinal(parent);
+    const int child_frame = HandleOrdinal(child);
+    const auto& joint = model.tree_.AddJoint<drake::multibody::PrismaticJoint>(
+        std::make_unique<drake::multibody::PrismaticJoint<double>>(
+            joint_name, model.tree_.get_frame(model.tree_frame_[parent_frame]),
+            model.tree_.get_frame(model.tree_frame_[child_frame]), axis));
 
-    model.RecordJoint(joint_name, parent_body, child_body);
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index());
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -351,19 +358,17 @@ JointHandle MultibodyModel::AddWeldJoint(std::string_view name,
     const auto [parent_body, child_body] =
         model.PrepareRelation(parent, child, joint_name);
 
-    const int parent_frame = internal::HandleAccess::ordinal_of(parent);
-    const int child_frame = internal::HandleAccess::ordinal_of(child);
+    const int parent_frame = HandleOrdinal(parent);
+    const int child_frame = HandleOrdinal(child);
     // The weld's own transform is identity: where the two frames sit on their
     // bodies already says how the bodies are placed relative to each other.
-    model.tree_.AddJoint<drake::multibody::WeldJoint>(
-        joint_name,
-        model.tree_.get_link(model.tree_body_[parent_body]),
-        ToRigidTransform(model.frame_pose_[parent_frame]),
-        model.tree_.get_link(model.tree_body_[child_body]),
-        ToRigidTransform(model.frame_pose_[child_frame]),
-        drake::math::RigidTransform<double>::Identity());
+    const auto& joint = model.tree_.AddJoint<drake::multibody::WeldJoint>(
+        std::make_unique<drake::multibody::WeldJoint<double>>(
+            joint_name, model.tree_.get_frame(model.tree_frame_[parent_frame]),
+            model.tree_.get_frame(model.tree_frame_[child_frame]),
+            drake::math::RigidTransform<double>::Identity()));
 
-    model.RecordJoint(joint_name, parent_body, child_body);
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index());
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -391,53 +396,21 @@ void MultibodyModel::DeclareFreeBody(RigidBodyHandle body) {
     // relation to the world by the rigid tree at finalization: six degrees of
     // freedom nobody asked for, in a model that otherwise came out looking
     // exactly as described.
-    const std::string joint_name =
-        "free_" + model.body_names_[static_cast<std::size_t>(ordinal)];
+    // The implementation joint is not recorded as a public JointHandle or
+    // public joint name. Pick an unused tree-local name so a public joint that
+    // was already added can never be displaced by this implementation detail.
+    std::string internal_joint_name =
+        "__orvd_free_body_" + std::to_string(ordinal);
+    while (model.tree_.HasJointNamed(internal_joint_name)) {
+        internal_joint_name.push_back('_');
+    }
     model.tree_.AddJoint<drake::multibody::QuaternionFloatingJoint>(
-        joint_name, model.tree_.world_link(), std::nullopt,
-        model.tree_.get_link(model.tree_body_[ordinal]), std::nullopt);
+        std::make_unique<drake::multibody::QuaternionFloatingJoint<double>>(
+            internal_joint_name, model.tree_.world_frame(),
+            model.tree_.get_link(model.tree_body_[ordinal]).link_frame()));
 
     model.is_free_[ordinal] = true;
-    model.RecordJoint(joint_name, 0, ordinal);
-}
-
-// --- What has been described so far -----------------------------------------
-
-int MultibodyModel::num_rigid_bodies() const {
-    return static_cast<int>(implementation_->body_names_.size());
-}
-
-int MultibodyModel::num_frames() const {
-    return static_cast<int>(implementation_->frame_names_.size());
-}
-
-int MultibodyModel::num_joints() const {
-    return static_cast<int>(implementation_->joint_names_.size());
-}
-
-bool MultibodyModel::is_related(RigidBodyHandle body) const {
-    Implementation& model = *implementation_;
-    const int ordinal = model.Resolve(
-        body, static_cast<int>(model.body_names_.size()), "rigid body");
-    return model.AlreadyConnected(ordinal, 0);
-}
-
-const std::string& MultibodyModel::name_of(RigidBodyHandle body) const {
-    const Implementation& model = *implementation_;
-    return model.body_names_[static_cast<std::size_t>(model.Resolve(
-        body, static_cast<int>(model.body_names_.size()), "rigid body"))];
-}
-
-const std::string& MultibodyModel::name_of(FrameHandle frame) const {
-    const Implementation& model = *implementation_;
-    return model.frame_names_[static_cast<std::size_t>(model.Resolve(
-        frame, static_cast<int>(model.frame_names_.size()), "frame"))];
-}
-
-const std::string& MultibodyModel::name_of(JointHandle joint) const {
-    const Implementation& model = *implementation_;
-    return model.joint_names_[static_cast<std::size_t>(model.Resolve(
-        joint, static_cast<int>(model.joint_names_.size()), "joint"))];
+    model.Connect(0, ordinal);
 }
 
 }  // namespace orvd::multibody_model
