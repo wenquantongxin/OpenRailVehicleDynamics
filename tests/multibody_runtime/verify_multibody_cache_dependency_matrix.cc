@@ -255,6 +255,26 @@ void CheckCell(const ContractRow& row, MultibodyStateVersionSource source,
     EvaluateIfStale(slot, compute_count);
     ExpectTrue(compute_count == (expected_to_invalidate ? 2 : 1),
                cell + ": and the slot is fresh again afterwards");
+
+    // Advance the same source again after the slot has committed a non-zero
+    // version. Without this second write, an implementation that reduced every
+    // snapshot to "zero or non-zero" would pass: it would notice 0 -> 1, then
+    // mistake every later revision for the same state.
+    WriteSource(state, source, 0.75);
+    ExpectTrue(slot.is_fresh() != expected_to_invalidate,
+               cell + (expected_to_invalidate
+                           ? ": a second write makes the slot stale again"
+                           : ": a second write still leaves the slot fresh"));
+    ExpectTrue(compute_count == (expected_to_invalidate ? 2 : 1),
+               cell + ": the second write itself recomputes nothing");
+
+    EvaluateIfStale(slot, compute_count);
+    ExpectTrue(compute_count == (expected_to_invalidate ? 3 : 1),
+               cell + ": the query after a second write recomputes " +
+                   (expected_to_invalidate ? "once" : "not at all"));
+    EvaluateIfStale(slot, compute_count);
+    ExpectTrue(compute_count == (expected_to_invalidate ? 3 : 1),
+               cell + ": the second recomputation is also followed by a hot read");
 }
 
 /// Runs one row: one dependency subset against all five sources.
