@@ -37,6 +37,24 @@ include(OrvdFirstPartyTargetPolicy)
 # for, not made optional, and given no target.
 find_package(Eigen3 3.4 CONFIG REQUIRED)
 
+# fmt is required by the vendored Drake source: its public headers include
+# fmt/format.h and specialise fmt::formatter. No version is pinned — the same
+# Drake source builds against fmt 12.1 under Bazel and against system fmt 9.1
+# under /opt/drake, so the reference side's ABI is not a candidate-side
+# constraint. A real lower bound would have to come from a specific API, and
+# compiling only shows that the version tested works.
+#
+# PATH-derived prefixes are excluded for this search. An unrelated toolchain on
+# PATH — a conda environment, say — otherwise supplies its own fmt, whose
+# directory lands in every consumer's RUNPATH and takes the C++ runtime with it.
+# The result is an executable that links cleanly and cannot start, which is worse
+# than a build failure because it survives every check that stops at linking.
+# Measured on this machine: without this, fmt resolves to an anaconda build whose
+# libstdc++ predates the GLIBCXX version the compiler emits.
+set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
+find_package(fmt CONFIG REQUIRED)
+unset(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH)
+
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: external -> core -> {systems, forces} -> integrators
 #   -> equilibrium ; tests last.
