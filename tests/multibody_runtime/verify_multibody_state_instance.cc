@@ -43,12 +43,21 @@ using orvd::multibody_runtime::RigidBodyInertiaParameters;
 // source and is a category error across two.
 static_assert(!std::is_convertible_v<MultibodyStateVersion, std::uint64_t>);
 static_assert(!std::is_convertible_v<std::uint64_t, MultibodyStateVersion>);
+static_assert(
+    !std::is_constructible_v<MultibodyStateVersion, std::uint64_t>);
 template <typename T>
-concept HasOrdering = requires(T a, T b) { a < b; };
-static_assert(!HasOrdering<MultibodyStateVersion>);
+concept HasAnyOrdering =
+    requires(T a, T b) { a < b; } || requires(T a, T b) { a <= b; } ||
+    requires(T a, T b) { a > b; } || requires(T a, T b) { a >= b; } ||
+    requires(T a, T b) { a <=> b; };
+static_assert(!HasAnyOrdering<MultibodyStateVersion>);
 template <typename T>
-concept HasArithmetic = requires(T a, T b) { a + b; };
-static_assert(!HasArithmetic<MultibodyStateVersion>);
+concept HasAnyArithmetic =
+    requires(T a, T b) { a + b; } || requires(T a, T b) { a - b; } ||
+    requires(T a, T b) { a += b; } || requires(T a, T b) { a -= b; } ||
+    requires(T a) { ++a; } || requires(T a) { a++; } ||
+    requires(T a) { --a; } || requires(T a) { a--; };
+static_assert(!HasAnyArithmetic<MultibodyStateVersion>);
 
 static_assert(
     !std::is_constructible_v<MultibodyStateInstance, MultibodyStateLayout&&>);
@@ -524,6 +533,32 @@ std::array<std::uint64_t, 5> AllRevisions(const MultibodyStateInstance& state) {
             state.joint_actuator_parameters_version().revision_number()};
 }
 
+void BringVersionsToDistinctNonzeroRevisions(
+    MultibodyStateInstance& state) {
+    state.set_generalized_positions(Eigen::VectorXd::Zero(9));
+    for (int revision = 1; revision <= 2; ++revision) {
+        state.set_generalized_velocities(
+            Eigen::VectorXd::Constant(8, static_cast<double>(revision)));
+    }
+    for (int revision = 1; revision <= 3; ++revision) {
+        FixedFramePoseParameters pose;
+        pose.p_PoFo_P[0] = static_cast<double>(revision);
+        state.set_fixed_frame_pose_parameters(0, pose);
+    }
+    for (int revision = 1; revision <= 4; ++revision) {
+        state.set_rigid_body_inertia_parameters(0, ValidInertia());
+    }
+    for (int revision = 1; revision <= 5; ++revision) {
+        JointActuatorParameters actuator;
+        actuator.rotor_inertia = 0.1 * revision;
+        actuator.gear_ratio = static_cast<double>(revision);
+        state.set_joint_actuator_parameters(0, actuator);
+    }
+    ExpectTrue(AllRevisions(state) ==
+                   std::array<std::uint64_t, 5>{1, 2, 3, 4, 5},
+               "the version baseline is nonzero and distinct by source");
+}
+
 /// Runs `write`, then checks every version against what it should now be:
 /// `expected` up by exactly one, the rest untouched.
 ///
@@ -612,6 +647,25 @@ void CheckWritingTheSameValueStillAdvances() {
                        "writing the identical value again",
                        [&] { state.set_generalized_positions(positions); });
 
+    const Eigen::VectorXd velocities = Eigen::VectorXd::Constant(8, -0.5);
+    ExpectAdvancesOnly(state, VersionedSource::kGeneralizedVelocities,
+                       "the first write of velocities",
+                       [&] { state.set_generalized_velocities(velocities); });
+    ExpectAdvancesOnly(state, VersionedSource::kGeneralizedVelocities,
+                       "writing the identical velocities again",
+                       [&] { state.set_generalized_velocities(velocities); });
+
+    FixedFramePoseParameters pose;
+    pose.p_PoFo_P = Eigen::Vector3d(0.1, 0.2, 0.3);
+    ExpectAdvancesOnly(state, VersionedSource::kFixedFramePoses,
+                       "the first write of a fixed-frame pose", [&] {
+                           state.set_fixed_frame_pose_parameters(0, pose);
+                       });
+    ExpectAdvancesOnly(state, VersionedSource::kFixedFramePoses,
+                       "writing the identical fixed-frame pose again", [&] {
+                           state.set_fixed_frame_pose_parameters(0, pose);
+                       });
+
     const RigidBodyInertiaParameters inertia = ValidInertia();
     ExpectAdvancesOnly(state, VersionedSource::kRigidBodyInertias,
                        "the first write of an inertia",
@@ -619,6 +673,18 @@ void CheckWritingTheSameValueStillAdvances() {
     ExpectAdvancesOnly(state, VersionedSource::kRigidBodyInertias,
                        "writing the identical inertia again",
                        [&] { state.set_rigid_body_inertia_parameters(0, inertia); });
+
+    JointActuatorParameters actuator;
+    actuator.rotor_inertia = 0.2;
+    actuator.gear_ratio = -4.0;
+    ExpectAdvancesOnly(state, VersionedSource::kJointActuatorParameters,
+                       "the first write of actuator parameters", [&] {
+                           state.set_joint_actuator_parameters(0, actuator);
+                       });
+    ExpectAdvancesOnly(state, VersionedSource::kJointActuatorParameters,
+                       "writing the identical actuator parameters again", [&] {
+                           state.set_joint_actuator_parameters(0, actuator);
+                       });
 }
 
 void CheckRefusedWritesLeaveEveryVersionAlone() {
@@ -627,12 +693,24 @@ void CheckRefusedWritesLeaveEveryVersionAlone() {
 
     // Get every counter off zero first, so that "unchanged" is a real claim
     // rather than one that a state which never advances anything would satisfy.
-    state.set_generalized_positions(Eigen::VectorXd::Constant(9, 0.1));
-    state.set_generalized_velocities(Eigen::VectorXd::Constant(8, 0.2));
-    FixedFramePoseParameters pose;
-    state.set_fixed_frame_pose_parameters(0, pose);
-    state.set_rigid_body_inertia_parameters(0, ValidInertia());
-    state.set_joint_actuator_parameters(0, JointActuatorParameters{});
+    const Eigen::VectorXd accepted_positions =
+        Eigen::VectorXd::Constant(9, 0.1);
+    const Eigen::VectorXd accepted_velocities =
+        Eigen::VectorXd::Constant(8, 0.2);
+    FixedFramePoseParameters accepted_pose;
+    accepted_pose.p_PoFo_P = Eigen::Vector3d(0.3, -0.2, 0.1);
+    const RigidBodyInertiaParameters accepted_inertia = ValidInertia();
+    JointActuatorParameters accepted_actuator;
+    accepted_actuator.rotor_inertia = 0.4;
+    accepted_actuator.gear_ratio = -6.0;
+    state.set_generalized_positions(accepted_positions);
+    state.set_generalized_velocities(accepted_velocities);
+    state.set_fixed_frame_pose_parameters(0, accepted_pose);
+    state.set_rigid_body_inertia_parameters(0, accepted_inertia);
+    state.set_joint_actuator_parameters(0, accepted_actuator);
+    ExpectTrue(AllRevisions(state) ==
+                   std::array<std::uint64_t, 5>{1, 1, 1, 1, 1},
+               "the refused-write baseline advanced all five versions");
 
     ExpectAdvancesOnly(state, VersionedSource::kNone,
                        "a position write of the wrong size", [&] {
@@ -736,11 +814,31 @@ void CheckRefusedWritesLeaveEveryVersionAlone() {
                            }),
                                          "a rigid body index past the end");
                        });
+
+    ExpectTrue(state.generalized_positions() == accepted_positions,
+               "refused writes left the accepted positions unchanged");
+    ExpectTrue(state.generalized_velocities() == accepted_velocities,
+               "refused writes left the accepted velocities unchanged");
+    ExpectTrue(
+        state.fixed_frame_pose_parameters(0).R_PF == accepted_pose.R_PF &&
+            state.fixed_frame_pose_parameters(0).p_PoFo_P ==
+                accepted_pose.p_PoFo_P,
+        "refused writes left the accepted fixed-frame pose unchanged");
+    ExpectTrue(
+        SameInertia(state.rigid_body_inertia_parameters(0), accepted_inertia),
+        "refused writes left the accepted rigid-body inertia unchanged");
+    ExpectTrue(
+        state.joint_actuator_parameters(0).rotor_inertia ==
+                accepted_actuator.rotor_inertia &&
+            state.joint_actuator_parameters(0).gear_ratio ==
+                accepted_actuator.gear_ratio,
+        "refused writes left the accepted actuator parameters unchanged");
 }
 
 void CheckUnversionedParametersAdvanceNothing() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
+    BringVersionsToDistinctNonzeroRevisions(state);
 
     // These three have no cache consumer, so they have no version of their own —
     // and, just as importantly, they must not disturb anyone else's. A write
@@ -765,6 +863,51 @@ void CheckUnversionedParametersAdvanceNothing() {
                "the unversioned damping write still stored its value");
     ExpectTrue(state.revolute_spring_parameters(0).stiffness == 12.0,
                "the unversioned spring write still stored its value");
+    ExpectTrue(state.linear_bushing_parameters(0).torque_stiffness ==
+                   Eigen::Vector3d(1.0, 2.0, 3.0),
+               "the unversioned bushing write still stored its value");
+
+    ExpectAdvancesOnly(state, VersionedSource::kNone,
+                       "a refused damping write", [&] {
+                           Eigen::VectorXd damping =
+                               Eigen::VectorXd::Ones(6);
+                           damping[5] = -1.0;
+                           ExpectRefused(
+                               WasRefused([&] {
+                                   state.set_joint_damping(0, damping);
+                               }),
+                               "damping whose last coefficient is negative");
+                       });
+    ExpectAdvancesOnly(state, VersionedSource::kNone,
+                       "a refused spring write", [&] {
+                           RevoluteSpringParameters spring;
+                           spring.stiffness = 1.0;
+                           spring.nominal_angle_radians =
+                               std::numeric_limits<double>::quiet_NaN();
+                           ExpectRefused(
+                               WasRefused([&] {
+                                   state.set_revolute_spring_parameters(
+                                       0, spring);
+                               }),
+                               "a spring whose last validated value is NaN");
+                       });
+    ExpectAdvancesOnly(state, VersionedSource::kNone,
+                       "a refused bushing write", [&] {
+                           LinearBushingRollPitchYawParameters bushing;
+                           bushing.force_damping[2] = -1.0;
+                           ExpectRefused(
+                               WasRefused([&] {
+                                   state.set_linear_bushing_parameters(
+                                       0, bushing);
+                               }),
+                               "a bushing whose last damping value is negative");
+                       });
+    ExpectTrue(state.joint_damping(0).isZero() &&
+                   state.joint_damping(1)[0] == 3.0 &&
+                   state.revolute_spring_parameters(0).stiffness == 12.0 &&
+                   state.linear_bushing_parameters(0).torque_stiffness ==
+                       Eigen::Vector3d(1.0, 2.0, 3.0),
+               "refused unversioned writes left their stored data unchanged");
 }
 
 void CheckEqualVersionNumbersDoNotMakeTwoInstancesOne() {
@@ -777,23 +920,104 @@ void CheckEqualVersionNumbersDoNotMakeTwoInstancesOne() {
     // version that silently identified an instance, would go unnoticed.
     first.set_generalized_positions(Eigen::VectorXd::Constant(9, 1.0));
     second.set_generalized_positions(Eigen::VectorXd::Constant(9, 2.0));
-    ExpectTrue(first.generalized_positions_version() ==
-                   second.generalized_positions_version(),
-               "two instances written once each are at the same revision");
+    first.set_generalized_velocities(Eigen::VectorXd::Constant(8, 3.0));
+    second.set_generalized_velocities(Eigen::VectorXd::Constant(8, 4.0));
+
+    FixedFramePoseParameters first_pose;
+    first_pose.p_PoFo_P = Eigen::Vector3d::Constant(1.0);
+    FixedFramePoseParameters second_pose;
+    second_pose.p_PoFo_P = Eigen::Vector3d::Constant(2.0);
+    first.set_fixed_frame_pose_parameters(0, first_pose);
+    second.set_fixed_frame_pose_parameters(0, second_pose);
+
+    first.set_rigid_body_inertia_parameters(0, ValidInertia());
+    second.set_rigid_body_inertia_parameters(
+        0, RigidBodyInertiaParameters{});
+
+    JointActuatorParameters first_actuator;
+    first_actuator.rotor_inertia = 1.0;
+    first_actuator.gear_ratio = 2.0;
+    JointActuatorParameters second_actuator;
+    second_actuator.rotor_inertia = 2.0;
+    second_actuator.gear_ratio = -3.0;
+    first.set_joint_actuator_parameters(0, first_actuator);
+    second.set_joint_actuator_parameters(0, second_actuator);
+
+    first.set_joint_damping(1, Eigen::VectorXd::Constant(1, 1.0));
+    second.set_joint_damping(1, Eigen::VectorXd::Constant(1, 2.0));
+    RevoluteSpringParameters first_spring;
+    first_spring.stiffness = 1.0;
+    RevoluteSpringParameters second_spring;
+    second_spring.stiffness = 2.0;
+    first.set_revolute_spring_parameters(0, first_spring);
+    second.set_revolute_spring_parameters(0, second_spring);
+    LinearBushingRollPitchYawParameters first_bushing;
+    first_bushing.torque_stiffness = Eigen::Vector3d::Constant(1.0);
+    LinearBushingRollPitchYawParameters second_bushing;
+    second_bushing.torque_stiffness = Eigen::Vector3d::Constant(2.0);
+    first.set_linear_bushing_parameters(0, first_bushing);
+    second.set_linear_bushing_parameters(0, second_bushing);
+
+    ExpectTrue(
+        AllRevisions(first) == AllRevisions(second) &&
+            AllRevisions(first) ==
+                std::array<std::uint64_t, 5>{1, 1, 1, 1, 1},
+        "two differently-valued instances can have equal revisions");
     ExpectTrue(first.generalized_positions()[0] == 1.0 &&
-                   second.generalized_positions()[0] == 2.0,
-               "equal revisions do not imply equal contents");
+                   second.generalized_positions()[0] == 2.0 &&
+                   first.generalized_velocities()[0] == 3.0 &&
+                   second.generalized_velocities()[0] == 4.0 &&
+                   first.fixed_frame_pose_parameters(0).p_PoFo_P[0] == 1.0 &&
+                   second.fixed_frame_pose_parameters(0).p_PoFo_P[0] == 2.0 &&
+                   first.rigid_body_inertia_parameters(0).mass_kilograms !=
+                       second.rigid_body_inertia_parameters(0).mass_kilograms &&
+                   first.joint_actuator_parameters(0).rotor_inertia == 1.0 &&
+                   second.joint_actuator_parameters(0).rotor_inertia == 2.0 &&
+                   first.joint_damping(1)[0] == 1.0 &&
+                   second.joint_damping(1)[0] == 2.0 &&
+                   first.revolute_spring_parameters(0).stiffness == 1.0 &&
+                   second.revolute_spring_parameters(0).stiffness == 2.0 &&
+                   first.linear_bushing_parameters(0).torque_stiffness[0] ==
+                       1.0 &&
+                   second.linear_bushing_parameters(0).torque_stiffness[0] ==
+                       2.0,
+               "equal revisions do not merge any state or parameter storage");
 
     const std::array<std::uint64_t, 5> second_before = AllRevisions(second);
     first.set_generalized_positions(Eigen::VectorXd::Constant(9, 3.0));
-    first.set_rigid_body_inertia_parameters(0, ValidInertia());
+    first.set_generalized_velocities(Eigen::VectorXd::Constant(8, 5.0));
+    first_pose.p_PoFo_P = Eigen::Vector3d::Constant(3.0);
+    first.set_fixed_frame_pose_parameters(0, first_pose);
+    first.set_rigid_body_inertia_parameters(
+        0, RigidBodyInertiaParameters{});
+    first_actuator.rotor_inertia = 3.0;
+    first.set_joint_actuator_parameters(0, first_actuator);
+    first.set_joint_damping(1, Eigen::VectorXd::Constant(1, 3.0));
+    first_spring.stiffness = 3.0;
+    first.set_revolute_spring_parameters(0, first_spring);
+    first_bushing.torque_stiffness = Eigen::Vector3d::Constant(3.0);
+    first.set_linear_bushing_parameters(0, first_bushing);
+
     ExpectTrue(AllRevisions(second) == second_before,
-               "writing to one instance advances no version of the other");
-    ExpectTrue(second.generalized_positions()[0] == 2.0,
-               "writing to one instance does not change the other's state");
-    ExpectTrue(!(first.generalized_positions_version() ==
-                 second.generalized_positions_version()),
-               "the two instances' versions have now diverged");
+               "writing every source in one instance advances no version of "
+               "the other");
+    ExpectTrue(second.generalized_positions()[0] == 2.0 &&
+                   second.generalized_velocities()[0] == 4.0 &&
+                   second.fixed_frame_pose_parameters(0).p_PoFo_P[0] == 2.0 &&
+                   second.rigid_body_inertia_parameters(0).mass_kilograms ==
+                       0.0 &&
+                   second.joint_actuator_parameters(0).rotor_inertia == 2.0 &&
+                   second.joint_damping(1)[0] == 2.0 &&
+                   second.revolute_spring_parameters(0).stiffness == 2.0 &&
+                   second.linear_bushing_parameters(0).torque_stiffness[0] ==
+                       2.0,
+               "writing every source in one instance leaves all of the other "
+               "instance's storage unchanged");
+    ExpectTrue(
+        AllRevisions(first) ==
+            std::array<std::uint64_t, 5>{2, 2, 2, 2, 2},
+        "writing every versioned source advances all five versions only in "
+        "the written instance");
 }
 
 }  // namespace

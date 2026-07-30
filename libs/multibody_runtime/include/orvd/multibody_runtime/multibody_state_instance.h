@@ -102,6 +102,8 @@ class MultibodyStateInstance {
     void set_generalized_positions(const Eigen::Ref<const Eigen::VectorXd>& positions);
 
     /// @throws std::invalid_argument on a size mismatch or a non-finite value.
+    /// @throws std::overflow_error if the version counter is exhausted, before
+    /// anything is written.
     void set_generalized_velocities(const Eigen::Ref<const Eigen::VectorXd>& velocities);
 
     // --- Context-mutable physical parameters --------------------------------

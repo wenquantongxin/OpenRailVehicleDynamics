@@ -187,7 +187,8 @@ MultibodyStateInstance::MultibodyStateInstance(const MultibodyStateLayout& layou
 // Step 2 sits before step 3 so that an exhausted counter cannot leave data
 // written under a version that never advanced — the one state in which a stale
 // cache reads as fresh. Step 4 sits after step 3 so that no reader can observe
-// the new version while the old data is still in place.
+// the new version while the old data is still in place during single-threaded
+// evaluation. This ordering is not a synchronization mechanism.
 void MultibodyStateInstance::set_generalized_positions(
     const Eigen::Ref<const Eigen::VectorXd>& positions) {
     RequireSize(positions.size(), layout_->generalized_position_count(),

@@ -7,7 +7,7 @@
 vendored Drake common support、刚性 topology 与 double 位姿数学目标已可独立构建；
 其余刚性 tree 源码已完成 `double`-only 裁剪，并已界定受第一方运行时阻断的真实编译
 前沿。第一方运行时基础层已开始：多体状态与类型化物理参数有了单一所有者。
-缓存、动力学求值与完整 tree 目标尚未开始。
+五个有长期缓存消费者的状态来源已有独立版本；缓存、动力学求值与完整 tree 目标尚未开始。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -59,7 +59,7 @@ OpenRailVehicleDynamics/
     ├── contract/         模型中立场景与观测语义
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
     ├── math/             double 位姿组合的代数与输出重叠契约
-    ├── multibody_runtime/ 多体状态布局、类型化参数与原子写入契约
+    ├── multibody_runtime/ 多体状态布局、类型化参数、事务写入与版本隔离契约
     ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
     └── unit/             单元测试
