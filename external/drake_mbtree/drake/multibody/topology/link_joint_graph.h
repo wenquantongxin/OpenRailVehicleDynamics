@@ -673,10 +673,6 @@ class LinkJointGraph {
   @see GetLinksWeldedTo() if you already have a forest built */
   std::set<LinkIndex> CalcLinksWeldedTo(LinkIndex link_index) const;
 
-  // FYI Debugging APIs (including Graphviz-related) are defined in
-  // link_joint_graph_debug.cc.
-
-
   // Forest building requires these joint types so they are predefined.
 
   /* The predefined index for the "weld" joint type's traits. */

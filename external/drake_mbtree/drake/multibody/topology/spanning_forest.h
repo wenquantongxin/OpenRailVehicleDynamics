@@ -427,8 +427,7 @@ class SpanningForest {
   given label at the top. The result is in the "dot" language, see
   https://graphviz.org. If you write it to some file foo.dot, you can
   generate a viewable png (for example) using the command
-  `dot -Tpng foo.dot >foo.png`.
-  */
+  `dot -Tpng foo.dot >foo.png`. */
   std::string GenerateGraphvizString(std::string_view label) const;
 
   /* (Debugging, Testing) Runs a series of expensive tests to see that the

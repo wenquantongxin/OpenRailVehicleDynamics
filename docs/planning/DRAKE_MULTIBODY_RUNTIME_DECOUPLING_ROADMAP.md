@@ -6,9 +6,9 @@
 ## 当前状态
 
 - 工作分支：`main`
-- 当前阶段：正式实施前的基础设施收口
+- 当前阶段：vendored topology 验证
 - 当前 Goal：`G14`
-- 产品代码状态：尚未开始
+- 产品代码状态：vendored topology 静态库已落位；第一方运行时尚未开始
 - 仓库外探针：只作一次性研究输入，不直接复制进产品
 
 ## 不再讨论的前提
@@ -137,11 +137,11 @@ Goal GNN — <明确的功能名称>
 - [x] **G12 — 裁决生成头需求与第三方边界**
   - 产物：现场裁决准入源码的生成头需求（仅在实际闭包需要时提供），以及 Eigen/fmt/Abseil/Highway 的明确处置。
   - 完成门：只提供准入源码实际需要的定义；Highway 不准入首版产品，四个位姿组合函数由 G15 按数学定义独立实现；未使用功能不进入构建；缺定义在配置或编译阶段暴露。
-  - 实测结论：当前生成头需求为**零**——闭包中唯一源码树缺失的头 `common/autodiff_config.h` 只经已裁 `discard` 的标量机制抵达，因此不造 shim、空头、空目录或占位声明；G16 之后若真实的 double-only 闭包重新触达缺失头，再随真实消费者处理。准入源码不直接使用 Abseil；在当前准入闭包中，Highway 随 `fast_pose_composition_functions` 裁为 `first_party` 而离开闭包。产品中 vendored topology 目标对 fmt 的显式查找与直接链接在 G13 随第一个真实目标落地，此处不建空目标、选项或能力探针。
+  - 实测结论：当前生成头需求为**零**——闭包中唯一源码树缺失的头 `common/autodiff_config.h` 只经已裁 `discard` 的标量机制抵达，因此不造 shim、空头、空目录或占位声明；G16 之后若真实的 double-only 闭包重新触达缺失头，再随真实消费者处理。准入源码不直接使用 Abseil；在当前准入闭包中，Highway 随 `fast_pose_composition_functions` 裁为 `first_party` 而离开闭包。产品中 vendored topology 目标对 fmt 的显式查找与直接链接已在 G13 随首个真实目标落地，G12 未建空目标、选项或能力探针。
 
 - [x] **G13 — vendor 刚性 topology 源码**
   - 产物：可编译的 `multibody/topology` 源码目标。
-  - 完成门：随 vendored 源码附上游 `LICENSE.TXT`；每个文件可追溯至上游路径与固定 commit；删除未准入 Graphviz 调试实现时同步删除其公共声明；不修改准入算法语义；产品目标不链接 `libdrake`。
+  - 完成门：随 vendored 源码附上游 `LICENSE.TXT` 与已进入源码的 Apache-2.0 正文；每个文件可追溯至上游路径与固定 commit；删除未准入 Graphviz 调试实现时同步删除其公共声明；不修改准入算法语义；产品目标不链接 `libdrake`。
   - 说明：tree/topology 候选文件不写逐文件版权头；支撑源码已有的逐文件声明必须原样保留。履约依靠仓库级许可证、原有逐文件声明和逐文件溯源，不人工发明版权头。
 
 - [ ] **G14 — 验证 topology 与索引顺序**

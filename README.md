@@ -4,7 +4,8 @@
 
 ## 当前状态
 
-基础设施阶段，**尚无产品实现**。仓库目前只有工程骨架与实施依据。
+首个产品实现基底已经落位：可独立构建的 vendored Drake 刚性多体 topology 静态库。
+第一方 Context、缓存与动力学运行时尚未开始。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -31,7 +32,7 @@
 
 ```text
 OpenRailVehicleDynamics/
-├── CMakeLists.txt        顶层构建（当前仅产出模型中立自检）
+├── CMakeLists.txt        顶层构建（vendored topology；启用测试时另建模型中立自检）
 ├── CMakePresets.json     构建预设：dev / release / drake-reference
 ├── cmake/                CMake 辅助模块
 ├── docs/
@@ -41,7 +42,7 @@ OpenRailVehicleDynamics/
 │   ├── design/           历史调研输入（非现行依据）
 │   └── review/           历史审查往来（非现行依据）
 ├── external/
-│   └── drake_mbtree/     vendored Drake 源码的落位（尚未 vendor）与逐文件处置清单
+│   └── drake_mbtree/     vendored topology 源码、逐文件处置、许可证与修改记录
 ├── tools/
 │   └── drake_source_boundary/  源码闭包解析工具（开发期，Python 标准库）
 ├── libs/
@@ -63,9 +64,9 @@ OpenRailVehicleDynamics/
 
 ## 外置第三方
 
-Eigen 是必需依赖，缺失时配置立即失败。fmt 已准入，将随 G13 的首个 vendored topology
-目标引入；当前产品构建尚不直接查找或链接它。SUNDIALS CVODE 与 Ceres 尚无消费者，
-因此不查找、不设选项、不建目标，留到首个真实消费者出现时再引入。
+Eigen 是项目必需依赖，缺失时配置立即失败。vendored topology 目标直接依赖 fmt，缺失时
+同样在配置阶段失败。SUNDIALS CVODE 与 Ceres 尚无消费者，因此不查找、不设选项、不建
+目标，留到首个真实消费者出现时再引入。
 
 ## GZ18
 
@@ -73,6 +74,6 @@ GZ18 刚性轮对是**晚期适配对象**，在 G48–G50 接入。模型中立
 
 ## 许可证
 
-项目自有代码许可证待定。日后 vendored 的 Drake 源码为 BSD-3-Clause（Robot Locomotion
-Group），须随分发保留其许可证与 NOTICE，详见
+项目自有代码许可证待定。已落位的 Drake 源码受 BSD-3-Clause 及其逐文件注明的
+Apache-2.0 条款约束；最终分发还须带齐许可证与 NOTICE，详见
 [external/drake_mbtree/README.md](external/drake_mbtree/README.md)。

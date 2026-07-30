@@ -1,9 +1,10 @@
 # OpenRailVehicleDynamics (ORVD) — top-level build
 #
-# STATUS: infrastructure stage. No product library or executable exists yet.
-# With BUILD_TESTING enabled, the build contains only model-neutral self-checks.
-# Product modules are wired in only when they gain a CMakeLists.txt; their order
-# is set by docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
+# STATUS: vendored topology stage. The build contains the vendored Drake
+# multibody topology static library but no first-party runtime library or
+# executable yet. BUILD_TESTING adds model-neutral self-checks. Product modules
+# are wired in only when they gain a CMakeLists.txt; their order is set by
+# docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md.
 #
 # The first-party compile policy lives in cmake/OrvdFirstPartyTargetPolicy.cmake
 # and is applied per target. Eigen and the CTest entry point are configured below.
@@ -38,22 +39,16 @@ include(OrvdFirstPartyTargetPolicy)
 find_package(Eigen3 3.4 CONFIG REQUIRED)
 
 # fmt is required by the vendored Drake source: its public headers include
-# fmt/format.h and specialise fmt::formatter. No version is pinned — the same
-# Drake source builds against fmt 12.1 under Bazel and against system fmt 9.1
-# under /opt/drake, so the reference side's ABI is not a candidate-side
-# constraint. A real lower bound would have to come from a specific API, and
-# compiling only shows that the version tested works.
+# fmt/format.h and specialise fmt::formatter. No version is pinned: real source
+# compilation verifies the configured package, while a minimum version would
+# require evidence from a specific API.
 #
 # PATH-derived prefixes are excluded for this search. An unrelated toolchain on
 # PATH — a conda environment, say — otherwise supplies its own fmt, whose
 # directory lands in every consumer's RUNPATH and takes the C++ runtime with it.
 # The result is an executable that links cleanly and cannot start, which is worse
 # than a build failure because it survives every check that stops at linking.
-# Measured on this machine: without this, fmt resolves to an anaconda build whose
-# libstdc++ predates the GLIBCXX version the compiler emits.
-set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
-find_package(fmt CONFIG REQUIRED)
-unset(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH)
+find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: external -> core -> {systems, forces} -> integrators
@@ -82,4 +77,4 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-message(STATUS "ORVD ${PROJECT_VERSION} — infrastructure stage")
+message(STATUS "ORVD ${PROJECT_VERSION} — vendored multibody topology stage")
