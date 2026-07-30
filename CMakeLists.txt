@@ -25,8 +25,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Imported targets from find_package are directory-scoped by default, which would
+# leave the product boundary gate below unable to see a dependency that was
+# perfectly visible where it was linked. A boundary check that can only inspect
+# part of the graph reports a boundary it has not actually checked.
+set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(OrvdFirstPartyTargetPolicy)
+include(OrvdProductBoundaryGate)
 
 # --- External dependencies ---
 # Eigen is required outright: every multibody pass is Eigen arithmetic, so a
@@ -55,15 +62,21 @@ find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 #   -> {system_assembly, forces}
 #   -> integrators
 #   -> equilibrium ; tests last.
-foreach(_dir
-        external/drake_mbtree
-        libs/multibody_runtime
-        libs/system_assembly
-        libs/forces
-        libs/integrators
-        libs/equilibrium)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_dir}/CMakeLists.txt")
-        add_subdirectory(${_dir})
+# These directories are the product. Every non-imported target defined in one of
+# them is subject to the Drake boundary gate below — membership is by directory,
+# so a new target cannot escape the gate by nobody remembering to register it.
+# tests/ is deliberately absent: the Drake-backed reference targets live there and
+# are supposed to link Drake.
+set(ORVD_PRODUCT_MODULE_DIRECTORIES
+    external/drake_mbtree
+    libs/multibody_runtime
+    libs/system_assembly
+    libs/forces
+    libs/integrators
+    libs/equilibrium)
+foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${product_module_relative_path}/CMakeLists.txt")
+        add_subdirectory(${product_module_relative_path})
     endif()
 endforeach()
 
@@ -78,6 +91,13 @@ endif()
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+# After every add_subdirectory(), including the test tree: a target defined later
+# must not escape the gate by being defined later. Unconditional, and in
+# particular independent of ORVD_BUILD_DRAKE_REFERENCE_TESTS — that option is
+# exactly when Drake is in the graph, which is exactly when this must be checked.
+orvd_verify_product_targets_have_no_drake_dependency(
+    ${ORVD_PRODUCT_MODULE_DIRECTORIES})
 
 message(STATUS
     "ORVD ${PROJECT_VERSION} — vendored double-only frontier targets configured")

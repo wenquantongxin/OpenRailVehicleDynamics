@@ -45,7 +45,8 @@ OpenRailVehicleDynamics/
 ├── external/
 │   └── drake_mbtree/     vendored topology/tree 源码、第一方替代实现、处置与许可证
 ├── tools/
-│   └── drake_source_boundary/  源码闭包解析工具（开发期，Python 标准库）
+│   ├── drake_source_boundary/  源码闭包、编译前沿、来源与禁入边界工具（开发期）
+│   └── product_boundary_gate/  链接边界闸门的判别力自检（开发期）
 ├── libs/
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── system_assembly/  模型中立系统组装层

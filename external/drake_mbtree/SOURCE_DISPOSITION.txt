@@ -60,7 +60,6 @@ forbidden_prefix multibody/plant/  # MultibodyPlant is the System-level assembly
 forbidden_prefix multibody/contact_solvers/  # contact solvers and their SAP/TAMSI machinery; no contact in the admitted runtime
 forbidden_prefix multibody/meshcat/  # visualization
 forbidden_prefix solvers/  # mathematical program formulations and solver bindings
-forbidden_prefix geometry/proximity/  # mesh proximity internals reached only through geometry types
 
 # --- Split implementations ----------------------------------------------------
 # A header whose implementation does not share its stem. The closure cannot infer

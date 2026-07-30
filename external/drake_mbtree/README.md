@@ -70,7 +70,24 @@ topology 与 double 位姿数学目标。
 源码分发须携带 vendored 源码对应的材料；二进制包按其实际包含的代码与库在 G50 重新收集
 许可证和 NOTICE。第一方代码自身的许可证尚未选定，见仓库根 `README.md`。
 
-## 边界闸门（G19）
+## 边界闸门
 
-构建期检查：故意引入禁入头或链接 `libdrake` 必须失败。检查针对产品的实际边界，不针对
-固定的文件数或符号数。
+两道闸门,分别守住边界的两侧。都不以文件数或符号数作判据——数量是某次测量的结果,不是判据。
+
+**链接侧**由 `cmake/OrvdProductBoundaryGate.cmake` 在**配置期**把关:递归走每个产品目标的
+链接闭包,发现 `drake::` 目标、名为 `libdrake…` 的库文件、或 `-ldrake` 一类链接选项即
+`FATAL_ERROR`。判据是库自身的身份,**不匹配 `/opt/drake` 这类机器目录**——装在意料之外
+位置的 Drake 恰恰是路径匹配漏掉的那种。
+
+**哪些目标算产品目标,由顶层的 `ORVD_PRODUCT_MODULE_DIRECTORIES` 按目录决定**:这些目录下
+每一个非 imported 目标都受管。新增目标时**无须登记**——一份要人记得更新的名单,第一次被
+忘记时就会静默失效,而一道悄悄停止检查的边界闸门是最坏的失效形态。`tests/` 不在其中,
+因此 Drake 参考端可以正常链接 Drake;闸门本身**无条件启用**,与
+`ORVD_BUILD_DRAKE_REFERENCE_TESTS` 无关——那个选项开启时正是 Drake 在图中的时候,也正是
+最该检查的时候。G28 建成完整 tree 目标后,只要它落在产品目录里就自动进入同一道闸门。
+
+**源码侧**由 `tools/drake_source_boundary/verify_product_source_drake_boundary.py` 把关:
+产品源码既不得**是**禁入文件,也不得**include** 禁入文件;`forbidden_prefix` 优先于逐文件
+处置,一行 `vendor` 不能为跨越架构边界背书。它**只管** `forbidden` 与 `forbidden_prefix`——
+`discard`、未分类头、以及 G20–G28 尚未替换的运行时头都不判失败,那些分别是闭包分析器与
+编译前沿工具的职责;一道会在预期状况下报警的闸门,很快就会被关掉。

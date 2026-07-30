@@ -19,6 +19,30 @@ if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
                      --compiler ${CMAKE_CXX_COMPILER})
 endif()
 
+# The architectural boundary: no product source is a forbidden Drake file, and
+# none includes one. Both the synthetic discrimination check and a resident run
+# against the real product source are registered — the synthetic one proves the
+# tool still fires, the real one proves the boundary still holds.
+add_test(NAME verify_product_source_drake_boundary_check
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_product_source_drake_boundary_check.py)
+add_test(NAME verify_product_source_drake_boundary
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_product_source_drake_boundary.py
+                 --repository-root ${CMAKE_SOURCE_DIR}
+                 --disposition-ledger
+                 ${CMAKE_SOURCE_DIR}/external/drake_mbtree/SOURCE_DISPOSITION.txt)
+
+# The link boundary gate's own discrimination check. It configures synthetic
+# projects that include this repository's gate module, so what it exercises is the
+# gate this build uses rather than a copy of it. The gate itself has already run
+# by the time any test does: it fails at configure time, which is why there is no
+# test here for the real product targets.
+add_test(NAME verify_product_boundary_gate
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tools/product_boundary_gate/verify_product_boundary_gate.py
+                 --cmake ${CMAKE_COMMAND})
+
 # The provenance audit. Only its synthetic self-check is registered: the real
 # audit needs a clone of the pinned upstream, which is a large working copy of
 # someone else's repository whose location is a fact about a machine, not about
