@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks that the product source boundary tool fires on crossings and only on crossings.
+"""Checks that the product source boundary distinguishes crossings from valid source.
 
 Half the cases here are negative controls, and they are the more important half.
 A boundary check that also fails on `discard`, on an unclassified header, or on a
@@ -47,15 +47,25 @@ def record_failure_unless(condition: bool, failure_description: str) -> None:
         failure_count += 1
 
 
-def build_repository(root: Path, drake_files: dict[str, str],
-                     first_party_files: dict[str, str] | None = None,
-                     ledger_text: str = BASE_LEDGER) -> Path:
+def build_repository(
+    root: Path,
+    drake_files: dict[str, str],
+    first_party_files: dict[str, str] | None = None,
+    runtime_files: dict[str, str] | None = None,
+    ledger_text: str = BASE_LEDGER,
+) -> Path:
     for relative_path, content in drake_files.items():
         path = root / "external" / "drake_mbtree" / "drake" / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     for relative_path, content in (first_party_files or {}).items():
         path = root / "external" / "drake_mbtree" / "orvd_implementations" / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    runtime_root = root / "libs"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    for relative_path, content in (runtime_files or {}).items():
+        path = runtime_root / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     ledger = root / "SOURCE_DISPOSITION.txt"
@@ -151,6 +161,25 @@ def case_first_party_implementation_crossing_fails(work: Path) -> None:
     )
 
 
+def case_runtime_source_crossing_fails(work: Path) -> None:
+    root = work / "runtime_source_crossing"
+    ledger = build_repository(
+        root,
+        CLEAN_TREE,
+        runtime_files={
+            "multibody_runtime/native_context.cc": (
+                '#include "drake/geometry/query_object.h"\n'
+                "int NativeContext() { return 1; }\n"
+            )
+        },
+    )
+    result = run_tool(root, ledger)
+    record_failure_unless(
+        result.returncode == 1 and "libs/multibody_runtime" in result.stdout,
+        "first-party runtime source under libs must be scanned\n" + result.stdout,
+    )
+
+
 def case_vendor_cannot_override_forbidden_prefix(work: Path) -> None:
     # A per-file line must not be able to license an architectural crossing.
     root = work / "vendor_override"
@@ -215,6 +244,83 @@ def case_unreplaced_runtime_include_is_not_a_crossing(work: Path) -> None:
     )
 
 
+def case_commented_forbidden_include_is_not_source(work: Path) -> None:
+    root = work / "commented_include"
+    tree = dict(CLEAN_TREE)
+    tree["candidate/root.h"] = (
+        "#pragma once\n"
+        "/*\n"
+        '#include "drake/geometry/query_object.h"\n'
+        "*/\n"
+        '#include "drake/support/shared.h"\n'
+    )
+    ledger = build_repository(root, tree)
+    result = run_tool(root, ledger)
+    record_failure_unless(
+        result.returncode == 0,
+        "an include inside a block comment is not a source dependency\n"
+        + result.stdout,
+    )
+
+
+def case_missing_product_root_is_rejected(work: Path) -> None:
+    root = work / "missing_root"
+    ledger = build_repository(root, CLEAN_TREE)
+    (root / "libs").rmdir()
+    result = run_tool(root, ledger)
+    record_failure_unless(
+        result.returncode == 2
+        and "product source root does not exist: libs" in result.stdout,
+        "every requested product source root must exist\n" + result.stdout,
+    )
+
+
+def case_empty_product_roots_are_rejected(work: Path) -> None:
+    root = work / "empty_roots"
+    (root / "external" / "drake_mbtree").mkdir(parents=True)
+    (root / "libs").mkdir()
+    ledger = root / "SOURCE_DISPOSITION.txt"
+    ledger.write_text(BASE_LEDGER, encoding="utf-8")
+    result = run_tool(root, ledger)
+    record_failure_unless(
+        result.returncode == 2
+        and "contain no supported source files" in result.stdout,
+        "an empty scan must not certify a source boundary\n" + result.stdout,
+    )
+
+
+def case_symbolic_linked_source_is_rejected(work: Path) -> None:
+    root = work / "linked_source"
+    ledger = build_repository(root, CLEAN_TREE)
+    hidden_source = work / "source_outside_product_roots"
+    hidden_source.mkdir()
+    (hidden_source / "hidden.cc").write_text(
+        '#include "drake/geometry/query_object.h"\n', encoding="utf-8"
+    )
+    (root / "libs" / "linked_source").symlink_to(
+        hidden_source, target_is_directory=True
+    )
+    result = run_tool(root, ledger)
+    record_failure_unless(
+        result.returncode == 2 and "symbolic link" in result.stdout,
+        "a directory link must not place source outside the traversal silently\n"
+        + result.stdout,
+    )
+
+
+def case_unsupported_include_operand_is_an_input_error(work: Path) -> None:
+    root = work / "unsupported_include"
+    tree = dict(CLEAN_TREE)
+    tree["candidate/root.h"] = "#pragma once\n#include DRAKE_SELECTED_HEADER\n"
+    ledger = build_repository(root, tree)
+    result = run_tool(root, ledger)
+    record_failure_unless(
+        result.returncode == 2 and "BOUNDARY INPUT ERROR" in result.stdout,
+        "an include the scanner cannot interpret must be an input error, not a"
+        " forbidden crossing\n" + result.stdout,
+    )
+
+
 def main() -> int:
     cases = (
         case_clean_product_passes,
@@ -222,10 +328,16 @@ def main() -> int:
         case_forbidden_prefix_include_fails,
         case_landed_forbidden_file_fails,
         case_first_party_implementation_crossing_fails,
+        case_runtime_source_crossing_fails,
         case_vendor_cannot_override_forbidden_prefix,
         case_discarded_include_is_not_a_crossing,
         case_unclassified_include_is_not_a_crossing,
         case_unreplaced_runtime_include_is_not_a_crossing,
+        case_commented_forbidden_include_is_not_source,
+        case_missing_product_root_is_rejected,
+        case_empty_product_roots_are_rejected,
+        case_symbolic_linked_source_is_rejected,
+        case_unsupported_include_operand_is_an_input_error,
     )
     with tempfile.TemporaryDirectory(prefix="orvd_verify_product_boundary.") as work:
         for case in cases:

@@ -3,6 +3,7 @@
 | 模块 | 内容 |
 |---|---|
 | `OrvdFirstPartyTargetPolicy.cmake` | `orvd_configure_first_party_target(<target>)`：按目标声明 C++23、关闭语言扩展并设置第一方告警 |
+| `OrvdProductBoundaryGate.cmake` | 递归纳管已列产品模块的目标；配置期拒绝产品对 `libdrake` 的链接依赖 |
 
 ## 为什么按目标而不是全局
 
@@ -16,6 +17,5 @@
 ## 由后续 Goal 建立
 
 - 依赖定位模块（SUNDIALS、Ceres）留到第一个真实消费者出现时再建立。
-- **G19**：vendor 边界闸门——禁入头检查与"产品目标不链接 `libdrake`"检查。
 
 `CMAKE_MODULE_PATH` 已在顶层 CMakeLists 指向本目录。

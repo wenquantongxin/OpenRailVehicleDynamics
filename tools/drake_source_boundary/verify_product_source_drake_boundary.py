@@ -45,13 +45,25 @@ from calculate_required_drake_source_closure import (
 SOURCE_SUFFIXES = HEADER_SUFFIXES + IMPLEMENTATION_SUFFIXES
 
 
+class ProductSourceBoundaryInputError(Exception):
+    """The requested product source roots cannot be checked completely."""
+
+
 def product_source_files(product_roots: list[Path]) -> list[tuple[Path, Path]]:
-    """(root, file) for every source file under the product roots that exist."""
+    """Return `(root, file)` for every source file under the product roots."""
     found: list[tuple[Path, Path]] = []
     for root in product_roots:
-        if not root.is_dir():
-            continue
+        if root.is_symlink():
+            raise ProductSourceBoundaryInputError(
+                f"product source root is a symbolic link: {root}"
+            )
         for path in sorted(root.rglob("*")):
+            if path.is_symlink() and (
+                path.is_dir() or path.suffix in SOURCE_SUFFIXES
+            ):
+                raise ProductSourceBoundaryInputError(
+                    f"product source traversal reaches a symbolic link: {path}"
+                )
             if path.is_file() and path.suffix in SOURCE_SUFFIXES:
                 found.append((root, path))
     return found
@@ -81,20 +93,36 @@ def verify_product_source_boundary(
         return 2
 
     product_roots = [repository_root / relative for relative in product_relative_roots]
-    if not any(root.is_dir() for root in product_roots):
+    missing_roots = [
+        relative
+        for relative, root in zip(product_relative_roots, product_roots)
+        if not root.is_dir()
+    ]
+    if missing_roots:
         print(
-            "BOUNDARY: none of the product source roots exist: "
-            + ", ".join(product_relative_roots),
+            "BOUNDARY: product source root does not exist: "
+            + ", ".join(missing_roots),
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        source_files = product_source_files(product_roots)
+    except ProductSourceBoundaryInputError as error:
+        print(f"BOUNDARY: {error}", file=sys.stderr)
+        return 2
+    if not source_files:
+        print(
+            "BOUNDARY: product source roots contain no supported source files",
             file=sys.stderr,
         )
         return 2
 
     violations: list[str] = []
+    input_errors: list[str] = []
 
     print("PRODUCT SOURCE BOUNDARY")
     for relative in product_relative_roots:
-        present = "" if (repository_root / relative).is_dir() else "  (not present yet)"
-        print(f"  scanning {relative}{present}")
+        print(f"  scanning {relative}")
 
     landed_drake_root = repository_root / "external" / "drake_mbtree" / "drake"
     if landed_drake_root.is_dir():
@@ -109,12 +137,12 @@ def verify_product_source_boundary(
                     f" {reason}"
                 )
 
-    for root, path in product_source_files(product_roots):
+    for _root, path in source_files:
         display_path = path.relative_to(repository_root).as_posix()
         try:
             includes = read_drake_includes(path)
         except LedgerError as error:
-            violations.append(f"{display_path}: {error}")
+            input_errors.append(f"{display_path}: {error}")
             continue
         for included in includes:
             reason = forbidden_reason(ledger, included)
@@ -124,6 +152,10 @@ def verify_product_source_boundary(
                 )
 
     print("\nRESULT")
+    if input_errors:
+        for input_error in input_errors:
+            print(f"  BOUNDARY INPUT ERROR: {input_error}")
+        return 2
     if violations:
         for violation in violations:
             print(f"  FORBIDDEN BOUNDARY CROSSING: {violation}")

@@ -62,9 +62,10 @@ find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 #   -> {system_assembly, forces}
 #   -> integrators
 #   -> equilibrium ; tests last.
-# These directories are the product. Every non-imported target defined in one of
-# them is subject to the Drake boundary gate below — membership is by directory,
-# so a new target cannot escape the gate by nobody remembering to register it.
+# These listed directories are the product module roots. Every non-imported
+# target defined in one of them or a descendant is subject to the Drake boundary
+# gate below. A new target inside a listed module needs no registration; a new
+# top-level product module must be added to this list.
 # tests/ is deliberately absent: the Drake-backed reference targets live there and
 # are supposed to link Drake.
 set(ORVD_PRODUCT_MODULE_DIRECTORIES

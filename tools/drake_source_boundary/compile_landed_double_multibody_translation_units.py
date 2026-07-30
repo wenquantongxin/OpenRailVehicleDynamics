@@ -55,6 +55,8 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
+from calculate_required_drake_source_closure import source_lines_without_comments
+
 LANGUAGE_STANDARD = "c++23"
 
 # Headers that upstream Drake has and this boundary deliberately does not. If the
@@ -97,69 +99,6 @@ DRAKE_INCLUDE_PATTERN = re.compile(
     r'^\s*#\s*include\s*"(drake/[^"]+)"'
 )
 SYSTEMS_TYPE_PATTERN = re.compile(r"\bsystems::([A-Za-z_][A-Za-z0-9_]*)")
-
-
-def source_lines_without_comments(
-    text: str, *, preserve_literal_contents: bool
-) -> list[str]:
-    """Blanks comments and optionally literal contents without changing line count.
-
-    Line-prefix matching is not enough: Drake writes `/** ... */` blocks whose
-    continuation lines carry no marker, and a name mentioned in such a block —
-    `drake::systems::MyThing` appears in one, as an example of namespace
-    stripping — would otherwise be reported as a runtime dependency. Include
-    scanning preserves string contents; type and forbidden-token scans blank
-    them so prose embedded in a diagnostic string is not mistaken for C++.
-    """
-    lines: list[str] = []
-    in_block_comment = False
-    for line in text.splitlines():
-        kept: list[str] = []
-        index = 0
-        in_string = False
-        in_character = False
-        while index < len(line):
-            two = line[index : index + 2]
-            if in_block_comment:
-                if two == "*/":
-                    in_block_comment = False
-                    kept.append("  ")
-                    index += 2
-                else:
-                    kept.append(" ")
-                    index += 1
-                continue
-            if in_string or in_character:
-                kept.append(line[index] if preserve_literal_contents else " ")
-                if line[index] == "\\":
-                    if index + 1 < len(line):
-                        kept.append(
-                            line[index + 1] if preserve_literal_contents else " "
-                        )
-                    index += 2
-                    continue
-                if in_string and line[index] == '"':
-                    in_string = False
-                elif in_character and line[index] == "'":
-                    in_character = False
-                index += 1
-                continue
-            if two == "//":
-                kept.append(" " * (len(line) - index))
-                break
-            if two == "/*":
-                in_block_comment = True
-                kept.append("  ")
-                index += 2
-                continue
-            if line[index] == '"':
-                in_string = True
-            elif line[index] == "'":
-                in_character = True
-            kept.append(line[index])
-            index += 1
-        lines.append("".join(kept))
-    return lines
 
 
 @dataclass

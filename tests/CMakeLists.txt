@@ -23,9 +23,9 @@ endif()
 # none includes one. Both the synthetic discrimination check and a resident run
 # against the real product source are registered — the synthetic one proves the
 # tool still fires, the real one proves the boundary still holds.
-add_test(NAME verify_product_source_drake_boundary_check
+add_test(NAME verify_product_source_drake_boundary_discrimination
          COMMAND ${Python3_EXECUTABLE}
-                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_product_source_drake_boundary_check.py)
+                 ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_product_source_drake_boundary_discrimination.py)
 add_test(NAME verify_product_source_drake_boundary
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_product_source_drake_boundary.py

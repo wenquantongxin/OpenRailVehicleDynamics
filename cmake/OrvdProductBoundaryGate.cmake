@@ -5,11 +5,10 @@
 # new target picks up a convenient dependency, so this is checked by the build
 # system rather than by a habit.
 #
-# Which targets are product targets is decided by directory, not by a list
-# someone has to remember to update: every non-imported target defined under the
-# product module directories is one. A registration call would fail silently the
-# first time somebody forgot it, and the failure mode of a boundary check that
-# silently stops checking is the worst one available.
+# Which targets are product targets is decided by directory, not by a target list
+# someone has to remember to update: every non-imported target defined in a listed
+# product module directory or one of its subdirectories is one. A new top-level
+# product module still has to be added to ORVD_PRODUCT_MODULE_DIRECTORIES.
 #
 # The check is on the target graph, at configure time. That is the earliest point
 # where the answer is knowable, and it is the same answer on every platform. It
@@ -18,14 +17,11 @@
 # cross-platform confidence the evidence does not support. What a release package
 # actually carries is a separate question, settled at G50.
 #
-# What the gate can see: the top-level scope. Imported targets are directory
-# scoped by default, so the build sets CMAKE_FIND_PACKAGE_TARGETS_GLOBAL and every
-# find_package target — which is how a real Drake arrives — is visible here. A
-# hand-written `add_library(... IMPORTED)` without GLOBAL inside a product
-# directory would not be, and the gate reads such an item as the bare library name
-# it would otherwise become on the link line. That residue is a deliberate act
-# rather than an accident, and the identity checks below still catch it whenever
-# the name or the option says Drake.
+# Imported targets must also remain inspectable. The build sets
+# CMAKE_FIND_PACKAGE_TARGETS_GLOBAL so find_package targets are visible here. A
+# hand-written imported target in a product directory must likewise be GLOBAL;
+# otherwise configuration fails instead of silently treating an opaque target as
+# an innocent bare library name.
 #
 # Machine paths are not evidence. A dependency is Drake because of the library's
 # own identity — a `drake::` target, a library file named `libdrake…`, an
@@ -39,7 +35,14 @@ set(ORVD_DRAKE_LIBRARY_BASENAME_PATTERN "^(lib)?drake([._-]|$)")
 
 # Library-selection options, as opposed to directory options: `-ldrake` names a
 # library, `-L/opt/drake/lib` names a place to look and is not a dependency.
-set(ORVD_DRAKE_LINK_OPTION_PATTERN "^(-l:?|/DEFAULTLIB:|/defaultlib:)(lib)?drake([._-]|$)")
+set(ORVD_DRAKE_LINK_OPTION_PATTERN
+    "(^|[,;: =<>])(-l(:|,)?|/defaultlib:)(lib)?drake([._-]|[,;: =<>]|$)")
+
+# A file name may be wrapped in a generator expression or a linker-driver option.
+# Match a path component, not an installation directory: `/some/drake/libfmt.so`
+# is not Drake, while `/somewhere/libdrake.so` is.
+set(ORVD_DRAKE_LIBRARY_TEXT_PATTERN
+    "(^|[/\\\\,;:=<> ])(lib)?drake([._-][^/\\\\,;:=<> ]*)?([,;:=<> ]|$)")
 
 function(_orvd_record_boundary_violation product_target detail)
     set_property(GLOBAL APPEND PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS
@@ -49,25 +52,48 @@ endfunction()
 # True when a link item, read as a library file path or bare library name, is a
 # Drake library.
 function(_orvd_link_item_is_drake_library item output_variable)
-    get_filename_component(item_basename "${item}" NAME)
-    if(item_basename MATCHES "${ORVD_DRAKE_LIBRARY_BASENAME_PATTERN}")
+    string(TOLOWER "${item}" normalized_item)
+    get_filename_component(item_basename "${normalized_item}" NAME)
+    if(item_basename MATCHES "${ORVD_DRAKE_LIBRARY_BASENAME_PATTERN}" OR
+       normalized_item MATCHES "${ORVD_DRAKE_LIBRARY_TEXT_PATTERN}")
         set(${output_variable} TRUE PARENT_SCOPE)
     else()
         set(${output_variable} FALSE PARENT_SCOPE)
     endif()
 endfunction()
 
+function(_orvd_imported_configuration_names target output_variable)
+    get_property(configuration_names GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES)
+    get_target_property(imported_configuration_names
+        ${target} IMPORTED_CONFIGURATIONS)
+    if(imported_configuration_names)
+        list(APPEND configuration_names ${imported_configuration_names})
+    endif()
+    foreach(configuration_name IN LISTS configuration_names)
+        string(TOUPPER "${configuration_name}" upper_configuration_name)
+        get_target_property(mapped_configuration_names
+            ${target} "MAP_IMPORTED_CONFIG_${upper_configuration_name}")
+        if(mapped_configuration_names)
+            list(APPEND configuration_names ${mapped_configuration_names})
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES configuration_names)
+    set(${output_variable} "${configuration_names}" PARENT_SCOPE)
+endfunction()
+
 # Checks an imported target's own artefact, which is where a third-party package
 # records the library it actually resolves to.
 function(_orvd_imported_artefact_is_drake target output_variable)
     set(${output_variable} FALSE PARENT_SCOPE)
-    set(artefact_properties IMPORTED_LOCATION IMPORTED_IMPLIB)
-    get_property(configuration_names GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES)
+    set(artefact_properties
+        IMPORTED_LOCATION IMPORTED_IMPLIB IMPORTED_LIBNAME)
+    _orvd_imported_configuration_names(${target} configuration_names)
     foreach(configuration_name IN LISTS configuration_names)
         string(TOUPPER "${configuration_name}" upper_configuration_name)
         list(APPEND artefact_properties
             "IMPORTED_LOCATION_${upper_configuration_name}"
-            "IMPORTED_IMPLIB_${upper_configuration_name}")
+            "IMPORTED_IMPLIB_${upper_configuration_name}"
+            "IMPORTED_LIBNAME_${upper_configuration_name}")
     endforeach()
     foreach(artefact_property IN LISTS artefact_properties)
         get_target_property(artefact ${target} ${artefact_property})
@@ -84,13 +110,19 @@ endfunction()
 function(_orvd_check_link_options product_target target is_first_party)
     set(option_properties
         LINK_OPTIONS INTERFACE_LINK_OPTIONS LINK_FLAGS STATIC_LIBRARY_OPTIONS)
+    get_property(configuration_names GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES)
+    foreach(configuration_name IN LISTS configuration_names)
+        string(TOUPPER "${configuration_name}" upper_configuration_name)
+        list(APPEND option_properties "LINK_FLAGS_${upper_configuration_name}")
+    endforeach()
     foreach(option_property IN LISTS option_properties)
         get_target_property(options ${target} ${option_property})
         if(NOT options)
             continue()
         endif()
         foreach(option IN LISTS options)
-            if(option MATCHES "${ORVD_DRAKE_LINK_OPTION_PATTERN}")
+            string(TOLOWER "${option}" normalized_option)
+            if(normalized_option MATCHES "${ORVD_DRAKE_LINK_OPTION_PATTERN}")
                 _orvd_record_boundary_violation("${product_target}"
                     "${target} carries the link option '${option}', which selects a Drake library")
             elseif(option MATCHES "\\$<" AND is_first_party)
@@ -124,17 +156,16 @@ function(_orvd_walk_link_closure product_target item is_first_party)
         return()
     endif()
 
-    # Drake's identity is in the item's own text, so it is read before asking
-    # whether the item resolves to a target here. `find_package` creates
-    # directory-scoped targets by default, so a name that is a target where it was
-    # linked can arrive at this scope as a plain string; a check that only looked
-    # at resolved targets would wave it through.
-    if(item MATCHES "^drake::" OR item STREQUAL "drake")
+    # Drake's identity is in the item's own text, so read it before asking whether
+    # it resolves to a target. This also catches an identity nested inside an
+    # imported target's conditional generator expression.
+    string(TOLOWER "${item}" normalized_item)
+    if(normalized_item MATCHES "drake::" OR normalized_item STREQUAL "drake")
         _orvd_record_boundary_violation("${product_target}"
             "it depends on the Drake target '${item}'")
         return()
     endif()
-    if(item MATCHES "${ORVD_DRAKE_LINK_OPTION_PATTERN}")
+    if(normalized_item MATCHES "${ORVD_DRAKE_LINK_OPTION_PATTERN}")
         _orvd_record_boundary_violation("${product_target}"
             "the link item '${item}' selects a Drake library")
         return()
@@ -178,8 +209,21 @@ function(_orvd_walk_link_closure product_target item is_first_party)
     _orvd_check_link_options("${product_target}" ${item} ${item_is_first_party})
 
     set(edges "")
-    foreach(edge_property IN ITEMS
-            LINK_LIBRARIES INTERFACE_LINK_LIBRARIES INTERFACE_LINK_LIBRARIES_DIRECT)
+    set(edge_properties
+        LINK_LIBRARIES INTERFACE_LINK_LIBRARIES INTERFACE_LINK_LIBRARIES_DIRECT)
+    if(is_imported)
+        list(APPEND edge_properties
+            IMPORTED_LINK_INTERFACE_LIBRARIES
+            IMPORTED_LINK_DEPENDENT_LIBRARIES)
+        _orvd_imported_configuration_names(${item} imported_configuration_names)
+        foreach(configuration_name IN LISTS imported_configuration_names)
+            string(TOUPPER "${configuration_name}" upper_configuration_name)
+            list(APPEND edge_properties
+                "IMPORTED_LINK_INTERFACE_LIBRARIES_${upper_configuration_name}"
+                "IMPORTED_LINK_DEPENDENT_LIBRARIES_${upper_configuration_name}")
+        endforeach()
+    endif()
+    foreach(edge_property IN LISTS edge_properties)
         get_target_property(edge_values ${item} ${edge_property})
         if(edge_values)
             list(APPEND edges ${edge_values})
@@ -194,13 +238,51 @@ function(_orvd_walk_link_closure product_target item is_first_party)
     endforeach()
 endfunction()
 
-# Every non-imported target defined under the given directories is a product
-# target. Call after every add_subdirectory(), including the test tree: targets
-# defined later must not escape the gate by being defined later.
+function(_orvd_collect_product_directory product_module_directory)
+    get_property(visited_directories GLOBAL
+        PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES)
+    if(product_module_directory IN_LIST visited_directories)
+        return()
+    endif()
+    set_property(GLOBAL APPEND PROPERTY
+        ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES "${product_module_directory}")
+
+    get_property(directory_targets
+        DIRECTORY "${product_module_directory}" PROPERTY BUILDSYSTEM_TARGETS)
+    if(directory_targets)
+        set_property(GLOBAL APPEND PROPERTY
+            ORVD_PRODUCT_BOUNDARY_TARGETS ${directory_targets})
+    endif()
+
+    # IMPORTED_TARGETS lists targets created in this directory even when their
+    # directory scope makes them invisible here. An invisible target cannot be
+    # inspected, so accepting it would turn its neutral name into an escape hatch.
+    get_property(directory_imported_targets
+        DIRECTORY "${product_module_directory}" PROPERTY IMPORTED_TARGETS)
+    foreach(imported_target IN LISTS directory_imported_targets)
+        if(NOT TARGET "${imported_target}")
+            _orvd_record_boundary_violation(
+                "${product_module_directory}"
+                "it defines the directory-scoped imported target '${imported_target}'; imported targets in product directories must be GLOBAL so the boundary gate can inspect them")
+        endif()
+    endforeach()
+
+    get_property(product_subdirectories
+        DIRECTORY "${product_module_directory}" PROPERTY SUBDIRECTORIES)
+    foreach(product_subdirectory IN LISTS product_subdirectories)
+        _orvd_collect_product_directory("${product_subdirectory}")
+    endforeach()
+endfunction()
+
+# Every non-imported target defined under the given directories or their
+# descendants is a product target. Call after every add_subdirectory(), including
+# the test tree: targets defined later must not escape the gate.
 function(orvd_verify_product_targets_have_no_drake_dependency)
     set(product_module_relative_paths ${ARGN})
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS "")
     set_property(GLOBAL PROPERTY ORVD_BOUNDARY_VISITED "")
+    set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES "")
+    set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_TARGETS "")
 
     set(configuration_names "")
     if(CMAKE_CONFIGURATION_TYPES)
@@ -210,24 +292,21 @@ function(orvd_verify_product_targets_have_no_drake_dependency)
     endif()
     set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES "${configuration_names}")
 
-    set(product_targets "")
     foreach(product_module_relative_path IN LISTS product_module_relative_paths)
         set(product_module_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/${product_module_relative_path}")
         if(NOT EXISTS "${product_module_directory}/CMakeLists.txt")
             continue()
         endif()
-        get_property(directory_targets
-            DIRECTORY "${product_module_directory}" PROPERTY BUILDSYSTEM_TARGETS)
-        foreach(directory_target IN LISTS directory_targets)
-            get_target_property(is_imported ${directory_target} IMPORTED)
-            if(NOT is_imported)
-                list(APPEND product_targets ${directory_target})
-            endif()
-        endforeach()
+        _orvd_collect_product_directory("${product_module_directory}")
     endforeach()
 
-    if(NOT product_targets)
+    get_property(product_targets GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_TARGETS)
+    if(product_targets)
+        list(REMOVE_DUPLICATES product_targets)
+    endif()
+    get_property(violations GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS)
+    if(NOT product_targets AND NOT violations)
         message(STATUS
             "ORVD product boundary: no product target exists yet; nothing to check")
         return()

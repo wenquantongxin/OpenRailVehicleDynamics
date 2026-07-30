@@ -194,12 +194,75 @@ def parse_ledger(text: str) -> Ledger:
     return ledger
 
 
+def source_lines_without_comments(
+    text: str, *, preserve_literal_contents: bool
+) -> list[str]:
+    """Blank comments and optionally literals without changing line numbers.
+
+    Include scanning preserves quoted paths. Token scans can blank literal
+    contents as well, so prose in a diagnostic string does not become a source
+    dependency. A stateful block-comment pass is necessary: continuation lines
+    in a `/* ... */` block carry no prefix that a line-only filter could detect.
+    """
+    lines: list[str] = []
+    in_block_comment = False
+    for line in text.splitlines():
+        kept: list[str] = []
+        index = 0
+        in_string = False
+        in_character = False
+        while index < len(line):
+            two_characters = line[index : index + 2]
+            if in_block_comment:
+                if two_characters == "*/":
+                    in_block_comment = False
+                    kept.append("  ")
+                    index += 2
+                else:
+                    kept.append(" ")
+                    index += 1
+                continue
+            if in_string or in_character:
+                kept.append(line[index] if preserve_literal_contents else " ")
+                if line[index] == "\\":
+                    if index + 1 < len(line):
+                        kept.append(
+                            line[index + 1] if preserve_literal_contents else " "
+                        )
+                    index += 2
+                    continue
+                if in_string and line[index] == '"':
+                    in_string = False
+                elif in_character and line[index] == "'":
+                    in_character = False
+                index += 1
+                continue
+            if two_characters == "//":
+                kept.append(" " * (len(line) - index))
+                break
+            if two_characters == "/*":
+                in_block_comment = True
+                kept.append("  ")
+                index += 2
+                continue
+            if line[index] == '"':
+                in_string = True
+            elif line[index] == "'":
+                in_character = True
+            kept.append(line[index])
+            index += 1
+        lines.append("".join(kept))
+    return lines
+
+
 def read_drake_includes(file_path: Path) -> list[str]:
     """Every `drake/...` include in a file, in order, with the `drake/` prefix removed."""
     includes = []
-    for line_number, line in enumerate(
-        file_path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1
-    ):
+    source_lines = source_lines_without_comments(
+        file_path.read_text(encoding="utf-8", errors="replace"),
+        preserve_literal_contents=True,
+    )
+    for line_number, line in enumerate(source_lines, start=1):
         if not INCLUDE_DIRECTIVE_PATTERN.match(line):
             continue
         match = INCLUDE_PATH_PATTERN.match(line)

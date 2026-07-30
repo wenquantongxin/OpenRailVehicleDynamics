@@ -13,7 +13,7 @@
 | `verify_landed_drake_source_provenance.py` | 对着钉死的上游现场核验落位源码的来源与许可证义务 |
 | `verify_landed_drake_source_provenance_audit.py` | 用合成源码树检验上面那支审计 |
 | `verify_product_source_drake_boundary.py` | 检查产品源码既不是禁入文件、也不 include 禁入文件 |
-| `verify_product_source_drake_boundary_check.py` | 用合成源码树检验上面那支闸门 |
+| `verify_product_source_drake_boundary_discrimination.py` | 用合成源码树检验上面那支闸门能区分禁入、合法与无法判定的输入 |
 
 只用 Python 3 标准库，不引第三方包。
 

@@ -6,7 +6,7 @@
 ## 当前状态
 
 - 工作分支：`main`
-- 当前阶段：vendor 分发义务与产品边界闸门
+- 当前阶段：实现单一 Context 状态所有权
 - 当前 Goal：`G20`
 - 产品代码状态：vendored common support、topology 与 double pose math 三个静态库可构建，
   四个位姿组合函数有常驻契约测试；刚性 tree 源码已落位，其编译前沿受阻于三个待替换的
@@ -247,8 +247,10 @@ Goal GNN — <明确的功能名称>
   - 实测结论：链接侧闸门 `cmake/OrvdProductBoundaryGate.cmake` 在**配置期**递归走每个
     产品目标的链接闭包，按库自身身份（`drake::` 目标、`libdrake…` 库文件名、`-ldrake`
     一类选项）判定，不匹配机器目录。**产品目标按目录纳管**——顶层
-    `ORVD_PRODUCT_MODULE_DIRECTORIES` 下每个非 imported 目标自动受管，无须登记，因此
-    G28 的完整 tree 目标落进产品目录即自动进入同一闸门。闸门**无条件启用**，
+    `ORVD_PRODUCT_MODULE_DIRECTORIES` 已列模块及其后代目录中的每个非 imported 目标自动
+    受管；新增顶层产品模块仍须加入该模块列表。产品目录中不可由顶层检查的目录级 imported
+    target 直接失败，不能靠中性名字逃逸。G28 的完整 tree 目标落进已列产品目录即自动进入
+    同一闸门。闸门**无条件启用**，
     drake-reference 预设同样通过，证明"Drake 在图中存在但没有泄漏进产品"。
     为使闸门看得见 `find_package` 的导入目标，顶层设置 `CMAKE_FIND_PACKAGE_TARGETS_GLOBAL`。
     源码侧闸门 `verify_product_source_drake_boundary.py` 只管 `forbidden` 与

@@ -7,13 +7,10 @@ actually uses. The Drake targets are fabricated: the gate reads the target graph
 so whether a real Drake is installed on this machine is beside the point, and
 depending on one would make the check unrunnable wherever it is not.
 
-The cases cover the ways a dependency can arrive: a namespaced target reached
-through an innocent-looking interface wrapper, an imported target whose artefact
-turns out to be a Drake library, a raw link option, and a bare library path. Two
-controls give the rest their meaning — a target outside the product directories
-may link Drake, or the Drake-backed reference comparison could not exist; and a
-target nobody registered anywhere is still checked, because membership is by
-directory rather than by a list someone has to remember.
+The cases cover direct and wrapped target edges, imported artefacts, link-driver
+options, nested product directories, and directory-scoped imported targets. Two
+controls give the rest their meaning: a target outside the product directories
+may link Drake, while a clean product must configure.
 """
 
 from __future__ import annotations
@@ -55,7 +52,13 @@ add_library(drake::drake ALIAS fabricated_drake)
 """
 
 
-def write_case(work: Path, name: str, product_body: str, extra_body: str = "") -> Path:
+def write_case(
+    work: Path,
+    name: str,
+    product_body: str,
+    extra_body: str = "",
+    nested_product_body: str | None = None,
+) -> Path:
     case_root = work / name
     product_directory = case_root / "product_module"
     product_directory.mkdir(parents=True, exist_ok=True)
@@ -63,6 +66,15 @@ def write_case(work: Path, name: str, product_body: str, extra_body: str = "") -
         "int Product() { return 1; }\n", encoding="utf-8"
     )
     (product_directory / "CMakeLists.txt").write_text(product_body, encoding="utf-8")
+    if nested_product_body is not None:
+        nested_directory = product_directory / "nested"
+        nested_directory.mkdir()
+        (nested_directory / "nested.cc").write_text(
+            "int NestedProduct() { return 1; }\n", encoding="utf-8"
+        )
+        (nested_directory / "CMakeLists.txt").write_text(
+            nested_product_body, encoding="utf-8"
+        )
 
     other_directory = case_root / "not_the_product"
     other_directory.mkdir(parents=True, exist_ok=True)
@@ -222,6 +234,164 @@ def case_directory_membership_needs_no_registration(work: Path) -> None:
     )
 
 
+def case_nested_product_directory_is_checked(work: Path) -> None:
+    case_root = write_case(
+        work,
+        "nested_product",
+        "add_subdirectory(nested)\n",
+        nested_product_body=(
+            "add_library(nested_product_library STATIC nested.cc)\n"
+            "target_link_libraries(nested_product_library PRIVATE drake::drake)\n"
+        ),
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode != 0 and "nested_product_library" in result.stdout,
+        "a product target in a nested directory must be checked\n" + result.stdout,
+    )
+
+
+def case_directory_scoped_imported_target_is_refused(work: Path) -> None:
+    case_root = write_case(
+        work,
+        "directory_scoped_import",
+        "add_library(innocent_name SHARED IMPORTED)\n"
+        "set_target_properties(innocent_name PROPERTIES\n"
+        '    IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libdrake_hidden.so")\n'
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE innocent_name)\n",
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode != 0
+        and "directory-scoped imported target 'innocent_name'" in result.stdout,
+        "an imported target the top-level gate cannot inspect must fail loudly\n"
+        + result.stdout,
+    )
+
+
+def case_imported_configuration_and_libname_are_checked(work: Path) -> None:
+    configured_artefact_root = write_case(
+        work,
+        "configured_imported_artefact",
+        "add_library(configured_dependency SHARED IMPORTED GLOBAL)\n"
+        "set_target_properties(configured_dependency PROPERTIES\n"
+        '    IMPORTED_CONFIGURATIONS DEBUG\n'
+        '    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_BINARY_DIR}/libdrake_debug.so"\n'
+        "    MAP_IMPORTED_CONFIG_RELEASE DEBUG)\n"
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE configured_dependency)\n",
+    )
+    configured_result = configure(configured_artefact_root)
+    record_failure_unless(
+        configured_result.returncode != 0
+        and "resolves to a Drake library" in configured_result.stdout,
+        "every declared imported configuration must be inspected\n"
+        + configured_result.stdout,
+    )
+
+    imported_libname_root = write_case(
+        work,
+        "imported_libname",
+        "add_library(named_dependency INTERFACE IMPORTED GLOBAL)\n"
+        "set_target_properties(named_dependency PROPERTIES IMPORTED_LIBNAME drake)\n"
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE named_dependency)\n",
+    )
+    libname_result = configure(imported_libname_root)
+    record_failure_unless(
+        libname_result.returncode != 0
+        and "resolves to a Drake library" in libname_result.stdout,
+        "IMPORTED_LIBNAME must be inspected as a library identity\n"
+        + libname_result.stdout,
+    )
+
+
+def case_wrapped_and_configuration_link_options_are_checked(work: Path) -> None:
+    option_declarations = {
+        "compiler_driver_wrapper": (
+            "target_link_options(product_library PRIVATE -Wl,-ldrake)\n"
+        ),
+        "cmake_linker_wrapper": (
+            "target_link_options(product_library PRIVATE LINKER:-l,drake)\n"
+        ),
+        "windows_default_library": (
+            "target_link_options(product_library PRIVATE /DEFAULTLIB:Drake.lib)\n"
+        ),
+        "compound_link_flags": (
+            'set_property(TARGET product_library PROPERTY LINK_FLAGS "-pthread -ldrake")\n'
+        ),
+        "configuration_link_flags": (
+            "set(CMAKE_BUILD_TYPE Release PARENT_SCOPE)\n"
+            'set_property(TARGET product_library PROPERTY LINK_FLAGS_RELEASE "-ldrake")\n'
+        ),
+    }
+    for case_name, option_declaration in option_declarations.items():
+        case_root = write_case(
+            work,
+            case_name,
+            "add_library(product_library STATIC product.cc)\n"
+            + option_declaration,
+        )
+        result = configure(case_root)
+        record_failure_unless(
+            result.returncode != 0 and "selects a Drake library" in result.stdout,
+            f"{case_name} must not hide a Drake link option\n" + result.stdout,
+        )
+
+
+def case_imported_generator_expressions_cannot_hide_drake(work: Path) -> None:
+    link_edge_root = write_case(
+        work,
+        "imported_conditional_link_edge",
+        "add_library(imported_wrapper INTERFACE IMPORTED GLOBAL)\n"
+        "set_target_properties(imported_wrapper PROPERTIES\n"
+        '    INTERFACE_LINK_LIBRARIES "$<$<CONFIG:Release>:drake::drake>")\n'
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE imported_wrapper)\n",
+    )
+    edge_result = configure(link_edge_root)
+    record_failure_unless(
+        edge_result.returncode != 0 and "Drake target" in edge_result.stdout,
+        "an imported generator expression must not hide a Drake target\n"
+        + edge_result.stdout,
+    )
+
+    link_option_root = write_case(
+        work,
+        "imported_conditional_link_option",
+        "add_library(imported_wrapper INTERFACE IMPORTED GLOBAL)\n"
+        "set_target_properties(imported_wrapper PROPERTIES\n"
+        '    INTERFACE_LINK_OPTIONS "$<$<CONFIG:Release>:-ldrake>")\n'
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE imported_wrapper)\n",
+    )
+    option_result = configure(link_option_root)
+    record_failure_unless(
+        option_result.returncode != 0
+        and "selects a Drake library" in option_result.stdout,
+        "an imported generator expression must not hide a Drake link option\n"
+        + option_result.stdout,
+    )
+
+    dependent_library_root = write_case(
+        work,
+        "imported_dependent_library",
+        "add_library(imported_wrapper SHARED IMPORTED GLOBAL)\n"
+        "set_target_properties(imported_wrapper PROPERTIES\n"
+        '    IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libinnocent.so"\n'
+        "    IMPORTED_LINK_DEPENDENT_LIBRARIES drake::drake)\n"
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE imported_wrapper)\n",
+    )
+    dependent_result = configure(dependent_library_root)
+    record_failure_unless(
+        dependent_result.returncode != 0 and "Drake target" in dependent_result.stdout,
+        "an imported target must not hide a dependent Drake library\n"
+        + dependent_result.stdout,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Self-check for the product boundary gate."
@@ -242,6 +412,11 @@ def main() -> int:
         case_bare_drake_library_path_fails,
         case_non_product_target_may_link_drake,
         case_directory_membership_needs_no_registration,
+        case_nested_product_directory_is_checked,
+        case_directory_scoped_imported_target_is_refused,
+        case_imported_configuration_and_libname_are_checked,
+        case_wrapped_and_configuration_link_options_are_checked,
+        case_imported_generator_expressions_cannot_hide_drake,
     )
     with tempfile.TemporaryDirectory(prefix="orvd_verify_boundary_gate.") as work:
         for case in cases:
