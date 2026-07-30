@@ -128,6 +128,18 @@ target_link_libraries(verify_multibody_cache_dependency_matrix
 add_test(NAME verify_multibody_cache_dependency_matrix
          COMMAND verify_multibody_cache_dependency_matrix)
 
+# When the lazy evaluator calculates and when it does not, and what a failed
+# calculation leaves behind. The failure paths carry the weight: a half-written
+# buffer and a value computed from a state the calculator moved both look like
+# ordinary success from the call site if they are handled wrongly.
+add_executable(verify_multibody_cache_evaluation
+    multibody_runtime/verify_multibody_cache_evaluation.cc)
+orvd_configure_first_party_target(verify_multibody_cache_evaluation)
+target_link_libraries(verify_multibody_cache_evaluation
+    PRIVATE orvd_multibody_runtime)
+add_test(NAME verify_multibody_cache_evaluation
+         COMMAND verify_multibody_cache_evaluation)
+
 # The toolchain self-check is the project's first real first-party target, and
 # so also the first consumer of the target-scoped compile policy.
 add_executable(verify_eigen_and_cxx23_toolchain

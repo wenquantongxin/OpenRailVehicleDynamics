@@ -62,6 +62,16 @@ enum class MultibodyStateVersionSource {
 
 namespace internal {
 
+/// The one way the evaluator reaches a slot's bound state.
+///
+/// Declared here and defined alongside the evaluator. It exists so that the
+/// evaluator can read the versions it guards without `current_snapshot()`,
+/// `bound_state()`, a writable snapshot or a commit-this-snapshot entry point
+/// becoming public API: each of those would let a caller assemble its own
+/// freshness policy out of the parts, and the whole point of the slot is that
+/// there is exactly one such policy.
+struct CacheSlotEvaluationAccess;
+
 inline MultibodyStateVersion CurrentVersionOf(
     const MultibodyStateInstance& state, MultibodyStateVersionSource source) {
     switch (source) {
@@ -195,6 +205,8 @@ class VersionedCacheSlot {
     VersionSnapshot CurrentSnapshot() const {
         return VersionSnapshot{internal::CurrentVersionOf(*state_, Sources)...};
     }
+
+    friend struct internal::CacheSlotEvaluationAccess;
 
     const MultibodyStateInstance* state_;
     Value value_;
