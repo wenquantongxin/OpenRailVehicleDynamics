@@ -22,22 +22,27 @@ set(ORVD_VENDORED_DRAKE_COMMON_SUPPORT_SOURCES
     drake/common/nice_type_name.cc
     drake/common/nice_type_name_override.cc)
 
-add_library(orvd_vendored_drake_common_support STATIC
+# The objects are owned by an OBJECT library and the archive is packed from it.
+# That is what lets the rigid tree archive contain these objects too without
+# compiling them a second time: one owner, two archives, one set of objects.
+add_library(orvd_vendored_drake_common_support_objects OBJECT
     ${ORVD_VENDORED_DRAKE_COMMON_SUPPORT_SOURCES})
-
-# SYSTEM so that consumers do not inherit upstream diagnostics either.
-target_include_directories(orvd_vendored_drake_common_support
+target_include_directories(orvd_vendored_drake_common_support_objects
     SYSTEM PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
-
-target_compile_features(orvd_vendored_drake_common_support PUBLIC cxx_std_23)
-set_target_properties(orvd_vendored_drake_common_support
+target_compile_features(orvd_vendored_drake_common_support_objects
+    PUBLIC cxx_std_23)
+set_target_properties(orvd_vendored_drake_common_support_objects
     PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(orvd_vendored_drake_common_support_objects PUBLIC fmt::fmt)
+
+add_library(orvd_vendored_drake_common_support STATIC)
+target_link_libraries(orvd_vendored_drake_common_support
+    PUBLIC orvd_vendored_drake_common_support_objects)
+
 
 # PUBLIC, not PRIVATE: the vendored public headers include fmt headers and
 # specialise fmt::formatter, so a consumer needs fmt's include directories and
 # its library, not just this archive.
-target_link_libraries(orvd_vendored_drake_common_support PUBLIC fmt::fmt)
-
 # Eigen is deliberately absent from this target. Measured: these four
 # translation units compile with no Eigen include directory at all. Declaring it
 # would hand an Eigen dependency to the topology target, which does not have one.
@@ -53,17 +58,25 @@ set(ORVD_VENDORED_DRAKE_MULTIBODY_TOPOLOGY_SOURCES
     drake/multibody/topology/spanning_forest_debug.cc
     drake/multibody/topology/spanning_forest_mobod.cc)
 
-add_library(orvd_vendored_drake_multibody_topology STATIC
+add_library(orvd_vendored_drake_multibody_topology_objects OBJECT
     ${ORVD_VENDORED_DRAKE_MULTIBODY_TOPOLOGY_SOURCES})
-
-target_compile_features(orvd_vendored_drake_multibody_topology PUBLIC cxx_std_23)
-set_target_properties(orvd_vendored_drake_multibody_topology
+target_compile_features(orvd_vendored_drake_multibody_topology_objects
+    PUBLIC cxx_std_23)
+set_target_properties(orvd_vendored_drake_multibody_topology_objects
     PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(orvd_vendored_drake_multibody_topology_objects
+    PUBLIC orvd_vendored_drake_common_support_objects)
 
-# PUBLIC: the include directory and fmt both reach consumers through the support
-# target's own PUBLIC interface.
+add_library(orvd_vendored_drake_multibody_topology STATIC)
+# The object library supplies this archive's own members; the support archive is
+# a separate archive a consumer must also link. Linking an OBJECT library does
+# not carry the objects of the OBJECT libraries it in turn links — that is what
+# keeps each object in exactly one archive — so the archive-level dependency has
+# to be stated here as well.
 target_link_libraries(orvd_vendored_drake_multibody_topology
-    PUBLIC orvd_vendored_drake_common_support)
+    PUBLIC orvd_vendored_drake_multibody_topology_objects
+           orvd_vendored_drake_common_support)
+
 
 # --- ORVD's own double pose composition ---
 # This is first-party source satisfying a vendored declaration, so it carries the
@@ -83,7 +96,7 @@ target_link_libraries(orvd_double_pose_composition
 # units, plus the first-party composition that math/fast_pose_composition_functions.h
 # declares. This is a self-contained module, not a partial tree: it owns every
 # definition its own public headers declare, and none of the tree sources that
-# still wait on the runtime replacement of G20-G28.
+# the rigid tree target below now owns.
 #
 # fmt_eigen.cc belongs to this target rather than to the common support target
 # because this is its only consumer, and because fmt_eigen.h includes Eigen: in
@@ -96,17 +109,161 @@ set(ORVD_VENDORED_DRAKE_DOUBLE_POSE_MATH_SOURCES
     drake/math/rotation_matrix.cc
     drake/math/unit_vector.cc)
 
-add_library(orvd_vendored_drake_double_pose_math STATIC
-    ${ORVD_VENDORED_DRAKE_DOUBLE_POSE_MATH_SOURCES}
-    $<TARGET_OBJECTS:orvd_double_pose_composition>)
+add_library(orvd_vendored_drake_double_pose_math_objects OBJECT
+    ${ORVD_VENDORED_DRAKE_DOUBLE_POSE_MATH_SOURCES})
+target_compile_features(orvd_vendored_drake_double_pose_math_objects
+    PUBLIC cxx_std_23)
+set_target_properties(orvd_vendored_drake_double_pose_math_objects
+    PROPERTIES CXX_EXTENSIONS OFF)
+target_link_libraries(orvd_vendored_drake_double_pose_math_objects
+    PUBLIC orvd_vendored_drake_common_support_objects Eigen3::Eigen)
 
-target_compile_features(orvd_vendored_drake_double_pose_math PUBLIC cxx_std_23)
-set_target_properties(orvd_vendored_drake_double_pose_math
+add_library(orvd_vendored_drake_double_pose_math STATIC)
+target_link_libraries(orvd_vendored_drake_double_pose_math
+    PUBLIC orvd_vendored_drake_double_pose_math_objects
+           orvd_double_pose_composition
+           orvd_vendored_drake_common_support)
+
+# --- The rigid multibody tree ---
+# The remaining landed translation units: the tree itself and the trajectory
+# support one of its mobilizers needs. Together with the four object owners
+# above these account for every landed .cc exactly once, which the check at the
+# end of this file verifies rather than asserts.
+set(ORVD_VENDORED_DRAKE_RIGID_TREE_SOURCES
+    drake/common/trajectories/piecewise_constant_curvature_trajectory.cc
+    drake/common/trajectories/piecewise_trajectory.cc
+    drake/common/trajectories/trajectory.cc
+    drake/multibody/tree/acceleration_kinematics_cache.cc
+    drake/multibody/tree/articulated_body_force_cache.cc
+    drake/multibody/tree/articulated_body_inertia.cc
+    drake/multibody/tree/articulated_body_inertia_cache.cc
+    drake/multibody/tree/ball_rpy_joint.cc
+    drake/multibody/tree/body_node.cc
+    drake/multibody/tree/body_node_impl.cc
+    drake/multibody/tree/body_node_impl_mass_matrix.cc
+    drake/multibody/tree/curvilinear_joint.cc
+    drake/multibody/tree/curvilinear_mobilizer.cc
+    drake/multibody/tree/element_collection.cc
+    drake/multibody/tree/fixed_offset_frame.cc
+    drake/multibody/tree/force_element.cc
+    drake/multibody/tree/frame.cc
+    drake/multibody/tree/frame_body_pose_cache.cc
+    drake/multibody/tree/joint.cc
+    drake/multibody/tree/joint_actuator.cc
+    drake/multibody/tree/linear_bushing_roll_pitch_yaw.cc
+    drake/multibody/tree/linear_spring_damper.cc
+    drake/multibody/tree/mobilizer.cc
+    drake/multibody/tree/mobilizer_impl.cc
+    drake/multibody/tree/model_instance.cc
+    drake/multibody/tree/multibody_element.cc
+    drake/multibody/tree/multibody_forces.cc
+    drake/multibody/tree/multibody_tree.cc
+    drake/multibody/tree/planar_joint.cc
+    drake/multibody/tree/planar_mobilizer.cc
+    drake/multibody/tree/position_kinematics_cache.cc
+    drake/multibody/tree/prismatic_joint.cc
+    drake/multibody/tree/prismatic_mobilizer.cc
+    drake/multibody/tree/prismatic_spring.cc
+    drake/multibody/tree/quaternion_floating_joint.cc
+    drake/multibody/tree/quaternion_floating_mobilizer.cc
+    drake/multibody/tree/revolute_joint.cc
+    drake/multibody/tree/revolute_mobilizer.cc
+    drake/multibody/tree/revolute_spring.cc
+    drake/multibody/tree/rigid_body.cc
+    drake/multibody/tree/rotational_inertia.cc
+    drake/multibody/tree/rpy_ball_mobilizer.cc
+    drake/multibody/tree/rpy_floating_joint.cc
+    drake/multibody/tree/rpy_floating_mobilizer.cc
+    drake/multibody/tree/scoped_name.cc
+    drake/multibody/tree/screw_joint.cc
+    drake/multibody/tree/screw_mobilizer.cc
+    drake/multibody/tree/spatial_inertia.cc
+    drake/multibody/tree/uniform_gravity_field_element.cc
+    drake/multibody/tree/unit_inertia.cc
+    drake/multibody/tree/universal_joint.cc
+    drake/multibody/tree/universal_mobilizer.cc
+    drake/multibody/tree/velocity_kinematics_cache.cc
+    drake/multibody/tree/weld_joint.cc
+    drake/multibody/tree/weld_mobilizer.cc)
+
+add_library(orvd_vendored_drake_rigid_tree_objects OBJECT
+    ${ORVD_VENDORED_DRAKE_RIGID_TREE_SOURCES})
+target_compile_features(orvd_vendored_drake_rigid_tree_objects PUBLIC cxx_std_23)
+set_target_properties(orvd_vendored_drake_rigid_tree_objects
     PROPERTIES CXX_EXTENSIONS OFF)
 
-# Eigen is PUBLIC here: math/rigid_transform.h and math/rotation_matrix.h carry
-# Eigen types in their public interface, so a consumer compiling against them
-# needs Eigen's include directories. fmt reaches consumers through the support
-# target.
-target_link_libraries(orvd_vendored_drake_double_pose_math
-    PUBLIC orvd_vendored_drake_common_support Eigen3::Eigen)
+# The tree reaches down to the first-party runtime for state, versions and cache
+# slots. That is the intended direction and the only one: the runtime never
+# reaches back, which is why orvd_multibody_runtime links nothing from here.
+target_link_libraries(orvd_vendored_drake_rigid_tree_objects
+    PUBLIC orvd_vendored_drake_multibody_topology_objects
+           orvd_vendored_drake_double_pose_math_objects
+           orvd_multibody_runtime
+    PRIVATE orvd_double_pose_composition)
+
+# The internal product target: one archive holding every landed object.
+#
+# It is an archive of the objects themselves, not a target that merely links the
+# four sub-archives. A consumer of a static library gets only the members that
+# resolve a symbol it already needs, so a chain of archives cannot be made to
+# yield every object; putting the objects in makes "this archive is the tree"
+# true rather than approximately true.
+#
+# Deliberately not installed and not exported. What is public is G29-G30's
+# question, and exporting an internal target now would freeze an interface that
+# is still being built. The vendored types in its headers are not public either.
+add_library(orvd_rigid_multibody_tree STATIC)
+target_link_libraries(orvd_rigid_multibody_tree
+    PUBLIC orvd_vendored_drake_rigid_tree_objects
+           orvd_vendored_drake_multibody_topology_objects
+           orvd_vendored_drake_double_pose_math_objects
+           orvd_vendored_drake_common_support_objects
+           orvd_double_pose_composition
+           orvd_multibody_runtime)
+
+# --- Single source ownership, checked ---
+# Every landed .cc must belong to exactly one object owner. Two owners compiling
+# the same file would put two definitions of the same symbol into one archive,
+# and which one a consumer got would be decided by link order.
+#
+# The check compares sets, not counts: freezing a number would make an added
+# file look like a violation and a removed one look fine.
+set(_orvd_owned_sources
+    ${ORVD_VENDORED_DRAKE_COMMON_SUPPORT_SOURCES}
+    ${ORVD_VENDORED_DRAKE_MULTIBODY_TOPOLOGY_SOURCES}
+    ${ORVD_VENDORED_DRAKE_DOUBLE_POSE_MATH_SOURCES}
+    ${ORVD_VENDORED_DRAKE_RIGID_TREE_SOURCES}
+    orvd_implementations/double_rotation_and_rigid_transform_composition.cc)
+
+set(_orvd_duplicated_sources ${_orvd_owned_sources})
+list(REMOVE_DUPLICATES _orvd_duplicated_sources)
+list(LENGTH _orvd_owned_sources _orvd_owned_count)
+list(LENGTH _orvd_duplicated_sources _orvd_unique_count)
+if(NOT _orvd_owned_count EQUAL _orvd_unique_count)
+    message(FATAL_ERROR
+        "vendored source ownership: a translation unit is claimed by more than "
+        "one object owner, so one archive would hold two definitions of the "
+        "same symbol")
+endif()
+
+file(GLOB_RECURSE _orvd_landed_sources
+     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+     CONFIGURE_DEPENDS
+     ${CMAKE_CURRENT_SOURCE_DIR}/drake/*.cc
+     ${CMAKE_CURRENT_SOURCE_DIR}/orvd_implementations/*.cc)
+set(_orvd_unowned_sources ${_orvd_landed_sources})
+list(REMOVE_ITEM _orvd_unowned_sources ${_orvd_owned_sources})
+if(_orvd_unowned_sources)
+    message(FATAL_ERROR
+        "vendored source ownership: these landed translation units belong to no "
+        "target, so nothing compiles them and a missing definition would only "
+        "appear at a consumer's link: ${_orvd_unowned_sources}")
+endif()
+
+set(_orvd_missing_sources ${_orvd_owned_sources})
+list(REMOVE_ITEM _orvd_missing_sources ${_orvd_landed_sources})
+if(_orvd_missing_sources)
+    message(FATAL_ERROR
+        "vendored source ownership: these sources are claimed by a target but "
+        "are not landed: ${_orvd_missing_sources}")
+endif()

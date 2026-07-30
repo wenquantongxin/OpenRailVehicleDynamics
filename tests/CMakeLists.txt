@@ -53,18 +53,33 @@ add_test(NAME verify_landed_drake_source_provenance_audit
                  ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_drake_source_provenance_audit.py
                  --git-executable ${GIT_EXECUTABLE})
 
-# The landed compile frontier tool. Only its synthetic self-check is registered:
-# running the tool against the real landed tree exits non-zero today, because the
-# translation units that still need the runtime cannot compile until G20-G28
-# replace it. Registering that as a test would mean either a permanently red suite
-# or a WILL_FAIL wrapper, and a test allowed to fail stops being read. The real run
-# is a development command; see tools/drake_source_boundary/README.md.
+# The landed compile frontier: both the tool's synthetic self-check and a run
+# against the real landed tree. The real run used to be a development command
+# only, because until the runtime replacement landed it exited non-zero and a
+# test allowed to fail stops being read. It passes now — every landed
+# translation unit produces an object, nothing includes a header that is not
+# landed, and no `systems::` type is named — so keeping it out of the suite would
+# mean that regressing any of those would be noticed by nobody.
+#
+# The admitted include directories are the first-party runtime and Eigen. That
+# is the boundary being asserted: the tree compiles against what the product
+# ships and against nothing else, and in particular no external Drake tree is
+# visible to it.
 if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
    CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
     add_test(NAME verify_landed_double_compile_frontier
              COMMAND ${Python3_EXECUTABLE}
                      ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_landed_double_compile_frontier.py
                      --compiler ${CMAKE_CXX_COMPILER})
+    add_test(NAME verify_landed_double_compile_frontier_against_real_tree
+             COMMAND ${Python3_EXECUTABLE}
+                     ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py
+                     --landed-root ${CMAKE_SOURCE_DIR}/external/drake_mbtree
+                     --compiler ${CMAKE_CXX_COMPILER}
+                     --admitted-include-directory
+                     ${CMAKE_SOURCE_DIR}/libs/multibody_runtime/include
+                     --admitted-include-directory
+                     $<TARGET_PROPERTY:Eigen3::Eigen,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 # The index and ordering contract the vendored topology provides. It links only
@@ -140,80 +155,15 @@ target_link_libraries(verify_multibody_cache_evaluation
 add_test(NAME verify_multibody_cache_evaluation
          COMMAND verify_multibody_cache_evaluation)
 
-# The tree's own caches, bound to real state and driven on a real model. This
-# lists the landed tree sources directly rather than linking a library, because
-# the library is G28's product; when it exists this becomes a link against it.
-set(ORVD_LANDED_RIGID_TREE_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/common/trajectories/piecewise_constant_curvature_trajectory.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/common/trajectories/piecewise_trajectory.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/common/trajectories/trajectory.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/math/rigid_transform.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/math/roll_pitch_yaw.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/math/rotation_matrix.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/math/unit_vector.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/acceleration_kinematics_cache.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/articulated_body_force_cache.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/articulated_body_inertia.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/articulated_body_inertia_cache.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/ball_rpy_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/body_node.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/body_node_impl.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/body_node_impl_mass_matrix.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/curvilinear_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/curvilinear_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/element_collection.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/fixed_offset_frame.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/force_element.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/frame.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/frame_body_pose_cache.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/joint_actuator.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/linear_bushing_roll_pitch_yaw.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/linear_spring_damper.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/mobilizer_impl.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/model_instance.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/multibody_element.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/multibody_forces.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/multibody_tree.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/planar_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/planar_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/position_kinematics_cache.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/prismatic_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/prismatic_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/prismatic_spring.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/quaternion_floating_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/quaternion_floating_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/revolute_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/revolute_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/revolute_spring.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/rigid_body.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/rotational_inertia.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/rpy_ball_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/rpy_floating_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/rpy_floating_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/scoped_name.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/screw_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/screw_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/spatial_inertia.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/uniform_gravity_field_element.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/unit_inertia.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/universal_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/universal_mobilizer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/velocity_kinematics_cache.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/weld_joint.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/../external/drake_mbtree/drake/multibody/tree/weld_mobilizer.cc)
 
+# The tree's own caches, bound to real state and driven on a real model. An
+# ordinary consumer: it links the product archive and takes from it only what it
+# needs, which is how the archive will actually be used.
 add_executable(verify_rigid_tree_cache_binding
-    multibody_runtime/verify_rigid_tree_cache_binding.cc
-    ${ORVD_LANDED_RIGID_TREE_SOURCES})
+    multibody_runtime/verify_rigid_tree_cache_binding.cc)
 orvd_configure_first_party_target(verify_rigid_tree_cache_binding)
-# SYSTEM on the vendored root so upstream diagnostics stay out of the build.
-target_include_directories(verify_rigid_tree_cache_binding
-    SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/external/drake_mbtree)
 target_link_libraries(verify_rigid_tree_cache_binding
-    PRIVATE orvd_multibody_runtime orvd_vendored_drake_multibody_topology
-            orvd_vendored_drake_double_pose_math)
+    PRIVATE orvd_rigid_multibody_tree)
 add_test(NAME verify_rigid_tree_cache_binding
          COMMAND verify_rigid_tree_cache_binding)
 
@@ -329,3 +279,39 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
     add_test(NAME verify_drake_multibody_kinematics_cache_invalidation
              COMMAND verify_drake_multibody_kinematics_cache_invalidation)
 endif()
+
+# Every object of the landed tree, forced into one link.
+#
+# A consumer of a static archive gets only the members that resolve a symbol it
+# already needs, so the ordinary consumer above cannot show that every object
+# links — a translation unit with an unresolved symbol nobody happens to call
+# would sit in the archive unnoticed until some later consumer did call it. This
+# target consumes the object libraries directly, so every object is in the link
+# whether the program refers to it or not.
+#
+# It uses CMake's own object-library mechanism rather than a linker option:
+# `--whole-archive` is GNU-specific, and a check that only fires on one toolchain
+# is not a check on the others.
+add_executable(verify_landed_tree_objects_all_link
+    multibody_runtime/verify_landed_tree_objects_all_link.cc)
+orvd_configure_first_party_target(verify_landed_tree_objects_all_link)
+target_link_libraries(verify_landed_tree_objects_all_link
+    PRIVATE orvd_vendored_drake_rigid_tree_objects
+            orvd_vendored_drake_multibody_topology_objects
+            orvd_vendored_drake_double_pose_math_objects
+            orvd_vendored_drake_common_support_objects
+            orvd_double_pose_composition
+            orvd_multibody_runtime)
+add_test(NAME verify_landed_tree_objects_all_link
+         COMMAND verify_landed_tree_objects_all_link)
+
+# The smallest program that uses the tree the way a consumer will: build a
+# model, finalize it, make its own evaluation context, put it in a configuration
+# and ask for the kinematics. It links only the product archive.
+add_executable(verify_minimal_rigid_tree_model
+    multibody_runtime/verify_minimal_rigid_tree_model.cc)
+orvd_configure_first_party_target(verify_minimal_rigid_tree_model)
+target_link_libraries(verify_minimal_rigid_tree_model
+    PRIVATE orvd_rigid_multibody_tree)
+add_test(NAME verify_minimal_rigid_tree_model
+         COMMAND verify_minimal_rigid_tree_model)
