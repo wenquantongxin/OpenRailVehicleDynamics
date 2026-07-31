@@ -13,6 +13,7 @@
 // situation in which a workspace shared between contexts, or a freshness rule
 // that looked only at the numbers, would serve one context's value to the other
 // and look right doing it.
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <limits>
@@ -338,6 +339,76 @@ void SetJointAngles(const MultibodyTree<double>& tree, Context* context,
     Eigen::VectorXd q(tree.num_positions());
     q << first, second;
     tree.SetPositions(context, q);
+}
+
+drake::Vector6<double> ElbowAcrossNodeJacobianColumn(
+    const TwoLinkChain& model, const Context& context) {
+    const auto& elbow = model.tree().GetJointByName<RevoluteJoint>("elbow");
+    const auto& across_node_jacobian =
+        model.tree().EvalAcrossNodeJacobianWrtVExpressedInWorld(context);
+    return across_node_jacobian.at(
+        static_cast<std::size_t>(elbow.velocity_start()));
+}
+
+drake::Vector6<double> AnalyticElbowAcrossNodeJacobianColumn(
+    double shoulder_angle,
+    const drake::math::RotationMatrix<double>& R_PF) {
+    drake::Vector6<double> expected = drake::Vector6<double>::Zero();
+    expected.head<3>() =
+        drake::math::RotationMatrix<double>::MakeZRotation(shoulder_angle) *
+        R_PF * Eigen::Vector3d::UnitY();
+    return expected;
+}
+
+void CheckAcrossNodeJacobianUsesTheContextFrameRotation() {
+    const TwoLinkChain model;
+    constexpr double shoulder_angle = 0.47;
+    constexpr double tolerance =
+        128.0 * std::numeric_limits<double>::epsilon();
+
+    const std::unique_ptr<Context> baseline = model.MakeContext();
+    SetJointAngles(model.tree(), baseline.get(), shoulder_angle, -0.31);
+    const drake::Vector6<double> baseline_column =
+        ElbowAcrossNodeJacobianColumn(model, *baseline);
+    const drake::Vector6<double> expected_baseline =
+        AnalyticElbowAcrossNodeJacobianColumn(
+            shoulder_angle,
+            drake::math::RotationMatrix<double>::Identity());
+    ExpectTrue((baseline_column - expected_baseline).norm() <= tolerance,
+               "the elbow H column has the analytic world-expressed axis at "
+               "the construction-time frame pose");
+
+    const auto rotated_R_PF =
+        drake::math::RotationMatrix<double>::MakeXRotation(0.41);
+    const std::unique_ptr<Context> rotated = model.MakeContext();
+    SetJointAngles(model.tree(), rotated.get(), shoulder_angle, -0.31);
+    model.tree().SetFixedFramePoseInParentFrame(
+        rotated.get(), model.fixed_frame(),
+        drake::math::RigidTransform<double>(rotated_R_PF,
+                                             Eigen::Vector3d(0.3, 0.0, 0.0)));
+    const drake::Vector6<double> rotated_column =
+        ElbowAcrossNodeJacobianColumn(model, *rotated);
+    const drake::Vector6<double> expected_rotated =
+        AnalyticElbowAcrossNodeJacobianColumn(shoulder_angle, rotated_R_PF);
+    ExpectTrue((expected_rotated - expected_baseline).norm() > 0.3,
+               "the rotation-only H fixture moves the expected axis well "
+               "clear of representation precision");
+    ExpectTrue((rotated_column - expected_rotated).norm() <= tolerance,
+               "the elbow H column reads a nonparallel context-local inboard "
+               "frame rotation");
+
+    const std::unique_ptr<Context> translated = model.MakeContext();
+    SetJointAngles(model.tree(), translated.get(), shoulder_angle, -0.31);
+    model.tree().SetFixedFramePoseInParentFrame(
+        translated.get(), model.fixed_frame(),
+        drake::math::RigidTransform<double>(
+            drake::math::RotationMatrix<double>::Identity(),
+            Eigen::Vector3d(-0.17, 0.26, 0.11)));
+    const drake::Vector6<double> translated_column =
+        ElbowAcrossNodeJacobianColumn(model, *translated);
+    ExpectTrue((translated_column - expected_baseline).norm() <= tolerance,
+               "moving only the inboard-frame origin does not rotate the "
+               "revolute H axis");
 }
 
 struct CacheFreshness {
@@ -755,9 +826,16 @@ void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
         WarmEveryRetainedCache(model.tree(), *context);
         const Eigen::MatrixXd mass_before =
             MassMatrix(model.tree(), *context);
+        // Preserve the body's mass so the numerical assertion below cannot be
+        // satisfied by reading only the context-local mass while silently
+        // taking COM and inertia-tensor fields from the construction default.
+        const SpatialInertia<double> changed_shape =
+            SpatialInertia<double>::MakeFromCentralInertia(
+                1.2, Eigen::Vector3d(-0.11, 0.09, 0.07),
+                drake::multibody::RotationalInertia<double>(
+                    0.061, 0.074, 0.086, -0.004, 0.003, 0.005));
         model.tree().SetRigidBodySpatialInertiaInBodyFrame(
-            context.get(), model.first_body(),
-            SpatialInertia<double>::SolidBoxWithMass(3.0, 0.2, 0.1, 0.1));
+            context.get(), model.first_body(), changed_shape);
         ExpectCacheFreshness(
             *context,
             {/*frame_body_poses=*/false,
@@ -774,15 +852,23 @@ void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
             "a rigid-body-inertia write");
         const std::unique_ptr<Context> cold_context = model.MakeContext();
         model.tree().SetRigidBodySpatialInertiaInBodyFrame(
-            cold_context.get(), model.first_body(),
-            SpatialInertia<double>::SolidBoxWithMass(3.0, 0.2, 0.1, 0.1));
+            cold_context.get(), model.first_body(), changed_shape);
         const Eigen::MatrixXd mass_hot = MassMatrix(model.tree(), *context);
         const Eigen::MatrixXd mass_cold =
             MassMatrix(model.tree(), *cold_context);
-        ExpectTrue(!mass_hot.isApprox(mass_before) &&
-                       mass_hot.isApprox(mass_cold),
-                   "the invalidated inertia chain agrees with a cold context "
-                   "and differs from its old value");
+        const double mass_scale =
+            std::max({1.0, mass_before.cwiseAbs().maxCoeff(),
+                      mass_hot.cwiseAbs().maxCoeff(),
+                      mass_cold.cwiseAbs().maxCoeff()});
+        const double mass_tolerance =
+            2048.0 * std::numeric_limits<double>::epsilon() * mass_scale;
+        ExpectTrue((mass_hot - mass_before).cwiseAbs().maxCoeff() >
+                           mass_tolerance &&
+                       (mass_hot - mass_cold).cwiseAbs().maxCoeff() <=
+                           mass_tolerance,
+                   "a mass-preserving context-local COM and inertia-tensor "
+                   "change reaches the mass matrix and agrees cold versus "
+                   "hot");
     }
 
     {
@@ -1630,6 +1716,7 @@ void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
 
 int main() {
     CheckMassMatrixAlgorithmAndVelocityIndependence();
+    CheckAcrossNodeJacobianUsesTheContextFrameRotation();
     CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions();
     CheckVelocityKinematicsRecomputesForExactlyItsInputs();
     CheckFixedFrameVelocityUsesTheContextPose();

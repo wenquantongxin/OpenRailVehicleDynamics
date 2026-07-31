@@ -48,12 +48,32 @@ void Expect(bool condition, const std::string& description) {
 }
 
 template <typename Attempt>
-bool RefusalMentions(Attempt&& attempt, std::string_view fragment) {
+bool InvalidArgumentMentions(Attempt&& attempt, std::string_view fragment) {
     try {
         attempt();
-    } catch (const std::exception& reason) {
+    } catch (const std::invalid_argument& reason) {
         return std::string_view(reason.what()).find(fragment) !=
                std::string_view::npos;
+    } catch (...) {
+        return false;
+    }
+    return false;
+}
+
+template <typename Attempt>
+bool LogicErrorButNotInvalidArgumentMentions(Attempt&& attempt,
+                                             std::string_view fragment) {
+    try {
+        attempt();
+    } catch (const std::invalid_argument&) {
+        // invalid_argument derives from logic_error; the public contract makes
+        // the distinction, so catch the narrower type first.
+        return false;
+    } catch (const std::logic_error& reason) {
+        return std::string_view(reason.what()).find(fragment) !=
+               std::string_view::npos;
+    } catch (...) {
+        return false;
     }
     return false;
 }
@@ -349,7 +369,7 @@ void CheckFailureSemanticsAndZeroVelocityModel() {
 
     Eigen::MatrixXd wrong_shape = Eigen::MatrixXd::Constant(2, 3, 17.0);
     const Eigen::MatrixXd wrong_shape_before = wrong_shape;
-    Expect(RefusalMentions(
+    Expect(InvalidArgumentMentions(
                [&] {
                    fixture.model.CalcGeneralizedMassMatrix(*context,
                                                            wrong_shape);
@@ -367,7 +387,7 @@ void CheckFailureSemanticsAndZeroVelocityModel() {
     Eigen::MatrixXd foreign_output =
         Eigen::MatrixXd::Constant(velocity_count, velocity_count, 23.0);
     const Eigen::MatrixXd foreign_before = foreign_output;
-    Expect(RefusalMentions(
+    Expect(InvalidArgumentMentions(
                [&] {
                    fixture.model.CalcGeneralizedMassMatrix(*foreign_context,
                                                            foreign_output);
@@ -381,7 +401,7 @@ void CheckFailureSemanticsAndZeroVelocityModel() {
     Eigen::MatrixXd unfinished_output =
         Eigen::MatrixXd::Constant(velocity_count, velocity_count, 31.0);
     const Eigen::MatrixXd unfinished_before = unfinished_output;
-    Expect(RefusalMentions(
+    Expect(LogicErrorButNotInvalidArgumentMentions(
                [&] {
                    unfinished.CalcGeneralizedMassMatrix(*context,
                                                         unfinished_output);
