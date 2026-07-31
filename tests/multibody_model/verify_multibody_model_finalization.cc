@@ -128,6 +128,15 @@ void ExpectCoordinatesAreTiled(const MultibodyModel& model,
 
     const auto claim = [&](std::vector<std::string>& owners, int start,
                            int size, const std::string& who) {
+        // Checked before the loop, because for a weld there is no loop: a
+        // zero-length range still reports a place, and an unchecked one could
+        // be anything at all. One past the end is legitimate — nothing begins
+        // there — and anything outside that is a place this model does not have.
+        ExpectTrue(start >= 0 && start <= static_cast<int>(owners.size()),
+                   scenario + ": " + who + " begins at " +
+                       std::to_string(start) +
+                       ", which is not a place in this model's " +
+                       std::to_string(owners.size()));
         for (int offset = 0; offset < size; ++offset) {
             const int at = start + offset;
             if (at < 0 || at >= static_cast<int>(owners.size())) {
@@ -259,6 +268,79 @@ void CheckAWeldConsumesNoCoordinates() {
                 model.GetJointVelocityRange(weld).size(), 0);
     ExpectEqual("weld: the weld's position start",
                 model.GetJointPositionRange(weld).start(), 1);
+    ExpectEqual("weld: the weld's velocity start",
+                model.GetJointVelocityRange(weld).start(), 1);
+}
+
+void CheckTwoFreeBodiesEachGetTheirOwnRelation() {
+    // Two, because a loop that handled only the first would leave the second to
+    // the rigid tree — which would give it a floating relation of its own, and
+    // the counts would come out right while the model held a relation nobody
+    // stated. It is also the only shape in which the injection loop's own
+    // bounds are exercised.
+    MultibodyModel model;
+    const RigidBodyHandle first = model.AddRigidBody("first", SolidishBody(1.0));
+    const RigidBodyHandle second =
+        model.AddRigidBody("second", SolidishBody(1.0));
+    model.DeclareFreeBody(first);
+    model.DeclareFreeBody(second);
+    ExpectScenario(&model, "two free bodies", 14, 12);
+
+    // Each has its own place, and the two places are different ones.
+    const GeneralizedPositionRange first_positions =
+        model.GetFreeBodyPositionRange(first);
+    const GeneralizedPositionRange second_positions =
+        model.GetFreeBodyPositionRange(second);
+    ExpectTrue(first_positions.start() != second_positions.start(),
+               "two free bodies do not share a place in q");
+    ExpectTrue(model.GetFreeBodyVelocityRange(first).start() !=
+                   model.GetFreeBodyVelocityRange(second).start(),
+               "nor in v");
+}
+
+void CheckAPrivateNameCollisionSurvivesFinalization() {
+    // The private joint's name is chosen against the complete set of public
+    // joint names, and that choice happens during finalization. Checking only
+    // that the modelling calls were accepted stops one step short of the thing
+    // being claimed: the model has to come out the other side with the public
+    // joint still answering to the name and the free body still holding a
+    // relation of its own.
+    for (const bool free_first : {true, false}) {
+        const std::string order =
+            free_first ? "free declared first" : "public joint added first";
+        MultibodyModel model;
+        const RigidBodyHandle root = model.AddRigidBody("root",
+                                                        SolidishBody(1.0));
+        const RigidBodyHandle child =
+            model.AddRigidBody("child", SolidishBody(1.0));
+        if (free_first) model.DeclareFreeBody(root);
+        // The name the private joint would reach for first.
+        const JointHandle public_joint = model.AddRevoluteJoint(
+            "__orvd_free_body_1", model.body_frame(root),
+            model.body_frame(child), kZAxis);
+        if (!free_first) model.DeclareFreeBody(root);
+
+        // Stated as its own claim: the private name is chosen here, and if it
+        // ever stopped being chosen against the public names this is where it
+        // would show — as a refusal to finalize a model nobody described wrong.
+        if (WasRefused([&] { model.Finalize(); })) {
+            ExpectTrue(false,
+                       order + ": finalization was refused although the only "
+                               "collision is with a name the model chooses for "
+                               "itself");
+            continue;
+        }
+        ExpectTrue(model.GetJointByName("__orvd_free_body_1") == public_joint,
+                   order + ": the caller's joint still answers to the name it "
+                           "was given");
+        ExpectEqual(order + ": one revolute and one free body",
+                    model.num_generalized_positions(), 8);
+        ExpectEqual(order + ": velocities", model.num_generalized_velocities(),
+                    7);
+        ExpectEqual(order + ": the free body still has its own seven positions",
+                    model.GetFreeBodyPositionRange(root).size(), 7);
+        ExpectCoordinatesAreTiled(model, order);
+    }
 }
 
 void CheckAFreeBodyGetsSevenPositionsAndSixVelocities() {
@@ -419,6 +501,23 @@ void CheckAFinalizedModelRefusesToBeChanged() {
                    },
                    "cannot add a revolute joint"),
                "adding a joint to a finalized model is refused by the model");
+    ExpectTrue(RefusalMentions(
+                   [&] {
+                       model.AddPrismaticJoint("late_slider",
+                                               model.world_frame(),
+                                               model.body_frame(other), kXAxis);
+                   },
+                   "cannot add a prismatic joint"),
+               "adding a prismatic joint to a finalized model is refused by the "
+               "model");
+    ExpectTrue(RefusalMentions(
+                   [&] {
+                       model.AddWeldJoint("late_weld", model.world_frame(),
+                                          model.body_frame(other));
+                   },
+                   "cannot add a weld joint"),
+               "adding a weld joint to a finalized model is refused by the "
+               "model");
     ExpectTrue(RefusalMentions([&] { model.DeclareFreeBody(other); },
                                "cannot declare a rigid body free"),
                "declaring a body free in a finalized model is refused by the "
@@ -616,9 +715,11 @@ int main() {
     CheckBranchedTree();
     CheckAWeldConsumesNoCoordinates();
     CheckAFreeBodyGetsSevenPositionsAndSixVelocities();
+    CheckTwoFreeBodiesEachGetTheirOwnRelation();
     CheckMixedJointsAndAFreeBody();
     CheckARelationStatedTowardsTheWorld();
     CheckPositionsAndVelocitiesAreIndexedSeparately();
+    CheckAPrivateNameCollisionSurvivesFinalization();
 
     CheckABodyThatReachesNothingIsNamedAndNothingIsChanged();
     CheckFinalizationHappensOnce();

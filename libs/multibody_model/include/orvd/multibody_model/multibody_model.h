@@ -27,11 +27,19 @@
 /// relation to the world and carry on, and the model that came out would be one
 /// the caller never described.
 ///
-/// A model has two lives. While it is being described it accepts elements and
-/// answers nothing; once finalized it accepts nothing and answers everything.
-/// The split is not ceremony: a count or a coordinate range asked for mid
-/// description would be an answer to "what has been said so far", which is a
-/// different question, and one that the next call could change.
+/// A model has two lives. While it is being described it accepts elements;
+/// once finalized it accepts nothing and answers the questions about what it
+/// came out as. The split is not ceremony: a count or a coordinate range asked
+/// for mid description would be an answer to "what has been said so far", which
+/// is a different question, and one that the next call could change.
+///
+/// Precisely: every query about the final topology — counts, enumeration,
+/// lookup by name, the name behind a handle, whether a body is free, the
+/// coordinate ranges, and creating a context — requires finalization. Three
+/// things do not, because they do not depend on it: the two building helpers
+/// (`world_frame()` and `body_frame()`), the model's own state
+/// (`is_finalized()`), and the gravity vector, which has a value from the
+/// moment the model exists and only stops being settable.
 
 #include <memory>
 #include <string_view>
@@ -160,8 +168,10 @@ class MultibodyModel {
     ///
     /// First the one thing that needed the whole model: every rigid body must
     /// reach the world. Bodies that do not are refused, all of them named in
-    /// one message, and nothing has been changed — the caller can state the
-    /// missing relations and finalize again.
+    /// one message, and the model still describes exactly what it described —
+    /// the caller can state the missing relations and finalize again. (The
+    /// reachability test compacts the paths it walks, so the bookkeeping is not
+    /// byte-for-byte what it was; what it means is.)
     ///
     /// Then the model is committed, and from that point a failure is the end of
     /// it. The underlying tree may be half finalized, and there is no state to
@@ -256,6 +266,14 @@ class MultibodyModel {
         JointHandle joint) const;
 
     /// Where this free body's coordinates sit: seven positions, six velocities.
+    ///
+    /// Seven and six because a quaternion carries three degrees of freedom in
+    /// four numbers. Within the position range: the first four are that
+    /// quaternion, in w, x, y, z order, and the last three are the body
+    /// origin's position in the world. Within the velocity range: the first
+    /// three are the angular velocity, the last three the translational one.
+    /// A caller indexing the range needs this; leaving it unsaid would make the
+    /// range something you could take a block from but not read.
     ///
     /// @throws std::invalid_argument if the handle is invalid or foreign, or if
     /// the body was not declared free — an unfree body's coordinates belong to
