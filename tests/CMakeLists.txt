@@ -496,6 +496,7 @@ add_test(NAME verify_compiled_system_plan COMMAND verify_compiled_system_plan)
 # numerical integrator; it verifies the dynamically sized contiguous mapping,
 # component tolerances and the dedicated trial-context boundary used by G44.
 add_executable(verify_system_rhs_bridge
+    integrators/continuous_state_advancer_header_self_containment.cc
     integrators/system_rhs_bridge_header_self_containment.cc
     integrators/verify_system_rhs_bridge.cc)
 orvd_configure_first_party_target(verify_system_rhs_bridge)

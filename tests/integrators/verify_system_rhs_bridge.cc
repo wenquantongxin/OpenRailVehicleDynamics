@@ -16,6 +16,7 @@
 namespace {
 
 using orvd::integrators::ContinuousStateAdvancer;
+using orvd::integrators::ContinuousStateDenseOutputInterval;
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::ContinuousStateRhs;
 using orvd::integrators::NoCallTimeAppliedForces;
@@ -32,6 +33,24 @@ static_assert(std::is_abstract_v<ContinuousStateRhs>);
 static_assert(std::is_base_of_v<ContinuousStateRhs, SystemRhsBridge>);
 static_assert(!std::is_copy_constructible_v<SystemRhsBridge>);
 static_assert(!std::is_move_constructible_v<SystemRhsBridge>);
+
+class CompleteAdvancerContract final : public ContinuousStateAdvancer {
+   public:
+    int continuous_state_size() const override { return 0; }
+    double current_time_seconds() const override { return 0.0; }
+    void CopyCurrentState(Eigen::Ref<Eigen::VectorXd>) const override {}
+    void AdvanceTo(double) override {}
+    void ReinitializeAfterExternalChange(
+        double, const Eigen::Ref<const Eigen::VectorXd>&) override {}
+    std::optional<ContinuousStateDenseOutputInterval> dense_output_interval()
+        const override {
+        return std::nullopt;
+    }
+    void CopyDenseState(double,
+                        Eigen::Ref<Eigen::VectorXd>) const override {}
+};
+
+static_assert(!std::is_abstract_v<CompleteAdvancerContract>);
 
 int failure_count = 0;
 
