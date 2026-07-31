@@ -5,7 +5,7 @@
 ///
 /// A pose is a rotation and a translation, and nothing else. Which two frames
 /// it relates is the query's business and is said in the query's name: what
-/// `CalcWorldPose(context, body)` returns is that body's frame in the world
+/// `CalcPoseInWorld(context, body)` returns is that body's frame in the world
 /// frame, expressed in the world frame, and there is nowhere else for the
 /// answer to be measured from. Putting the frames into the type instead would
 /// make `WorldPose` a type that a relative-pose query could not return, and the
@@ -21,12 +21,15 @@
 /// would misuse one, but because giving one now would freeze an input
 /// validation policy before there is anything to validate it for.
 ///
-/// The accessors are reference-qualified. A query returns a pose by value, so
-/// `const auto& R = model.CalcPoseInWorld(context, body).rotation();` binds a
-/// reference to a member of a temporary that dies at the end of that statement.
-/// The `&&` overloads return by value, which makes that line copy rather than
-/// dangle; the `const&` overloads keep the zero-copy read for a pose the caller
-/// is holding.
+/// The accessors are reference-qualified, and every rvalue category returns by
+/// value. A query returns a pose by value, so
+/// `const auto& R = model.CalcPoseInWorld(context, body).rotation();` would
+/// otherwise bind a reference to a member of a temporary that dies at the end of
+/// that statement. Both `&&` and `const&&` are needed: overload resolution sends
+/// a `const` rvalue to the `const&` overload when there is no `const&&` one, so
+/// covering only the non-const case leaves the same line dangling for anything
+/// that produces a `const RigidPose`. Only the `const&` overload hands out a
+/// reference, and only for a pose the caller is holding.
 
 #include <utility>
 
@@ -41,6 +44,7 @@ class RigidPose {
     /// The rotation, as a 3×3 matrix whose columns are the posed frame's axes.
     [[nodiscard]] const Eigen::Matrix3d& rotation() const& { return rotation_; }
     [[nodiscard]] Eigen::Matrix3d rotation() && { return std::move(rotation_); }
+    [[nodiscard]] Eigen::Matrix3d rotation() const&& { return rotation_; }
 
     /// The position of the posed frame's origin.
     [[nodiscard]] const Eigen::Vector3d& translation() const& {
@@ -49,6 +53,7 @@ class RigidPose {
     [[nodiscard]] Eigen::Vector3d translation() && {
         return std::move(translation_);
     }
+    [[nodiscard]] Eigen::Vector3d translation() const&& { return translation_; }
 
    private:
     friend class MultibodyModel;

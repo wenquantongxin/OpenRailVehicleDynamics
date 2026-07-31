@@ -106,6 +106,42 @@ void CheckQuaternionStateIsUnitLength() {
            "the prescribed floating quaternion must be unit length");
 }
 
+void CheckTheElbowMountIsTurnedAndNotOnTheWorld() {
+    // The rotated mount is what makes the cross-process comparison exercise a
+    // non-identity fixed-frame rotation at all. Nothing downstream would notice
+    // if it quietly became identity: both sides would degrade together and
+    // agree. So the premise is stated here rather than assumed.
+    const orvd_contract::ScenarioDefinition scenario =
+        orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(
+            "dynamic_excitation");
+    const orvd_contract::RevoluteJointDefinition* elbow = nullptr;
+    for (const auto& joint : scenario.revolute_joints)
+        if (joint.name == "elbow_joint") elbow = &joint;
+    Expect(elbow != nullptr, "the fixture must contain the elbow joint");
+    if (elbow == nullptr) return;
+
+    Expect(!elbow->parent_link_name.empty(),
+           "the elbow hangs off a link, not off the world: a frame fixed to the "
+           "world is not something the modelling facade expresses");
+    Expect(!elbow->parent_frame_rotation_in_parent.isIdentity(0.0),
+           "the elbow's mount must be turned, or no non-identity fixed-frame "
+           "rotation enters the position chain anywhere in this comparison");
+
+    // The rotation itself, so that a change to it is a change somebody made on
+    // purpose. A quarter of a radian about y, give or take.
+    const double angle = 0.37;
+    Eigen::Matrix3d expected;
+    expected << std::cos(angle), 0.0, std::sin(angle), 0.0, 1.0, 0.0,
+        -std::sin(angle), 0.0, std::cos(angle);
+    Expect((elbow->parent_frame_rotation_in_parent - expected)
+                   .cwiseAbs()
+                   .maxCoeff() < 1e-15,
+           "the elbow's mount is a rotation of 0.37 rad about y");
+    Expect(elbow->axis_in_parent.isApprox(Eigen::Vector3d::UnitX()),
+           "and its axis is stated in that turned frame, so a dropped rotation "
+           "moves the axis as well as the frame");
+}
+
 void CheckLooseObservationStreamParsing() {
     orvd_contract::ObservationStream written;
     written.topology_facts = {{"num_positions", 9}, {"num_velocities", 8}};
@@ -147,6 +183,7 @@ void CheckLooseObservationStreamParsing() {
 int main() {
     CheckScenarioStatesAreDimensionallyConsistent();
     CheckQuaternionStateIsUnitLength();
+    CheckTheElbowMountIsTurnedAndNotOnTheWorld();
     CheckLooseObservationStreamParsing();
 
     if (failure_count > 0) {

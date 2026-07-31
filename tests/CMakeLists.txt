@@ -359,11 +359,17 @@ add_test(NAME verify_multibody_model_position_kinematics
          COMMAND verify_multibody_model_position_kinematics)
 
 # The candidate side of the cross-process comparison. It links the modelling
-# facade and the shared scenario contract, and nothing else — no Drake, not even
-# transitively, which is the property the launcher checks before it believes any
-# number this program prints.
+# facade and the shared scenario contract, which brings in the landed tree
+# statically — that is the product. What it must never link is the installed
+# `libdrake.so`: that library and the vendored copy export the same `drake::`
+# symbols, so having both in one address space is an ODR violation whose likely
+# symptom is a comparison that appears to pass. The gate below checks it, at
+# configure time, because a runtime check would be one more thing that has to be
+# remembered.
 add_executable(emit_orvd_position_kinematics_observations
     orvd_candidate/emit_orvd_position_kinematics_observations.cc)
 orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
 target_link_libraries(emit_orvd_position_kinematics_observations
     PRIVATE orvd_multibody_model orvd_test_contract)
+orvd_verify_targets_have_no_drake_dependency(
+    emit_orvd_position_kinematics_observations)

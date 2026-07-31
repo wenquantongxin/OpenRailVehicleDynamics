@@ -19,6 +19,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -42,6 +44,28 @@ using orvd::multibody_runtime::RigidBodyInertiaParameters;
 static_assert(!std::is_default_constructible_v<RigidPose>);
 static_assert(!std::is_constructible_v<RigidPose, Eigen::Matrix3d,
                                        Eigen::Vector3d>);
+
+// Only a pose the caller is holding hands out a reference. Every rvalue
+// category returns by value, because a query returns a pose by value and
+// `const auto& R = model.CalcPoseInWorld(...).rotation();` would otherwise
+// reference a member of something that is already gone. `const&&` is not
+// redundant with `&&`: without it a `const` rvalue resolves to the `const&`
+// overload and dangles exactly as before.
+static_assert(std::is_same_v<decltype(std::declval<const RigidPose&>().rotation()),
+                             const Eigen::Matrix3d&>);
+static_assert(std::is_same_v<decltype(std::declval<RigidPose&&>().rotation()),
+                             Eigen::Matrix3d>);
+static_assert(
+    std::is_same_v<decltype(std::declval<const RigidPose&&>().rotation()),
+                   Eigen::Matrix3d>);
+static_assert(
+    std::is_same_v<decltype(std::declval<const RigidPose&>().translation()),
+                   const Eigen::Vector3d&>);
+static_assert(std::is_same_v<decltype(std::declval<RigidPose&&>().translation()),
+                             Eigen::Vector3d>);
+static_assert(
+    std::is_same_v<decltype(std::declval<const RigidPose&&>().translation()),
+                   Eigen::Vector3d>);
 
 int failure_count = 0;
 
@@ -189,6 +213,17 @@ void CheckAChainOfStatedRelations() {
     ExpectPoseIs(model.CalcPoseInWorld(*context, model.world_frame()),
                  Eigen::Matrix3d::Identity(), Eigen::Vector3d::Zero(),
                  "the world frame's own pose");
+
+    // Reading straight off the returned temporary, which is how a caller will
+    // most often write it. The value has to survive the end of the statement.
+    const Eigen::Matrix3d rotation_from_temporary =
+        model.CalcPoseInWorld(*context, arm).rotation();
+    const Eigen::Vector3d translation_from_temporary =
+        model.CalcPoseInWorld(*context, slider).translation();
+    ExpectTrue(rotation_from_temporary == R_W_arm,
+               "a rotation read off the returned temporary is the rotation");
+    ExpectTrue(translation_from_temporary == p_W_slider,
+               "and a translation read off one is the translation");
 }
 
 void CheckANonIdentityFixedFrameRotationEntersTheChain() {

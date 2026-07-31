@@ -133,16 +133,34 @@ int main(int argc, char** argv) {
     }
     for (const auto& free_body_name : scenario.free_body_names) {
         const auto& body = plant.GetBodyByName(free_body_name);
+        // Asked of the joint the plant actually gave this body, sizes included.
+        // Writing 7 and 6 as literals would be this emitter agreeing with
+        // itself about the one thing the fact exists to report.
+        const drake::multibody::Joint<double>* floating_joint = nullptr;
+        for (drake::multibody::JointIndex index{0};
+             index < plant.num_joints(); ++index) {
+            const auto& joint = plant.get_joint(index);
+            if (joint.child_body().index() == body.index())
+                floating_joint = &joint;
+        }
+        if (floating_joint == nullptr) {
+            std::fprintf(stderr,
+                         "the plant gave '%s' no inboard joint\n",
+                         free_body_name.c_str());
+            return 1;
+        }
         stream.topology_facts.push_back(
             {"free_body_position_range_start[" + free_body_name + "]",
-             body.floating_positions_start()});
+             floating_joint->position_start()});
         stream.topology_facts.push_back(
-            {"free_body_position_range_size[" + free_body_name + "]", 7});
+            {"free_body_position_range_size[" + free_body_name + "]",
+             floating_joint->num_positions()});
         stream.topology_facts.push_back(
             {"free_body_velocity_range_start[" + free_body_name + "]",
-             body.floating_velocities_start_in_v()});
+             floating_joint->velocity_start()});
         stream.topology_facts.push_back(
-            {"free_body_velocity_range_size[" + free_body_name + "]", 6});
+            {"free_body_velocity_range_size[" + free_body_name + "]",
+             floating_joint->num_velocities()});
     }
 
     Eigen::MatrixXd mass_matrix(plant.num_velocities(), plant.num_velocities());

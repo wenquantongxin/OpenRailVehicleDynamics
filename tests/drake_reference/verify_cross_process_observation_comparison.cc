@@ -189,6 +189,11 @@ void ExpectRequirementsCoverPositionKinematics(
                           std::to_string(position_index) + "]"),
                "every generalized position must be read back: index " +
                    std::to_string(position_index));
+    for (const char* fact : {"num_positions", "num_velocities",
+                             "num_rigid_bodies_excluding_world"})
+        Expect(has_fact(fact),
+               std::string("the coordinate counts must be required facts: ") +
+                   fact);
     for (const auto& joint : scenario.revolute_joints)
         for (const char* fact :
              {"joint_position_range_start", "joint_position_range_size",
@@ -398,15 +403,38 @@ int main(int argc, char** argv) {
         // coordinates out the way this fixture assumes. Comparing the two sides
         // is not enough: a reordering that happened on both at once would agree
         // with itself. So the layout this fixture depends on is pinned here.
+        const auto expect_fact = [&reference](const std::string& name,
+                                              int expected) {
+            const auto* fact = reference.FindTopologyFact(name);
+            Expect(fact != nullptr, "the reference must report " + name);
+            if (fact != nullptr)
+                Expect(fact->value == expected,
+                       name + " is " + std::to_string(fact->value) +
+                           ", but this fixture's scenario reads its state as "
+                           "though it were " + std::to_string(expected));
+        };
+        // The whole layout, element by element. Pinning only where the free
+        // body starts would let the two revolute coordinates swap places on
+        // both sides at once and still pass.
+        expect_fact("joint_position_range_start[shoulder_joint]", 0);
+        expect_fact("joint_position_range_size[shoulder_joint]", 1);
+        expect_fact("joint_velocity_range_start[shoulder_joint]", 0);
+        expect_fact("joint_velocity_range_size[shoulder_joint]", 1);
+        expect_fact("joint_position_range_start[elbow_joint]", 1);
+        expect_fact("joint_position_range_size[elbow_joint]", 1);
+        expect_fact("joint_velocity_range_start[elbow_joint]", 1);
+        expect_fact("joint_velocity_range_size[elbow_joint]", 1);
+        expect_fact("free_body_position_range_start[floating_link]", 2);
+        expect_fact("free_body_position_range_size[floating_link]", 7);
+        expect_fact("free_body_velocity_range_start[floating_link]", 2);
+        expect_fact("free_body_velocity_range_size[floating_link]", 6);
+
         const auto* free_body_velocity_start = reference.FindTopologyFact(
             "free_body_velocity_range_start[" + scenario.free_body_names.front() +
             "]");
         Expect(free_body_velocity_start != nullptr,
                "the reference must report the free body's velocity range");
         if (free_body_velocity_start != nullptr) {
-            Expect(free_body_velocity_start->value == 2,
-                   "this fixture's free body starts at velocity 2, after the "
-                   "two revolute coordinates");
             // The scenario calls the last three generalized forces translational
             // because they belong to the free body's linear velocities, which
             // begin three past its angular ones. If the layout moved, that
@@ -421,6 +449,31 @@ int main(int argc, char** argv) {
                        free_body_velocity_start->value + 3,
                    "the scenario's first translational generalized force must "
                    "be the free body's first linear velocity");
+        }
+
+        // Which branch judges which quantity is part of the claim. A run that
+        // never left the near-zero branch would have compared nothing
+        // proportionally, and "the tolerance is 1e-8" would be a statement
+        // about a number nobody applied. Checked per dimension, because the
+        // crossover sits at a different magnitude for each.
+        if (excitation == "dynamic_excitation") {
+            const auto expect_relative = [&reference](
+                                             const std::string& name,
+                                             orvd_contract::ObservationKind kind) {
+                const auto* observation = reference.FindObservation(name);
+                Expect(observation != nullptr,
+                       "the reference must report " + name);
+                if (observation == nullptr) return;
+                Expect(orvd_comparison::SelectToleranceBranch(observation->value,
+                                                              kind) ==
+                           orvd_comparison::ToleranceBranch::kRelativeError,
+                       name + " must be judged proportionally, not against its "
+                              "dimension's near-zero floor");
+            };
+            expect_relative("pose_lower_link_translation[1]",
+                            orvd_contract::ObservationKind::kTranslationMeters);
+            expect_relative("state_readback_position[0]",
+                            orvd_contract::ObservationKind::kAngleRadians);
         }
 
         const auto verdict = orvd_comparison::CompareObservationStreams(

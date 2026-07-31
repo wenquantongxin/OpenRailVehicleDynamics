@@ -46,6 +46,35 @@ orvd_comparison::ComparisonRequirements MakeRequirements() {
     return requirements;
 }
 
+void CheckWhichBranchJudgesWhichMagnitude() {
+    // The branch is chosen by comparing the relative allowance against the
+    // dimension's own floor, so tightening the relative limit moves the
+    // crossover up. These are the magnitudes the rail-vehicle quantities
+    // actually sit at, pinned so that a later change to either constant has to
+    // be a change somebody decided on rather than one that happened.
+    using orvd_comparison::SelectToleranceBranch;
+    using orvd_comparison::ToleranceBranch;
+    using orvd_contract::ObservationKind;
+
+    Expect(SelectToleranceBranch(1.0, ObservationKind::kTranslationMeters) ==
+               ToleranceBranch::kRelativeError,
+           "a translation of a metre is judged proportionally");
+    Expect(SelectToleranceBranch(1e-5, ObservationKind::kTranslationMeters) ==
+               ToleranceBranch::kNearZeroAbsoluteError,
+           "a contact-scale translation of ten micrometres is judged against "
+           "the absolute floor, because a proportional allowance there would be "
+           "smaller than the floor itself");
+    Expect(SelectToleranceBranch(0.37, ObservationKind::kAngleRadians) ==
+               ToleranceBranch::kRelativeError,
+           "a joint angle of a third of a radian is judged proportionally");
+    Expect(SelectToleranceBranch(1e-6, ObservationKind::kAngleRadians) ==
+               ToleranceBranch::kNearZeroAbsoluteError,
+           "a microradian is judged against the absolute floor");
+    Expect(SelectToleranceBranch(1.0e3, ObservationKind::kForceNewtons) ==
+               ToleranceBranch::kRelativeError,
+           "a kilonewton is judged proportionally");
+}
+
 void CheckRelativeAndNearZeroLimits() {
     const auto requirements = MakeRequirements();
     const auto reference = MakeStream(100.0);
@@ -159,6 +188,7 @@ void CheckLooseParsingAtThePointOfUse() {
 }  // namespace
 
 int main() {
+    CheckWhichBranchJudgesWhichMagnitude();
     CheckRelativeAndNearZeroLimits();
     CheckRotationAndRequiredObservationFailures();
     CheckLooseParsingAtThePointOfUse();

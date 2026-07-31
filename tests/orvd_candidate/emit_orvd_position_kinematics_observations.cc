@@ -6,16 +6,22 @@
 // declares no tolerance, and cannot certify itself. Two sides that each
 // declared their own acceptance rule could agree on a wrong one.
 //
-// Runs in its own process, and links no Drake at all — not the library, not a
-// vendored copy through some other target. That is checked by the launcher
-// rather than asserted here, because a claim a program makes about itself is
-// the one thing it cannot check.
+// Runs in its own process and links no installed `libdrake.so`. It does link
+// the landed tree, statically, which is the vendored Drake source — that is what
+// the product is, and pretending otherwise here would be describing a program
+// that does not exist. What must not happen is the installed library being in
+// the same address space as the vendored copy: both export the same `drake::`
+// symbols, and co-linking them is an ODR violation whose likely symptom is a
+// comparison that appears to pass. The build gate checks that, not this file:
+// a claim a program makes about its own linkage is the one claim it cannot
+// check.
 //
 // Only what G31 has landed is emitted. The mass matrix and the inverse dynamics
 // belong to later goals; the judge's position-kinematics requirement set is what
 // says so, and it refuses a missing observation rather than skipping it.
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>

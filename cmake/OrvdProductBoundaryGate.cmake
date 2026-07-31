@@ -343,3 +343,56 @@ function(orvd_verify_product_targets_have_no_drake_dependency)
     message(STATUS
         "ORVD product boundary: no Drake dependency in ${checked_report}")
 endfunction()
+
+# The same check, on targets named outright rather than found by directory.
+#
+# A cross-process candidate is not a product module — it is a test program — but
+# it carries the same prohibition for a sharper reason: it exists to produce
+# numbers that are compared against Drake's, and if it linked the installed
+# library those numbers would be Drake's. The directory-based entry point cannot
+# reach it, because it is declared beside the tests that consume it rather than
+# in a module of its own.
+#
+# Call after the targets exist. Names that are not targets are a failure rather
+# than a skip: a gate that silently checks nothing is worse than no gate, because
+# it is written down as if it did something.
+function(orvd_verify_targets_have_no_drake_dependency)
+    set(named_targets ${ARGN})
+    if(NOT named_targets)
+        message(FATAL_ERROR
+            "orvd_verify_targets_have_no_drake_dependency was called with no "
+            "target, which cannot be what the caller meant")
+    endif()
+
+    set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS "")
+    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_VISITED "")
+
+    set(configuration_names "")
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(configuration_names ${CMAKE_CONFIGURATION_TYPES})
+    elseif(CMAKE_BUILD_TYPE)
+        set(configuration_names ${CMAKE_BUILD_TYPE})
+    endif()
+    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES
+                 "${configuration_names}")
+
+    foreach(named_target IN LISTS named_targets)
+        if(NOT TARGET ${named_target})
+            message(FATAL_ERROR
+                "ORVD boundary: '${named_target}' is not a target, so the "
+                "prohibition written down for it checks nothing")
+        endif()
+        _orvd_walk_link_closure("${named_target}" "${named_target}" TRUE)
+    endforeach()
+
+    get_property(violations GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS)
+    if(violations)
+        list(JOIN violations "\n  " violation_report)
+        message(FATAL_ERROR
+            "ORVD boundary violated. These targets must not link Drake:\n  "
+            "${violation_report}")
+    endif()
+    list(JOIN named_targets ", " checked_targets)
+    message(STATUS
+        "ORVD boundary: ${checked_targets} link no Drake")
+endfunction()
