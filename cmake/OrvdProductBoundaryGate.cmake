@@ -1,5 +1,20 @@
 # Configure-time gate: no product target may depend on Drake.
 #
+# An architectural check on the CMake graph, and best-effort by construction. It
+# models the ways a dependency can be written down — a library-selection option
+# in its several spellings, an imported target's artefact, a link edge through a
+# wrapper — and each of those is a separate thing to get right. It cannot be the
+# last word even in principle: `cmake_language(DEFER)` can change the graph after
+# this has run, and a directory-scoped imported target is invisible from where
+# the check happens. What it buys is that the ordinary ways of introducing the
+# dependency are refused at the moment they are written, with a message naming
+# the target.
+#
+# Where a guarantee is needed rather than a habit, check the built artefact:
+# tests/orvd_candidate/verify_candidate_links_no_installed_drake.cmake asks the
+# linked file what it loads, which has one answer regardless of how it was
+# spelled.
+#
 # The product vendors Drake source. It must not link Drake. Those two facts are
 # easy to keep straight while someone is looking and easy to lose the moment a
 # new target picks up a convenient dependency, so this is checked by the build
@@ -267,11 +282,6 @@ function(_orvd_walk_link_closure product_target item is_first_party)
     set(item_is_first_party FALSE)
     if(NOT is_imported)
         set(item_is_first_party TRUE)
-        get_target_property(item_source_directory ${item} SOURCE_DIR)
-        if(item_source_directory)
-            set_property(GLOBAL APPEND PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES
-                         "${item_source_directory}")
-        endif()
     endif()
     _orvd_check_link_options("${product_target}" ${item} ${item_is_first_party})
 
@@ -357,7 +367,6 @@ function(orvd_verify_product_targets_have_no_drake_dependency)
     set_property(GLOBAL PROPERTY ORVD_BOUNDARY_VISITED "")
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES "")
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_TARGETS "")
-    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES "")
 
     set(configuration_names "")
     if(CMAKE_CONFIGURATION_TYPES)
@@ -403,68 +412,3 @@ function(orvd_verify_product_targets_have_no_drake_dependency)
         "ORVD product boundary: no Drake dependency in ${checked_report}")
 endfunction()
 
-# The same check, on targets named outright rather than found by directory.
-#
-# A cross-process candidate is not a product module — it is a test program — but
-# it carries the same prohibition for a sharper reason: it exists to produce
-# numbers that are compared against Drake's, and if it linked the installed
-# library those numbers would be Drake's. The directory-based entry point cannot
-# reach it, because it is declared beside the tests that consume it rather than
-# in a module of its own.
-#
-# Call after the targets exist. Names that are not targets are a failure rather
-# than a skip: a gate that silently checks nothing is worse than no gate, because
-# it is written down as if it did something.
-function(orvd_verify_targets_have_no_drake_dependency)
-    set(named_targets ${ARGN})
-    if(NOT named_targets)
-        message(FATAL_ERROR
-            "orvd_verify_targets_have_no_drake_dependency was called with no "
-            "target, which cannot be what the caller meant")
-    endif()
-
-    set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS "")
-    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_VISITED "")
-    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES "")
-
-    set(configuration_names "")
-    if(CMAKE_CONFIGURATION_TYPES)
-        set(configuration_names ${CMAKE_CONFIGURATION_TYPES})
-    elseif(CMAKE_BUILD_TYPE)
-        set(configuration_names ${CMAKE_BUILD_TYPE})
-    endif()
-    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES
-                 "${configuration_names}")
-
-    set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES "")
-    foreach(named_target IN LISTS named_targets)
-        if(NOT TARGET ${named_target})
-            message(FATAL_ERROR
-                "ORVD boundary: '${named_target}' is not a target, so the "
-                "prohibition written down for it checks nothing")
-        endif()
-        _orvd_walk_link_closure("${named_target}" "${named_target}" TRUE)
-
-        # The same audit the directory entry performs, over the directories this
-        # target's own closure was declared in. A directory-scoped imported
-        # target is invisible from here, so the walk above sees a neutral name
-        # and a bare link item — which is exactly what an escape looks like.
-        get_property(closure_directories GLOBAL
-            PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES)
-        foreach(closure_directory IN LISTS closure_directories)
-            _orvd_audit_directory_imported_targets(
-                "${named_target}" "${closure_directory}")
-        endforeach()
-    endforeach()
-
-    get_property(violations GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS)
-    if(violations)
-        list(JOIN violations "\n  " violation_report)
-        message(FATAL_ERROR
-            "ORVD boundary violated. These targets must not link Drake:\n  "
-            "${violation_report}")
-    endif()
-    list(JOIN named_targets ", " checked_targets)
-    message(STATUS
-        "ORVD boundary: ${checked_targets} link no Drake")
-endfunction()

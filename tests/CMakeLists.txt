@@ -274,6 +274,16 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
                      $<TARGET_FILE:emit_drake_reference_observations>
                      $<TARGET_FILE:emit_orvd_position_kinematics_observations>)
 
+    # The same check, on the one program here that does load Drake. A check that
+    # only ever runs against something clean has never been shown to fail, and a
+    # check that cannot fail is not a check.
+    add_test(NAME verify_candidate_drake_check_discriminates
+             COMMAND ${CMAKE_COMMAND}
+                     -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake)
+    set_tests_properties(verify_candidate_drake_check_discriminates
+                         PROPERTIES WILL_FAIL TRUE)
+
     # Measures the reference's kinematics cache invalidation semantics on the
     # pinned Drake. Reference-only probe: the cache-entry accessors are Drake
     # public API but must not shape any ORVD interface.
@@ -371,8 +381,11 @@ add_executable(emit_orvd_position_kinematics_observations
 orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
 target_link_libraries(emit_orvd_position_kinematics_observations
     PRIVATE orvd_multibody_model orvd_test_contract)
-# Registered here, checked at the top level once every target exists. Checking
-# it on the spot would prove only that nothing had linked Drake into it *yet*:
-# a later target_link_libraries in any file would go unexamined.
-set_property(GLOBAL APPEND PROPERTY ORVD_DRAKE_FREE_CANDIDATE_TARGETS
-             emit_orvd_position_kinematics_observations)
+# Asked of the built program rather than of the CMake graph. A graph check has to
+# model every spelling of a dependency and still cannot be final, because
+# cmake_language(DEFER) can change the graph after it has run. The linked file
+# has one answer.
+add_test(NAME verify_candidate_links_no_installed_drake
+         COMMAND ${CMAKE_COMMAND}
+                 -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_position_kinematics_observations>
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake)
