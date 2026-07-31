@@ -59,9 +59,9 @@ find_package(Eigen3 3.4 CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 
 # --- Module graph, wired in as each module is implemented ---
-# Dependency direction: external -> multibody_runtime
-#   -> {system_assembly, forces}
-#   -> integrators
+# Dependency direction: multibody_runtime + internal rigid tree
+#   -> multibody_model -> system_assembly
+#   -> {forces, integrators}
 #   -> equilibrium ; tests last.
 # These listed directories are the product module roots. Every non-imported
 # target defined in one of them or a descendant is subject to the Drake boundary

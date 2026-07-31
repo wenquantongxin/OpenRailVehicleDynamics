@@ -461,6 +461,17 @@ target_link_libraries(verify_multibody_model_forward_dynamics
 add_test(NAME verify_multibody_model_forward_dynamics
          COMMAND verify_multibody_model_forward_dynamics)
 
+# G40's immutable assembly description.  It links only the first-party
+# modelling facade and proves that description construction observes finalized
+# topology without creating a runtime context or workspace.
+add_executable(verify_system_assembly_description
+    system_assembly/verify_system_assembly_description.cc)
+orvd_configure_first_party_target(verify_system_assembly_description)
+target_link_libraries(verify_system_assembly_description
+    PRIVATE orvd_system_assembly)
+add_test(NAME verify_system_assembly_description
+         COMMAND verify_system_assembly_description)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed
