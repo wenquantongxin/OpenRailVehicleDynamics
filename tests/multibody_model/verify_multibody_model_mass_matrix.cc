@@ -162,7 +162,7 @@ class RichMassFixture {
 
         root_joint = model.AddRevoluteJoint(
             "root_joint", model.world_frame(), model.body_frame(root),
-            Eigen::Vector3d(0.31, -0.47, 0.83));
+            Eigen::Vector3d(0.31, -0.47, 0.83), 0.0);
 
         FixedFramePoseParameters slider_mount_pose;
         slider_mount_pose.R_PF =
@@ -173,7 +173,7 @@ class RichMassFixture {
             model.AddFixedFrame("slider_mount", root, slider_mount_pose);
         slider_joint = model.AddPrismaticJoint(
             "slider_joint", slider_mount, model.body_frame(leaf),
-            Eigen::Vector3d(0.91, 0.28, -0.19));
+            Eigen::Vector3d(0.91, 0.28, -0.19), 0.0);
 
         FixedFramePoseParameters weld_mount_pose;
         weld_mount_pose.R_PF =
@@ -343,7 +343,7 @@ void CheckSingleRevoluteAnalyticMass() {
     const auto body = model.AddRigidBody("body", inertia);
     const auto joint = model.AddRevoluteJoint(
         "joint", model.world_frame(), model.body_frame(body),
-        Eigen::Vector3d::UnitZ());
+        Eigen::Vector3d::UnitZ(), 0.0);
     model.Finalize();
     auto context = model.CreateDefaultContext();
     Eigen::VectorXd positions(1);

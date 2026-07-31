@@ -219,11 +219,11 @@ void CheckSerialChain() {
         model.AddRigidBody("second", SolidishBody(1.0));
     const RigidBodyHandle third = model.AddRigidBody("third", SolidishBody(1.0));
     model.AddRevoluteJoint("world_to_first", model.world_frame(),
-                           model.body_frame(first), kZAxis);
+                           model.body_frame(first), kZAxis, 0.0);
     model.AddRevoluteJoint("first_to_second", model.body_frame(first),
-                           model.body_frame(second), kZAxis);
+                           model.body_frame(second), kZAxis, 0.0);
     model.AddRevoluteJoint("second_to_third", model.body_frame(second),
-                           model.body_frame(third), kZAxis);
+                           model.body_frame(third), kZAxis, 0.0);
     ExpectScenario(&model, "serial chain", 3, 3);
 }
 
@@ -236,13 +236,13 @@ void CheckBranchedTree() {
         model.AddRigidBody("shallow", SolidishBody(1.0));
     const RigidBodyHandle tip = model.AddRigidBody("tip", SolidishBody(1.0));
     model.AddRevoluteJoint("world_to_shoulder", model.world_frame(),
-                           model.body_frame(shoulder), kZAxis);
+                           model.body_frame(shoulder), kZAxis, 0.0);
     model.AddRevoluteJoint("shoulder_to_deep", model.body_frame(shoulder),
-                           model.body_frame(deep), kZAxis);
+                           model.body_frame(deep), kZAxis, 0.0);
     model.AddRevoluteJoint("deep_to_tip", model.body_frame(deep),
-                           model.body_frame(tip), kZAxis);
+                           model.body_frame(tip), kZAxis, 0.0);
     model.AddRevoluteJoint("shoulder_to_shallow", model.body_frame(shoulder),
-                           model.body_frame(shallow), kZAxis);
+                           model.body_frame(shallow), kZAxis, 0.0);
     ExpectScenario(&model, "branched tree", 4, 4);
 }
 
@@ -253,7 +253,7 @@ void CheckAWeldConsumesNoCoordinates() {
     const RigidBodyHandle welded =
         model.AddRigidBody("welded", SolidishBody(1.0));
     model.AddRevoluteJoint("world_to_hinged", model.world_frame(),
-                           model.body_frame(hinged), kZAxis);
+                           model.body_frame(hinged), kZAxis, 0.0);
     model.AddWeldJoint("the_weld", model.body_frame(hinged),
                        model.body_frame(welded));
     ExpectScenario(&model, "weld", 1, 1);
@@ -317,7 +317,7 @@ void CheckAPrivateNameCollisionSurvivesFinalization() {
         // The name the private joint would reach for first.
         const JointHandle public_joint = model.AddRevoluteJoint(
             "__orvd_free_body_1", model.body_frame(root),
-            model.body_frame(child), kZAxis);
+            model.body_frame(child), kZAxis, 0.0);
         if (!free_first) model.DeclareFreeBody(root);
 
         // Stated as its own claim: the private name is chosen here, and if it
@@ -362,9 +362,9 @@ void CheckMixedJointsAndAFreeBody() {
     const RigidBodyHandle floating =
         model.AddRigidBody("floating", SolidishBody(1.0));
     model.AddRevoluteJoint("world_to_hinged", model.world_frame(),
-                           model.body_frame(hinged), kZAxis);
+                           model.body_frame(hinged), kZAxis, 0.0);
     model.AddPrismaticJoint("hinged_to_sliding", model.body_frame(hinged),
-                            model.body_frame(sliding), kXAxis);
+                            model.body_frame(sliding), kXAxis, 0.0);
     model.AddWeldJoint("sliding_to_welded", model.body_frame(sliding),
                        model.body_frame(welded));
     model.DeclareFreeBody(floating);
@@ -381,7 +381,7 @@ void CheckARelationStatedTowardsTheWorld() {
     const RigidBodyHandle backwards =
         model.AddRigidBody("backwards", SolidishBody(1.0));
     model.AddRevoluteJoint("towards_world", model.body_frame(backwards),
-                           model.world_frame(), kZAxis);
+                           model.world_frame(), kZAxis, 0.0);
     ExpectScenario(&model, "reversed relation", 1, 1);
 }
 
@@ -401,7 +401,7 @@ void CheckPositionsAndVelocitiesAreIndexedSeparately() {
         model.AddRigidBody("hanging", SolidishBody(1.0));
     model.DeclareFreeBody(floating);
     model.AddRevoluteJoint("outboard", model.body_frame(floating),
-                           model.body_frame(hanging), kZAxis);
+                           model.body_frame(hanging), kZAxis, 0.0);
     ExpectScenario(&model, "joint outboard of a free body", 8, 7);
 
     const JointHandle outboard = model.GetJointByName("outboard");
@@ -433,7 +433,7 @@ void CheckABodyThatReachesNothingIsNamedAndNothingIsChanged() {
     const RigidBodyHandle also_adrift =
         model.AddRigidBody("also_adrift", SolidishBody(1.0));
     model.AddRevoluteJoint("hinge", model.world_frame(),
-                           model.body_frame(attached), kZAxis);
+                           model.body_frame(attached), kZAxis, 0.0);
 
     ExpectTrue(RefusalMentions([&] { model.Finalize(); }, "'adrift'"),
                "an unreachable body is named in the refusal");
@@ -452,7 +452,7 @@ void CheckABodyThatReachesNothingIsNamedAndNothingIsChanged() {
     // that is not terminal, and it is only sound because nothing was committed.
     model.DeclareFreeBody(adrift);
     model.AddRevoluteJoint("second_hinge", model.body_frame(attached),
-                           model.body_frame(also_adrift), kZAxis);
+                           model.body_frame(also_adrift), kZAxis, 0.0);
     model.Finalize();
     ExpectTrue(model.is_finalized(),
                "a model that failed its precheck finalizes once the missing "
@@ -476,7 +476,7 @@ void CheckAFinalizedModelRefusesToBeChanged() {
         model.AddRigidBody("other", SolidishBody(1.0));
     model.DeclareFreeBody(body);
     model.AddRevoluteJoint("hinge", model.body_frame(body),
-                           model.body_frame(other), kZAxis);
+                           model.body_frame(other), kZAxis, 0.0);
     model.Finalize();
 
     // Each refusal has to come from this layer's own gate, named for what was
@@ -497,7 +497,7 @@ void CheckAFinalizedModelRefusesToBeChanged() {
     ExpectTrue(RefusalMentions(
                    [&] {
                        model.AddRevoluteJoint("late_hinge", model.world_frame(),
-                                              model.body_frame(other), kZAxis);
+                                              model.body_frame(other), kZAxis, 0.0);
                    },
                    "cannot add a revolute joint"),
                "adding a joint to a finalized model is refused by the model");
@@ -505,7 +505,7 @@ void CheckAFinalizedModelRefusesToBeChanged() {
                    [&] {
                        model.AddPrismaticJoint("late_slider",
                                                model.world_frame(),
-                                               model.body_frame(other), kXAxis);
+                                               model.body_frame(other), kXAxis, 0.0);
                    },
                    "cannot add a prismatic joint"),
                "adding a prismatic joint to a finalized model is refused by the "
@@ -558,7 +558,7 @@ void CheckWhatTheModelSaysItContains() {
         model.AddRigidBody("floating", SolidishBody(1.0));
     const FrameHandle mount = model.AddFixedFrame("mount", carrier, {});
     model.DeclareFreeBody(floating);
-    model.AddRevoluteJoint("hinge", mount, model.body_frame(floating), kZAxis);
+    model.AddRevoluteJoint("hinge", mount, model.body_frame(floating), kZAxis, 0.0);
     model.Finalize();
 
     ExpectEqual("the world is not one of the model's rigid bodies",
@@ -620,7 +620,7 @@ void CheckHandlesFromAnotherModelAreRefused() {
         other.AddRigidBody("second", SolidishBody(1.0));
     other.DeclareFreeBody(first);
     other.AddRevoluteJoint("hinge", other.body_frame(first),
-                           other.body_frame(second), kZAxis);
+                           other.body_frame(second), kZAxis, 0.0);
     other.Finalize();
 
     ExpectTrue(RefusalMentions([&] { (void)described.IsFreeBody(second); },
@@ -674,7 +674,7 @@ void CheckAContextComesFromTheModelWithItsDefaultsInstalled() {
         model.AddRigidBody("hinged", SolidishBody(1.0));
     model.DeclareFreeBody(floating);
     model.AddRevoluteJoint("hinge", model.body_frame(floating),
-                           model.body_frame(hinged), kZAxis);
+                           model.body_frame(hinged), kZAxis, 0.0);
     model.Finalize();
 
     const std::unique_ptr<MultibodyEvaluationContext> context =

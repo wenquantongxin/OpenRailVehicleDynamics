@@ -1,6 +1,8 @@
 #include "orvd/multibody_model/multibody_model.h"
 
 #include <atomic>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -9,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "drake/multibody/tree/articulated_body_inertia_cache.h"
 #include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/multibody_tree-inl.h"
 #include "drake/multibody/tree/prismatic_joint.h"
@@ -17,6 +20,7 @@
 #include "drake/multibody/tree/rigid_body.h"
 #include "drake/multibody/tree/uniform_gravity_field_element.h"
 #include "drake/multibody/tree/weld_joint.h"
+#include "forward_dynamics_workspace_implementation.h"
 #include "multibody_evaluation_context_implementation.h"
 #include "orvd/multibody_runtime/multibody_physical_parameter_validation.h"
 #include "orvd/rigid_multibody_tree/spatial_inertia_parameter_conversion.h"
@@ -214,11 +218,14 @@ class MultibodyModel::Implementation {
         return {parent_body, child_body};
     }
 
+    enum class JointKind { kRevolute, kPrismatic, kWeld };
+
     void RecordJoint(const std::string& name, int parent_body, int child_body,
-                     drake::multibody::JointIndex tree_joint) {
+                     drake::multibody::JointIndex tree_joint, JointKind kind) {
         joint_by_name_.emplace(name, static_cast<int>(joint_names_.size()));
         joint_names_.push_back(name);
         tree_joint_.push_back(tree_joint);
+        joint_kind_.push_back(kind);
         Connect(parent_body, child_body);
     }
 
@@ -260,6 +267,7 @@ class MultibodyModel::Implementation {
     std::vector<drake::multibody::BodyIndex> tree_body_;
     std::vector<drake::multibody::FrameIndex> tree_frame_;
     std::vector<drake::multibody::JointIndex> tree_joint_;
+    std::vector<JointKind> joint_kind_;
 };
 
 MultibodyModel::MultibodyModel()
@@ -388,44 +396,62 @@ Eigen::Vector3d RequireUsableAxis(const Eigen::Vector3d& axis,
 
 JointHandle MultibodyModel::AddRevoluteJoint(
     std::string_view name, FrameHandle parent, FrameHandle child,
-    const Eigen::Vector3d& axis_in_parent) {
+    const Eigen::Vector3d& axis_in_parent,
+    double damping_newton_metre_seconds_per_radian) {
     Implementation& model = *implementation_;
     model.ThrowIfNotBuildable("add a revolute joint");
     const std::string joint_name(name);
     const auto [parent_body, child_body] =
         model.PrepareRelation(parent, child, joint_name);
     const Eigen::Vector3d axis = RequireUsableAxis(axis_in_parent, joint_name);
+    if (!std::isfinite(damping_newton_metre_seconds_per_radian) ||
+        damping_newton_metre_seconds_per_radian < 0.0) {
+        Reject("revolute joint '" + joint_name +
+               "' damping must be finite and non-negative");
+    }
 
     const int parent_frame = HandleOrdinal(parent);
     const int child_frame = HandleOrdinal(child);
     const auto& joint = model.tree_.AddJoint<drake::multibody::RevoluteJoint>(
         std::make_unique<drake::multibody::RevoluteJoint<double>>(
             joint_name, model.tree_.get_frame(model.tree_frame_[parent_frame]),
-            model.tree_.get_frame(model.tree_frame_[child_frame]), axis));
+            model.tree_.get_frame(model.tree_frame_[child_frame]), axis,
+            damping_newton_metre_seconds_per_radian));
 
-    model.RecordJoint(joint_name, parent_body, child_body, joint.index());
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
+                      Implementation::JointKind::kRevolute);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
 
 JointHandle MultibodyModel::AddPrismaticJoint(
     std::string_view name, FrameHandle parent, FrameHandle child,
-    const Eigen::Vector3d& axis_in_parent) {
+    const Eigen::Vector3d& axis_in_parent,
+    double damping_newton_seconds_per_metre) {
     Implementation& model = *implementation_;
     model.ThrowIfNotBuildable("add a prismatic joint");
     const std::string joint_name(name);
     const auto [parent_body, child_body] =
         model.PrepareRelation(parent, child, joint_name);
     const Eigen::Vector3d axis = RequireUsableAxis(axis_in_parent, joint_name);
+    if (!std::isfinite(damping_newton_seconds_per_metre) ||
+        damping_newton_seconds_per_metre < 0.0) {
+        Reject("prismatic joint '" + joint_name +
+               "' damping must be finite and non-negative");
+    }
 
     const int parent_frame = HandleOrdinal(parent);
     const int child_frame = HandleOrdinal(child);
     const auto& joint = model.tree_.AddJoint<drake::multibody::PrismaticJoint>(
         std::make_unique<drake::multibody::PrismaticJoint<double>>(
             joint_name, model.tree_.get_frame(model.tree_frame_[parent_frame]),
-            model.tree_.get_frame(model.tree_frame_[child_frame]), axis));
+            model.tree_.get_frame(model.tree_frame_[child_frame]), axis,
+            -std::numeric_limits<double>::infinity(),
+            std::numeric_limits<double>::infinity(),
+            damping_newton_seconds_per_metre));
 
-    model.RecordJoint(joint_name, parent_body, child_body, joint.index());
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
+                      Implementation::JointKind::kPrismatic);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -449,7 +475,8 @@ JointHandle MultibodyModel::AddWeldJoint(std::string_view name,
             model.tree_.get_frame(model.tree_frame_[child_frame]),
             drake::math::RigidTransform<double>::Identity()));
 
-    model.RecordJoint(joint_name, parent_body, child_body, joint.index());
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
+                      Implementation::JointKind::kWeld);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -780,7 +807,9 @@ std::unique_ptr<MultibodyEvaluationContext> MultibodyModel::CreateDefaultContext
     model.ThrowIfNotFinalized("create an evaluation context");
     auto implementation =
         std::make_unique<MultibodyEvaluationContext::Implementation>(
-            model.identity_, model.tree_.CreateDefaultEvaluationContext());
+            model.identity_, model.tree_.CreateDefaultEvaluationContext(),
+            model.tree_.num_links(), model.tree_.num_mobods(),
+            model.tree_.num_velocities());
     return std::unique_ptr<MultibodyEvaluationContext>(
         new MultibodyEvaluationContext(std::move(implementation)));
 }
@@ -1119,6 +1148,264 @@ void MultibodyModel::CalcGeneralizedMassMatrix(
 
     model.tree_.CalcMassMatrix(context.implementation_->tree_context(),
                                &generalized_mass_matrix);
+}
+
+namespace {
+
+void RequireDynamicsVector(const Eigen::VectorXd& vector, int expected_size,
+                           const char* name) {
+    RequireCoordinateCount(static_cast<int>(vector.size()), expected_size, name);
+    RequireFiniteVector(vector, name);
+}
+
+void RequireDynamicsOutput(Eigen::VectorXd& output, int expected_size,
+                           const char* name) {
+    RequireCoordinateCount(static_cast<int>(output.size()), expected_size, name);
+}
+
+void AssembleModelAppliedForces(
+    const drake::multibody::internal::MultibodyTree<double>& tree,
+    const rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext&
+        tree_context,
+    drake::multibody::MultibodyForces<double>* forces) {
+    tree.CalcForceElementsContribution(
+        tree_context, tree.EvalPositionKinematics(tree_context),
+        tree.EvalVelocityKinematics(tree_context), forces);
+}
+
+}  // namespace
+
+void MultibodyModel::CalcRequiredGeneralizedForces(
+    const MultibodyEvaluationContext& context,
+    const Eigen::VectorXd& generalized_velocity_derivatives,
+    Eigen::VectorXd& required_generalized_forces) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate required generalized forces");
+    Implementation::RequireOwnContext(
+        model, &context, "calculate required generalized forces from");
+    const int nv = model.tree_.num_velocities();
+    RequireDynamicsVector(generalized_velocity_derivatives, nv,
+                          "generalized velocity derivatives");
+    RequireDynamicsOutput(required_generalized_forces, nv,
+                          "required generalized forces");
+    if (&generalized_velocity_derivatives == &required_generalized_forces) {
+        Reject("generalized velocity derivatives and required generalized "
+               "forces are the same object; nothing was written");
+    }
+
+    auto& workspace = *context.implementation_;
+    auto& forces = workspace.mutable_forces();
+    AssembleModelAppliedForces(model.tree_, workspace.tree_context(), &forces);
+    model.tree_.CalcInverseDynamics(
+        workspace.tree_context(), generalized_velocity_derivatives,
+        forces.body_forces(), forces.generalized_forces(),
+        &workspace.mutable_accelerations(), &workspace.mutable_reactions(),
+        &required_generalized_forces);
+}
+
+void MultibodyModel::CalcVelocityBiasGeneralizedForces(
+    const MultibodyEvaluationContext& context,
+    Eigen::VectorXd& velocity_bias_generalized_forces) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate velocity-bias generalized forces");
+    Implementation::RequireOwnContext(
+        model, &context, "calculate velocity-bias generalized forces from");
+    const int nv = model.tree_.num_velocities();
+    RequireDynamicsOutput(velocity_bias_generalized_forces, nv,
+                          "velocity-bias generalized forces");
+
+    auto& workspace = *context.implementation_;
+    auto& forces = workspace.mutable_forces();
+    forces.SetZero();
+    model.tree_.CalcInverseDynamics(
+        workspace.tree_context(), workspace.zero_velocity_derivatives(),
+        forces.body_forces(), forces.generalized_forces(),
+        &workspace.mutable_accelerations(), &workspace.mutable_reactions(),
+        &velocity_bias_generalized_forces);
+}
+
+void MultibodyModel::CalcGravityAppliedGeneralizedForces(
+    const MultibodyEvaluationContext& context,
+    Eigen::VectorXd& gravity_applied_generalized_forces) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate gravity generalized forces");
+    Implementation::RequireOwnContext(
+        model, &context, "calculate gravity generalized forces from");
+    const int nv = model.tree_.num_velocities();
+    RequireDynamicsOutput(gravity_applied_generalized_forces, nv,
+                          "gravity generalized forces");
+
+    auto& workspace = *context.implementation_;
+    auto& forces = workspace.mutable_forces();
+    AssembleModelAppliedForces(model.tree_, workspace.tree_context(), &forces);
+    gravity_applied_generalized_forces.setZero();
+    model.tree_.CalcSystemJacobianTransposeTimesF(
+        workspace.tree_context(), &forces.mutable_body_forces(),
+        &gravity_applied_generalized_forces);
+}
+
+void MultibodyModel::CalcJointDampingAppliedGeneralizedForces(
+    const MultibodyEvaluationContext& context,
+    Eigen::VectorXd& damping_applied_generalized_forces) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate joint-damping generalized forces");
+    Implementation::RequireOwnContext(
+        model, &context, "calculate joint-damping generalized forces from");
+    const int nv = model.tree_.num_velocities();
+    RequireDynamicsOutput(damping_applied_generalized_forces, nv,
+                          "joint-damping generalized forces");
+
+    auto& workspace = *context.implementation_;
+    auto& forces = workspace.mutable_forces();
+    AssembleModelAppliedForces(model.tree_, workspace.tree_context(), &forces);
+    damping_applied_generalized_forces = forces.generalized_forces();
+}
+
+std::unique_ptr<ForwardDynamicsWorkspace>
+MultibodyModel::CreateForwardDynamicsWorkspace() const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("create a forward-dynamics workspace");
+    auto implementation =
+        std::make_unique<ForwardDynamicsWorkspace::Implementation>(
+            model.identity_, model.tree_);
+    return std::unique_ptr<ForwardDynamicsWorkspace>(
+        new ForwardDynamicsWorkspace(std::move(implementation)));
+}
+
+const Eigen::VectorXd& MultibodyModel::EvaluateForwardDynamics(
+    const MultibodyEvaluationContext& context,
+    std::span<const AppliedBodyWrench> body_wrenches,
+    std::span<const AppliedRevoluteJointTorque> revolute_joint_torques,
+    std::span<const AppliedPrismaticJointForce> prismatic_joint_forces,
+    ForwardDynamicsWorkspace& workspace) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate forward dynamics");
+    Implementation::RequireOwnContext(model, &context,
+                                      "calculate forward dynamics from");
+    if (workspace.implementation_->issuer_ != model.identity_) {
+        Reject("forward-dynamics workspace belongs to a different model");
+    }
+
+    for (const AppliedBodyWrench& wrench : body_wrenches) {
+        model.Resolve(wrench.body, static_cast<int>(model.body_names_.size()),
+                      "rigid body");
+        model.Resolve(wrench.expressed_in_frame,
+                      static_cast<int>(model.frame_names_.size()), "frame");
+        if (!wrench.point_position_in_body_frame_meters.allFinite() ||
+            !wrench.torque_about_point_newton_metres.allFinite() ||
+            !wrench.force_newtons.allFinite()) {
+            Reject("an applied body wrench contains a non-finite value");
+        }
+    }
+    for (const AppliedRevoluteJointTorque& effort : revolute_joint_torques) {
+        const int ordinal = model.Resolve(
+            effort.joint, static_cast<int>(model.joint_names_.size()), "joint");
+        if (model.joint_kind_[ordinal] !=
+            Implementation::JointKind::kRevolute) {
+            Reject("a revolute torque was applied to joint '" +
+                   model.joint_names_[ordinal] + "', which is not revolute");
+        }
+        if (!std::isfinite(effort.torque_newton_metres)) {
+            Reject("an applied revolute-joint torque is not finite");
+        }
+    }
+    for (const AppliedPrismaticJointForce& effort : prismatic_joint_forces) {
+        const int ordinal = model.Resolve(
+            effort.joint, static_cast<int>(model.joint_names_.size()), "joint");
+        if (model.joint_kind_[ordinal] !=
+            Implementation::JointKind::kPrismatic) {
+            Reject("a prismatic force was applied to joint '" +
+                   model.joint_names_[ordinal] + "', which is not prismatic");
+        }
+        if (!std::isfinite(effort.force_newtons)) {
+            Reject("an applied prismatic-joint force is not finite");
+        }
+    }
+
+    const auto& tree_context = context.implementation_->tree_context();
+    auto& computation = *workspace.implementation_;
+    model.tree_.CalcForceElementsContribution(
+        tree_context, model.tree_.EvalPositionKinematics(tree_context),
+        model.tree_.EvalVelocityKinematics(tree_context), &computation.forces_);
+
+    for (const AppliedBodyWrench& wrench : body_wrenches) {
+        const int body_ordinal = HandleOrdinal(wrench.body);
+        const int frame_ordinal = HandleOrdinal(wrench.expressed_in_frame);
+        const auto& body =
+            model.tree_.get_link(model.tree_body_[body_ordinal]);
+        const auto& frame_E =
+            model.tree_.get_frame(model.tree_frame_[frame_ordinal]);
+        const Eigen::Matrix3d R_WB =
+            body.body_frame().CalcRotationMatrixInWorld(tree_context).matrix();
+        const Eigen::Matrix3d R_WE =
+            frame_E.CalcRotationMatrixInWorld(tree_context).matrix();
+        const Eigen::Vector3d p_BoQ_E =
+            R_WE.transpose() * R_WB *
+            wrench.point_position_in_body_frame_meters;
+        body.AddInForce(
+            tree_context, p_BoQ_E,
+            drake::multibody::SpatialForce<double>(
+                wrench.torque_about_point_newton_metres,
+                wrench.force_newtons),
+            frame_E, &computation.forces_);
+    }
+    for (const AppliedRevoluteJointTorque& effort : revolute_joint_torques) {
+        const int ordinal = HandleOrdinal(effort.joint);
+        const auto& joint = static_cast<const drake::multibody::RevoluteJoint<
+            double>&>(model.tree_.get_joint(model.tree_joint_[ordinal]));
+        joint.AddInTorque(tree_context.state(), effort.torque_newton_metres,
+                          &computation.forces_);
+    }
+    for (const AppliedPrismaticJointForce& effort : prismatic_joint_forces) {
+        const int ordinal = HandleOrdinal(effort.joint);
+        const auto& joint = static_cast<const drake::multibody::PrismaticJoint<
+            double>&>(model.tree_.get_joint(model.tree_joint_[ordinal]));
+        joint.AddInForce(tree_context.state(), effort.force_newtons,
+                         &computation.forces_);
+    }
+
+    model.tree_.CalcArticulatedBodyForceCache(
+        tree_context, computation.forces_, &computation.aba_force_);
+    model.tree_.CalcArticulatedBodyAccelerations(
+        tree_context, computation.aba_force_, &computation.acceleration_);
+    return computation.acceleration_.get_vdot();
+}
+
+void MultibodyModel::CalcGeneralizedVelocityDerivatives(
+    const MultibodyEvaluationContext& context,
+    std::span<const AppliedBodyWrench> body_wrenches,
+    std::span<const AppliedRevoluteJointTorque> revolute_joint_torques,
+    std::span<const AppliedPrismaticJointForce> prismatic_joint_forces,
+    ForwardDynamicsWorkspace& workspace,
+    Eigen::VectorXd& generalized_velocity_derivatives) const {
+    const int nv = implementation_->tree_.num_velocities();
+    RequireDynamicsOutput(generalized_velocity_derivatives, nv,
+                          "generalized velocity derivatives");
+    generalized_velocity_derivatives = EvaluateForwardDynamics(
+        context, body_wrenches, revolute_joint_torques,
+        prismatic_joint_forces, workspace);
+}
+
+void MultibodyModel::CalcStateTimeDerivatives(
+    const MultibodyEvaluationContext& context,
+    std::span<const AppliedBodyWrench> body_wrenches,
+    std::span<const AppliedRevoluteJointTorque> revolute_joint_torques,
+    std::span<const AppliedPrismaticJointForce> prismatic_joint_forces,
+    ForwardDynamicsWorkspace& workspace,
+    Eigen::VectorXd& state_time_derivatives) const {
+    const int nq = implementation_->tree_.num_positions();
+    const int nv = implementation_->tree_.num_velocities();
+    RequireDynamicsOutput(state_time_derivatives, nq + nv,
+                          "state time derivatives");
+    const Eigen::VectorXd& vdot = EvaluateForwardDynamics(
+        context, body_wrenches, revolute_joint_torques,
+        prismatic_joint_forces, workspace);
+    auto& qdot = workspace.implementation_->position_derivatives_;
+    const auto& state = context.implementation_->tree_context().state();
+    implementation_->tree_.MapVelocityToQDot(
+        state, state.generalized_velocities(), &qdot);
+    state_time_derivatives.head(nq) = qdot;
+    state_time_derivatives.tail(nv) = vdot;
 }
 
 }  // namespace orvd::multibody_model

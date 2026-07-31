@@ -20,6 +20,20 @@ orvd_contract::ObservationKind ObservationKindForGeneralizedForceComponent(
         "Generalized-force component has no observation dimension");
 }
 
+orvd_contract::ObservationKind ObservationKindForGeneralizedAcceleration(
+    orvd_contract::GeneralizedForceComponentKind component_kind) {
+    using orvd_contract::GeneralizedForceComponentKind;
+    using orvd_contract::ObservationKind;
+    switch (component_kind) {
+        case GeneralizedForceComponentKind::kForceNewtons:
+            return ObservationKind::kTranslationalAccelerationMetersPerSecondSquared;
+        case GeneralizedForceComponentKind::kTorqueNewtonMetres:
+            return ObservationKind::kAngularAccelerationRadiansPerSecondSquared;
+    }
+    throw std::logic_error(
+        "Generalized-acceleration component has no observation dimension");
+}
+
 }  // namespace
 
 ComparisonRequirements MakePositionKinematicsComparisonRequirements(
@@ -193,6 +207,55 @@ ComparisonRequirements MakeMassMatrixComparisonRequirements(
         }
     }
 
+    return requirements;
+}
+
+ComparisonRequirements
+MakeInverseDynamicsAndForceElementsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario) {
+    ComparisonRequirements requirements =
+        MakeMassMatrixComparisonRequirements(scenario);
+    for (std::size_t index = 0;
+         index < scenario.generalized_force_component_kinds.size(); ++index) {
+        const auto kind = ObservationKindForGeneralizedForceComponent(
+            scenario.generalized_force_component_kinds[index]);
+        for (const char* name : {"velocity_bias_generalized_force",
+                                 "gravity_applied_generalized_force",
+                                 "damping_applied_generalized_force",
+                                 "required_generalized_force"}) {
+            requirements.scalars.push_back(
+                {std::string(name) + "[" + std::to_string(index) + "]", kind});
+        }
+    }
+    return requirements;
+}
+
+ComparisonRequirements
+MakeExternalForceAndForwardDynamicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario) {
+    ComparisonRequirements requirements =
+        MakeInverseDynamicsAndForceElementsComparisonRequirements(scenario);
+    const std::size_t nq = scenario.generalized_positions.size();
+    const std::size_t nv = scenario.generalized_velocities.size();
+    for (std::size_t index = 0; index < nv; ++index) {
+        const auto kind = ObservationKindForGeneralizedAcceleration(
+            scenario.generalized_force_component_kinds[index]);
+        requirements.scalars.push_back(
+            {"forward_dynamics_generalized_acceleration[" +
+                 std::to_string(index) + "]",
+             kind});
+    }
+    for (std::size_t index = 0; index < nq; ++index) {
+        requirements.scalars.push_back(
+            {"state_time_derivative[" + std::to_string(index) + "]",
+             scenario.generalized_position_derivative_observation_kinds[index]});
+    }
+    for (std::size_t index = 0; index < nv; ++index) {
+        requirements.scalars.push_back(
+            {"state_time_derivative[" + std::to_string(nq + index) + "]",
+             ObservationKindForGeneralizedAcceleration(
+                 scenario.generalized_force_component_kinds[index])});
+    }
     return requirements;
 }
 

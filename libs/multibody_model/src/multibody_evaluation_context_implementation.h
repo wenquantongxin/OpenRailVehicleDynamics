@@ -13,7 +13,10 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
+#include "drake/multibody/math/spatial_algebra.h"
+#include "drake/multibody/tree/multibody_forces.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_model_handles.h"
 #include "orvd/rigid_multibody_tree/rigid_multibody_tree_evaluation_context.h"
@@ -25,8 +28,14 @@ class MultibodyEvaluationContext::Implementation {
     Implementation(internal::ModelIdentity issuer,
                    std::unique_ptr<rigid_multibody_tree::internal::
                                        RigidMultibodyTreeEvaluationContext>
-                       tree_context)
-        : issuer_(issuer), tree_context_(std::move(tree_context)) {}
+                       tree_context,
+                   int link_count, int mobod_count, int velocity_count)
+        : issuer_(issuer),
+          tree_context_(std::move(tree_context)),
+          forces_(link_count, velocity_count),
+          accelerations_(mobod_count),
+          reactions_(mobod_count),
+          zero_velocity_derivatives_(Eigen::VectorXd::Zero(velocity_count)) {}
 
     /// The model that issued this context.
     ///
@@ -44,8 +53,26 @@ class MultibodyEvaluationContext::Implementation {
 
     [[nodiscard]] rigid_multibody_tree::internal::
         RigidMultibodyTreeEvaluationContext&
-        mutable_tree_context() {
+    mutable_tree_context() {
         return *tree_context_;
+    }
+
+    [[nodiscard]] drake::multibody::MultibodyForces<double>& mutable_forces() {
+        return forces_;
+    }
+
+    [[nodiscard]] std::vector<drake::multibody::SpatialAcceleration<double>>&
+    mutable_accelerations() {
+        return accelerations_;
+    }
+
+    [[nodiscard]] std::vector<drake::multibody::SpatialForce<double>>&
+    mutable_reactions() {
+        return reactions_;
+    }
+
+    [[nodiscard]] const Eigen::VectorXd& zero_velocity_derivatives() const {
+        return zero_velocity_derivatives_;
     }
 
    private:
@@ -57,6 +84,10 @@ class MultibodyEvaluationContext::Implementation {
     std::unique_ptr<
         rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext>
         tree_context_;
+    drake::multibody::MultibodyForces<double> forces_;
+    std::vector<drake::multibody::SpatialAcceleration<double>> accelerations_;
+    std::vector<drake::multibody::SpatialForce<double>> reactions_;
+    Eigen::VectorXd zero_velocity_derivatives_;
 };
 
 }  // namespace orvd::multibody_model

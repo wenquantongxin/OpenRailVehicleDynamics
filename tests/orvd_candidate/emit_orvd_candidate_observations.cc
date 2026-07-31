@@ -16,10 +16,10 @@
 // file: a claim a program makes about its own linkage is the one claim it cannot
 // check.
 //
-// Only what G31-G34 have landed is emitted. The judge's capability-specific
+// Only what G31-G36 have landed is emitted. The judge's capability-specific
 // requirement set says which observations count, and it refuses a missing
-// observation rather than skipping it. Inverse dynamics and external-force
-// observations belong to later goals and do not appear here early.
+// observation rather than skipping it.
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +40,8 @@ using orvd::multibody_model::FrameHandle;
 using orvd::multibody_model::JointHandle;
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_model::RigidBodyHandle;
+using orvd::multibody_model::AppliedBodyWrench;
+using orvd::multibody_model::AppliedRevoluteJointTorque;
 using orvd::multibody_runtime::FixedFramePoseParameters;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
 
@@ -126,7 +128,8 @@ int main(int argc, char** argv) {
         }
         model.AddRevoluteJoint(joint.name, parent,
                                model.body_frame(body_named(joint.child_link_name)),
-                               joint.axis_in_parent);
+                               joint.axis_in_parent,
+                               joint.damping_newton_metre_seconds_per_radian);
     }
     for (const auto& free_body_name : scenario.free_body_names) {
         model.DeclareFreeBody(body_named(free_body_name));
@@ -176,6 +179,45 @@ int main(int argc, char** argv) {
         model.num_generalized_velocities(),
         model.num_generalized_velocities());
     model.CalcGeneralizedMassMatrix(*context, generalized_mass_matrix);
+
+    Eigen::VectorXd velocity_bias(model.num_generalized_velocities());
+    Eigen::VectorXd gravity_applied(model.num_generalized_velocities());
+    Eigen::VectorXd damping_applied(model.num_generalized_velocities());
+    Eigen::VectorXd required(model.num_generalized_velocities());
+    model.CalcVelocityBiasGeneralizedForces(*context, velocity_bias);
+    model.CalcGravityAppliedGeneralizedForces(*context, gravity_applied);
+    model.CalcJointDampingAppliedGeneralizedForces(*context, damping_applied);
+    model.CalcRequiredGeneralizedForces(*context, generalized_accelerations,
+                                        required);
+
+    std::vector<AppliedBodyWrench> applied_body_wrenches;
+    for (const auto& definition : scenario.applied_body_wrenches) {
+        const FrameHandle expressed = definition.expressed_in_frame_name.empty()
+                                          ? model.world_frame()
+                                          : model.body_frame(body_named(
+                                                definition.expressed_in_frame_name));
+        applied_body_wrenches.push_back(
+            {body_named(definition.body_name),
+             definition.point_position_in_body_frame_meters, expressed,
+             definition.torque_about_point_newton_metres,
+             definition.force_newtons});
+    }
+    std::vector<AppliedRevoluteJointTorque> applied_joint_torques;
+    for (const auto& definition : scenario.applied_revolute_joint_torques) {
+        applied_joint_torques.push_back(
+            {model.GetJointByName(definition.joint_name),
+             definition.torque_newton_metres});
+    }
+    auto forward_workspace = model.CreateForwardDynamicsWorkspace();
+    Eigen::VectorXd forward_acceleration(model.num_generalized_velocities());
+    model.CalcGeneralizedVelocityDerivatives(
+        *context, applied_body_wrenches, applied_joint_torques, {},
+        *forward_workspace, forward_acceleration);
+    Eigen::VectorXd state_derivative(model.num_generalized_positions() +
+                                     model.num_generalized_velocities());
+    model.CalcStateTimeDerivatives(
+        *context, applied_body_wrenches, applied_joint_torques, {},
+        *forward_workspace, state_derivative);
 
     orvd_contract::ObservationStream stream;
     stream.topology_facts = {
@@ -354,6 +396,28 @@ int main(int argc, char** argv) {
                      std::to_string(generalized_force_index) + "]",
                  column_generalized_force_response(generalized_force_index)});
         }
+    }
+
+    for (int index = 0; index < model.num_generalized_velocities(); ++index) {
+        const std::array<std::pair<std::string_view, const Eigen::VectorXd*>, 5>
+            generalized_dynamics_observations{{
+                {"velocity_bias_generalized_force", &velocity_bias},
+                {"gravity_applied_generalized_force", &gravity_applied},
+                {"damping_applied_generalized_force", &damping_applied},
+                {"required_generalized_force", &required},
+                {"forward_dynamics_generalized_acceleration",
+                 &forward_acceleration},
+            }};
+        for (const auto& [name, values] : generalized_dynamics_observations) {
+            stream.observations.push_back(
+                {std::string(name) + "[" + std::to_string(index) + "]",
+                 (*values)(index)});
+        }
+    }
+    for (int index = 0; index < state_derivative.size(); ++index) {
+        stream.observations.push_back(
+            {"state_time_derivative[" + std::to_string(index) + "]",
+             state_derivative(index)});
     }
 
     std::fputs(orvd_contract::FormatObservationStream(stream).c_str(), stdout);

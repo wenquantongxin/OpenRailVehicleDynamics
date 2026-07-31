@@ -42,10 +42,13 @@
 /// moment the model exists and only stops being settable.
 
 #include <memory>
+#include <span>
 #include <string_view>
 
 #include <Eigen/Dense>
 
+#include "orvd/multibody_model/forward_dynamics_workspace.h"
+#include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_coordinate_ranges.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
@@ -120,12 +123,14 @@ class MultibodyModel {
     /// would close a loop, or if `axis_in_parent` is not a usable direction.
     JointHandle AddRevoluteJoint(std::string_view name, FrameHandle parent,
                                  FrameHandle child,
-                                 const Eigen::Vector3d& axis_in_parent);
+                                 const Eigen::Vector3d& axis_in_parent,
+                                 double damping_newton_metre_seconds_per_radian);
 
     /// Adds a prismatic joint along `axis_in_parent`. Same refusals.
     JointHandle AddPrismaticJoint(std::string_view name, FrameHandle parent,
                                   FrameHandle child,
-                                  const Eigen::Vector3d& axis_in_parent);
+                                  const Eigen::Vector3d& axis_in_parent,
+                                  double damping_newton_seconds_per_metre);
 
     /// Adds a weld: the two frames hold still with respect to each other.
     JointHandle AddWeldJoint(std::string_view name, FrameHandle parent,
@@ -477,7 +482,59 @@ class MultibodyModel {
         const MultibodyEvaluationContext& context,
         Eigen::MatrixXd& generalized_mass_matrix) const;
 
+    /// Computes the generalized force required to realize `vdot`, including
+    /// the current velocity bias and subtracting gravity and joint damping.
+    /// The caller supplies an `nv`-sized output; its storage is reused.
+    void CalcRequiredGeneralizedForces(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_velocity_derivatives,
+        Eigen::VectorXd& required_generalized_forces) const;
+
+    /// Computes C(q, v)v in generalized-force coordinates.
+    void CalcVelocityBiasGeneralizedForces(
+        const MultibodyEvaluationContext& context,
+        Eigen::VectorXd& velocity_bias_generalized_forces) const;
+
+    /// Computes the applied generalized force due to uniform gravity.
+    void CalcGravityAppliedGeneralizedForces(
+        const MultibodyEvaluationContext& context,
+        Eigen::VectorXd& gravity_applied_generalized_forces) const;
+
+    /// Computes the applied generalized force due to joint viscous damping.
+    void CalcJointDampingAppliedGeneralizedForces(
+        const MultibodyEvaluationContext& context,
+        Eigen::VectorXd& damping_applied_generalized_forces) const;
+
+    /// Creates the model-bound storage reused by forward dynamics calls.
+    [[nodiscard]] std::unique_ptr<ForwardDynamicsWorkspace>
+    CreateForwardDynamicsWorkspace() const;
+
+    /// Computes vdot with model gravity and damping plus the stated forces.
+    void CalcGeneralizedVelocityDerivatives(
+        const MultibodyEvaluationContext& context,
+        std::span<const AppliedBodyWrench> body_wrenches,
+        std::span<const AppliedRevoluteJointTorque> revolute_joint_torques,
+        std::span<const AppliedPrismaticJointForce> prismatic_joint_forces,
+        ForwardDynamicsWorkspace& workspace,
+        Eigen::VectorXd& generalized_velocity_derivatives) const;
+
+    /// Computes [N(q)v; vdot] without storing a call result in the context.
+    void CalcStateTimeDerivatives(
+        const MultibodyEvaluationContext& context,
+        std::span<const AppliedBodyWrench> body_wrenches,
+        std::span<const AppliedRevoluteJointTorque> revolute_joint_torques,
+        std::span<const AppliedPrismaticJointForce> prismatic_joint_forces,
+        ForwardDynamicsWorkspace& workspace,
+        Eigen::VectorXd& state_time_derivatives) const;
+
    private:
+    const Eigen::VectorXd& EvaluateForwardDynamics(
+        const MultibodyEvaluationContext& context,
+        std::span<const AppliedBodyWrench> body_wrenches,
+        std::span<const AppliedRevoluteJointTorque> revolute_joint_torques,
+        std::span<const AppliedPrismaticJointForce> prismatic_joint_forces,
+        ForwardDynamicsWorkspace& workspace) const;
+
     template <typename Handle>
     static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {
         return handle.model_;

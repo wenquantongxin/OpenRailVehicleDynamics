@@ -505,7 +505,9 @@ int main(int argc, char** argv) {
         const orvd_contract::ScenarioDefinition scenario =
             orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
         const orvd_comparison::ComparisonRequirements requirements =
-            orvd_comparison::MakeMassMatrixComparisonRequirements(scenario);
+            orvd_comparison::
+                MakeExternalForceAndForwardDynamicsComparisonRequirements(
+                    scenario);
 
         // Two independent processes of the same reference implementation.
         std::string first_text, second_text;
@@ -608,7 +610,12 @@ int main(int argc, char** argv) {
               std::string(
                   "mass_matrix_column_generalized_force_response[0][0]"),
               std::string(
-                  "mass_matrix_column_generalized_force_response[6][6]")}) {
+                  "mass_matrix_column_generalized_force_response[6][6]"),
+              std::string("required_generalized_force[0]"),
+              std::string("gravity_applied_generalized_force[1]"),
+              std::string("damping_applied_generalized_force[2]"),
+              std::string("forward_dynamics_generalized_acceleration[0]"),
+              std::string("state_time_derivative[0]")}) {
             const auto missing = orvd_comparison::CompareObservationStreams(
                 requirements, first, WithObservationRemoved(second, removed));
             Expect(missing.outcome ==
@@ -636,8 +643,12 @@ int main(int argc, char** argv) {
         const orvd_contract::ScenarioDefinition scenario =
             orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
         const orvd_comparison::ComparisonRequirements requirements =
-            orvd_comparison::MakeMassMatrixComparisonRequirements(scenario);
-        ExpectRequirementsCoverMassMatrix(requirements, scenario);
+            orvd_comparison::
+                MakeExternalForceAndForwardDynamicsComparisonRequirements(
+                    scenario);
+        ExpectRequirementsCoverMassMatrix(
+            orvd_comparison::MakeMassMatrixComparisonRequirements(scenario),
+            scenario);
 
         std::string reference_text, candidate_text;
         if (!CaptureEmitterOutput(emitter_path, excitation, &reference_text) ||
@@ -824,7 +835,7 @@ int main(int argc, char** argv) {
             requirements, reference, candidate);
         Expect(verdict.outcome == orvd_comparison::ComparisonOutcome::kAccepted,
                std::string("the ORVD candidate must agree with the Drake "
-                           "reference through the mass matrix (") +
+                           "reference through external-force forward dynamics (") +
                    std::string(excitation) + "): " + verdict.detail);
         if (excitation == "dynamic_excitation") {
             Expect(verdict.relative_branch_count > 0,

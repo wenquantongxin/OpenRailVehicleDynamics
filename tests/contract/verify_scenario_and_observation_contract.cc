@@ -196,6 +196,21 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
         };
         Expect(scenario.generalized_force_component_kinds == expected_force_kinds,
                "generalized-force kinds must match the scenario topology");
+        for (const auto& joint : scenario.revolute_joints) {
+            Expect(std::isfinite(
+                       joint.damping_newton_metre_seconds_per_radian) &&
+                       joint.damping_newton_metre_seconds_per_radian >= 0.0,
+                   "every revolute joint damping must be finite and non-negative");
+        }
+        if (excitation == "dynamic_excitation") {
+            Expect(!scenario.applied_body_wrenches.empty() &&
+                       !scenario.applied_revolute_joint_torques.empty(),
+                   "the dynamic excitation must carry call-time body and joint forces");
+        } else {
+            Expect(scenario.applied_body_wrenches.empty() &&
+                       scenario.applied_revolute_joint_torques.empty(),
+                   "the near-zero excitation must not hide a call-time force");
+        }
         if (scenario.mass_matrix_column_generalized_accelerations.size() !=
                 velocity_count ||
             scenario.generalized_force_component_kinds.size() != velocity_count) {

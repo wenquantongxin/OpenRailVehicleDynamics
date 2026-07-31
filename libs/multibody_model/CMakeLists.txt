@@ -9,6 +9,7 @@
 # G46's question; exporting now would freeze an interface still being built.
 
 add_library(orvd_multibody_model STATIC
+    src/forward_dynamics_workspace.cc
     src/multibody_evaluation_context.cc
     src/multibody_model.cc)
 

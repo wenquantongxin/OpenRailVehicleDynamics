@@ -10,6 +10,7 @@
 // address space: libdrake exports the same drake:: symbols a vendored copy would
 // keep, and co-linking is an ODR violation whose likely symptom is a comparison
 // that appears to pass.
+#include <array>
 #include <cstdio>
 #include <string>
 #include <string_view>
@@ -19,6 +20,7 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/math/rotation_matrix.h"
 #include "drake/multibody/plant/multibody_plant.h"
+#include "drake/multibody/tree/multibody_forces.h"
 #include "drake/multibody/tree/revolute_joint.h"
 #include "drake/multibody/tree/spatial_inertia.h"
 
@@ -59,7 +61,8 @@ void BuildDrakePlantFromScenario(const orvd_contract::ScenarioDefinition& scenar
                 drake::math::RotationMatrixd(joint.parent_frame_rotation_in_parent),
                 joint.parent_frame_translation_in_parent_meters),
             plant->GetBodyByName(joint.child_link_name), RigidTransformd::Identity(),
-            joint.axis_in_parent);
+            joint.axis_in_parent,
+            joint.damping_newton_metre_seconds_per_radian);
     }
     // Gravity is set from the scenario rather than inherited, so a change in the
     // library default cannot silently move the results.
@@ -180,6 +183,60 @@ int main(int argc, char** argv) {
 
     Eigen::MatrixXd mass_matrix(plant.num_velocities(), plant.num_velocities());
     plant.CalcMassMatrix(*context, &mass_matrix);
+
+    drake::multibody::MultibodyForces<double> model_forces(plant);
+    plant.CalcForceElementsContribution(*context, &model_forces);
+    Eigen::VectorXd total_model_applied;
+    plant.CalcGeneralizedForces(*context, model_forces,
+                                &total_model_applied);
+    const Eigen::VectorXd gravity_applied =
+        plant.CalcGravityGeneralizedForces(*context);
+    const Eigen::VectorXd damping_applied =
+        total_model_applied - gravity_applied;
+    Eigen::VectorXd velocity_bias(plant.num_velocities());
+    plant.CalcBiasTerm(*context, &velocity_bias);
+    const Eigen::VectorXd required = plant.CalcInverseDynamics(
+        *context, generalized_accelerations, model_forces);
+
+    drake::multibody::MultibodyForces<double> forward_forces(model_forces);
+    for (const auto& definition : scenario.applied_body_wrenches) {
+        const auto& body = plant.GetBodyByName(definition.body_name);
+        const auto& frame_E = definition.expressed_in_frame_name.empty()
+                                  ? plant.world_frame()
+                                  : plant.GetBodyByName(
+                                             definition.expressed_in_frame_name)
+                                        .body_frame();
+        const Eigen::Matrix3d R_WB =
+            body.body_frame().CalcRotationMatrixInWorld(*context).matrix();
+        const Eigen::Matrix3d R_WE =
+            frame_E.CalcRotationMatrixInWorld(*context).matrix();
+        const Eigen::Vector3d p_BoQ_E =
+            R_WE.transpose() * R_WB *
+            definition.point_position_in_body_frame_meters;
+        body.AddInForce(
+            *context, p_BoQ_E,
+            drake::multibody::SpatialForce<double>(
+                definition.torque_about_point_newton_metres,
+                definition.force_newtons),
+            frame_E, &forward_forces);
+    }
+    for (const auto& definition :
+         scenario.applied_revolute_joint_torques) {
+        plant.GetJointByName<RevoluteJoint>(definition.joint_name)
+            .AddInTorque(*context, definition.torque_newton_metres,
+                         &forward_forces);
+    }
+    Eigen::VectorXd total_forward_applied;
+    plant.CalcGeneralizedForces(*context, forward_forces,
+                                &total_forward_applied);
+    const Eigen::VectorXd forward_acceleration =
+        mass_matrix.ldlt().solve(total_forward_applied - velocity_bias);
+    Eigen::VectorXd state_derivative(plant.num_positions() +
+                                     plant.num_velocities());
+    Eigen::VectorXd qdot(plant.num_positions());
+    plant.MapVelocityToQDot(*context, generalized_velocities, &qdot);
+    state_derivative.head(plant.num_positions()) = qdot;
+    state_derivative.tail(plant.num_velocities()) = forward_acceleration;
     for (int column = 0; column < plant.num_velocities(); ++column) {
         const Eigen::VectorXd column_generalized_force_response =
             mass_matrix.col(column) *
@@ -302,6 +359,27 @@ int main(int argc, char** argv) {
             {"mapped_position_derivative[" +
                  std::to_string(position_index) + "]",
              mapped_position_derivatives(position_index)});
+    }
+    for (int index = 0; index < plant.num_velocities(); ++index) {
+        const std::array<std::pair<std::string_view, const Eigen::VectorXd*>, 5>
+            generalized_dynamics_observations{{
+                {"velocity_bias_generalized_force", &velocity_bias},
+                {"gravity_applied_generalized_force", &gravity_applied},
+                {"damping_applied_generalized_force", &damping_applied},
+                {"required_generalized_force", &required},
+                {"forward_dynamics_generalized_acceleration",
+                 &forward_acceleration},
+            }};
+        for (const auto& [name, values] : generalized_dynamics_observations) {
+            stream.observations.push_back(
+                {std::string(name) + "[" + std::to_string(index) + "]",
+                 (*values)(index)});
+        }
+    }
+    for (int index = 0; index < state_derivative.size(); ++index) {
+        stream.observations.push_back(
+            {"state_time_derivative[" + std::to_string(index) + "]",
+             state_derivative(index)});
     }
     for (int velocity_index = 0;
          velocity_index < mapped_back_velocities.size(); ++velocity_index) {

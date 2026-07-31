@@ -67,16 +67,16 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
     }
     scenario.revolute_joints = {
         {"shoulder_joint", "", "upper_link", Eigen::Matrix3d::Identity(),
-         Eigen::Vector3d::Zero(), Eigen::Vector3d::UnitZ()},
+         Eigen::Vector3d::Zero(), Eigen::Vector3d::UnitZ(), 0.14},
         {"elbow_joint", "upper_link", "lower_link", elbow_mount_rotation,
-         {0.0, -kUpperLinkLengthMeters, 0.0}, Eigen::Vector3d::UnitX()},
+         {0.0, -kUpperLinkLengthMeters, 0.0}, Eigen::Vector3d::UnitX(), 0.23},
         // The branch link is named as parent while the already world-connected
         // upper link is named as child. The forest must traverse this relation
         // backwards to reach the branch, so the coordinate and velocity signs
         // are independently observable.
         {"reverse_branch_joint", "reverse_branch_link", "upper_link",
          reverse_branch_mount_rotation, {0.12, -0.08, 0.15},
-         Eigen::Vector3d::UnitY()},
+         Eigen::Vector3d::UnitY(), 0.31},
     };
     // The floating link is free by statement, not because nothing joins it.
     scenario.free_body_names = {"floating_link"};
@@ -157,6 +157,11 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
             -1.9, 1.4, -0.6, 0.9, -1.1, 1.7, -0.8, 1.3, -1.6};
         scenario.generalized_accelerations = {
             7.0, -5.5, 2.6, 3.1, -4.2, 6.3, -2.7, 4.9, -3.4};
+        scenario.applied_body_wrenches = {{
+            "lower_link", {0.08, -0.04, 0.03}, "upper_link",
+            {0.17, -0.22, 0.31}, {1.4, -0.9, 0.6}}};
+        scenario.applied_revolute_joint_torques = {
+            {"shoulder_joint", 0.7}, {"reverse_branch_joint", -0.35}};
     } else {
         throw std::invalid_argument(
             "unknown excitation: " + std::string(excitation));

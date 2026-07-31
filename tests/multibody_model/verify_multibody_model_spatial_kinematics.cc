@@ -169,7 +169,7 @@ class BranchedSpatialKinematicsFixture {
 
         root_joint = model.AddRevoluteJoint(
             "root", model.world_frame(), model.body_frame(base),
-            Eigen::Vector3d::UnitZ());
+            Eigen::Vector3d::UnitZ(), 0.0);
 
         FixedFramePoseParameters serial_mount_pose;
         serial_mount_pose.R_PF = RotationAboutY(kSerialMountTilt);
@@ -178,7 +178,7 @@ class BranchedSpatialKinematicsFixture {
             model.AddFixedFrame("serial_mount", base, serial_mount_pose);
         serial_joint = model.AddRevoluteJoint(
             "serial_joint", serial_mount, model.body_frame(serial),
-            Eigen::Vector3d::UnitX());
+            Eigen::Vector3d::UnitX(), 0.0);
 
         FixedFramePoseParameters branch_mount_pose;
         branch_mount_pose.R_PF = RotationAboutX(kBranchMountTilt);
@@ -187,7 +187,7 @@ class BranchedSpatialKinematicsFixture {
             model.AddFixedFrame("branch_mount", base, branch_mount_pose);
         branch_joint = model.AddRevoluteJoint(
             "branch_joint", branch_mount, model.body_frame(branch),
-            Eigen::Vector3d::UnitY());
+            Eigen::Vector3d::UnitY(), 0.0);
 
         FixedFramePoseParameters moving_point_pose;
         moving_point_pose.R_PF = RotationAboutZ(-0.22);
@@ -558,7 +558,7 @@ void CheckRelationsTowardsWorldReverseVelocitySigns() {
             "reversed_revolute_joint_frame", body, joint_frame_pose);
         const JointHandle joint = model.AddRevoluteJoint(
             "towards_world", joint_frame, model.world_frame(),
-            Eigen::Vector3d::UnitZ());
+            Eigen::Vector3d::UnitZ(), 0.0);
         model.Finalize();
         auto context = model.CreateDefaultContext();
         Eigen::VectorXd q =
@@ -590,7 +590,7 @@ void CheckRelationsTowardsWorldReverseVelocitySigns() {
             model.AddRigidBody("reversed_prismatic", SolidishBody(1.0));
         const JointHandle joint = model.AddPrismaticJoint(
             "towards_world", model.body_frame(body), model.world_frame(),
-            Eigen::Vector3d::UnitX());
+            Eigen::Vector3d::UnitX(), 0.0);
         model.Finalize();
         auto context = model.CreateDefaultContext();
         Eigen::VectorXd q =

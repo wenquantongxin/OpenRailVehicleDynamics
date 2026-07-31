@@ -445,6 +445,22 @@ target_link_libraries(verify_multibody_model_mass_matrix
 add_test(NAME verify_multibody_model_mass_matrix
          COMMAND verify_multibody_model_mass_matrix)
 
+add_executable(verify_multibody_model_inverse_dynamics
+    multibody_model/verify_multibody_model_inverse_dynamics.cc)
+orvd_configure_first_party_target(verify_multibody_model_inverse_dynamics)
+target_link_libraries(verify_multibody_model_inverse_dynamics
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_inverse_dynamics
+         COMMAND verify_multibody_model_inverse_dynamics)
+
+add_executable(verify_multibody_model_forward_dynamics
+    multibody_model/verify_multibody_model_forward_dynamics.cc)
+orvd_configure_first_party_target(verify_multibody_model_forward_dynamics)
+target_link_libraries(verify_multibody_model_forward_dynamics
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_forward_dynamics
+         COMMAND verify_multibody_model_forward_dynamics)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed

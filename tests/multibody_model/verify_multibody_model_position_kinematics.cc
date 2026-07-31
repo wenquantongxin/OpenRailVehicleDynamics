@@ -176,16 +176,16 @@ void CheckAChainOfStatedRelations() {
     const RigidBodyHandle tip = model.AddRigidBody("tip", SolidishBody(1.0));
 
     const JointHandle shoulder = model.AddRevoluteJoint(
-        "shoulder", model.world_frame(), model.body_frame(arm), kZAxis);
+        "shoulder", model.world_frame(), model.body_frame(arm), kZAxis, 0.0);
 
     FixedFramePoseParameters elbow_pose;
     elbow_pose.p_PoFo_P = Eigen::Vector3d(kArmLength, 0.0, 0.0);
     const FrameHandle elbow = model.AddFixedFrame("elbow", arm, elbow_pose);
 
     const JointHandle forearm =
-        model.AddRevoluteJoint("forearm", elbow, model.body_frame(fore), kZAxis);
+        model.AddRevoluteJoint("forearm", elbow, model.body_frame(fore), kZAxis, 0.0);
     const JointHandle rail = model.AddPrismaticJoint(
-        "rail", model.body_frame(fore), model.body_frame(slider), kXAxis);
+        "rail", model.body_frame(fore), model.body_frame(slider), kXAxis, 0.0);
     model.AddWeldJoint("tip_weld", model.body_frame(slider),
                        model.body_frame(tip));
     model.Finalize();
@@ -256,7 +256,7 @@ void CheckANonIdentityFixedFrameRotationEntersTheChain() {
     const FrameHandle mount = model.AddFixedFrame("mount", base, mount_pose);
 
     const JointHandle hinge =
-        model.AddRevoluteJoint("hinge", mount, model.body_frame(hung), kZAxis);
+        model.AddRevoluteJoint("hinge", mount, model.body_frame(hung), kZAxis, 0.0);
     model.Finalize();
 
     const std::unique_ptr<MultibodyEvaluationContext> context =
@@ -305,8 +305,8 @@ void CheckWhichFrameIsTheParentFixesTheSign() {
         const FrameHandle child = swapped ? model.body_frame(first)
                                           : model.body_frame(second);
         const JointHandle joint =
-            prismatic ? model.AddPrismaticJoint("relation", parent, child, kXAxis)
-                      : model.AddRevoluteJoint("relation", parent, child, kZAxis);
+            prismatic ? model.AddPrismaticJoint("relation", parent, child, kXAxis, 0.0)
+                      : model.AddRevoluteJoint("relation", parent, child, kZAxis, 0.0);
         model.Finalize();
         auto context = model.CreateDefaultContext();
         Eigen::VectorXd positions =
@@ -353,7 +353,7 @@ void CheckARelationStatedTowardsTheWorldIsTraversedInReverse() {
         model.AddRigidBody("backwards", SolidishBody(1.0));
     const JointHandle joint =
         model.AddRevoluteJoint("towards_world", model.body_frame(backwards),
-                               model.world_frame(), kZAxis);
+                               model.world_frame(), kZAxis, 0.0);
     model.Finalize();
 
     auto context = model.CreateDefaultContext();
@@ -382,7 +382,7 @@ void CheckANegativeAxisKeepsItsDirection() {
         model.AddRigidBody("negative_axis_arm", SolidishBody(1.0));
     const JointHandle hinge = model.AddRevoluteJoint(
         "negative_axis_hinge", model.world_frame(), model.body_frame(arm),
-        -kZAxis);
+        -kZAxis, 0.0);
     model.Finalize();
 
     auto context = model.CreateDefaultContext();
@@ -464,7 +464,7 @@ void CheckAVelocityWriteLeavesThePositionsWhereTheyWere() {
     MultibodyModel model;
     const RigidBodyHandle arm = model.AddRigidBody("arm", SolidishBody(1.0));
     const JointHandle hinge = model.AddRevoluteJoint(
-        "hinge", model.world_frame(), model.body_frame(arm), kZAxis);
+        "hinge", model.world_frame(), model.body_frame(arm), kZAxis, 0.0);
     model.Finalize();
 
     auto context = model.CreateDefaultContext();
@@ -534,7 +534,7 @@ void CheckACoordinateVectorOfTheWrongSizeIsRefused() {
     MultibodyModel model;
     const RigidBodyHandle arm = model.AddRigidBody("arm", SolidishBody(1.0));
     model.AddRevoluteJoint("hinge", model.world_frame(),
-                           model.body_frame(arm), kZAxis);
+                           model.body_frame(arm), kZAxis, 0.0);
     model.Finalize();
     auto context = model.CreateDefaultContext();
 

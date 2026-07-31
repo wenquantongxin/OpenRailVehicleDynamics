@@ -38,6 +38,20 @@ struct RevoluteJointDefinition {
     Eigen::Matrix3d parent_frame_rotation_in_parent;
     Eigen::Vector3d parent_frame_translation_in_parent_meters;
     Eigen::Vector3d axis_in_parent;
+    double damping_newton_metre_seconds_per_radian;
+};
+
+struct BodyWrenchDefinition {
+    std::string body_name;
+    Eigen::Vector3d point_position_in_body_frame_meters;
+    std::string expressed_in_frame_name;  // empty means world
+    Eigen::Vector3d torque_about_point_newton_metres;
+    Eigen::Vector3d force_newtons;
+};
+
+struct RevoluteJointTorqueDefinition {
+    std::string joint_name;
+    double torque_newton_metres;
 };
 
 struct RelativeSpatialVelocityObservationDefinition {
@@ -95,6 +109,10 @@ struct ScenarioDefinition {
     // are rad/s² and translational entries are m/s². Every entry is non-zero so
     // every column produces an observable generalized-force response.
     std::vector<double> mass_matrix_column_generalized_accelerations;
+
+    // Call-time inputs for the forward-dynamics operating case.
+    std::vector<BodyWrenchDefinition> applied_body_wrenches;
+    std::vector<RevoluteJointTorqueDefinition> applied_revolute_joint_torques;
 };
 
 // A two-link revolute chain, a revolute branch stated in the direction opposite

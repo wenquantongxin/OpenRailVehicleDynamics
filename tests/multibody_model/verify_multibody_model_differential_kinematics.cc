@@ -112,7 +112,7 @@ class DifferentialKinematicsFixture {
 
         base_joint = model.AddRevoluteJoint(
             "base_joint", model.world_frame(), model.body_frame(base),
-            Eigen::Vector3d::UnitZ());
+            Eigen::Vector3d::UnitZ(), 0.0);
 
         FixedFramePoseParameters slider_mount_pose;
         slider_mount_pose.R_PF = RotationAboutY(0.41);
@@ -121,7 +121,7 @@ class DifferentialKinematicsFixture {
             model.AddFixedFrame("slider_mount", base, slider_mount_pose);
         slider_joint = model.AddPrismaticJoint(
             "slider_joint", slider_mount, model.body_frame(slider),
-            Eigen::Vector3d::UnitX());
+            Eigen::Vector3d::UnitX(), 0.0);
 
         FixedFramePoseParameters weld_parent_pose;
         weld_parent_pose.R_PF = RotationAboutY(-0.28);
@@ -142,7 +142,7 @@ class DifferentialKinematicsFixture {
             model.AddFixedFrame("reverse_mount", reversed, reverse_mount_pose);
         reverse_joint = model.AddRevoluteJoint(
             "reverse_joint", reverse_mount, model.world_frame(),
-            Eigen::Vector3d::UnitY());
+            Eigen::Vector3d::UnitY(), 0.0);
 
         model.DeclareFreeBody(free);
         model.Finalize();
@@ -454,7 +454,7 @@ void CheckSpatialAccelerationAgainstVelocityDerivativeAndBodyOrder() {
         model.AddRigidBody("acceleration_root", PhysicalInertia(1.1));
     const JointHandle root_joint = model.AddRevoluteJoint(
         "acceleration_root_joint", model.world_frame(), model.body_frame(root),
-        Eigen::Vector3d::UnitZ());
+        Eigen::Vector3d::UnitZ(), 0.0);
     FixedFramePoseParameters leaf_mount_pose;
     leaf_mount_pose.R_PF = RotationAboutY(0.39);
     leaf_mount_pose.p_PoFo_P = Eigen::Vector3d(0.32, -0.21, 0.17);
@@ -462,7 +462,7 @@ void CheckSpatialAccelerationAgainstVelocityDerivativeAndBodyOrder() {
         model.AddFixedFrame("acceleration_leaf_mount", root, leaf_mount_pose);
     const JointHandle leaf_joint = model.AddRevoluteJoint(
         "acceleration_leaf_joint", leaf_mount, model.body_frame(leaf),
-        Eigen::Vector3d::UnitX());
+        Eigen::Vector3d::UnitX(), 0.0);
     model.Finalize();
 
     ExpectTrue(model.GetRigidBody(0) == leaf && model.GetRigidBody(1) == root,
@@ -884,7 +884,7 @@ void CheckFailureBoundaries() {
         alias_model.AddRigidBody("alias_body", PhysicalInertia(1.0));
     alias_model.AddRevoluteJoint(
         "alias_joint", alias_model.world_frame(),
-        alias_model.body_frame(alias_body), Eigen::Vector3d::UnitZ());
+        alias_model.body_frame(alias_body), Eigen::Vector3d::UnitZ(), 0.0);
     alias_model.Finalize();
     auto alias_context = alias_model.CreateDefaultContext();
     Eigen::VectorXd same_vector = Eigen::VectorXd::Constant(1, 0.23);

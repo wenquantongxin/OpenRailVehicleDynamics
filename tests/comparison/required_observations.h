@@ -66,4 +66,12 @@ MakeDifferentialKinematicsComparisonRequirements(
 [[nodiscard]] ComparisonRequirements MakeMassMatrixComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 
+[[nodiscard]] ComparisonRequirements
+MakeInverseDynamicsAndForceElementsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario);
+
+[[nodiscard]] ComparisonRequirements
+MakeExternalForceAndForwardDynamicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario);
+
 }  // namespace orvd_comparison

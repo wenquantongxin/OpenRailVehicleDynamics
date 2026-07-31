@@ -121,9 +121,9 @@ void CheckAModelCanBeDescribed() {
                "adding bodies returns usable semantic handles");
 
     const JointHandle shoulder = model.AddRevoluteJoint(
-        "shoulder", model.world_frame(), model.body_frame(first), kZAxis);
+        "shoulder", model.world_frame(), model.body_frame(first), kZAxis, 0.0);
     const JointHandle elbow = model.AddRevoluteJoint(
-        "elbow", model.body_frame(first), model.body_frame(second), kZAxis);
+        "elbow", model.body_frame(first), model.body_frame(second), kZAxis, 0.0);
     ExpectTrue(shoulder.is_valid() && elbow.is_valid(),
                "adding joints returns usable semantic handles");
 }
@@ -156,13 +156,13 @@ void CheckNamesMustBeUsableAndUnique() {
         "a later body cannot bring a second frame with an existing name");
 
     model.AddRevoluteJoint("j", model.world_frame(), model.body_frame(body),
-                           kZAxis);
+                           kZAxis, 0.0);
     const RigidBodyHandle other = model.AddRigidBody("other", SolidishBody(1.0));
     ExpectTrue(
         RefusalMentions(
             [&] {
                 model.AddRevoluteJoint("j", model.world_frame(),
-                                       model.body_frame(other), kZAxis);
+                                       model.body_frame(other), kZAxis, 0.0);
             },
             "already a joint named 'j'"),
         "a duplicate public joint is diagnosed as such, not as a collision with "
@@ -209,7 +209,7 @@ void CheckRelationsThatNoModelCanMean() {
     ExpectTrue(RefusalMentions(
                    [&] {
                        model.AddRevoluteJoint("self", model.body_frame(first),
-                                              model.body_frame(first), kZAxis);
+                                              model.body_frame(first), kZAxis, 0.0);
                    },
                    "to itself"),
                "a joint from a body to itself is refused as such, not as a loop");
@@ -217,20 +217,20 @@ void CheckRelationsThatNoModelCanMean() {
     ExpectRefused(WasRefused([&] {
                       model.AddRevoluteJoint("zero_axis", model.world_frame(),
                                              model.body_frame(first),
-                                             Eigen::Vector3d::Zero());
+                                             Eigen::Vector3d::Zero(), 0.0);
                   }),
                   "a joint about a zero axis");
 
     model.AddRevoluteJoint("a", model.world_frame(), model.body_frame(first),
-                           kZAxis);
+                           kZAxis, 0.0);
     model.AddRevoluteJoint("b", model.body_frame(first),
-                           model.body_frame(second), kZAxis);
+                           model.body_frame(second), kZAxis, 0.0);
 
     // first and second already reach each other, so another relation between
     // them closes a loop.
     ExpectRefused(WasRefused([&] {
                       model.AddRevoluteJoint("loop", model.body_frame(second),
-                                             model.body_frame(first), kZAxis);
+                                             model.body_frame(first), kZAxis, 0.0);
                   }),
                   "a second relation between two bodies already connected");
     ExpectRefused(WasRefused([&] {
@@ -253,19 +253,19 @@ void CheckBranchingAndRepeatedBodiesAreFine() {
 
     ExpectAccepted(WasRefused([&] {
                        model.AddRevoluteJoint("to_hub", model.world_frame(),
-                                              model.body_frame(hub), kZAxis);
+                                              model.body_frame(hub), kZAxis, 0.0);
                    }),
                    "a joint from the world to the hub");
     ExpectAccepted(WasRefused([&] {
                        model.AddRevoluteJoint("hub_left",
                                               model.body_frame(hub),
-                                              model.body_frame(left), kZAxis);
+                                              model.body_frame(left), kZAxis, 0.0);
                    }),
                    "a first branch off the hub");
     ExpectAccepted(WasRefused([&] {
                        model.AddPrismaticJoint("hub_right",
                                                model.body_frame(hub),
-                                               model.body_frame(right), kZAxis);
+                                               model.body_frame(right), kZAxis, 0.0);
                    }),
                    "a second branch off the same hub");
 
@@ -277,7 +277,7 @@ void CheckBranchingAndRepeatedBodiesAreFine() {
     ExpectAccepted(WasRefused([&] {
                        backwards.AddRevoluteJoint(
                            "towards_world", backwards.body_frame(body),
-                           backwards.world_frame(), kZAxis);
+                           backwards.world_frame(), kZAxis, 0.0);
                    }),
                    "a joint declared with the world as its child");
 }
@@ -293,7 +293,7 @@ void CheckPublicNamesDoNotCollideWithImplementationFrames() {
     ExpectAccepted(
         WasRefused([&] {
             model.AddRevoluteJoint("hinge", model.world_frame(),
-                                   model.body_frame(child), kZAxis);
+                                   model.body_frame(child), kZAxis, 0.0);
         }),
         "a body name that resembles an implementation joint-frame name");
 }
@@ -314,7 +314,7 @@ void CheckFreedomIsStatedRatherThanInferred() {
         "declaration, not merely as another world relation");
 
     model.AddRevoluteJoint("j", model.world_frame(),
-                           model.body_frame(jointed), kZAxis);
+                           model.body_frame(jointed), kZAxis, 0.0);
     ExpectRefused(WasRefused([&] { model.DeclareFreeBody(jointed); }),
                   "declaring a body free when a joint already relates it");
 
@@ -325,7 +325,7 @@ void CheckFreedomIsStatedRatherThanInferred() {
                        model.AddRevoluteJoint("off_the_free_body",
                                               model.body_frame(floating),
                                               model.body_frame(hanging),
-                                              kZAxis);
+                                              kZAxis, 0.0);
                    }),
                    "a joint outboard of a free body");
 
@@ -339,7 +339,7 @@ void CheckFreedomIsStatedRatherThanInferred() {
         collision.AddRigidBody("child", SolidishBody(1.0));
     collision.AddRevoluteJoint("__orvd_free_body_1",
                                collision.body_frame(root),
-                               collision.body_frame(child), kZAxis);
+                               collision.body_frame(child), kZAxis, 0.0);
     ExpectAccepted(WasRefused([&] { collision.DeclareFreeBody(root); }),
                    "a free declaration after a caller used the exact first "
                    "private-name candidate");
@@ -358,7 +358,7 @@ void CheckFreedomIsStatedRatherThanInferred() {
                        reversed_order.AddRevoluteJoint(
                            "__orvd_free_body_1",
                            reversed_order.body_frame(free_root),
-                           reversed_order.body_frame(attached), kZAxis);
+                           reversed_order.body_frame(attached), kZAxis, 0.0);
                    }),
                    "a caller's joint name matching the private-name candidate "
                    "of a body already declared free");
@@ -404,7 +404,7 @@ void CheckEveryFiniteNonzeroAxisIsAUsableDirection() {
             model.AddRevoluteJoint(
                 "large_axis", model.world_frame(),
                 model.body_frame(large_axis_body),
-                Eigen::Vector3d(largest, largest, 0.0));
+                Eigen::Vector3d(largest, largest, 0.0), 0.0);
         }),
         "a large finite nonzero axis whose direct norm would overflow");
     const double smallest = std::numeric_limits<double>::denorm_min();
@@ -413,7 +413,7 @@ void CheckEveryFiniteNonzeroAxisIsAUsableDirection() {
             model.AddPrismaticJoint(
                 "small_axis", model.world_frame(),
                 model.body_frame(small_axis_body),
-                Eigen::Vector3d(smallest, 0.0, 0.0));
+                Eigen::Vector3d(smallest, 0.0, 0.0), 0.0);
         }),
         "a small finite nonzero axis whose direct norm would underflow");
 }
@@ -429,7 +429,7 @@ void CheckAFixedFrameIsUsableAsAJointEndpoint() {
     ExpectAccepted(WasRefused([&] {
                        model.AddRevoluteJoint("at_the_mount",
                                               model.world_frame(), mount,
-                                              kZAxis);
+                                              kZAxis, 0.0);
                    }),
                    "a joint attached at a fixed frame");
 }
