@@ -5,9 +5,9 @@
 // twice and comparing it with itself establishes that the harness works — the
 // pipe, the parser and the judge — and nothing about any candidate. Running the
 // reference against ORVD's own emitter is the equivalence claim, and it is made
-// only over the capability ORVD has actually landed: the judge's mass-matrix
-// requirement set includes every earlier kinematics layer and refuses a missing
-// observation rather than skipping it.
+// only over the capability ORVD has actually landed: the judge's external-force
+// forward-dynamics requirement set includes every earlier layer and refuses a
+// missing observation rather than skipping it.
 //
 // Separate processes are not tidiness. libdrake exports the same drake:: symbols
 // a vendored copy keeps, so co-linking the two would be an ODR violation whose
@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_set>
 #include <vector>
 
 #include <sys/types.h>
@@ -429,6 +430,104 @@ void ExpectRequirementsCoverMassMatrix(
     }
 }
 
+void ExpectRequirementsCoverExternalForceAndForwardDynamics(
+    const orvd_comparison::ComparisonRequirements& requirements,
+    const orvd_contract::ScenarioDefinition& scenario) {
+    const orvd_comparison::ComparisonRequirements narrower =
+        orvd_comparison::MakeMassMatrixComparisonRequirements(scenario);
+    ExpectRequirementsCoverMassMatrix(narrower, scenario);
+    Expect(requirements.topology_fact_names == narrower.topology_fact_names,
+           "dynamics requirements retain exactly the earlier topology facts");
+    Expect(requirements.rotations.size() == narrower.rotations.size(),
+           "dynamics requirements retain exactly the earlier rotations");
+    for (std::size_t index = 0;
+         index < requirements.rotations.size() &&
+         index < narrower.rotations.size();
+         ++index) {
+        Expect(requirements.rotations[index].group_name ==
+                   narrower.rotations[index].group_name,
+               "dynamics requirements retain each earlier rotation");
+    }
+
+    const std::size_t nq = scenario.generalized_positions.size();
+    const std::size_t nv = scenario.generalized_velocities.size();
+    Expect(requirements.scalars.size() ==
+               narrower.scalars.size() + 6 * nv + nq,
+           "dynamics requirements add exactly four force vectors, one "
+           "acceleration vector and one complete state derivative");
+    for (std::size_t index = 0;
+         index < narrower.scalars.size() &&
+         index < requirements.scalars.size();
+         ++index) {
+        Expect(requirements.scalars[index].name ==
+                       narrower.scalars[index].name &&
+                   requirements.scalars[index].kind ==
+                       narrower.scalars[index].kind,
+               "dynamics requirements retain every earlier scalar in order");
+    }
+
+    const auto expect_required = [&](const std::string& name,
+                                     orvd_contract::ObservationKind kind) {
+        const bool present = std::ranges::any_of(
+            requirements.scalars, [&](const auto& required) {
+                return required.name == name && required.kind == kind;
+            });
+        Expect(present,
+               "dynamics requirement has the expected name and units: " +
+                   name);
+    };
+    const auto force_kind = [](orvd_contract::GeneralizedForceComponentKind kind) {
+        return kind ==
+                       orvd_contract::GeneralizedForceComponentKind::kForceNewtons
+                   ? orvd_contract::ObservationKind::kForceNewtons
+                   : orvd_contract::ObservationKind::kTorqueNewtonMetres;
+    };
+    const auto acceleration_kind = [](
+                                       orvd_contract::GeneralizedForceComponentKind
+                                           kind) {
+        return kind ==
+                       orvd_contract::GeneralizedForceComponentKind::kForceNewtons
+                   ? orvd_contract::ObservationKind::
+                         kTranslationalAccelerationMetersPerSecondSquared
+                   : orvd_contract::ObservationKind::
+                         kAngularAccelerationRadiansPerSecondSquared;
+    };
+    for (std::size_t index = 0; index < nv; ++index) {
+        const auto kind = force_kind(
+            scenario.generalized_force_component_kinds[index]);
+        for (const char* name : {"velocity_bias_generalized_force",
+                                 "gravity_applied_generalized_force",
+                                 "damping_applied_generalized_force",
+                                 "required_generalized_force"}) {
+            expect_required(
+                std::string(name) + "[" + std::to_string(index) + "]", kind);
+        }
+    }
+    for (std::size_t index = 0; index < nv; ++index) {
+        expect_required(
+            "forward_dynamics_generalized_acceleration[" +
+                std::to_string(index) + "]",
+            acceleration_kind(
+                scenario.generalized_force_component_kinds[index]));
+    }
+    for (std::size_t index = 0; index < nq; ++index) {
+        expect_required(
+            "state_time_derivative[" + std::to_string(index) + "]",
+            scenario.generalized_position_derivative_observation_kinds[index]);
+    }
+    for (std::size_t index = 0; index < nv; ++index) {
+        expect_required(
+            "state_time_derivative[" + std::to_string(nq + index) + "]",
+            acceleration_kind(
+                scenario.generalized_force_component_kinds[index]));
+    }
+    std::unordered_set<std::string> scalar_names;
+    for (const auto& required : requirements.scalars) {
+        Expect(scalar_names.insert(required.name).second,
+               "required scalar names are unique: " + required.name);
+    }
+}
+
 /// Moves one named observation by an absolute amount.
 ///
 /// Distinct from the proportional perturbation helper: here the caller has
@@ -646,9 +745,8 @@ int main(int argc, char** argv) {
             orvd_comparison::
                 MakeExternalForceAndForwardDynamicsComparisonRequirements(
                     scenario);
-        ExpectRequirementsCoverMassMatrix(
-            orvd_comparison::MakeMassMatrixComparisonRequirements(scenario),
-            scenario);
+        ExpectRequirementsCoverExternalForceAndForwardDynamics(requirements,
+                                                               scenario);
 
         std::string reference_text, candidate_text;
         if (!CaptureEmitterOutput(emitter_path, excitation, &reference_text) ||
@@ -850,6 +948,6 @@ int main(int argc, char** argv) {
     }
     std::printf(
         "the harness fails when it should, and the ORVD candidate agrees with "
-        "the Drake reference through the mass matrix\n");
+        "the Drake reference through external-force forward dynamics\n");
     return 0;
 }

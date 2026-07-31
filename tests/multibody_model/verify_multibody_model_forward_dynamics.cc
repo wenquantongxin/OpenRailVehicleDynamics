@@ -4,6 +4,7 @@
 #include <limits>
 
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 #include "orvd/multibody_model/multibody_model.h"
 
@@ -13,6 +14,7 @@ using orvd::multibody_model::AppliedBodyWrench;
 using orvd::multibody_model::AppliedPrismaticJointForce;
 using orvd::multibody_model::AppliedRevoluteJointTorque;
 using orvd::multibody_model::MultibodyModel;
+using orvd::multibody_runtime::FixedFramePoseParameters;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
 
 int failure_count = 0;
@@ -115,6 +117,73 @@ void CheckWorkspaceReuseAndTypedPrismaticForce() {
     ExpectNear(vdot[0], 2.0, "A-B-A reuse leaves no force residue");
 }
 
+void CheckMixedTreeAbaRneaRoundTrip() {
+    MultibodyModel model;
+    const auto welded =
+        model.AddRigidBody("welded", MakeInertia(0.8, -0.11, 0.17));
+    const auto slider =
+        model.AddRigidBody("slider", MakeInertia(1.4, 0.09, 0.24));
+    const auto root =
+        model.AddRigidBody("root", MakeInertia(2.1, 0.13, 0.31));
+    const auto revolute = model.AddRevoluteJoint(
+        "root_joint", model.world_frame(), model.body_frame(root),
+        Eigen::Vector3d(0.31, -0.47, 0.83), 0.0);
+
+    FixedFramePoseParameters slider_mount_pose;
+    slider_mount_pose.R_PF =
+        Eigen::AngleAxisd(0.37, Eigen::Vector3d::UnitY()).toRotationMatrix();
+    slider_mount_pose.p_PoFo_P = Eigen::Vector3d(0.34, -0.16, 0.22);
+    const auto slider_mount =
+        model.AddFixedFrame("slider_mount", root, slider_mount_pose);
+    const auto prismatic = model.AddPrismaticJoint(
+        "slider_joint", slider_mount, model.body_frame(slider),
+        Eigen::Vector3d(0.91, 0.28, -0.19), 0.0);
+
+    FixedFramePoseParameters weld_mount_pose;
+    weld_mount_pose.R_PF =
+        Eigen::AngleAxisd(-0.29, Eigen::Vector3d::UnitX()).toRotationMatrix();
+    weld_mount_pose.p_PoFo_P = Eigen::Vector3d(-0.21, 0.18, 0.13);
+    const auto weld_mount =
+        model.AddFixedFrame("weld_mount", slider, weld_mount_pose);
+    model.AddWeldJoint("weld_joint", weld_mount, model.body_frame(welded));
+    model.SetGravityVector(Eigen::Vector3d::Zero());
+    model.Finalize();
+
+    Eigen::VectorXd positions =
+        Eigen::VectorXd::Zero(model.num_generalized_positions());
+    positions[model.GetJointPositionRange(revolute).start()] = 0.43;
+    positions[model.GetJointPositionRange(prismatic).start()] = -0.24;
+    Eigen::VectorXd velocities =
+        Eigen::VectorXd::Zero(model.num_generalized_velocities());
+    velocities[model.GetJointVelocityRange(revolute).start()] = 0.76;
+    velocities[model.GetJointVelocityRange(prismatic).start()] = -0.39;
+    auto context = model.CreateDefaultContext();
+    model.SetGeneralizedPositions(context.get(), positions);
+    model.SetGeneralizedVelocities(context.get(), velocities);
+
+    constexpr double applied_torque = 1.7;
+    constexpr double applied_force = -2.4;
+    const std::array torques{
+        AppliedRevoluteJointTorque{revolute, applied_torque}};
+    const std::array forces{
+        AppliedPrismaticJointForce{prismatic, applied_force}};
+    auto workspace = model.CreateForwardDynamicsWorkspace();
+    Eigen::VectorXd vdot(model.num_generalized_velocities());
+    model.CalcGeneralizedVelocityDerivatives(
+        *context, {}, torques, forces, *workspace, vdot);
+
+    Eigen::VectorXd required(model.num_generalized_velocities());
+    model.CalcRequiredGeneralizedForces(*context, vdot, required);
+    Eigen::VectorXd applied =
+        Eigen::VectorXd::Zero(model.num_generalized_velocities());
+    applied[model.GetJointVelocityRange(revolute).start()] = applied_torque;
+    applied[model.GetJointVelocityRange(prismatic).start()] = applied_force;
+    Expect((required - applied).norm() <=
+               4096.0 * std::numeric_limits<double>::epsilon() *
+                   std::max(1.0, applied.norm()),
+           "ABA and RNEA agree on a rotated revolute-prismatic-weld tree");
+}
+
 void CheckWorkspaceAndEffortRefusals() {
     MultibodyModel first_model;
     const auto first_body = first_model.AddRigidBody(
@@ -163,6 +232,7 @@ void CheckWorkspaceAndEffortRefusals() {
 int main() {
     CheckOffsetWrenchAndStateDerivative();
     CheckWorkspaceReuseAndTypedPrismaticForce();
+    CheckMixedTreeAbaRneaRoundTrip();
     CheckWorkspaceAndEffortRefusals();
     if (failure_count != 0) return 1;
     std::printf("PASS multibody external forces and forward dynamics\n");
