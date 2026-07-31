@@ -482,6 +482,16 @@ orvd_configure_first_party_target(verify_system_instance)
 target_link_libraries(verify_system_instance PRIVATE orvd_system_assembly)
 add_test(NAME verify_system_instance COMMAND verify_system_instance)
 
+# G42's single static evaluation order.  The current admitted graph has no
+# event-producing component, so unsupported event forms have no API to test;
+# this executable verifies the real derivative operation and that both success
+# and failure leave the accepted physical state untouched.
+add_executable(verify_compiled_system_plan
+    system_assembly/verify_compiled_system_plan.cc)
+orvd_configure_first_party_target(verify_compiled_system_plan)
+target_link_libraries(verify_compiled_system_plan PRIVATE orvd_system_assembly)
+add_test(NAME verify_compiled_system_plan COMMAND verify_compiled_system_plan)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed
