@@ -334,3 +334,14 @@ target_link_libraries(verify_multibody_model_building
     PRIVATE orvd_multibody_model)
 add_test(NAME verify_multibody_model_building
          COMMAND verify_multibody_model_building)
+
+# Finalization and what a finalized model answers. Same linkage and the same
+# reason: everything it asks for is asked through the public headers, so the
+# coordinate ranges it checks are ones a consumer can actually obtain.
+add_executable(verify_multibody_model_finalization
+    multibody_model/verify_multibody_model_finalization.cc)
+orvd_configure_first_party_target(verify_multibody_model_finalization)
+target_link_libraries(verify_multibody_model_finalization
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_finalization
+         COMMAND verify_multibody_model_finalization)

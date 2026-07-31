@@ -18,20 +18,28 @@
 /// Failures happen where they can first be seen. A duplicate name, a handle from
 /// another model, a joint from a body to itself, a second relation between two
 /// bodies already related, a relation that would close a loop — each of these is
-/// decidable when it is offered, and each is refused then, by name. What cannot
-/// be decided until the whole model is known — whether every body reaches the
-/// world — belongs to finalization, which is G30's.
+/// decidable when it is offered, and each is refused then, by name. Exactly one
+/// thing cannot be decided until the whole model is known — whether every body
+/// reaches the world — and that one is decided by Finalize().
 ///
 /// Nothing here silently repairs anything. A body nobody connected stays
 /// unconnected: the rigid tree underneath would eventually give it a floating
 /// relation to the world and carry on, and the model that came out would be one
 /// the caller never described.
+///
+/// A model has two lives. While it is being described it accepts elements and
+/// answers nothing; once finalized it accepts nothing and answers everything.
+/// The split is not ceremony: a count or a coordinate range asked for mid
+/// description would be an answer to "what has been said so far", which is a
+/// different question, and one that the next call could change.
 
 #include <memory>
 #include <string_view>
 
 #include <Eigen/Dense>
 
+#include "orvd/multibody_model/multibody_coordinate_ranges.h"
+#include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_model_handles.h"
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
 
@@ -129,6 +137,145 @@ class MultibodyModel {
     /// caller meant, and the model cannot tell which.
     void DeclareFreeBody(RigidBodyHandle body);
 
+    // --- Gravity ------------------------------------------------------------
+
+    /// The uniform gravitational acceleration, expressed in the world frame.
+    ///
+    /// A model constant, not something that varies between two evaluations of
+    /// one model. Making it a context parameter would give every cache that
+    /// reads a gravity force a dependency to declare, in exchange for a freedom
+    /// nothing in this product uses.
+    [[nodiscard]] const Eigen::Vector3d& gravity_vector() const;
+
+    /// States it, while the model is still being described.
+    ///
+    /// @throws std::invalid_argument if `g_W` is not finite.
+    /// @throws std::logic_error if the model is finalized or its finalization
+    /// failed.
+    void SetGravityVector(const Eigen::Vector3d& g_W);
+
+    // --- Finalization -------------------------------------------------------
+
+    /// Fixes the model: no more elements, and the coordinates get their places.
+    ///
+    /// First the one thing that needed the whole model: every rigid body must
+    /// reach the world. Bodies that do not are refused, all of them named in
+    /// one message, and nothing has been changed — the caller can state the
+    /// missing relations and finalize again.
+    ///
+    /// Then the model is committed, and from that point a failure is the end of
+    /// it. The underlying tree may be half finalized, and there is no state to
+    /// go back to, so the model enters a failed state in which every call is
+    /// refused and says why. This is deliberately not a retry: a retry would be
+    /// building on a tree whose condition nobody knows.
+    ///
+    /// After it succeeds the structure, the gravity vector and the model's own
+    /// force-element constants are frozen. Every Add, the gravity setter and a
+    /// second Finalize() are refused at entry.
+    ///
+    /// @throws std::invalid_argument if some rigid body has no path to the
+    /// world, naming each one.
+    /// @throws std::logic_error if the model is already finalized or its
+    /// finalization already failed.
+    void Finalize();
+
+    /// Whether Finalize() has succeeded.
+    [[nodiscard]] bool is_finalized() const;
+
+    // --- The finalized model ------------------------------------------------
+    //
+    // Everything below requires finalization and refuses without it.
+
+    /// How many rigid bodies, not counting the world.
+    ///
+    /// The world is not one of them. Nothing accelerates it, it has no mass
+    /// properties to read and no force to receive, so a caller walking the
+    /// bodies would be skipping it every time.
+    [[nodiscard]] int num_rigid_bodies() const;
+
+    /// How many frames, counting the world frame.
+    ///
+    /// Only the frames this model has: the world frame, one per rigid body, and
+    /// the fixed frames somebody added. The rigid tree makes frames of its own
+    /// for its own purposes; those are not the model's and are not counted.
+    [[nodiscard]] int num_frames() const;
+
+    /// How many joints, counting only the ones a caller added.
+    ///
+    /// A declared free relation is not one of them. It is implemented with a
+    /// joint, but the caller stated a property of a body, not a joint, and a
+    /// joint they never named appearing in the count is the arrangement showing
+    /// through.
+    [[nodiscard]] int num_joints() const;
+
+    /// The size of the model's q and v.
+    [[nodiscard]] int num_generalized_positions() const;
+    [[nodiscard]] int num_generalized_velocities() const;
+
+    /// The `index`-th rigid body, frame or joint, in the order they were added.
+    ///
+    /// A position in an enumeration, not an identity: it is how a caller walks
+    /// what a model holds without having kept every handle. `index` is not what
+    /// a handle carries and the two are not interchangeable.
+    ///
+    /// @throws std::invalid_argument if `index` is out of range.
+    [[nodiscard]] RigidBodyHandle GetRigidBody(int index) const;
+    [[nodiscard]] FrameHandle GetFrame(int index) const;
+    [[nodiscard]] JointHandle GetJoint(int index) const;
+
+    /// The element with this name.
+    ///
+    /// @throws std::invalid_argument if nothing of that kind has that name.
+    [[nodiscard]] RigidBodyHandle GetRigidBodyByName(std::string_view name) const;
+    [[nodiscard]] FrameHandle GetFrameByName(std::string_view name) const;
+    [[nodiscard]] JointHandle GetJointByName(std::string_view name) const;
+
+    /// The name this element was added under.
+    ///
+    /// @throws std::invalid_argument if the handle is invalid or foreign.
+    [[nodiscard]] std::string_view GetRigidBodyName(RigidBodyHandle body) const;
+    [[nodiscard]] std::string_view GetFrameName(FrameHandle frame) const;
+    [[nodiscard]] std::string_view GetJointName(JointHandle joint) const;
+
+    /// Whether this body was declared to move freely in the world.
+    [[nodiscard]] bool IsFreeBody(RigidBodyHandle body) const;
+
+    // --- Coordinates --------------------------------------------------------
+    //
+    // Every generalized coordinate belongs to exactly one public joint or one
+    // declared free body. The two sets do not overlap and together they cover q
+    // and v exactly; a coordinate belonging to neither would be a degree of
+    // freedom the model was given without being asked.
+
+    /// Where this joint's coordinates sit. A weld's are empty.
+    ///
+    /// @throws std::invalid_argument if the handle is invalid or foreign.
+    [[nodiscard]] GeneralizedPositionRange GetJointPositionRange(
+        JointHandle joint) const;
+    [[nodiscard]] GeneralizedVelocityRange GetJointVelocityRange(
+        JointHandle joint) const;
+
+    /// Where this free body's coordinates sit: seven positions, six velocities.
+    ///
+    /// @throws std::invalid_argument if the handle is invalid or foreign, or if
+    /// the body was not declared free — an unfree body's coordinates belong to
+    /// the joints that relate it, and asking here would be asking the wrong
+    /// question rather than getting an empty answer.
+    [[nodiscard]] GeneralizedPositionRange GetFreeBodyPositionRange(
+        RigidBodyHandle body) const;
+    [[nodiscard]] GeneralizedVelocityRange GetFreeBodyVelocityRange(
+        RigidBodyHandle body) const;
+
+    // --- Evaluation ---------------------------------------------------------
+
+    /// A context holding this model's defaults.
+    ///
+    /// The only way to get one. The model must outlive it.
+    ///
+    /// @throws std::logic_error if the model is not finalized.
+    [[nodiscard]] std::unique_ptr<MultibodyEvaluationContext>
+    CreateDefaultContext() const;
+
    private:
     template <typename Handle>
     static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {
@@ -144,6 +291,11 @@ class MultibodyModel {
     static Handle MakeHandle(internal::ModelIdentity model_identity,
                              int ordinal) {
         return Handle(model_identity, ordinal);
+    }
+
+    template <typename Range>
+    static Range MakeRange(int start, int size) {
+        return Range(start, size);
     }
 
     class Implementation;

@@ -68,7 +68,7 @@ OpenRailVehicleDynamics/
     └── unit/             单元测试
 ```
 
-已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、不导出；G29 已建立程序化建模门面，稳定最终化查询归 G30，安装与交付边界归 G46。尚未开工的模块仍只保留职责骨架。
+已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、不导出；G29–G30 已建立程序化建模门面、最终化与稳定查询，安装与交付边界归 G46。尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 

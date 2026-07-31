@@ -9,6 +9,7 @@
 # G46's question; exporting now would freeze an interface still being built.
 
 add_library(orvd_multibody_model STATIC
+    src/multibody_evaluation_context.cc
     src/multibody_model.cc)
 
 orvd_configure_first_party_target(orvd_multibody_model)

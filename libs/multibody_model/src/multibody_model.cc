@@ -1,7 +1,9 @@
 #include "orvd/multibody_model/multibody_model.h"
 
 #include <atomic>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -12,7 +14,9 @@
 #include "drake/multibody/tree/quaternion_floating_joint.h"
 #include "drake/multibody/tree/revolute_joint.h"
 #include "drake/multibody/tree/rigid_body.h"
+#include "drake/multibody/tree/uniform_gravity_field_element.h"
 #include "drake/multibody/tree/weld_joint.h"
+#include "multibody_evaluation_context_implementation.h"
 #include "orvd/multibody_runtime/multibody_physical_parameter_validation.h"
 #include "orvd/rigid_multibody_tree/spatial_inertia_parameter_conversion.h"
 
@@ -21,6 +25,16 @@ namespace {
 
 [[noreturn]] void Reject(const std::string& detail) {
     throw std::invalid_argument("multibody model: " + detail);
+}
+
+/// Refuses something the model cannot be asked at this point in its life.
+///
+/// A different exception type from Reject() because it is a different kind of
+/// mistake: the arguments were fine, the model was not in a state to receive
+/// them. `std::invalid_argument` derives from `std::logic_error`, so a caller
+/// who does not care about the distinction still catches both with one clause.
+[[noreturn]] void RejectState(const std::string& detail) {
+    throw std::logic_error("multibody model: " + detail);
 }
 
 /// Hands out an identity nobody else has had.
@@ -57,7 +71,40 @@ class MultibodyModel::Implementation {
         body_frame_.push_back(0);
         related_root_.push_back(0);
         is_free_.push_back(false);
+        free_body_tree_joint_.emplace_back();
         tree_body_.push_back(tree_.world_link().index());
+    }
+
+    /// Refuses anything that would add to or restate a model that is past it.
+    void ThrowIfNotBuildable(const std::string& action) const {
+        if (finalization_failed_) {
+            RejectState(
+                "cannot " + action +
+                ": this model's finalization failed partway through, so the "
+                "rigid tree underneath is in a condition nothing here can "
+                "describe; build a new model rather than continuing with this "
+                "one");
+        }
+        if (finalized_) {
+            RejectState("cannot " + action +
+                        ": this model is finalized, and what a finalized model "
+                        "contains is what its coordinates were assigned from");
+        }
+    }
+
+    /// Refuses anything that only a finalized model can answer.
+    void ThrowIfNotFinalized(const std::string& query) const {
+        if (finalization_failed_) {
+            RejectState("cannot " + query +
+                        ": this model's finalization failed partway through, "
+                        "so it never came to hold an answer");
+        }
+        if (!finalized_) {
+            RejectState(
+                "cannot " + query +
+                " before Finalize(): until then the answer is about what has "
+                "been described so far, which the next call can still change");
+        }
     }
 
     template <typename Handle>
@@ -125,10 +172,6 @@ class MultibodyModel::Implementation {
         if (joint_by_name_.contains(joint_name)) {
             Reject("there is already a joint named '" + joint_name + "'");
         }
-        if (tree_.HasJointNamed(joint_name)) {
-            Reject("joint name '" + joint_name +
-                   "' is already used by an internal model relation");
-        }
         const int parent_frame =
             Resolve(parent, static_cast<int>(frame_names_.size()), "frame");
         const int child_frame =
@@ -176,6 +219,18 @@ class MultibodyModel::Implementation {
     std::vector<int> related_root_;
     std::vector<bool> is_free_;
 
+    /// For each declared free body: the private joint that implements it.
+    ///
+    /// Assigned during finalization, not when the body is declared free.
+    /// Deferring it is what lets the private name be picked against the
+    /// complete set of public joint names: a private joint already sitting in
+    /// the tree would make a caller's later, perfectly legitimate joint name
+    /// collide with an implementation detail.
+    std::vector<drake::multibody::JointIndex> free_body_tree_joint_;
+
+    bool finalized_{false};
+    bool finalization_failed_{false};
+
     /// The rigid tree, built as the model is described.
     ///
     /// Private to this file. The public header names no vendored type, so how
@@ -198,6 +253,7 @@ RigidBodyHandle MultibodyModel::AddRigidBody(
     std::string_view name,
     const multibody_runtime::RigidBodyInertiaParameters& inertia) {
     Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("add a rigid body");
     const std::string body_name(name);
     if (body_name.empty()) {
         Reject("a rigid body needs a name; an unnamed one cannot be named in "
@@ -226,6 +282,7 @@ RigidBodyHandle MultibodyModel::AddRigidBody(
     model.tree_body_.push_back(link.index());
     model.related_root_.push_back(ordinal);
     model.is_free_.push_back(false);
+    model.free_body_tree_joint_.emplace_back();
 
     // Every body brings its own frame, at its origin.
     const int frame_ordinal = static_cast<int>(model.frame_names_.size());
@@ -255,6 +312,7 @@ FrameHandle MultibodyModel::AddFixedFrame(
     std::string_view name, RigidBodyHandle body,
     const multibody_runtime::FixedFramePoseParameters& pose_in_body) {
     Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("add a fixed frame");
     const std::string frame_name(name);
     if (frame_name.empty()) {
         Reject("a frame needs a name");
@@ -312,6 +370,7 @@ JointHandle MultibodyModel::AddRevoluteJoint(
     std::string_view name, FrameHandle parent, FrameHandle child,
     const Eigen::Vector3d& axis_in_parent) {
     Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("add a revolute joint");
     const std::string joint_name(name);
     const auto [parent_body, child_body] =
         model.PrepareRelation(parent, child, joint_name);
@@ -333,6 +392,7 @@ JointHandle MultibodyModel::AddPrismaticJoint(
     std::string_view name, FrameHandle parent, FrameHandle child,
     const Eigen::Vector3d& axis_in_parent) {
     Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("add a prismatic joint");
     const std::string joint_name(name);
     const auto [parent_body, child_body] =
         model.PrepareRelation(parent, child, joint_name);
@@ -354,6 +414,7 @@ JointHandle MultibodyModel::AddWeldJoint(std::string_view name,
                                          FrameHandle parent,
                                          FrameHandle child) {
     Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("add a weld joint");
     const std::string joint_name(name);
     const auto [parent_body, child_body] =
         model.PrepareRelation(parent, child, joint_name);
@@ -375,6 +436,7 @@ JointHandle MultibodyModel::AddWeldJoint(std::string_view name,
 
 void MultibodyModel::DeclareFreeBody(RigidBodyHandle body) {
     Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("declare a rigid body free");
     const int ordinal = model.Resolve(
         body, static_cast<int>(model.body_names_.size()), "rigid body");
     if (ordinal == 0) {
@@ -396,21 +458,310 @@ void MultibodyModel::DeclareFreeBody(RigidBodyHandle body) {
     // relation to the world by the rigid tree at finalization: six degrees of
     // freedom nobody asked for, in a model that otherwise came out looking
     // exactly as described.
-    // The implementation joint is not recorded as a public JointHandle or
-    // public joint name. Pick an unused tree-local name so a public joint that
-    // was already added can never be displaced by this implementation detail.
-    std::string internal_joint_name =
-        "__orvd_free_body_" + std::to_string(ordinal);
-    while (model.tree_.HasJointNamed(internal_joint_name)) {
-        internal_joint_name.push_back('_');
-    }
-    model.tree_.AddJoint<drake::multibody::QuaternionFloatingJoint>(
-        std::make_unique<drake::multibody::QuaternionFloatingJoint<double>>(
-            internal_joint_name, model.tree_.world_frame(),
-            model.tree_.get_link(model.tree_body_[ordinal]).link_frame()));
-
+    //
+    // The relation is recorded here, in the model's own forest, so that every
+    // topological conflict is still decided at the moment it is offered. The
+    // joint that implements it is not created until finalization: a private
+    // joint sitting in the tree from now on would occupy a name, and a caller
+    // who later asked for a joint by that same perfectly ordinary name would be
+    // refused because of something the model never told them about.
     model.is_free_[ordinal] = true;
     model.Connect(0, ordinal);
+}
+
+// --- Gravity -----------------------------------------------------------------
+
+const Eigen::Vector3d& MultibodyModel::gravity_vector() const {
+    return implementation_->tree_.gravity_field().gravity_vector();
+}
+
+void MultibodyModel::SetGravityVector(const Eigen::Vector3d& g_W) {
+    Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("set the gravity vector");
+    if (!g_W.allFinite()) {
+        Reject("the gravity vector is not finite");
+    }
+    model.tree_.mutable_gravity_field().set_gravity_vector(g_W);
+}
+
+// --- Finalization ------------------------------------------------------------
+
+void MultibodyModel::Finalize() {
+    Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("finalize the model");
+
+    // The precheck. It reads the model's own forest and writes nothing, so a
+    // model that fails it is exactly the model that went in: the caller can
+    // state what is missing and finalize again.
+    //
+    // Reachability is all there is to check. Every relation the model accepted
+    // joined two components that were not yet joined, so the forest cannot
+    // contain a cycle and no body can reach the world by two different paths.
+    // What remains is whether it reaches the world at all.
+    std::vector<std::string> unreachable;
+    for (int ordinal = 1; ordinal < static_cast<int>(model.body_names_.size());
+         ++ordinal) {
+        if (!model.AlreadyConnected(ordinal, 0)) {
+            unreachable.push_back(model.body_names_[ordinal]);
+        }
+    }
+    if (!unreachable.empty()) {
+        std::string names;
+        for (std::size_t i = 0; i < unreachable.size(); ++i) {
+            names += (i == 0 ? "'" : ", '") + unreachable[i] + "'";
+        }
+        Reject("cannot finalize: " + std::to_string(unreachable.size()) +
+               (unreachable.size() == 1 ? " rigid body has" : " rigid bodies have") +
+               " no path to the world: " + names +
+               ". Relate each one, or declare it free if that is what was "
+               "meant; nothing was changed, so finalizing again after saying so "
+               "will work");
+    }
+
+    // The commit phase. Past this line the tree is being changed, and a failure
+    // leaves it in a condition nothing here can describe — so the model records
+    // that it is finished before it starts, and only getting all the way
+    // through clears that. No exception is caught: the reason a finalization
+    // failed is the reason the caller needs, not one this layer would restate.
+    model.finalization_failed_ = true;
+
+    for (int ordinal = 1; ordinal < static_cast<int>(model.body_names_.size());
+         ++ordinal) {
+        if (!model.is_free_[ordinal]) continue;
+        // Private, and named so it cannot be mistaken for one of the caller's.
+        // Every public joint is in the tree by now, so a name that is free here
+        // is free for good.
+        std::string joint_name = "__orvd_free_body_" + std::to_string(ordinal);
+        while (model.tree_.HasJointNamed(joint_name)) {
+            joint_name.push_back('_');
+        }
+        const auto& joint =
+            model.tree_.AddJoint<drake::multibody::QuaternionFloatingJoint>(
+                std::make_unique<
+                    drake::multibody::QuaternionFloatingJoint<double>>(
+                    joint_name, model.tree_.world_frame(),
+                    model.tree_.get_link(model.tree_body_[ordinal])
+                        .link_frame()));
+        model.free_body_tree_joint_[ordinal] = joint.index();
+    }
+
+    model.tree_.Finalize();
+
+    model.finalization_failed_ = false;
+    model.finalized_ = true;
+}
+
+bool MultibodyModel::is_finalized() const {
+    return implementation_->finalized_;
+}
+
+// --- What the finalized model contains ---------------------------------------
+
+namespace {
+
+/// A position in an enumeration, checked before it is used as one.
+int RequireIndex(int index, int count, const std::string& what) {
+    if (index < 0 || index >= count) {
+        Reject("there is no " + what + " at index " + std::to_string(index) +
+               "; this model has " + std::to_string(count));
+    }
+    return index;
+}
+
+}  // namespace
+
+int MultibodyModel::num_rigid_bodies() const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("count the rigid bodies");
+    // Less the world, which occupies ordinal zero and is not one of them.
+    return static_cast<int>(model.body_names_.size()) - 1;
+}
+
+int MultibodyModel::num_frames() const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("count the frames");
+    return static_cast<int>(model.frame_names_.size());
+}
+
+int MultibodyModel::num_joints() const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("count the joints");
+    return static_cast<int>(model.joint_names_.size());
+}
+
+int MultibodyModel::num_generalized_positions() const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("count the generalized positions");
+    return model.tree_.num_positions();
+}
+
+int MultibodyModel::num_generalized_velocities() const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("count the generalized velocities");
+    return model.tree_.num_velocities();
+}
+
+RigidBodyHandle MultibodyModel::GetRigidBody(int index) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("enumerate the rigid bodies");
+    RequireIndex(index, static_cast<int>(model.body_names_.size()) - 1,
+                 "rigid body");
+    // Ordinal zero is the world, which the enumeration does not include.
+    return model.MakeHandle<RigidBodyHandle>(index + 1);
+}
+
+FrameHandle MultibodyModel::GetFrame(int index) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("enumerate the frames");
+    RequireIndex(index, static_cast<int>(model.frame_names_.size()), "frame");
+    return model.MakeHandle<FrameHandle>(index);
+}
+
+JointHandle MultibodyModel::GetJoint(int index) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("enumerate the joints");
+    RequireIndex(index, static_cast<int>(model.joint_names_.size()), "joint");
+    return model.MakeHandle<JointHandle>(index);
+}
+
+RigidBodyHandle MultibodyModel::GetRigidBodyByName(
+    std::string_view name) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("look a rigid body up by name");
+    const auto found = model.body_by_name_.find(std::string(name));
+    if (found == model.body_by_name_.end()) {
+        Reject("this model has no rigid body named '" + std::string(name) +
+               "'");
+    }
+    if (found->second == 0) {
+        Reject("'" + std::string(name) +
+               "' names the world, which is what the model's rigid bodies are "
+               "placed with respect to rather than one of them");
+    }
+    return model.MakeHandle<RigidBodyHandle>(found->second);
+}
+
+FrameHandle MultibodyModel::GetFrameByName(std::string_view name) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("look a frame up by name");
+    const auto found = model.frame_by_name_.find(std::string(name));
+    if (found == model.frame_by_name_.end()) {
+        Reject("this model has no frame named '" + std::string(name) + "'");
+    }
+    return model.MakeHandle<FrameHandle>(found->second);
+}
+
+JointHandle MultibodyModel::GetJointByName(std::string_view name) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("look a joint up by name");
+    const auto found = model.joint_by_name_.find(std::string(name));
+    if (found == model.joint_by_name_.end()) {
+        Reject("this model has no joint named '" + std::string(name) + "'");
+    }
+    return model.MakeHandle<JointHandle>(found->second);
+}
+
+std::string_view MultibodyModel::GetRigidBodyName(RigidBodyHandle body) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("name a rigid body");
+    return model.body_names_[model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body")];
+}
+
+std::string_view MultibodyModel::GetFrameName(FrameHandle frame) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("name a frame");
+    return model.frame_names_[model.Resolve(
+        frame, static_cast<int>(model.frame_names_.size()), "frame")];
+}
+
+std::string_view MultibodyModel::GetJointName(JointHandle joint) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("name a joint");
+    return model.joint_names_[model.Resolve(
+        joint, static_cast<int>(model.joint_names_.size()), "joint")];
+}
+
+bool MultibodyModel::IsFreeBody(RigidBodyHandle body) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask whether a rigid body is free");
+    return model.is_free_[model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body")];
+}
+
+// --- Coordinates -------------------------------------------------------------
+//
+// A weld reports a start with a zero length. That start is where its
+// coordinates would have begun, which is a legitimate place to take an empty
+// block from and is not a coordinate belonging to anything.
+
+GeneralizedPositionRange MultibodyModel::GetJointPositionRange(
+    JointHandle joint) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask where a joint's positions are");
+    const int ordinal = model.Resolve(
+        joint, static_cast<int>(model.joint_names_.size()), "joint");
+    const auto& tree_joint = model.tree_.get_joint(model.tree_joint_[ordinal]);
+    return MakeRange<GeneralizedPositionRange>(tree_joint.position_start(),
+                                               tree_joint.num_positions());
+}
+
+GeneralizedVelocityRange MultibodyModel::GetJointVelocityRange(
+    JointHandle joint) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask where a joint's velocities are");
+    const int ordinal = model.Resolve(
+        joint, static_cast<int>(model.joint_names_.size()), "joint");
+    const auto& tree_joint = model.tree_.get_joint(model.tree_joint_[ordinal]);
+    return MakeRange<GeneralizedVelocityRange>(tree_joint.velocity_start(),
+                                               tree_joint.num_velocities());
+}
+
+GeneralizedPositionRange MultibodyModel::GetFreeBodyPositionRange(
+    RigidBodyHandle body) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask where a free body's positions are");
+    const int ordinal = model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body");
+    if (!model.is_free_[ordinal]) {
+        Reject("rigid body '" + model.body_names_[ordinal] +
+               "' was not declared free, so its coordinates belong to the "
+               "joints that relate it rather than to it");
+    }
+    const auto& tree_joint =
+        model.tree_.get_joint(model.free_body_tree_joint_[ordinal]);
+    return MakeRange<GeneralizedPositionRange>(tree_joint.position_start(),
+                                               tree_joint.num_positions());
+}
+
+GeneralizedVelocityRange MultibodyModel::GetFreeBodyVelocityRange(
+    RigidBodyHandle body) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask where a free body's velocities are");
+    const int ordinal = model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body");
+    if (!model.is_free_[ordinal]) {
+        Reject("rigid body '" + model.body_names_[ordinal] +
+               "' was not declared free, so its coordinates belong to the "
+               "joints that relate it rather than to it");
+    }
+    const auto& tree_joint =
+        model.tree_.get_joint(model.free_body_tree_joint_[ordinal]);
+    return MakeRange<GeneralizedVelocityRange>(tree_joint.velocity_start(),
+                                               tree_joint.num_velocities());
+}
+
+// --- Evaluation --------------------------------------------------------------
+
+std::unique_ptr<MultibodyEvaluationContext> MultibodyModel::CreateDefaultContext()
+    const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("create an evaluation context");
+    auto implementation =
+        std::make_unique<MultibodyEvaluationContext::Implementation>(
+            model.tree_.CreateDefaultEvaluationContext());
+    return std::unique_ptr<MultibodyEvaluationContext>(
+        new MultibodyEvaluationContext(std::move(implementation)));
 }
 
 }  // namespace orvd::multibody_model

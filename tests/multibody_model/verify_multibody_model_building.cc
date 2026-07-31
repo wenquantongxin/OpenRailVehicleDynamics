@@ -343,6 +343,25 @@ void CheckFreedomIsStatedRatherThanInferred() {
     ExpectAccepted(WasRefused([&] { collision.DeclareFreeBody(root); }),
                    "a free declaration after a caller used the exact first "
                    "private-name candidate");
+
+    // And the other order, which matters more: a caller must not be refused a
+    // perfectly ordinary joint name because a private relation got there first.
+    // Nothing ever told them that name was taken, so such a refusal would be
+    // about something they were never given a way to know about.
+    MultibodyModel reversed_order;
+    const RigidBodyHandle free_root =
+        reversed_order.AddRigidBody("free_root", SolidishBody(1.0));
+    const RigidBodyHandle attached =
+        reversed_order.AddRigidBody("attached", SolidishBody(1.0));
+    reversed_order.DeclareFreeBody(free_root);
+    ExpectAccepted(WasRefused([&] {
+                       reversed_order.AddRevoluteJoint(
+                           "__orvd_free_body_1",
+                           reversed_order.body_frame(free_root),
+                           reversed_order.body_frame(attached), kZAxis);
+                   }),
+                   "a caller's joint name matching the private-name candidate "
+                   "of a body already declared free");
 }
 
 void CheckPhysicallyImpossibleDescriptionsAreRefused() {
