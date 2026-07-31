@@ -101,22 +101,21 @@ void ThrowIfNotRealisableInertia(const RigidBodyInertiaParameters& parameters,
     const Eigen::Matrix3d point_mass_unit_inertia =
         center_of_mass.squaredNorm() * Eigen::Matrix3d::Identity() -
         center_of_mass * center_of_mass.transpose();
-    const Eigen::Matrix3d central_rotational_inertia =
-        parameters.mass_kilograms *
-        (unit_inertia_about_body_origin - point_mass_unit_inertia);
-    if (!central_rotational_inertia.allFinite()) {
-        Reject(body + "central rotational inertia is not finite");
+    const Eigen::Matrix3d central_unit_inertia =
+        unit_inertia_about_body_origin - point_mass_unit_inertia;
+    if (!central_unit_inertia.allFinite()) {
+        Reject(body + "central unit inertia is not finite");
     }
 
     const Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> principal_moment_solver(
-        central_rotational_inertia, Eigen::EigenvaluesOnly);
+        central_unit_inertia, Eigen::EigenvaluesOnly);
     if (principal_moment_solver.info() != Eigen::Success) {
         Reject(body + "central principal moments could not be computed");
     }
     const Eigen::Vector3d principal_moments =
         principal_moment_solver.eigenvalues();
     const double scale =
-        std::max(1.0, 0.5 * std::abs(central_rotational_inertia.trace()));
+        std::max(1.0, 0.5 * std::abs(central_unit_inertia.trace()));
     const double tolerance =
         16 * std::numeric_limits<double>::epsilon() * scale;
     if (principal_moments[0] < -tolerance ||

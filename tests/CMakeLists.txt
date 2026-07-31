@@ -143,6 +143,24 @@ target_link_libraries(verify_multibody_cache_evaluation
 add_test(NAME verify_multibody_cache_evaluation
          COMMAND verify_multibody_cache_evaluation)
 
+# These five adapter headers are first-party code but are normally reached
+# through vendored Drake headers. GCC and Clang inherit a system-header identity
+# along that include chain, so merely placing the files on a normal `-I` root
+# does not apply the first-party warning policy to them. Each translation unit
+# includes one adapter header first: this both checks that the header is
+# self-contained and makes its diagnostics first-party. It is a compile-only
+# target, not an empty runtime test and not a member of the product archive.
+add_library(verify_rigid_multibody_tree_adapter_headers_compile OBJECT
+    header_diagnostics/compile_multibody_parameter_slot_allocator_header.cc
+    header_diagnostics/compile_rigid_multibody_tree_cache_workspace_header.cc
+    header_diagnostics/compile_rigid_multibody_tree_evaluation_context_header.cc
+    header_diagnostics/compile_rigid_multibody_tree_evaluation_context_forward_declaration_header.cc
+    header_diagnostics/compile_spatial_inertia_parameter_conversion_header.cc)
+orvd_configure_first_party_target(
+    verify_rigid_multibody_tree_adapter_headers_compile)
+target_link_libraries(verify_rigid_multibody_tree_adapter_headers_compile
+    PRIVATE orvd_rigid_multibody_tree)
+
 
 # The tree's own caches, bound to real state and driven on a real model. An
 # ordinary consumer: it links the product archive and takes from it only what it

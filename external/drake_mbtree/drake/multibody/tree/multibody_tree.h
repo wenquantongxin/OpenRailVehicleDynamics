@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -997,11 +998,6 @@ class MultibodyTree {
   // @throws std::exception if called post-finalize.
   void Finalize();
 
-  /// The immutable state and parameter layout assigned by Finalize().
-  ///
-  /// Its object identity belongs to this model. A state built against an
-  /// otherwise identical layout from another tree is not interchangeable.
-  /// @throws std::exception if called before Finalize().
   /// Creates an evaluation context holding this model's default configuration.
   ///
   /// The only way to obtain one. A context built any other way would hold the
@@ -1022,7 +1018,7 @@ class MultibodyTree {
     auto context = std::unique_ptr<orvd::rigid_multibody_tree::internal::
                                        RigidMultibodyTreeEvaluationContext>(
         new orvd::rigid_multibody_tree::internal::
-            RigidMultibodyTreeEvaluationContext(state_layout(), forest(),
+            RigidMultibodyTreeEvaluationContext(*state_layout_, forest(),
                                                 num_links(), num_frames()));
     SetDefaultParameters(&context->mutable_state());
     SetDefaultState(&context->mutable_state());
@@ -1080,25 +1076,6 @@ class MultibodyTree {
       orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
           context,
       const JointActuator<T>& actuator, const T& gear_ratio) const;
-
-  const orvd::multibody_runtime::MultibodyStateLayout& state_layout() const {
-    DRAKE_MBT_THROW_IF_NOT_FINALIZED();
-    DRAKE_DEMAND(state_layout_ != nullptr);
-    return *state_layout_;
-  }
-
-  /// Installs the finalized model's context-mutable physical parameter
-  /// defaults into `state`.
-  ///
-  /// This is separate from SetDefaultState(), which installs q and v. A
-  /// model-aware context creation path calls both exactly once.
-  void SetDefaultParameters(
-      orvd::multibody_runtime::MultibodyStateInstance* state) const;
-
-  // See MultibodyPlant method.
-  // Installs the finalized model's default configuration into `state`: one
-  // commit of q, one of v.
-  void SetDefaultState(orvd::multibody_runtime::MultibodyStateInstance* state) const;
 
   // The concatenated `[q; v]` view is gone. It existed because upstream stored
   // both in one BasicVector; the typed store keeps them apart, so a joined view
@@ -2183,32 +2160,40 @@ class MultibodyTree {
           "was written",
           num_positions(), positions.size()));
     }
-    ThrowIfAnyQuaternionIsZero(positions);
+    ThrowIfAnyQuaternionCannotBeConvertedToRotation(positions);
     state->set_generalized_positions(positions);
   }
 
-  // Refuses a q in which some mobilizer's quaternion is exactly zero.
+  // Refuses a q in which some mobilizer's quaternion cannot be converted to a
+  // finite rotation by the landed RotationMatrix formula.
   //
-  // A zero quaternion is not a rotation and cannot be normalised into one: the
-  // direction information is not merely inaccurate, it is absent. Everything
-  // downstream would take it and produce numbers.
+  // RotationMatrix uses two divided by the squared norm. Merely checking that
+  // four components are not all zero misses both overflow of the squared norm
+  // (which silently collapses a direction to identity) and underflow of it
+  // (which can produce NaNs). The two finite checks below are the exact numeric
+  // domain that calculation requires; they are not a magnitude policy.
   //
-  // Non-unit but non-zero quaternions are accepted and stored exactly as given.
+  // Safe non-unit quaternions are still accepted and stored exactly as given.
   // Normalising here would silently answer a different question from the one
-  // the caller asked, and the caller would never learn that the value they read
-  // back is not the value they wrote. Which segments are quaternions is model
-  // knowledge, which is why this check is here and not in the state store.
-  void ThrowIfAnyQuaternionIsZero(
+  // the caller asked. Which segments are quaternions is model knowledge, so the
+  // check belongs here rather than in the state store.
+  void ThrowIfAnyQuaternionCannotBeConvertedToRotation(
       const Eigen::Ref<const VectorX<T>>& positions) const {
     for (const auto& mobod : forest().mobods()) {
       if (!mobod.has_quaternion()) continue;
       // The mobod's first four positions are the quaternion, wxyz.
-      if (positions.template segment<4>(mobod.q_start()).isZero(0.0)) {
-        throw std::logic_error(fmt::format(
-            "MultibodyTree: the quaternion of mobilized body {} is exactly "
-            "zero, which is not a rotation and cannot be made into one; "
-            "nothing was written",
-            mobod.index()));
+      const Vector4<T> quaternion =
+          positions.template segment<4>(mobod.q_start());
+      const T squared_norm = quaternion.squaredNorm();
+      const T two_over_squared_norm = T{2.0} / squared_norm;
+      if (!(squared_norm > T{0.0}) || !std::isfinite(squared_norm) ||
+          !std::isfinite(two_over_squared_norm)) {
+        throw std::invalid_argument(fmt::format(
+            "MultibodyTree: quaternion wxyz [{}, {}, {}, {}] for mobilized "
+            "body {} has squared norm {}; converting it would not produce a "
+            "finite rotation, so nothing was written",
+            quaternion[0], quaternion[1], quaternion[2], quaternion[3],
+            mobod.index(), squared_norm));
       }
     }
   }
@@ -2374,6 +2359,17 @@ class MultibodyTree {
   // Elements use their parent tree as the authority for deciding whether a
   // typed state belongs to this finalized model.
   friend class ::drake::multibody::MultibodyElement<T>;
+
+  /// Installs the finalized model's context-mutable physical parameter
+  /// defaults into `state`. Only context construction may call this: exposing
+  /// it with the raw layout would recreate a public route to partially
+  /// initialized model state.
+  void SetDefaultParameters(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const;
+
+  /// Installs the finalized model's default q and v as one commit each.
+  void SetDefaultState(
+      orvd::multibody_runtime::MultibodyStateInstance* state) const;
 
   // (Internal use only) Adds a Joint to the MultibodyPlant corresponding to
   // joints that were added to the LinkJointGraph during modeling (elements

@@ -49,15 +49,24 @@ orvd_comparison::ComparisonRequirements MakeRequirements() {
 void CheckRelativeAndNearZeroLimits() {
     const auto requirements = MakeRequirements();
     const auto reference = MakeStream(100.0);
+    constexpr double reference_force = 100.0;
+    constexpr double inside_relative_limit =
+        0.5 * orvd_comparison::kRelativeErrorLimit;
+    constexpr double outside_relative_limit =
+        5.0 * orvd_comparison::kRelativeErrorLimit;
 
     Expect(orvd_comparison::CompareObservationStreams(
-               requirements, reference, MakeStream(100.05)).outcome ==
+               requirements, reference,
+               MakeStream(reference_force *
+                          (1.0 + inside_relative_limit))).outcome ==
                orvd_comparison::ComparisonOutcome::kAccepted,
-           "a relative error inside 1e-3 must pass");
+           "a relative error inside the declared limit must pass");
     Expect(orvd_comparison::CompareObservationStreams(
-               requirements, reference, MakeStream(100.5)).outcome ==
+               requirements, reference,
+               MakeStream(reference_force *
+                          (1.0 + outside_relative_limit))).outcome ==
                orvd_comparison::ComparisonOutcome::kToleranceExceeded,
-           "a relative error outside 1e-3 must fail");
+           "a relative error outside the declared limit must fail");
 
     const auto near_zero_reference = MakeStream(0.0);
     Expect(orvd_comparison::CompareObservationStreams(

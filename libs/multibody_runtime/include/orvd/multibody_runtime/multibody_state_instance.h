@@ -71,8 +71,15 @@ class MultibodyStateInstance {
     MultibodyStateInstance(MultibodyStateInstance&&) = delete;
     MultibodyStateInstance& operator=(MultibodyStateInstance&&) = delete;
 
-    /// The layout this state is bound to.
-    const MultibodyStateLayout& layout() const { return *layout_; }
+    /// Reports whether this state is bound to this exact layout object.
+    ///
+    /// The boolean form preserves the identity check needed by the rigid-tree
+    /// adapter without handing callers the model-owned layout. Exposing that
+    /// layout would let ordinary code build a zero-filled state that passes the
+    /// tree's identity gate while bypassing installation of the model defaults.
+    bool is_bound_to(const MultibodyStateLayout& layout) const {
+        return layout_ == &layout;
+    }
 
     // --- Generalized coordinates -------------------------------------------
 

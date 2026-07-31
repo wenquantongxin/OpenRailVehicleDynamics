@@ -8,6 +8,10 @@
 # diagnostics would produce noise nobody is allowed to fix. ORVD's own source in
 # orvd_implementations/ does carry the policy, and the first-party adapter headers
 # live under include/orvd rather than the SYSTEM-qualified vendored include root.
+# Because compilers inherit system-header identity through a vendored includer,
+# a compile-only first-party target under tests/ also includes every adapter
+# header directly before any Drake header. That target, rather than path spelling
+# alone, is what guarantees warning coverage for the adapter headers.
 #
 # Compilation ownership is single: every translation unit is compiled by
 # exactly one OBJECT target. The resulting object may be packaged both in its

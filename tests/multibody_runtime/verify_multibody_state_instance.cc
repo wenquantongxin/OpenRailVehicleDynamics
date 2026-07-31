@@ -67,6 +67,11 @@ static_assert(!std::is_copy_constructible_v<MultibodyStateInstance>);
 static_assert(!std::is_copy_assignable_v<MultibodyStateInstance>);
 static_assert(!std::is_move_constructible_v<MultibodyStateInstance>);
 static_assert(!std::is_move_assignable_v<MultibodyStateInstance>);
+template <typename T>
+concept PubliclyExposesBoundLayout = requires(const T& value) {
+    value.layout();
+};
+static_assert(!PubliclyExposesBoundLayout<MultibodyStateInstance>);
 
 int failure_count = 0;
 
@@ -169,7 +174,7 @@ void CheckLayoutRefusesNegativeCounts() {
 void CheckCoordinatesStartAtZeroAndRoundTrip() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
-    ExpectTrue(&state.layout() == &layout,
+    ExpectTrue(state.is_bound_to(layout),
                "the state remains bound to the exact layout object");
     ExpectTrue(state.generalized_positions().size() == 9 &&
                    state.generalized_positions().isZero(),
@@ -252,6 +257,40 @@ void CheckInertiaValidation() {
                            1, RigidBodyInertiaParameters{});
                    }),
                    "a body with zero mass and zero inertia");
+
+    // Mass and unit inertia are independent fields for a massless frame
+    // carrier. Multiplying the latter by zero during validation would erase an
+    // impossible matrix and make every massless inertia appear valid.
+    RigidBodyInertiaParameters massless_with_realisable_unit_inertia =
+        ValidInertia();
+    massless_with_realisable_unit_inertia.mass_kilograms = 0.0;
+    ExpectAccepted(WasRefused([&] {
+                       state.set_rigid_body_inertia_parameters(
+                           1, massless_with_realisable_unit_inertia);
+                   }),
+                   "a massless body with a realisable nonzero unit inertia");
+    const RigidBodyInertiaParameters massless_before_refusal =
+        state.rigid_body_inertia_parameters(1);
+    const MultibodyStateVersion version_before_massless_refusal =
+        state.rigid_body_inertias_version();
+    RigidBodyInertiaParameters impossible_massless;
+    impossible_massless.unit_inertia_moments =
+        Eigen::Vector3d(1.0, 1.0, 1.0);
+    impossible_massless.unit_inertia_products =
+        Eigen::Vector3d(2.0, 0.0, 0.0);
+    ExpectRefused(WasRefused([&] {
+                      state.set_rigid_body_inertia_parameters(
+                          1, impossible_massless);
+                  }),
+                  "a massless body whose unit inertia has a negative principal "
+                  "moment");
+    ExpectTrue(
+        SameInertia(state.rigid_body_inertia_parameters(1),
+                    massless_before_refusal) &&
+            state.rigid_body_inertias_version() ==
+                version_before_massless_refusal,
+        "refusing an impossible massless inertia changes neither the record nor "
+        "its version");
 
     // A point mass one metre from the body origin has G_BBo =
     // diag(0, 1, 1); shifting to its centre of mass leaves zero inertia.

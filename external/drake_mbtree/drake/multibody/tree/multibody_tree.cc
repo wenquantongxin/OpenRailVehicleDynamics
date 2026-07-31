@@ -1134,7 +1134,7 @@ void MultibodyTree<T>::ValidateStateInstance(
     const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   DRAKE_MBT_THROW_IF_NOT_FINALIZED();
   DRAKE_DEMAND(state_layout_ != nullptr);
-  if (&state.layout() != state_layout_.get()) {
+  if (!state.is_bound_to(*state_layout_)) {
     throw std::invalid_argument(
         "The multibody state was not created for this finalized tree.");
   }

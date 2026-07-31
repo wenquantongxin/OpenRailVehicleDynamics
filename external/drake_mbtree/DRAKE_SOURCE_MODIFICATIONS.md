@@ -451,3 +451,9 @@ finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的�
   也不能以“未写值”为由推进版本。
 - 删除前向动力学便利 API 后遗留在 `frame.h`、`rigid_body.h` 与 `multibody_tree.h` 的孤立
   Doxygen 块和失效交叉引用；接收已知 vdot 的加速度 pass 与说明保留。
+
+## G23–G29 深度复核收口
+
+**`multibody_tree.h` 的 quaternion 提交门按下游真实数值定义域收紧。** 旧门只拒绝四个分量逐位为零，遗漏平方范数上溢或下溢：极大有限 quaternion 会因倒数因子退化为零而静默得到单位阵，极小有限 quaternion 则会因倒数因子溢出而产生 NaN。新门要求平方范数与下游实际使用的倒数因子均为有限值，失败时点名 mobod 与输入并保持状态、版本不变；安全的非单位 quaternion 仍按原值保存，不归一化。
+
+**模型 layout 与默认安装步骤不再是公共入口。** `CreateDefaultEvaluationContext()` 直接使用 tree 私有拥有的 layout，再调用私有默认参数和默认状态安装步骤；`ValidateStateInstance()` 只通过状态的身份谓词核对归属。普通调用方因此不能取得模型 layout 后构造一个通过身份门但仍为零填充的裸状态。该修改只收窄所有权边界，不改变运动学或动力学公式。

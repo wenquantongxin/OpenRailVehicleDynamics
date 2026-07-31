@@ -194,13 +194,17 @@ int main(int argc, char** argv) {
 
         const auto tolerated = orvd_comparison::CompareObservationStreams(
             requirements, first,
-            WithScalarPerturbed(second, relative_branch_target->name, 5e-4));
+            WithScalarPerturbed(
+                second, relative_branch_target->name,
+                0.5 * orvd_comparison::kRelativeErrorLimit));
         Expect(tolerated.outcome == orvd_comparison::ComparisonOutcome::kAccepted,
                "a perturbation inside the relative limit must be accepted");
 
         const auto rejected = orvd_comparison::CompareObservationStreams(
             requirements, first,
-            WithScalarPerturbed(second, relative_branch_target->name, 5e-3));
+            WithScalarPerturbed(
+                second, relative_branch_target->name,
+                5.0 * orvd_comparison::kRelativeErrorLimit));
         Expect(rejected.outcome == orvd_comparison::ComparisonOutcome::kToleranceExceeded,
                "a perturbation beyond the relative limit must be rejected");
 
@@ -210,13 +214,19 @@ int main(int argc, char** argv) {
         // Rotation is judged separately, so it gets its own perturbation.
         const std::string rotation_group = requirements.rotations.front().group_name;
         const auto rotation_tolerated = orvd_comparison::CompareObservationStreams(
-            requirements, first, WithRotationPerturbed(second, rotation_group, 5e-4));
+            requirements, first,
+            WithRotationPerturbed(
+                second, rotation_group,
+                0.5 * orvd_comparison::kRotationAngleErrorLimitRadians));
         Expect(rotation_tolerated.outcome ==
                    orvd_comparison::ComparisonOutcome::kAccepted,
                "a rotation perturbation inside the angle limit must be accepted");
 
         const auto rotation_rejected = orvd_comparison::CompareObservationStreams(
-            requirements, first, WithRotationPerturbed(second, rotation_group, 5e-3));
+            requirements, first,
+            WithRotationPerturbed(
+                second, rotation_group,
+                5.0 * orvd_comparison::kRotationAngleErrorLimitRadians));
         Expect(rotation_rejected.outcome ==
                    orvd_comparison::ComparisonOutcome::kToleranceExceeded,
                "a rotation perturbation beyond the angle limit must be rejected");

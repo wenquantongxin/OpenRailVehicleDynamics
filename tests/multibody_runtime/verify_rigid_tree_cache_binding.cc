@@ -15,6 +15,7 @@
 // and look right doing it.
 #include <array>
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,7 @@
 
 #include <Eigen/Dense>
 
+#include "orvd/rigid_multibody_tree/spatial_inertia_parameter_conversion.h"
 #include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/multibody_tree-inl.h"
 #include "drake/multibody/tree/quaternion_floating_joint.h"
@@ -45,6 +47,11 @@ using MultibodyStateInstance =
 using SpanningForest = drake::multibody::internal::SpanningForest;
 using VersionSource =
     orvd::multibody_runtime::MultibodyStateVersionSource;
+
+template <typename T>
+concept PubliclyExposesStateLayout =
+    requires(const T& value) { value.state_layout(); };
+static_assert(!PubliclyExposesStateLayout<MultibodyTree<double>>);
 
 inline constexpr auto kQ = VersionSource::kGeneralizedPositions;
 inline constexpr auto kV = VersionSource::kGeneralizedVelocities;
@@ -167,11 +174,20 @@ void ExpectTrue(bool condition, const std::string& what) {
 class TwoLinkChain {
    public:
     TwoLinkChain() {
+        const auto first_inertia =
+            SpatialInertia<double>::MakeFromCentralInertia(
+                1.2, Eigen::Vector3d(0.08, -0.04, 0.03),
+                drake::multibody::RotationalInertia<double>(
+                    0.025, 0.032, 0.041, 0.002, -0.001, 0.003));
+        const auto second_inertia =
+            SpatialInertia<double>::MakeFromCentralInertia(
+                1.8, Eigen::Vector3d(-0.05, 0.07, 0.04),
+                drake::multibody::RotationalInertia<double>(
+                    0.038, 0.047, 0.056, -0.002, 0.003, 0.001));
         const auto& first = tree_.AddLink(
-            "first", SpatialInertia<double>::SolidBoxWithMass(1.0, 0.2, 0.1, 0.1));
+            "first", first_inertia);
         const auto& second = tree_.AddLink(
-            "second", SpatialInertia<double>::SolidBoxWithMass(2.0, 0.2, 0.1, 0.1));
-        const Eigen::Vector3d axis = Eigen::Vector3d::UnitZ();
+            "second", second_inertia);
         // The joints are offset along x. With every frame coincident, rotating a
         // revolute joint would leave each body origin exactly where it was, and
         // a check that "the pose moved" would be asserting something the model
@@ -181,15 +197,18 @@ class TwoLinkChain {
             Eigen::Vector3d(0.3, 0.0, 0.0));
         const auto& shoulder =
             tree_.AddJoint<RevoluteJoint>("shoulder", tree_.world_link(),
-                                          offset, first, {}, axis);
-        tree_.AddJoint<RevoluteJoint>("elbow", first, offset, second, {}, axis);
+                                          offset, first, {},
+                                          Eigen::Vector3d::UnitZ());
+        const auto& elbow =
+            tree_.AddJoint<RevoluteJoint>("elbow", first, offset, second, {},
+                                          Eigen::Vector3d::UnitY());
         // The overload above creates a FixedOffsetFrame for its non-identity
         // parent offset. Keep that real mobilizer frame: changing it must move
         // the kinematics, unlike an otherwise unused frame attached to a body.
         fixed_frame_ =
             &dynamic_cast<const drake::multibody::FixedOffsetFrame<double>&>(
                 shoulder.frame_on_parent());
-        actuator_ = &tree_.AddJointActuator("shoulder_motor", shoulder);
+        actuator_ = &tree_.AddJointActuator("elbow_motor", elbow);
         auto& mutable_actuator =
             tree_.get_mutable_joint_actuator(actuator_->index());
         mutable_actuator.set_default_rotor_inertia(0.2);
@@ -200,6 +219,9 @@ class TwoLinkChain {
     const MultibodyTree<double>& tree() const { return tree_; }
     const drake::multibody::RigidBody<double>& first_body() const {
         return tree_.GetLinkByName("first");
+    }
+    const drake::multibody::RigidBody<double>& second_body() const {
+        return tree_.GetLinkByName("second");
     }
     const drake::multibody::FixedOffsetFrame<double>& fixed_frame() const {
         return *fixed_frame_;
@@ -224,6 +246,12 @@ Eigen::Vector3d LastBodyOrigin(const MultibodyTree<double>& tree,
     return pc.get_X_WB(drake::multibody::internal::MobodIndex(
                            tree.num_mobods() - 1))
         .translation();
+}
+
+drake::math::RigidTransform<double> LastBodyPose(
+    const MultibodyTree<double>& tree, const Context& context) {
+    return tree.EvalPositionKinematics(context).get_X_WB(
+        drake::multibody::internal::MobodIndex(tree.num_mobods() - 1));
 }
 
 drake::Vector6<double> LastBodySpatialVelocity(
@@ -339,6 +367,223 @@ void WarmEveryRetainedCache(const MultibodyTree<double>& tree,
         "warming the complete retained directory");
 }
 
+struct AbaObservations {
+    Eigen::VectorXd dynamic_bias;
+    Eigen::VectorXd articulated_body_inertia;
+    Eigen::VectorXd spatial_acceleration_bias;
+    Eigen::VectorXd articulated_body_force_bias;
+};
+
+Eigen::VectorXd FlattenArticulatedBodyInertia(
+    const MultibodyTree<double>& tree,
+    const drake::multibody::internal::ArticulatedBodyInertiaCache<double>&
+        cache) {
+    Eigen::VectorXd values((tree.num_mobods() - 1) * (36 + 36 + 6));
+    int cursor = 0;
+    for (int index = 1; index < tree.num_mobods(); ++index) {
+        const Eigen::Matrix<double, 6, 6> matrix =
+            cache
+                .get_P_B_W(
+                    drake::multibody::internal::MobodIndex(index))
+                .CopyToFullMatrix6();
+        values.segment<36>(cursor) =
+            Eigen::Map<const Eigen::Matrix<double, 36, 1>>(matrix.data());
+        cursor += 36;
+        const Eigen::Matrix<double, 6, 6> outboard_matrix =
+            cache
+                .get_Pplus_PB_W(
+                    drake::multibody::internal::MobodIndex(index))
+                .CopyToFullMatrix6();
+        values.segment<36>(cursor) =
+            Eigen::Map<const Eigen::Matrix<double, 36, 1>>(
+                outboard_matrix.data());
+        cursor += 36;
+        const auto& gain =
+            cache.get_g_PB_W(drake::multibody::internal::MobodIndex(index));
+        ExpectTrue(gain.cols() == 1,
+                   "the ABA dependency fixture uses one-velocity mobilizers");
+        values.segment<6>(cursor) = gain.col(0);
+        cursor += 6;
+    }
+    return values;
+}
+
+template <typename SpatialQuantity>
+Eigen::VectorXd FlattenSpatialQuantities(
+    const std::vector<SpatialQuantity>& quantities) {
+    Eigen::VectorXd values(
+        static_cast<Eigen::Index>((quantities.size() - 1) * 6));
+    int cursor = 0;
+    for (std::size_t index = 1; index < quantities.size(); ++index) {
+        values.segment<6>(cursor) = quantities[index].get_coeffs();
+        cursor += 6;
+    }
+    return values;
+}
+
+AbaObservations ObserveAbaRetainedCaches(const MultibodyTree<double>& tree,
+                                         const Context& context) {
+    AbaObservations observations;
+    Eigen::VectorXd projected_bias(tree.num_velocities());
+    tree.CalcBiasTerm(context, &projected_bias);
+    observations.dynamic_bias =
+        FlattenSpatialQuantities(context.caches().dynamic_bias.value());
+    observations.articulated_body_inertia =
+        FlattenArticulatedBodyInertia(
+            tree, tree.EvalArticulatedBodyInertiaCache(context));
+
+    drake::multibody::MultibodyForces<double> forces(tree);
+    forces.SetZero();
+    drake::multibody::internal::ArticulatedBodyForceCache<double>
+        force_workspace(tree.forest());
+    tree.CalcArticulatedBodyForceCache(context, forces, &force_workspace);
+    // The public ABA force calculation evaluates #13, whose calculator in turn
+    // evaluates #12. Read the retained values only after that real consumer has
+    // made both slots fresh; no test-only evaluation hook is needed.
+    observations.spatial_acceleration_bias = FlattenSpatialQuantities(
+        context.caches().spatial_acceleration_bias.value());
+    observations.articulated_body_force_bias =
+        FlattenSpatialQuantities(
+            context.caches().articulated_body_force_bias.value());
+    return observations;
+}
+
+enum class StateMutation {
+    kGeneralizedPositions,
+    kGeneralizedVelocities,
+    kFixedFramePose,
+    kRigidBodyInertia,
+    kJointActuatorParameters,
+};
+
+void EstablishNondegenerateState(const TwoLinkChain& model,
+                                 Context* context) {
+    SetJointAngles(model.tree(), context, 0.21, -0.37);
+    Eigen::VectorXd velocities(model.tree().num_velocities());
+    velocities << 0.63, -0.46;
+    model.tree().SetVelocities(context, velocities);
+}
+
+void ApplyMutation(const TwoLinkChain& model, StateMutation mutation,
+                   Context* context) {
+    switch (mutation) {
+        case StateMutation::kGeneralizedPositions:
+            SetJointAngles(model.tree(), context, -0.42, 0.58);
+            return;
+        case StateMutation::kGeneralizedVelocities: {
+            Eigen::VectorXd velocities(model.tree().num_velocities());
+            velocities << -0.31, 0.77;
+            model.tree().SetVelocities(context, velocities);
+            return;
+        }
+        case StateMutation::kFixedFramePose:
+            model.tree().SetFixedFramePoseInParentFrame(
+                context, model.fixed_frame(),
+                drake::math::RigidTransform<double>(
+                    drake::math::RotationMatrix<double>::MakeXRotation(0.29),
+                    Eigen::Vector3d(0.24, -0.13, 0.19)));
+            return;
+        case StateMutation::kRigidBodyInertia:
+            model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+                context, model.second_body(),
+                SpatialInertia<double>::MakeFromCentralInertia(
+                    2.6, Eigen::Vector3d(-0.09, 0.06, 0.11),
+                    drake::multibody::RotationalInertia<double>(
+                        0.051, 0.064, 0.079, -0.004, 0.002, 0.005)));
+            return;
+        case StateMutation::kJointActuatorParameters:
+            model.tree().SetJointActuatorRotorInertia(
+                context, model.actuator(), 0.83);
+            model.tree().SetJointActuatorGearRatio(
+                context, model.actuator(), -3.4);
+            return;
+    }
+}
+
+bool SameValues(const Eigen::VectorXd& first,
+                const Eigen::VectorXd& second) {
+    const double tolerance =
+        256.0 * std::numeric_limits<double>::epsilon();
+    return first.isApprox(second, tolerance);
+}
+
+void CheckAbaRetainedCacheDependenciesAgainstColdContexts() {
+    const TwoLinkChain model;
+    struct ExpectedDependencies {
+        StateMutation source;
+        const char* source_name;
+        bool dynamic_bias;
+        bool articulated_body_inertia;
+        bool spatial_acceleration_bias;
+        bool articulated_body_force_bias;
+    };
+    const std::array<ExpectedDependencies, 5> expectations{{
+        {StateMutation::kGeneralizedPositions, "generalized positions", true,
+         true, true, true},
+        {StateMutation::kGeneralizedVelocities, "generalized velocities", true,
+         false, true, true},
+        {StateMutation::kFixedFramePose, "fixed-frame pose", true, true, true,
+         true},
+        {StateMutation::kRigidBodyInertia, "rigid-body inertia", true, true,
+         false, true},
+        {StateMutation::kJointActuatorParameters,
+         "joint-actuator parameters", false, true, false, true},
+    }};
+
+    for (const ExpectedDependencies& expected : expectations) {
+        const std::unique_ptr<Context> hot = model.MakeContext();
+        const std::unique_ptr<Context> cold = model.MakeContext();
+        EstablishNondegenerateState(model, hot.get());
+        EstablishNondegenerateState(model, cold.get());
+        const AbaObservations before =
+            ObserveAbaRetainedCaches(model.tree(), *hot);
+
+        ApplyMutation(model, expected.source, hot.get());
+        ApplyMutation(model, expected.source, cold.get());
+        const AbaObservations hot_after =
+            ObserveAbaRetainedCaches(model.tree(), *hot);
+        const AbaObservations cold_after =
+            ObserveAbaRetainedCaches(model.tree(), *cold);
+
+        const auto check = [&](const Eigen::VectorXd& previous,
+                               const Eigen::VectorXd& hot_value,
+                               const Eigen::VectorXd& cold_value,
+                               bool should_depend,
+                               const char* cache_name) {
+            ExpectTrue(
+                SameValues(hot_value, cold_value),
+                std::string(cache_name) +
+                    " agrees between invalidated-hot and cold contexts after "
+                    "changing " +
+                    expected.source_name);
+            ExpectTrue(
+                SameValues(previous, cold_value) != should_depend,
+                std::string(cache_name) +
+                    (should_depend ? " is observably sensitive to "
+                                   : " is observably independent of ") +
+                    expected.source_name);
+        };
+        check(before.dynamic_bias, hot_after.dynamic_bias,
+              cold_after.dynamic_bias, expected.dynamic_bias,
+              "dynamic bias (#10)");
+        check(before.articulated_body_inertia,
+              hot_after.articulated_body_inertia,
+              cold_after.articulated_body_inertia,
+              expected.articulated_body_inertia,
+              "articulated-body inertia (#11)");
+        check(before.spatial_acceleration_bias,
+              hot_after.spatial_acceleration_bias,
+              cold_after.spatial_acceleration_bias,
+              expected.spatial_acceleration_bias,
+              "spatial acceleration bias (#12)");
+        check(before.articulated_body_force_bias,
+              hot_after.articulated_body_force_bias,
+              cold_after.articulated_body_force_bias,
+              expected.articulated_body_force_bias,
+              "articulated-body force bias (#13)");
+    }
+}
+
 void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
     const TwoLinkChain model;
 
@@ -399,6 +644,7 @@ void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
         const Eigen::Vector3d origin_before =
             LastBodyOrigin(model.tree(), *context);
         const drake::math::RigidTransform<double> changed_pose(
+            drake::math::RotationMatrix<double>::MakeYRotation(0.4),
             Eigen::Vector3d(0.2, -0.1, 0.3));
         model.tree().SetFixedFramePoseInParentFrame(
             context.get(), model.fixed_frame(), changed_pose);
@@ -419,20 +665,26 @@ void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
         const auto& frame_poses = model.tree().EvalFrameBodyPoses(*context);
         ExpectTrue(
             frame_poses.get_X_LF(model.fixed_frame().index())
-                .translation()
-                .isApprox(changed_pose.translation()),
-            "the real frame-pose calculator reads the updated fixed frame");
+                    .rotation()
+                    .matrix()
+                    .isApprox(changed_pose.rotation().matrix()) &&
+                frame_poses.get_X_LF(model.fixed_frame().index())
+                    .translation()
+                    .isApprox(changed_pose.translation()),
+            "the real frame-pose calculator reads the complete updated fixed "
+            "frame pose, including its non-identity rotation");
         const std::unique_ptr<Context> cold_context = model.MakeContext();
         model.tree().SetFixedFramePoseInParentFrame(
             cold_context.get(), model.fixed_frame(), changed_pose);
-        const Eigen::Vector3d hot_origin =
-            LastBodyOrigin(model.tree(), *context);
-        const Eigen::Vector3d cold_origin =
-            LastBodyOrigin(model.tree(), *cold_context);
-        ExpectTrue(!hot_origin.isApprox(origin_before) &&
-                       hot_origin.isApprox(cold_origin),
+        const drake::math::RigidTransform<double> hot_pose =
+            LastBodyPose(model.tree(), *context);
+        const drake::math::RigidTransform<double> cold_pose =
+            LastBodyPose(model.tree(), *cold_context);
+        ExpectTrue(
+            !hot_pose.translation().isApprox(origin_before) &&
+                hot_pose.GetAsMatrix34().isApprox(cold_pose.GetAsMatrix34()),
                    "the frame-dependent kinematics agrees with a cold context "
-                   "and differs from its old value");
+                   "in rotation and translation, and differs from its old value");
     }
 
     {
@@ -728,7 +980,25 @@ void CheckTheQuaternionCommitGate() {
     ExpectTrue(context->state().generalized_positions() == non_unit,
                "a nonzero non-unit quaternion is stored exactly, not "
                "silently normalized");
+    const Eigen::Matrix3d non_unit_rotation =
+        LastBodyPose(model.tree(), *context).rotation().matrix();
+    ExpectTrue(non_unit_rotation.allFinite() &&
+                   non_unit_rotation.isApprox(Eigen::Matrix3d::Identity()),
+               "a safely scaled identity quaternion evaluates to the same "
+               "finite rotation");
 
+    for (const double safe_scale : {1e-150, 1e150}) {
+        Eigen::VectorXd safely_scaled = non_unit;
+        safely_scaled.template head<4>() << safe_scale, safe_scale, 0.0, 0.0;
+        model.tree().SetPositions(context.get(), safely_scaled);
+        ExpectTrue(
+            context->state().generalized_positions() == safely_scaled &&
+                LastBodyPose(model.tree(), *context).rotation().matrix().allFinite(),
+            "a finite quaternion inside the formula's numeric domain is "
+            "accepted without an arbitrary magnitude policy");
+    }
+
+    model.tree().SetPositions(context.get(), non_unit);
     const Eigen::VectorXd before_zero =
         context->state().generalized_positions();
     const auto version_before_zero =
@@ -738,7 +1008,7 @@ void CheckTheQuaternionCommitGate() {
     bool zero_was_rejected = false;
     try {
         model.tree().SetPositions(context.get(), zero);
-    } catch (const std::logic_error&) {
+    } catch (const std::invalid_argument&) {
         zero_was_rejected = true;
     }
     ExpectTrue(zero_was_rejected,
@@ -748,6 +1018,29 @@ void CheckTheQuaternionCommitGate() {
                    context->state().generalized_positions_version() ==
                        version_before_zero,
                "a refused zero quaternion changes neither q nor its version");
+
+    for (const double unsafe_scale :
+         {std::numeric_limits<double>::max(),
+          std::numeric_limits<double>::min()}) {
+        Eigen::VectorXd unsafe = before_zero;
+        unsafe.template head<4>() << unsafe_scale, unsafe_scale, 0.0, 0.0;
+        bool unsafe_was_rejected = false;
+        try {
+            model.tree().SetPositions(context.get(), unsafe);
+        } catch (const std::invalid_argument&) {
+            unsafe_was_rejected = true;
+        }
+        ExpectTrue(
+            unsafe_was_rejected,
+            "a finite quaternion whose squared norm cannot support the "
+            "rotation formula is refused");
+        ExpectTrue(
+            context->state().generalized_positions() == before_zero &&
+                context->state().generalized_positions_version() ==
+                    version_before_zero,
+            "a refused numerically unusable quaternion changes neither q nor "
+            "its version");
+    }
 
     Eigen::VectorXd short_positions(model.tree().num_positions() - 1);
     short_positions.setZero();
@@ -770,12 +1063,57 @@ void CheckTheQuaternionCommitGate() {
     try {
         const auto invalid_context = invalid_default.MakeContext();
         (void)invalid_context;
-    } catch (const std::logic_error&) {
+    } catch (const std::invalid_argument&) {
         invalid_default_was_rejected = true;
     }
     ExpectTrue(
         invalid_default_was_rejected,
         "the model-aware factory routes default q through the quaternion gate");
+}
+
+void CheckSpatialInertiaParameterConversionPreservesEveryField() {
+    using orvd::multibody_runtime::RigidBodyInertiaParameters;
+    using orvd::rigid_multibody_tree::internal::ToInertiaParameters;
+    using orvd::rigid_multibody_tree::internal::ToSpatialInertia;
+
+    const Eigen::Vector3d center_of_mass(0.12, -0.23, 0.31);
+    Eigen::Matrix3d central_unit_inertia;
+    central_unit_inertia << 0.42, 0.017, -0.026, 0.017, 0.53, 0.031, -0.026,
+        0.031, 0.64;
+    const Eigen::Matrix3d shift =
+        center_of_mass.squaredNorm() * Eigen::Matrix3d::Identity() -
+        center_of_mass * center_of_mass.transpose();
+    const Eigen::Matrix3d about_body_origin = central_unit_inertia + shift;
+
+    RigidBodyInertiaParameters original;
+    original.mass_kilograms = 3.7;
+    original.center_of_mass_in_body_frame = center_of_mass;
+    original.unit_inertia_moments = about_body_origin.diagonal();
+    original.unit_inertia_products =
+        Eigen::Vector3d(about_body_origin(0, 1), about_body_origin(0, 2),
+                        about_body_origin(1, 2));
+
+    const SpatialInertia<double> spatial = ToSpatialInertia(original);
+    const RigidBodyInertiaParameters round_trip =
+        ToInertiaParameters(spatial);
+    const double tolerance =
+        64.0 * std::numeric_limits<double>::epsilon();
+    ExpectTrue(round_trip.mass_kilograms == original.mass_kilograms,
+               "inertia conversion preserves a nontrivial mass");
+    ExpectTrue(
+        round_trip.center_of_mass_in_body_frame.isApprox(
+            original.center_of_mass_in_body_frame, tolerance),
+        "inertia conversion preserves all three nonzero centre-of-mass "
+        "components");
+    ExpectTrue(
+        round_trip.unit_inertia_moments.isApprox(
+            original.unit_inertia_moments, tolerance),
+        "inertia conversion preserves three distinct unit-inertia moments");
+    ExpectTrue(
+        round_trip.unit_inertia_products.isApprox(
+            original.unit_inertia_products, tolerance),
+        "inertia conversion preserves three distinct nonzero products in "
+        "Ixy, Ixz, Iyz order");
 }
 
 void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
@@ -801,10 +1139,12 @@ int main() {
     CheckTheFactoryIsTheOnlyDoor();
     CheckColdAndRepeatedReadsReturnTheSameRealValue();
     CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots();
+    CheckAbaRetainedCacheDependenciesAgainstColdContexts();
     CheckAPositionWriteExpiresOnlyWhatReadsPositions();
     CheckAMassWriteExpiresInertiaButNotPosition();
     CheckTwoContextsWithEqualVersionsStayApart();
     CheckTheQuaternionCommitGate();
+    CheckSpatialInertiaParameterConversionPreservesEveryField();
     CheckPhysicalParameterDoorsRejectAContextFromAnotherModel();
 
     if (failure_count > 0) {

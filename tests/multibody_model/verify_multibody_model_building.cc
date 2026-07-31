@@ -134,9 +134,12 @@ void CheckNamesMustBeUsableAndUnique() {
 
     ExpectRefused(WasRefused([&] { model.AddRigidBody("", SolidishBody(1.0)); }),
                   "a body with no name");
-    ExpectRefused(
-        WasRefused([&] { model.AddRigidBody("link", SolidishBody(1.0)); }),
-        "a second body named 'link'");
+    ExpectTrue(
+        RefusalMentions(
+            [&] { model.AddRigidBody("link", SolidishBody(1.0)); },
+            "rigid body named 'link'"),
+        "a duplicate body is diagnosed as a duplicate body, not merely as its "
+        "body-frame name colliding");
     ExpectRefused(
         WasRefused([&] {
             FixedFramePoseParameters pose;
@@ -155,11 +158,15 @@ void CheckNamesMustBeUsableAndUnique() {
     model.AddRevoluteJoint("j", model.world_frame(), model.body_frame(body),
                            kZAxis);
     const RigidBodyHandle other = model.AddRigidBody("other", SolidishBody(1.0));
-    ExpectRefused(WasRefused([&] {
-                      model.AddRevoluteJoint("j", model.world_frame(),
-                                             model.body_frame(other), kZAxis);
-                  }),
-                  "a second joint named 'j'");
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                model.AddRevoluteJoint("j", model.world_frame(),
+                                       model.body_frame(other), kZAxis);
+            },
+            "already a joint named 'j'"),
+        "a duplicate public joint is diagnosed as such, not as a collision with "
+        "an internal relation");
 }
 
 void CheckHandlesFromElsewhereAreRefused() {
@@ -300,8 +307,11 @@ void CheckFreedomIsStatedRatherThanInferred() {
 
     model.DeclareFreeBody(floating);
 
-    ExpectRefused(WasRefused([&] { model.DeclareFreeBody(floating); }),
-                  "declaring the same body free twice");
+    ExpectTrue(
+        RefusalMentions([&] { model.DeclareFreeBody(floating); },
+                        "already declared free"),
+        "declaring the same body free twice is diagnosed as a duplicate free "
+        "declaration, not merely as another world relation");
 
     model.AddRevoluteJoint("j", model.world_frame(),
                            model.body_frame(jointed), kZAxis);
@@ -327,10 +337,12 @@ void CheckFreedomIsStatedRatherThanInferred() {
         collision.AddRigidBody("root", SolidishBody(1.0));
     const RigidBodyHandle child =
         collision.AddRigidBody("child", SolidishBody(1.0));
-    collision.AddRevoluteJoint("free_root", collision.body_frame(root),
+    collision.AddRevoluteJoint("__orvd_free_body_1",
+                               collision.body_frame(root),
                                collision.body_frame(child), kZAxis);
     ExpectAccepted(WasRefused([&] { collision.DeclareFreeBody(root); }),
-                   "a free declaration after a caller used its obvious name");
+                   "a free declaration after a caller used the exact first "
+                   "private-name candidate");
 }
 
 void CheckPhysicallyImpossibleDescriptionsAreRefused() {

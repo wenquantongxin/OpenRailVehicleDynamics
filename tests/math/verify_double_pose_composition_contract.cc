@@ -23,8 +23,9 @@
 // very symbols under test, so an implementation and its expectation would agree
 // by construction and the check would certify nothing.
 //
-// The tolerance is not the project's 1e-3 engineering caliber. That caliber is
-// for comparing a physical quantity across two implementations of a model. This
+// The tolerance is not the project's 1e-8 cross-implementation caliber. That
+// caliber is for comparing a well-conditioned double physical quantity across
+// two implementations of a model. This
 // is one algebraic identity evaluated two ways in the same arithmetic, so the
 // honest bar is a small multiple of the representation's own resolution:
 // 64 * epsilon scaled by the magnitudes involved. A wrong implementation — a

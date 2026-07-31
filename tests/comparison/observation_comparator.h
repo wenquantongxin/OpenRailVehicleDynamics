@@ -2,11 +2,11 @@
 //
 // Acceptance, declared once here and nowhere else:
 //
-//   |b - a| <= max(absolute_floor_for_kind, 1e-3 * |a|)
+//   |b - a| <= max(absolute_floor_for_kind, 1e-8 * |a|)
 //
 // The branch taken is reported, because a gate that never leaves the near-zero
 // branch has not tested proportional accuracy at all. Rotations are judged by
-// the SO(3) geodesic angle between them, against a flat 1e-3 rad.
+// the SO(3) geodesic angle between them, against a flat 1e-8 rad.
 //
 // Bit equality is deliberately not the rule: two implementations legitimately
 // differ in summation order and vectorisation, and demanding identical bit
@@ -21,8 +21,8 @@
 
 namespace orvd_comparison {
 
-inline constexpr double kRelativeErrorLimit = 1e-3;
-inline constexpr double kRotationAngleErrorLimitRadians = 1e-3;
+inline constexpr double kRelativeErrorLimit = 1e-8;
+inline constexpr double kRotationAngleErrorLimitRadians = 1e-8;
 
 enum class ComparisonOutcome {
     kAccepted,

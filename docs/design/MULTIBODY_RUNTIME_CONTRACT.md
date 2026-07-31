@@ -188,9 +188,10 @@ G26 要同时删掉元素级空声明与 tree 级离散分支。
 `.state()`。公开入口在捷径返回或改写输出之前完成身份校验，派生 mobilizer 与
 force-element 通过 NVI 接入，不能绕开该校验。
 
-G27 的模型感知 context 工厂必须以 `tree.state_layout()` 构造私有状态，依次调用
-`SetDefaultParameters()` 和 `SetDefaultState()` 后才发布 context。G26 的直接构造器只是
-尚未接入缓存时的阶段性搭桥，不能成为允许原始零填充状态直接参与求值的长期公共入口。
+G27 的模型感知 context 工厂必须直接使用 tree 私有拥有的 layout 构造私有状态，依次调用
+同样私有的默认参数与默认状态安装步骤后才发布 context。tree 不公开 layout，状态只提供
+layout 对象身份判断而不泄漏引用；基础层仍可用自有 layout 单测状态存储，但不能借模型 layout
+造出一个通过身份门的原始零填充状态。
 
 ## 五、计算输入的四类来源
 
