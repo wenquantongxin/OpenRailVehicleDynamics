@@ -113,6 +113,16 @@ class MultibodyStateInstance {
     /// anything is written.
     void set_generalized_velocities(const Eigen::Ref<const Eigen::VectorXd>& velocities);
 
+    /// Replaces q and v as one transaction.
+    ///
+    /// Both vectors and both successor versions are validated before either
+    /// live vector is changed.  This is the state-vector load used by an ODE
+    /// right-hand-side trial; it cannot leave q from one trial beside v from
+    /// another when the second half is refused.
+    void set_generalized_state(
+        const Eigen::Ref<const Eigen::VectorXd>& positions,
+        const Eigen::Ref<const Eigen::VectorXd>& velocities);
+
     // --- Context-mutable physical parameters --------------------------------
 
     const RigidBodyInertiaParameters& rigid_body_inertia_parameters(

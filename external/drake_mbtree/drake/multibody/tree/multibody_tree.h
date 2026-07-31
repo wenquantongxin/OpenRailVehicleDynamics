@@ -1048,6 +1048,16 @@ class MultibodyTree {
     SetVelocities(&context->mutable_state(), velocities);
   }
 
+  /// Writes q and v as one model-aware transaction.
+  void SetPositionsAndVelocities(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const Eigen::Ref<const VectorX<T>>& positions,
+      const Eigen::Ref<const VectorX<T>>& velocities) const {
+    DRAKE_DEMAND(context != nullptr);
+    SetPositionsAndVelocities(&context->mutable_state(), positions, velocities);
+  }
+
   /// Sets one body's complete spatial inertia in this context.
   ///
   /// Parameter writes are exposed by physical identity, not by returning the
@@ -2205,6 +2215,31 @@ class MultibodyTree {
     DRAKE_DEMAND(state != nullptr);
     ValidateStateInstance(*state);
     state->set_generalized_velocities(velocities);
+  }
+
+  // Writes the complete continuous multibody state as one transaction.  This
+  // is the ODE trial-state entry point: all model-aware and storage-level
+  // validation completes before either q or v is changed.
+  void SetPositionsAndVelocities(
+      orvd::multibody_runtime::MultibodyStateInstance* state,
+      const Eigen::Ref<const VectorX<T>>& positions,
+      const Eigen::Ref<const VectorX<T>>& velocities) const {
+    DRAKE_DEMAND(state != nullptr);
+    ValidateStateInstance(*state);
+    if (positions.size() != num_positions()) {
+      throw std::invalid_argument(fmt::format(
+          "MultibodyTree: expected {} generalized positions, got {}; nothing "
+          "was written",
+          num_positions(), positions.size()));
+    }
+    if (velocities.size() != num_velocities()) {
+      throw std::invalid_argument(fmt::format(
+          "MultibodyTree: expected {} generalized velocities, got {}; nothing "
+          "was written",
+          num_velocities(), velocities.size()));
+    }
+    ThrowIfAnyQuaternionCannotBeConvertedToRotation(positions);
+    state->set_generalized_state(positions, velocities);
   }
 
   // Returns a const fixed-size block of `length` generalized positions starting

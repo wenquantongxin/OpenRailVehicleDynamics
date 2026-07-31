@@ -670,6 +670,32 @@ void CheckEachVersionedWriteAdvancesExactlyItsOwn() {
                        });
 }
 
+void CheckCombinedStateWriteAdvancesBothCoordinateVersionsAtomically() {
+    const MultibodyStateLayout layout(SampleDescription());
+    MultibodyStateInstance state(layout);
+    const Eigen::VectorXd positions = Eigen::VectorXd::Constant(9, 0.25);
+    const Eigen::VectorXd velocities = Eigen::VectorXd::Constant(8, -1.5);
+    state.set_generalized_state(positions, velocities);
+    ExpectTrue(
+        AllRevisions(state) ==
+            std::array<std::uint64_t, 5>{1, 1, 0, 0, 0},
+        "one combined state write advances q and v exactly once");
+
+    Eigen::VectorXd invalid_velocities = velocities;
+    invalid_velocities[7] = std::numeric_limits<double>::quiet_NaN();
+    const auto before_versions = AllRevisions(state);
+    ExpectRefused(
+        WasRefused([&] {
+            state.set_generalized_state(
+                Eigen::VectorXd::Constant(9, 2.0), invalid_velocities);
+        }),
+        "a combined state write with an invalid velocity");
+    ExpectTrue(AllRevisions(state) == before_versions &&
+                   state.generalized_positions() == positions &&
+                   state.generalized_velocities() == velocities,
+               "a refused combined write changes neither data nor versions");
+}
+
 void CheckWritingTheSameValueStillAdvances() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
@@ -1074,6 +1100,7 @@ int main() {
     CheckElementParameterValidation();
     CheckVersionValueSemantics();
     CheckEachVersionedWriteAdvancesExactlyItsOwn();
+    CheckCombinedStateWriteAdvancesBothCoordinateVersionsAtomically();
     CheckWritingTheSameValueStillAdvances();
     CheckRefusedWritesLeaveEveryVersionAlone();
     CheckUnversionedParametersAdvanceNothing();

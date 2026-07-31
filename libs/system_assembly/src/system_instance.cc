@@ -85,6 +85,44 @@ SystemInstance::CreateDefaultRuntimeContext() const {
         new SystemRuntimeContext(identity_, *multibody_model_));
 }
 
+void SystemInstance::CopyContinuousState(
+    const SystemRuntimeContext& context,
+    Eigen::Ref<Eigen::VectorXd> output) const {
+    if (context.issuer_ != identity_) {
+        Reject("the runtime context belongs to a different system");
+    }
+    if (output.size() != continuous_state_size()) {
+        Reject("the continuous-state output has " +
+               std::to_string(output.size()) + " entries, but this system has " +
+               std::to_string(continuous_state_size()) +
+               "; nothing was written");
+    }
+    output.segment(0, generalized_position_count_) =
+        context.generalized_positions();
+    output.segment(generalized_position_count_, generalized_velocity_count_) =
+        context.generalized_velocities();
+}
+
+void SystemInstance::SetContinuousState(
+    SystemRuntimeContext& context,
+    const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const {
+    if (context.issuer_ != identity_) {
+        Reject("the runtime context belongs to a different system");
+    }
+    if (continuous_state.size() != continuous_state_size()) {
+        Reject("the continuous-state input has " +
+               std::to_string(continuous_state.size()) +
+               " entries, but this system has " +
+               std::to_string(continuous_state_size()) +
+               "; nothing was written");
+    }
+    multibody_model_->SetGeneralizedState(
+        context.multibody_context_.get(),
+        continuous_state.segment(0, generalized_position_count_),
+        continuous_state.segment(generalized_position_count_,
+                                 generalized_velocity_count_));
+}
+
 MultibodyComponentView SystemInstance::GetMultibodyComponentView(
     SystemRuntimeContext& context, MultibodyComponentIndex component) const {
     if (context.issuer_ != identity_) {

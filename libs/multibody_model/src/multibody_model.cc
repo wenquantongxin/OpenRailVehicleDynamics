@@ -886,6 +886,19 @@ void MultibodyModel::SetGeneralizedVelocities(
                               velocities);
 }
 
+void MultibodyModel::SetGeneralizedState(
+    MultibodyEvaluationContext* context,
+    const Eigen::Ref<const Eigen::VectorXd>& positions,
+    const Eigen::Ref<const Eigen::VectorXd>& velocities) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("state the generalized positions and velocities");
+    Implementation::RequireOwnContext(model, context,
+                                      "write continuous state into");
+    model.tree_.SetPositionsAndVelocities(
+        &context->implementation_->mutable_tree_context(), positions,
+        velocities);
+}
+
 namespace {
 
 void RequireDampingCoefficient(double damping, const char* joint_kind) {

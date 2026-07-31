@@ -330,6 +330,17 @@ class MultibodyModel {
     void SetGeneralizedVelocities(MultibodyEvaluationContext* context,
                                   const Eigen::VectorXd& velocities) const;
 
+    /// States q and v as one transaction for an ODE trial or accepted commit.
+    /// Both vectors are validated before either one is changed.
+    ///
+    /// @throws std::invalid_argument under the union of the two individual
+    /// setter contracts.  A refusal leaves both vectors unchanged.
+    /// @throws std::logic_error if the model is not finalized.
+    void SetGeneralizedState(
+        MultibodyEvaluationContext* context,
+        const Eigen::Ref<const Eigen::VectorXd>& positions,
+        const Eigen::Ref<const Eigen::VectorXd>& velocities) const;
+
     /// Sets this context's revolute-joint viscous damping coefficient.
     ///
     /// The value is in N m s/rad and is read directly by every damping-force

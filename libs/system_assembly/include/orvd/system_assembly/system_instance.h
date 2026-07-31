@@ -133,6 +133,21 @@ class SystemInstance {
     [[nodiscard]] std::unique_ptr<SystemRuntimeContext>
     CreateDefaultRuntimeContext() const;
 
+    /// Copies the frozen `[q; v]` continuous-state layout into `output`.
+    /// `output` must already have `continuous_state_size()` entries.
+    void CopyContinuousState(
+        const SystemRuntimeContext& context,
+        Eigen::Ref<Eigen::VectorXd> output) const;
+
+    /// Replaces the frozen `[q; v]` state as one transaction.
+    ///
+    /// This is the contiguous-vector bridge used by ODE backends.  The input
+    /// is mapped directly into the authoritative multibody state; no mirrored
+    /// system state is kept.
+    void SetContinuousState(
+        SystemRuntimeContext& context,
+        const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
+
     /// Resolves the stable component index to direct references.  No name or
     /// run-time type lookup occurs on this path.
     ///

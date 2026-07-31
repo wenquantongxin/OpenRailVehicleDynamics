@@ -111,6 +111,25 @@ void MultibodyStateInstance::set_generalized_velocities(
     generalized_velocities_version_ = next;
 }
 
+void MultibodyStateInstance::set_generalized_state(
+    const Eigen::Ref<const Eigen::VectorXd>& positions,
+    const Eigen::Ref<const Eigen::VectorXd>& velocities) {
+    RequireSize(positions.size(), layout_->generalized_position_count(),
+                "the generalized position vector");
+    RequireSize(velocities.size(), layout_->generalized_velocity_count(),
+                "the generalized velocity vector");
+    RequireFinite(positions, "generalized position");
+    RequireFinite(velocities, "generalized velocity");
+    const MultibodyStateVersion next_positions =
+        generalized_positions_version_.Next();
+    const MultibodyStateVersion next_velocities =
+        generalized_velocities_version_.Next();
+    generalized_positions_ = positions;
+    generalized_velocities_ = velocities;
+    generalized_positions_version_ = next_positions;
+    generalized_velocities_version_ = next_velocities;
+}
+
 const RigidBodyInertiaParameters&
 MultibodyStateInstance::rigid_body_inertia_parameters(
     int rigid_body_index) const {

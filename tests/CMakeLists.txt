@@ -492,6 +492,16 @@ orvd_configure_first_party_target(verify_compiled_system_plan)
 target_link_libraries(verify_compiled_system_plan PRIVATE orvd_system_assembly)
 add_test(NAME verify_compiled_system_plan COMMAND verify_compiled_system_plan)
 
+# G43's backend-neutral state/RHS seam.  This does not link SUNDIALS or step a
+# numerical integrator; it verifies the dynamically sized contiguous mapping,
+# component tolerances and the dedicated trial-context boundary used by G44.
+add_executable(verify_system_rhs_bridge
+    integrators/system_rhs_bridge_header_self_containment.cc
+    integrators/verify_system_rhs_bridge.cc)
+orvd_configure_first_party_target(verify_system_rhs_bridge)
+target_link_libraries(verify_system_rhs_bridge PRIVATE orvd_integrators)
+add_test(NAME verify_system_rhs_bridge COMMAND verify_system_rhs_bridge)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed
