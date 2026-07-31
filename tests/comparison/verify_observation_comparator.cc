@@ -3,6 +3,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <Eigen/Dense>
 
@@ -40,11 +41,12 @@ orvd_contract::ObservationStream MakeStream(double force_newtons) {
     return stream;
 }
 
-orvd_comparison::ComparisonRequirements MakeRequirements() {
+orvd_comparison::ComparisonRequirements MakeRequirements(
+    orvd_contract::ObservationKind generalized_force_kind =
+        orvd_contract::ObservationKind::kForceNewtons) {
     orvd_comparison::ComparisonRequirements requirements;
     requirements.topology_fact_names = {"num_velocities"};
-    requirements.scalars = {
-        {"generalized_force[0]", orvd_contract::ObservationKind::kForceNewtons}};
+    requirements.scalars = {{"generalized_force[0]", generalized_force_kind}};
     requirements.rotations = {{"body_rotation"}};
     return requirements;
 }
@@ -76,6 +78,10 @@ void CheckWhichBranchJudgesWhichMagnitude() {
     Expect(SelectToleranceBranch(1.0e3, ObservationKind::kForceNewtons) ==
                ToleranceBranch::kRelativeError,
            "a kilonewton is judged proportionally");
+    Expect(SelectToleranceBranch(1.0e3,
+                                 ObservationKind::kTorqueNewtonMetres) ==
+               ToleranceBranch::kRelativeError,
+           "a kilonewton-metre is judged proportionally");
     Expect(SelectToleranceBranch(
                1.2, ObservationKind::kAngularVelocityRadiansPerSecond) ==
                ToleranceBranch::kRelativeError,
@@ -88,39 +94,52 @@ void CheckWhichBranchJudgesWhichMagnitude() {
 }
 
 void CheckRelativeAndNearZeroLimits() {
-    const auto requirements = MakeRequirements();
-    const auto reference = MakeStream(100.0);
     constexpr double reference_force = 100.0;
     constexpr double inside_relative_limit =
         0.5 * orvd_comparison::kRelativeErrorLimit;
     constexpr double outside_relative_limit =
         5.0 * orvd_comparison::kRelativeErrorLimit;
 
-    Expect(orvd_comparison::CompareObservationStreams(
-               requirements, reference,
-               MakeStream(reference_force *
-                          (1.0 + inside_relative_limit))).outcome ==
-               orvd_comparison::ComparisonOutcome::kAccepted,
-           "a relative error inside the declared limit must pass");
-    Expect(orvd_comparison::CompareObservationStreams(
-               requirements, reference,
-               MakeStream(reference_force *
-                          (1.0 + outside_relative_limit))).outcome ==
-               orvd_comparison::ComparisonOutcome::kToleranceExceeded,
-           "a relative error outside the declared limit must fail");
+    using orvd_contract::ObservationKind;
+    for (const auto& [kind, description] :
+         {std::pair{ObservationKind::kForceNewtons,
+                    std::string_view{"force"}},
+          std::pair{ObservationKind::kTorqueNewtonMetres,
+                    std::string_view{"torque"}}}) {
+        const auto requirements = MakeRequirements(kind);
+        const auto reference = MakeStream(reference_force);
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, reference,
+                   MakeStream(reference_force *
+                              (1.0 + inside_relative_limit))).outcome ==
+                   orvd_comparison::ComparisonOutcome::kAccepted,
+               std::string(description) +
+                   " relative error inside the declared limit must pass");
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, reference,
+                   MakeStream(reference_force *
+                              (1.0 + outside_relative_limit))).outcome ==
+                   orvd_comparison::ComparisonOutcome::kToleranceExceeded,
+               std::string(description) +
+                   " relative error outside the declared limit must fail");
 
-    const auto near_zero_reference = MakeStream(0.0);
-    Expect(orvd_comparison::CompareObservationStreams(
-               requirements, near_zero_reference, MakeStream(0.5e-9)).outcome ==
-               orvd_comparison::ComparisonOutcome::kAccepted,
-           "a near-zero force inside its absolute limit must pass");
-    const auto near_zero_failure = orvd_comparison::CompareObservationStreams(
-        requirements, near_zero_reference, MakeStream(1.5e-9));
-    Expect(near_zero_failure.outcome ==
-               orvd_comparison::ComparisonOutcome::kToleranceExceeded,
-           "a near-zero force outside its absolute limit must fail");
-    Expect(near_zero_failure.detail.find("e-") != std::string::npos,
-           "a near-zero failure must retain its scientific magnitude");
+        const auto near_zero_reference = MakeStream(0.0);
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, near_zero_reference, MakeStream(0.5e-9))
+                   .outcome == orvd_comparison::ComparisonOutcome::kAccepted,
+               std::string("a near-zero ") + std::string(description) +
+                   " inside its absolute limit must pass");
+        const auto near_zero_failure =
+            orvd_comparison::CompareObservationStreams(
+                requirements, near_zero_reference, MakeStream(1.5e-9));
+        Expect(near_zero_failure.outcome ==
+                   orvd_comparison::ComparisonOutcome::kToleranceExceeded,
+               std::string("a near-zero ") + std::string(description) +
+                   " outside its absolute limit must fail");
+        Expect(near_zero_failure.detail.find("e-") != std::string::npos,
+               std::string("a near-zero ") + std::string(description) +
+                   " failure must retain its scientific magnitude");
+    }
 }
 
 void CheckVelocityNearZeroLimits() {

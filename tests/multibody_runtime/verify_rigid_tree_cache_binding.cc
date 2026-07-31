@@ -184,10 +184,14 @@ class TwoLinkChain {
                 1.8, Eigen::Vector3d(-0.05, 0.07, 0.04),
                 drake::multibody::RotationalInertia<double>(
                     0.038, 0.047, 0.056, -0.002, 0.003, 0.001));
-        const auto& first = tree_.AddLink(
-            "first", first_inertia);
         const auto& second = tree_.AddLink(
             "second", second_inertia);
+        const auto& first = tree_.AddLink(
+            "first", first_inertia);
+        // Link ordinal follows insertion, so `second` precedes `first`; the
+        // forest must nevertheless mobilize `first` before its child `second`.
+        // Any test oracle that confuses link/public order with Mobod order is
+        // exposed by this otherwise immaterial construction order.
         // The joints are offset along x. With every frame coincident, rotating a
         // revolute joint would leave each body origin exactly where it was, and
         // a check that "the pose moved" would be asserting something the model
@@ -300,6 +304,32 @@ Eigen::MatrixXd MassMatrix(const MultibodyTree<double>& tree,
                            const Context& context) {
     Eigen::MatrixXd result(tree.num_velocities(), tree.num_velocities());
     tree.CalcMassMatrix(context, &result);
+    return result;
+}
+
+Eigen::MatrixXd MassMatrixViaPreallocatedInverseDynamics(
+    const MultibodyTree<double>& tree, const Context& context) {
+    const int velocity_count = tree.num_velocities();
+    Eigen::MatrixXd result(velocity_count, velocity_count);
+    Eigen::VectorXd velocity_derivatives =
+        Eigen::VectorXd::Zero(velocity_count);
+    Eigen::VectorXd generalized_forces(velocity_count);
+    const std::vector<drake::multibody::SpatialForce<double>> no_body_forces;
+    const Eigen::VectorXd no_generalized_forces;
+    std::vector<drake::multibody::SpatialAcceleration<double>>
+        accelerations_by_mobod(tree.num_mobods());
+    std::vector<drake::multibody::SpatialForce<double>>
+        reaction_forces_by_mobod(tree.num_mobods());
+    for (int column = 0; column < velocity_count; ++column) {
+        velocity_derivatives.setZero();
+        velocity_derivatives[column] = 1.0;
+        tree.CalcInverseDynamics(
+            context, velocity_derivatives, no_body_forces,
+            no_generalized_forces, /*ignore_velocities=*/true,
+            &accelerations_by_mobod, &reaction_forces_by_mobod,
+            &generalized_forces);
+        result.col(column) = generalized_forces;
+    }
     return result;
 }
 
@@ -821,6 +851,142 @@ constexpr std::array<const char*, 11> kSlotNames{
      "velocity kinematics", "world inertias", "composite inertias",
      "dynamic bias", "spatial acceleration bias", "reflected inertia",
      "articulated body inertia", "articulated body force bias"}};
+
+void CheckMassMatrixAlgorithmAndVelocityIndependence() {
+    const TwoLinkChain model;
+    ExpectTrue(
+        static_cast<int>(model.second_body().index()) <
+                static_cast<int>(model.first_body().index()) &&
+            static_cast<int>(model.second_body().mobod_index()) >
+                static_cast<int>(model.first_body().mobod_index()),
+        "the mass fixture's link order differs from its Mobod order");
+
+    const std::unique_ptr<Context> context = model.MakeContext();
+    SetJointAngles(model.tree(), context.get(), 0.47, -0.31);
+    Eigen::VectorXd velocities(model.tree().num_velocities());
+    velocities << 0.63, -0.42;
+    model.tree().SetVelocities(context.get(), velocities);
+
+    const Eigen::MatrixXd mass_crba = MassMatrix(model.tree(), *context);
+    const std::array<std::uint64_t, 11> after_crba =
+        RecomputationCounts(*context);
+    const std::array<std::uint64_t, 11> expected_after_crba{
+        {/*frame/body poses=*/1,
+         /*position kinematics=*/1,
+         /*across-node Jacobian=*/1,
+         /*velocity kinematics=*/0,
+         /*world inertias=*/1,
+         /*composite inertias=*/1,
+         /*dynamic bias=*/0,
+         /*spatial acceleration bias=*/0,
+         /*reflected inertia=*/1,
+         /*articulated body inertia=*/0,
+         /*articulated body force bias=*/0}};
+    ExpectTrue(after_crba == expected_after_crba,
+               "a cold CRBA evaluation computes exactly its six retained "
+               "cache dependencies");
+
+    const Eigen::MatrixXd mass_rnea =
+        MassMatrixViaPreallocatedInverseDynamics(model.tree(), *context);
+    const double scale = std::max(1.0, mass_rnea.cwiseAbs().maxCoeff());
+    const double tolerance =
+        2048.0 * std::numeric_limits<double>::epsilon() * scale;
+    ExpectTrue((mass_crba - mass_rnea).cwiseAbs().maxCoeff() <= tolerance,
+               "the complete CRBA matrix agrees column by column with "
+               "preallocated inverse dynamics");
+
+    const std::array<std::uint64_t, 11> before_velocity_write =
+        RecomputationCounts(*context);
+    velocities << -0.28, 0.71;
+    model.tree().SetVelocities(context.get(), velocities);
+    const Eigen::MatrixXd mass_after_velocity =
+        MassMatrix(model.tree(), *context);
+    const std::array<std::uint64_t, 11> after_velocity_write =
+        RecomputationCounts(*context);
+    ExpectTrue(after_velocity_write == before_velocity_write,
+               "changing v and evaluating M(q) recomputes no retained slot");
+
+    const std::unique_ptr<Context> cold_context = model.MakeContext();
+    SetJointAngles(model.tree(), cold_context.get(), 0.47, -0.31);
+    model.tree().SetVelocities(cold_context.get(), velocities);
+    const Eigen::MatrixXd mass_cold =
+        MassMatrix(model.tree(), *cold_context);
+    ExpectTrue((mass_after_velocity - mass_crba).cwiseAbs().maxCoeff() <=
+                       tolerance &&
+                   (mass_after_velocity - mass_cold)
+                           .cwiseAbs()
+                           .maxCoeff() <= tolerance,
+               "M(q) is unchanged by v and agrees with a cold context at the "
+               "same q and v");
+
+    SetJointAngles(model.tree(), context.get(), -0.22, 0.58);
+    const Eigen::MatrixXd mass_after_position =
+        MassMatrix(model.tree(), *context);
+    const std::unique_ptr<Context> cold_position_context = model.MakeContext();
+    SetJointAngles(model.tree(), cold_position_context.get(), -0.22, 0.58);
+    model.tree().SetVelocities(cold_position_context.get(), velocities);
+    const Eigen::MatrixXd mass_cold_position =
+        MassMatrix(model.tree(), *cold_position_context);
+    ExpectTrue((mass_after_position - mass_crba).cwiseAbs().maxCoeff() >
+                       tolerance &&
+                   (mass_after_position - mass_cold_position)
+                           .cwiseAbs()
+                           .maxCoeff() <= tolerance,
+               "changing q changes the qualified mass matrix and the hot "
+               "result agrees with a cold context");
+
+    const std::unique_ptr<Context> frame_context = model.MakeContext();
+    SetJointAngles(model.tree(), frame_context.get(), 0.47, -0.31);
+    model.tree().SetVelocities(frame_context.get(), velocities);
+    const Eigen::MatrixXd mass_before_frame_change =
+        MassMatrix(model.tree(), *frame_context);
+    const std::array<std::uint64_t, 11> before_frame_change =
+        RecomputationCounts(*frame_context);
+    const drake::math::RigidTransform<double> changed_frame_pose(
+        drake::math::RotationMatrix<double>::MakeYRotation(0.39),
+        Eigen::Vector3d(0.23, -0.12, 0.28));
+    model.tree().SetFixedFramePoseInParentFrame(
+        frame_context.get(), model.fixed_frame(), changed_frame_pose);
+    const Eigen::MatrixXd mass_after_frame_change =
+        MassMatrix(model.tree(), *frame_context);
+    const std::array<std::uint64_t, 11> after_frame_change =
+        RecomputationCounts(*frame_context);
+    const std::array<std::uint64_t, 11> expected_frame_increments{
+        {/*frame/body poses=*/1,
+         /*position kinematics=*/1,
+         /*across-node Jacobian=*/1,
+         /*velocity kinematics=*/0,
+         /*world inertias=*/1,
+         /*composite inertias=*/1,
+         /*dynamic bias=*/0,
+         /*spatial acceleration bias=*/0,
+         /*reflected inertia=*/0,
+         /*articulated body inertia=*/0,
+         /*articulated body force bias=*/0}};
+    for (std::size_t index = 0; index < after_frame_change.size(); ++index) {
+        ExpectTrue(after_frame_change[index] - before_frame_change[index] ==
+                       expected_frame_increments[index],
+                   std::string("a fixed-frame change makes mass evaluation "
+                               "recompute the expected status of ") +
+                       kSlotNames[index]);
+    }
+    const std::unique_ptr<Context> cold_frame_context = model.MakeContext();
+    SetJointAngles(model.tree(), cold_frame_context.get(), 0.47, -0.31);
+    model.tree().SetVelocities(cold_frame_context.get(), velocities);
+    model.tree().SetFixedFramePoseInParentFrame(
+        cold_frame_context.get(), model.fixed_frame(), changed_frame_pose);
+    const Eigen::MatrixXd mass_cold_frame =
+        MassMatrix(model.tree(), *cold_frame_context);
+    ExpectTrue(
+        (mass_after_frame_change - mass_before_frame_change)
+                .cwiseAbs()
+                .maxCoeff() > tolerance &&
+            (mass_after_frame_change - mass_cold_frame)
+                    .cwiseAbs()
+                    .maxCoeff() <= tolerance,
+        "changing a fixed-frame pose changes M(q), and the recomputed value "
+        "agrees with a cold context");
+}
 
 void CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions() {
     // Freshness says whether a slot *would* recompute. It cannot say whether a
@@ -1463,6 +1629,7 @@ void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
 }  // namespace
 
 int main() {
+    CheckMassMatrixAlgorithmAndVelocityIndependence();
     CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions();
     CheckVelocityKinematicsRecomputesForExactlyItsInputs();
     CheckFixedFrameVelocityUsesTheContextPose();

@@ -5,9 +5,9 @@
 // twice and comparing it with itself establishes that the harness works — the
 // pipe, the parser and the judge — and nothing about any candidate. Running the
 // reference against ORVD's own emitter is the equivalence claim, and it is made
-// only over the capability ORVD has actually landed: the judge's differential-
-// kinematics requirement set says which observations that is, and it refuses a
-// missing one rather than skipping it.
+// only over the capability ORVD has actually landed: the judge's mass-matrix
+// requirement set includes every earlier kinematics layer and refuses a missing
+// observation rather than skipping it.
 //
 // Separate processes are not tidiness. libdrake exports the same drake:: symbols
 // a vendored copy keeps, so co-linking the two would be an ODR violation whose
@@ -50,9 +50,8 @@ void Expect(bool condition, std::string_view what) {
 // exit status is checked: a process that failed to start produces no
 // observations, and reporting that as "a required observation is missing" would
 // name the symptom and hide the cause.
-bool CaptureReferenceEmitterOutput(const std::string& emitter_path,
-                                   std::string_view excitation,
-                                   std::string* output) {
+bool CaptureEmitterOutput(const std::string& emitter_path,
+                          std::string_view excitation, std::string* output) {
     int standard_output_pipe[2];
     if (pipe(standard_output_pipe) != 0) {
         std::perror("pipe");
@@ -367,6 +366,69 @@ void ExpectRequirementsCoverDifferentialKinematics(
     }
 }
 
+void ExpectRequirementsCoverMassMatrix(
+    const orvd_comparison::ComparisonRequirements& requirements,
+    const orvd_contract::ScenarioDefinition& scenario) {
+    ExpectRequirementsCoverDifferentialKinematics(requirements, scenario);
+    const orvd_comparison::ComparisonRequirements narrower =
+        orvd_comparison::MakeDifferentialKinematicsComparisonRequirements(
+            scenario);
+    Expect(requirements.topology_fact_names == narrower.topology_fact_names,
+           "mass-matrix requirements retain exactly the earlier topology facts");
+    Expect(requirements.rotations.size() == narrower.rotations.size(),
+           "mass-matrix requirements retain exactly the earlier rotations");
+    for (std::size_t index = 0;
+         index < requirements.rotations.size() &&
+         index < narrower.rotations.size();
+         ++index) {
+        Expect(requirements.rotations[index].group_name ==
+                   narrower.rotations[index].group_name,
+               "mass-matrix requirements retain each earlier rotation");
+    }
+    Expect(requirements.scalars.size() ==
+               narrower.scalars.size() +
+                   scenario.generalized_velocities.size() *
+                       scenario.generalized_velocities.size(),
+           "mass-matrix requirements add exactly one complete square operator");
+    for (std::size_t index = 0;
+         index < narrower.scalars.size() && index < requirements.scalars.size();
+         ++index) {
+        Expect(requirements.scalars[index].name == narrower.scalars[index].name &&
+                   requirements.scalars[index].kind ==
+                       narrower.scalars[index].kind,
+               "mass-matrix requirements retain every earlier scalar in order");
+    }
+
+    const auto has_scalar = [&requirements](
+                                const std::string& name,
+                                orvd_contract::ObservationKind expected) {
+        for (const auto& required : requirements.scalars) {
+            if (required.name == name && required.kind == expected) return true;
+        }
+        return false;
+    };
+    for (std::size_t column = 0;
+         column < scenario.generalized_velocities.size(); ++column) {
+        for (std::size_t row = 0;
+             row < scenario.generalized_velocities.size(); ++row) {
+            const auto kind =
+                scenario.generalized_force_component_kinds[row] ==
+                        orvd_contract::GeneralizedForceComponentKind::
+                            kForceNewtons
+                    ? orvd_contract::ObservationKind::kForceNewtons
+                    : orvd_contract::ObservationKind::kTorqueNewtonMetres;
+            Expect(
+                has_scalar(
+                    "mass_matrix_column_generalized_force_response[" +
+                        std::to_string(column) + "][" +
+                        std::to_string(row) + "]",
+                    kind),
+                "every mass-matrix column response must be required with its "
+                "output row's generalized-force units");
+        }
+    }
+}
+
 /// Moves one named observation by an absolute amount.
 ///
 /// Distinct from the proportional perturbation helper: here the caller has
@@ -443,12 +505,12 @@ int main(int argc, char** argv) {
         const orvd_contract::ScenarioDefinition scenario =
             orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
         const orvd_comparison::ComparisonRequirements requirements =
-            orvd_comparison::MakeComparisonRequirements(scenario);
+            orvd_comparison::MakeMassMatrixComparisonRequirements(scenario);
 
         // Two independent processes of the same reference implementation.
         std::string first_text, second_text;
-        if (!CaptureReferenceEmitterOutput(emitter_path, excitation, &first_text) ||
-            !CaptureReferenceEmitterOutput(emitter_path, excitation, &second_text)) {
+        if (!CaptureEmitterOutput(emitter_path, excitation, &first_text) ||
+            !CaptureEmitterOutput(emitter_path, excitation, &second_text)) {
             std::fprintf(stderr, "reference emitter failed to run\n");
             return 1;
         }
@@ -542,7 +604,11 @@ int main(int argc, char** argv) {
               std::string("acceleration_lower_link_angular[0]"),
               std::string(
                   "jacobian_probe_response_reverse_branch_link_"
-                  "translational_at_center_of_mass[0]")}) {
+                  "translational_at_center_of_mass[0]"),
+              std::string(
+                  "mass_matrix_column_generalized_force_response[0][0]"),
+              std::string(
+                  "mass_matrix_column_generalized_force_response[6][6]")}) {
             const auto missing = orvd_comparison::CompareObservationStreams(
                 requirements, first, WithObservationRemoved(second, removed));
             Expect(missing.outcome ==
@@ -570,15 +636,13 @@ int main(int argc, char** argv) {
         const orvd_contract::ScenarioDefinition scenario =
             orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
         const orvd_comparison::ComparisonRequirements requirements =
-            orvd_comparison::MakeDifferentialKinematicsComparisonRequirements(
-                scenario);
-        ExpectRequirementsCoverDifferentialKinematics(requirements, scenario);
+            orvd_comparison::MakeMassMatrixComparisonRequirements(scenario);
+        ExpectRequirementsCoverMassMatrix(requirements, scenario);
 
         std::string reference_text, candidate_text;
-        if (!CaptureReferenceEmitterOutput(emitter_path, excitation,
-                                           &reference_text) ||
-            !CaptureReferenceEmitterOutput(candidate_path, excitation,
-                                           &candidate_text)) {
+        if (!CaptureEmitterOutput(emitter_path, excitation, &reference_text) ||
+            !CaptureEmitterOutput(candidate_path, excitation,
+                                  &candidate_text)) {
             std::fprintf(stderr, "an emitter failed to run\n");
             return 1;
         }
@@ -692,9 +756,9 @@ int main(int argc, char** argv) {
                                "near-zero floor: " + judged.detail);
             }
 
-            // Every differential-kinematics dimension has its own near-zero
-            // floor. Prove that each one actually enters and uses the 1e-8
-            // proportional branch in this dynamic scenario.
+            // Every currently required continuous dimension has its own
+            // near-zero floor. Prove that each one actually enters and uses
+            // the 1e-8 proportional branch in this dynamic scenario.
             for (const auto kind :
                  {orvd_contract::ObservationKind::
                       kAngularVelocityRadiansPerSecond,
@@ -705,7 +769,9 @@ int main(int argc, char** argv) {
                   orvd_contract::ObservationKind::
                       kAngularAccelerationRadiansPerSecondSquared,
                   orvd_contract::ObservationKind::
-                      kTranslationalAccelerationMetersPerSecondSquared}) {
+                      kTranslationalAccelerationMetersPerSecondSquared,
+                  orvd_contract::ObservationKind::kForceNewtons,
+                  orvd_contract::ObservationKind::kTorqueNewtonMetres}) {
                 const orvd_comparison::RequiredObservation* target = nullptr;
                 for (const auto& required : requirements.scalars) {
                     if (required.kind != kind) continue;
@@ -720,7 +786,7 @@ int main(int argc, char** argv) {
                     }
                 }
                 Expect(target != nullptr,
-                       "each differential-kinematics dimension must exercise the "
+                       "each required continuous dimension must exercise the "
                        "relative tolerance branch");
                 if (target == nullptr) continue;
                 const auto* observation =
@@ -758,7 +824,7 @@ int main(int argc, char** argv) {
             requirements, reference, candidate);
         Expect(verdict.outcome == orvd_comparison::ComparisonOutcome::kAccepted,
                std::string("the ORVD candidate must agree with the Drake "
-                           "reference on differential kinematics (") +
+                           "reference through the mass matrix (") +
                    std::string(excitation) + "): " + verdict.detail);
         if (excitation == "dynamic_excitation") {
             Expect(verdict.relative_branch_count > 0,
@@ -773,6 +839,6 @@ int main(int argc, char** argv) {
     }
     std::printf(
         "the harness fails when it should, and the ORVD candidate agrees with "
-        "the Drake reference on differential kinematics\n");
+        "the Drake reference through the mass matrix\n");
     return 0;
 }

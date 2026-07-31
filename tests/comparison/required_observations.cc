@@ -165,7 +165,7 @@ ComparisonRequirements MakeDifferentialKinematicsComparisonRequirements(
     return requirements;
 }
 
-ComparisonRequirements MakeComparisonRequirements(
+ComparisonRequirements MakeMassMatrixComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario) {
     using orvd_contract::ObservationKind;
 
@@ -191,14 +191,6 @@ ComparisonRequirements MakeComparisonRequirements(
                      std::to_string(generalized_force_index) + "]",
                  kind});
         }
-    }
-
-    for (std::size_t velocity_index = 0; velocity_index < velocity_count;
-         ++velocity_index) {
-        const ObservationKind kind = ObservationKindForGeneralizedForceComponent(
-            scenario.generalized_force_component_kinds[velocity_index]);
-        requirements.scalars.push_back(
-            {"inverse_dynamics[" + std::to_string(velocity_index) + "]", kind});
     }
 
     return requirements;

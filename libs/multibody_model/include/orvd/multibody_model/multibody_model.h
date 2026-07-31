@@ -460,6 +460,23 @@ class MultibodyModel {
         Eigen::MatrixXd* angular_velocity_jacobian,
         Eigen::MatrixXd* point_translational_velocity_jacobian) const;
 
+    // --- Dynamics ----------------------------------------------------------
+
+    /// Computes the generalized mass matrix M(q).
+    ///
+    /// Rows and columns follow the model's generalized-velocity ranges. Thus
+    /// `M * vdot` has the generalized-force component associated with each
+    /// velocity: N for a translational coordinate and N m for a rotational
+    /// coordinate. The caller supplies an already sized `nv x nv` matrix; this
+    /// call neither resizes nor replaces its storage.
+    ///
+    /// @throws std::invalid_argument if the context is foreign or the output
+    /// has the wrong dimensions. A refusal occurs before the output is changed.
+    /// @throws std::logic_error if the model is not finalized.
+    void CalcGeneralizedMassMatrix(
+        const MultibodyEvaluationContext& context,
+        Eigen::MatrixXd& generalized_mass_matrix) const;
+
    private:
     template <typename Handle>
     static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {

@@ -16,10 +16,10 @@
 // file: a claim a program makes about its own linkage is the one claim it cannot
 // check.
 //
-// Only what G31-G33 have landed is emitted. The mass matrix and the inverse
-// dynamics belong to later goals; the judge's differential-kinematics
-// requirement set is what says so, and it refuses a missing observation
-// rather than skipping it.
+// Only what G31-G34 have landed is emitted. The judge's capability-specific
+// requirement set says which observations count, and it refuses a missing
+// observation rather than skipping it. Inverse dynamics and external-force
+// observations belong to later goals and do not appear here early.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -172,6 +172,10 @@ int main(int argc, char** argv) {
     model.CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
         *context, generalized_accelerations, &angular_accelerations,
         &translational_accelerations);
+    Eigen::MatrixXd generalized_mass_matrix(
+        model.num_generalized_velocities(),
+        model.num_generalized_velocities());
+    model.CalcGeneralizedMassMatrix(*context, generalized_mass_matrix);
 
     orvd_contract::ObservationStream stream;
     stream.topology_facts = {
@@ -334,6 +338,22 @@ int main(int argc, char** argv) {
             {"mapped_back_generalized_velocity[" +
                  std::to_string(velocity_index) + "]",
              mapped_back_velocities(velocity_index)});
+    }
+    for (int column = 0; column < generalized_mass_matrix.cols(); ++column) {
+        const Eigen::VectorXd column_generalized_force_response =
+            generalized_mass_matrix.col(column) *
+            scenario.mass_matrix_column_generalized_accelerations[
+                static_cast<std::size_t>(column)];
+        for (int generalized_force_index = 0;
+             generalized_force_index <
+             column_generalized_force_response.size();
+             ++generalized_force_index) {
+            stream.observations.push_back(
+                {"mass_matrix_column_generalized_force_response[" +
+                     std::to_string(column) + "][" +
+                     std::to_string(generalized_force_index) + "]",
+                 column_generalized_force_response(generalized_force_index)});
+        }
     }
 
     std::fputs(orvd_contract::FormatObservationStream(stream).c_str(), stdout);

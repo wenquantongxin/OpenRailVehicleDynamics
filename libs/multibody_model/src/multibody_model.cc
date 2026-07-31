@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -76,17 +77,17 @@ class MultibodyModel::Implementation {
     }
 
     /// Refuses anything that would add to or restate a model that is past it.
-    void ThrowIfNotBuildable(const std::string& action) const {
+    void ThrowIfNotBuildable(std::string_view action) const {
         if (finalization_failed_) {
             RejectState(
-                "cannot " + action +
+                "cannot " + std::string(action) +
                 ": this model's finalization failed partway through, so the "
                 "rigid tree underneath is in a condition nothing here can "
                 "describe; build a new model rather than continuing with this "
                 "one");
         }
         if (finalized_) {
-            RejectState("cannot " + action +
+            RejectState("cannot " + std::string(action) +
                         ": this model is finalized, and what a finalized model "
                         "contains is what its coordinates were assigned from");
         }
@@ -112,15 +113,15 @@ class MultibodyModel::Implementation {
     }
 
     /// Refuses anything that only a finalized model can answer.
-    void ThrowIfNotFinalized(const std::string& query) const {
+    void ThrowIfNotFinalized(std::string_view query) const {
         if (finalization_failed_) {
-            RejectState("cannot " + query +
+            RejectState("cannot " + std::string(query) +
                         ": this model's finalization failed partway through, "
                         "so it never came to hold an answer");
         }
         if (!finalized_) {
             RejectState(
-                "cannot " + query +
+                "cannot " + std::string(query) +
                 " before Finalize(): until then the answer is about what has "
                 "been described so far, which the next call can still change");
         }
@@ -1094,6 +1095,30 @@ void MultibodyModel::
     *angular_velocity_jacobian = spatial_jacobian.topRows<3>();
     *point_translational_velocity_jacobian =
         spatial_jacobian.bottomRows<3>();
+}
+
+// --- Dynamics --------------------------------------------------------------
+
+void MultibodyModel::CalcGeneralizedMassMatrix(
+    const MultibodyEvaluationContext& context,
+    Eigen::MatrixXd& generalized_mass_matrix) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate the generalized mass matrix");
+    Implementation::RequireOwnContext(
+        model, &context, "calculate the generalized mass matrix from");
+    const int velocity_count = model.tree_.num_velocities();
+    if (generalized_mass_matrix.rows() != velocity_count ||
+        generalized_mass_matrix.cols() != velocity_count) {
+        Reject("generalized mass matrix output must be " +
+               std::to_string(velocity_count) + " x " +
+               std::to_string(velocity_count) + ", but it is " +
+               std::to_string(generalized_mass_matrix.rows()) + " x " +
+               std::to_string(generalized_mass_matrix.cols()) +
+               "; nothing was written");
+    }
+
+    model.tree_.CalcMassMatrix(context.implementation_->tree_context(),
+                               &generalized_mass_matrix);
 }
 
 }  // namespace orvd::multibody_model

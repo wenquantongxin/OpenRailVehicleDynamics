@@ -60,10 +60,10 @@ MakeSpatialKinematicsComparisonRequirements(
 MakeDifferentialKinematicsComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 
-// The above, plus the mass-matrix columns and the inverse-dynamics generalized
-// forces. Structurally a superset: it starts from the differential-kinematics
-// set.
-[[nodiscard]] ComparisonRequirements MakeComparisonRequirements(
+// The above, plus every mass-matrix column represented as a generalized-force
+// response to that column's nonzero acceleration probe. Structurally a strict
+// superset: it starts from the differential-kinematics set.
+[[nodiscard]] ComparisonRequirements MakeMassMatrixComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 
 }  // namespace orvd_comparison

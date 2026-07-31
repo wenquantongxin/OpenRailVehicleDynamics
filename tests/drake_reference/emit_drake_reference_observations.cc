@@ -195,16 +195,6 @@ int main(int argc, char** argv) {
                  column_generalized_force_response(generalized_force_index)});
     }
 
-    drake::multibody::MultibodyForces<double> applied_forces(plant);
-    plant.CalcForceElementsContribution(*context, &applied_forces);
-    const Eigen::VectorXd inverse_dynamics =
-        plant.CalcInverseDynamics(*context, generalized_accelerations, applied_forces);
-    for (int velocity_index = 0; velocity_index < inverse_dynamics.size();
-         ++velocity_index)
-        stream.observations.push_back(
-            {"inverse_dynamics[" + std::to_string(velocity_index) + "]",
-             inverse_dynamics(velocity_index)});
-
     for (const auto& link : scenario.links) {
         const auto& body = plant.GetBodyByName(link.name);
         const RigidTransformd pose =
