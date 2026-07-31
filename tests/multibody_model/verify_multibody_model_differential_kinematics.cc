@@ -2,7 +2,8 @@
 //
 // Expectations are independent rigid-body identities: the quaternion map is
 // written out, Jacobian columns come from central differences of the public
-// pose query, and acceleration is checked against A(vdot)=A(0)+J*vdot.
+// pose query, and full acceleration comes from central differences of the
+// public spatial-velocity query. A(vdot)=A(0)+J*vdot is a secondary identity.
 
 #include <algorithm>
 #include <cmath>
@@ -443,6 +444,109 @@ void CalculateAccelerations(const DifferentialKinematicsFixture& fixture,
             context, vdot, angular, translational);
 }
 
+void CheckSpatialAccelerationAgainstVelocityDerivativeAndBodyOrder() {
+    MultibodyModel model;
+    // Add the leaf first on purpose. Public body order is [leaf, root], while
+    // every valid spanning forest must place the root's mobod before the leaf's.
+    const RigidBodyHandle leaf =
+        model.AddRigidBody("acceleration_leaf", PhysicalInertia(0.8));
+    const RigidBodyHandle root =
+        model.AddRigidBody("acceleration_root", PhysicalInertia(1.1));
+    const JointHandle root_joint = model.AddRevoluteJoint(
+        "acceleration_root_joint", model.world_frame(), model.body_frame(root),
+        Eigen::Vector3d::UnitZ());
+    FixedFramePoseParameters leaf_mount_pose;
+    leaf_mount_pose.R_PF = RotationAboutY(0.39);
+    leaf_mount_pose.p_PoFo_P = Eigen::Vector3d(0.32, -0.21, 0.17);
+    const FrameHandle leaf_mount =
+        model.AddFixedFrame("acceleration_leaf_mount", root, leaf_mount_pose);
+    const JointHandle leaf_joint = model.AddRevoluteJoint(
+        "acceleration_leaf_joint", leaf_mount, model.body_frame(leaf),
+        Eigen::Vector3d::UnitX());
+    model.Finalize();
+
+    ExpectTrue(model.GetRigidBody(0) == leaf && model.GetRigidBody(1) == root,
+               "the acceleration oracle makes public body order differ from "
+               "topological mobod order");
+    Eigen::VectorXd positions =
+        Eigen::VectorXd::Zero(model.num_generalized_positions());
+    PutJointCoordinate(model, root_joint, 0.31, &positions);
+    PutJointCoordinate(model, leaf_joint, -0.27, &positions);
+    Eigen::VectorXd velocities =
+        Eigen::VectorXd::Zero(model.num_generalized_velocities());
+    PutJointVelocity(model, root_joint, 0.83, &velocities);
+    PutJointVelocity(model, leaf_joint, -0.59, &velocities);
+    Eigen::VectorXd velocity_derivatives =
+        Eigen::VectorXd::Zero(model.num_generalized_velocities());
+    PutJointVelocity(model, root_joint, 0.47, &velocity_derivatives);
+    PutJointVelocity(model, leaf_joint, -0.36, &velocity_derivatives);
+    Eigen::VectorXd position_derivatives =
+        Eigen::VectorXd::Zero(model.num_generalized_positions());
+    position_derivatives[model.GetJointPositionRange(root_joint).start()] =
+        velocities[model.GetJointVelocityRange(root_joint).start()];
+    position_derivatives[model.GetJointPositionRange(leaf_joint).start()] =
+        velocities[model.GetJointVelocityRange(leaf_joint).start()];
+
+    auto make_context = [&](const Eigen::VectorXd& q,
+                            const Eigen::VectorXd& v) {
+        auto context = model.CreateDefaultContext();
+        model.SetGeneralizedPositions(context.get(), q);
+        model.SetGeneralizedVelocities(context.get(), v);
+        return context;
+    };
+    auto context = make_context(positions, velocities);
+    Eigen::MatrixXd angular(3, model.num_rigid_bodies());
+    Eigen::MatrixXd translational(3, model.num_rigid_bodies());
+    model.CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
+        *context, velocity_derivatives, &angular, &translational);
+
+    Eigen::MatrixXd bias_angular(3, model.num_rigid_bodies());
+    Eigen::MatrixXd bias_translational(3, model.num_rigid_bodies());
+    model.CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
+        *context, Eigen::VectorXd::Zero(model.num_generalized_velocities()),
+        &bias_angular, &bias_translational);
+    ExpectTrue(bias_angular.col(0).norm() > 1.0e-4 &&
+                   bias_translational.col(0).norm() > 1.0e-4,
+               "the nonparallel two-revolute leaf excites angular and "
+               "translational bias acceleration");
+
+    const double step = 1.0e-5;
+    auto minus = make_context(positions - step * position_derivatives,
+                              velocities - step * velocity_derivatives);
+    auto plus = make_context(positions + step * position_derivatives,
+                             velocities + step * velocity_derivatives);
+    for (int body_index = 0; body_index < model.num_rigid_bodies();
+         ++body_index) {
+        const RigidBodyHandle body = model.GetRigidBody(body_index);
+        const auto velocity_minus =
+            model.CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *minus, model.body_frame(body));
+        const auto velocity_plus =
+            model.CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *plus, model.body_frame(body));
+        ExpectVectorNear(
+            angular.col(body_index),
+            (velocity_plus.angular_velocity_radians_per_second() -
+             velocity_minus.angular_velocity_radians_per_second()) /
+                (2.0 * step),
+            2.0e-8,
+            "full angular acceleration is the independent velocity derivative "
+            "for public body " +
+                std::to_string(body_index));
+        ExpectVectorNear(
+            translational.col(body_index),
+            (velocity_plus
+                 .translational_velocity_at_frame_origin_meters_per_second() -
+             velocity_minus
+                 .translational_velocity_at_frame_origin_meters_per_second()) /
+                (2.0 * step),
+            2.0e-8,
+            "full translational acceleration is the independent velocity "
+            "derivative for public body " +
+                std::to_string(body_index));
+    }
+}
+
 void CheckSpatialAccelerations() {
     DifferentialKinematicsFixture fixture;
     auto context = fixture.MakeContext(fixture.positions, fixture.velocities);
@@ -670,6 +774,15 @@ void CheckFailureBoundaries() {
                    wrong_size_mapping_output_before,
                "refusing a wrong-size mapping output writes nothing");
 
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                first.model.MapGeneralizedVelocitiesToPositionDerivatives(
+                    *first_context, first.velocities, nullptr);
+            },
+            "output is null"),
+        "mapping rejects a null vector output");
+
     Eigen::MatrixXd valid_acceleration_output =
         Eigen::MatrixXd::Constant(
             3, first.model.num_rigid_bodies(), 19.0);
@@ -697,6 +810,26 @@ void CheckFailureBoundaries() {
                        wrong_size_acceleration_output_before,
                "refusing one wrong-size acceleration output writes neither "
                "physical output");
+
+    Eigen::MatrixXd null_acceleration_sentinel =
+        Eigen::MatrixXd::Constant(
+            3, first.model.num_rigid_bodies(), -43.0);
+    const Eigen::MatrixXd null_acceleration_sentinel_before =
+        null_acceleration_sentinel;
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                first.model
+                    .CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
+                        *first_context, first.velocities,
+                        &null_acceleration_sentinel, nullptr);
+            },
+            "output is null"),
+        "acceleration rejects a null second physical output");
+    ExpectTrue(null_acceleration_sentinel ==
+                   null_acceleration_sentinel_before,
+               "refusing a null acceleration output leaves the other output "
+               "unchanged");
 
     Eigen::MatrixXd nonfinite_point_angular =
         Eigen::MatrixXd::Constant(
@@ -784,6 +917,7 @@ void CheckFailureBoundaries() {
 int main() {
     CheckMappings();
     CheckJacobianColumns();
+    CheckSpatialAccelerationAgainstVelocityDerivativeAndBodyOrder();
     CheckSpatialAccelerations();
     CheckFailureBoundaries();
     if (failure_count == 0) {

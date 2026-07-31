@@ -330,8 +330,8 @@ BSD-3-Clause 没有对应条款,故另外 133 个被修改的文件在文件内�
   include 行一字未动。改前缀是对每个文件的机械编辑,且每次上游同步都要重做一遍。
 - **没有添加逐文件版权头。** Drake 的 tree/topology 候选文件本就没有;人工发明是
   误述来源,不是保全来源。支撑源码原有的 Stanford/Apache-2.0 声明原样保留。
-- **没有改写 vendored Drake 的刚体算法主体。** 边界/API/include/说明的裁剪均逐项列在
-  上文；四个位姿组合函数是明确分列的 ORVD 第一方实现。
+- **没有未登记地改写 vendored Drake 的刚体算法主体。** 边界/API/include/说明的裁剪与
+  后续各 Goal 的语义偏离均按符号列在本文件；四个位姿组合函数是明确分列的 ORVD 第一方实现。
 
 ## G26:用类型化多体状态替换 systems 状态表面
 
@@ -467,6 +467,11 @@ finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的�
 「实际参数只有一个权威来源」而作的蓄意上游偏离；焊接 frame 相对其刚体的速度与偏置加速度
 恒为零测试覆盖了上下文位姿不同于默认值的情形。
 
-**已知 `vdot` 的加速度 pass 只保留真实输入。** `CalcSpatialAccelerationsFromVdot()` 不再接收
-调用方预先求出的 position/velocity cache；它从同一个求值上下文按需取得这些长期缓存，
-显式 `vdot` 仍只属于本次调用，不进入持久缓存或新鲜度先决条件。
+**已知 `vdot` 的加速度 pass 只保留真实输入。** `CalcSpatialAccelerationsFromVdot()` 与
+`CalcAccelerationKinematicsCache()` 不再接收调用方预先求出的 position/velocity cache；前者
+从同一个求值上下文按需取得这些长期缓存，`CalcAllBodyBiasSpatialAccelerationsInWorld()`
+同步改走该入口。显式 `vdot` 仍只属于本次调用，不进入持久缓存或新鲜度先决条件。
+
+**fixed-frame 加速度点移显式传递上下文。** `CalcSpatialAccelerationHelper()` 的两处点移调用
+把求值上下文传给 `ShiftSpatialAccelerationInWorld()`，后者的签名相应增加上下文参数，保证上文
+登记的 context-local pose 数据源贯穿实际调用链。

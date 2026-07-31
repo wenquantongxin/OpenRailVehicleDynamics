@@ -1080,6 +1080,16 @@ void CheckFixedFrameVelocityUsesTheContextPose() {
         relative_bias.get_coeffs().isZero(1.0e-13),
         "a frame welded to a body has zero bias acceleration relative to that "
         "body after its context-local pose changes");
+
+    const auto relative_point_bias =
+        model.tree().CalcBiasSpatialAcceleration(
+            *context, drake::multibody::JacobianWrtVariable::kV,
+            model.fixed_frame(), Eigen::Vector3d(0.23, -0.17, 0.31),
+            body.body_frame(), model.tree().world_frame());
+    ExpectTrue(
+        relative_point_bias.get_coeffs().isZero(1.0e-13),
+        "every point fixed to a body has zero bias acceleration relative to "
+        "that body after its context-local pose changes");
 }
 
 void CheckTheFactoryIsTheOnlyDoor() {

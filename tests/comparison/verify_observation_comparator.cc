@@ -11,6 +11,9 @@
 
 namespace {
 
+static_assert(orvd_comparison::kRelativeErrorLimit == 1e-8,
+              "the scalar comparison contract is exactly 1e-8 relative error");
+
 int failure_count = 0;
 
 void Expect(bool condition, std::string_view description) {
