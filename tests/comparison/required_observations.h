@@ -32,9 +32,21 @@ struct ComparisonRequirements {
     std::vector<RequiredRotation> rotations;
 };
 
-// Builds the requirements for one scenario: the mass-matrix columns, the
-// inverse-dynamics generalized forces, each link pose, and generalized positions
-// read back after evaluation.
+// What a candidate that can do position kinematics must agree on: the coordinate
+// counts and every element's coordinate range, each link's pose, and the
+// generalized positions read back after evaluation.
+//
+// A named capability rather than a switch. Requirements are widened by a goal
+// that landed the capability, and each wider set is built by calling the
+// narrower one first — so a later set cannot quietly drop something an earlier
+// one insisted on, and there is no runtime choice for a failing comparison to
+// be made to pass by.
+[[nodiscard]] ComparisonRequirements
+MakePositionKinematicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario);
+
+// The above, plus the mass-matrix columns and the inverse-dynamics generalized
+// forces. Structurally a superset: it starts from the position-kinematics set.
 [[nodiscard]] ComparisonRequirements MakeComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 

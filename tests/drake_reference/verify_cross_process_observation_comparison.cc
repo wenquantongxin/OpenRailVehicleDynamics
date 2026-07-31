@@ -1,18 +1,25 @@
-// Launches two independent reference processes, compares their observations
-// through pipes, and proves the comparison can actually fail.
+// Launches the reference and the candidate as separate processes, compares what
+// they observed through pipes, and proves the comparison can actually fail.
 //
-// What this establishes today is that the harness works: the same reference
-// implementation, run twice in separate processes, agrees with itself, and a
-// deliberate perturbation is caught. It says nothing about any ORVD candidate,
-// because there is no candidate yet — the first one arrives with the vendored
-// topology. Claiming otherwise here would be claiming a result we have not
-// measured.
+// Two things happen here and they are not the same thing. Running the reference
+// twice and comparing it with itself establishes that the harness works — the
+// pipe, the parser and the judge — and nothing about any candidate. Running the
+// reference against ORVD's own emitter is the equivalence claim, and it is made
+// only over the capability ORVD has actually landed: the judge's
+// position-kinematics requirement set says which observations that is, and it
+// refuses a missing one rather than skipping it.
+//
+// Separate processes are not tidiness. libdrake exports the same drake:: symbols
+// a vendored copy keeps, so co-linking the two would be an ODR violation whose
+// likely symptom is a comparison that appears to pass.
 //
 // Nothing is written to disk: the streams exist only in the pipe and in memory.
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -141,12 +148,114 @@ orvd_contract::ObservationStream WithRotationPerturbed(
 
 }  // namespace
 
+/// Checks that the requirement set really asks for the capability it is named
+/// for.
+///
+/// The judge refuses a missing observation, so a requirement set that forgot to
+/// ask for something produces a passing comparison over less than it claims.
+/// That is the one failure this whole file cannot notice by running, which is
+/// why the set is inspected rather than trusted.
+void ExpectRequirementsCoverPositionKinematics(
+    const orvd_comparison::ComparisonRequirements& requirements,
+    const orvd_contract::ScenarioDefinition& scenario) {
+    const auto has_scalar = [&requirements](const std::string& name) {
+        for (const auto& required : requirements.scalars)
+            if (required.name == name) return true;
+        return false;
+    };
+    const auto has_rotation = [&requirements](const std::string& group) {
+        for (const auto& required : requirements.rotations)
+            if (required.group_name == group) return true;
+        return false;
+    };
+    const auto has_fact = [&requirements](const std::string& name) {
+        for (const auto& fact_name : requirements.topology_fact_names)
+            if (fact_name == name) return true;
+        return false;
+    };
+
+    for (const auto& link : scenario.links) {
+        Expect(has_rotation("pose_" + link.name),
+               "every link's orientation must be required: " + link.name);
+        for (int axis_index = 0; axis_index < 3; ++axis_index)
+            Expect(has_scalar("pose_" + link.name + "_translation[" +
+                              std::to_string(axis_index) + "]"),
+                   "every component of every link's position must be required: " +
+                       link.name);
+    }
+    for (std::size_t position_index = 0;
+         position_index < scenario.generalized_positions.size(); ++position_index)
+        Expect(has_scalar("state_readback_position[" +
+                          std::to_string(position_index) + "]"),
+               "every generalized position must be read back: index " +
+                   std::to_string(position_index));
+    for (const auto& joint : scenario.revolute_joints)
+        for (const char* fact :
+             {"joint_position_range_start", "joint_position_range_size",
+              "joint_velocity_range_start", "joint_velocity_range_size"})
+            Expect(has_fact(std::string(fact) + "[" + joint.name + "]"),
+                   "every joint's coordinate range must be a required fact: " +
+                       joint.name);
+    for (const auto& free_body_name : scenario.free_body_names)
+        for (const char* fact : {"free_body_position_range_start",
+                                 "free_body_position_range_size",
+                                 "free_body_velocity_range_start",
+                                 "free_body_velocity_range_size"})
+            Expect(has_fact(std::string(fact) + "[" + free_body_name + "]"),
+                   "every free body's coordinate range must be a required "
+                   "fact: " + free_body_name);
+
+    std::vector<std::string> every_name = requirements.topology_fact_names;
+    for (const auto& required : requirements.scalars)
+        every_name.push_back(required.name);
+    for (const auto& required : requirements.rotations)
+        every_name.push_back(required.group_name);
+    std::sort(every_name.begin(), every_name.end());
+    Expect(std::adjacent_find(every_name.begin(), every_name.end()) ==
+               every_name.end(),
+           "no requirement may be named twice: a duplicate is a second chance "
+           "to pass on the same evidence");
+}
+
+/// Drops one named observation, so the missing-observation path is exercised on
+/// something this comparison actually requires.
+orvd_contract::ObservationStream WithObservationRemoved(
+    orvd_contract::ObservationStream stream, const std::string& name) {
+    for (auto it = stream.observations.begin(); it != stream.observations.end();
+         ++it) {
+        if (it->name == name) {
+            stream.observations.erase(it);
+            return stream;
+        }
+    }
+    Expect(false, "the stream was expected to contain " + name);
+    return stream;
+}
+
+/// Drops one named topology fact, for the same reason.
+orvd_contract::ObservationStream WithTopologyFactRemoved(
+    orvd_contract::ObservationStream stream, const std::string& name) {
+    for (auto it = stream.topology_facts.begin();
+         it != stream.topology_facts.end(); ++it) {
+        if (it->name == name) {
+            stream.topology_facts.erase(it);
+            return stream;
+        }
+    }
+    Expect(false, "the stream was expected to contain the fact " + name);
+    return stream;
+}
+
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::fprintf(stderr, "usage: %s <reference_emitter_path>\n", argv[0]);
+    if (argc < 3) {
+        std::fprintf(stderr,
+                     "usage: %s <reference_emitter_path> "
+                     "<candidate_emitter_path>\n",
+                     argv[0]);
         return 2;
     }
     const std::string emitter_path = argv[1];
+    const std::string candidate_path = argv[2];
 
     for (const std::string_view excitation :
          {"near_zero_cancellation", "dynamic_excitation"}) {
@@ -232,20 +341,107 @@ int main(int argc, char** argv) {
                "a rotation perturbation beyond the angle limit must be rejected");
 
         // A required observation that is absent must be reported as missing
-        // rather than quietly skipped.
-        orvd_contract::ObservationStream truncated = second;
-        truncated.observations.erase(truncated.observations.begin());
-        const auto missing = orvd_comparison::CompareObservationStreams(
-            requirements, first, truncated);
-        Expect(missing.outcome ==
+        // rather than quietly skipped. Removed by name, and by a name this
+        // comparison genuinely requires: dropping whichever observation happens
+        // to be first would pass even if that one were not required at all.
+        for (const std::string& removed :
+             {std::string("pose_") + scenario.links.front().name + "[0,0]",
+              std::string("pose_") + scenario.links.front().name +
+                  "_translation[0]",
+              std::string("state_readback_position[0]")}) {
+            const auto missing = orvd_comparison::CompareObservationStreams(
+                requirements, first, WithObservationRemoved(second, removed));
+            Expect(missing.outcome ==
+                       orvd_comparison::ComparisonOutcome::
+                           kRequiredObservationMissing,
+                   "a missing required observation must be reported: " + removed);
+        }
+        const auto missing_fact = orvd_comparison::CompareObservationStreams(
+            requirements, first,
+            WithTopologyFactRemoved(
+                second, "free_body_position_range_start[" +
+                            scenario.free_body_names.front() + "]"));
+        Expect(missing_fact.outcome ==
                    orvd_comparison::ComparisonOutcome::kRequiredObservationMissing,
-               "a missing required observation must be reported");
+               "a missing required topology fact must be reported");
+    }
+
+    // The equivalence claim. Everything above proves the judge can fail; this is
+    // the part that says something about ORVD, and it is deliberately confined
+    // to the capability ORVD has landed. A wider claim would have to come from a
+    // wider requirement set, which is a thing a later goal builds rather than a
+    // thing this one can assert.
+    for (const std::string_view excitation :
+         {"near_zero_cancellation", "dynamic_excitation"}) {
+        const orvd_contract::ScenarioDefinition scenario =
+            orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
+        const orvd_comparison::ComparisonRequirements requirements =
+            orvd_comparison::MakePositionKinematicsComparisonRequirements(
+                scenario);
+        ExpectRequirementsCoverPositionKinematics(requirements, scenario);
+
+        std::string reference_text, candidate_text;
+        if (!CaptureReferenceEmitterOutput(emitter_path, excitation,
+                                           &reference_text) ||
+            !CaptureReferenceEmitterOutput(candidate_path, excitation,
+                                           &candidate_text)) {
+            std::fprintf(stderr, "an emitter failed to run\n");
+            return 1;
+        }
+        const orvd_contract::ObservationStream reference =
+            orvd_contract::ParseObservationStream(reference_text);
+        const orvd_contract::ObservationStream candidate =
+            orvd_contract::ParseObservationStream(candidate_text);
+
+        // The scenario states q, v, v̇ and the generalized-force kinds by global
+        // index, so those indices mean something only if both sides lay their
+        // coordinates out the way this fixture assumes. Comparing the two sides
+        // is not enough: a reordering that happened on both at once would agree
+        // with itself. So the layout this fixture depends on is pinned here.
+        const auto* free_body_velocity_start = reference.FindTopologyFact(
+            "free_body_velocity_range_start[" + scenario.free_body_names.front() +
+            "]");
+        Expect(free_body_velocity_start != nullptr,
+               "the reference must report the free body's velocity range");
+        if (free_body_velocity_start != nullptr) {
+            Expect(free_body_velocity_start->value == 2,
+                   "this fixture's free body starts at velocity 2, after the "
+                   "two revolute coordinates");
+            // The scenario calls the last three generalized forces translational
+            // because they belong to the free body's linear velocities, which
+            // begin three past its angular ones. If the layout moved, that
+            // labelling would be describing a different set of coordinates.
+            std::size_t first_translational = 0;
+            while (first_translational <
+                       scenario.generalized_force_component_kinds.size() &&
+                   scenario.generalized_force_component_kinds[first_translational] !=
+                       orvd_contract::GeneralizedForceComponentKind::kForceNewtons)
+                ++first_translational;
+            Expect(static_cast<int>(first_translational) ==
+                       free_body_velocity_start->value + 3,
+                   "the scenario's first translational generalized force must "
+                   "be the free body's first linear velocity");
+        }
+
+        const auto verdict = orvd_comparison::CompareObservationStreams(
+            requirements, reference, candidate);
+        Expect(verdict.outcome == orvd_comparison::ComparisonOutcome::kAccepted,
+               std::string("the ORVD candidate must agree with the Drake "
+                           "reference on position kinematics (") +
+                   std::string(excitation) + "): " + verdict.detail);
+        if (excitation == "dynamic_excitation") {
+            Expect(verdict.relative_branch_count > 0,
+                   "and must do so with the relative gate actually engaged, "
+                   "not entirely in the near-zero branch");
+        }
     }
 
     if (failure_count > 0) {
         std::fprintf(stderr, "%d comparison harness check(s) failed\n", failure_count);
         return 1;
     }
-    std::printf("cross-process observation comparison harness verified\n");
+    std::printf(
+        "the harness fails when it should, and the ORVD candidate agrees with "
+        "the Drake reference on position kinematics\n");
     return 0;
 }

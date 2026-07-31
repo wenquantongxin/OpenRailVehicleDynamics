@@ -17,6 +17,7 @@
 #include <Eigen/Dense>
 
 #include "drake/math/rigid_transform.h"
+#include "drake/math/rotation_matrix.h"
 #include "drake/multibody/plant/multibody_plant.h"
 #include "drake/multibody/tree/revolute_joint.h"
 #include "drake/multibody/tree/spatial_inertia.h"
@@ -54,7 +55,9 @@ void BuildDrakePlantFromScenario(const orvd_contract::ScenarioDefinition& scenar
                                  : plant->GetBodyByName(joint.parent_link_name);
         plant->AddJoint<RevoluteJoint>(
             joint.name, parent,
-            RigidTransformd(joint.parent_frame_translation_in_parent_meters),
+            RigidTransformd(
+                drake::math::RotationMatrixd(joint.parent_frame_rotation_in_parent),
+                joint.parent_frame_translation_in_parent_meters),
             plant->GetBodyByName(joint.child_link_name), RigidTransformd::Identity(),
             joint.axis_in_parent);
     }
@@ -98,9 +101,49 @@ int main(int argc, char** argv) {
     plant.SetVelocities(context.get(), generalized_velocities);
 
     orvd_contract::ObservationStream stream;
-    stream.topology_facts = {{"num_positions", plant.num_positions()},
-                             {"num_velocities", plant.num_velocities()},
-                             {"num_bodies", plant.num_bodies()}};
+    // The world is not one of the model's rigid bodies. Drake counts it and the
+    // ORVD facade does not, so the fact is named for what it means rather than
+    // left as a bare "num_bodies" that the two sides would answer differently
+    // while both being right.
+    stream.topology_facts = {
+        {"num_positions", plant.num_positions()},
+        {"num_velocities", plant.num_velocities()},
+        {"num_rigid_bodies_excluding_world",
+         static_cast<int>(plant.num_bodies()) - 1}};
+
+    // Where each element's coordinates ended up, asked of the plant rather than
+    // copied from the scenario. This is what makes the index-keyed state and
+    // read-back observations mean the same thing on both sides instead of
+    // agreeing by coincidence.
+    for (const auto& joint_definition : scenario.revolute_joints) {
+        const auto& joint =
+            plant.GetJointByName(joint_definition.name);
+        stream.topology_facts.push_back(
+            {"joint_position_range_start[" + joint_definition.name + "]",
+             joint.position_start()});
+        stream.topology_facts.push_back(
+            {"joint_position_range_size[" + joint_definition.name + "]",
+             joint.num_positions()});
+        stream.topology_facts.push_back(
+            {"joint_velocity_range_start[" + joint_definition.name + "]",
+             joint.velocity_start()});
+        stream.topology_facts.push_back(
+            {"joint_velocity_range_size[" + joint_definition.name + "]",
+             joint.num_velocities()});
+    }
+    for (const auto& free_body_name : scenario.free_body_names) {
+        const auto& body = plant.GetBodyByName(free_body_name);
+        stream.topology_facts.push_back(
+            {"free_body_position_range_start[" + free_body_name + "]",
+             body.floating_positions_start()});
+        stream.topology_facts.push_back(
+            {"free_body_position_range_size[" + free_body_name + "]", 7});
+        stream.topology_facts.push_back(
+            {"free_body_velocity_range_start[" + free_body_name + "]",
+             body.floating_velocities_start_in_v()});
+        stream.topology_facts.push_back(
+            {"free_body_velocity_range_size[" + free_body_name + "]", 6});
+    }
 
     Eigen::MatrixXd mass_matrix(plant.num_velocities(), plant.num_velocities());
     plant.CalcMassMatrix(*context, &mass_matrix);

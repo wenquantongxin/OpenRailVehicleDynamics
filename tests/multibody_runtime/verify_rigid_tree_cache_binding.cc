@@ -765,6 +765,98 @@ void CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots() {
     }
 }
 
+/// The eleven slots' recomputation counts, in the freshness table's order.
+std::array<std::uint64_t, 11> RecomputationCounts(const Context& context) {
+    const auto& caches = context.caches();
+    return {{
+        caches.frame_body_poses.committed_recomputation_count(),
+        caches.position_kinematics.committed_recomputation_count(),
+        caches.across_node_jacobian.committed_recomputation_count(),
+        caches.velocity_kinematics.committed_recomputation_count(),
+        caches.spatial_inertia_in_world.committed_recomputation_count(),
+        caches.composite_body_inertia_in_world.committed_recomputation_count(),
+        caches.dynamic_bias.committed_recomputation_count(),
+        caches.spatial_acceleration_bias.committed_recomputation_count(),
+        caches.reflected_inertia.committed_recomputation_count(),
+        caches.articulated_body_inertia.committed_recomputation_count(),
+        caches.articulated_body_force_bias.committed_recomputation_count(),
+    }};
+}
+
+constexpr std::array<const char*, 11> kSlotNames{
+    {"frame/body poses", "position kinematics", "across-node Jacobian",
+     "velocity kinematics", "world inertias", "composite inertias",
+     "dynamic bias", "spatial acceleration bias", "reflected inertia",
+     "articulated body inertia", "articulated body force bias"}};
+
+void CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions() {
+    // Freshness says whether a slot *would* recompute. It cannot say whether a
+    // slot that was already fresh got recomputed anyway — the answer would come
+    // out the same either way and only the work would differ. That is what the
+    // recomputation count is for, and it is the observable ADR-0002 names for
+    // the over-invalidation half of its criterion.
+    const TwoLinkChain model;
+    const std::unique_ptr<Context> context = model.MakeContext();
+    EstablishNondegenerateState(model, context.get());
+    WarmEveryRetainedCache(model.tree(), *context);
+
+    const std::array<std::uint64_t, 11> after_warming =
+        RecomputationCounts(*context);
+    for (std::size_t index = 0; index < after_warming.size(); ++index) {
+        ExpectTrue(after_warming[index] > 0,
+                   std::string("warming computed ") + kSlotNames[index] +
+                       " at least once, so these counts are not all sitting at "
+                       "zero");
+    }
+
+    // Ask for everything again with nothing changed. Every slot is fresh, so
+    // every evaluation has to hand back what is stored.
+    WarmEveryRetainedCache(model.tree(), *context);
+    const std::array<std::uint64_t, 11> after_reading =
+        RecomputationCounts(*context);
+    for (std::size_t index = 0; index < after_reading.size(); ++index) {
+        ExpectTrue(after_reading[index] == after_warming[index],
+                   std::string("reading a fresh ") + kSlotNames[index] +
+                       " again did not recompute it");
+    }
+
+    // Two velocity writes, each followed by a full evaluation. The slots that
+    // read v recompute once per write; the ones that do not must not move at
+    // all — not once across the pair, which a single write could not tell apart
+    // from a slot recomputed for some other reason.
+    const std::array<bool, 11> reads_velocities{{
+        /*frame/body poses=*/false,
+        /*position kinematics=*/false,
+        /*across-node Jacobian=*/false,
+        /*velocity kinematics=*/true,
+        /*world inertias=*/false,
+        /*composite inertias=*/false,
+        /*dynamic bias=*/true,
+        /*spatial acceleration bias=*/true,
+        /*reflected inertia=*/false,
+        /*articulated body inertia=*/false,
+        /*articulated body force bias=*/true,
+    }};
+    for (int write = 0; write < 2; ++write) {
+        Eigen::VectorXd velocities(model.tree().num_velocities());
+        velocities << 0.11 * (write + 1), -0.29 * (write + 1);
+        model.tree().SetVelocities(context.get(), velocities);
+        WarmEveryRetainedCache(model.tree(), *context);
+    }
+    const std::array<std::uint64_t, 11> after_velocity_writes =
+        RecomputationCounts(*context);
+    for (std::size_t index = 0; index < after_velocity_writes.size(); ++index) {
+        const std::uint64_t moved =
+            after_velocity_writes[index] - after_reading[index];
+        const std::uint64_t expected = reads_velocities[index] ? 2 : 0;
+        ExpectTrue(moved == expected,
+                   std::string(kSlotNames[index]) + " recomputed " +
+                       std::to_string(moved) +
+                       " times across two velocity writes, expected " +
+                       std::to_string(expected));
+    }
+}
+
 void CheckTheFactoryIsTheOnlyDoor() {
     // A context cannot be built from a layout alone: the bare constructor is
     // private. What would come out of one is a model with every body massless
@@ -1136,6 +1228,7 @@ void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
 }  // namespace
 
 int main() {
+    CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions();
     CheckTheFactoryIsTheOnlyDoor();
     CheckColdAndRepeatedReadsReturnTheSameRealValue();
     CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots();

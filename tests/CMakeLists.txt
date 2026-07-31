@@ -271,7 +271,8 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
 
     add_test(NAME verify_cross_process_observation_comparison
              COMMAND verify_cross_process_observation_comparison
-                     $<TARGET_FILE:emit_drake_reference_observations>)
+                     $<TARGET_FILE:emit_drake_reference_observations>
+                     $<TARGET_FILE:emit_orvd_position_kinematics_observations>)
 
     # Measures the reference's kinematics cache invalidation semantics on the
     # pinned Drake. Reference-only probe: the cache-entry accessors are Drake
@@ -345,3 +346,24 @@ target_link_libraries(verify_multibody_model_finalization
     PRIVATE orvd_multibody_model)
 add_test(NAME verify_multibody_model_finalization
          COMMAND verify_multibody_model_finalization)
+
+# Where the model says things are, against where the stated relations put them.
+# Same linkage again: every expectation is written against the public headers,
+# so a pose this test can obtain is a pose a consumer can obtain.
+add_executable(verify_multibody_model_position_kinematics
+    multibody_model/verify_multibody_model_position_kinematics.cc)
+orvd_configure_first_party_target(verify_multibody_model_position_kinematics)
+target_link_libraries(verify_multibody_model_position_kinematics
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_position_kinematics
+         COMMAND verify_multibody_model_position_kinematics)
+
+# The candidate side of the cross-process comparison. It links the modelling
+# facade and the shared scenario contract, and nothing else — no Drake, not even
+# transitively, which is the property the launcher checks before it believes any
+# number this program prints.
+add_executable(emit_orvd_position_kinematics_observations
+    orvd_candidate/emit_orvd_position_kinematics_observations.cc)
+orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
+target_link_libraries(emit_orvd_position_kinematics_observations
+    PRIVATE orvd_multibody_model orvd_test_contract)

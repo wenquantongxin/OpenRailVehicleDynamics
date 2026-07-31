@@ -31,6 +31,11 @@ struct RevoluteJointDefinition {
     std::string name;
     std::string parent_link_name;  // empty means the world link
     std::string child_link_name;
+    // Where the joint's parent frame sits on the parent link. The rotation is
+    // part of it: a mount that is only ever displaced never exercises the code
+    // that carries a rotation along the position chain, and the axis below is
+    // stated in this frame, so a dropped rotation moves the axis too.
+    Eigen::Matrix3d parent_frame_rotation_in_parent;
     Eigen::Vector3d parent_frame_translation_in_parent_meters;
     Eigen::Vector3d axis_in_parent;
 };
@@ -44,6 +49,12 @@ struct ScenarioDefinition {
     double gravity_acceleration_meters_per_second_squared;
     std::vector<LinkDefinition> links;
     std::vector<RevoluteJointDefinition> revolute_joints;
+
+    // Which links move freely in the world, stated rather than inferred from
+    // "has no joint". One side of the comparison refuses to guess and the other
+    // guesses silently; a scenario that left it unsaid would be describing two
+    // different models to them.
+    std::vector<std::string> free_body_names;
 
     // Prescribed state and excitation. Both sides are driven from these exact
     // numbers rather than from each implementation's own defaults.

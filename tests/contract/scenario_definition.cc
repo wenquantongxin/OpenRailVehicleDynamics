@@ -1,5 +1,7 @@
 #include "contract/scenario_definition.h"
 
+#include <cmath>
+
 #include <stdexcept>
 #include <string_view>
 
@@ -40,12 +42,24 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
          {0.01, 0.02, -0.03},
          {0.2, 0.3, 0.4}},
     };
+    // The elbow's mount is turned as well as displaced. Without a non-identity
+    // rotation somewhere in the chain, the code that carries one is never
+    // exercised by this comparison, and the axis below — stated in the mount's
+    // frame — would point the same way whether the rotation survived or not.
+    Eigen::Matrix3d elbow_mount_rotation;
+    {
+        const double angle = 0.37;
+        elbow_mount_rotation << std::cos(angle), 0.0, std::sin(angle), 0.0, 1.0,
+            0.0, -std::sin(angle), 0.0, std::cos(angle);
+    }
     scenario.revolute_joints = {
-        {"shoulder_joint", "", "upper_link",
+        {"shoulder_joint", "", "upper_link", Eigen::Matrix3d::Identity(),
          Eigen::Vector3d::Zero(), Eigen::Vector3d::UnitZ()},
-        {"elbow_joint", "upper_link", "lower_link",
+        {"elbow_joint", "upper_link", "lower_link", elbow_mount_rotation,
          {0.0, -kUpperLinkLengthMeters, 0.0}, Eigen::Vector3d::UnitX()},
     };
+    // The floating link is free by statement, not because nothing joins it.
+    scenario.free_body_names = {"floating_link"};
     scenario.generalized_position_observation_kinds = {
         ObservationKind::kAngleRadians,
         ObservationKind::kAngleRadians,

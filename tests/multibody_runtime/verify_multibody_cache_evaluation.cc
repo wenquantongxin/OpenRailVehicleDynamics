@@ -157,6 +157,81 @@ void CheckRecomputationHappensOnRequestAndNotOnWrite() {
     ExpectTrue(calls == 2, "and is fresh again afterwards");
 }
 
+void CheckTheCommittedRecomputationCountTracksSuccessesOnly() {
+    // The count is what over-invalidation is seen with: a wrongly widened
+    // dependency wastes work and changes no answer, so nothing in the values
+    // could show it. What it counts therefore has to be exactly the
+    // recomputations that produced a readable value — an attempt that threw
+    // left the buffer half written, and counting it would be saying a value
+    // became readable when none did.
+    const MultibodyStateLayout layout(SampleDescription());
+    MultibodyStateInstance state(layout);
+    PositionPassSlot slot(state, std::in_place, 4);
+
+    ExpectTrue(slot.committed_recomputation_count() == 0,
+               "a slot that has never been computed has committed nothing");
+
+    int calls = 0;
+    const auto fill = [&calls](SyntheticPass& storage) {
+        ++calls;
+        storage.entries[0] = static_cast<double>(calls);
+    };
+    EvaluateVersionedCacheSlot(slot, fill);
+    ExpectTrue(slot.committed_recomputation_count() == 1,
+               "a cold evaluation commits one recomputation");
+
+    EvaluateVersionedCacheSlot(slot, fill);
+    EvaluateVersionedCacheSlot(slot, fill);
+    ExpectTrue(slot.committed_recomputation_count() == 1,
+               "reading a fresh slot commits nothing further");
+
+    state.set_generalized_positions(Eigen::VectorXd::Constant(9, 1.0));
+    ExpectTrue(slot.committed_recomputation_count() == 1,
+               "a write nobody has queried yet commits nothing: the work has "
+               "not been done, only made necessary");
+
+    EvaluateVersionedCacheSlot(slot, fill);
+    ExpectTrue(slot.committed_recomputation_count() == 2,
+               "and the query after the write commits exactly one more");
+
+    // A calculator that throws leaves the slot stale and unreadable, so no
+    // value became readable and the count must not move.
+    state.set_generalized_positions(Eigen::VectorXd::Constant(9, 2.0));
+    bool threw = false;
+    try {
+        EvaluateVersionedCacheSlot(slot, [](SyntheticPass& storage) {
+            storage.entries[0] = -1.0;
+            throw std::runtime_error("the calculator gave up half way");
+        });
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    ExpectTrue(threw, "the calculator's exception reached the caller");
+    ExpectTrue(slot.committed_recomputation_count() == 2,
+               "a calculator that threw committed nothing");
+    ExpectTrue(!slot.is_fresh(), "and left the slot stale");
+
+    // A calculator that writes a versioned source: the evaluator refuses to
+    // commit the result, so again nothing became readable.
+    bool guard_fired = false;
+    try {
+        EvaluateVersionedCacheSlot(slot, [&state](SyntheticPass& storage) {
+            storage.entries[0] = -2.0;
+            state.set_generalized_positions(Eigen::VectorXd::Constant(9, 3.0));
+        });
+    } catch (const std::logic_error&) {
+        guard_fired = true;
+    }
+    ExpectTrue(guard_fired, "the state guard refused the calculation");
+    ExpectTrue(slot.committed_recomputation_count() == 2,
+               "a calculation the guard refused committed nothing");
+
+    // Only getting all the way through moves it again.
+    EvaluateVersionedCacheSlot(slot, fill);
+    ExpectTrue(slot.committed_recomputation_count() == 3,
+               "a successful retry after two failures commits exactly one");
+}
+
 void CheckAThrowingCalculatorLeavesNothingReadable() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
@@ -408,6 +483,7 @@ int main() {
     CheckColdComputesOnceAndHotQueriesDoNot();
     CheckTheInvocationContractMatchesTheAcceptedCalculator();
     CheckRecomputationHappensOnRequestAndNotOnWrite();
+    CheckTheCommittedRecomputationCountTracksSuccessesOnly();
     CheckAThrowingCalculatorLeavesNothingReadable();
     CheckACalculatorThatWritesTheStateIsRefused();
     CheckCalculatorExceptionTakesPrecedenceOverTheStateGuard();

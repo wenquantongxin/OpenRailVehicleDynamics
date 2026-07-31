@@ -49,6 +49,7 @@
 #include "orvd/multibody_model/multibody_coordinate_ranges.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_model_handles.h"
+#include "orvd/multibody_model/multibody_rigid_pose.h"
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
 
 namespace orvd::multibody_model {
@@ -294,6 +295,44 @@ class MultibodyModel {
     [[nodiscard]] std::unique_ptr<MultibodyEvaluationContext>
     CreateDefaultContext() const;
 
+    /// States the model's generalized positions.
+    ///
+    /// The whole vector at once. Which numbers are a quaternion, and what makes
+    /// one usable, is knowledge this model has and the context does not — which
+    /// is why the write is here and not on the context, and why there is no way
+    /// to reach past it to the numbers.
+    ///
+    /// A quaternion is stored exactly as written. Normalising it would answer a
+    /// different question from the one asked and the caller would never learn
+    /// that what they read back is not what they wrote.
+    ///
+    /// @throws std::invalid_argument if `positions` is the wrong size, if the
+    /// context came from another model, or if some free body's quaternion
+    /// cannot be turned into a rotation.
+    /// @throws std::logic_error if the model is not finalized.
+    void SetGeneralizedPositions(MultibodyEvaluationContext* context,
+                                 const Eigen::VectorXd& positions) const;
+
+    /// States the model's generalized velocities. Same size and ownership
+    /// rules; velocities have no analogue of the quaternion condition.
+    void SetGeneralizedVelocities(MultibodyEvaluationContext* context,
+                                  const Eigen::VectorXd& velocities) const;
+
+    // --- Position kinematics ------------------------------------------------
+
+    /// Where this body's own frame is, in the world.
+    ///
+    /// @throws std::invalid_argument if the handle is invalid or foreign, or if
+    /// the context came from another model.
+    /// @throws std::logic_error if the model is not finalized.
+    [[nodiscard]] RigidPose CalcPoseInWorld(
+        const MultibodyEvaluationContext& context, RigidBodyHandle body) const;
+
+    /// Where this frame is, in the world. The world frame's own pose is the
+    /// identity, which is what it means for it to be the world frame.
+    [[nodiscard]] RigidPose CalcPoseInWorld(
+        const MultibodyEvaluationContext& context, FrameHandle frame) const;
+
    private:
     template <typename Handle>
     static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {
@@ -314,6 +353,11 @@ class MultibodyModel {
     template <typename Range>
     static Range MakeRange(int start, int size) {
         return Range(start, size);
+    }
+
+    static RigidPose MakePose(const Eigen::Matrix3d& rotation,
+                              const Eigen::Vector3d& translation) {
+        return RigidPose(rotation, translation);
     }
 
     class Implementation;

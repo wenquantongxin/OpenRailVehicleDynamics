@@ -3,12 +3,18 @@
 /// @file
 /// A pre-allocated cache slot that knows which state sources it depends on.
 ///
-/// A slot holds three things: a value built once at the size the model implies,
-/// the versions of the sources that value was computed from, and — implied by
-/// those — whether it is still fresh. It does not hold a calculator. What
-/// recomputes it is the caller's business; what a slot guarantees is that a
-/// value can only be read when the state it was computed from has not moved
-/// since.
+/// A slot holds a value built once at the size the model implies, the versions
+/// of the sources that value was computed from, and — implied by those —
+/// whether it is still fresh. Beside those it keeps a count of how many
+/// recomputations have been committed: a read-only diagnostic that takes no
+/// part in freshness and that nothing consults to decide anything. It is there
+/// because over-invalidation cannot be seen in any value (the answer stays
+/// right and only the work is wasted), and [ADR-0002] names counting as how it
+/// is seen instead.
+///
+/// A slot does not hold a calculator. What recomputes it is the caller's
+/// business; what a slot guarantees is that a value can only be read when the
+/// state it was computed from has not moved since.
 ///
 /// The dependency set is part of the type. `VersionedCacheSlot<PositionPass,
 /// kGeneralizedPositions, kFixedFramePoses>` says, in the declaration itself,
@@ -37,6 +43,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -196,7 +204,46 @@ class VersionedCacheSlot {
     /// recomputed through `mutable_value_for_recomputation()`. G25's evaluator
     /// owns that call sequence and tests the precondition; this storage
     /// primitive does not duplicate the evaluator with a second state machine.
-    void CommitRecomputation() { committed_snapshot_ = CurrentSnapshot(); }
+    void CommitRecomputation() {
+        // Counted before the snapshot, so that a count which cannot advance
+        // leaves the slot stale rather than fresh-with-a-wrong-count. Stale is
+        // the state that is safe to be in.
+        if (committed_recomputation_count_ ==
+            std::numeric_limits<std::uint64_t>::max()) {
+            throw std::overflow_error(
+                "multibody cache slot: the committed-recomputation count has "
+                "reached its ceiling and cannot advance; it does not wrap, for "
+                "the same reason a state version does not");
+        }
+        ++committed_recomputation_count_;
+        committed_snapshot_ = CurrentSnapshot();
+    }
+
+    /// How many recomputations of this slot have been committed.
+    ///
+    /// Committed, not attempted: a calculator that threw, and a calculation the
+    /// evaluator refused to commit because the state moved underneath it, both
+    /// leave this where it was. What it counts is the number of times a value in
+    /// this slot became readable.
+    ///
+    /// This is the observable [ADR-0002] names for the over-invalidation half of
+    /// its criterion. Under-invalidation shows up as a wrong number, which a
+    /// cold-versus-hot comparison finds. Over-invalidation does not: the answer
+    /// stays right and only the work is wasted, so no value can reveal it. What
+    /// reveals it is that a write touching nothing this slot declares still made
+    /// the slot recompute.
+    ///
+    /// A count rather than a flag, because "did it recompute at all" cannot tell
+    /// one recomputation from ten across a sequence of writes, and the sequence
+    /// is where a dependency declared too widely shows itself.
+    ///
+    /// It is a long-term read-only diagnostic, not instrumentation added to
+    /// prove a goal and then left behind. Nothing reads it to decide anything:
+    /// it takes no part in freshness, is not a value hash, and exists to be
+    /// compared between two moments.
+    [[nodiscard]] std::uint64_t committed_recomputation_count() const {
+        return committed_recomputation_count_;
+    }
 
    private:
     VersionSnapshot CurrentSnapshot() const {
@@ -210,6 +257,7 @@ class VersionedCacheSlot {
     /// Absent until a recomputation has been committed. Absent is not the same
     /// as a snapshot of zeros: see the file comment.
     std::optional<VersionSnapshot> committed_snapshot_;
+    std::uint64_t committed_recomputation_count_{0};
 };
 
 }  // namespace orvd::multibody_runtime

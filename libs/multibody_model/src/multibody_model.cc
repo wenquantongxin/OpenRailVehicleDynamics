@@ -92,6 +92,25 @@ class MultibodyModel::Implementation {
         }
     }
 
+    /// Refuses a context this model did not issue.
+    ///
+    /// Checked here rather than left to the rigid tree. The tree would refuse
+    /// it too — a state is bound to its layout by object identity — but it
+    /// would refuse in terms of a layout the caller has never seen, about a
+    /// model they did not name.
+    template <typename Context>
+    static void RequireOwnContext(const Implementation& model, Context* context,
+                                  const char* action) {
+        if (context == nullptr) {
+            Reject(std::string("cannot ") + action + " a context that is null");
+        }
+        if (context->implementation_->issuer() != model.identity_) {
+            Reject(std::string("cannot ") + action +
+                   " a context issued by a different model; a context holds one "
+                   "model's coordinates and means nothing in another");
+        }
+    }
+
     /// Refuses anything that only a finalized model can answer.
     void ThrowIfNotFinalized(const std::string& query) const {
         if (finalization_failed_) {
@@ -759,9 +778,79 @@ std::unique_ptr<MultibodyEvaluationContext> MultibodyModel::CreateDefaultContext
     model.ThrowIfNotFinalized("create an evaluation context");
     auto implementation =
         std::make_unique<MultibodyEvaluationContext::Implementation>(
-            model.tree_.CreateDefaultEvaluationContext());
+            model.identity_, model.tree_.CreateDefaultEvaluationContext());
     return std::unique_ptr<MultibodyEvaluationContext>(
         new MultibodyEvaluationContext(std::move(implementation)));
+}
+
+// --- State ------------------------------------------------------------------
+
+namespace {
+
+/// Refuses a coordinate vector that is not the size the model's is.
+void RequireCoordinateCount(int given, int expected, const char* what) {
+    if (given != expected) {
+        Reject(std::string("this model has ") + std::to_string(expected) + " " +
+               what + ", but " + std::to_string(given) +
+               " were given; nothing was written");
+    }
+}
+
+}  // namespace
+
+void MultibodyModel::SetGeneralizedPositions(
+    MultibodyEvaluationContext* context,
+    const Eigen::VectorXd& positions) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("state the generalized positions");
+    Implementation::RequireOwnContext(model, context, "write positions into");
+    RequireCoordinateCount(static_cast<int>(positions.size()),
+                           model.tree_.num_positions(),
+                           "generalized positions");
+    model.tree_.SetPositions(&context->implementation_->mutable_tree_context(),
+                             positions);
+}
+
+void MultibodyModel::SetGeneralizedVelocities(
+    MultibodyEvaluationContext* context,
+    const Eigen::VectorXd& velocities) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("state the generalized velocities");
+    Implementation::RequireOwnContext(model, context, "write velocities into");
+    RequireCoordinateCount(static_cast<int>(velocities.size()),
+                           model.tree_.num_velocities(),
+                           "generalized velocities");
+    model.tree_.SetVelocities(&context->implementation_->mutable_tree_context(),
+                              velocities);
+}
+
+// --- Position kinematics -----------------------------------------------------
+
+RigidPose MultibodyModel::CalcPoseInWorld(
+    const MultibodyEvaluationContext& context, RigidBodyHandle body) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask where a rigid body is");
+    Implementation::RequireOwnContext(model, &context, "read poses from");
+    const int ordinal = model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body");
+    const auto X_WB =
+        model.tree_.get_link(model.tree_body_[ordinal])
+            .body_frame()
+            .CalcPoseInWorld(context.implementation_->tree_context());
+    return MakePose(X_WB.rotation().matrix(), X_WB.translation());
+}
+
+RigidPose MultibodyModel::CalcPoseInWorld(
+    const MultibodyEvaluationContext& context, FrameHandle frame) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask where a frame is");
+    Implementation::RequireOwnContext(model, &context, "read poses from");
+    const int ordinal = model.Resolve(
+        frame, static_cast<int>(model.frame_names_.size()), "frame");
+    const auto X_WF =
+        model.tree_.get_frame(model.tree_frame_[ordinal])
+            .CalcPoseInWorld(context.implementation_->tree_context());
+    return MakePose(X_WF.rotation().matrix(), X_WF.translation());
 }
 
 }  // namespace orvd::multibody_model
