@@ -109,6 +109,19 @@ function(_orvd_imported_artefact_is_drake target output_variable)
     foreach(artefact_property IN LISTS artefact_properties)
         get_target_property(artefact ${target} ${artefact_property})
         if(artefact)
+            # A generator expression here is not a third-party habit to be
+            # tolerated: it is the one place an imported target says which file
+            # it resolves to, and an expression this gate cannot evaluate can
+            # resolve to Drake in exactly the configuration nobody checked. The
+            # identity match below runs on the raw text, so a Drake named inside
+            # the expression is still caught — what escapes is a neutral name
+            # that resolves to Drake, which is why this fails closed instead.
+            if(artefact MATCHES "\\$<")
+                set(${output_variable} TRUE PARENT_SCOPE)
+                _orvd_record_boundary_violation("${target}"
+                    "its ${artefact_property} is the generator expression '${artefact}', which this gate cannot evaluate; an imported target must name the file it resolves to")
+                return()
+            endif()
             _orvd_link_item_is_drake_library("${artefact}" artefact_is_drake)
             if(artefact_is_drake)
                 set(${output_variable} TRUE PARENT_SCOPE)
@@ -131,6 +144,39 @@ function(_orvd_check_link_options product_target target is_first_party)
         if(NOT options)
             continue()
         endif()
+        # Flatten first. A library selector and the library it selects may arrive
+        # as two list elements (`-l;drake`), as one element with a space
+        # (`-l drake`), or wrapped in a driver prefix (`LINKER:SHELL:-l drake`).
+        # Scanning elements one at a time sees `-l` and `drake` separately, and
+        # neither of them alone says Drake.
+        set(option_tokens "")
+        foreach(option IN LISTS options)
+            set(unwrapped_option "${option}")
+            string(REGEX REPLACE "^(LINKER|SHELL):" "" unwrapped_option
+                   "${unwrapped_option}")
+            string(REGEX REPLACE "^(LINKER|SHELL):" "" unwrapped_option
+                   "${unwrapped_option}")
+            string(REPLACE " " ";" unwrapped_option "${unwrapped_option}")
+            string(REPLACE "," ";" unwrapped_option "${unwrapped_option}")
+            list(APPEND option_tokens ${unwrapped_option})
+        endforeach()
+        set(selector_pending FALSE)
+        foreach(option_token IN LISTS option_tokens)
+            string(TOLOWER "${option_token}" normalized_token)
+            if(selector_pending)
+                set(selector_pending FALSE)
+                if(normalized_token MATCHES
+                   "${ORVD_DRAKE_LIBRARY_BASENAME_PATTERN}")
+                    _orvd_record_boundary_violation("${product_target}"
+                        "${target} carries a link option selecting the library '${option_token}', which is Drake")
+                    continue()
+                endif()
+            endif()
+            if(normalized_token MATCHES "^(-l|--library|-framework|/defaultlib:?)$")
+                # A bare selector: the library it selects is the next token.
+                set(selector_pending TRUE)
+            endif()
+        endforeach()
         foreach(option IN LISTS options)
             string(TOLOWER "${option}" normalized_option)
             if(normalized_option MATCHES "${ORVD_DRAKE_LINK_OPTION_PATTERN}")
@@ -221,6 +267,11 @@ function(_orvd_walk_link_closure product_target item is_first_party)
     set(item_is_first_party FALSE)
     if(NOT is_imported)
         set(item_is_first_party TRUE)
+        get_target_property(item_source_directory ${item} SOURCE_DIR)
+        if(item_source_directory)
+            set_property(GLOBAL APPEND PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES
+                         "${item_source_directory}")
+        endif()
     endif()
     _orvd_check_link_options("${product_target}" ${item} ${item_is_first_party})
 
@@ -254,6 +305,23 @@ function(_orvd_walk_link_closure product_target item is_first_party)
     endforeach()
 endfunction()
 
+# Refuses a directory that declares an imported target this gate cannot see.
+#
+# IMPORTED_TARGETS lists targets created in a directory even when their directory
+# scope makes them invisible from where the check runs. An invisible target
+# cannot be inspected, so accepting its neutral name would turn it into the
+# escape hatch.
+function(_orvd_audit_directory_imported_targets subject directory)
+    get_property(directory_imported_targets
+        DIRECTORY "${directory}" PROPERTY IMPORTED_TARGETS)
+    foreach(imported_target IN LISTS directory_imported_targets)
+        if(NOT TARGET "${imported_target}")
+            _orvd_record_boundary_violation("${subject}"
+                "its link closure passes through '${directory}', which defines the directory-scoped imported target '${imported_target}'; an imported target in that closure must be GLOBAL so the boundary gate can inspect it")
+        endif()
+    endforeach()
+endfunction()
+
 function(_orvd_collect_product_directory product_module_directory)
     get_property(visited_directories GLOBAL
         PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES)
@@ -270,18 +338,8 @@ function(_orvd_collect_product_directory product_module_directory)
             ORVD_PRODUCT_BOUNDARY_TARGETS ${directory_targets})
     endif()
 
-    # IMPORTED_TARGETS lists targets created in this directory even when their
-    # directory scope makes them invisible here. An invisible target cannot be
-    # inspected, so accepting it would turn its neutral name into an escape hatch.
-    get_property(directory_imported_targets
-        DIRECTORY "${product_module_directory}" PROPERTY IMPORTED_TARGETS)
-    foreach(imported_target IN LISTS directory_imported_targets)
-        if(NOT TARGET "${imported_target}")
-            _orvd_record_boundary_violation(
-                "${product_module_directory}"
-                "it defines the directory-scoped imported target '${imported_target}'; imported targets in product directories must be GLOBAL so the boundary gate can inspect them")
-        endif()
-    endforeach()
+    _orvd_audit_directory_imported_targets(
+        "${product_module_directory}" "${product_module_directory}")
 
     get_property(product_subdirectories
         DIRECTORY "${product_module_directory}" PROPERTY SUBDIRECTORIES)
@@ -299,6 +357,7 @@ function(orvd_verify_product_targets_have_no_drake_dependency)
     set_property(GLOBAL PROPERTY ORVD_BOUNDARY_VISITED "")
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES "")
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_TARGETS "")
+    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES "")
 
     set(configuration_names "")
     if(CMAKE_CONFIGURATION_TYPES)
@@ -366,6 +425,7 @@ function(orvd_verify_targets_have_no_drake_dependency)
 
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS "")
     set_property(GLOBAL PROPERTY ORVD_BOUNDARY_VISITED "")
+    set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES "")
 
     set(configuration_names "")
     if(CMAKE_CONFIGURATION_TYPES)
@@ -376,6 +436,7 @@ function(orvd_verify_targets_have_no_drake_dependency)
     set_property(GLOBAL PROPERTY ORVD_BOUNDARY_CONFIGURATION_NAMES
                  "${configuration_names}")
 
+    set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VISITED_DIRECTORIES "")
     foreach(named_target IN LISTS named_targets)
         if(NOT TARGET ${named_target})
             message(FATAL_ERROR
@@ -383,6 +444,17 @@ function(orvd_verify_targets_have_no_drake_dependency)
                 "prohibition written down for it checks nothing")
         endif()
         _orvd_walk_link_closure("${named_target}" "${named_target}" TRUE)
+
+        # The same audit the directory entry performs, over the directories this
+        # target's own closure was declared in. A directory-scoped imported
+        # target is invisible from here, so the walk above sees a neutral name
+        # and a bare link item — which is exactly what an escape looks like.
+        get_property(closure_directories GLOBAL
+            PROPERTY ORVD_BOUNDARY_CLOSURE_DIRECTORIES)
+        foreach(closure_directory IN LISTS closure_directories)
+            _orvd_audit_directory_imported_targets(
+                "${named_target}" "${closure_directory}")
+        endforeach()
     endforeach()
 
     get_property(violations GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS)

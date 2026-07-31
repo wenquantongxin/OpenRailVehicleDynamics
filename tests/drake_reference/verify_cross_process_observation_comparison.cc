@@ -222,6 +222,24 @@ void ExpectRequirementsCoverPositionKinematics(
            "to pass on the same evidence");
 }
 
+/// Moves one named observation by an absolute amount.
+///
+/// Distinct from the proportional perturbation helper: here the caller has
+/// already worked out the step it wants, because the point is to choose one the
+/// two allowances disagree about.
+orvd_contract::ObservationStream WithScalarValueOffset(
+    orvd_contract::ObservationStream stream, const std::string& name,
+    double offset) {
+    for (auto& observation : stream.observations) {
+        if (observation.name == name) {
+            observation.value += offset;
+            return stream;
+        }
+    }
+    Expect(false, "the stream was expected to contain " + name);
+    return stream;
+}
+
 /// Drops one named observation, so the missing-observation path is exercised on
 /// something this comparison actually requires.
 orvd_contract::ObservationStream WithObservationRemoved(
@@ -474,6 +492,30 @@ int main(int argc, char** argv) {
                             orvd_contract::ObservationKind::kTranslationMeters);
             expect_relative("state_readback_position[0]",
                             orvd_contract::ObservationKind::kAngleRadians);
+
+            // And the judge really does apply the proportional allowance to
+            // them. Asking which branch a helper would choose says nothing
+            // about which one the comparison used, so each named field is
+            // perturbed by an amount that the two allowances answer
+            // differently: comfortably inside the proportional one, and far
+            // outside the dimension's near-zero floor.
+            for (const std::string& named :
+                 {std::string("pose_lower_link_translation[1]"),
+                  std::string("state_readback_position[0]")}) {
+                const auto* observation = reference.FindObservation(named);
+                if (observation == nullptr) continue;
+                const double proportional_step =
+                    0.5 * orvd_comparison::kRelativeErrorLimit *
+                    std::abs(observation->value);
+                const auto judged = orvd_comparison::CompareObservationStreams(
+                    requirements, reference,
+                    WithScalarValueOffset(candidate, named, proportional_step));
+                Expect(judged.outcome ==
+                           orvd_comparison::ComparisonOutcome::kAccepted,
+                       named + " must be accepted at half its proportional "
+                               "allowance, which is far outside its dimension's "
+                               "near-zero floor: " + judged.detail);
+            }
         }
 
         const auto verdict = orvd_comparison::CompareObservationStreams(

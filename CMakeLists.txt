@@ -102,5 +102,16 @@ endif()
 orvd_verify_product_targets_have_no_drake_dependency(
     ${ORVD_PRODUCT_MODULE_DIRECTORIES})
 
+# The same prohibition on targets that are not product modules but carry it for
+# their own reason: a cross-process candidate exists to produce numbers that are
+# compared against Drake's, so if it linked Drake those numbers would be Drake's.
+# Here, after every add_subdirectory(), for the same reason as above.
+get_property(orvd_drake_free_candidate_targets
+             GLOBAL PROPERTY ORVD_DRAKE_FREE_CANDIDATE_TARGETS)
+if(orvd_drake_free_candidate_targets)
+    orvd_verify_targets_have_no_drake_dependency(
+        ${orvd_drake_free_candidate_targets})
+endif()
+
 message(STATUS
     "ORVD ${PROJECT_VERSION} — product targets configured")

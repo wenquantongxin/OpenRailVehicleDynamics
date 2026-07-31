@@ -441,6 +441,148 @@ def case_imported_generator_expressions_cannot_hide_drake(work: Path) -> None:
     )
 
 
+def write_named_target_case(
+    work: Path,
+    name: str,
+    product_body: str,
+    subdirectory_body: str | None = None,
+) -> Path:
+    """A project checked through the by-name entry point rather than by directory.
+
+    A cross-process candidate is not a product module — it is a test program that
+    carries the same prohibition for its own reason — so it is named outright.
+    The two entry points share a walker but not their setup, and a hole in one
+    is not a hole in the other.
+    """
+    case_root = work / name
+    case_root.mkdir(parents=True, exist_ok=True)
+    (case_root / "candidate.cc").write_text("int main() { return 0; }\n", encoding="utf-8")
+    (case_root / "helper.cc").write_text("int Helper() { return 1; }\n", encoding="utf-8")
+    body = (
+        PROJECT_PREAMBLE.replace(
+            "@GATE_MODULE_DIRECTORY@", GATE_MODULE_DIRECTORY.as_posix()
+        ).replace("@WORK@", case_root.as_posix())
+        + "\nadd_library(helper STATIC helper.cc)\n"
+        + "add_executable(candidate candidate.cc)\n"
+        + "target_link_libraries(candidate PRIVATE helper)\n"
+    )
+    if subdirectory_body is not None:
+        subdirectory = case_root / "sub"
+        subdirectory.mkdir(exist_ok=True)
+        (subdirectory / "sub.cc").write_text("int Sub() { return 1; }\n", encoding="utf-8")
+        (subdirectory / "CMakeLists.txt").write_text(subdirectory_body, encoding="utf-8")
+        body += "add_subdirectory(sub)\n"
+    body += product_body
+    body += "orvd_verify_targets_have_no_drake_dependency(candidate)\n"
+    (case_root / "CMakeLists.txt").write_text(body, encoding="utf-8")
+    return case_root
+
+
+def case_named_target_entry_accepts_a_clean_candidate(work: Path) -> None:
+    case_root = write_named_target_case(work, "named_clean", "")
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode == 0 and "link no Drake" in result.stdout,
+        "a candidate that links no Drake must configure\n" + result.stdout,
+    )
+
+
+def case_named_target_entry_refuses_an_absent_target(work: Path) -> None:
+    case_root = write_named_target_case(work, "named_absent", "")
+    text = (case_root / "CMakeLists.txt").read_text(encoding="utf-8")
+    (case_root / "CMakeLists.txt").write_text(
+        text.replace(
+            "orvd_verify_targets_have_no_drake_dependency(candidate)",
+            "orvd_verify_targets_have_no_drake_dependency(no_such_target)",
+        ),
+        encoding="utf-8",
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode != 0 and "checks nothing" in result.stdout,
+        "naming a target that does not exist must fail rather than pass "
+        "vacuously\n" + result.stdout,
+    )
+
+
+def case_split_library_selection_options_are_caught(work: Path) -> None:
+    """A selector and the library it selects, arriving apart.
+
+    `-ldrake` is one token and easy. `-l` followed by `drake` — as two list
+    elements, as one element with a space, or wrapped in a driver prefix — is the
+    same instruction written differently, and scanning tokens one at a time sees
+    only a selector and only a neutral name.
+    """
+    for label, option in (
+        ("split_elements", '"-l" "drake"'),
+        ("spaced_element", '"-l drake"'),
+        ("long_form", '"--library" "drake"'),
+        ("linker_driver", '"LINKER:SHELL:-l drake"'),
+        ("framework", '"-framework" "Drake"'),
+    ):
+        case_root = write_named_target_case(
+            work,
+            f"split_option_{label}",
+            f"target_link_options(helper PUBLIC {option})\n",
+        )
+        result = configure(case_root)
+        record_failure_unless(
+            result.returncode != 0 and "which is Drake" in result.stdout,
+            f"a split library selection ({label}) must fail\n" + result.stdout,
+        )
+
+
+def case_named_entry_refuses_an_imported_artefact_behind_a_generator_expression(
+    work: Path,
+) -> None:
+    """An imported target whose location is decided later.
+
+    The one place an imported target says which file it resolves to is exactly
+    where an unevaluable expression must not be tolerated: it can resolve to
+    Drake in the configuration nobody checked.
+    """
+    case_root = write_named_target_case(
+        work,
+        "named_imported_genex",
+        "add_library(sneaky SHARED IMPORTED GLOBAL)\n"
+        "set_target_properties(sneaky PROPERTIES IMPORTED_LOCATION"
+        ' "$<$<CONFIG:Release>:/opt/drake/lib/libdrake.so>")\n'
+        "target_link_libraries(helper PUBLIC sneaky)\n",
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode != 0 and "cannot evaluate" in result.stdout,
+        "an imported artefact hidden behind a generator expression must fail\n"
+        + result.stdout,
+    )
+
+
+def case_named_entry_refuses_a_directory_scoped_imported_target(work: Path) -> None:
+    """An imported target declared in a subdirectory without GLOBAL.
+
+    From the parent it is not a target at all, so the walker sees a neutral name
+    and a bare link item — which is precisely what an escape looks like.
+    """
+    case_root = write_named_target_case(
+        work,
+        "named_scoped_imported",
+        "target_link_libraries(helper PUBLIC subhelper)\n",
+        subdirectory_body=(
+            "add_library(hidden SHARED IMPORTED)\n"
+            "set_target_properties(hidden PROPERTIES IMPORTED_LOCATION"
+            ' "/opt/drake/lib/libdrake.so")\n'
+            "add_library(subhelper STATIC sub.cc)\n"
+            "target_link_libraries(subhelper PUBLIC hidden)\n"
+        ),
+    )
+    result = configure(case_root)
+    record_failure_unless(
+        result.returncode != 0 and "must be GLOBAL" in result.stdout,
+        "a directory-scoped imported target in the closure must fail\n"
+        + result.stdout,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Self-check for the product boundary gate."
@@ -468,6 +610,11 @@ def main() -> int:
         case_directory_link_options_do_not_name_a_library,
         case_unrelated_target_namespace_configures,
         case_imported_generator_expressions_cannot_hide_drake,
+        case_named_target_entry_accepts_a_clean_candidate,
+        case_named_target_entry_refuses_an_absent_target,
+        case_split_library_selection_options_are_caught,
+        case_named_entry_refuses_an_imported_artefact_behind_a_generator_expression,
+        case_named_entry_refuses_a_directory_scoped_imported_target,
     )
     with tempfile.TemporaryDirectory(prefix="orvd_verify_boundary_gate.") as work:
         for case in cases:

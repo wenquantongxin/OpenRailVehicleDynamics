@@ -51,21 +51,31 @@ static_assert(!std::is_constructible_v<RigidPose, Eigen::Matrix3d,
 // reference a member of something that is already gone. `const&&` is not
 // redundant with `&&`: without it a `const` rvalue resolves to the `const&`
 // overload and dangles exactly as before.
-static_assert(std::is_same_v<decltype(std::declval<const RigidPose&>().rotation()),
-                             const Eigen::Matrix3d&>);
-static_assert(std::is_same_v<decltype(std::declval<RigidPose&&>().rotation()),
-                             Eigen::Matrix3d>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const RigidPose&&>().rotation()),
-                   Eigen::Matrix3d>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const RigidPose&>().translation()),
-                   const Eigen::Vector3d&>);
-static_assert(std::is_same_v<decltype(std::declval<RigidPose&&>().translation()),
-                             Eigen::Vector3d>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const RigidPose&&>().translation()),
-                   Eigen::Vector3d>);
+//
+// Named one overload at a time, by taking a pointer to each. Asking what a call
+// returns cannot tell three overloads from two: delete the `&&` one and an
+// rvalue simply binds to `const&&`, which also returns by value, so every
+// return type stays what it was and nothing notices that an overload went
+// missing. A pointer to a particular ref-qualified member does notice.
+// The cast is the check: naming an overload that is not there is what fails,
+// and it fails at compile time. Comparing the resulting pointer against null
+// would add nothing — a pointer obtained this way cannot be null, which GCC
+// says out loud — so nothing is compared.
+[[maybe_unused]] constexpr auto kRotationOnLvalue =
+    static_cast<const Eigen::Matrix3d& (RigidPose::*)() const&>(
+        &RigidPose::rotation);
+[[maybe_unused]] constexpr auto kRotationOnRvalue =
+    static_cast<Eigen::Matrix3d (RigidPose::*)() &&>(&RigidPose::rotation);
+[[maybe_unused]] constexpr auto kRotationOnConstRvalue =
+    static_cast<Eigen::Matrix3d (RigidPose::*)() const&&>(&RigidPose::rotation);
+[[maybe_unused]] constexpr auto kTranslationOnLvalue =
+    static_cast<const Eigen::Vector3d& (RigidPose::*)() const&>(
+        &RigidPose::translation);
+[[maybe_unused]] constexpr auto kTranslationOnRvalue =
+    static_cast<Eigen::Vector3d (RigidPose::*)() &&>(&RigidPose::translation);
+[[maybe_unused]] constexpr auto kTranslationOnConstRvalue =
+    static_cast<Eigen::Vector3d (RigidPose::*)() const&&>(
+        &RigidPose::translation);
 
 int failure_count = 0;
 

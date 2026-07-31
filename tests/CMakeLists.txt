@@ -371,5 +371,8 @@ add_executable(emit_orvd_position_kinematics_observations
 orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
 target_link_libraries(emit_orvd_position_kinematics_observations
     PRIVATE orvd_multibody_model orvd_test_contract)
-orvd_verify_targets_have_no_drake_dependency(
-    emit_orvd_position_kinematics_observations)
+# Registered here, checked at the top level once every target exists. Checking
+# it on the spot would prove only that nothing had linked Drake into it *yet*:
+# a later target_link_libraries in any file would go unexamined.
+set_property(GLOBAL APPEND PROPERTY ORVD_DRAKE_FREE_CANDIDATE_TARGETS
+             emit_orvd_position_kinematics_observations)

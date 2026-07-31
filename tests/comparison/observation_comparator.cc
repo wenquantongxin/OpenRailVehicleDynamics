@@ -180,11 +180,17 @@ ComparisonReport CompareObservationStreams(
         }
         const double error =
             std::abs(candidate_observation->value - reference_observation->value);
-        const double relative_allowance =
-            kRelativeErrorLimit * std::abs(reference_observation->value);
-        const double absolute_floor = AbsoluteFloorForKind(required.kind);
-        const bool relative_branch = relative_allowance >= absolute_floor;
-        const double allowance = relative_branch ? relative_allowance : absolute_floor;
+        // The same call a caller makes to ask which branch will judge a value.
+        // Written out twice, the two could disagree — and then a test that
+        // asserted a quantity is judged proportionally would be asserting it
+        // about a decision nobody makes.
+        const bool relative_branch =
+            SelectToleranceBranch(reference_observation->value, required.kind) ==
+            ToleranceBranch::kRelativeError;
+        const double allowance =
+            relative_branch
+                ? kRelativeErrorLimit * std::abs(reference_observation->value)
+                : AbsoluteFloorForKind(required.kind);
         if (relative_branch) ++report.relative_branch_count;
 
         if (error > allowance) {
