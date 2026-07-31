@@ -673,12 +673,13 @@ void CheckEachVersionedWriteAdvancesExactlyItsOwn() {
 void CheckCombinedStateWriteAdvancesBothCoordinateVersionsAtomically() {
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
+    BringVersionsToDistinctNonzeroRevisions(state);
     const Eigen::VectorXd positions = Eigen::VectorXd::Constant(9, 0.25);
     const Eigen::VectorXd velocities = Eigen::VectorXd::Constant(8, -1.5);
     state.set_generalized_state(positions, velocities);
     ExpectTrue(
         AllRevisions(state) ==
-            std::array<std::uint64_t, 5>{1, 1, 0, 0, 0},
+            std::array<std::uint64_t, 5>{2, 3, 3, 4, 5},
         "one combined state write advances q and v exactly once");
 
     Eigen::VectorXd invalid_velocities = velocities;
@@ -694,6 +695,25 @@ void CheckCombinedStateWriteAdvancesBothCoordinateVersionsAtomically() {
                    state.generalized_positions() == positions &&
                    state.generalized_velocities() == velocities,
                "a refused combined write changes neither data nor versions");
+}
+
+void CheckCombinedStateWritePreservesAliasedEntryValues() {
+    MultibodyStateLayoutDescription description = SampleDescription();
+    description.generalized_position_count = 8;
+    const MultibodyStateLayout layout(description);
+    MultibodyStateInstance state(layout);
+    const Eigen::VectorXd positions =
+        Eigen::VectorXd::LinSpaced(8, 1.0, 8.0);
+    const Eigen::VectorXd velocities =
+        Eigen::VectorXd::LinSpaced(8, -8.0, -1.0);
+    state.set_generalized_state(positions, velocities);
+
+    state.set_generalized_state(state.generalized_velocities(),
+                                state.generalized_positions());
+    ExpectTrue(state.generalized_positions() == velocities &&
+                   state.generalized_velocities() == positions,
+               "a combined state write preserves both cross-aliased entry "
+               "values");
 }
 
 void CheckWritingTheSameValueStillAdvances() {
@@ -1101,6 +1121,7 @@ int main() {
     CheckVersionValueSemantics();
     CheckEachVersionedWriteAdvancesExactlyItsOwn();
     CheckCombinedStateWriteAdvancesBothCoordinateVersionsAtomically();
+    CheckCombinedStateWritePreservesAliasedEntryValues();
     CheckWritingTheSameValueStillAdvances();
     CheckRefusedWritesLeaveEveryVersionAlone();
     CheckUnversionedParametersAdvanceNothing();

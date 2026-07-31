@@ -118,7 +118,8 @@ class MultibodyStateInstance {
     /// Both vectors and both successor versions are validated before either
     /// live vector is changed.  This is the state-vector load used by an ODE
     /// right-hand-side trial; it cannot leave q from one trial beside v from
-    /// another when the second half is refused.
+    /// another when the second half is refused.  Each input retains its value
+    /// at function entry even when it borrows this instance's current storage.
     void set_generalized_state(
         const Eigen::Ref<const Eigen::VectorXd>& positions,
         const Eigen::Ref<const Eigen::VectorXd>& velocities);

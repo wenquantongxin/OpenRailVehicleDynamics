@@ -3,6 +3,7 @@
 #include "orvd/multibody_runtime/multibody_physical_parameter_validation.h"
 
 #include <cmath>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -56,6 +57,20 @@ void RequireSize(Eigen::Index actual, int expected, std::string_view what) {
         Reject(std::string(what) + " has " + std::to_string(actual) +
                " entries, but the layout says " + std::to_string(expected));
     }
+}
+
+bool OverlapsStorage(const Eigen::Ref<const Eigen::VectorXd>& values,
+                     const Eigen::VectorXd& storage) {
+    if (values.size() == 0 || storage.size() == 0) {
+        return false;
+    }
+    const double* const values_begin = values.data();
+    const double* const values_end = values_begin + values.size();
+    const double* const storage_begin = storage.data();
+    const double* const storage_end = storage_begin + storage.size();
+    const std::less<const double*> less;
+    return less(values_begin, storage_end) &&
+           less(storage_begin, values_end);
 }
 
 }  // namespace
@@ -124,8 +139,16 @@ void MultibodyStateInstance::set_generalized_state(
         generalized_positions_version_.Next();
     const MultibodyStateVersion next_velocities =
         generalized_velocities_version_.Next();
-    generalized_positions_ = positions;
-    generalized_velocities_ = velocities;
+    // q is stored first. Preserve v only when its input borrows q; the normal
+    // ODE path supplies external contiguous storage and allocates nothing here.
+    if (OverlapsStorage(velocities, generalized_positions_)) {
+        const Eigen::VectorXd velocities_at_entry = velocities;
+        generalized_positions_ = positions;
+        generalized_velocities_ = velocities_at_entry;
+    } else {
+        generalized_positions_ = positions;
+        generalized_velocities_ = velocities;
+    }
     generalized_positions_version_ = next_positions;
     generalized_velocities_version_ = next_velocities;
 }

@@ -2206,10 +2206,10 @@ class MultibodyTree {
 
   // Writes the whole of v, as one transaction.
   //
-  // There is deliberately no combined q-and-v setter. Two independent writes in
-  // sequence are not one transaction: if the second is refused, the first has
-  // already been committed and its version already advanced, leaving a state
-  // that is half of what the caller asked for and no way to tell.
+  // This single-block writer remains for callers that intentionally replace v
+  // alone. Consumers replacing both coordinate blocks use the combined
+  // transaction below; composing the two single-block writers would allow the
+  // first half to commit before the second half is refused.
   void SetVelocities(orvd::multibody_runtime::MultibodyStateInstance* state,
                      const Eigen::Ref<const VectorX<T>>& velocities) const {
     DRAKE_DEMAND(state != nullptr);
