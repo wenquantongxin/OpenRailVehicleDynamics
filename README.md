@@ -7,8 +7,8 @@
 vendored Drake common support、刚性 topology、double 位姿数学与完整 double-only 刚性树
 均已有内部构建目标。第一方运行时拥有单一多体状态、类型化参数、版本缓存与具名工作区；
 G29–G39 已接通模型中立建模、运动学、质量矩阵、逆动力学、具名外力和 O(n) 前向动力学，
-G40–G43 已接通静态系统组装、上下文局部阻尼、连续状态原子事务与 RHS 桥。当前暂停推进并做
-阶段复盘；恢复时从 G44 开始，当前路书止于 G46。
+G40–G44 已接通静态系统组装、上下文局部阻尼、连续状态原子事务、RHS 桥与真实 CVODE 后端。
+当前 Goal 为 G45，当前路书止于 G46。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -73,10 +73,9 @@ OpenRailVehicleDynamics/
 
 ## 外置第三方
 
-Eigen 是项目必需依赖，缺失时配置立即失败。vendored common support 公开传递 fmt，
-topology 与 double 位姿数学目标按其真实源码依赖消费该支持层；fmt 缺失时同样在配置
-阶段失败。SUNDIALS CVODE 与 Ceres 尚无消费者，因此不查找、不设选项、不建目标，留到
-首个真实消费者出现时再引入。
+Eigen、fmt 与精确版本 SUNDIALS 7.7.0 是当前产品的必需依赖，缺失时配置立即失败。开发者通过
+标准 CMake 搜索前缀提供依赖，仓库不记录机器路径；SUNDIALS 的随仓供应与精简组件构建归 G46。
+Ceres 尚无消费者，因此不查找、不设选项、不建目标。
 
 ## GZ18
 

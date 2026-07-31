@@ -492,8 +492,8 @@ orvd_configure_first_party_target(verify_compiled_system_plan)
 target_link_libraries(verify_compiled_system_plan PRIVATE orvd_system_assembly)
 add_test(NAME verify_compiled_system_plan COMMAND verify_compiled_system_plan)
 
-# G43's backend-neutral state/RHS seam.  This does not link SUNDIALS or step a
-# numerical integrator; it verifies the dynamically sized contiguous mapping,
+# G43's backend-neutral state/RHS seam. This does not instantiate or step a
+# numerical backend; it verifies the dynamically sized contiguous mapping,
 # component tolerances and the dedicated trial-context boundary used by G44.
 add_executable(verify_system_rhs_bridge
     integrators/continuous_state_advancer_header_self_containment.cc
@@ -502,6 +502,18 @@ add_executable(verify_system_rhs_bridge
 orvd_configure_first_party_target(verify_system_rhs_bridge)
 target_link_libraries(verify_system_rhs_bridge PRIVATE orvd_integrators)
 add_test(NAME verify_system_rhs_bridge COMMAND verify_system_rhs_bridge)
+
+# G44's real CVODE backend. The two analytic systems exercise the fixed BDF +
+# dense numerical-Jacobian configuration; the focused failure case verifies
+# that a C callback never leaks a C++ exception or publishes a partial endpoint.
+add_executable(verify_cvode_continuous_state_advancer
+    integrators/cvode_continuous_state_advancer_header_self_containment.cc
+    integrators/verify_cvode_continuous_state_advancer.cc)
+orvd_configure_first_party_target(verify_cvode_continuous_state_advancer)
+target_link_libraries(verify_cvode_continuous_state_advancer
+    PRIVATE orvd_integrators)
+add_test(NAME verify_cvode_continuous_state_advancer
+         COMMAND verify_cvode_continuous_state_advancer)
 
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree

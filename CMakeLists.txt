@@ -42,9 +42,14 @@ include(OrvdProductBoundaryGate)
 # time rather than at the first compile error. CMake treats include directories
 # from the imported Eigen3::Eigen target as SYSTEM by default, which keeps its
 # diagnostics out of first-party output.
-# SUNDIALS CVODE and Ceres have no consumer yet and are therefore not searched
-# for, not made optional, and given no target.
+# G44 is the first SUNDIALS consumer. The dependency is exact and required:
+# silently omitting the only admitted numerical backend would leave a build
+# that advertises an advancer it cannot construct. Its installation prefix is
+# supplied by the build environment and is never recorded in the source tree.
+# Ceres still has no consumer and is therefore not searched or given a target.
 find_package(Eigen3 3.4 CONFIG REQUIRED)
+find_package(SUNDIALS 7.7.0 EXACT CONFIG REQUIRED
+    COMPONENTS cvode nvecserial sunmatrixdense sunlinsoldense core)
 
 # fmt is required by the vendored Drake source: its public headers include
 # fmt/format.h and specialise fmt::formatter. No version is pinned: real source

@@ -80,6 +80,16 @@ fmt
   or another supported target form. A release that ships fmt material must carry
   the licence text belonging to that fmt version.
 
+SUNDIALS 7.7.0
+
+    Licence   BSD-3-Clause
+    Form      CVODE, serial N_Vector, dense matrix and dense linear solver
+
+  ORVD resolves these components through the configured SUNDIALS CMake package
+  and links them into the first numerical backend. The dependency is external
+  during development; G46 determines the source and licence materials carried
+  by the standalone package.
+
 
 Release
 -------
