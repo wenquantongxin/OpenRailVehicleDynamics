@@ -91,6 +91,9 @@ class RigidMultibodyTreeEvaluationContext {
     RigidMultibodyTreeEvaluationContext(
         multibody_runtime::MultibodyStateLayout&&,
         const drake::multibody::internal::SpanningForest&, int, int) = delete;
+    RigidMultibodyTreeEvaluationContext(
+        const multibody_runtime::MultibodyStateLayout&&,
+        const drake::multibody::internal::SpanningForest&, int, int) = delete;
 
     /// The state, writable only from within the tree's own entry points.
     ///

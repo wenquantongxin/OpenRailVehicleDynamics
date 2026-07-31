@@ -40,6 +40,9 @@ using Context = orvd::rigid_multibody_tree::internal::
     RigidMultibodyTreeEvaluationContext;
 using RigidMultibodyTreeCacheWorkspace =
     orvd::rigid_multibody_tree::internal::RigidMultibodyTreeCacheWorkspace;
+using MultibodyStateInstance =
+    orvd::multibody_runtime::MultibodyStateInstance;
+using SpanningForest = drake::multibody::internal::SpanningForest;
 using VersionSource =
     orvd::multibody_runtime::MultibodyStateVersionSource;
 
@@ -132,6 +135,23 @@ concept PubliclyExposesMutableCaches =
 static_assert(!PubliclyExposesMutableCaches<Context>);
 static_assert(std::is_same_v<decltype(std::declval<const Context&>().caches()),
                              const RigidMultibodyTreeCacheWorkspace&>);
+// The workspace is not an independently assembled object. Even an lvalue state
+// may belong to a shorter-lived scope than the returned workspace, so deleting
+// only rvalue construction would leave the same eleven dangling bindings
+// reachable through a helper function. The context's private ownership pair is
+// the sole construction path.
+static_assert(!std::is_constructible_v<
+              RigidMultibodyTreeCacheWorkspace, MultibodyStateInstance&,
+              const SpanningForest&, int, int>);
+static_assert(!std::is_constructible_v<
+              RigidMultibodyTreeCacheWorkspace, const MultibodyStateInstance&,
+              const SpanningForest&, int, int>);
+static_assert(!std::is_constructible_v<
+              RigidMultibodyTreeCacheWorkspace, MultibodyStateInstance&&,
+              const SpanningForest&, int, int>);
+static_assert(!std::is_constructible_v<
+              RigidMultibodyTreeCacheWorkspace, const MultibodyStateInstance&&,
+              const SpanningForest&, int, int>);
 
 int failure_count = 0;
 

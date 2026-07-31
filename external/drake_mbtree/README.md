@@ -6,6 +6,10 @@ support、topology、double 位姿数学、tree + trajectories 与第一方位�
 对象装入一个归档。G26 已用类型化状态替换 systems 状态表面，G27 已删除 tree-system
 反向指针并接入具名缓存，G28 已完成全对象链接与最小模型运行。
 
+## 源码身份与告警边界
+
+`drake/` 保留 vendored 上游路径并作为 SYSTEM include 根，避免用第一方告警规则审判不能随意改写的上游风格；`include/orvd/` 是刚性树接入层的第一方头，作为普通 include 根传播，使第一方消费者的告警策略能检查这些头；`orvd_implementations/` 是满足 vendored 声明的第一方翻译单元并直接应用第一方告警策略。目录身份不靠文件名猜测，也不把第一方接入头藏在 SYSTEM 根下。
+
 ## 来源与逐文件处置
 
 **确切的 commit、tag、许可证标识与每个候选文件的处置，唯一权威是

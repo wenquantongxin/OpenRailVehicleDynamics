@@ -1,7 +1,7 @@
 #pragma once
 
 /// @file
-/// The two conversions between the first-party inertia record and the vendored
+/// The two first-party conversions between the inertia record and the vendored
 /// spatial inertia value type.
 ///
 /// These replace what upstream did with a ten-element anonymous vector: mass at

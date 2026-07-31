@@ -120,12 +120,13 @@ CTest 仍只注册合成源码树自检；真实的逐 TU 编译约两分钟，�
 python3 tools/drake_source_boundary/compile_landed_double_multibody_translation_units.py \
     --landed-root external/drake_mbtree \
     --compiler <编译器> \
+    --admitted-include-directory external/drake_mbtree/include \
     --admitted-include-directory libs/multibody_runtime/include \
     --admitted-include-directory <Eigen include 目录>
 ```
 
-这里的“landed 边界”是 landed tree 加仓库内第一方 runtime 头及明确准入的 Eigen/fmt，
-不是单独一棵 `external/drake_mbtree/`。工具仍保证其他 Drake 源码树或安装树不可见。
+这里的“landed 边界”是 landed tree 加仓库内第一方刚性树接入头、runtime 头及明确准入的
+Eigen/fmt，不是单独一棵 `external/drake_mbtree/`。工具仍保证其他 Drake 源码树或安装树不可见。
 
 临时对象遵循调用环境的 `TMPDIR`（Windows 上为相应的临时目录环境变量），正常退出时
 删除。大树审计应由调用方把该变量指向容量足够的外置工作区；机器路径不写入仓库。工具不

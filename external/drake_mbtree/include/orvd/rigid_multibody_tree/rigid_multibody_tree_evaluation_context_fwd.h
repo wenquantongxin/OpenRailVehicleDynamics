@@ -1,7 +1,7 @@
 #pragma once
 
 /// @file
-/// A forward declaration of the rigid tree's evaluation context.
+/// A forward declaration of the first-party rigid-tree evaluation context.
 ///
 /// Most of the tree only ever holds a reference to a context and passes it
 /// along. Those declarations need the name and nothing else, and including the

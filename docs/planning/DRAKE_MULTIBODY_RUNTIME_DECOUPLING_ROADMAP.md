@@ -476,7 +476,7 @@ Goal GNN — <明确的功能名称>
     `const_cast`,也不把可变槽引用暴露到 context 生命周期之外。
   - 实测结论：`RigidMultibodyTreeCacheWorkspace` 以 11 个具名 `VersionedCacheSlot` 成员冻结
     缓存目录,依赖集合逐项照 G20 契约填;由 context 以 `mutable` 成员私有成对拥有,无
-    `const_cast`。11 个 `Eval` 转发已绑到槽与 G25 求值器。`tree_system_`、
+    `const_cast`。工作区构造能力只授予 context，外部不能把任意左值或临时状态绑定给 11 个槽后让工作区逃逸；11 个 `Eval` 转发已绑到槽与 G25 求值器。`tree_system_`、
     `MultibodyTreeSystem`、`CacheEntry`、`DependencyTicket` 全树归零;
     **编译前沿缺口归零**,全部落位翻译单元在 landed tree、第一方 runtime 头和准入
     Eigen/fmt 的边界内产出对象，外部 Drake 不可见；开 `-Wall -Wextra` 后的既有
@@ -526,7 +526,7 @@ Goal GNN — <明确的功能名称>
   - 跨平台机制用 CMake 自己的 OBJECT 库,**不使用 `--whole-archive`**:实测链接命令中
     无任何 `-Wl,` 专用参数。最小程序运行时零 `libdrake`。
   - 单一源码所有权由**配置期检查**把关(比较集合而非数字):同一源码被两个 owner 认领、
-    有落位源码无人认领、认领了不存在的源码——三种都会让配置直接失败。
+    有落位源码无人认领、认领了不存在的源码——三种都会让配置直接失败；发现集合递归覆盖整个 `external/drake_mbtree/` 产品源码根，不因第一方翻译单元位于 `orvd/` 或后来新增的子目录而漏检。
   - 真实编译前沿在 G28 收口时再次现场运行并通过:每个 TU 产出对象、无未落位的被包含头、
     零 `systems::` 类型,准入包含边界为第一方 runtime 与 Eigen。它保留为开发期独立审计,
     不进入默认 CTest:该工具用自身固定命令行重新编译整棵源码,在 dev/release/reference
@@ -579,6 +579,7 @@ Goal GNN — <明确的功能名称>
     内部术语；句柄在所属模型生命周期内稳定，跨模型句柄和越界值在最早可判定处明确失败，
     不为不存在的删除/重建语义引入代际句柄系统或备用查询路径。
   - 自由体语义以 G29 的显式声明为权威，不读取上游 `is_floating_base_body()`：该上游标志专指由 `BuildForest()` 自动加入 ephemeral 关节的基体，而 ORVD 的显式 quaternion 关系按设计不是 ephemeral。
+  - 公共 frame 查询只枚举 G29 门面创建并持有语义句柄的 World、body frame 与 fixed frame；不得把底层 mobilizer 为内部实现创建的 ephemeral frame 混入公共计数、名称或句柄范围。
 
 ## 子目标 12：接通运动学能力
 

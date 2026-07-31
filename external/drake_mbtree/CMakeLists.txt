@@ -6,8 +6,8 @@
 # The first-party warning policy is deliberately not applied to vendored source.
 # This is upstream code compiled as found, and turning its style choices into our
 # diagnostics would produce noise nobody is allowed to fix. ORVD's own source in
-# orvd_implementations/ is a different matter and does carry the policy; see the
-# object target below.
+# orvd_implementations/ does carry the policy, and the first-party adapter headers
+# live under include/orvd rather than the SYSTEM-qualified vendored include root.
 #
 # Compilation ownership is single: every translation unit is compiled by
 # exactly one OBJECT target. The resulting object may be packaged both in its
@@ -194,6 +194,8 @@ add_library(orvd_vendored_drake_rigid_tree_objects OBJECT
 target_compile_features(orvd_vendored_drake_rigid_tree_objects PUBLIC cxx_std_23)
 set_target_properties(orvd_vendored_drake_rigid_tree_objects
     PROPERTIES CXX_EXTENSIONS OFF)
+target_include_directories(orvd_vendored_drake_rigid_tree_objects
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
 # The tree reaches down to the first-party runtime for state, versions and cache
 # slots. That is the intended direction and the only one: the runtime never
@@ -288,8 +290,7 @@ endif()
 file(GLOB_RECURSE _orvd_landed_sources
      RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
      CONFIGURE_DEPENDS
-     ${CMAKE_CURRENT_SOURCE_DIR}/drake/*.cc
-     ${CMAKE_CURRENT_SOURCE_DIR}/orvd_implementations/*.cc)
+     ${CMAKE_CURRENT_SOURCE_DIR}/*.cc)
 set(_orvd_unowned_sources ${_orvd_landed_sources})
 list(REMOVE_ITEM _orvd_unowned_sources ${_orvd_owned_sources})
 if(_orvd_unowned_sources)

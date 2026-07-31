@@ -43,6 +43,8 @@
 
 namespace orvd::rigid_multibody_tree::internal {
 
+class RigidMultibodyTreeEvaluationContext;
+
 namespace slot_sources {
 inline constexpr auto kQ = multibody_runtime::MultibodyStateVersionSource::
     kGeneralizedPositions;
@@ -58,7 +60,9 @@ inline constexpr auto kActuators = multibody_runtime::
 
 /// The eleven retained caches of the runtime contract, pre-allocated.
 class RigidMultibodyTreeCacheWorkspace {
-   public:
+   private:
+    friend class RigidMultibodyTreeEvaluationContext;
+
     /// Sizes every slot from the finalized model.
     ///
     /// `state` is the state these slots read their versions from. It must be the
@@ -111,6 +115,7 @@ class RigidMultibodyTreeCacheWorkspace {
               state, std::in_place,
               static_cast<std::size_t>(forest.num_mobods())) {}
 
+   public:
     // A workspace is one context's private world, for the same reason a state
     // is. Copying it would produce a second set of slots claiming the first
     // set's committed snapshots.

@@ -1,7 +1,7 @@
 #pragma once
 
 /// @file
-/// The finalize-time assignment of typed parameter slots.
+/// The first-party finalize-time assignment of typed parameter slots.
 ///
 /// Upstream asked a `System` for a numeric parameter of a given width and got
 /// back an index into one undifferentiated pool. A rigid body's mass properties
