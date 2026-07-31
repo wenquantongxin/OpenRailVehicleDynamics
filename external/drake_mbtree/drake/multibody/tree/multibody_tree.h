@@ -1077,6 +1077,12 @@ class MultibodyTree {
           context,
       const JointActuator<T>& actuator, const T& gear_ratio) const;
 
+  /// Sets one joint's complete damping vector without exposing the state store.
+  void SetJointDamping(
+      orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+          context,
+      const Joint<T>& joint, const VectorX<T>& damping) const;
+
   // The concatenated `[q; v]` view is gone. It existed because upstream stored
   // both in one BasicVector; the typed store keeps them apart, so a joined view
   // could only be synthesised by copying. Keeping it would mean carrying a

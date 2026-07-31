@@ -1182,6 +1182,16 @@ void MultibodyTree<T>::SetJointActuatorGearRatio(
 }
 
 template <typename T>
+void MultibodyTree<T>::SetJointDamping(
+    orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext*
+        context,
+    const Joint<T>& joint, const VectorX<T>& damping) const {
+  DRAKE_THROW_UNLESS(context != nullptr);
+  ValidateEvaluationContext(*context);
+  joint.SetDampingVector(&context->mutable_state(), damping);
+}
+
+template <typename T>
 void MultibodyTree<T>::SetDefaultParameters(
     orvd::multibody_runtime::MultibodyStateInstance* state) const {
   DRAKE_DEMAND(state != nullptr);

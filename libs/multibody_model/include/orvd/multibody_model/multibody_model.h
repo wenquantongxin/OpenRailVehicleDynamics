@@ -330,6 +330,25 @@ class MultibodyModel {
     void SetGeneralizedVelocities(MultibodyEvaluationContext* context,
                                   const Eigen::VectorXd& velocities) const;
 
+    /// Sets this context's revolute-joint viscous damping coefficient.
+    ///
+    /// The value is in N m s/rad and is read directly by every damping-force
+    /// calculation; it has no cache version because no long-lived cache stores
+    /// a damping-derived result.
+    ///
+    /// @throws std::invalid_argument if the context or joint is foreign, the
+    /// joint is not revolute, or the value is non-finite or negative.
+    /// @throws std::logic_error if the model is not finalized.
+    void SetRevoluteJointDampingCoefficient(
+        MultibodyEvaluationContext* context, JointHandle joint,
+        double damping_newton_metre_seconds_per_radian) const;
+
+    /// Sets this context's prismatic-joint viscous damping coefficient in
+    /// N s/m.  The same ownership, value and no-cache rules apply.
+    void SetPrismaticJointDampingCoefficient(
+        MultibodyEvaluationContext* context, JointHandle joint,
+        double damping_newton_seconds_per_metre) const;
+
     // --- Position kinematics ------------------------------------------------
 
     /// Where this body's own frame is, in the world.

@@ -886,6 +886,61 @@ void MultibodyModel::SetGeneralizedVelocities(
                               velocities);
 }
 
+namespace {
+
+void RequireDampingCoefficient(double damping, const char* joint_kind) {
+    if (!std::isfinite(damping) || damping < 0.0) {
+        Reject(std::string(joint_kind) +
+               " joint damping must be finite and non-negative; nothing was "
+               "written");
+    }
+}
+
+}  // namespace
+
+void MultibodyModel::SetRevoluteJointDampingCoefficient(
+    MultibodyEvaluationContext* context, JointHandle joint,
+    double damping_newton_metre_seconds_per_radian) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("state a revolute joint damping coefficient");
+    Implementation::RequireOwnContext(model, context,
+                                      "write joint damping into");
+    const int ordinal = model.Resolve(
+        joint, static_cast<int>(model.joint_names_.size()), "joint");
+    if (model.joint_kind_[ordinal] != Implementation::JointKind::kRevolute) {
+        Reject("joint '" + model.joint_names_[ordinal] +
+               "' is not revolute and has no damping coefficient in N m s/rad");
+    }
+    RequireDampingCoefficient(damping_newton_metre_seconds_per_radian,
+                              "revolute");
+    Eigen::VectorXd damping(1);
+    damping[0] = damping_newton_metre_seconds_per_radian;
+    model.tree_.SetJointDamping(
+        &context->implementation_->mutable_tree_context(),
+        model.tree_.get_joint(model.tree_joint_[ordinal]), damping);
+}
+
+void MultibodyModel::SetPrismaticJointDampingCoefficient(
+    MultibodyEvaluationContext* context, JointHandle joint,
+    double damping_newton_seconds_per_metre) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("state a prismatic joint damping coefficient");
+    Implementation::RequireOwnContext(model, context,
+                                      "write joint damping into");
+    const int ordinal = model.Resolve(
+        joint, static_cast<int>(model.joint_names_.size()), "joint");
+    if (model.joint_kind_[ordinal] != Implementation::JointKind::kPrismatic) {
+        Reject("joint '" + model.joint_names_[ordinal] +
+               "' is not prismatic and has no damping coefficient in N s/m");
+    }
+    RequireDampingCoefficient(damping_newton_seconds_per_metre, "prismatic");
+    Eigen::VectorXd damping(1);
+    damping[0] = damping_newton_seconds_per_metre;
+    model.tree_.SetJointDamping(
+        &context->implementation_->mutable_tree_context(),
+        model.tree_.get_joint(model.tree_joint_[ordinal]), damping);
+}
+
 // --- Position kinematics -----------------------------------------------------
 
 RigidPose MultibodyModel::CalcPoseInWorld(

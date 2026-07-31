@@ -6,7 +6,8 @@
 # first-party modelling facade and no vendored type.
 
 add_library(orvd_system_assembly STATIC
-    src/system_assembly_description.cc)
+    src/system_assembly_description.cc
+    src/system_instance.cc)
 
 orvd_configure_first_party_target(orvd_system_assembly)
 

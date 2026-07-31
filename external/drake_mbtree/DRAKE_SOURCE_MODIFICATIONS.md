@@ -475,3 +475,11 @@ finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的�
 **fixed-frame 加速度点移显式传递上下文。** `CalcSpatialAccelerationHelper()` 的两处点移调用
 把求值上下文传给 `ShiftSpatialAccelerationInWorld()`，后者的签名相应增加上下文参数，保证上文
 登记的 context-local pose 数据源贯穿实际调用链。
+
+## G41：上下文局部关节阻尼写入
+
+`MultibodyTree::SetJointDamping()` 是与现有刚体惯量、fixed-frame 位姿和执行器参数入口同形的
+窄写门：先核对求值上下文属于本 tree，再把一个关节的完整阻尼向量写入 G21 类型化状态。
+它不返回可写状态、不建立通用参数容器，也不增加版本；阻尼没有长期缓存消费者，力计算每次
+直接读取该记录。第一方门面只为当前准入的一自由度转动与移动关节分别暴露带物理单位的标量
+入口，焊接和其他未准入关节不获得回退接口。

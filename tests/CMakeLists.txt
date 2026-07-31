@@ -472,6 +472,16 @@ target_link_libraries(verify_system_assembly_description
 add_test(NAME verify_system_assembly_description
          COMMAND verify_system_assembly_description)
 
+# G41's executable system: frozen ranges and component identity, exactly one
+# authoritative multibody state per root context, and a colocated preallocated
+# forward-dynamics workspace.  The same test closes the deferred context-local
+# joint-damping write contract.
+add_executable(verify_system_instance
+    system_assembly/verify_system_instance.cc)
+orvd_configure_first_party_target(verify_system_instance)
+target_link_libraries(verify_system_instance PRIVATE orvd_system_assembly)
+add_test(NAME verify_system_instance COMMAND verify_system_instance)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed
