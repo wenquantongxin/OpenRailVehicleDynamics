@@ -9,7 +9,7 @@
 | `math/` | 四个 double 位姿组合函数的代数与输出重叠契约 |
 | `multibody_model/` | 程序化建模门面的加入期语义、最终化与位置运动学 |
 | `multibody_runtime/` | 多体状态、版本隔离、类型化缓存、刚性树全对象链接与最小模型契约 |
-| `orvd_candidate/` | ORVD 位置运动学观测端及其已构建产物的 Drake 禁入检查 |
+| `orvd_candidate/` | ORVD 位置运动学观测端及其已构建产物的共享 Drake 动态闭包检查 |
 | `drake_reference/` | Drake 参考发射器、跨进程比较与缓存失效语义探针，默认不构建 |
 | `unit/` | 逐模块单元测试 |
 

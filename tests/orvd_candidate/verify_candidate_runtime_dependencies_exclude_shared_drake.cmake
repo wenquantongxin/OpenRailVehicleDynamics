@@ -1,19 +1,23 @@
-# Checks a built candidate's actual runtime dependencies for an installed Drake.
+# Checks a built candidate's declared dynamic load-time closure for shared Drake.
 #
-# On the built artefact, not on the CMake graph. A graph check has to model every
-# way CMake can be told about a dependency — a library selection option in any of
-# its spellings, a generator expression evaluated per configuration, an imported
-# target declared in a scope where it is invisible, a link edge written from a
-# different directory — and each of those is a separate thing to get right. Worse,
-# `cmake_language(DEFER)` can change the graph after any configure-time check has
-# run, so such a check cannot be the last word even in principle.
+# On the built artefact, not only on the CMake graph. A graph check has to model
+# every way CMake can be told about a dependency — a library selection option in
+# any of its spellings, a generator expression evaluated per configuration, an
+# imported target declared in a scope where it is invisible, a link edge written
+# from a different directory — and each is a separate thing to get right.
+# Deferring a graph check can move it later, but still does not turn the
+# configure-time representation into the built program's resolved load-time
+# closure.
 #
-# The linked file's declared load-time closure has one answer. Whatever spelling
-# produced it, an installed `libdrake` either is reachable through that closure
-# or is not. What this does not see is a library loaded by name at run time —
-# `dlopen`, `LoadLibrary`, `LD_PRELOAD` — because none of those is recorded in
-# the file. Nothing in the candidate does that, and if something ever does, this
-# check will not be the thing that notices.
+# CMake resolves the linked file's declared dynamic dependencies recursively
+# using the platform rules available in this test environment. Whatever CMake
+# spelling produced them, a shared `libdrake` either appears in that resolved
+# closure or it does not. This is not a claim about static archives, `dlopen`,
+# `LoadLibrary`, `LD_PRELOAD`, a changed loader search environment, or a library
+# deliberately renamed to hide its identity. The product graph gate rejects
+# ordinary static and shared Drake inputs early; provenance and object ownership
+# say what the product embeds statically. This check has the narrower job of
+# keeping a shared Drake out of this candidate's declared runtime closure.
 #
 # What this permits, and must: the candidate links the landed tree statically.
 # That is vendored Drake source compiled into ORVD's own archives, and it is what
@@ -74,12 +78,13 @@ list(LENGTH drake_dependencies drake_count)
 if(drake_count GREATER 0)
     list(JOIN drake_dependencies "\n  " report)
     message(FATAL_ERROR
-        "the candidate loads Drake at runtime:\n  ${report}\n"
+        "the candidate's runtime dependency closure contains shared Drake:\n  "
+        "${report}\n"
         "It exists to produce numbers that are compared against Drake's; if it "
         "loaded Drake those numbers would be Drake's.")
 endif()
 
 list(LENGTH resolved_dependencies resolved_count)
 message(STATUS
-    "the candidate loads no Drake: ${resolved_count} runtime dependencies, all "
-    "of them resolved, none of them Drake")
+    "the candidate's runtime dependency closure contains no shared Drake: "
+    "${resolved_count} dependencies, all resolved")

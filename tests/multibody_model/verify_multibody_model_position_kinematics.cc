@@ -371,6 +371,32 @@ void CheckARelationStatedTowardsTheWorldIsTraversedInReverse() {
                  "the coordinate");
 }
 
+void CheckANegativeAxisKeepsItsDirection() {
+    // An axis is a direction, not merely a line. Normalising it may change its
+    // magnitude but must not discard its sign: with -z as the stated axis, a
+    // positive coordinate is a negative turn about z.
+    constexpr double kAngle = 0.47;
+
+    MultibodyModel model;
+    const RigidBodyHandle arm =
+        model.AddRigidBody("negative_axis_arm", SolidishBody(1.0));
+    const JointHandle hinge = model.AddRevoluteJoint(
+        "negative_axis_hinge", model.world_frame(), model.body_frame(arm),
+        -kZAxis);
+    model.Finalize();
+
+    auto context = model.CreateDefaultContext();
+    Eigen::VectorXd positions =
+        Eigen::VectorXd::Zero(model.num_generalized_positions());
+    PlaceJointPosition(model, hinge, kAngle, &positions);
+    model.SetGeneralizedPositions(context.get(), positions);
+
+    ExpectPoseIs(model.CalcPoseInWorld(*context, arm),
+                 RotationAboutZ(-kAngle), Eigen::Vector3d::Zero(),
+                 "a negative joint axis keeps its direction during "
+                 "normalisation");
+}
+
 // --- Free bodies and quaternions ---------------------------------------------
 
 void CheckAFreeBodyIsPlacedByItsOwnCoordinates() {
@@ -535,6 +561,7 @@ int main() {
     CheckANonIdentityFixedFrameRotationEntersTheChain();
     CheckWhichFrameIsTheParentFixesTheSign();
     CheckARelationStatedTowardsTheWorldIsTraversedInReverse();
+    CheckANegativeAxisKeepsItsDirection();
     CheckAFreeBodyIsPlacedByItsOwnCoordinates();
     CheckASafeNonUnitQuaternionIsUsedAndNotRewritten();
     CheckAVelocityWriteLeavesThePositionsWhereTheyWere();

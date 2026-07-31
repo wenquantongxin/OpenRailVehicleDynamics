@@ -317,13 +317,13 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
     set_target_properties(orvd_false_like_consumer
         PROPERTIES SKIP_BUILD_RPATH TRUE BUILD_RPATH "" INSTALL_RPATH "")
 
-    add_test(NAME verify_candidate_drake_check_discriminates
+    add_test(NAME verify_candidate_runtime_dependency_check_discriminates
              COMMAND ${CMAKE_COMMAND}
-                     -DCHECK_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake
+                     -DCHECK_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake
                      -DDRAKE_LOADING_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
                      -DUNRESOLVABLE_EXECUTABLE=$<TARGET_FILE:orvd_unresolvable_consumer>
                      -DFALSE_LIKE_EXECUTABLE=$<TARGET_FILE:orvd_false_like_consumer>
-                     -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_drake_check_discriminates.cmake)
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependency_check_discriminates.cmake)
 
     # Measures the reference's kinematics cache invalidation semantics on the
     # pinned Drake. Reference-only probe: the cache-entry accessors are Drake
@@ -423,9 +423,10 @@ add_executable(emit_orvd_position_kinematics_observations
 orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
 target_link_libraries(emit_orvd_position_kinematics_observations
     PRIVATE orvd_multibody_model orvd_test_contract)
-# The declared runtime closure of the built program. Anything it could not finish
-# walking is a refusal, not a clean result.
-add_test(NAME verify_candidate_links_no_installed_drake
+# The declared dynamic runtime closure of the built program. Anything it could
+# not finish walking is a refusal, not a clean result. Static object provenance
+# and ordinary link inputs are guarded separately.
+add_test(NAME verify_candidate_runtime_dependencies_exclude_shared_drake
          COMMAND ${CMAKE_COMMAND}
                  -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_position_kinematics_observations>
-                 -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake)
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake)

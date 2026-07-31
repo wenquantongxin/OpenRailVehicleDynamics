@@ -509,9 +509,10 @@ void MultibodyModel::Finalize() {
     Implementation& model = *implementation_;
     model.ThrowIfNotBuildable("finalize the model");
 
-    // The precheck. It reads the model's own forest and writes nothing, so a
-    // model that fails it is exactly the model that went in: the caller can
-    // state what is missing and finalize again.
+    // The precheck. It does not change the rigid tree or the model's meaning;
+    // Root() only shortens paths in the model's union-find bookkeeping. A
+    // caller whose model fails this check can state what is missing and
+    // finalize again.
     //
     // Reachability is all there is to check. Every relation the model accepted
     // joined two components that were not yet joined, so the forest cannot

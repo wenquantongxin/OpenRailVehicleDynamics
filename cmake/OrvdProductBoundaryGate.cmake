@@ -10,10 +10,11 @@
 # dependency are refused at the moment they are written, with a message naming
 # the target.
 #
-# Where a guarantee is needed rather than a habit, check the built artefact:
-# tests/orvd_candidate/verify_candidate_links_no_installed_drake.cmake asks the
-# linked file what it loads, which has one answer regardless of how it was
-# spelled.
+# The built candidate gets a second, narrower check:
+# tests/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake
+# reads the declared dynamic load-time closure and refuses shared Drake. Static
+# object provenance and ordinary static or shared link inputs remain this gate's
+# and the source audits' responsibility.
 #
 # The product vendors Drake source. It must not link Drake. Those two facts are
 # easy to keep straight while someone is looking and easy to lose the moment a
@@ -29,10 +30,12 @@
 # at which anything can be said, and what it says is the same on every platform.
 # It is not the last word: the graph can still change under it, and some of the
 # graph is not visible from where it runs — see the qualification above. Where a
-# guarantee is needed about a program rather than a habit about a graph, ask the
-# built file: `tests/orvd_candidate/verify_candidate_links_no_installed_drake.cmake`
-# reads its declared runtime closure and refuses anything it could not finish
-# walking. What a release package carries is a further question, settled at G50.
+# evidence is needed about a program rather than a habit about a graph, ask the
+# built file:
+# `tests/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake`
+# reads its declared dynamic runtime closure and refuses anything it could not
+# finish walking. It does not claim to identify static archives. What a release
+# package carries is a further question, settled at G50.
 #
 # Imported targets must also remain inspectable. The build sets
 # CMAKE_FIND_PACKAGE_TARGETS_GLOBAL so find_package targets are visible here. A

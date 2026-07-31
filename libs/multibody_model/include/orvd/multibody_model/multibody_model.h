@@ -176,9 +176,11 @@ class MultibodyModel {
     ///
     /// Then the model is committed, and from that point a failure is the end of
     /// it. The underlying tree may be half finalized, and there is no state to
-    /// go back to, so the model enters a failed state in which every call is
-    /// refused and says why. This is deliberately not a retry: a retry would be
-    /// building on a tree whose condition nobody knows.
+    /// go back to, so the model enters a failed state in which every modelling
+    /// write and every final-topology or evaluation query is refused and says
+    /// why. The four observations that never depend on final topology remain
+    /// what the class-level contract says they are. This is deliberately not a
+    /// retry: a retry would be building on a tree whose condition nobody knows.
     ///
     /// After it succeeds the structure, the gravity vector and the model's own
     /// force-element constants are frozen. Every Add, the gravity setter and a
