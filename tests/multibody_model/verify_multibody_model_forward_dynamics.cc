@@ -90,6 +90,82 @@ void CheckOffsetWrenchAndStateDerivative() {
     ExpectNear(xdot[1], vdot[0], "state derivative ends with ABA vdot");
 }
 
+void CheckWrenchExpressionAndAccumulation() {
+    constexpr double mass = 2.4;
+    constexpr double unit_izz = 0.37;
+    MultibodyModel model;
+    const auto rotor =
+        model.AddRigidBody("expression_rotor",
+                           MakeInertia(mass, 0.0, unit_izz));
+    const auto expression_carrier =
+        model.AddRigidBody("expression_carrier",
+                           MakeInertia(0.6, 0.0, 0.11));
+    model.AddRevoluteJoint(
+        "expression_hinge", model.world_frame(), model.body_frame(rotor),
+        Eigen::Vector3d::UnitZ(), 0.0);
+    model.AddWeldJoint("expression_carrier_weld", model.world_frame(),
+                       model.body_frame(expression_carrier));
+
+    FixedFramePoseParameters expression_pose;
+    expression_pose.R_PF =
+        Eigen::AngleAxisd(
+            0.61, Eigen::Vector3d(0.23, -0.41, 0.88).normalized())
+            .toRotationMatrix();
+    expression_pose.p_PoFo_P = Eigen::Vector3d(-0.17, 0.29, 0.13);
+    const auto expression_frame = model.AddFixedFrame(
+        "rotated_expression_frame", expression_carrier, expression_pose);
+    model.SetGravityVector(Eigen::Vector3d::Zero());
+    model.Finalize();
+
+    auto context = model.CreateDefaultContext();
+    Eigen::VectorXd positions(1);
+    positions << 0.47;
+    model.SetGeneralizedPositions(context.get(), positions);
+    auto workspace = model.CreateForwardDynamicsWorkspace();
+
+    const Eigen::Vector3d p_BoQ_B(0.31, -0.22, 0.17);
+    const Eigen::Vector3d torque_Q_W(0.46, -0.73, 1.12);
+    const Eigen::Vector3d force_W(-1.7, 2.3, 0.58);
+    const Eigen::Matrix3d R_WE = expression_pose.R_PF;
+    const Eigen::Vector3d torque_Q_E = R_WE.transpose() * torque_Q_W;
+    const Eigen::Vector3d force_E = R_WE.transpose() * force_W;
+
+    const std::array wrench_in_world{AppliedBodyWrench{
+        rotor, p_BoQ_B, model.world_frame(), torque_Q_W, force_W}};
+    const std::array wrench_in_rotated_frame{AppliedBodyWrench{
+        rotor, p_BoQ_B, expression_frame, torque_Q_E, force_E}};
+    const std::array split_wrench{
+        AppliedBodyWrench{rotor, p_BoQ_B, expression_frame,
+                          0.35 * torque_Q_E, 0.35 * force_E},
+        AppliedBodyWrench{rotor, p_BoQ_B, expression_frame,
+                          0.65 * torque_Q_E, 0.65 * force_E}};
+
+    Eigen::VectorXd vdot_world(1);
+    Eigen::VectorXd vdot_rotated(1);
+    Eigen::VectorXd vdot_split(1);
+    model.CalcGeneralizedVelocityDerivatives(
+        *context, wrench_in_world, {}, {}, *workspace, vdot_world);
+    model.CalcGeneralizedVelocityDerivatives(
+        *context, wrench_in_rotated_frame, {}, {}, *workspace, vdot_rotated);
+    model.CalcGeneralizedVelocityDerivatives(
+        *context, split_wrench, {}, {}, *workspace, vdot_split);
+
+    const Eigen::Matrix3d R_WB =
+        Eigen::AngleAxisd(positions[0], Eigen::Vector3d::UnitZ())
+            .toRotationMatrix();
+    const Eigen::Vector3d p_BoQ_W = R_WB * p_BoQ_B;
+    const double generalized_effort =
+        Eigen::Vector3d::UnitZ().dot(torque_Q_W) +
+        Eigen::Vector3d::UnitZ().cross(p_BoQ_W).dot(force_W);
+    const double expected_vdot = generalized_effort / (mass * unit_izz);
+    ExpectNear(vdot_world[0], expected_vdot,
+               "a nontrivial body-point wrench satisfies virtual power");
+    ExpectNear(vdot_rotated[0], expected_vdot,
+               "the same wrench in a rotated frame has the same dynamics");
+    ExpectNear(vdot_split[0], expected_vdot,
+               "multiple wrenches on one body accumulate linearly");
+}
+
 void CheckWorkspaceReuseAndTypedPrismaticForce() {
     MultibodyModel model;
     const auto body = model.AddRigidBody("slider", MakeInertia(2.0, 0.0, 0.2));
@@ -231,6 +307,7 @@ void CheckWorkspaceAndEffortRefusals() {
 
 int main() {
     CheckOffsetWrenchAndStateDerivative();
+    CheckWrenchExpressionAndAccumulation();
     CheckWorkspaceReuseAndTypedPrismaticForce();
     CheckMixedTreeAbaRneaRoundTrip();
     CheckWorkspaceAndEffortRefusals();
