@@ -35,7 +35,8 @@
 # `tests/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake`
 # reads its declared dynamic runtime closure and refuses anything it could not
 # finish walking. It does not claim to identify static archives. What a release
-# package carries is a further question, settled at G50.
+# package carries is a further question, settled by the subsequent release
+# workflow.
 #
 # Imported targets must also remain inspectable. The build sets
 # CMAKE_FIND_PACKAGE_TARGETS_GLOBAL so find_package targets are visible here. A

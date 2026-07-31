@@ -4,7 +4,8 @@ OpenRailVehicleDynamics (ORVD)
 This file records the third-party source this repository redistributes and the
 external libraries it currently builds against. Licence texts shipped with the
 vendored source are identified below. The exact materials required by a release
-package are collected again at G50. This file is a notice, not a grant.
+package are collected again by the subsequent release workflow. This file is a
+notice, not a grant.
 
 This NOTICE does not grant a license to ORVD first-party code.
 
@@ -67,8 +68,8 @@ Eigen
   The configured Eigen distribution's `COPYING.README` and individual source
   files are authoritative. Upstream provides `EIGEN_MPL2_ONLY` to reject
   included LGPL code; the tracked ORVD target configuration does not define it.
-  G50 must determine which Eigen files reach the release artifacts and carry the
-  corresponding terms.
+  The subsequent release workflow must determine which Eigen files reach the
+  release artifacts and carry the corresponding terms.
 
 fmt
 
@@ -83,6 +84,7 @@ fmt
 Release
 -------
 
-Roadmap goal G50 gates release on a complete dependency licence collection made
-against what is actually packaged, and on the project owner having chosen a
-first-party licence. This file is the current state, not the release manifest.
+The subsequent release workflow gates release on a complete dependency licence
+collection made against what is actually packaged, and on the project owner
+having chosen a first-party licence. This file is the current state, not the
+release manifest.
