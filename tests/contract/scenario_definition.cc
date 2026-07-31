@@ -79,24 +79,28 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
             GeneralizedForceComponentKind::kForceNewtons;
     }
 
-    // A legal unit quaternion. How an implementation handles a non-unit
-    // quaternion is a separate question about normalization, and mixing it in
-    // here would confound an equivalence result with that question.
-    const double unit_quaternion_component = 0.5;
+    // A legal unit quaternion whose four components are all non-zero and
+    // different, including one different sign. Equal components would make any
+    // wxyz permutation invisible; that is exactly the ordering this scenario's
+    // index-keyed state is meant to exercise. How an implementation handles a
+    // non-unit quaternion is a separate normalization question.
+    const double quaternion_scale = 1.0 / std::sqrt(30.0);
+    const double quaternion_w = quaternion_scale;
+    const double quaternion_x = 2.0 * quaternion_scale;
+    const double quaternion_y = -3.0 * quaternion_scale;
+    const double quaternion_z = 4.0 * quaternion_scale;
 
     if (excitation == "near_zero_cancellation") {
         scenario.generalized_positions = {
             0.0, 0.0,
-            unit_quaternion_component, unit_quaternion_component,
-            unit_quaternion_component, unit_quaternion_component,
+            quaternion_w, quaternion_x, quaternion_y, quaternion_z,
             0.11, -0.23, 0.31};
         scenario.generalized_velocities.assign(kVelocityCount, 0.0);
         scenario.generalized_accelerations.assign(kVelocityCount, 0.0);
     } else if (excitation == "dynamic_excitation") {
         scenario.generalized_positions = {
             0.37, -0.62,
-            unit_quaternion_component, unit_quaternion_component,
-            unit_quaternion_component, unit_quaternion_component,
+            quaternion_w, quaternion_x, quaternion_y, quaternion_z,
             0.11, -0.23, 0.31};
         scenario.generalized_velocities = {-1.9, 1.4, 0.9, -1.1, 1.7, -0.8, 1.3, -1.6};
         scenario.generalized_accelerations = {7.0, -5.5, 3.1, -4.2, 6.3, -2.7, 4.9, -3.4};

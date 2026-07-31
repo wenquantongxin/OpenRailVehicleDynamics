@@ -17,8 +17,10 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include <sys/types.h>
@@ -279,6 +281,19 @@ int main(int argc, char** argv) {
     }
     const std::string emitter_path = argv[1];
     const std::string candidate_path = argv[2];
+    std::error_code equivalence_error;
+    const bool same_emitter =
+        emitter_path == candidate_path ||
+        std::filesystem::equivalent(emitter_path, candidate_path,
+                                    equivalence_error);
+    if (same_emitter) {
+        std::fprintf(
+            stderr,
+            "reference and candidate emitters must be different executables; "
+            "'%s' and '%s' resolve to the same executable\n",
+            emitter_path.c_str(), candidate_path.c_str());
+        return 2;
+    }
 
     for (const std::string_view excitation :
          {"near_zero_cancellation", "dynamic_excitation"}) {

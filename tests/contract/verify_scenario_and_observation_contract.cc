@@ -91,7 +91,7 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
     }
 }
 
-void CheckQuaternionStateIsUnitLength() {
+void CheckQuaternionStateIsNonDegenerateAndUnitLength() {
     const orvd_contract::ScenarioDefinition scenario =
         orvd_contract::MakeRevoluteChainWithFloatingBodyScenario("dynamic_excitation");
     Expect(scenario.generalized_positions.size() >= 6,
@@ -104,6 +104,19 @@ void CheckQuaternionStateIsUnitLength() {
                         scenario.generalized_positions[index];
     Expect(std::abs(squared_norm - 1.0) < 1e-12,
            "the prescribed floating quaternion must be unit length");
+
+    // All four are distinct and one has a different sign, so exchanging any
+    // pair changes the represented rotation instead of moving equal fixture
+    // values around. Pin the deliberate wxyz order as part of the premise.
+    const double scale = 1.0 / std::sqrt(30.0);
+    const std::vector<double> expected_wxyz = {
+        scale, 2.0 * scale, -3.0 * scale, 4.0 * scale};
+    for (std::size_t offset = 0; offset < expected_wxyz.size(); ++offset) {
+        Expect(std::abs(scenario.generalized_positions[2 + offset] -
+                        expected_wxyz[offset]) < 1e-15,
+               "the floating quaternion must use the non-degenerate wxyz "
+               "fixture");
+    }
 }
 
 void CheckTheElbowMountIsTurnedAndNotOnTheWorld() {
@@ -182,7 +195,7 @@ void CheckLooseObservationStreamParsing() {
 
 int main() {
     CheckScenarioStatesAreDimensionallyConsistent();
-    CheckQuaternionStateIsUnitLength();
+    CheckQuaternionStateIsNonDegenerateAndUnitLength();
     CheckTheElbowMountIsTurnedAndNotOnTheWorld();
     CheckLooseObservationStreamParsing();
 

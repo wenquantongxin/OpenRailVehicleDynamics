@@ -85,6 +85,10 @@ topology 与 double 位姿数学目标。
 `FATAL_ERROR`。显式库选择和整库链接同样受检；目标命名空间按词边界识别，不误伤名称里
 恰好含有 `drake` 的其他目标。判据是库自身的身份，**不匹配 `/opt/drake` 这类搜索或
 运行时目录**——装在意料之外位置的 Drake 恰恰是路径匹配漏掉的那种。
+这是一道对 CMake 图的架构性尽力检查，不是最终证明：`cmake_language(DEFER)` 可在检查后
+改图，目录作用域 imported target 也可能从检查处不可见。对具体程序的保证改查已构建产物的
+运行期闭包；G31 的候选端用 `file(GET_RUNTIME_DEPENDENCIES)` 实施，产物缺失或闭包存在未解析
+节点都直接拒绝。
 
 **哪些目标算产品目标,由顶层的 `ORVD_PRODUCT_MODULE_DIRECTORIES` 按目录决定**:已列模块
 目录及其后代目录中的每一个非 imported 目标都受管。模块内新增目标无须登记;新增顶层产品

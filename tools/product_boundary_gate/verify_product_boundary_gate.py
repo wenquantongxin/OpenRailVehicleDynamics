@@ -145,6 +145,26 @@ def case_drake_through_interface_wrapper_fails(work: Path) -> None:
         + result.stdout,
     )
 
+    # A one-element property is still a list even when CMake reads its contents
+    # as false. If the gate asks `if(edge_values)` instead of counting the
+    # elements, this Drake-named edge is mistaken for an empty property.
+    false_like_edge_root = write_case(
+        work,
+        "false_like_interface_edge",
+        "add_library(innocent_wrapper INTERFACE IMPORTED GLOBAL)\n"
+        "set_target_properties(innocent_wrapper PROPERTIES\n"
+        "    INTERFACE_LINK_LIBRARIES drake-NOTFOUND)\n"
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE innocent_wrapper)\n",
+    )
+    false_like_edge_result = configure(false_like_edge_root)
+    record_failure_unless(
+        false_like_edge_result.returncode != 0
+        and "is a Drake library" in false_like_edge_result.stdout,
+        "a false-like one-element link edge is not an empty edge list\n"
+        + false_like_edge_result.stdout,
+    )
+
 
 def case_imported_drake_artefact_fails(work: Path) -> None:
     # No `drake::` in sight; the target is called something else entirely and only
@@ -166,6 +186,26 @@ def case_imported_drake_artefact_fails(work: Path) -> None:
         result.returncode != 0 and "resolves to a Drake library" in result.stdout,
         "an imported target whose artefact is a Drake library must fail\n"
         + result.stdout,
+    )
+
+    # `get_target_property` uses `<variable>-NOTFOUND` for an unset property, but
+    # a real property value can also end in `-NOTFOUND`. Property presence and
+    # list length, not CMake truth, decide whether there is text to inspect.
+    false_like_artefact_root = write_case(
+        work,
+        "false_like_imported_artefact",
+        "add_library(third_party_thing SHARED IMPORTED GLOBAL)\n"
+        "set_target_properties(third_party_thing PROPERTIES\n"
+        '    IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/libdrake-NOTFOUND")\n'
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE third_party_thing)\n",
+    )
+    false_like_artefact_result = configure(false_like_artefact_root)
+    record_failure_unless(
+        false_like_artefact_result.returncode != 0
+        and "resolves to a Drake library" in false_like_artefact_result.stdout,
+        "a false-like imported artefact value is not an unset artefact\n"
+        + false_like_artefact_result.stdout,
     )
 
 
@@ -233,6 +273,25 @@ def case_directory_membership_needs_no_registration(work: Path) -> None:
         " by directory\n" + result.stdout,
     )
 
+    # Target names are list contents too. `OFF` is legal here and false to
+    # `if(directory_targets)`, so a truth test would report that the directory had
+    # no targets at all.
+    false_like_target_root = write_case(
+        work,
+        "false_like_product_target",
+        "add_library(OFF STATIC product.cc)\n"
+        "target_link_libraries(OFF PRIVATE drake::drake)\n",
+    )
+    false_like_target_result = configure(false_like_target_root)
+    record_failure_unless(
+        false_like_target_result.returncode != 0
+        and "boundary violated" in false_like_target_result.stdout
+        and "OFF: it depends on the Drake target 'drake::drake'"
+        in false_like_target_result.stdout,
+        "a product target whose name looks false must still be collected\n"
+        + false_like_target_result.stdout,
+    )
+
 
 def case_nested_product_directory_is_checked(work: Path) -> None:
     case_root = write_case(
@@ -290,6 +349,24 @@ def case_imported_configuration_and_libname_are_checked(work: Path) -> None:
         + configured_result.stdout,
     )
 
+    false_like_configuration_root = write_case(
+        work,
+        "false_like_imported_configuration",
+        "add_library(configured_dependency SHARED IMPORTED GLOBAL)\n"
+        "set_target_properties(configured_dependency PROPERTIES\n"
+        "    IMPORTED_CONFIGURATIONS OFF\n"
+        '    IMPORTED_LOCATION_OFF "${CMAKE_CURRENT_BINARY_DIR}/libdrake.so")\n'
+        "add_library(product_library STATIC product.cc)\n"
+        "target_link_libraries(product_library PRIVATE configured_dependency)\n",
+    )
+    false_like_configuration_result = configure(false_like_configuration_root)
+    record_failure_unless(
+        false_like_configuration_result.returncode != 0
+        and "resolves to a Drake library" in false_like_configuration_result.stdout,
+        "an imported configuration named OFF is one configuration, not none\n"
+        + false_like_configuration_result.stdout,
+    )
+
     imported_libname_root = write_case(
         work,
         "imported_libname",
@@ -335,6 +412,13 @@ def case_wrapped_and_configuration_link_options_are_checked(work: Path) -> None:
         "configuration_link_flags": (
             "set(CMAKE_BUILD_TYPE Release PARENT_SCOPE)\n"
             'set_property(TARGET product_library PROPERTY LINK_FLAGS_RELEASE "-ldrake")\n'
+        ),
+        "false_like_configuration_link_flags": (
+            "set(CMAKE_BUILD_TYPE OFF PARENT_SCOPE)\n"
+            'set_property(TARGET product_library PROPERTY LINK_FLAGS_OFF "-ldrake")\n'
+        ),
+        "false_like_library_option": (
+            "target_link_options(product_library PRIVATE -ldrake-NOTFOUND)\n"
         ),
     }
     for case_name, option_declaration in option_declarations.items():

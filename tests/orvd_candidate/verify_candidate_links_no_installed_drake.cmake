@@ -40,8 +40,9 @@ file(GET_RUNTIME_DEPENDENCIES
 # A dependency that could not be resolved is not a dependency that was cleared.
 # Resolution is how the closure is walked: an unresolved node is one whose own
 # dependencies were never read, so a Drake sitting behind a neutrally named
-# wrapper would go unmentioned while the loader finds it perfectly well. There is
-# no answer to give about such a file, so none is given.
+# wrapper would go unmentioned. A runtime environment may still make that wrapper
+# loadable without changing this executable. There is no answer to give about
+# such a file, so none is given.
 # Counted, not tested for truth. `if(<list>)` asks whether the list's *contents*
 # look true, and CMake reads `OFF`, `0`, `NOTFOUND` and anything ending in
 # `-NOTFOUND` as false — so a dependency whose name happens to be one of those

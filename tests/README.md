@@ -7,8 +7,9 @@
 | `comparison/` | 必需观测集合与容差判定（判定方独占） |
 | `topology/` | vendored topology 的索引与顺序结构契约 |
 | `math/` | 四个 double 位姿组合函数的代数与输出重叠契约 |
-| `multibody_model/` | 程序化建模门面的加入期接受与拒绝语义 |
+| `multibody_model/` | 程序化建模门面的加入期语义、最终化与位置运动学 |
 | `multibody_runtime/` | 多体状态、版本隔离、类型化缓存、刚性树全对象链接与最小模型契约 |
+| `orvd_candidate/` | ORVD 位置运动学观测端及其已构建产物的 Drake 禁入检查 |
 | `drake_reference/` | Drake 参考发射器、跨进程比较与缓存失效语义探针，默认不构建 |
 | `unit/` | 逐模块单元测试 |
 
@@ -45,8 +46,9 @@ cmake --build --preset drake-reference
 ctest --preset drake-reference --output-on-failure
 ```
 
-当前尚无 ORVD 候选端，因此该台架证明的是台架本身可用：同一参考实现的两个独立进程互相
-一致，且注入的扰动会被发现。它不构成任何关于候选实现的结论。
+台架先用同一 Drake 参考实现的两个独立进程证明管道、解析与裁判可用，并确认注入的扰动会
+被发现；这一步本身不构成候选结论。G31 已接入独立的 ORVD 位置运动学候选端，随后用能力具名
+的必需观测集合与 Drake 比较；启动器拒绝把同一个可执行文件同时充当参考端和候选端。
 
 ## 参考缓存语义
 

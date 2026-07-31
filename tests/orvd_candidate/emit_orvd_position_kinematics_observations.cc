@@ -12,8 +12,8 @@
 // that does not exist. What must not happen is the installed library being in
 // the same address space as the vendored copy: both export the same `drake::`
 // symbols, and co-linking them is an ODR violation whose likely symptom is a
-// comparison that appears to pass. The build gate checks that, not this file:
-// a claim a program makes about its own linkage is the one claim it cannot
+// comparison that appears to pass. The built-artefact test checks that, not this
+// file: a claim a program makes about its own linkage is the one claim it cannot
 // check.
 //
 // Only what G31 has landed is emitted. The mass matrix and the inverse dynamics

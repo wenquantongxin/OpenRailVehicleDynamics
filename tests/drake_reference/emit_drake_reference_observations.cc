@@ -1,12 +1,12 @@
-// Builds a scenario with unmodified upstream Drake and writes the raw
-// observations to stdout.
+// Builds a scenario with the configured installed Drake 1.54.0 and writes the
+// raw observations to stdout.
 //
 // This emitter owns nothing but arithmetic. It does not know which observations
 // are required, does not declare a tolerance, and cannot certify itself; the
 // launcher and comparator hold those. That separation is the point: two sides
 // that each declared their own acceptance rule could agree on a wrong one.
 //
-// Runs in its own process. Drake and a future ORVD candidate must never share an
+// Runs in its own process. Drake and the ORVD candidate must never share an
 // address space: libdrake exports the same drake:: symbols a vendored copy would
 // keep, and co-linking is an ODR violation whose likely symptom is a comparison
 // that appears to pass.

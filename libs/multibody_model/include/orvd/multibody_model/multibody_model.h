@@ -306,15 +306,19 @@ class MultibodyModel {
     /// different question from the one asked and the caller would never learn
     /// that what they read back is not what they wrote.
     ///
-    /// @throws std::invalid_argument if `positions` is the wrong size, if the
-    /// context came from another model, or if some free body's quaternion
-    /// cannot be turned into a rotation.
+    /// @throws std::invalid_argument if `context` is null or came from another
+    /// model, if `positions` has the wrong size or a non-finite value, or if some
+    /// free body's quaternion cannot be turned into a rotation.
     /// @throws std::logic_error if the model is not finalized.
     void SetGeneralizedPositions(MultibodyEvaluationContext* context,
                                  const Eigen::VectorXd& positions) const;
 
     /// States the model's generalized velocities. Same size and ownership
     /// rules; velocities have no analogue of the quaternion condition.
+    ///
+    /// @throws std::invalid_argument if `context` is null or came from another
+    /// model, or if `velocities` has the wrong size or a non-finite value.
+    /// @throws std::logic_error if the model is not finalized.
     void SetGeneralizedVelocities(MultibodyEvaluationContext* context,
                                   const Eigen::VectorXd& velocities) const;
 

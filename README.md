@@ -7,7 +7,8 @@
 vendored Drake common support、刚性 topology、double 位姿数学与完整 double-only 刚性树
 均已有内部构建目标。第一方运行时拥有多体状态、类型化物理参数、五个版本源、类型化缓存槽
 与惰性求值；刚性树的十一个具名缓存已接入该运行时，并能完成最小模型最终化、独立上下文创建
-与位置运动学求值。模型中立公共门面以及完整运动学、动力学接口仍按后续 Goal 推进。
+与位置运动学求值。模型中立程序化建模门面、状态写入和世界位姿查询已经落地；速度/空间
+运动学与动力学接口仍按后续 Goal 推进。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -68,7 +69,7 @@ OpenRailVehicleDynamics/
     └── unit/             单元测试
 ```
 
-已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、不导出；G29–G30 已建立程序化建模门面、最终化与稳定查询，安装与交付边界归 G46。尚未开工的模块仍只保留职责骨架。
+已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、不导出；G29–G31 已建立程序化建模门面、最终化、稳定查询与世界位姿求值，安装与交付边界归 G46。尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 

@@ -115,6 +115,13 @@ void CheckRotationAndRequiredObservationFailures() {
     const auto requirements = MakeRequirements();
     const auto reference = MakeStream(1.0);
 
+    auto different_topology = reference;
+    different_topology.topology_facts.front().value += 1;
+    Expect(orvd_comparison::CompareObservationStreams(
+               requirements, reference, different_topology).outcome ==
+               orvd_comparison::ComparisonOutcome::kTopologyMismatch,
+           "a different required topology value must fail");
+
     auto non_rotation = reference;
     for (orvd_contract::Observation& observation : non_rotation.observations) {
         if (observation.name.starts_with("body_rotation[")) observation.value *= 2.0;

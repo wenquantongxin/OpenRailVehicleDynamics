@@ -275,16 +275,22 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
              COMMAND verify_cross_process_observation_comparison
                      $<TARGET_FILE:emit_drake_reference_observations>
                      $<TARGET_FILE:emit_orvd_position_kinematics_observations>)
+    add_test(NAME verify_cross_process_comparison_rejects_same_emitter
+             COMMAND ${CMAKE_COMMAND}
+                     -DCOMPARISON_EXECUTABLE=$<TARGET_FILE:verify_cross_process_observation_comparison>
+                     -DEMITTER_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/drake_reference/verify_cross_process_comparison_rejects_same_emitter.cmake)
 
     # A check that only ever runs against something clean has never been shown to
-    # fail. This runs it against three things it must refuse and asserts that
+    # fail. This runs it against four things it must refuse and asserts that
     # each refusal is the one expected: `WILL_FAIL` alone would take any non-zero
     # exit, so a typo that aborted the script early would read as success.
     #
-    # The unresolvable fixture is a program whose dependency the loader can find
-    # and this check cannot: no run path is recorded, so the closure stops there.
-    # A Drake behind such a node would go unmentioned, which is why the check
-    # refuses rather than reporting a walk it did not finish.
+    # The unresolvable fixture is a program the build linker can produce, but its
+    # dependency has no recorded runtime search path. Neither the closure check
+    # nor the default loader resolves it. A runtime environment could make that
+    # neutral wrapper loadable and reveal a Drake behind it, which is why the
+    # check refuses rather than reporting a walk it did not finish.
     add_library(orvd_neutral_wrapper SHARED orvd_candidate/neutral_wrapper.cc)
     orvd_configure_first_party_target(orvd_neutral_wrapper)
     add_executable(orvd_unresolvable_consumer

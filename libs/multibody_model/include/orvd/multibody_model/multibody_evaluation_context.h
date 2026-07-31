@@ -4,9 +4,9 @@
 /// One evaluation's state, for a finalized model.
 ///
 /// A context holds what varies between evaluations of the same model: the
-/// generalized coordinates, the context-mutable physical parameters, and — as
-/// later goals bind them — the caches computed from those. The model holds what
-/// does not vary: the topology, the gravity vector, the element names.
+/// generalized coordinates, the context-mutable physical parameters, and the
+/// caches computed from those. The model holds what does not vary: the topology,
+/// the gravity vector, the element names.
 ///
 /// It comes from the model and from nowhere else. A context assembled any other
 /// way would hold the state store's own zeros — zero positions, a zero
@@ -50,7 +50,7 @@ class MultibodyEvaluationContext {
     ///
     /// Read-only. Which numbers are quaternion components and what a legitimate
     /// one is are model knowledge, so a write goes through the model rather than
-    /// through here; until a goal has a use for one, there is no write.
+    /// through here.
     [[nodiscard]] const Eigen::VectorXd& generalized_positions() const;
 
     /// The model's generalized velocities. Same ordering, same read-only rule.
