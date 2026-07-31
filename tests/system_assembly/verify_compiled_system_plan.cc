@@ -13,8 +13,11 @@
 
 namespace {
 
+using orvd::multibody_model::AppliedBodyWrench;
+using orvd::multibody_model::AppliedPrismaticJointForce;
 using orvd::multibody_model::AppliedRevoluteJointTorque;
 using orvd::multibody_model::MultibodyModel;
+using orvd::multibody_model::RigidBodyHandle;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
 using orvd::system_assembly::CompiledSystemPlan;
 using orvd::system_assembly::SystemAssemblyDescription;
@@ -24,6 +27,8 @@ static_assert(!std::is_copy_constructible_v<CompiledSystemPlan>);
 static_assert(!std::is_move_constructible_v<CompiledSystemPlan>);
 static_assert(std::is_constructible_v<CompiledSystemPlan, SystemInstance&>);
 static_assert(!std::is_constructible_v<CompiledSystemPlan, SystemInstance&&>);
+static_assert(
+    !std::is_constructible_v<CompiledSystemPlan, const SystemInstance&&>);
 
 int failure_count = 0;
 
@@ -40,6 +45,17 @@ void ExpectNear(double actual, double expected, const char* description) {
     Expect(std::abs(actual - expected) <= tolerance, description);
 }
 
+template <typename Function>
+void ExpectInvalidArgument(Function&& function, const char* description) {
+    bool refused = false;
+    try {
+        function();
+    } catch (const std::invalid_argument&) {
+        refused = true;
+    }
+    Expect(refused, description);
+}
+
 RigidBodyInertiaParameters MakeInertia() {
     RigidBodyInertiaParameters inertia;
     inertia.mass_kilograms = 2.0;
@@ -51,10 +67,11 @@ RigidBodyInertiaParameters MakeInertia() {
 
 struct Fixture {
     MultibodyModel model;
+    RigidBodyHandle body;
     orvd::multibody_model::JointHandle joint;
 
     Fixture() {
-        const auto body = model.AddRigidBody("body", MakeInertia());
+        body = model.AddRigidBody("body", MakeInertia());
         joint = model.AddRevoluteJoint(
             "joint", model.world_frame(), model.body_frame(body),
             Eigen::Vector3d::UnitZ(), 0.3);
@@ -99,20 +116,55 @@ void CheckStaticEvaluationAndStatePurity() {
     Expect(context->generalized_velocities() == accepted_velocities,
            "a successful derivative trial does not write accepted v");
 
+    fixture.model.SetRevoluteJointDampingCoefficient(
+        &component.context(), fixture.joint, 0.5);
+    Eigen::VectorXd accepted_damping_force(1);
+    fixture.model.CalcJointDampingAppliedGeneralizedForces(
+        component.context(), accepted_damping_force);
+    plan.CalcStateTimeDerivatives(*context, {}, torque, {}, derivatives);
+    ExpectNear(derivatives[1], 0.25,
+               "the next static evaluation reads context-local damping");
+    Eigen::VectorXd observed_damping_force(1);
+    fixture.model.CalcJointDampingAppliedGeneralizedForces(
+        component.context(), observed_damping_force);
+    Expect(observed_damping_force == accepted_damping_force,
+           "a successful evaluation does not write physical parameters");
+
     const std::array invalid_torque{AppliedRevoluteJointTorque{
         fixture.joint, std::numeric_limits<double>::quiet_NaN()}};
-    bool refused = false;
-    try {
-        plan.CalcStateTimeDerivatives(*context, {}, invalid_torque, {},
-                                      derivatives);
-    } catch (const std::invalid_argument&) {
-        refused = true;
-    }
-    Expect(refused, "an invalid force trial fails explicitly");
+    ExpectInvalidArgument(
+        [&] {
+            plan.CalcStateTimeDerivatives(*context, {}, invalid_torque, {},
+                                          derivatives);
+        },
+        "an invalid revolute torque trial fails explicitly");
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const std::array invalid_body_wrench{AppliedBodyWrench{
+        fixture.body, Eigen::Vector3d::Zero(), fixture.model.world_frame(),
+        Eigen::Vector3d::Zero(), Eigen::Vector3d(nan, 0.0, 0.0)}};
+    ExpectInvalidArgument(
+        [&] {
+            plan.CalcStateTimeDerivatives(*context, invalid_body_wrench, {},
+                                          {}, derivatives);
+        },
+        "the plan forwards and rejects an invalid body wrench");
+    const std::array wrong_kind_prismatic_force{
+        AppliedPrismaticJointForce{fixture.joint, 1.0}};
+    ExpectInvalidArgument(
+        [&] {
+            plan.CalcStateTimeDerivatives(*context, {}, {},
+                                          wrong_kind_prismatic_force,
+                                          derivatives);
+        },
+        "the plan forwards and rejects a wrong-kind prismatic force");
     Expect(context->generalized_positions() == accepted_positions,
-           "a failed derivative trial does not write accepted q");
+           "rejected derivative trials do not write accepted q");
     Expect(context->generalized_velocities() == accepted_velocities,
-           "a failed derivative trial does not write accepted v");
+           "rejected derivative trials do not write accepted v");
+    fixture.model.CalcJointDampingAppliedGeneralizedForces(
+        component.context(), observed_damping_force);
+    Expect(observed_damping_force == accepted_damping_force,
+           "rejected derivative trials do not write physical parameters");
 
     auto other_context = system.CreateDefaultRuntimeContext();
     plan.CalcStateTimeDerivatives(*other_context, {}, {}, {}, derivatives);
@@ -129,6 +181,7 @@ void CheckForeignContextRefusal() {
     const CompiledSystemPlan plan(first);
     auto foreign_context = second.CreateDefaultRuntimeContext();
     Eigen::VectorXd derivatives(2);
+    derivatives.setConstant(17.0);
     bool refused = false;
     try {
         plan.CalcStateTimeDerivatives(*foreign_context, {}, {}, {},
@@ -138,6 +191,8 @@ void CheckForeignContextRefusal() {
     }
     Expect(refused,
            "a compiled plan cannot evaluate another system's root context");
+    Expect(derivatives == Eigen::VectorXd::Constant(2, 17.0),
+           "a foreign root context is rejected before output evaluation");
 }
 
 }  // namespace

@@ -201,6 +201,26 @@ void CheckContextLocalDampingAndIsolation() {
                 &first.context(), fixture.prismatic, 0.4);
         },
         "a prismatic joint cannot receive a revolute damping unit");
+    Fixture foreign_fixture;
+    auto foreign_context = foreign_fixture.model.CreateDefaultContext();
+    ExpectInvalidArgument(
+        [&] {
+            fixture.model.SetRevoluteJointDampingCoefficient(
+                foreign_context.get(), fixture.revolute, 0.4);
+        },
+        "a foreign context cannot receive a damping write");
+    ExpectInvalidArgument(
+        [&] {
+            fixture.model.SetRevoluteJointDampingCoefficient(
+                &first.context(), foreign_fixture.revolute, 0.4);
+        },
+        "a foreign joint cannot receive a damping write");
+    ExpectInvalidArgument(
+        [&] {
+            fixture.model.SetRevoluteJointDampingCoefficient(
+                nullptr, fixture.revolute, 0.4);
+        },
+        "a null context cannot receive a damping write");
     fixture.model.CalcJointDampingAppliedGeneralizedForces(first.context(),
                                                            first_force);
     ExpectNear(first_force[fixture.model.GetJointVelocityRange(fixture.revolute)

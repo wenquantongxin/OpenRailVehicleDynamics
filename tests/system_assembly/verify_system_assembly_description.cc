@@ -21,6 +21,8 @@ static_assert(
     std::is_constructible_v<SystemAssemblyDescription, MultibodyModel&>);
 static_assert(
     !std::is_constructible_v<SystemAssemblyDescription, MultibodyModel&&>);
+static_assert(!std::is_constructible_v<SystemAssemblyDescription,
+                                       const MultibodyModel&&>);
 
 int failure_count = 0;
 

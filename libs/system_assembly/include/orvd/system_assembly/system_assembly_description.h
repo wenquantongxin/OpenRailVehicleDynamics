@@ -37,6 +37,8 @@ class SystemAssemblyDescription {
     explicit SystemAssemblyDescription(
         const multibody_model::MultibodyModel& model);
     SystemAssemblyDescription(multibody_model::MultibodyModel&&) = delete;
+    SystemAssemblyDescription(const multibody_model::MultibodyModel&&) =
+        delete;
 
     SystemAssemblyDescription(const SystemAssemblyDescription&) = delete;
     SystemAssemblyDescription& operator=(const SystemAssemblyDescription&) =
