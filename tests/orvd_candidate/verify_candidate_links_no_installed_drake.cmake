@@ -42,7 +42,13 @@ file(GET_RUNTIME_DEPENDENCIES
 # dependencies were never read, so a Drake sitting behind a neutrally named
 # wrapper would go unmentioned while the loader finds it perfectly well. There is
 # no answer to give about such a file, so none is given.
-if(unresolved_dependencies)
+# Counted, not tested for truth. `if(<list>)` asks whether the list's *contents*
+# look true, and CMake reads `OFF`, `0`, `NOTFOUND` and anything ending in
+# `-NOTFOUND` as false — so a dependency whose name happens to be one of those
+# would make this branch decide there were none. What is being asked is how many
+# there are.
+list(LENGTH unresolved_dependencies unresolved_count)
+if(unresolved_count GREATER 0)
     list(JOIN unresolved_dependencies "\n  " unresolved_report)
     message(FATAL_ERROR
         "the candidate's runtime dependencies could not all be resolved, so "
@@ -63,7 +69,8 @@ foreach(dependency IN LISTS resolved_dependencies)
     endif()
 endforeach()
 
-if(drake_dependencies)
+list(LENGTH drake_dependencies drake_count)
+if(drake_count GREATER 0)
     list(JOIN drake_dependencies "\n  " report)
     message(FATAL_ERROR
         "the candidate loads Drake at runtime:\n  ${report}\n"

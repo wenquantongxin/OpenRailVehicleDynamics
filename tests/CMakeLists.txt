@@ -295,11 +295,28 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
     set_target_properties(orvd_unresolvable_consumer
         PROPERTIES SKIP_BUILD_RPATH TRUE BUILD_RPATH "" INSTALL_RPATH "")
 
+    # And the same thing wearing a name CMake reads as false. `if(<list>)` looks
+    # at the contents, and `NOTFOUND` is one of the words that makes a list of
+    # one item test false — so a check written that way would decide there were
+    # no unresolved dependencies at all. An ordinary name cannot show that.
+    add_library(orvd_false_like_wrapper SHARED orvd_candidate/neutral_wrapper.cc)
+    orvd_configure_first_party_target(orvd_false_like_wrapper)
+    set_target_properties(orvd_false_like_wrapper
+        PROPERTIES PREFIX "" SUFFIX "" OUTPUT_NAME "NOTFOUND")
+    add_executable(orvd_false_like_consumer
+        orvd_candidate/unresolvable_consumer.cc)
+    orvd_configure_first_party_target(orvd_false_like_consumer)
+    target_link_libraries(orvd_false_like_consumer
+        PRIVATE orvd_false_like_wrapper)
+    set_target_properties(orvd_false_like_consumer
+        PROPERTIES SKIP_BUILD_RPATH TRUE BUILD_RPATH "" INSTALL_RPATH "")
+
     add_test(NAME verify_candidate_drake_check_discriminates
              COMMAND ${CMAKE_COMMAND}
                      -DCHECK_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake
                      -DDRAKE_LOADING_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
                      -DUNRESOLVABLE_EXECUTABLE=$<TARGET_FILE:orvd_unresolvable_consumer>
+                     -DFALSE_LIKE_EXECUTABLE=$<TARGET_FILE:orvd_false_like_consumer>
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_drake_check_discriminates.cmake)
 
     # Measures the reference's kinematics cache invalidation semantics on the
@@ -391,18 +408,17 @@ add_test(NAME verify_multibody_model_position_kinematics
 # statically — that is the product. What it must never link is the installed
 # `libdrake.so`: that library and the vendored copy export the same `drake::`
 # symbols, so having both in one address space is an ODR violation whose likely
-# symptom is a comparison that appears to pass. The gate below checks it, at
-# configure time, because a runtime check would be one more thing that has to be
-# remembered.
+# symptom is a comparison that appears to pass. What checks that is the test
+# below, on the built program: a configure-time check on the target graph would
+# have to model every spelling of a dependency and still could not be final,
+# because cmake_language(DEFER) can change the graph after it has run.
 add_executable(emit_orvd_position_kinematics_observations
     orvd_candidate/emit_orvd_position_kinematics_observations.cc)
 orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
 target_link_libraries(emit_orvd_position_kinematics_observations
     PRIVATE orvd_multibody_model orvd_test_contract)
-# Asked of the built program rather than of the CMake graph. A graph check has to
-# model every spelling of a dependency and still cannot be final, because
-# cmake_language(DEFER) can change the graph after it has run. The linked file
-# has one answer.
+# The declared runtime closure of the built program. Anything it could not finish
+# walking is a refusal, not a clean result.
 add_test(NAME verify_candidate_links_no_installed_drake
          COMMAND ${CMAKE_COMMAND}
                  -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_position_kinematics_observations>

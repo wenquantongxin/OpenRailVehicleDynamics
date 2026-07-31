@@ -35,6 +35,11 @@ expect_refusal("a Drake-loading program" "${DRAKE_LOADING_EXECUTABLE}"
 expect_refusal("an unresolvable dependency" "${UNRESOLVABLE_EXECUTABLE}"
                "could not all be resolved")
 
+# The same, with a name CMake reads as false. A check that asked whether the list
+# "is true" rather than how long it is would decide there was nothing there.
+expect_refusal("a false-like dependency name" "${FALSE_LIKE_EXECUTABLE}"
+               "could not all be resolved")
+
 # And a file that is not there at all, which must not read as "nothing to see".
 expect_refusal("a missing file" "${CMAKE_CURRENT_LIST_DIR}/no_such_program"
                "does not exist")

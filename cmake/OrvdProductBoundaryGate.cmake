@@ -362,7 +362,8 @@ endfunction()
 
 # Every non-imported target defined under the given directories or their
 # descendants is a product target. Call after every add_subdirectory(), including
-# the test tree: targets defined later must not escape the gate.
+# the test tree, so that a target declared in a later file is still seen — which
+# is not the same as saying none can escape; see the qualification at the top.
 function(orvd_verify_product_targets_have_no_drake_dependency)
     set(product_module_relative_paths ${ARGN})
     set_property(GLOBAL PROPERTY ORVD_PRODUCT_BOUNDARY_VIOLATIONS "")
