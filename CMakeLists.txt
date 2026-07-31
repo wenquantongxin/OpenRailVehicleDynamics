@@ -95,8 +95,12 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-# After every add_subdirectory(), including the test tree: a target defined later
-# must not escape the gate by being defined later. Unconditional, and in
+# After every add_subdirectory(), including the test tree, so that a target
+# defined in a later file is still seen. Not a proof that none can escape:
+# cmake_language(DEFER) can change the graph after this has run, and a
+# directory-scoped imported target is invisible from here. What carries a
+# guarantee is the built-artefact check in tests/orvd_candidate/. Unconditional,
+# and in
 # particular independent of ORVD_BUILD_DRAKE_REFERENCE_TESTS — that option is
 # exactly when Drake is in the graph, which is exactly when this must be checked.
 orvd_verify_product_targets_have_no_drake_dependency(

@@ -37,7 +37,9 @@ add_test(NAME verify_product_source_drake_boundary
 # projects that include this repository's gate module, so what it exercises is the
 # gate this build uses rather than a copy of it. The gate itself has already run
 # by the time any test does: it fails at configure time, which is why there is no
-# test here for the real product targets.
+# test here for the real product targets. It is an architectural check on the
+# CMake graph and best-effort by construction; see the module head for what it
+# does not reach.
 add_test(NAME verify_product_boundary_gate
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/product_boundary_gate/verify_product_boundary_gate.py
@@ -274,15 +276,31 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
                      $<TARGET_FILE:emit_drake_reference_observations>
                      $<TARGET_FILE:emit_orvd_position_kinematics_observations>)
 
-    # The same check, on the one program here that does load Drake. A check that
-    # only ever runs against something clean has never been shown to fail, and a
-    # check that cannot fail is not a check.
+    # A check that only ever runs against something clean has never been shown to
+    # fail. This runs it against three things it must refuse and asserts that
+    # each refusal is the one expected: `WILL_FAIL` alone would take any non-zero
+    # exit, so a typo that aborted the script early would read as success.
+    #
+    # The unresolvable fixture is a program whose dependency the loader can find
+    # and this check cannot: no run path is recorded, so the closure stops there.
+    # A Drake behind such a node would go unmentioned, which is why the check
+    # refuses rather than reporting a walk it did not finish.
+    add_library(orvd_neutral_wrapper SHARED orvd_candidate/neutral_wrapper.cc)
+    orvd_configure_first_party_target(orvd_neutral_wrapper)
+    add_executable(orvd_unresolvable_consumer
+        orvd_candidate/unresolvable_consumer.cc)
+    orvd_configure_first_party_target(orvd_unresolvable_consumer)
+    target_link_libraries(orvd_unresolvable_consumer
+        PRIVATE orvd_neutral_wrapper)
+    set_target_properties(orvd_unresolvable_consumer
+        PROPERTIES SKIP_BUILD_RPATH TRUE BUILD_RPATH "" INSTALL_RPATH "")
+
     add_test(NAME verify_candidate_drake_check_discriminates
              COMMAND ${CMAKE_COMMAND}
-                     -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
-                     -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake)
-    set_tests_properties(verify_candidate_drake_check_discriminates
-                         PROPERTIES WILL_FAIL TRUE)
+                     -DCHECK_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_links_no_installed_drake.cmake
+                     -DDRAKE_LOADING_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
+                     -DUNRESOLVABLE_EXECUTABLE=$<TARGET_FILE:orvd_unresolvable_consumer>
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_drake_check_discriminates.cmake)
 
     # Measures the reference's kinematics cache invalidation semantics on the
     # pinned Drake. Reference-only probe: the cache-entry accessors are Drake

@@ -8,8 +8,12 @@
 # `cmake_language(DEFER)` can change the graph after any configure-time check has
 # run, so such a check cannot be the last word even in principle.
 #
-# The linked file has one answer. Whatever spelling produced it, an installed
-# `libdrake` either is among its runtime dependencies or is not.
+# The linked file's declared load-time closure has one answer. Whatever spelling
+# produced it, an installed `libdrake` either is reachable through that closure
+# or is not. What this does not see is a library loaded by name at run time —
+# `dlopen`, `LoadLibrary`, `LD_PRELOAD` — because none of those is recorded in
+# the file. Nothing in the candidate does that, and if something ever does, this
+# check will not be the thing that notices.
 #
 # What this permits, and must: the candidate links the landed tree statically.
 # That is vendored Drake source compiled into ORVD's own archives, and it is what
@@ -33,8 +37,22 @@ file(GET_RUNTIME_DEPENDENCIES
      RESOLVED_DEPENDENCIES_VAR resolved_dependencies
      UNRESOLVED_DEPENDENCIES_VAR unresolved_dependencies)
 
+# A dependency that could not be resolved is not a dependency that was cleared.
+# Resolution is how the closure is walked: an unresolved node is one whose own
+# dependencies were never read, so a Drake sitting behind a neutrally named
+# wrapper would go unmentioned while the loader finds it perfectly well. There is
+# no answer to give about such a file, so none is given.
+if(unresolved_dependencies)
+    list(JOIN unresolved_dependencies "\n  " unresolved_report)
+    message(FATAL_ERROR
+        "the candidate's runtime dependencies could not all be resolved, so "
+        "what lies behind them was never read:\n  ${unresolved_report}\n"
+        "This check reports nothing rather than reporting a closure it did not "
+        "finish walking.")
+endif()
+
 set(drake_dependencies "")
-foreach(dependency IN LISTS resolved_dependencies unresolved_dependencies)
+foreach(dependency IN LISTS resolved_dependencies)
     get_filename_component(dependency_name "${dependency}" NAME)
     string(TOLOWER "${dependency_name}" normalized_dependency_name)
     # The library's own name, not the directory it sits in. An installation in an
@@ -55,5 +73,5 @@ endif()
 
 list(LENGTH resolved_dependencies resolved_count)
 message(STATUS
-    "the candidate loads no Drake: ${resolved_count} runtime dependencies, none "
-    "of them Drake")
+    "the candidate loads no Drake: ${resolved_count} runtime dependencies, all "
+    "of them resolved, none of them Drake")

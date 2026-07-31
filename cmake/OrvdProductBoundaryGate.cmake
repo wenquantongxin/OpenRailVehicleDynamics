@@ -26,11 +26,13 @@
 # product module still has to be added to ORVD_PRODUCT_MODULE_DIRECTORIES.
 #
 # The check is on the target graph, at configure time. That is the earliest point
-# where the answer is knowable, and it is the same answer on every platform. It
-# is deliberately not `ldd` or `readelf`: those would report only what one
-# operating system's loader does with one build, and passing them would create a
-# cross-platform confidence the evidence does not support. What a release package
-# actually carries is a separate question, settled at G50.
+# at which anything can be said, and what it says is the same on every platform.
+# It is not the last word: the graph can still change under it, and some of the
+# graph is not visible from where it runs — see the qualification above. Where a
+# guarantee is needed about a program rather than a habit about a graph, ask the
+# built file: `tests/orvd_candidate/verify_candidate_links_no_installed_drake.cmake`
+# reads its declared runtime closure and refuses anything it could not finish
+# walking. What a release package carries is a further question, settled at G50.
 #
 # Imported targets must also remain inspectable. The build sets
 # CMAKE_FIND_PACKAGE_TARGETS_GLOBAL so find_package targets are visible here. A
@@ -411,4 +413,3 @@ function(orvd_verify_product_targets_have_no_drake_dependency)
     message(STATUS
         "ORVD product boundary: no Drake dependency in ${checked_report}")
 endfunction()
-

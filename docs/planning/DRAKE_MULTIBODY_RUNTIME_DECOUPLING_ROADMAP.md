@@ -252,7 +252,10 @@ Goal GNN — <明确的功能名称>
     受管；新增顶层产品模块仍须加入该模块列表。产品目录中不可由顶层检查的目录级 imported
     target 直接失败，不能靠中性名字逃逸。G28 的完整 tree 目标落进已列产品目录即自动进入
     同一闸门。闸门**无条件启用**，
-    drake-reference 预设同样通过，证明"Drake 在图中存在但没有泄漏进产品"。
+    drake-reference 预设同样通过——即在 Drake 确实存在于图中的那次配置里，产品目标的链接
+    闭包上没有出现它。这是一句关于**图**的话：G31 复核证明配置期图检查在原理上不可能是
+    最终的（`cmake_language(DEFER)` 可在其后改图，目录作用域 imported target 从检查处
+    不可见），所以它是让常见写法当场被点名的架构性尽力检查，不是证明。
     为使闸门看得见 `find_package` 的导入目标，顶层设置 `CMAKE_FIND_PACKAGE_TARGETS_GLOBAL`。
     源码侧闸门 `verify_product_source_drake_boundary.py` 只管 `forbidden` 与
     `forbidden_prefix`，且前缀优先于逐文件处置；`discard`、未分类头与 G20–G28 尚未替换的
@@ -260,8 +263,9 @@ Goal GNN — <明确的功能名称>
     链接判据覆盖直接目标、配置化导入库、整库链接和显式库选择器，但不把搜索目录或
     运行时搜索路径误当成依赖身份；目标名按命名空间边界匹配。源码闸门独立覆盖第一方常用的
     头、模板实现和翻译单元后缀，不沿用只针对上游 Drake 文件形态的窄后缀集合。
-    未加 `ldd`/`readelf` 门：CMake 目标图负责声明依赖，真实消费者负责运行，最终包实际
-    携带的动态库属 G50。账本中 `forbidden_prefix geometry/proximity/` 已被
+    未加 `ldd`/`readelf` 门：跨平台的产物检查用 CMake 自己的
+    `file(GET_RUNTIME_DEPENDENCIES)`，G31 已对跨进程候选落地一条（未解析依赖一律失败，
+    并有三例判别力驱动），安装消费者的同类检查归 G46，最终包实际携带的动态库属 G50。账本中 `forbidden_prefix geometry/proximity/` 已被
     `geometry/` 完全覆盖，是死规则，一并删除。
 
 ## 子目标 8：实现单一 Context 状态所有权
@@ -712,7 +716,7 @@ Goal GNN — <明确的功能名称>
     像保证、实际不是的检查，比没有更糟。它带来的两项真实加固（选项前瞻扫描、imported
     artefact 表达式失败关闭）保留下来服务产品闸门，并各有一条自测看守（用例数 14 → 16）。
   - **告警数的诚实记录**：干净 Debug 构建 0 条；干净 Release 构建 **6 条**，全部是 GCC 13.3
-    在系统 `stl_algobase.h` 里的 `-Wstringop-overflow=`，由 vendored TU 在 `-O2` 下实例化
+    在系统 `stl_algobase.h` 里的 `-Wstringop-overflow=`，由 vendored TU 在 `-O3 -DNDEBUG` 下实例化
     触发（该告警不依赖 `-Wall`，第一方告警策略管不到它），非本轮引入。此前写的「三预设零
     告警」是**增量构建的测量假象**——那个 TU 没有被重新编译，`grep -c` 于是数到零。该差异
     由 CodeX 复核指出。
@@ -826,6 +830,12 @@ Goal GNN — <明确的功能名称>
 - [ ] **G46 — 建立可安装的跨平台软件包**
   - 产物：GCC、Clang、MSVC 可构建并由 `find_package` 使用的 ORVD 包。
   - 完成门：独立消费者不引用源码树或 `/opt`；Linux 与 Windows 运行同一程序化测试；不要求跨平台逐位一致。
+  - **产物依赖检查**（G31 记入的债）：对安装后的独立消费者用
+    `file(GET_RUNTIME_DEPENDENCIES)` 检查运行期闭包，Linux 与 Windows 各跑一次；产物缺失
+    或存在未解析依赖一律失败——未解析节点背后的闭包根本没被走过；并有一个确实加载 Drake
+    的阳性对照证明该检查会失败。配置期的目标图闸门不能替代它：`cmake_language(DEFER)` 可
+    在其后改图，目录作用域 imported target 从检查处不可见。当前产品主要是 STATIC/OBJECT
+    库，本身没有可扫描的运行期闭包，所以正确落点是安装消费者而不是 G31。
 
 - [ ] **G47 — 建立运行时性能资格**
   - 产物：冷/热缓存、选择性失效、运动学、动力学、CVODE 以及四个位姿组合函数的现场基准程序。
