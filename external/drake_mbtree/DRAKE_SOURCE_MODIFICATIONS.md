@@ -457,3 +457,16 @@ finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的�
 **`multibody_tree.h` 的 quaternion 提交门按下游真实数值定义域收紧。** 旧门只拒绝四个分量逐位为零，遗漏平方范数上溢或下溢：极大有限 quaternion 会因倒数因子退化为零而静默得到单位阵，极小有限 quaternion 则会因倒数因子溢出而产生 NaN。新门要求平方范数与下游实际使用的倒数因子均为有限值，失败时点名 mobod 与输入并保持状态、版本不变；安全的非单位 quaternion 仍按原值保存，不归一化。
 
 **模型 layout 与默认安装步骤不再是公共入口。** `CreateDefaultEvaluationContext()` 直接使用 tree 私有拥有的 layout，再调用私有默认参数和默认状态安装步骤；`ValidateStateInstance()` 只通过状态的身份谓词核对归属。普通调用方因此不能取得模型 layout 后构造一个通过身份门但仍为零填充的裸状态。该修改只收窄所有权边界，不改变运动学或动力学公式。
+
+## G33：微分运动学与上下文参数权威
+
+**fixed frame 的速度与加速度点移改读上下文位姿。** 上游 v1.54 的
+`Frame::CalcSpatialVelocityInWorld()` 与 `MultibodyTree::ShiftSpatialAccelerationInWorld()`
+分别从构造期 `X_PF_` 取得 fixed-frame 平移，而同一 frame 的位姿与 Jacobian 已从上下文中的
+类型化参数读取。ORVD 改为统一调用 `CalcPoseInBodyFrame(state)`。这是为满足 ADR-0002
+「实际参数只有一个权威来源」而作的蓄意上游偏离；焊接 frame 相对其刚体的速度与偏置加速度
+恒为零测试覆盖了上下文位姿不同于默认值的情形。
+
+**已知 `vdot` 的加速度 pass 只保留真实输入。** `CalcSpatialAccelerationsFromVdot()` 不再接收
+调用方预先求出的 position/velocity cache；它从同一个求值上下文按需取得这些长期缓存，
+显式 `vdot` 仍只属于本次调用，不进入持久缓存或新鲜度先决条件。

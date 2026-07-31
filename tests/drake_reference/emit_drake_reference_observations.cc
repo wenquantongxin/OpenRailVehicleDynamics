@@ -86,6 +86,10 @@ int main(int argc, char** argv) {
         CopyToEigenVector(scenario.generalized_velocities);
     const Eigen::VectorXd generalized_accelerations =
         CopyToEigenVector(scenario.generalized_accelerations);
+    const Eigen::VectorXd differential_kinematics_probe = CopyToEigenVector(
+        scenario.differential_kinematics_probe_generalized_velocities);
+    const Eigen::VectorXd inverse_mapping_probe = CopyToEigenVector(
+        scenario.inverse_mapping_probe_generalized_position_derivatives);
     if (generalized_positions.size() != plant.num_positions() ||
         generalized_velocities.size() != plant.num_velocities()) {
         std::fprintf(stderr,
@@ -99,6 +103,17 @@ int main(int argc, char** argv) {
     auto context = plant.CreateDefaultContext();
     plant.SetPositions(context.get(), generalized_positions);
     plant.SetVelocities(context.get(), generalized_velocities);
+
+    Eigen::VectorXd mapped_position_derivatives(plant.num_positions());
+    plant.MapVelocityToQDot(*context, differential_kinematics_probe,
+                            &mapped_position_derivatives);
+    Eigen::VectorXd mapped_back_velocities(plant.num_velocities());
+    plant.MapQDotToVelocity(*context, inverse_mapping_probe,
+                            &mapped_back_velocities);
+    std::vector<drake::multibody::SpatialAcceleration<double>>
+        spatial_accelerations(plant.num_bodies());
+    plant.CalcSpatialAccelerationsFromVdot(
+        *context, generalized_accelerations, &spatial_accelerations);
 
     orvd_contract::ObservationStream stream;
     // The world is not one of the model's rigid bodies. Drake counts it and the
@@ -217,6 +232,35 @@ int main(int argc, char** argv) {
                      "_translational_at_body_origin[" +
                      std::to_string(axis_index) + "]",
                  velocity.translational()(axis_index)});
+            stream.observations.push_back(
+                {"acceleration_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 spatial_accelerations[body.index()].rotational()(axis_index)});
+            stream.observations.push_back(
+                {"acceleration_" + link.name +
+                     "_translational_at_body_origin[" +
+                     std::to_string(axis_index) + "]",
+                 spatial_accelerations[body.index()].translational()(
+                     axis_index)});
+        }
+
+        Eigen::MatrixXd spatial_jacobian(6, plant.num_velocities());
+        plant.CalcJacobianSpatialVelocity(
+            *context, drake::multibody::JacobianWrtVariable::kV,
+            body.body_frame(), link.center_of_mass_in_link_frame_meters,
+            plant.world_frame(), plant.world_frame(), &spatial_jacobian);
+        const Eigen::VectorXd response =
+            spatial_jacobian * differential_kinematics_probe;
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            stream.observations.push_back(
+                {"jacobian_probe_response_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 response(axis_index)});
+            stream.observations.push_back(
+                {"jacobian_probe_response_" + link.name +
+                     "_translational_at_center_of_mass[" +
+                     std::to_string(axis_index) + "]",
+                 response(axis_index + 3)});
         }
     }
 
@@ -261,6 +305,20 @@ int main(int argc, char** argv) {
         stream.observations.push_back(
             {"state_readback_velocity[" + std::to_string(velocity_index) + "]",
              velocities_after_evaluation(velocity_index)});
+    }
+    for (int position_index = 0;
+         position_index < mapped_position_derivatives.size(); ++position_index) {
+        stream.observations.push_back(
+            {"mapped_position_derivative[" +
+                 std::to_string(position_index) + "]",
+             mapped_position_derivatives(position_index)});
+    }
+    for (int velocity_index = 0;
+         velocity_index < mapped_back_velocities.size(); ++velocity_index) {
+        stream.observations.push_back(
+            {"mapped_back_generalized_velocity[" +
+                 std::to_string(velocity_index) + "]",
+             mapped_back_velocities(velocity_index)});
     }
 
     std::fputs(orvd_contract::FormatObservationStream(stream).c_str(), stdout);

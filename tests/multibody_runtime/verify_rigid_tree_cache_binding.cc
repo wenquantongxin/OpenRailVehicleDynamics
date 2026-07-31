@@ -195,19 +195,20 @@ class TwoLinkChain {
         // with the cache.
         const drake::math::RigidTransform<double> offset(
             Eigen::Vector3d(0.3, 0.0, 0.0));
-        const auto& shoulder =
-            tree_.AddJoint<RevoluteJoint>("shoulder", tree_.world_link(),
-                                          offset, first, {},
-                                          Eigen::Vector3d::UnitZ());
+        tree_.AddJoint<RevoluteJoint>("shoulder", tree_.world_link(), offset,
+                                      first, {}, Eigen::Vector3d::UnitZ());
         const auto& elbow =
             tree_.AddJoint<RevoluteJoint>("elbow", first, offset, second, {},
                                           Eigen::Vector3d::UnitY());
-        // The overload above creates a FixedOffsetFrame for its non-identity
-        // parent offset. Keep that real mobilizer frame: changing it must move
-        // the kinematics, unlike an otherwise unused frame attached to a body.
+        // The overload above creates a FixedOffsetFrame for each non-identity
+        // parent offset. Keep the elbow's frame, which is attached to the
+        // moving first body. The shoulder's corresponding frame is attached to
+        // World, so its angular velocity and acceleration are zero; using it
+        // would make every point-shift term vanish and could not distinguish a
+        // context-local pose from the construction-time default.
         fixed_frame_ =
             &dynamic_cast<const drake::multibody::FixedOffsetFrame<double>&>(
-                shoulder.frame_on_parent());
+                elbow.frame_on_parent());
         actuator_ = &tree_.AddJointActuator("elbow_motor", elbow);
         auto& mutable_actuator =
             tree_.get_mutable_joint_actuator(actuator_->index());
@@ -1040,6 +1041,47 @@ void CheckVelocityKinematicsRecomputesForExactlyItsInputs() {
     }
 }
 
+void CheckFixedFrameVelocityUsesTheContextPose() {
+    const TwoLinkChain model;
+    const std::unique_ptr<Context> context = model.MakeContext();
+    SetJointAngles(model.tree(), context.get(), 0.42, -0.31);
+    Eigen::VectorXd velocities(model.tree().num_velocities());
+    velocities << 1.2, -0.7;
+    model.tree().SetVelocities(context.get(), velocities);
+
+    const drake::math::RigidTransform<double> stated_pose(
+        drake::math::RotationMatrix<double>::MakeYRotation(-0.27),
+        Eigen::Vector3d(0.51, -0.14, 0.22));
+    model.tree().SetFixedFramePoseInParentFrame(
+        context.get(), model.fixed_frame(), stated_pose);
+
+    const auto actual = model.fixed_frame().CalcSpatialVelocityInWorld(*context);
+    const auto& body = model.fixed_frame().body();
+    const auto& body_velocity = body.EvalSpatialVelocityInWorld(*context);
+    const auto& body_rotation = body.EvalPoseInWorld(*context).rotation();
+    const auto expected =
+        body_velocity.Shift(body_rotation * stated_pose.translation());
+    ExpectTrue(
+        actual.get_coeffs().isApprox(expected.get_coeffs(), 1.0e-14),
+        "a fixed frame's world velocity shifts to the pose stated in this "
+        "context rather than its construction-time default");
+
+    const auto relative = model.fixed_frame().CalcSpatialVelocity(
+        *context, body.body_frame(), model.tree().world_frame());
+    ExpectTrue(relative.get_coeffs().isZero(1.0e-14),
+               "a frame welded to a body has zero velocity relative to that "
+               "body after its context-local pose changes");
+
+    const auto relative_bias = model.tree().CalcBiasSpatialAcceleration(
+        *context, drake::multibody::JacobianWrtVariable::kV,
+        model.fixed_frame(), Eigen::Vector3d::Zero(), body.body_frame(),
+        model.tree().world_frame());
+    ExpectTrue(
+        relative_bias.get_coeffs().isZero(1.0e-13),
+        "a frame welded to a body has zero bias acceleration relative to that "
+        "body after its context-local pose changes");
+}
+
 void CheckTheFactoryIsTheOnlyDoor() {
     // A context cannot be built from a layout alone: the bare constructor is
     // private. What would come out of one is a model with every body massless
@@ -1413,6 +1455,7 @@ void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
 int main() {
     CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions();
     CheckVelocityKinematicsRecomputesForExactlyItsInputs();
+    CheckFixedFrameVelocityUsesTheContextPose();
     CheckTheFactoryIsTheOnlyDoor();
     CheckColdAndRepeatedReadsReturnTheSameRealValue();
     CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots();

@@ -797,6 +797,37 @@ void RequireCoordinateCount(int given, int expected, const char* what) {
     }
 }
 
+void RequireFiniteVector(const Eigen::VectorXd& values, const char* what) {
+    if (!values.allFinite()) {
+        Reject(std::string(what) +
+               " contains a non-finite value; nothing was written");
+    }
+}
+
+void RequireVectorOutput(Eigen::VectorXd* output, int expected_size,
+                         const char* what) {
+    if (output == nullptr) {
+        Reject(std::string(what) + " output is null; nothing was written");
+    }
+    RequireCoordinateCount(static_cast<int>(output->size()), expected_size,
+                           what);
+}
+
+void RequireMatrixOutput(Eigen::MatrixXd* output, int expected_rows,
+                         int expected_columns, const char* what) {
+    if (output == nullptr) {
+        Reject(std::string(what) + " output is null; nothing was written");
+    }
+    if (output->rows() != expected_rows ||
+        output->cols() != expected_columns) {
+        Reject(std::string(what) + " output must be " +
+               std::to_string(expected_rows) + " x " +
+               std::to_string(expected_columns) + ", but it is " +
+               std::to_string(output->rows()) + " x " +
+               std::to_string(output->cols()) + "; nothing was written");
+    }
+}
+
 }  // namespace
 
 void MultibodyModel::SetGeneralizedPositions(
@@ -917,6 +948,152 @@ MultibodyModel::
                 model.tree_.get_frame(model.tree_frame_[expressed_ordinal]));
     return MakeFrameSpatialVelocity(V_MF_E.rotational(),
                                     V_MF_E.translational());
+}
+
+// --- Differential kinematics -----------------------------------------------
+
+void MultibodyModel::MapGeneralizedVelocitiesToPositionDerivatives(
+    const MultibodyEvaluationContext& context,
+    const Eigen::VectorXd& generalized_velocities,
+    Eigen::VectorXd* generalized_position_derivatives) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized(
+        "map generalized velocities to position derivatives");
+    Implementation::RequireOwnContext(
+        model, &context, "map generalized velocities in");
+    RequireCoordinateCount(static_cast<int>(generalized_velocities.size()),
+                           model.tree_.num_velocities(),
+                           "generalized velocities");
+    RequireFiniteVector(generalized_velocities, "generalized velocities");
+    RequireVectorOutput(generalized_position_derivatives,
+                        model.tree_.num_positions(),
+                        "generalized position derivatives");
+    if (&generalized_velocities == generalized_position_derivatives) {
+        Reject("generalized velocities and position derivatives are the same "
+               "object; in-place mapping is not supported and nothing was "
+               "written");
+    }
+
+    model.tree_.MapVelocityToQDot(
+        context.implementation_->tree_context().state(),
+        generalized_velocities, generalized_position_derivatives);
+}
+
+void MultibodyModel::MapGeneralizedPositionDerivativesToVelocities(
+    const MultibodyEvaluationContext& context,
+    const Eigen::VectorXd& generalized_position_derivatives,
+    Eigen::VectorXd* generalized_velocities) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized(
+        "map generalized position derivatives to velocities");
+    Implementation::RequireOwnContext(
+        model, &context, "map generalized position derivatives in");
+    RequireCoordinateCount(
+        static_cast<int>(generalized_position_derivatives.size()),
+        model.tree_.num_positions(), "generalized position derivatives");
+    RequireFiniteVector(generalized_position_derivatives,
+                        "generalized position derivatives");
+    RequireVectorOutput(generalized_velocities,
+                        model.tree_.num_velocities(),
+                        "generalized velocities");
+    if (&generalized_position_derivatives == generalized_velocities) {
+        Reject("generalized position derivatives and velocities are the same "
+               "object; in-place mapping is not supported and nothing was "
+               "written");
+    }
+
+    model.tree_.MapQDotToVelocity(
+        context.implementation_->tree_context().state(),
+        generalized_position_derivatives, generalized_velocities);
+}
+
+void MultibodyModel::
+    CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_velocity_derivatives,
+        Eigen::MatrixXd* angular_accelerations_radians_per_second_squared,
+        Eigen::MatrixXd*
+            translational_accelerations_at_body_origins_meters_per_second_squared)
+        const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate rigid-body spatial accelerations");
+    Implementation::RequireOwnContext(
+        model, &context, "calculate spatial accelerations from");
+    RequireCoordinateCount(
+        static_cast<int>(generalized_velocity_derivatives.size()),
+        model.tree_.num_velocities(), "generalized velocity derivatives");
+    RequireFiniteVector(generalized_velocity_derivatives,
+                        "generalized velocity derivatives");
+    const int body_count = static_cast<int>(model.body_names_.size()) - 1;
+    RequireMatrixOutput(angular_accelerations_radians_per_second_squared, 3,
+                        body_count, "angular acceleration");
+    RequireMatrixOutput(
+        translational_accelerations_at_body_origins_meters_per_second_squared,
+        3, body_count, "body-origin translational acceleration");
+    if (angular_accelerations_radians_per_second_squared ==
+        translational_accelerations_at_body_origins_meters_per_second_squared) {
+        Reject("angular and translational acceleration outputs are the same "
+               "object; distinct physical quantities require distinct outputs "
+               "and nothing was written");
+    }
+
+    std::vector<drake::multibody::SpatialAcceleration<double>>
+        accelerations_by_mobod(model.tree_.num_mobods());
+    model.tree_.CalcSpatialAccelerationsFromVdot(
+        context.implementation_->tree_context(),
+        generalized_velocity_derivatives, &accelerations_by_mobod);
+
+    for (int body_index = 0; body_index < body_count; ++body_index) {
+        const int body_ordinal = body_index + 1;
+        const auto mobod_index =
+            model.tree_.get_link(model.tree_body_[body_ordinal]).mobod_index();
+        const auto& acceleration = accelerations_by_mobod[mobod_index];
+        angular_accelerations_radians_per_second_squared->col(body_index) =
+            acceleration.rotational();
+        translational_accelerations_at_body_origins_meters_per_second_squared
+            ->col(body_index) = acceleration.translational();
+    }
+}
+
+void MultibodyModel::
+    CalcRigidBodyPointSpatialVelocityJacobianRelativeToWorldExpressedInWorld(
+        const MultibodyEvaluationContext& context, RigidBodyHandle body,
+        const Eigen::Vector3d& point_position_in_body_frame,
+        Eigen::MatrixXd* angular_velocity_jacobian,
+        Eigen::MatrixXd* point_translational_velocity_jacobian) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("calculate a rigid-body point Jacobian");
+    Implementation::RequireOwnContext(model, &context,
+                                      "calculate a point Jacobian from");
+    const int body_ordinal = model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body");
+    if (!point_position_in_body_frame.allFinite()) {
+        Reject("body-fixed point position contains a non-finite value; nothing "
+               "was written");
+    }
+    const int velocity_count = model.tree_.num_velocities();
+    RequireMatrixOutput(angular_velocity_jacobian, 3, velocity_count,
+                        "angular-velocity Jacobian");
+    RequireMatrixOutput(point_translational_velocity_jacobian, 3,
+                        velocity_count,
+                        "point translational-velocity Jacobian");
+    if (angular_velocity_jacobian == point_translational_velocity_jacobian) {
+        Reject("angular and point translational Jacobian outputs are the same "
+               "object; distinct physical quantities require distinct outputs "
+               "and nothing was written");
+    }
+
+    Eigen::MatrixXd spatial_jacobian(6, velocity_count);
+    const auto& body_frame =
+        model.tree_.get_link(model.tree_body_[body_ordinal]).body_frame();
+    model.tree_.CalcJacobianSpatialVelocity(
+        context.implementation_->tree_context(),
+        drake::multibody::JacobianWrtVariable::kV, body_frame,
+        point_position_in_body_frame, model.tree_.world_frame(),
+        model.tree_.world_frame(), &spatial_jacobian);
+    *angular_velocity_jacobian = spatial_jacobian.topRows<3>();
+    *point_translational_velocity_jacobian =
+        spatial_jacobian.bottomRows<3>();
 }
 
 }  // namespace orvd::multibody_model

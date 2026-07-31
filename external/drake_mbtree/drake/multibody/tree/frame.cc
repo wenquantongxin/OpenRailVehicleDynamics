@@ -58,7 +58,11 @@ SpatialVelocity<T> Frame<T>::CalcSpatialVelocityInWorld(
     const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context) const {
   const math::RotationMatrix<T>& R_WB =
       body().EvalPoseInWorld(context).rotation();
-  const Vector3<T> p_BF_B = GetFixedPoseInBodyFrame().translation();
+  // ORVD's context is the single authority for a frame's physical parameters.
+  // The construction-time pose can differ after a context-local parameter
+  // write; using it here would make this velocity disagree with the pose and
+  // Jacobian evaluated from the same context.
+  const Vector3<T> p_BF_B = CalcPoseInBodyFrame(context.state()).translation();
   const Vector3<T> p_BF_W = R_WB * p_BF_B;
   const SpatialVelocity<T>& V_WB = body().EvalSpatialVelocityInWorld(context);
   const SpatialVelocity<T> V_WF = V_WB.Shift(p_BF_W);

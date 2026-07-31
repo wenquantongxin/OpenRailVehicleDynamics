@@ -115,8 +115,57 @@ ComparisonRequirements MakeSpatialKinematicsComparisonRequirements(
     return requirements;
 }
 
-ComparisonRequirements MakeComparisonRequirements(
+ComparisonRequirements MakeDifferentialKinematicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario) {
+    using orvd_contract::ObservationKind;
 
+    ComparisonRequirements requirements =
+        MakeSpatialKinematicsComparisonRequirements(scenario);
+    for (std::size_t position_index = 0;
+         position_index < scenario.generalized_positions.size();
+         ++position_index) {
+        requirements.scalars.push_back(
+            {"mapped_position_derivative[" + std::to_string(position_index) +
+                 "]",
+             scenario.generalized_position_derivative_observation_kinds
+                 [position_index]});
+    }
+    for (std::size_t velocity_index = 0;
+         velocity_index < scenario.generalized_velocities.size();
+         ++velocity_index) {
+        requirements.scalars.push_back(
+            {"mapped_back_generalized_velocity[" +
+                 std::to_string(velocity_index) + "]",
+             scenario.generalized_velocity_observation_kinds[velocity_index]});
+    }
+    for (const auto& link : scenario.links) {
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            requirements.scalars.push_back(
+                {"acceleration_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::
+                     kAngularAccelerationRadiansPerSecondSquared});
+            requirements.scalars.push_back(
+                {"acceleration_" + link.name +
+                     "_translational_at_body_origin[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::
+                     kTranslationalAccelerationMetersPerSecondSquared});
+            requirements.scalars.push_back(
+                {"jacobian_probe_response_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::kAngularVelocityRadiansPerSecond});
+            requirements.scalars.push_back(
+                {"jacobian_probe_response_" + link.name +
+                     "_translational_at_center_of_mass[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::kTranslationalVelocityMetersPerSecond});
+        }
+    }
+    return requirements;
+}
+
+ComparisonRequirements MakeComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario) {
     using orvd_contract::ObservationKind;
 
@@ -124,7 +173,7 @@ ComparisonRequirements MakeComparisonRequirements(
     // maintained lists drift, and the drift shows up as a capability that used
     // to be compared and silently stopped being.
     ComparisonRequirements requirements =
-        MakeSpatialKinematicsComparisonRequirements(scenario);
+        MakeDifferentialKinematicsComparisonRequirements(scenario);
 
     const std::size_t velocity_count = scenario.generalized_velocities.size();
     // The mass matrix is required column by column. A single matrix-vector

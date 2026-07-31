@@ -53,8 +53,16 @@ MakePositionKinematicsComparisonRequirements(
 MakeSpatialKinematicsComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 
+// The spatial-kinematics set, plus qdot/v mappings, explicit-vdot body-frame
+// accelerations and a non-state probe through every body-point kV Jacobian.
+// This is G33's cross-process qualification surface.
+[[nodiscard]] ComparisonRequirements
+MakeDifferentialKinematicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario);
+
 // The above, plus the mass-matrix columns and the inverse-dynamics generalized
-// forces. Structurally a superset: it starts from the spatial-kinematics set.
+// forces. Structurally a superset: it starts from the differential-kinematics
+// set.
 [[nodiscard]] ComparisonRequirements MakeComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 

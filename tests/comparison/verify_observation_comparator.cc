@@ -155,6 +155,34 @@ void CheckVelocityNearZeroLimits() {
                 "a translational velocity");
 }
 
+void CheckDifferentialKinematicsNearZeroLimits() {
+    using orvd_contract::ObservationKind;
+    for (const ObservationKind kind :
+         {ObservationKind::kQuaternionDerivativePerSecond,
+          ObservationKind::kAngularAccelerationRadiansPerSecondSquared,
+          ObservationKind::
+              kTranslationalAccelerationMetersPerSecondSquared}) {
+        orvd_comparison::ComparisonRequirements requirements;
+        requirements.scalars = {{"differential_quantity", kind}};
+        orvd_contract::ObservationStream reference;
+        reference.observations = {{"differential_quantity", 0.0}};
+        orvd_contract::ObservationStream inside;
+        inside.observations = {{"differential_quantity", 0.5e-12}};
+        orvd_contract::ObservationStream outside;
+        outside.observations = {{"differential_quantity", 1.5e-12}};
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, reference, inside)
+                       .outcome ==
+                   orvd_comparison::ComparisonOutcome::kAccepted,
+               "a G33 near-zero quantity inside 1e-12 must pass");
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, reference, outside)
+                       .outcome ==
+                   orvd_comparison::ComparisonOutcome::kToleranceExceeded,
+               "a G33 near-zero quantity outside 1e-12 must fail");
+    }
+}
+
 void CheckRotationAndRequiredObservationFailures() {
     const auto requirements = MakeRequirements();
     const auto reference = MakeStream(1.0);
@@ -242,6 +270,7 @@ int main() {
     CheckWhichBranchJudgesWhichMagnitude();
     CheckRelativeAndNearZeroLimits();
     CheckVelocityNearZeroLimits();
+    CheckDifferentialKinematicsNearZeroLimits();
     CheckRotationAndRequiredObservationFailures();
     CheckLooseParsingAtThePointOfUse();
 

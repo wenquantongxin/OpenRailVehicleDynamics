@@ -387,6 +387,79 @@ class MultibodyModel {
         const MultibodyEvaluationContext& context, FrameHandle moving_frame,
         FrameHandle reference_frame, FrameHandle expressed_in_frame) const;
 
+    // --- Differential kinematics ------------------------------------------
+
+    /// Maps generalized velocities v to generalized-position derivatives qdot.
+    ///
+    /// For a quaternion free body the first four entries of that body's
+    /// seven-entry position range are wxyz.
+    /// The stored quaternion is used as written: this call neither normalizes
+    /// nor changes it. Consequently scaling that quaternion scales its four
+    /// derivative entries, while the three translational derivatives are
+    /// unchanged.
+    ///
+    /// @throws std::invalid_argument if the context is foreign, either vector
+    /// has the wrong size, an input is non-finite, the output is null, or input
+    /// and output are the same object.
+    /// @throws std::logic_error if the model is not finalized.
+    void MapGeneralizedVelocitiesToPositionDerivatives(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_velocities,
+        Eigen::VectorXd* generalized_position_derivatives) const;
+
+    /// Maps generalized-position derivatives qdot to generalized velocities v.
+    ///
+    /// For quaternion coordinates this is a left pseudoinverse: the component
+    /// of qdot parallel to the stored quaternion is discarded. Thus
+    /// v -> qdot -> v is an identity, whereas an arbitrary qdot -> v -> qdot is
+    /// its projection onto the quaternion tangent space.
+    ///
+    /// @throws std::invalid_argument if the context is foreign, either vector
+    /// has the wrong size, an input is non-finite, the output is null, or input
+    /// and output are the same object.
+    /// @throws std::logic_error if the model is not finalized.
+    void MapGeneralizedPositionDerivativesToVelocities(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_position_derivatives,
+        Eigen::VectorXd* generalized_velocities) const;
+
+    /// Computes every public rigid body's frame acceleration A_WB_W for an
+    /// explicitly supplied generalized-velocity derivative vdot.
+    ///
+    /// Columns follow GetRigidBody() order and exclude the world. Outputs are
+    /// 3 x num_rigid_bodies(): angular acceleration in rad/s^2 and the
+    /// translational acceleration of body-frame origin Bo in m/s^2. The result
+    /// is computed for this call; vdot is not hidden in a persistent cache.
+    ///
+    /// @throws std::invalid_argument if the context is foreign, vdot is the
+    /// wrong size or non-finite, either output is null or the wrong size, or
+    /// both physical outputs name the same object.
+    /// @throws std::logic_error if the model is not finalized.
+    void CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_velocity_derivatives,
+        Eigen::MatrixXd* angular_accelerations_radians_per_second_squared,
+        Eigen::MatrixXd*
+            translational_accelerations_at_body_origins_meters_per_second_squared)
+        const;
+
+    /// Computes the spatial-velocity Jacobian of a body-fixed point Q.
+    ///
+    /// `point_position_in_body_frame` is p_BoQ_B. The two 3 x nv outputs map
+    /// generalized velocities to angular velocity w_WB_W and point velocity
+    /// v_WQ_W, respectively. This deliberately exposes only the kV,
+    /// World-measured, World-expressed operator current consumers need.
+    ///
+    /// @throws std::invalid_argument if the context or body is foreign, the
+    /// body-fixed point is non-finite, either output is null or the wrong size,
+    /// or both physical outputs name the same object.
+    /// @throws std::logic_error if the model is not finalized.
+    void CalcRigidBodyPointSpatialVelocityJacobianRelativeToWorldExpressedInWorld(
+        const MultibodyEvaluationContext& context, RigidBodyHandle body,
+        const Eigen::Vector3d& point_position_in_body_frame,
+        Eigen::MatrixXd* angular_velocity_jacobian,
+        Eigen::MatrixXd* point_translational_velocity_jacobian) const;
+
    private:
     template <typename Handle>
     static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {

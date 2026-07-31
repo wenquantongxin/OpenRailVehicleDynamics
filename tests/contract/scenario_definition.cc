@@ -103,6 +103,22 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
         ObservationKind::kTranslationalVelocityMetersPerSecond,
         ObservationKind::kTranslationalVelocityMetersPerSecond,
     };
+    scenario.generalized_position_derivative_observation_kinds = {
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kQuaternionDerivativePerSecond,
+        ObservationKind::kQuaternionDerivativePerSecond,
+        ObservationKind::kQuaternionDerivativePerSecond,
+        ObservationKind::kQuaternionDerivativePerSecond,
+        ObservationKind::kTranslationalVelocityMetersPerSecond,
+        ObservationKind::kTranslationalVelocityMetersPerSecond,
+        ObservationKind::kTranslationalVelocityMetersPerSecond,
+    };
+    scenario.differential_kinematics_probe_generalized_velocities = {
+        0.31, -0.27, 0.43, -0.52, 0.38, -0.29, 0.47, -0.36, 0.22};
+    scenario.inverse_mapping_probe_generalized_position_derivatives = {
+        0.26, -0.31, 0.44, -0.37, 0.18, 0.52, -0.29, 0.33, -0.41, 0.24};
     scenario.generalized_force_component_kinds.assign(
         kVelocityCount, GeneralizedForceComponentKind::kTorqueNewtonMetres);
     for (int velocity_index = kFirstFloatingLinearVelocityIndex;

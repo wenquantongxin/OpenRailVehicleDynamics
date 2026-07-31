@@ -5,7 +5,7 @@
 // twice and comparing it with itself establishes that the harness works — the
 // pipe, the parser and the judge — and nothing about any candidate. Running the
 // reference against ORVD's own emitter is the equivalence claim, and it is made
-// only over the capability ORVD has actually landed: the judge's spatial-
+// only over the capability ORVD has actually landed: the judge's differential-
 // kinematics requirement set says which observations that is, and it refuses a
 // missing one rather than skipping it.
 //
@@ -292,6 +292,81 @@ void ExpectRequirementsCoverSpatialKinematics(
     }
 }
 
+void ExpectRequirementsCoverDifferentialKinematics(
+    const orvd_comparison::ComparisonRequirements& requirements,
+    const orvd_contract::ScenarioDefinition& scenario) {
+    ExpectRequirementsCoverSpatialKinematics(requirements, scenario);
+    const auto has_scalar =
+        [&requirements](const std::string& name,
+                        orvd_contract::ObservationKind expected_kind) {
+            for (const auto& required : requirements.scalars) {
+                if (required.name == name && required.kind == expected_kind)
+                    return true;
+            }
+            return false;
+        };
+
+    for (std::size_t position_index = 0;
+         position_index < scenario.generalized_positions.size();
+         ++position_index) {
+        Expect(has_scalar(
+                   "mapped_position_derivative[" +
+                       std::to_string(position_index) + "]",
+                   scenario.generalized_position_derivative_observation_kinds
+                       [position_index]),
+               "every mapped position derivative must be required with its "
+               "physical kind: index " + std::to_string(position_index));
+    }
+    for (std::size_t velocity_index = 0;
+         velocity_index < scenario.generalized_velocities.size();
+         ++velocity_index) {
+        Expect(has_scalar(
+                   "mapped_back_generalized_velocity[" +
+                       std::to_string(velocity_index) + "]",
+                   scenario.generalized_velocity_observation_kinds
+                       [velocity_index]),
+               "every inverse-mapped velocity must be required: index " +
+                   std::to_string(velocity_index));
+    }
+    for (const auto& link : scenario.links) {
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            Expect(
+                has_scalar(
+                    "acceleration_" + link.name + "_angular[" +
+                        std::to_string(axis_index) + "]",
+                    orvd_contract::ObservationKind::
+                        kAngularAccelerationRadiansPerSecondSquared),
+                "every body angular acceleration must be required: " +
+                    link.name);
+            Expect(
+                has_scalar(
+                    "acceleration_" + link.name +
+                        "_translational_at_body_origin[" +
+                        std::to_string(axis_index) + "]",
+                    orvd_contract::ObservationKind::
+                        kTranslationalAccelerationMetersPerSecondSquared),
+                "every body-origin translational acceleration must be "
+                "required: " + link.name);
+            Expect(has_scalar(
+                       "jacobian_probe_response_" + link.name + "_angular[" +
+                           std::to_string(axis_index) + "]",
+                       orvd_contract::ObservationKind::
+                           kAngularVelocityRadiansPerSecond),
+                   "every body Jacobian angular response must be required: " +
+                       link.name);
+            Expect(
+                has_scalar(
+                    "jacobian_probe_response_" + link.name +
+                        "_translational_at_center_of_mass[" +
+                        std::to_string(axis_index) + "]",
+                    orvd_contract::ObservationKind::
+                        kTranslationalVelocityMetersPerSecond),
+                "every body Jacobian point response must be required: " +
+                    link.name);
+        }
+    }
+}
+
 /// Moves one named observation by an absolute amount.
 ///
 /// Distinct from the proportional perturbation helper: here the caller has
@@ -461,7 +536,13 @@ int main(int argc, char** argv) {
               std::string("relative_velocity_") +
                   scenario.relative_spatial_velocity_observations.front().name +
                   "_angular[0]",
-              std::string("state_readback_velocity[0]")}) {
+              std::string("state_readback_velocity[0]"),
+              std::string("mapped_position_derivative[3]"),
+              std::string("mapped_back_generalized_velocity[3]"),
+              std::string("acceleration_lower_link_angular[0]"),
+              std::string(
+                  "jacobian_probe_response_reverse_branch_link_"
+                  "translational_at_center_of_mass[0]")}) {
             const auto missing = orvd_comparison::CompareObservationStreams(
                 requirements, first, WithObservationRemoved(second, removed));
             Expect(missing.outcome ==
@@ -489,9 +570,9 @@ int main(int argc, char** argv) {
         const orvd_contract::ScenarioDefinition scenario =
             orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
         const orvd_comparison::ComparisonRequirements requirements =
-            orvd_comparison::MakeSpatialKinematicsComparisonRequirements(
+            orvd_comparison::MakeDifferentialKinematicsComparisonRequirements(
                 scenario);
-        ExpectRequirementsCoverSpatialKinematics(requirements, scenario);
+        ExpectRequirementsCoverDifferentialKinematics(requirements, scenario);
 
         std::string reference_text, candidate_text;
         if (!CaptureReferenceEmitterOutput(emitter_path, excitation,
@@ -611,14 +692,20 @@ int main(int argc, char** argv) {
                                "near-zero floor: " + judged.detail);
             }
 
-            // Angular and translational velocities have different dimensions
-            // and separate near-zero floors. Prove that both dimensions
-            // actually enter and use the 1e-8 proportional branch.
+            // Every differential-kinematics dimension has its own near-zero
+            // floor. Prove that each one actually enters and uses the 1e-8
+            // proportional branch in this dynamic scenario.
             for (const auto kind :
                  {orvd_contract::ObservationKind::
                       kAngularVelocityRadiansPerSecond,
                   orvd_contract::ObservationKind::
-                      kTranslationalVelocityMetersPerSecond}) {
+                      kTranslationalVelocityMetersPerSecond,
+                  orvd_contract::ObservationKind::
+                      kQuaternionDerivativePerSecond,
+                  orvd_contract::ObservationKind::
+                      kAngularAccelerationRadiansPerSecondSquared,
+                  orvd_contract::ObservationKind::
+                      kTranslationalAccelerationMetersPerSecondSquared}) {
                 const orvd_comparison::RequiredObservation* target = nullptr;
                 for (const auto& required : requirements.scalars) {
                     if (required.kind != kind) continue;
@@ -633,7 +720,7 @@ int main(int argc, char** argv) {
                     }
                 }
                 Expect(target != nullptr,
-                       "each spatial-velocity dimension must exercise the "
+                       "each differential-kinematics dimension must exercise the "
                        "relative tolerance branch");
                 if (target == nullptr) continue;
                 const auto* observation =
@@ -671,7 +758,7 @@ int main(int argc, char** argv) {
             requirements, reference, candidate);
         Expect(verdict.outcome == orvd_comparison::ComparisonOutcome::kAccepted,
                std::string("the ORVD candidate must agree with the Drake "
-                           "reference on spatial kinematics (") +
+                           "reference on differential kinematics (") +
                    std::string(excitation) + "): " + verdict.detail);
         if (excitation == "dynamic_excitation") {
             Expect(verdict.relative_branch_count > 0,
@@ -686,6 +773,6 @@ int main(int argc, char** argv) {
     }
     std::printf(
         "the harness fails when it should, and the ORVD candidate agrees with "
-        "the Drake reference on spatial kinematics\n");
+        "the Drake reference on differential kinematics\n");
     return 0;
 }

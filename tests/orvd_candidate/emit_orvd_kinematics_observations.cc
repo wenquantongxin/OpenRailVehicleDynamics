@@ -16,10 +16,10 @@
 // file: a claim a program makes about its own linkage is the one claim it cannot
 // check.
 //
-// Only what G31-G32 have landed is emitted. The mass matrix and the inverse
-// dynamics belong to later goals; the judge's spatial-kinematics requirement
-// set is what says so, and it refuses a missing observation rather than
-// skipping it.
+// Only what G31-G33 have landed is emitted. The mass matrix and the inverse
+// dynamics belong to later goals; the judge's differential-kinematics
+// requirement set is what says so, and it refuses a missing observation
+// rather than skipping it.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -137,6 +137,12 @@ int main(int argc, char** argv) {
         CopyToEigenVector(scenario.generalized_positions);
     const Eigen::VectorXd generalized_velocities =
         CopyToEigenVector(scenario.generalized_velocities);
+    const Eigen::VectorXd generalized_accelerations =
+        CopyToEigenVector(scenario.generalized_accelerations);
+    const Eigen::VectorXd differential_kinematics_probe = CopyToEigenVector(
+        scenario.differential_kinematics_probe_generalized_velocities);
+    const Eigen::VectorXd inverse_mapping_probe = CopyToEigenVector(
+        scenario.inverse_mapping_probe_generalized_position_derivatives);
     if (generalized_positions.size() != model.num_generalized_positions() ||
         generalized_velocities.size() != model.num_generalized_velocities()) {
         std::fprintf(stderr,
@@ -152,6 +158,20 @@ int main(int argc, char** argv) {
     const auto context = model.CreateDefaultContext();
     model.SetGeneralizedPositions(context.get(), generalized_positions);
     model.SetGeneralizedVelocities(context.get(), generalized_velocities);
+
+    Eigen::VectorXd mapped_position_derivatives(
+        model.num_generalized_positions());
+    model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *context, differential_kinematics_probe,
+        &mapped_position_derivatives);
+    Eigen::VectorXd mapped_back_velocities(model.num_generalized_velocities());
+    model.MapGeneralizedPositionDerivativesToVelocities(
+        *context, inverse_mapping_probe, &mapped_back_velocities);
+    Eigen::MatrixXd angular_accelerations(3, model.num_rigid_bodies());
+    Eigen::MatrixXd translational_accelerations(3, model.num_rigid_bodies());
+    model.CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
+        *context, generalized_accelerations, &angular_accelerations,
+        &translational_accelerations);
 
     orvd_contract::ObservationStream stream;
     stream.topology_facts = {
@@ -190,7 +210,9 @@ int main(int argc, char** argv) {
              model.GetFreeBodyVelocityRange(body).size()});
     }
 
-    for (const auto& link : scenario.links) {
+    for (std::size_t link_index = 0; link_index < scenario.links.size();
+         ++link_index) {
+        const auto& link = scenario.links[link_index];
         const RigidBodyHandle body = model.GetRigidBodyByName(link.name);
         const auto pose =
             model.CalcPoseInWorld(*context, body);
@@ -221,6 +243,40 @@ int main(int argc, char** argv) {
                  velocity
                      .translational_velocity_at_frame_origin_meters_per_second()(
                          axis_index)});
+            stream.observations.push_back(
+                {"acceleration_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 angular_accelerations(axis_index,
+                                       static_cast<int>(link_index))});
+            stream.observations.push_back(
+                {"acceleration_" + link.name +
+                     "_translational_at_body_origin[" +
+                     std::to_string(axis_index) + "]",
+                 translational_accelerations(axis_index,
+                                             static_cast<int>(link_index))});
+        }
+
+        Eigen::MatrixXd angular_jacobian(3,
+                                         model.num_generalized_velocities());
+        Eigen::MatrixXd translational_jacobian(
+            3, model.num_generalized_velocities());
+        model.CalcRigidBodyPointSpatialVelocityJacobianRelativeToWorldExpressedInWorld(
+            *context, body, link.center_of_mass_in_link_frame_meters,
+            &angular_jacobian, &translational_jacobian);
+        const Eigen::Vector3d angular_response =
+            angular_jacobian * differential_kinematics_probe;
+        const Eigen::Vector3d translational_response =
+            translational_jacobian * differential_kinematics_probe;
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            stream.observations.push_back(
+                {"jacobian_probe_response_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 angular_response(axis_index)});
+            stream.observations.push_back(
+                {"jacobian_probe_response_" + link.name +
+                     "_translational_at_center_of_mass[" +
+                     std::to_string(axis_index) + "]",
+                 translational_response(axis_index)});
         }
     }
 
@@ -264,6 +320,20 @@ int main(int argc, char** argv) {
         stream.observations.push_back(
             {"state_readback_velocity[" + std::to_string(velocity_index) + "]",
              velocities_after_evaluation(velocity_index)});
+    }
+    for (int position_index = 0;
+         position_index < mapped_position_derivatives.size(); ++position_index) {
+        stream.observations.push_back(
+            {"mapped_position_derivative[" +
+                 std::to_string(position_index) + "]",
+             mapped_position_derivatives(position_index)});
+    }
+    for (int velocity_index = 0;
+         velocity_index < mapped_back_velocities.size(); ++velocity_index) {
+        stream.observations.push_back(
+            {"mapped_back_generalized_velocity[" +
+                 std::to_string(velocity_index) + "]",
+             mapped_back_velocities(velocity_index)});
     }
 
     std::fputs(orvd_contract::FormatObservationStream(stream).c_str(), stdout);

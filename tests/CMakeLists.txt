@@ -421,6 +421,19 @@ target_link_libraries(verify_multibody_model_spatial_kinematics
 add_test(NAME verify_multibody_model_spatial_kinematics
          COMMAND verify_multibody_model_spatial_kinematics)
 
+# qdot/v mappings, caller-owned spatial accelerations and the deliberately
+# narrow kV body-point Jacobian. The Jacobian is checked column by column
+# against central differences of the public pose query; acceleration is checked
+# against its independent affine relation to that Jacobian.
+add_executable(verify_multibody_model_differential_kinematics
+    multibody_model/verify_multibody_model_differential_kinematics.cc)
+orvd_configure_first_party_target(
+    verify_multibody_model_differential_kinematics)
+target_link_libraries(verify_multibody_model_differential_kinematics
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_differential_kinematics
+         COMMAND verify_multibody_model_differential_kinematics)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed

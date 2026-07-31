@@ -1633,13 +1633,13 @@ void MultibodyTree<T>::CalcDynamicBiasForces(
 
 template <typename T>
 void MultibodyTree<T>::CalcSpatialAccelerationsFromVdot(
-    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>&,
-    const VelocityKinematicsCache<T>&, const VectorX<T>& known_vdot,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+    const VectorX<T>& known_vdot,
     std::vector<SpatialAcceleration<T>>* A_WB_array) const {
   ValidateEvaluationContext(context);
   const bool ignore_velocities = false;
   CalcSpatialAccelerationsFromVdot(context, known_vdot, ignore_velocities,
-                                   &*A_WB_array);
+                                   A_WB_array);
 }
 
 template <typename T>
@@ -1680,8 +1680,8 @@ void MultibodyTree<T>::CalcSpatialAccelerationsFromVdot(
 
 template <typename T>
 void MultibodyTree<T>::CalcAccelerationKinematicsCache(
-    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
-    const VelocityKinematicsCache<T>& vc, const VectorX<T>& known_vdot,
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+    const VectorX<T>& known_vdot,
     AccelerationKinematicsCache<T>* ac) const {
   ValidateEvaluationContext(context);
   DRAKE_DEMAND(ac != nullptr);
@@ -1689,7 +1689,7 @@ void MultibodyTree<T>::CalcAccelerationKinematicsCache(
 
   std::vector<SpatialAcceleration<T>>& A_WB_array = ac->get_mutable_A_WB_pool();
 
-  CalcSpatialAccelerationsFromVdot(context, pc, vc, known_vdot, &A_WB_array);
+  CalcSpatialAccelerationsFromVdot(context, known_vdot, &A_WB_array);
 }
 
 template <typename T>
@@ -2619,10 +2619,8 @@ void MultibodyTree<T>::CalcAllBodyBiasSpatialAccelerationsInWorld(
   //     A𝑠Bias_WA = J̇𝑠_V_WA ⋅ 𝑠  =  A_WA − J𝑠_V_WA ⋅ 𝑠̇
   // One way to calculate A𝑠Bias_WA is to evaluate A_WA with 𝑠̇ = 0.  Hence, set
   // 𝑠̇ = 0 to calculate all bodies' spatial acceleration biases in world W.
-  const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
-  const VelocityKinematicsCache<T>& vc = EvalVelocityKinematics(context);
   const VectorX<T> vdot = VectorX<T>::Zero(num_velocities());
-  CalcSpatialAccelerationsFromVdot(context, pc, vc, vdot, AsBias_WB_all);
+  CalcSpatialAccelerationsFromVdot(context, vdot, AsBias_WB_all);
 }
 
 template <typename T>
@@ -2711,7 +2709,8 @@ SpatialAcceleration<T> MultibodyTree<T>::CalcSpatialAccelerationHelper(
   const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
   const VelocityKinematicsCache<T>& vc = EvalVelocityKinematics(context);
   const SpatialAcceleration<T> A_WFp_W =
-      ShiftSpatialAccelerationInWorld(frame_F, p_FoFp_F, A_WB_W, pc, vc);
+      ShiftSpatialAccelerationInWorld(context, frame_F, p_FoFp_F, A_WB_W, pc,
+                                      vc);
 
   // Calculations are simpler if body_A (the "measured-in" frame) is the world
   // frame W.  Otherwise, extra calculations are needed.
@@ -2733,7 +2732,8 @@ SpatialAcceleration<T> MultibodyTree<T>::CalcSpatialAccelerationHelper(
     // Reminder: p_AoAp is an "instantaneous" position vector, so differentation
     // of p_AoAp or a_WAp may produce a result different than you might expect.
     const SpatialAcceleration<T> A_WAp_W =
-        ShiftSpatialAccelerationInWorld(frame_A, p_AoAp_A, A_WA_W, pc, vc);
+        ShiftSpatialAccelerationInWorld(context, frame_A, p_AoAp_A, A_WA_W, pc,
+                                        vc);
 
     // Implement part of the formula from equations (5) and (6) above.
     // TODO(Mitiguy) Investigate whether it is more accurate and/or efficient
@@ -2783,6 +2783,7 @@ SpatialAcceleration<T> MultibodyTree<T>::CalcSpatialAccelerationHelper(
 
 template <typename T>
 SpatialAcceleration<T> MultibodyTree<T>::ShiftSpatialAccelerationInWorld(
+    const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
     const Frame<T>& frame_B, const Eigen::Ref<const Vector3<T>>& p_BoBp_B,
     const SpatialAcceleration<T>& A_WA_W, const PositionKinematicsCache<T>& pc,
     const VelocityKinematicsCache<T>& vc) const {
@@ -2795,7 +2796,8 @@ SpatialAcceleration<T> MultibodyTree<T>::ShiftSpatialAccelerationInWorld(
     p_AoBp_A = p_BoBp_B;
   } else {
     // Form the position from Ao (body_A's origin) to Bp, expressed in body_A.
-    const RigidTransform<T> X_AB = frame_B.GetFixedPoseInBodyFrame();
+    const RigidTransform<T> X_AB =
+        frame_B.CalcPoseInBodyFrame(context.state());
     p_AoBp_A = X_AB * p_BoBp_B;
   }
 

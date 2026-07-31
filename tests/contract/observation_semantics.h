@@ -24,6 +24,9 @@ enum class ObservationKind {
     kTranslationMeters,
     kAngularVelocityRadiansPerSecond,
     kTranslationalVelocityMetersPerSecond,
+    kQuaternionDerivativePerSecond,
+    kAngularAccelerationRadiansPerSecondSquared,
+    kTranslationalAccelerationMetersPerSecondSquared,
     kForceNewtons,          // translational generalized force
     kTorqueNewtonMetres,    // rotational generalized force
 };

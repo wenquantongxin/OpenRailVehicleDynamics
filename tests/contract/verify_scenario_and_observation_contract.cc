@@ -43,6 +43,18 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
         Expect(scenario.generalized_velocity_observation_kinds.size() ==
                    velocity_count,
                "velocity kinds must have one entry per velocity");
+        Expect(
+            scenario.generalized_position_derivative_observation_kinds.size() ==
+                scenario.generalized_positions.size(),
+            "position-derivative kinds must have one entry per position");
+        Expect(
+            scenario.differential_kinematics_probe_generalized_velocities
+                    .size() == velocity_count,
+            "the differential-kinematics probe must have one entry per velocity");
+        Expect(
+            scenario.inverse_mapping_probe_generalized_position_derivatives
+                    .size() == scenario.generalized_positions.size(),
+            "the inverse-mapping probe must have one entry per position");
         const std::vector<orvd_contract::ObservationKind> expected_position_kinds = {
             orvd_contract::ObservationKind::kAngleRadians,
             orvd_contract::ObservationKind::kAngleRadians,
@@ -82,6 +94,93 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
         Expect(scenario.generalized_velocity_observation_kinds ==
                    expected_velocity_kinds,
                "velocity kinds must match the scenario topology");
+        const std::vector<orvd_contract::ObservationKind>
+            expected_position_derivative_kinds = {
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::kQuaternionDerivativePerSecond,
+                orvd_contract::ObservationKind::kQuaternionDerivativePerSecond,
+                orvd_contract::ObservationKind::kQuaternionDerivativePerSecond,
+                orvd_contract::ObservationKind::kQuaternionDerivativePerSecond,
+                orvd_contract::ObservationKind::
+                    kTranslationalVelocityMetersPerSecond,
+                orvd_contract::ObservationKind::
+                    kTranslationalVelocityMetersPerSecond,
+                orvd_contract::ObservationKind::
+                    kTranslationalVelocityMetersPerSecond,
+            };
+        Expect(scenario.generalized_position_derivative_observation_kinds ==
+                   expected_position_derivative_kinds,
+               "position-derivative kinds must match the wxyz/free-body "
+               "topology");
+        bool probe_has_positive_component = false;
+        bool probe_has_negative_component = false;
+        const auto& velocity_probe =
+            scenario.differential_kinematics_probe_generalized_velocities;
+        for (const double probe_component : velocity_probe) {
+            Expect(std::isfinite(probe_component) && probe_component != 0.0,
+                   "every differential-kinematics probe component must be "
+                   "finite and nonzero");
+            probe_has_positive_component =
+                probe_has_positive_component || probe_component > 0.0;
+            probe_has_negative_component =
+                probe_has_negative_component || probe_component < 0.0;
+        }
+        for (std::size_t first = 0; first < velocity_probe.size(); ++first) {
+            for (std::size_t second = first + 1; second < velocity_probe.size();
+                 ++second) {
+                Expect(velocity_probe[first] != velocity_probe[second],
+                       "differential-kinematics probe components must be "
+                       "pairwise distinct so column permutations are visible");
+            }
+        }
+        Expect(probe_has_positive_component && probe_has_negative_component,
+               "the differential-kinematics probe must contain both signs");
+        Expect(velocity_probe != scenario.generalized_velocities,
+               "the differential-kinematics probe must differ from the state "
+               "velocity");
+
+        for (const double derivative_component :
+             scenario.inverse_mapping_probe_generalized_position_derivatives) {
+            Expect(std::isfinite(derivative_component),
+                   "every inverse-mapping probe component must be finite");
+        }
+        if (scenario.generalized_positions.size() >= 7 &&
+            scenario.inverse_mapping_probe_generalized_position_derivatives
+                    .size() >= 7) {
+            double quaternion_radial_component = 0.0;
+            for (std::size_t index = 3; index < 7; ++index) {
+                quaternion_radial_component +=
+                    scenario.generalized_positions[index] *
+                    scenario
+                        .inverse_mapping_probe_generalized_position_derivatives
+                            [index];
+            }
+            Expect(std::abs(quaternion_radial_component) > 1.0e-2,
+                   "the inverse-mapping probe must exercise quaternion radial "
+                   "projection");
+        }
+
+        if (excitation == "dynamic_excitation") {
+            for (const double generalized_acceleration :
+                 scenario.generalized_accelerations) {
+                Expect(std::isfinite(generalized_acceleration) &&
+                           generalized_acceleration != 0.0,
+                       "dynamic generalized accelerations must be finite and "
+                       "nonzero");
+            }
+        } else {
+            for (const double generalized_acceleration :
+                 scenario.generalized_accelerations) {
+                Expect(generalized_acceleration == 0.0,
+                       "the near-zero scenario must prescribe zero generalized "
+                       "accelerations");
+            }
+        }
 
         using orvd_contract::GeneralizedForceComponentKind;
         const std::vector<GeneralizedForceComponentKind> expected_force_kinds = {

@@ -1418,12 +1418,6 @@ class MultibodyTree {
   //
   // @param[in] context
   //   The context containing the state of the MultibodyTree model.
-  // @param[in] pc
-  //   A position kinematics cache object already updated to be in sync with
-  //   `context`.
-  // @param[in] vc
-  //   A velocity kinematics cache object already updated to be in sync with
-  //   `context`.
   // @param[in] known_vdot
   //   A vector with the generalized accelerations for the full MultibodyTree
   //   model.
@@ -1431,21 +1425,17 @@ class MultibodyTree {
   //   A pointer to a valid, non nullptr, acceleration kinematics cache. This
   //   method aborts if `ac` is nullptr.
   //
-  // @pre The position kinematics `pc` must have been previously updated with a
-  // call to CalcPositionKinematicsCache().
-  // @pre The velocity kinematics `vc` must have been previously updated with a
-  // call to CalcVelocityKinematicsCache().
   void CalcAccelerationKinematicsCache(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
-      const VelocityKinematicsCache<T>& vc, const VectorX<T>& known_vdot,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+      const VectorX<T>& known_vdot,
       AccelerationKinematicsCache<T>* ac) const;
 
   // See MultibodyPlant method.
   // @warning The output parameter `A_WB_array` is indexed by MobodIndex,
   // while MultibodyPlant's method returns accelerations indexed by BodyIndex.
   void CalcSpatialAccelerationsFromVdot(
-      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context, const PositionKinematicsCache<T>& pc,
-      const VelocityKinematicsCache<T>& vc, const VectorX<T>& known_vdot,
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
+      const VectorX<T>& known_vdot,
       std::vector<SpatialAcceleration<T>>* A_WB_array) const;
 
   // See MultibodyPlant method.
@@ -2498,6 +2488,7 @@ class MultibodyTree {
   // respect to speeds 𝑠 (𝑠 = q̇ or 𝑠 = v)). It then returns A𝑠Bias_WBp_W (point
   // Bp's bias spatial acceleration in W, expressed in W with respect to 𝑠).
   SpatialAcceleration<T> ShiftSpatialAccelerationInWorld(
+      const orvd::rigid_multibody_tree::internal::RigidMultibodyTreeEvaluationContext& context,
       const Frame<T>& frame_B, const Eigen::Ref<const Vector3<T>>& p_BoBp_B,
       const SpatialAcceleration<T>& A_WA_W,
       const PositionKinematicsCache<T>& pc,
