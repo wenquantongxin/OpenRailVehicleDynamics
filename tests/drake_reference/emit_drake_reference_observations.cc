@@ -191,8 +191,9 @@ int main(int argc, char** argv) {
              inverse_dynamics(velocity_index)});
 
     for (const auto& link : scenario.links) {
+        const auto& body = plant.GetBodyByName(link.name);
         const RigidTransformd pose =
-            plant.EvalBodyPoseInWorld(*context, plant.GetBodyByName(link.name));
+            plant.EvalBodyPoseInWorld(*context, body);
         for (int row = 0; row < 3; ++row)
             for (int column = 0; column < 3; ++column)
                 stream.observations.push_back(
@@ -203,6 +204,44 @@ int main(int argc, char** argv) {
             stream.observations.push_back(
                 {"pose_" + link.name + "_translation[" + std::to_string(axis_index) + "]",
                  pose.translation()(axis_index)});
+
+        const auto& velocity =
+            plant.EvalBodySpatialVelocityInWorld(*context, body);
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            stream.observations.push_back(
+                {"velocity_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 velocity.rotational()(axis_index)});
+            stream.observations.push_back(
+                {"velocity_" + link.name +
+                     "_translational_at_body_origin[" +
+                     std::to_string(axis_index) + "]",
+                 velocity.translational()(axis_index)});
+        }
+    }
+
+    for (const auto& relative :
+         scenario.relative_spatial_velocity_observations) {
+        const auto velocity =
+            plant.GetBodyByName(relative.moving_link_name)
+                .body_frame()
+                .CalcSpatialVelocity(
+                    *context,
+                    plant.GetBodyByName(relative.reference_link_name)
+                        .body_frame(),
+                    plant.GetBodyByName(relative.expressed_in_link_name)
+                        .body_frame());
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            stream.observations.push_back(
+                {"relative_velocity_" + relative.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 velocity.rotational()(axis_index)});
+            stream.observations.push_back(
+                {"relative_velocity_" + relative.name +
+                     "_translational_at_moving_origin[" +
+                     std::to_string(axis_index) + "]",
+                 velocity.translational()(axis_index)});
+        }
     }
 
     // Read generalized positions back after evaluation, so an implementation
@@ -214,6 +253,14 @@ int main(int argc, char** argv) {
         stream.observations.push_back(
             {"state_readback_position[" + std::to_string(position_index) + "]",
              positions_after_evaluation(position_index)});
+    }
+    const Eigen::VectorXd velocities_after_evaluation =
+        plant.GetVelocities(*context);
+    for (int velocity_index = 0;
+         velocity_index < velocities_after_evaluation.size(); ++velocity_index) {
+        stream.observations.push_back(
+            {"state_readback_velocity[" + std::to_string(velocity_index) + "]",
+             velocities_after_evaluation(velocity_index)});
     }
 
     std::fputs(orvd_contract::FormatObservationStream(stream).c_str(), stdout);

@@ -40,6 +40,13 @@ struct RevoluteJointDefinition {
     Eigen::Vector3d axis_in_parent;
 };
 
+struct RelativeSpatialVelocityObservationDefinition {
+    std::string name;
+    std::string moving_link_name;
+    std::string reference_link_name;
+    std::string expressed_in_link_name;
+};
+
 enum class GeneralizedForceComponentKind {
     kForceNewtons,
     kTorqueNewtonMetres,
@@ -62,7 +69,13 @@ struct ScenarioDefinition {
     std::vector<double> generalized_velocities;
     std::vector<double> generalized_accelerations;
     std::vector<ObservationKind> generalized_position_observation_kinds;
+    std::vector<ObservationKind> generalized_velocity_observation_kinds;
     std::vector<GeneralizedForceComponentKind> generalized_force_component_kinds;
+
+    // Named independently of link-vector order. Both emitters resolve these
+    // three links in the model they actually built.
+    std::vector<RelativeSpatialVelocityObservationDefinition>
+        relative_spatial_velocity_observations;
 
     // One generalized acceleration per mass-matrix column. Rotational entries
     // are rad/s² and translational entries are m/s². Every entry is non-zero so
@@ -70,7 +83,8 @@ struct ScenarioDefinition {
     std::vector<double> mass_matrix_column_generalized_accelerations;
 };
 
-// A two-link revolute chain plus one free-floating body. The joint axes are
+// A two-link revolute chain, a revolute branch stated in the direction opposite
+// the world-rooted forest, and one free-floating body. The joint axes are
 // deliberately non-parallel: a chain whose joints share an axis cannot expose a
 // sign or frame error in the off-diagonal inertia coupling.
 //

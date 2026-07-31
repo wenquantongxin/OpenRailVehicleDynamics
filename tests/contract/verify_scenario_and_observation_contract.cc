@@ -40,7 +40,11 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
         Expect(scenario.generalized_position_observation_kinds.size() ==
                    scenario.generalized_positions.size(),
                "position kinds must have one entry per position");
+        Expect(scenario.generalized_velocity_observation_kinds.size() ==
+                   velocity_count,
+               "velocity kinds must have one entry per velocity");
         const std::vector<orvd_contract::ObservationKind> expected_position_kinds = {
+            orvd_contract::ObservationKind::kAngleRadians,
             orvd_contract::ObservationKind::kAngleRadians,
             orvd_contract::ObservationKind::kAngleRadians,
             orvd_contract::ObservationKind::kUnitQuaternionComponent,
@@ -54,9 +58,34 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
         Expect(scenario.generalized_position_observation_kinds ==
                    expected_position_kinds,
                "position kinds must match the scenario topology");
+        const std::vector<orvd_contract::ObservationKind>
+            expected_velocity_kinds = {
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kAngularVelocityRadiansPerSecond,
+                orvd_contract::ObservationKind::
+                    kTranslationalVelocityMetersPerSecond,
+                orvd_contract::ObservationKind::
+                    kTranslationalVelocityMetersPerSecond,
+                orvd_contract::ObservationKind::
+                    kTranslationalVelocityMetersPerSecond,
+            };
+        Expect(scenario.generalized_velocity_observation_kinds ==
+                   expected_velocity_kinds,
+               "velocity kinds must match the scenario topology");
 
         using orvd_contract::GeneralizedForceComponentKind;
         const std::vector<GeneralizedForceComponentKind> expected_force_kinds = {
+            GeneralizedForceComponentKind::kTorqueNewtonMetres,
             GeneralizedForceComponentKind::kTorqueNewtonMetres,
             GeneralizedForceComponentKind::kTorqueNewtonMetres,
             GeneralizedForceComponentKind::kTorqueNewtonMetres,
@@ -94,12 +123,12 @@ void CheckScenarioStatesAreDimensionallyConsistent() {
 void CheckQuaternionStateIsNonDegenerateAndUnitLength() {
     const orvd_contract::ScenarioDefinition scenario =
         orvd_contract::MakeRevoluteChainWithFloatingBodyScenario("dynamic_excitation");
-    Expect(scenario.generalized_positions.size() >= 6,
+    Expect(scenario.generalized_positions.size() >= 7,
            "the scenario must contain the floating quaternion");
-    if (scenario.generalized_positions.size() < 6) return;
-    // Positions [2..5] are the floating body's quaternion in this topology.
+    if (scenario.generalized_positions.size() < 7) return;
+    // Positions [3..6] are the floating body's quaternion in this topology.
     double squared_norm = 0.0;
-    for (std::size_t index = 2; index < 6; ++index)
+    for (std::size_t index = 3; index < 7; ++index)
         squared_norm += scenario.generalized_positions[index] *
                         scenario.generalized_positions[index];
     Expect(std::abs(squared_norm - 1.0) < 1e-12,
@@ -112,7 +141,7 @@ void CheckQuaternionStateIsNonDegenerateAndUnitLength() {
     const std::vector<double> expected_wxyz = {
         scale, 2.0 * scale, -3.0 * scale, 4.0 * scale};
     for (std::size_t offset = 0; offset < expected_wxyz.size(); ++offset) {
-        Expect(std::abs(scenario.generalized_positions[2 + offset] -
+        Expect(std::abs(scenario.generalized_positions[3 + offset] -
                         expected_wxyz[offset]) < 1e-15,
                "the floating quaternion must use the non-degenerate wxyz "
                "fixture");
@@ -153,6 +182,52 @@ void CheckTheElbowMountIsTurnedAndNotOnTheWorld() {
     Expect(elbow->axis_in_parent.isApprox(Eigen::Vector3d::UnitX()),
            "and its axis is stated in that turned frame, so a dropped rotation "
            "moves the axis as well as the frame");
+}
+
+void CheckRelativeVelocityObservationNamesThreeDistinctLinks() {
+    const orvd_contract::ScenarioDefinition scenario =
+        orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(
+            "dynamic_excitation");
+    Expect(scenario.relative_spatial_velocity_observations.size() == 1,
+           "the scenario must state one nontrivial relative velocity");
+    if (scenario.relative_spatial_velocity_observations.size() != 1) return;
+    const auto& relative =
+        scenario.relative_spatial_velocity_observations.front();
+    Expect(relative.moving_link_name != relative.reference_link_name &&
+               relative.moving_link_name != relative.expressed_in_link_name &&
+               relative.reference_link_name != relative.expressed_in_link_name,
+           "moving, reference and expression links must be distinct");
+    Expect(relative.moving_link_name == "lower_link" &&
+               relative.reference_link_name == "floating_link" &&
+               relative.expressed_in_link_name == "upper_link",
+           "the relative observation must retain its named frame roles");
+}
+
+void CheckTheReverseBranchIsActuallyAReverseBranch() {
+    const orvd_contract::ScenarioDefinition scenario =
+        orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(
+            "dynamic_excitation");
+    const orvd_contract::RevoluteJointDefinition* reverse_branch = nullptr;
+    for (const auto& joint : scenario.revolute_joints) {
+        if (joint.name == "reverse_branch_joint") reverse_branch = &joint;
+    }
+    Expect(reverse_branch != nullptr,
+           "the fixture must contain the reverse branch joint");
+    if (reverse_branch == nullptr) return;
+    Expect(reverse_branch->parent_link_name == "reverse_branch_link" &&
+               reverse_branch->child_link_name == "upper_link",
+           "the unrooted branch must be stated as parent of an already "
+           "world-connected child so the forest traverses it in reverse");
+    Expect(!reverse_branch->parent_frame_rotation_in_parent.isIdentity(0.0) &&
+               !reverse_branch->parent_frame_translation_in_parent_meters
+                    .isZero(0.0),
+           "the reverse branch must carry both a rotated and displaced mount");
+    Expect(scenario.generalized_positions.size() > 2 &&
+               scenario.generalized_positions[2] != 0.0 &&
+               scenario.generalized_velocities.size() > 2 &&
+               scenario.generalized_velocities[2] != 0.0,
+           "the dynamic fixture must excite both the position and velocity of "
+           "the reverse branch");
 }
 
 void CheckLooseObservationStreamParsing() {
@@ -197,6 +272,8 @@ int main() {
     CheckScenarioStatesAreDimensionallyConsistent();
     CheckQuaternionStateIsNonDegenerateAndUnitLength();
     CheckTheElbowMountIsTurnedAndNotOnTheWorld();
+    CheckRelativeVelocityObservationNamesThreeDistinctLinks();
+    CheckTheReverseBranchIsActuallyAReverseBranch();
     CheckLooseObservationStreamParsing();
 
     if (failure_count > 0) {

@@ -20,6 +20,8 @@ constexpr double kTorqueAbsoluteFloorNewtonMetres = 1e-9;
 constexpr double kTranslationAbsoluteFloorMeters = 1e-12;
 constexpr double kAngleAbsoluteFloorRadians = 1e-12;
 constexpr double kUnitQuaternionComponentAbsoluteFloor = 1e-12;
+constexpr double kAngularVelocityAbsoluteFloorRadiansPerSecond = 1e-12;
+constexpr double kTranslationalVelocityAbsoluteFloorMetersPerSecond = 1e-12;
 
 double AbsoluteFloorForKind(ObservationKind kind) {
     switch (kind) {
@@ -28,6 +30,10 @@ double AbsoluteFloorForKind(ObservationKind kind) {
         case ObservationKind::kTranslationMeters:       return kTranslationAbsoluteFloorMeters;
         case ObservationKind::kAngleRadians:            return kAngleAbsoluteFloorRadians;
         case ObservationKind::kUnitQuaternionComponent: return kUnitQuaternionComponentAbsoluteFloor;
+        case ObservationKind::kAngularVelocityRadiansPerSecond:
+            return kAngularVelocityAbsoluteFloorRadiansPerSecond;
+        case ObservationKind::kTranslationalVelocityMetersPerSecond:
+            return kTranslationalVelocityAbsoluteFloorMetersPerSecond;
     }
     throw std::logic_error("Observation kind has no absolute-error floor");
 }

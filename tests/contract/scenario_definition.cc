@@ -12,16 +12,19 @@ constexpr double kUpperLinkLengthMeters = 0.5;
 constexpr double kLowerLinkLengthMeters = 0.3;
 constexpr double kUpperLinkMassKilograms = 1.3;
 constexpr double kLowerLinkMassKilograms = 0.7;
+constexpr double kReverseBranchMassKilograms = 0.45;
 constexpr double kFloatingLinkMassKilograms = 2.1;
 constexpr double kGravityAccelerationMetersPerSecondSquared = 9.81;
 
 // Layout produced by this topology, in Drake's depth-first coordinate order:
 //   positions  [0]=shoulder angle, [1]=elbow angle,
-//              [2..5]=floating quaternion, [6..8]=floating translation
+//              [2]=reverse-branch angle,
+//              [3..6]=floating quaternion, [7..9]=floating translation
 //   velocities [0]=shoulder rate,  [1]=elbow rate,
-//              [2..4]=floating angular rate, [5..7]=floating linear rate
-constexpr int kVelocityCount = 8;
-constexpr int kFirstFloatingLinearVelocityIndex = 5;
+//              [2]=reverse-branch rate,
+//              [3..5]=floating angular rate, [6..8]=floating linear rate
+constexpr int kVelocityCount = 9;
+constexpr int kFirstFloatingLinearVelocityIndex = 6;
 
 }  // namespace
 
@@ -38,6 +41,9 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
         {"lower_link", kLowerLinkMassKilograms,
          {0.0, -kLowerLinkLengthMeters / 2.0, 0.0},
          {0.04, kLowerLinkLengthMeters, 0.04}},
+        {"reverse_branch_link", kReverseBranchMassKilograms,
+         {0.04, -0.03, 0.02},
+         {0.16, 0.12, 0.1}},
         {"floating_link", kFloatingLinkMassKilograms,
          {0.01, 0.02, -0.03},
          {0.2, 0.3, 0.4}},
@@ -52,17 +58,32 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
         elbow_mount_rotation << std::cos(angle), 0.0, std::sin(angle), 0.0, 1.0,
             0.0, -std::sin(angle), 0.0, std::cos(angle);
     }
+    Eigen::Matrix3d reverse_branch_mount_rotation;
+    {
+        const double angle = -0.29;
+        reverse_branch_mount_rotation << 1.0, 0.0, 0.0, 0.0,
+            std::cos(angle), -std::sin(angle), 0.0, std::sin(angle),
+            std::cos(angle);
+    }
     scenario.revolute_joints = {
         {"shoulder_joint", "", "upper_link", Eigen::Matrix3d::Identity(),
          Eigen::Vector3d::Zero(), Eigen::Vector3d::UnitZ()},
         {"elbow_joint", "upper_link", "lower_link", elbow_mount_rotation,
          {0.0, -kUpperLinkLengthMeters, 0.0}, Eigen::Vector3d::UnitX()},
+        // The branch link is named as parent while the already world-connected
+        // upper link is named as child. The forest must traverse this relation
+        // backwards to reach the branch, so the coordinate and velocity signs
+        // are independently observable.
+        {"reverse_branch_joint", "reverse_branch_link", "upper_link",
+         reverse_branch_mount_rotation, {0.12, -0.08, 0.15},
+         Eigen::Vector3d::UnitY()},
     };
     // The floating link is free by statement, not because nothing joins it.
     scenario.free_body_names = {"floating_link"};
     scenario.generalized_position_observation_kinds = {
         ObservationKind::kAngleRadians,
         ObservationKind::kAngleRadians,
+        ObservationKind::kAngleRadians,
         ObservationKind::kUnitQuaternionComponent,
         ObservationKind::kUnitQuaternionComponent,
         ObservationKind::kUnitQuaternionComponent,
@@ -70,6 +91,17 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
         ObservationKind::kTranslationMeters,
         ObservationKind::kTranslationMeters,
         ObservationKind::kTranslationMeters,
+    };
+    scenario.generalized_velocity_observation_kinds = {
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kAngularVelocityRadiansPerSecond,
+        ObservationKind::kTranslationalVelocityMetersPerSecond,
+        ObservationKind::kTranslationalVelocityMetersPerSecond,
+        ObservationKind::kTranslationalVelocityMetersPerSecond,
     };
     scenario.generalized_force_component_kinds.assign(
         kVelocityCount, GeneralizedForceComponentKind::kTorqueNewtonMetres);
@@ -78,6 +110,9 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
         scenario.generalized_force_component_kinds[velocity_index] =
             GeneralizedForceComponentKind::kForceNewtons;
     }
+    scenario.relative_spatial_velocity_observations = {
+        {"lower_relative_to_floating_expressed_in_upper", "lower_link",
+         "floating_link", "upper_link"}};
 
     // A legal unit quaternion whose four components are all non-zero and
     // different, including one different sign. Equal components would make any
@@ -92,18 +127,20 @@ ScenarioDefinition MakeRevoluteChainWithFloatingBodyScenario(
 
     if (excitation == "near_zero_cancellation") {
         scenario.generalized_positions = {
-            0.0, 0.0,
+            0.0, 0.0, 0.0,
             quaternion_w, quaternion_x, quaternion_y, quaternion_z,
             0.11, -0.23, 0.31};
         scenario.generalized_velocities.assign(kVelocityCount, 0.0);
         scenario.generalized_accelerations.assign(kVelocityCount, 0.0);
     } else if (excitation == "dynamic_excitation") {
         scenario.generalized_positions = {
-            0.37, -0.62,
+            0.37, -0.62, 0.28,
             quaternion_w, quaternion_x, quaternion_y, quaternion_z,
             0.11, -0.23, 0.31};
-        scenario.generalized_velocities = {-1.9, 1.4, 0.9, -1.1, 1.7, -0.8, 1.3, -1.6};
-        scenario.generalized_accelerations = {7.0, -5.5, 3.1, -4.2, 6.3, -2.7, 4.9, -3.4};
+        scenario.generalized_velocities = {
+            -1.9, 1.4, -0.6, 0.9, -1.1, 1.7, -0.8, 1.3, -1.6};
+        scenario.generalized_accelerations = {
+            7.0, -5.5, 2.6, 3.1, -4.2, 6.3, -2.7, 4.9, -3.4};
     } else {
         throw std::invalid_argument(
             "unknown excitation: " + std::string(excitation));

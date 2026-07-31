@@ -45,8 +45,16 @@ struct ComparisonRequirements {
 MakePositionKinematicsComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 
+// The above, plus every link body frame's world spatial velocity (with its
+// translational component at the body origin), the named relative spatial
+// velocities, and the generalized velocities read back after evaluation.
+// Structurally a superset of position kinematics.
+[[nodiscard]] ComparisonRequirements
+MakeSpatialKinematicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario);
+
 // The above, plus the mass-matrix columns and the inverse-dynamics generalized
-// forces. Structurally a superset: it starts from the position-kinematics set.
+// forces. Structurally a superset: it starts from the spatial-kinematics set.
 [[nodiscard]] ComparisonRequirements MakeComparisonRequirements(
     const orvd_contract::ScenarioDefinition& scenario);
 

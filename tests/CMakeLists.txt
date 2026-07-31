@@ -274,7 +274,7 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
     add_test(NAME verify_cross_process_observation_comparison
              COMMAND verify_cross_process_observation_comparison
                      $<TARGET_FILE:emit_drake_reference_observations>
-                     $<TARGET_FILE:emit_orvd_position_kinematics_observations>)
+                     $<TARGET_FILE:emit_orvd_kinematics_observations>)
     add_test(NAME verify_cross_process_comparison_rejects_same_emitter
              COMMAND ${CMAKE_COMMAND}
                      -DCOMPARISON_EXECUTABLE=$<TARGET_FILE:verify_cross_process_observation_comparison>
@@ -409,6 +409,18 @@ target_link_libraries(verify_multibody_model_position_kinematics
 add_test(NAME verify_multibody_model_position_kinematics
          COMMAND verify_multibody_model_position_kinematics)
 
+# Angular and frame-origin translational velocities, including point shifts,
+# relative measurement, expression frames, branches, free bodies and reversed
+# relations. Every expectation is built from elementary rigid-body formulas
+# through the public first-party API.
+add_executable(verify_multibody_model_spatial_kinematics
+    multibody_model/verify_multibody_model_spatial_kinematics.cc)
+orvd_configure_first_party_target(verify_multibody_model_spatial_kinematics)
+target_link_libraries(verify_multibody_model_spatial_kinematics
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_spatial_kinematics
+         COMMAND verify_multibody_model_spatial_kinematics)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed
@@ -418,15 +430,15 @@ add_test(NAME verify_multibody_model_position_kinematics
 # below, on the built program: a configure-time check on the target graph would
 # have to model every spelling of a dependency and still could not be final,
 # because cmake_language(DEFER) can change the graph after it has run.
-add_executable(emit_orvd_position_kinematics_observations
-    orvd_candidate/emit_orvd_position_kinematics_observations.cc)
-orvd_configure_first_party_target(emit_orvd_position_kinematics_observations)
-target_link_libraries(emit_orvd_position_kinematics_observations
+add_executable(emit_orvd_kinematics_observations
+    orvd_candidate/emit_orvd_kinematics_observations.cc)
+orvd_configure_first_party_target(emit_orvd_kinematics_observations)
+target_link_libraries(emit_orvd_kinematics_observations
     PRIVATE orvd_multibody_model orvd_test_contract)
 # The declared dynamic runtime closure of the built program. Anything it could
 # not finish walking is a refusal, not a clean result. Static object provenance
 # and ordinary link inputs are guarded separately.
 add_test(NAME verify_candidate_runtime_dependencies_exclude_shared_drake
          COMMAND ${CMAKE_COMMAND}
-                 -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_position_kinematics_observations>
+                 -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_kinematics_observations>
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake)

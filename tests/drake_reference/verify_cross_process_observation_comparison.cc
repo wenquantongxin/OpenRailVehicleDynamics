@@ -5,9 +5,9 @@
 // twice and comparing it with itself establishes that the harness works — the
 // pipe, the parser and the judge — and nothing about any candidate. Running the
 // reference against ORVD's own emitter is the equivalence claim, and it is made
-// only over the capability ORVD has actually landed: the judge's
-// position-kinematics requirement set says which observations that is, and it
-// refuses a missing one rather than skipping it.
+// only over the capability ORVD has actually landed: the judge's spatial-
+// kinematics requirement set says which observations that is, and it refuses a
+// missing one rather than skipping it.
 //
 // Separate processes are not tidiness. libdrake exports the same drake:: symbols
 // a vendored copy keeps, so co-linking the two would be an ODR violation whose
@@ -224,6 +224,74 @@ void ExpectRequirementsCoverPositionKinematics(
            "to pass on the same evidence");
 }
 
+void ExpectRequirementsCoverSpatialKinematics(
+    const orvd_comparison::ComparisonRequirements& requirements,
+    const orvd_contract::ScenarioDefinition& scenario) {
+    ExpectRequirementsCoverPositionKinematics(requirements, scenario);
+    const auto has_scalar =
+        [&requirements](const std::string& name,
+                        orvd_contract::ObservationKind expected_kind) {
+        for (const auto& required : requirements.scalars)
+            if (required.name == name && required.kind == expected_kind)
+                return true;
+        return false;
+    };
+
+    for (const auto& link : scenario.links) {
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            Expect(has_scalar("velocity_" + link.name + "_angular[" +
+                                  std::to_string(axis_index) + "]",
+                              orvd_contract::ObservationKind::
+                                  kAngularVelocityRadiansPerSecond),
+                   "every angular component of every link velocity must be "
+                   "required with angular-velocity units: " +
+                       link.name);
+            Expect(has_scalar("velocity_" + link.name +
+                                  "_translational_at_body_origin[" +
+                                  std::to_string(axis_index) + "]",
+                              orvd_contract::ObservationKind::
+                                  kTranslationalVelocityMetersPerSecond),
+                   "every body-origin translational component must be "
+                   "required with translational-velocity units: " +
+                       link.name);
+        }
+    }
+    for (const auto& relative :
+         scenario.relative_spatial_velocity_observations) {
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            Expect(has_scalar("relative_velocity_" + relative.name +
+                                  "_angular[" +
+                                  std::to_string(axis_index) + "]",
+                              orvd_contract::ObservationKind::
+                                  kAngularVelocityRadiansPerSecond),
+                   "every angular component of a named relative velocity must "
+                   "be required with angular-velocity units: " +
+                       relative.name);
+            Expect(
+                has_scalar("relative_velocity_" + relative.name +
+                               "_translational_at_moving_origin[" +
+                               std::to_string(axis_index) + "]",
+                           orvd_contract::ObservationKind::
+                               kTranslationalVelocityMetersPerSecond),
+                "every moving-origin translational component of a named "
+                "relative velocity must be required with "
+                "translational-velocity units: " +
+                    relative.name);
+        }
+    }
+    for (std::size_t velocity_index = 0;
+         velocity_index < scenario.generalized_velocities.size();
+         ++velocity_index) {
+        Expect(has_scalar("state_readback_velocity[" +
+                              std::to_string(velocity_index) + "]",
+                          scenario.generalized_velocity_observation_kinds
+                              [velocity_index]),
+               "every generalized velocity must be read back with its "
+               "declared physical kind: index " +
+                   std::to_string(velocity_index));
+    }
+}
+
 /// Moves one named observation by an absolute amount.
 ///
 /// Distinct from the proportional perturbation helper: here the caller has
@@ -386,7 +454,14 @@ int main(int argc, char** argv) {
              {std::string("pose_") + scenario.links.front().name + "[0,0]",
               std::string("pose_") + scenario.links.front().name +
                   "_translation[0]",
-              std::string("state_readback_position[0]")}) {
+              std::string("state_readback_position[0]"),
+              std::string("velocity_upper_link_angular[2]"),
+              std::string(
+                  "velocity_floating_link_translational_at_body_origin[0]"),
+              std::string("relative_velocity_") +
+                  scenario.relative_spatial_velocity_observations.front().name +
+                  "_angular[0]",
+              std::string("state_readback_velocity[0]")}) {
             const auto missing = orvd_comparison::CompareObservationStreams(
                 requirements, first, WithObservationRemoved(second, removed));
             Expect(missing.outcome ==
@@ -414,9 +489,9 @@ int main(int argc, char** argv) {
         const orvd_contract::ScenarioDefinition scenario =
             orvd_contract::MakeRevoluteChainWithFloatingBodyScenario(excitation);
         const orvd_comparison::ComparisonRequirements requirements =
-            orvd_comparison::MakePositionKinematicsComparisonRequirements(
+            orvd_comparison::MakeSpatialKinematicsComparisonRequirements(
                 scenario);
-        ExpectRequirementsCoverPositionKinematics(requirements, scenario);
+        ExpectRequirementsCoverSpatialKinematics(requirements, scenario);
 
         std::string reference_text, candidate_text;
         if (!CaptureReferenceEmitterOutput(emitter_path, excitation,
@@ -457,9 +532,13 @@ int main(int argc, char** argv) {
         expect_fact("joint_position_range_size[elbow_joint]", 1);
         expect_fact("joint_velocity_range_start[elbow_joint]", 1);
         expect_fact("joint_velocity_range_size[elbow_joint]", 1);
-        expect_fact("free_body_position_range_start[floating_link]", 2);
+        expect_fact("joint_position_range_start[reverse_branch_joint]", 2);
+        expect_fact("joint_position_range_size[reverse_branch_joint]", 1);
+        expect_fact("joint_velocity_range_start[reverse_branch_joint]", 2);
+        expect_fact("joint_velocity_range_size[reverse_branch_joint]", 1);
+        expect_fact("free_body_position_range_start[floating_link]", 3);
         expect_fact("free_body_position_range_size[floating_link]", 7);
-        expect_fact("free_body_velocity_range_start[floating_link]", 2);
+        expect_fact("free_body_velocity_range_start[floating_link]", 3);
         expect_fact("free_body_velocity_range_size[floating_link]", 6);
 
         const auto* free_body_velocity_start = reference.FindTopologyFact(
@@ -531,13 +610,68 @@ int main(int argc, char** argv) {
                                "allowance, which is far outside its dimension's "
                                "near-zero floor: " + judged.detail);
             }
+
+            // Angular and translational velocities have different dimensions
+            // and separate near-zero floors. Prove that both dimensions
+            // actually enter and use the 1e-8 proportional branch.
+            for (const auto kind :
+                 {orvd_contract::ObservationKind::
+                      kAngularVelocityRadiansPerSecond,
+                  orvd_contract::ObservationKind::
+                      kTranslationalVelocityMetersPerSecond}) {
+                const orvd_comparison::RequiredObservation* target = nullptr;
+                for (const auto& required : requirements.scalars) {
+                    if (required.kind != kind) continue;
+                    const auto* observation =
+                        reference.FindObservation(required.name);
+                    if (observation != nullptr &&
+                        orvd_comparison::SelectToleranceBranch(
+                            observation->value, kind) ==
+                            orvd_comparison::ToleranceBranch::kRelativeError) {
+                        target = &required;
+                        break;
+                    }
+                }
+                Expect(target != nullptr,
+                       "each spatial-velocity dimension must exercise the "
+                       "relative tolerance branch");
+                if (target == nullptr) continue;
+                const auto* observation =
+                    reference.FindObservation(target->name);
+                const double inside_step =
+                    0.5 * orvd_comparison::kRelativeErrorLimit *
+                    std::abs(observation->value);
+                const double outside_step =
+                    5.0 * orvd_comparison::kRelativeErrorLimit *
+                    std::abs(observation->value);
+                const auto inside =
+                    orvd_comparison::CompareObservationStreams(
+                        requirements, reference,
+                        WithScalarValueOffset(candidate, target->name,
+                                              inside_step));
+                Expect(inside.outcome ==
+                           orvd_comparison::ComparisonOutcome::kAccepted,
+                       target->name +
+                           " must accept half its proportional allowance: " +
+                           inside.detail);
+                const auto outside =
+                    orvd_comparison::CompareObservationStreams(
+                        requirements, reference,
+                        WithScalarValueOffset(candidate, target->name,
+                                              outside_step));
+                Expect(
+                    outside.outcome ==
+                        orvd_comparison::ComparisonOutcome::kToleranceExceeded,
+                    target->name +
+                        " must reject five times its proportional allowance");
+            }
         }
 
         const auto verdict = orvd_comparison::CompareObservationStreams(
             requirements, reference, candidate);
         Expect(verdict.outcome == orvd_comparison::ComparisonOutcome::kAccepted,
                std::string("the ORVD candidate must agree with the Drake "
-                           "reference on position kinematics (") +
+                           "reference on spatial kinematics (") +
                    std::string(excitation) + "): " + verdict.detail);
         if (excitation == "dynamic_excitation") {
             Expect(verdict.relative_branch_count > 0,
@@ -552,6 +686,6 @@ int main(int argc, char** argv) {
     }
     std::printf(
         "the harness fails when it should, and the ORVD candidate agrees with "
-        "the Drake reference on position kinematics\n");
+        "the Drake reference on spatial kinematics\n");
     return 0;
 }

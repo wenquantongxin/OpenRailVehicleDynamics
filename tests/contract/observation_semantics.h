@@ -22,6 +22,8 @@ enum class ObservationKind {
     kAngleRadians,          // a joint angle or any bare rotation coordinate
     kUnitQuaternionComponent,  // one component of a unit quaternion; O(1), dimensionless
     kTranslationMeters,
+    kAngularVelocityRadiansPerSecond,
+    kTranslationalVelocityMetersPerSecond,
     kForceNewtons,          // translational generalized force
     kTorqueNewtonMetres,    // rotational generalized force
 };

@@ -73,6 +73,15 @@ void CheckWhichBranchJudgesWhichMagnitude() {
     Expect(SelectToleranceBranch(1.0e3, ObservationKind::kForceNewtons) ==
                ToleranceBranch::kRelativeError,
            "a kilonewton is judged proportionally");
+    Expect(SelectToleranceBranch(
+               1.2, ObservationKind::kAngularVelocityRadiansPerSecond) ==
+               ToleranceBranch::kRelativeError,
+           "an angular velocity of order one is judged proportionally");
+    Expect(SelectToleranceBranch(
+               1e-6,
+               ObservationKind::kTranslationalVelocityMetersPerSecond) ==
+               ToleranceBranch::kNearZeroAbsoluteError,
+           "a micrometre per second is judged against the absolute floor");
 }
 
 void CheckRelativeAndNearZeroLimits() {

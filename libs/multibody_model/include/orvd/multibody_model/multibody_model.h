@@ -48,6 +48,7 @@
 
 #include "orvd/multibody_model/multibody_coordinate_ranges.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
+#include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
 #include "orvd/multibody_model/multibody_model_handles.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
@@ -339,6 +340,53 @@ class MultibodyModel {
     [[nodiscard]] RigidPose CalcPoseInWorld(
         const MultibodyEvaluationContext& context, FrameHandle frame) const;
 
+    // --- Velocity and spatial kinematics -----------------------------------
+
+    /// The spatial velocity of rigid body B's frame, measured in the world
+    /// frame W and expressed in W.
+    ///
+    /// The angular component is ω_WB_W. The translational component is
+    /// v_WBo_W: the velocity of Bo, not of the body's centre of mass or another
+    /// point fixed to B.
+    ///
+    /// @throws std::invalid_argument if the handle is invalid or foreign, or if
+    /// the context came from another model.
+    /// @throws std::logic_error if the model is not finalized.
+    [[nodiscard]] FrameSpatialVelocity
+    CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+        const MultibodyEvaluationContext& context, RigidBodyHandle body) const;
+
+    /// The spatial velocity of frame F, measured in the world frame W and
+    /// expressed in W.
+    ///
+    /// A frame fixed away from its body's origin generally has a different
+    /// translational velocity because its point Fo moves with ω×p.
+    ///
+    /// @throws std::invalid_argument if the handle is invalid or foreign, or if
+    /// the context came from another model.
+    /// @throws std::logic_error if the model is not finalized.
+    [[nodiscard]] FrameSpatialVelocity
+    CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+        const MultibodyEvaluationContext& context, FrameHandle frame) const;
+
+    /// The spatial velocity of moving frame F relative to reference frame M,
+    /// expressed in frame E.
+    ///
+    /// `moving_frame` names F, `reference_frame` names M, and
+    /// `expressed_in_frame` names E. The angular component is ω_MF_E. The
+    /// translational component is v_MFo_E: the velocity of F's origin Fo
+    /// measured in M and expressed in E. Because that point is Fo, this is not
+    /// in general the simple difference between the world translational
+    /// velocities of Fo and Mo; M's velocity must first be shifted to Fo.
+    ///
+    /// @throws std::invalid_argument if any handle is invalid or foreign, or if
+    /// the context came from another model.
+    /// @throws std::logic_error if the model is not finalized.
+    [[nodiscard]] FrameSpatialVelocity
+    CalcFrameSpatialVelocityRelativeToFrameExpressedInFrame(
+        const MultibodyEvaluationContext& context, FrameHandle moving_frame,
+        FrameHandle reference_frame, FrameHandle expressed_in_frame) const;
+
    private:
     template <typename Handle>
     static internal::ModelIdentity HandleModelIdentity(const Handle& handle) {
@@ -364,6 +412,15 @@ class MultibodyModel {
     static RigidPose MakePose(const Eigen::Matrix3d& rotation,
                               const Eigen::Vector3d& translation) {
         return RigidPose(rotation, translation);
+    }
+
+    static FrameSpatialVelocity MakeFrameSpatialVelocity(
+        const Eigen::Vector3d& angular_velocity_radians_per_second,
+        const Eigen::Vector3d&
+            translational_velocity_at_frame_origin_meters_per_second) {
+        return FrameSpatialVelocity(
+            angular_velocity_radians_per_second,
+            translational_velocity_at_frame_origin_meters_per_second);
     }
 
     class Implementation;

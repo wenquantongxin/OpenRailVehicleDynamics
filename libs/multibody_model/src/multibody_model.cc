@@ -854,4 +854,69 @@ RigidPose MultibodyModel::CalcPoseInWorld(
     return MakePose(X_WF.rotation().matrix(), X_WF.translation());
 }
 
+// --- Velocity and spatial kinematics -----------------------------------------
+
+FrameSpatialVelocity
+MultibodyModel::CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+    const MultibodyEvaluationContext& context, RigidBodyHandle body) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask how a rigid body is moving");
+    Implementation::RequireOwnContext(model, &context,
+                                      "read spatial velocities from");
+    const int ordinal = model.Resolve(
+        body, static_cast<int>(model.body_names_.size()), "rigid body");
+    const auto& V_WB_W =
+        model.tree_.get_link(model.tree_body_[ordinal])
+            .EvalSpatialVelocityInWorld(
+                context.implementation_->tree_context());
+    return MakeFrameSpatialVelocity(V_WB_W.rotational(),
+                                    V_WB_W.translational());
+}
+
+FrameSpatialVelocity
+MultibodyModel::CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+    const MultibodyEvaluationContext& context, FrameHandle frame) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask how a frame is moving");
+    Implementation::RequireOwnContext(model, &context,
+                                      "read spatial velocities from");
+    const int ordinal = model.Resolve(
+        frame, static_cast<int>(model.frame_names_.size()), "frame");
+    const auto V_WF_W =
+        model.tree_.get_frame(model.tree_frame_[ordinal])
+            .CalcSpatialVelocityInWorld(
+                context.implementation_->tree_context());
+    return MakeFrameSpatialVelocity(V_WF_W.rotational(),
+                                    V_WF_W.translational());
+}
+
+FrameSpatialVelocity
+MultibodyModel::
+    CalcFrameSpatialVelocityRelativeToFrameExpressedInFrame(
+        const MultibodyEvaluationContext& context, FrameHandle moving_frame,
+        FrameHandle reference_frame, FrameHandle expressed_in_frame) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask how one frame is moving relative to another");
+    Implementation::RequireOwnContext(model, &context,
+                                      "read spatial velocities from");
+    const int moving_ordinal =
+        model.Resolve(moving_frame, static_cast<int>(model.frame_names_.size()),
+                      "moving frame");
+    const int reference_ordinal = model.Resolve(
+        reference_frame, static_cast<int>(model.frame_names_.size()),
+        "reference frame");
+    const int expressed_ordinal = model.Resolve(
+        expressed_in_frame, static_cast<int>(model.frame_names_.size()),
+        "expression frame");
+
+    const auto V_MF_E =
+        model.tree_.get_frame(model.tree_frame_[moving_ordinal])
+            .CalcSpatialVelocity(
+                context.implementation_->tree_context(),
+                model.tree_.get_frame(model.tree_frame_[reference_ordinal]),
+                model.tree_.get_frame(model.tree_frame_[expressed_ordinal]));
+    return MakeFrameSpatialVelocity(V_MF_E.rotational(),
+                                    V_MF_E.translational());
+}
+
 }  // namespace orvd::multibody_model

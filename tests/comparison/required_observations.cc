@@ -72,6 +72,49 @@ ComparisonRequirements MakePositionKinematicsComparisonRequirements(
     return requirements;
 }
 
+ComparisonRequirements MakeSpatialKinematicsComparisonRequirements(
+    const orvd_contract::ScenarioDefinition& scenario) {
+    using orvd_contract::ObservationKind;
+
+    ComparisonRequirements requirements =
+        MakePositionKinematicsComparisonRequirements(scenario);
+    for (const auto& link : scenario.links) {
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            requirements.scalars.push_back(
+                {"velocity_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::kAngularVelocityRadiansPerSecond});
+            requirements.scalars.push_back(
+                {"velocity_" + link.name +
+                     "_translational_at_body_origin[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::kTranslationalVelocityMetersPerSecond});
+        }
+    }
+    for (const auto& relative :
+         scenario.relative_spatial_velocity_observations) {
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            requirements.scalars.push_back(
+                {"relative_velocity_" + relative.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::kAngularVelocityRadiansPerSecond});
+            requirements.scalars.push_back(
+                {"relative_velocity_" + relative.name +
+                     "_translational_at_moving_origin[" +
+                     std::to_string(axis_index) + "]",
+                 ObservationKind::kTranslationalVelocityMetersPerSecond});
+        }
+    }
+    for (std::size_t velocity_index = 0;
+         velocity_index < scenario.generalized_velocities.size();
+         ++velocity_index) {
+        requirements.scalars.push_back(
+            {"state_readback_velocity[" + std::to_string(velocity_index) + "]",
+             scenario.generalized_velocity_observation_kinds[velocity_index]});
+    }
+    return requirements;
+}
+
 ComparisonRequirements MakeComparisonRequirements(
 
     const orvd_contract::ScenarioDefinition& scenario) {
@@ -81,7 +124,7 @@ ComparisonRequirements MakeComparisonRequirements(
     // maintained lists drift, and the drift shows up as a capability that used
     // to be compared and silently stopped being.
     ComparisonRequirements requirements =
-        MakePositionKinematicsComparisonRequirements(scenario);
+        MakeSpatialKinematicsComparisonRequirements(scenario);
 
     const std::size_t velocity_count = scenario.generalized_velocities.size();
     // The mass matrix is required column by column. A single matrix-vector

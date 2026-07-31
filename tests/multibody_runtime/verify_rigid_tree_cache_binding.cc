@@ -263,6 +263,38 @@ drake::Vector6<double> LastBodySpatialVelocity(
         .get_coeffs();
 }
 
+void ExpectVelocityKinematicsMatch(
+    const MultibodyTree<double>& tree, const Context& actual_context,
+    const Context& expected_context, const std::string& reason) {
+    const auto& actual = tree.EvalVelocityKinematics(actual_context);
+    const auto& expected = tree.EvalVelocityKinematics(expected_context);
+    for (int mobod_ordinal = 0; mobod_ordinal < tree.num_mobods();
+         ++mobod_ordinal) {
+        const drake::multibody::internal::MobodIndex mobod(mobod_ordinal);
+        ExpectTrue(actual.get_V_WB(mobod).get_coeffs().isApprox(
+                       expected.get_V_WB(mobod).get_coeffs()),
+                   reason + ": V_WB differs at mobod " +
+                       std::to_string(mobod_ordinal));
+        if (mobod_ordinal == 0) continue;
+        ExpectTrue(actual.get_V_FM(mobod).get_coeffs().isApprox(
+                       expected.get_V_FM(mobod).get_coeffs()),
+                   reason + ": V_FM differs at mobod " +
+                       std::to_string(mobod_ordinal));
+        ExpectTrue(actual.get_V_PB_W(mobod).get_coeffs().isApprox(
+                       expected.get_V_PB_W(mobod).get_coeffs()),
+                   reason + ": V_PB_W differs at mobod " +
+                       std::to_string(mobod_ordinal));
+    }
+    for (int link_ordinal = 0; link_ordinal < tree.num_links();
+         ++link_ordinal) {
+        const drake::multibody::LinkOrdinal link(link_ordinal);
+        ExpectTrue(actual.get_V_WL(link).get_coeffs().isApprox(
+                       expected.get_V_WL(link).get_coeffs()),
+                   reason + ": V_WL differs at link ordinal " +
+                       std::to_string(link_ordinal));
+    }
+}
+
 Eigen::MatrixXd MassMatrix(const MultibodyTree<double>& tree,
                            const Context& context) {
     Eigen::MatrixXd result(tree.num_velocities(), tree.num_velocities());
@@ -857,6 +889,121 @@ void CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions() {
     }
 }
 
+void CheckVelocityKinematicsRecomputesForExactlyItsInputs() {
+    // The public G32 query reaches this real slot. Freshness alone can show that
+    // a write made a slot stale, but it cannot show that a query recomputed a
+    // slot that was already fresh. These committed counts close both sides.
+    const TwoLinkChain model;
+    const std::unique_ptr<Context> context = model.MakeContext();
+    EstablishNondegenerateState(model, context.get());
+
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    const auto counts = [&]() {
+        const auto& caches = context->caches();
+        return std::array{
+            caches.position_kinematics.committed_recomputation_count(),
+            caches.across_node_jacobian.committed_recomputation_count(),
+            caches.velocity_kinematics.committed_recomputation_count()};
+    };
+    const std::array<std::uint64_t, 3> after_cold_read = counts();
+    ExpectTrue(after_cold_read == std::array<std::uint64_t, 3>{1, 1, 1},
+               "a cold spatial-velocity query computes position, H and "
+               "velocity exactly once");
+
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    ExpectTrue(counts() == after_cold_read,
+               "a hot spatial-velocity query recomputes nothing");
+
+    Eigen::VectorXd changed_velocities(model.tree().num_velocities());
+    changed_velocities << 0.91, -0.47;
+    model.tree().SetVelocities(context.get(), changed_velocities);
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    const std::array<std::uint64_t, 3> after_velocity_write = counts();
+    ExpectTrue(
+        after_velocity_write ==
+            std::array<std::uint64_t, 3>{after_cold_read[0],
+                                         after_cold_read[1],
+                                         after_cold_read[2] + 1},
+        "a velocity write recomputes velocity once and neither position nor H");
+    {
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetPositions(
+            cold_context.get(), context->state().generalized_positions());
+        model.tree().SetVelocities(
+            cold_context.get(), context->state().generalized_velocities());
+        ExpectVelocityKinematicsMatch(
+            model.tree(), *context, *cold_context,
+            "velocity invalidation agrees with a cold context");
+    }
+
+    // Keep v nonzero. With v=0 the correct value stays zero after changing q,
+    // and a missing q dependency could agree numerically by accident.
+    SetJointAngles(model.tree(), context.get(), 0.53, -0.39);
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    const std::array<std::uint64_t, 3> after_position_write = counts();
+    ExpectTrue(
+        after_position_write ==
+            std::array<std::uint64_t, 3>{after_velocity_write[0] + 1,
+                                         after_velocity_write[1] + 1,
+                                         after_velocity_write[2] + 1},
+        "a position write makes position, H and velocity recompute once when "
+        "the velocity answer is requested");
+    {
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetPositions(
+            cold_context.get(), context->state().generalized_positions());
+        model.tree().SetVelocities(
+            cold_context.get(), context->state().generalized_velocities());
+        ExpectVelocityKinematicsMatch(
+            model.tree(), *context, *cold_context,
+            "position invalidation agrees with a cold context");
+    }
+
+    const drake::math::RigidTransform<double> changed_frame_pose(
+        drake::math::RotationMatrix<double>::MakeYRotation(-0.34),
+        Eigen::Vector3d(0.18, -0.11, 0.26));
+    model.tree().SetFixedFramePoseInParentFrame(
+        context.get(), model.fixed_frame(), changed_frame_pose);
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    const std::array<std::uint64_t, 3> after_frame_pose_write = counts();
+    ExpectTrue(
+        after_frame_pose_write ==
+            std::array<std::uint64_t, 3>{after_position_write[0] + 1,
+                                         after_position_write[1] + 1,
+                                         after_position_write[2] + 1},
+        "a fixed-frame-pose write makes position, H and velocity recompute "
+        "once when the velocity answer is requested");
+    {
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetPositions(
+            cold_context.get(), context->state().generalized_positions());
+        model.tree().SetVelocities(
+            cold_context.get(), context->state().generalized_velocities());
+        model.tree().SetFixedFramePoseInParentFrame(
+            cold_context.get(), model.fixed_frame(), changed_frame_pose);
+        ExpectVelocityKinematicsMatch(
+            model.tree(), *context, *cold_context,
+            "fixed-frame-pose invalidation agrees with a cold context");
+    }
+
+    model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+        context.get(), model.first_body(),
+        SpatialInertia<double>::SolidBoxWithMass(2.4, 0.2, 0.1, 0.1));
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    ExpectTrue(counts() == after_frame_pose_write,
+               "changing rigid-body inertia does not recompute velocity "
+               "kinematics");
+
+    model.tree().SetJointActuatorRotorInertia(context.get(), model.actuator(),
+                                              0.6);
+    model.tree().SetJointActuatorGearRatio(context.get(), model.actuator(),
+                                           -2.5);
+    (void)LastBodySpatialVelocity(model.tree(), *context);
+    ExpectTrue(counts() == after_frame_pose_write,
+               "changing actuator inertia or gear ratio does not recompute "
+               "velocity kinematics");
+}
+
 void CheckTheFactoryIsTheOnlyDoor() {
     // A context cannot be built from a layout alone: the bare constructor is
     // private. What would come out of one is a model with every body massless
@@ -1229,6 +1376,7 @@ void CheckPhysicalParameterDoorsRejectAContextFromAnotherModel() {
 
 int main() {
     CheckEvaluationIsLazyAndAVelocityWriteDoesNotRecomputePositions();
+    CheckVelocityKinematicsRecomputesForExactlyItsInputs();
     CheckTheFactoryIsTheOnlyDoor();
     CheckColdAndRepeatedReadsReturnTheSameRealValue();
     CheckTheFiveVersionSourcesExpireExactlyTheirDeclaredSlots();

@@ -16,9 +16,10 @@
 // file: a claim a program makes about its own linkage is the one claim it cannot
 // check.
 //
-// Only what G31 has landed is emitted. The mass matrix and the inverse dynamics
-// belong to later goals; the judge's position-kinematics requirement set is what
-// says so, and it refuses a missing observation rather than skipping it.
+// Only what G31-G32 have landed is emitted. The mass matrix and the inverse
+// dynamics belong to later goals; the judge's spatial-kinematics requirement
+// set is what says so, and it refuses a missing observation rather than
+// skipping it.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -190,8 +191,9 @@ int main(int argc, char** argv) {
     }
 
     for (const auto& link : scenario.links) {
+        const RigidBodyHandle body = model.GetRigidBodyByName(link.name);
         const auto pose =
-            model.CalcPoseInWorld(*context, model.GetRigidBodyByName(link.name));
+            model.CalcPoseInWorld(*context, body);
         for (int row = 0; row < 3; ++row)
             for (int column = 0; column < 3; ++column)
                 stream.observations.push_back(
@@ -203,6 +205,48 @@ int main(int argc, char** argv) {
                 {"pose_" + link.name + "_translation[" +
                      std::to_string(axis_index) + "]",
                  pose.translation()(axis_index)});
+
+        const auto velocity =
+            model.CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *context, body);
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            stream.observations.push_back(
+                {"velocity_" + link.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 velocity.angular_velocity_radians_per_second()(axis_index)});
+            stream.observations.push_back(
+                {"velocity_" + link.name +
+                     "_translational_at_body_origin[" +
+                     std::to_string(axis_index) + "]",
+                 velocity
+                     .translational_velocity_at_frame_origin_meters_per_second()(
+                         axis_index)});
+        }
+    }
+
+    for (const auto& relative :
+         scenario.relative_spatial_velocity_observations) {
+        const auto velocity =
+            model
+                .CalcFrameSpatialVelocityRelativeToFrameExpressedInFrame(
+                    *context,
+                    model.body_frame(body_named(relative.moving_link_name)),
+                    model.body_frame(body_named(relative.reference_link_name)),
+                    model.body_frame(
+                        body_named(relative.expressed_in_link_name)));
+        for (int axis_index = 0; axis_index < 3; ++axis_index) {
+            stream.observations.push_back(
+                {"relative_velocity_" + relative.name + "_angular[" +
+                     std::to_string(axis_index) + "]",
+                 velocity.angular_velocity_radians_per_second()(axis_index)});
+            stream.observations.push_back(
+                {"relative_velocity_" + relative.name +
+                     "_translational_at_moving_origin[" +
+                     std::to_string(axis_index) + "]",
+                 velocity
+                     .translational_velocity_at_frame_origin_meters_per_second()(
+                         axis_index)});
+        }
     }
 
     const Eigen::VectorXd positions_after_evaluation =
@@ -212,6 +256,14 @@ int main(int argc, char** argv) {
         stream.observations.push_back(
             {"state_readback_position[" + std::to_string(position_index) + "]",
              positions_after_evaluation(position_index)});
+    }
+    const Eigen::VectorXd velocities_after_evaluation =
+        context->generalized_velocities();
+    for (int velocity_index = 0;
+         velocity_index < velocities_after_evaluation.size(); ++velocity_index) {
+        stream.observations.push_back(
+            {"state_readback_velocity[" + std::to_string(velocity_index) + "]",
+             velocities_after_evaluation(velocity_index)});
     }
 
     std::fputs(orvd_contract::FormatObservationStream(stream).c_str(), stdout);
