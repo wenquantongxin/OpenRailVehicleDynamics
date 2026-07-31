@@ -120,6 +120,41 @@ void CheckRelativeAndNearZeroLimits() {
            "a near-zero failure must retain its scientific magnitude");
 }
 
+void CheckVelocityNearZeroLimits() {
+    using orvd_contract::ObservationKind;
+
+    const auto check_limit = [](ObservationKind kind,
+                                std::string_view description) {
+        orvd_comparison::ComparisonRequirements requirements;
+        requirements.scalars = {{"measured_velocity", kind}};
+
+        orvd_contract::ObservationStream reference;
+        reference.observations = {{"measured_velocity", 0.0}};
+        orvd_contract::ObservationStream inside;
+        inside.observations = {{"measured_velocity", 0.5e-12}};
+        orvd_contract::ObservationStream outside;
+        outside.observations = {{"measured_velocity", 1.5e-12}};
+
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, reference, inside)
+                       .outcome ==
+                   orvd_comparison::ComparisonOutcome::kAccepted,
+               std::string(description) +
+                   " inside its 1e-12 absolute floor must pass");
+        Expect(orvd_comparison::CompareObservationStreams(
+                   requirements, reference, outside)
+                       .outcome ==
+                   orvd_comparison::ComparisonOutcome::kToleranceExceeded,
+               std::string(description) +
+                   " outside its 1e-12 absolute floor must fail");
+    };
+
+    check_limit(ObservationKind::kAngularVelocityRadiansPerSecond,
+                "an angular velocity");
+    check_limit(ObservationKind::kTranslationalVelocityMetersPerSecond,
+                "a translational velocity");
+}
+
 void CheckRotationAndRequiredObservationFailures() {
     const auto requirements = MakeRequirements();
     const auto reference = MakeStream(1.0);
@@ -206,6 +241,7 @@ void CheckLooseParsingAtThePointOfUse() {
 int main() {
     CheckWhichBranchJudgesWhichMagnitude();
     CheckRelativeAndNearZeroLimits();
+    CheckVelocityNearZeroLimits();
     CheckRotationAndRequiredObservationFailures();
     CheckLooseParsingAtThePointOfUse();
 

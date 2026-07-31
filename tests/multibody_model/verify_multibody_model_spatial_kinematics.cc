@@ -1,10 +1,9 @@
 // Spatial velocity through the public modelling boundary, checked against the
 // relations that were stated.
 //
-// The calculations below are independent elementary rigid-body formulas. They
-// do not call a second public velocity query to manufacture an expectation:
-// doing that would make a dropped point shift, a wrong expression frame, or a
-// reversed sign agree with itself.
+// The analytic checks below use independent elementary rigid-body formulas.
+// The later linearity checks intentionally combine results from the same public
+// queries; they test linearity in v, not frame, point or expression semantics.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -85,7 +84,9 @@ bool RefusalMentions(Attempt&& attempt, std::string_view fragment) {
 RigidBodyInertiaParameters SolidishBody(double mass) {
     RigidBodyInertiaParameters inertia;
     inertia.mass_kilograms = mass;
-    inertia.unit_inertia_moments = Eigen::Vector3d(0.01, 0.02, 0.02);
+    inertia.center_of_mass_in_body_frame =
+        Eigen::Vector3d(0.05, -0.03, 0.02);
+    inertia.unit_inertia_moments = Eigen::Vector3d(0.20, 0.25, 0.30);
     return inertia;
 }
 
@@ -350,6 +351,40 @@ void CheckNonCoplanarChainBranchPointAndExpressionSemantics() {
         "a relative velocity shifts the reference to the moving origin and "
         "expresses both components in the requested frame");
 
+    ExpectVectorNear(
+        fixture.model
+            .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *context, fixture.serial)
+            .angular_velocity_radians_per_second(),
+        expected.serial_velocity.angular,
+        "the rvalue angular accessor returns the angular member");
+    ExpectVectorNear(
+        fixture.model
+            .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *context, fixture.serial)
+            .translational_velocity_at_frame_origin_meters_per_second(),
+        expected.serial_velocity.translational,
+        "the rvalue translational accessor returns the translational member");
+    const FrameSpatialVelocity const_angular_velocity =
+        fixture.model
+            .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *context, fixture.serial);
+    const FrameSpatialVelocity const_translational_velocity =
+        fixture.model
+            .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                *context, fixture.serial);
+    ExpectVectorNear(
+        std::move(const_angular_velocity)
+            .angular_velocity_radians_per_second(),
+        expected.serial_velocity.angular,
+        "the const-rvalue angular accessor returns the angular member");
+    ExpectVectorNear(
+        std::move(const_translational_velocity)
+            .translational_velocity_at_frame_origin_meters_per_second(),
+        expected.serial_velocity.translational,
+        "the const-rvalue translational accessor returns the translational "
+        "member");
+
     const auto world_velocity =
         fixture.model.CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
             *context, fixture.model.world_frame());
@@ -516,8 +551,13 @@ void CheckRelationsTowardsWorldReverseVelocitySigns() {
         MultibodyModel model;
         const RigidBodyHandle body =
             model.AddRigidBody("reversed_revolute", SolidishBody(1.0));
+        const Eigen::Vector3d kJointOffsetInBody(0.24, -0.13, 0.19);
+        FixedFramePoseParameters joint_frame_pose;
+        joint_frame_pose.p_PoFo_P = kJointOffsetInBody;
+        const FrameHandle joint_frame = model.AddFixedFrame(
+            "reversed_revolute_joint_frame", body, joint_frame_pose);
         const JointHandle joint = model.AddRevoluteJoint(
-            "towards_world", model.body_frame(body), model.world_frame(),
+            "towards_world", joint_frame, model.world_frame(),
             Eigen::Vector3d::UnitZ());
         model.Finalize();
         auto context = model.CreateDefaultContext();
@@ -529,13 +569,18 @@ void CheckRelationsTowardsWorldReverseVelocitySigns() {
             Eigen::VectorXd::Zero(model.num_generalized_velocities());
         PlaceJointVelocity(model, joint, kAngularRate, &v);
         model.SetGeneralizedVelocities(context.get(), v);
+        const Eigen::Vector3d angular_velocity =
+            -kAngularRate * Eigen::Vector3d::UnitZ();
+        const Eigen::Vector3d position_from_joint_to_body_in_world =
+            -RotationAboutZ(-kAngle) * kJointOffsetInBody;
         ExpectVelocityNear(
             model.CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
                 *context, body),
-            {-kAngularRate * Eigen::Vector3d::UnitZ(),
-             Eigen::Vector3d::Zero()},
+            {angular_velocity,
+             angular_velocity.cross(position_from_joint_to_body_in_world)},
             "a revolute relation stated towards the world reverses the "
-            "positive rate");
+            "positive rate and shifts it from the offset joint frame to the "
+            "body origin");
     }
 
     constexpr double kLinearRate = -0.62;
@@ -594,6 +639,36 @@ void CheckVelocityQueriesRejectForeignInputs() {
         RefusalMentions(
             [&] {
                 (void)first
+                    .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                        *first_context, second_body);
+            },
+            "different model"),
+        "a body spatial-velocity query rejects a foreign body handle");
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                (void)first
+                    .CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                        *second_context, first.body_frame(first_body));
+            },
+            "issued by a different model"),
+        "a frame spatial-velocity query rejects a context from another model "
+        "at the public boundary");
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                (void)first
+                    .CalcFrameSpatialVelocityRelativeToFrameExpressedInFrame(
+                        *second_context, first.body_frame(first_body),
+                        first.world_frame(), first.world_frame());
+            },
+            "issued by a different model"),
+        "a relative spatial-velocity query rejects a context from another "
+        "model at the public boundary");
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                (void)first
                     .CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
                         *first_context, second.body_frame(second_body));
             },
@@ -644,6 +719,51 @@ void CheckVelocityQueriesRejectForeignInputs() {
                "components read from returned temporaries remain valid");
 }
 
+void CheckVelocityQueriesRequireFinalization() {
+    MultibodyModel unfinalized;
+    const RigidBodyHandle body =
+        unfinalized.AddRigidBody("body", SolidishBody(1.0));
+
+    MultibodyModel context_owner;
+    const RigidBodyHandle context_body =
+        context_owner.AddRigidBody("context_body", SolidishBody(1.0));
+    context_owner.DeclareFreeBody(context_body);
+    context_owner.Finalize();
+    const auto context = context_owner.CreateDefaultContext();
+
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                (void)unfinalized
+                    .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                        *context, body);
+            },
+            "before Finalize()"),
+        "a body spatial-velocity query rejects an unfinalized model at the "
+        "public boundary");
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                (void)unfinalized
+                    .CalcFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                        *context, unfinalized.body_frame(body));
+            },
+            "before Finalize()"),
+        "a frame spatial-velocity query rejects an unfinalized model at the "
+        "public boundary");
+    ExpectTrue(
+        RefusalMentions(
+            [&] {
+                (void)unfinalized
+                    .CalcFrameSpatialVelocityRelativeToFrameExpressedInFrame(
+                        *context, unfinalized.body_frame(body),
+                        unfinalized.world_frame(), unfinalized.world_frame());
+            },
+            "before Finalize()"),
+        "a relative spatial-velocity query rejects an unfinalized model at "
+        "the public boundary");
+}
+
 }  // namespace
 
 int main() {
@@ -652,6 +772,7 @@ int main() {
     CheckFreeBodyVelocityLayoutAndPointShift();
     CheckRelationsTowardsWorldReverseVelocitySigns();
     CheckVelocityQueriesRejectForeignInputs();
+    CheckVelocityQueriesRequireFinalization();
 
     if (failure_count > 0) {
         std::printf("%d spatial-kinematics check(s) failed\n", failure_count);

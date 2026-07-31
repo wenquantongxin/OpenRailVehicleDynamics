@@ -993,6 +993,22 @@ void CheckVelocityKinematicsRecomputesForExactlyItsInputs() {
     ExpectTrue(counts() == after_frame_pose_write,
                "changing rigid-body inertia does not recompute velocity "
                "kinematics");
+    {
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetPositions(
+            cold_context.get(), context->state().generalized_positions());
+        model.tree().SetVelocities(
+            cold_context.get(), context->state().generalized_velocities());
+        model.tree().SetFixedFramePoseInParentFrame(
+            cold_context.get(), model.fixed_frame(), changed_frame_pose);
+        model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+            cold_context.get(), model.first_body(),
+            SpatialInertia<double>::SolidBoxWithMass(2.4, 0.2, 0.1, 0.1));
+        ExpectVelocityKinematicsMatch(
+            model.tree(), *context, *cold_context,
+            "an inertia write leaves every velocity-cache field equal to a "
+            "cold calculation at the same complete state");
+    }
 
     model.tree().SetJointActuatorRotorInertia(context.get(), model.actuator(),
                                               0.6);
@@ -1002,6 +1018,26 @@ void CheckVelocityKinematicsRecomputesForExactlyItsInputs() {
     ExpectTrue(counts() == after_frame_pose_write,
                "changing actuator inertia or gear ratio does not recompute "
                "velocity kinematics");
+    {
+        const std::unique_ptr<Context> cold_context = model.MakeContext();
+        model.tree().SetPositions(
+            cold_context.get(), context->state().generalized_positions());
+        model.tree().SetVelocities(
+            cold_context.get(), context->state().generalized_velocities());
+        model.tree().SetFixedFramePoseInParentFrame(
+            cold_context.get(), model.fixed_frame(), changed_frame_pose);
+        model.tree().SetRigidBodySpatialInertiaInBodyFrame(
+            cold_context.get(), model.first_body(),
+            SpatialInertia<double>::SolidBoxWithMass(2.4, 0.2, 0.1, 0.1));
+        model.tree().SetJointActuatorRotorInertia(
+            cold_context.get(), model.actuator(), 0.6);
+        model.tree().SetJointActuatorGearRatio(
+            cold_context.get(), model.actuator(), -2.5);
+        ExpectVelocityKinematicsMatch(
+            model.tree(), *context, *cold_context,
+            "an actuator write leaves every velocity-cache field equal to a "
+            "cold calculation at the same complete state");
+    }
 }
 
 void CheckTheFactoryIsTheOnlyDoor() {
