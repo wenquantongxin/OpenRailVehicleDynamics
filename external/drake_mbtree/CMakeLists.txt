@@ -209,15 +209,30 @@ target_link_libraries(orvd_vendored_drake_rigid_tree_objects
            orvd_vendored_drake_double_pose_math_objects
            orvd_multibody_runtime)
 
+# Drake's variadic assertion macros use C++20 __VA_OPT__.  VS 2019 supports
+# that syntax only through its conforming preprocessor; without this option the
+# parser fails at every no-detail DRAKE_THROW_UNLESS call before it reaches the
+# actual C++ source.  This is a language-conformance option, not an attempt to
+# apply the first-party warning policy to vendored code.
+set(ORVD_VENDORED_DRAKE_OBJECT_OWNER_TARGETS
+    orvd_vendored_drake_rigid_tree_objects
+    orvd_vendored_drake_multibody_topology_objects
+    orvd_vendored_drake_double_pose_math_objects
+    orvd_vendored_drake_common_support_objects)
+if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    foreach(orvd_vendored_drake_object_owner
+            IN LISTS ORVD_VENDORED_DRAKE_OBJECT_OWNER_TARGETS)
+        target_compile_options(
+            ${orvd_vendored_drake_object_owner} PRIVATE /Zc:preprocessor)
+    endforeach()
+endif()
+
 # The five compilation owners are also the single source of truth for both the
 # complete archive and the all-object link test. Keeping that set in one place
 # prevents the verifier from silently omitting an owner that the archive gained,
 # or from verifying an owner the archive no longer packages.
 set(ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS
-    orvd_vendored_drake_rigid_tree_objects
-    orvd_vendored_drake_multibody_topology_objects
-    orvd_vendored_drake_double_pose_math_objects
-    orvd_vendored_drake_common_support_objects
+    ${ORVD_VENDORED_DRAKE_OBJECT_OWNER_TARGETS}
     orvd_double_pose_composition)
 set(ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS
     ${ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS}

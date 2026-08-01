@@ -14,7 +14,11 @@
 # upstream compiler upgrade into a build outage on code that did not change.
 # A project that wants errors can add them in CI on top of this.
 set(ORVD_FIRST_PARTY_WARNINGS_GNU_LIKE -Wall -Wextra -Wpedantic)
-set(ORVD_FIRST_PARTY_WARNINGS_MSVC /W4 /permissive- /Zc:__cplusplus)
+set(ORVD_FIRST_PARTY_OPTIONS_MSVC
+    /W4
+    /permissive-
+    /Zc:__cplusplus
+    /Zc:preprocessor)
 
 function(orvd_configure_first_party_target target_name)
     if(NOT TARGET ${target_name})
@@ -43,7 +47,7 @@ function(orvd_configure_first_party_target target_name)
 
     if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
         target_compile_options(
-            ${target_name} PRIVATE ${ORVD_FIRST_PARTY_WARNINGS_MSVC})
+            ${target_name} PRIVATE ${ORVD_FIRST_PARTY_OPTIONS_MSVC})
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
         target_compile_options(
             ${target_name} PRIVATE ${ORVD_FIRST_PARTY_WARNINGS_GNU_LIKE})
