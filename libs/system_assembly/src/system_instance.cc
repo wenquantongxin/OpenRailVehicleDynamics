@@ -1,6 +1,7 @@
 #include "orvd/system_assembly/system_instance.h"
 
 #include <atomic>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -25,8 +26,9 @@ internal::SystemIdentity NextSystemIdentity() {
 
 SystemRuntimeContext::SystemRuntimeContext(
     internal::SystemIdentity issuer,
-    const multibody_model::MultibodyModel& model)
+    const multibody_model::MultibodyModel& model, double initial_time_seconds)
     : issuer_(issuer),
+      time_seconds_(initial_time_seconds),
       multibody_context_(model.CreateDefaultContext()),
       forward_dynamics_workspace_(model.CreateForwardDynamicsWorkspace()) {}
 
@@ -80,9 +82,13 @@ int SystemInstance::continuous_state_size() const {
 }
 
 std::unique_ptr<SystemRuntimeContext>
-SystemInstance::CreateDefaultRuntimeContext() const {
+SystemInstance::CreateDefaultRuntimeContext(double initial_time_seconds) const {
+    if (!std::isfinite(initial_time_seconds)) {
+        Reject("the initial time must be finite");
+    }
     return std::unique_ptr<SystemRuntimeContext>(
-        new SystemRuntimeContext(identity_, *multibody_model_));
+        new SystemRuntimeContext(identity_, *multibody_model_,
+                                 initial_time_seconds));
 }
 
 void SystemInstance::CopyContinuousState(
@@ -106,8 +112,17 @@ void SystemInstance::CopyContinuousState(
 void SystemInstance::SetContinuousState(
     SystemRuntimeContext& context,
     const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const {
+    SetTimeAndContinuousState(context, context.time_seconds_, continuous_state);
+}
+
+void SystemInstance::SetTimeAndContinuousState(
+    SystemRuntimeContext& context, double time_seconds,
+    const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const {
     if (context.issuer_ != identity_) {
         Reject("the runtime context belongs to a different system");
+    }
+    if (!std::isfinite(time_seconds)) {
+        Reject("the accepted time must be finite; nothing was written");
     }
     if (continuous_state.size() != continuous_state_size()) {
         Reject("the continuous-state input has " +
@@ -121,6 +136,7 @@ void SystemInstance::SetContinuousState(
         continuous_state.segment(0, generalized_position_count_),
         continuous_state.segment(generalized_position_count_,
                                  generalized_velocity_count_));
+    context.time_seconds_ = time_seconds;
 }
 
 MultibodyComponentView SystemInstance::GetMultibodyComponentView(

@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
 
@@ -34,8 +35,19 @@ int SystemRhsBridge::continuous_state_size() const {
     return system_->continuous_state_size();
 }
 
+void SystemRhsBridge::SynchronizeJointDampingFrom(
+    system_assembly::SystemRuntimeContext& source_context) {
+    const auto component = system_->multibody_component();
+    const auto source =
+        system_->GetMultibodyComponentView(source_context, component);
+    const auto trial =
+        system_->GetMultibodyComponentView(*trial_context_, component);
+    source.model().CopyJointDampingParameters(source.context(),
+                                              &trial.context());
+}
+
 void SystemRhsBridge::CalcTimeDerivatives(
-    double /*time_seconds*/,
+    double time_seconds,
     const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
     Eigen::Ref<Eigen::VectorXd> state_time_derivatives) {
     if (continuous_state.size() != continuous_state_size()) {
@@ -49,7 +61,8 @@ void SystemRhsBridge::CalcTimeDerivatives(
             "was written");
     }
 
-    system_->SetContinuousState(*trial_context_, continuous_state);
+    system_->SetTimeAndContinuousState(*trial_context_, time_seconds,
+                                       continuous_state);
     plan_->CalcStateTimeDerivatives(*trial_context_, {}, {}, {},
                                     derivative_buffer_);
     state_time_derivatives = derivative_buffer_;

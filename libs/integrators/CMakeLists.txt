@@ -1,6 +1,7 @@
 add_library(orvd_integrators STATIC
     src/continuous_state_advancer.cc
     src/cvode_continuous_state_advancer.cc
+    src/system_continuous_state_advancer.cc
     src/system_rhs_bridge.cc)
 
 orvd_configure_first_party_target(orvd_integrators)

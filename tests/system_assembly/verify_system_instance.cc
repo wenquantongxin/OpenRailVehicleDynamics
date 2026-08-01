@@ -92,7 +92,7 @@ void CheckFrozenLayoutAndSingleOwnership() {
     Expect(system.continuous_state_size() == 4,
            "the frozen continuous-state size covers q and v once");
 
-    auto context = system.CreateDefaultRuntimeContext();
+    auto context = system.CreateDefaultRuntimeContext(0.0);
     const auto first = system.GetMultibodyComponentView(
         *context, system.multibody_component());
     const auto second = system.GetMultibodyComponentView(
@@ -127,8 +127,8 @@ void CheckContextLocalDampingAndIsolation() {
     Fixture fixture;
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
-    auto first_context = system.CreateDefaultRuntimeContext();
-    auto second_context = system.CreateDefaultRuntimeContext();
+    auto first_context = system.CreateDefaultRuntimeContext(0.0);
+    auto second_context = system.CreateDefaultRuntimeContext(0.0);
     const auto first = system.GetMultibodyComponentView(
         *first_context, system.multibody_component());
     const auto second = system.GetMultibodyComponentView(

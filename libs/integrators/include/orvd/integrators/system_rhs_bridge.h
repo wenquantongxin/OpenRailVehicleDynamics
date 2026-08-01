@@ -63,6 +63,12 @@ class SystemRhsBridge final : public ContinuousStateRhs {
     SystemRhsBridge& operator=(SystemRhsBridge&&) = delete;
 
     [[nodiscard]] int continuous_state_size() const override;
+
+    /// Copies the currently admitted context-local joint damping into the trial
+    /// context.  The source is borrowed only for this call.
+    void SynchronizeJointDampingFrom(
+        system_assembly::SystemRuntimeContext& source_context);
+
     void CalcTimeDerivatives(
         double time_seconds,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state,

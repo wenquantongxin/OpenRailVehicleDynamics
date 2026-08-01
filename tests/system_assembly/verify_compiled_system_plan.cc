@@ -88,7 +88,7 @@ void CheckStaticEvaluationAndStatePurity() {
     Expect(plan.derivative_component() == system.multibody_component(),
            "the frozen order ends in the admitted multibody component");
 
-    auto context = system.CreateDefaultRuntimeContext();
+    auto context = system.CreateDefaultRuntimeContext(0.0);
     const auto component = system.GetMultibodyComponentView(
         *context, system.multibody_component());
     Eigen::VectorXd positions(1);
@@ -166,7 +166,7 @@ void CheckStaticEvaluationAndStatePurity() {
     Expect(observed_damping_force == accepted_damping_force,
            "rejected derivative trials do not write physical parameters");
 
-    auto other_context = system.CreateDefaultRuntimeContext();
+    auto other_context = system.CreateDefaultRuntimeContext(0.0);
     plan.CalcStateTimeDerivatives(*other_context, {}, {}, {}, derivatives);
     ExpectNear(derivatives[0], 0.0,
                "each accepted context is evaluated through its own state");
@@ -179,7 +179,7 @@ void CheckForeignContextRefusal() {
     const SystemInstance first(first_description);
     const SystemInstance second(second_description);
     const CompiledSystemPlan plan(first);
-    auto foreign_context = second.CreateDefaultRuntimeContext();
+    auto foreign_context = second.CreateDefaultRuntimeContext(0.0);
     Eigen::VectorXd derivatives(2);
     derivatives.setConstant(17.0);
     bool refused = false;

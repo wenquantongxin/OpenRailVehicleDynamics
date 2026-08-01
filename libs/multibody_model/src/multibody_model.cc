@@ -954,6 +954,25 @@ void MultibodyModel::SetPrismaticJointDampingCoefficient(
         model.tree_.get_joint(model.tree_joint_[ordinal]), damping);
 }
 
+void MultibodyModel::CopyJointDampingParameters(
+    const MultibodyEvaluationContext& source,
+    MultibodyEvaluationContext* destination) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("copy joint damping between contexts");
+    Implementation::RequireOwnContext(model, &source,
+                                      "read joint damping from");
+    Implementation::RequireOwnContext(model, destination,
+                                      "write joint damping into");
+    for (const drake::multibody::JointIndex& joint_index : model.tree_joint_) {
+        const auto& joint = model.tree_.get_joint(joint_index);
+        const Eigen::VectorXd damping = joint.GetDampingVector(
+            source.implementation_->tree_context().state());
+        model.tree_.SetJointDamping(
+            &destination->implementation_->mutable_tree_context(), joint,
+            damping);
+    }
+}
+
 // --- Position kinematics -----------------------------------------------------
 
 RigidPose MultibodyModel::CalcPoseInWorld(

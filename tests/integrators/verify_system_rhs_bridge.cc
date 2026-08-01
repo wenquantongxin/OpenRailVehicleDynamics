@@ -116,8 +116,8 @@ void CheckDynamicStateMappingAndAtomicRefusal() {
     TwoDofFixture fixture;
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
-    auto source = system.CreateDefaultRuntimeContext();
-    auto destination = system.CreateDefaultRuntimeContext();
+    auto source = system.CreateDefaultRuntimeContext(0.0);
+    auto destination = system.CreateDefaultRuntimeContext(0.0);
 
     Eigen::VectorXd stated(4);
     stated << 0.25, -0.5, 1.75, -2.25;
@@ -183,7 +183,7 @@ void CheckModelAwareQuaternionGate() {
     model.Finalize();
     const SystemAssemblyDescription description(model);
     const SystemInstance system(description);
-    auto context = system.CreateDefaultRuntimeContext();
+    auto context = system.CreateDefaultRuntimeContext(0.0);
     Eigen::VectorXd before(system.continuous_state_size());
     system.CopyContinuousState(*context, before);
 
@@ -205,9 +205,9 @@ void CheckDedicatedTrialRhs() {
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
     const CompiledSystemPlan plan(system);
-    auto accepted = system.CreateDefaultRuntimeContext();
-    auto trial = system.CreateDefaultRuntimeContext();
-    auto expected_context = system.CreateDefaultRuntimeContext();
+    auto accepted = system.CreateDefaultRuntimeContext(0.0);
+    auto trial = system.CreateDefaultRuntimeContext(0.0);
+    auto expected_context = system.CreateDefaultRuntimeContext(0.0);
 
     Eigen::VectorXd accepted_state(2);
     accepted_state << -0.7, -1.25;
@@ -270,7 +270,7 @@ void CheckPlanAndTrialBelongToTheSameSystem() {
     const SystemInstance first(first_description);
     const SystemInstance second(second_description);
     const CompiledSystemPlan foreign_plan(second);
-    auto first_trial = first.CreateDefaultRuntimeContext();
+    auto first_trial = first.CreateDefaultRuntimeContext(0.0);
     ExpectInvalidArgument(
         [&] {
             (void)SystemRhsBridge(first, foreign_plan, std::move(first_trial),

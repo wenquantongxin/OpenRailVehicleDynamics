@@ -360,6 +360,16 @@ class MultibodyModel {
         MultibodyEvaluationContext* context, JointHandle joint,
         double damping_newton_seconds_per_metre) const;
 
+    /// Copies every currently mutable joint-damping parameter between two
+    /// contexts of this model.
+    ///
+    /// This is the narrow synchronization operation used by the continuous
+    /// system advancer.  It does not copy q, v, caches or any parameter category
+    /// without a public context-local write contract.
+    void CopyJointDampingParameters(
+        const MultibodyEvaluationContext& source,
+        MultibodyEvaluationContext* destination) const;
+
     // --- Position kinematics ------------------------------------------------
 
     /// Where this body's own frame is, in the world.

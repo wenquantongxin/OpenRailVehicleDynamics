@@ -59,9 +59,10 @@ class SystemContinuousStateRange {
 
 /// The root runtime context for one `SystemInstance`.
 ///
-/// It owns exactly one multibody evaluation context.  That context in turn
-/// owns the G21 state store; this class does not mirror q or v.  The model-bound
-/// forward-dynamics workspace is created beside it once and reused.
+/// It owns exactly one accepted time and one multibody evaluation context.
+/// That context in turn owns the G21 state store; this class does not mirror q
+/// or v.  The model-bound forward-dynamics workspace is created beside it once
+/// and reused.
 class SystemRuntimeContext {
    public:
     ~SystemRuntimeContext();
@@ -73,13 +74,16 @@ class SystemRuntimeContext {
 
     [[nodiscard]] const Eigen::VectorXd& generalized_positions() const;
     [[nodiscard]] const Eigen::VectorXd& generalized_velocities() const;
+    [[nodiscard]] double time_seconds() const { return time_seconds_; }
 
    private:
     friend class SystemInstance;
     SystemRuntimeContext(internal::SystemIdentity issuer,
-                         const multibody_model::MultibodyModel& model);
+                         const multibody_model::MultibodyModel& model,
+                         double initial_time_seconds);
 
     internal::SystemIdentity issuer_;
+    double time_seconds_;
     std::unique_ptr<multibody_model::MultibodyEvaluationContext>
         multibody_context_;
     std::unique_ptr<multibody_model::ForwardDynamicsWorkspace>
@@ -130,8 +134,9 @@ class SystemInstance {
         const;
     [[nodiscard]] int continuous_state_size() const;
 
+    /// Creates the default physical state at an explicit finite accepted time.
     [[nodiscard]] std::unique_ptr<SystemRuntimeContext>
-    CreateDefaultRuntimeContext() const;
+    CreateDefaultRuntimeContext(double initial_time_seconds) const;
 
     /// Copies the frozen `[q; v]` continuous-state layout into `output`.
     /// `output` must already have `continuous_state_size()` entries.
@@ -143,9 +148,18 @@ class SystemInstance {
     ///
     /// This is the contiguous-vector bridge used by ODE backends.  The input
     /// is mapped directly into the authoritative multibody state; no mirrored
-    /// system state is kept.
+    /// system state is kept.  The accepted time is retained.
     void SetContinuousState(
         SystemRuntimeContext& context,
+        const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
+
+    /// Accepts a finite time and complete `[q; v]` state as one transaction.
+    ///
+    /// Every check, including the model-aware quaternion condition and both
+    /// state-version successors, precedes the write.  A refusal therefore
+    /// leaves time, q, v and their versions unchanged.
+    void SetTimeAndContinuousState(
+        SystemRuntimeContext& context, double time_seconds,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
 
     /// Resolves the stable component index to direct references.  No name or

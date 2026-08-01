@@ -515,6 +515,19 @@ target_link_libraries(verify_cvode_continuous_state_advancer
 add_test(NAME verify_cvode_continuous_state_advancer
          COMMAND verify_cvode_continuous_state_advancer)
 
+# G45's accepted/trial transaction boundary.  A real damped multibody system
+# runs through CVODE, a singular articulated inertia exercises post-RHS failure,
+# and the system-level atomic setter covers an invalid final acceptance without
+# introducing a fake numerical backend or a production fault hook.
+add_executable(verify_system_continuous_state_advancer
+    integrators/system_continuous_state_advancer_header_self_containment.cc
+    integrators/verify_system_continuous_state_advancer.cc)
+orvd_configure_first_party_target(verify_system_continuous_state_advancer)
+target_link_libraries(verify_system_continuous_state_advancer
+    PRIVATE orvd_integrators)
+add_test(NAME verify_system_continuous_state_advancer
+         COMMAND verify_system_continuous_state_advancer)
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed
