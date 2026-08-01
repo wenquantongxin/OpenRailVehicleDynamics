@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
+if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+endif()
+
 if(NOT DEFINED CHECKED_EXECUTABLE)
     message(FATAL_ERROR "CHECKED_EXECUTABLE was not given")
 endif()
@@ -16,6 +20,15 @@ set(runtime_dependency_arguments
 if(DEFINED RUNTIME_SEARCH_DIRECTORIES AND RUNTIME_SEARCH_DIRECTORIES)
     list(APPEND runtime_dependency_arguments
          DIRECTORIES ${RUNTIME_SEARCH_DIRECTORIES})
+endif()
+if(WIN32)
+    # Windows PE files name API-set contracts that the loader redirects to
+    # system implementations; they are not distributable DLLs that CMake can
+    # resolve on disk.  Exclude only those two contract namespaces before
+    # resolution.  Every ordinary DLL name remains subject to the strict
+    # unresolved-dependency failure below.
+    list(APPEND runtime_dependency_arguments
+         PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-")
 endif()
 
 file(GET_RUNTIME_DEPENDENCIES ${runtime_dependency_arguments})
