@@ -33,6 +33,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # part of the graph reports a boundary it has not actually checked.
 set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 include(OrvdFirstPartyTargetPolicy)
 include(OrvdProductBoundaryGate)
 
@@ -52,16 +54,16 @@ find_package(SUNDIALS 7.7.0 EXACT CONFIG REQUIRED
     COMPONENTS cvode nvecserial sunmatrixdense sunlinsoldense core)
 
 # fmt is required by the vendored Drake source: its public headers include
-# fmt/format.h and specialise fmt::formatter. No version is pinned: real source
-# compilation verifies the configured package, while a minimum version would
-# require evidence from a specific API.
+# fmt/format.h and specialise fmt::formatter. G46 pins 9.1.0 to the version
+# carried by the offline source bundle, so development and installed-package
+# modes consume the same declared interface.
 #
 # PATH-derived prefixes are excluded for this search. An unrelated toolchain on
 # PATH — a conda environment, say — otherwise supplies its own fmt, whose
 # directory lands in every consumer's RUNPATH and takes the C++ runtime with it.
 # The result is an executable that links cleanly and cannot start, which is worse
 # than a build failure because it survives every check that stops at linking.
-find_package(fmt CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
+find_package(fmt 9.1.0 CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: multibody_runtime + internal rigid tree
@@ -87,6 +89,55 @@ foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
         add_subdirectory(${product_module_relative_path})
     endif()
 endforeach()
+
+# --- Installable package ---
+# Four first-party targets form the documented surface.  The rigid-tree archive
+# is exported only because a static modelling archive must retain its private
+# implementation link edge; no vendored or adapter header is installed.
+set(ORVD_INSTALL_TARGETS
+    orvd_multibody_runtime
+    orvd_multibody_model
+    orvd_system_assembly
+    orvd_integrators
+    orvd_rigid_multibody_tree)
+install(TARGETS ${ORVD_INSTALL_TARGETS}
+        EXPORT OpenRailVehicleDynamicsTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+foreach(orvd_public_module
+        multibody_runtime multibody_model system_assembly integrators)
+    install(DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+            FILES_MATCHING PATTERN "*.h")
+endforeach()
+
+set(ORVD_INSTALL_CMAKEDIR
+    "${CMAKE_INSTALL_LIBDIR}/cmake/OpenRailVehicleDynamics")
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OpenRailVehicleDynamicsConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfig.cmake"
+    INSTALL_DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY ExactVersion)
+install(EXPORT OpenRailVehicleDynamicsTargets
+        FILE OpenRailVehicleDynamicsTargets.cmake
+        NAMESPACE ORVD::
+        DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfigVersion.cmake"
+        DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+install(FILES
+        NOTICE
+        external/drake_mbtree/LICENSE.TXT
+        external/drake_mbtree/LICENSE.Apache-2.0.txt
+        external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenRailVehicleDynamics")
 
 # include(CTest) defines BUILD_TESTING (default ON) and configures CTest.
 include(CTest)

@@ -5,8 +5,9 @@
 # against them never sees `drake/` — and cannot come to depend on how the tree
 # arranges what it is given, because it cannot see the arrangement.
 #
-# Deliberately not installed and not exported. What is public at delivery is
-# G46's question; exporting now would freeze an interface still being built.
+# G46 installs this first-party facade.  The rigid tree remains a link-only
+# implementation dependency and no vendored type appears in the installed
+# headers.
 
 add_library(orvd_multibody_model STATIC
     src/forward_dynamics_workspace.cc
@@ -16,7 +17,9 @@ add_library(orvd_multibody_model STATIC
 orvd_configure_first_party_target(orvd_multibody_model)
 
 target_include_directories(orvd_multibody_model
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 # PUBLIC on the runtime: the public headers carry its typed physical parameter
 # records, which is first-party and is the vocabulary this layer speaks.
@@ -25,3 +28,7 @@ target_include_directories(orvd_multibody_model
 target_link_libraries(orvd_multibody_model
     PUBLIC orvd_multibody_runtime Eigen3::Eigen
     PRIVATE orvd_rigid_multibody_tree)
+
+set_target_properties(orvd_multibody_model PROPERTIES
+    EXPORT_NAME multibody_model)
+add_library(ORVD::multibody_model ALIAS orvd_multibody_model)

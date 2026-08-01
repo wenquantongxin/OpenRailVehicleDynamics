@@ -4,6 +4,7 @@
 |---|---|
 | `OrvdFirstPartyTargetPolicy.cmake` | `orvd_configure_first_party_target(<target>)`：按目标声明 C++23、关闭语言扩展并设置第一方告警 |
 | `OrvdProductBoundaryGate.cmake` | 递归纳管已列产品模块的目标；配置期拒绝产品对 `libdrake` 的链接依赖 |
+| `OpenRailVehicleDynamicsConfig.cmake.in` | 安装包入口：先恢复 Eigen、fmt、SUNDIALS 依赖，再载入导出的 ORVD 目标 |
 
 ## 为什么按目标而不是全局
 
@@ -13,9 +14,5 @@
 
 告警不设为错误：在构建系统里启用 `-Werror` 会让一次上游编译器升级变成未改动代码的构建
 中断。需要更严格时由 CI 在此之上叠加。
-
-## 由后续 Goal 建立
-
-- 依赖定位模块（SUNDIALS、Ceres）留到第一个真实消费者出现时再建立。
 
 `CMAKE_MODULE_PATH` 已在顶层 CMakeLists 指向本目录。

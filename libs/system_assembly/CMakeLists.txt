@@ -13,9 +13,14 @@ add_library(orvd_system_assembly STATIC
 orvd_configure_first_party_target(orvd_system_assembly)
 
 target_include_directories(orvd_system_assembly
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_system_assembly PUBLIC orvd_multibody_model)
 
-# Deliberately not installed or exported.  Packaging is G46's concern; doing it
-# here would freeze an assembly interface before it has an executable consumer.
+set_target_properties(orvd_system_assembly PROPERTIES
+    EXPORT_NAME system_assembly)
+add_library(ORVD::system_assembly ALIAS orvd_system_assembly)
+
+# G46 exports this target as the model-neutral assembly layer.

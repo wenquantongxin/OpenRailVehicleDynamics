@@ -528,6 +528,46 @@ target_link_libraries(verify_system_continuous_state_advancer
 add_test(NAME verify_system_continuous_state_advancer
          COMMAND verify_system_continuous_state_advancer)
 
+# G46's installed-package qualification.  This test moves an actual installation
+# to a second prefix, configures an independent public-header-only consumer,
+# advances a damped rotor with the real CVODE backend, and then walks the
+# resulting executable's runtime dependency closure.  The sibling marker
+# executable proves that the same closure check rejects a real shared library
+# whose file identity is Drake.  It is a native execution test, not a cross-build
+# substitute for running on the target platform.
+if(NOT CMAKE_CROSSCOMPILING)
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(orvd_installation_multi_config TRUE)
+        set(orvd_installation_build_config "$<CONFIG>")
+    else()
+        set(orvd_installation_multi_config FALSE)
+        set(orvd_installation_build_config "${CMAKE_BUILD_TYPE}")
+    endif()
+    string(REPLACE ";" "\\;" orvd_installation_dependency_prefix_path
+           "${CMAKE_PREFIX_PATH}")
+    add_test(NAME verify_relocated_install_consumer
+        COMMAND ${CMAKE_COMMAND}
+            -DORVD_BUILD_DIR=${CMAKE_BINARY_DIR}
+            -DORVD_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DINSTALLATION_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/installation
+            -DWORK_ROOT=${CMAKE_CURRENT_BINARY_DIR}/installation/$<CONFIG>
+            -DCMAKE_GENERATOR_NAME=${CMAKE_GENERATOR}
+            -DCMAKE_GENERATOR_PLATFORM_NAME=${CMAKE_GENERATOR_PLATFORM}
+            -DCMAKE_GENERATOR_TOOLSET_NAME=${CMAKE_GENERATOR_TOOLSET}
+            -DCMAKE_CXX_COMPILER_PATH=${CMAKE_CXX_COMPILER}
+            -DCMAKE_MAKE_PROGRAM_PATH=${CMAKE_MAKE_PROGRAM}
+            -DBUILD_CONFIG=${orvd_installation_build_config}
+            -DEXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+            -DMULTI_CONFIG=${orvd_installation_multi_config}
+            -DDEPENDENCY_PREFIX_PATH=${orvd_installation_dependency_prefix_path}
+            -DEIGEN3_CONFIG_DIR=${Eigen3_DIR}
+            -DFMT_CONFIG_DIR=${fmt_DIR}
+            -DSUNDIALS_CONFIG_DIR=${SUNDIALS_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/installation/verify_relocated_install_consumer.cmake)
+    set_tests_properties(verify_relocated_install_consumer
+        PROPERTIES RUN_SERIAL TRUE)
+endif()
+
 # The candidate side of the cross-process comparison. It links the modelling
 # facade and the shared scenario contract, which brings in the landed tree
 # statically — that is the product. What it must never link is the installed

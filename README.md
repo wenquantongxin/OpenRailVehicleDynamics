@@ -8,7 +8,9 @@ vendored Drake common support、刚性 topology、double 位姿数学与完整 d
 均已有内部构建目标。第一方运行时拥有单一多体状态、类型化参数、版本缓存与具名工作区；
 G29–G39 已接通模型中立建模、运动学、质量矩阵、逆动力学、具名外力和 O(n) 前向动力学，
 G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原子事务、RHS 桥、真实 CVODE 后端
-以及接受/试算提交边界。当前 Goal 为 G46，当前路书止于 G46。
+以及接受/试算提交边界。G46 已在 Ubuntu 上落下可安装包、离线依赖源码包和独立消费者资格，
+并由 GCC 13 与 Clang 18 实际构建运行；Windows/MSVC 资格尚待真实平台执行，因此当前 Goal
+仍为 G46，当前路书止于 G46。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -39,6 +41,7 @@ OpenRailVehicleDynamics/
 ├── CMakeLists.txt        顶层构建（内部刚性树产品目标；启用测试时另建模型中立自检）
 ├── CMakePresets.json     构建预设：dev / release / drake-reference
 ├── cmake/                CMake 辅助模块
+├── distribution/         离线依赖源码包的锁表与超级构建模板
 ├── docs/
 │   ├── planning/         唯一实施路书
 │   ├── engineering/      第一方工程约束
@@ -49,7 +52,8 @@ OpenRailVehicleDynamics/
 │   └── drake_mbtree/     vendored topology/tree 源码、第一方替代实现、处置与许可证
 ├── tools/
 │   ├── drake_source_boundary/  源码闭包、编译前沿、来源与禁入边界工具（开发期）
-│   └── product_boundary_gate/  链接边界闸门的判别力自检（开发期）
+│   ├── product_boundary_gate/  链接边界闸门的判别力自检（开发期）
+│   └── package_distribution/   开发者侧离线源码包组装工具
 ├── libs/
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── multibody_model/   模型中立的程序化多体建模门面
@@ -69,13 +73,42 @@ OpenRailVehicleDynamics/
     └── unit/             单元测试
 ```
 
-已建模块的 `include/orvd/<module>/` 是仓内目标的公共编译接口头，`src/` 是实现；例如 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。这些目标当前不安装、不导出；G29–G33 已建立程序化建模门面、最终化、稳定查询、位置、空间速度与微分运动学求值，安装与交付边界归 G46。尚未开工的模块仍只保留职责骨架。
+已建模块的 `include/orvd/<module>/` 是公共编译接口头，`src/` 是实现；例如
+`#include "orvd/multibody_runtime/multibody_state_instance.h"`。安装包导出
+`ORVD::multibody_runtime`、`ORVD::multibody_model`、`ORVD::system_assembly` 与
+`ORVD::integrators`；vendored Drake 类型和接入头不安装。尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 
-Eigen、fmt 与精确版本 SUNDIALS 7.7.0 是当前产品的必需依赖，缺失时配置立即失败。开发者通过
-标准 CMake 搜索前缀提供依赖，仓库不记录机器路径；SUNDIALS 的随仓供应与精简组件构建归 G46。
-Ceres 尚无消费者，因此不查找、不设选项、不建目标。
+Eigen 3.4.0、fmt 9.1.0 与精确版本 SUNDIALS 7.7.0 是当前产品的必需依赖，缺失时配置立即
+失败。开发构建可通过标准 CMake 搜索前缀提供依赖；离线源码包则携带三者的锁定官方归档与
+许可证，由同一工具链安装到私有前缀后仍经唯一的 `find_package()` 路径消费。SUNDIALS 只启用
+CVODE 软件包、串行向量和稠密求解所需目标，关闭 OpenMP、MPI、BLAS、LAPACK 等当前无消费者
+后端；上游无条件构建的基础模块不作私有补丁裁剪。Ceres 尚无消费者，因此不查找、不设选项、
+不进源码包。
+
+## 构建与安装
+
+已有依赖前缀时可直接安装并由外部工程消费：
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=<dependency-prefix> \
+  -DCMAKE_INSTALL_PREFIX=<orvd-prefix> \
+  -DBUILD_TESTING=OFF
+cmake --build build
+cmake --install build
+```
+
+外部 CMake 工程使用 `find_package(OpenRailVehicleDynamics CONFIG REQUIRED)`，按所需最高层链接
+例如 `ORVD::integrators`。无需包含源码树、vendored Drake 头或接入层头。
+
+不依赖系统开发包的离线方式见
+[`distribution/dependencies/README.md`](distribution/dependencies/README.md)：开发者先用显式工具
+组装源码包，普通使用者只需 CMake、C/C++ 工具链和构建器即可完成全部依赖与 ORVD 的构建安装。
+该机制已经在 Ubuntu 24.04 上以 GCC 13 和 Clang 18 运行真实 CVODE 消费者；这不是 Windows
+资格的替代，Windows/MSVC 仍须在真实平台运行同一消费者。
 
 ## GZ18
 

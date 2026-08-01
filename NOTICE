@@ -55,9 +55,12 @@ Drake — a subset of the rigid multibody tree and topology sources.
 Build and link dependencies
 ---------------------------
 
-These are resolved by `find_package` at configure time and are not vendored in
-this repository. Their packaging form and the files actually incorporated into
-or shipped with a release determine that release's licence materials.
+These are resolved by `find_package` at configure time; their source archives
+are not committed to this repository. G46's developer-side source-bundle tool
+accepts the locked official Eigen 3.4.0, fmt 9.1.0 and SUNDIALS 7.7.0 archives,
+extracts the declared licence materials and gives both to the offline build.
+Their packaging form and the files actually incorporated into or shipped with a
+release still determine that release's final licence materials.
 
 Eigen
 
@@ -86,9 +89,9 @@ SUNDIALS 7.7.0
     Form      CVODE, serial N_Vector, dense matrix and dense linear solver
 
   ORVD resolves these components through the configured SUNDIALS CMake package
-  and links them into the first numerical backend. The dependency is external
-  during development; G46 determines the source and licence materials carried
-  by the standalone package.
+  and links them into the first numerical backend. The G46 offline source bundle
+  carries the locked upstream archive, LICENSE and NOTICE; a development build
+  may instead provide the same package through a standard CMake search prefix.
 
 
 Release

@@ -231,13 +231,23 @@ set(ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS
 # yield every object; putting the objects in makes "this archive is the tree"
 # true rather than approximately true.
 #
-# Deliberately not installed and not exported. What is public is G29-G30's
-# question, and exporting an internal target now would freeze an interface that
-# is still being built. The vendored types in its headers are not public either.
+# G46 installs this archive only as an implementation dependency of the public
+# modelling target.  Its exported name is explicitly internal, and none of its
+# vendored or adapter headers is installed.
 add_library(orvd_rigid_multibody_tree STATIC)
+foreach(orvd_rigid_tree_object_owner
+        IN LISTS ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS)
+    target_link_libraries(orvd_rigid_multibody_tree
+        PUBLIC "$<BUILD_INTERFACE:${orvd_rigid_tree_object_owner}>")
+endforeach()
+# The object owners vanish from the installed link interface, but their archive
+# still contains unresolved fmt calls and runtime references.  Keep those real
+# link dependencies explicit for an installed static consumer.
 target_link_libraries(orvd_rigid_multibody_tree
-    PUBLIC ${ORVD_RIGID_MULTIBODY_TREE_OBJECT_OWNER_TARGETS}
-           orvd_multibody_runtime)
+    PUBLIC orvd_multibody_runtime
+    PRIVATE fmt::fmt)
+set_target_properties(orvd_rigid_multibody_tree PROPERTIES
+    EXPORT_NAME _internal_rigid_multibody_tree)
 
 # --- Single source ownership, checked ---
 # Every landed .cc must belong to exactly one of the object owners that form the

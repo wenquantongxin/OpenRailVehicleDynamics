@@ -18,12 +18,17 @@ add_library(orvd_multibody_runtime STATIC
 orvd_configure_first_party_target(orvd_multibody_runtime)
 
 target_include_directories(orvd_multibody_runtime
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 # PUBLIC: the public headers carry Eigen types in their interface, so a consumer
 # compiling against them needs Eigen's include directories.
 target_link_libraries(orvd_multibody_runtime PUBLIC Eigen3::Eigen)
 
-# Deliberately not installed or exported. Installation is a delivery concern with
-# its own set of decisions about what is public; those belong to G29 and G46, and
-# exporting a target before then would freeze an interface still being built.
+set_target_properties(orvd_multibody_runtime PROPERTIES
+    EXPORT_NAME multibody_runtime)
+add_library(ORVD::multibody_runtime ALIAS orvd_multibody_runtime)
+
+# G46 installs this complete first-party header surface and exports the compiled
+# target as ORVD::multibody_runtime.

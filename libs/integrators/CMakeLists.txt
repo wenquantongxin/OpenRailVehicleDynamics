@@ -7,7 +7,9 @@ add_library(orvd_integrators STATIC
 orvd_configure_first_party_target(orvd_integrators)
 
 target_include_directories(orvd_integrators
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_integrators
     PUBLIC Eigen3::Eigen orvd_system_assembly)
@@ -20,3 +22,6 @@ target_link_libraries(orvd_integrators PRIVATE
     SUNDIALS::nvecserial
     SUNDIALS::sunmatrixdense
     SUNDIALS::sunlinsoldense)
+
+set_target_properties(orvd_integrators PROPERTIES EXPORT_NAME integrators)
+add_library(ORVD::integrators ALIAS orvd_integrators)
