@@ -150,10 +150,15 @@ void CheckAtomicAcceptedTimeAndState() {
     Expect(context->time_seconds() == kInitialTime && observed == accepted,
            "a late state refusal preserves the whole accepted transaction");
 
+    Eigen::VectorXd valid_but_different = accepted;
+    valid_but_different[q_range.start() + 4] += 1.25;
+    valid_but_different.tail(model.num_generalized_velocities())
+        .setConstant(-2.0);
     ExpectInvalidArgument(
         [&] {
             system.SetTimeAndContinuousState(
-                *context, std::numeric_limits<double>::quiet_NaN(), accepted);
+                *context, std::numeric_limits<double>::quiet_NaN(),
+                valid_but_different);
         },
         "a non-finite accepted time is refused before the state is written");
     system.CopyContinuousState(*context, observed);
@@ -181,6 +186,12 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
     initial << 0.2, 1.4;
     system.SetContinuousState(*accepted, initial);
     system.SetContinuousState(*untouched, initial);
+    constexpr double kInitialAcceptedDamping = 0.9;
+    auto accepted_component = system.GetMultibodyComponentView(
+        *accepted, system.multibody_component());
+    fixture.model.SetRevoluteJointDampingCoefficient(
+        &accepted_component.context(), fixture.joint,
+        kInitialAcceptedDamping);
 
     SystemContinuousStateAdvancer advancer(
         system, plan, *accepted, MakeTolerances(2),
@@ -194,7 +205,7 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
     constexpr double kFirstTarget = 0.55;
     constexpr double kInertia =
         DampedRotorFixture::kMass * DampedRotorFixture::kUnitIzz;
-    const double first_rate = DampedRotorFixture::kInitialDamping / kInertia;
+    const double first_rate = kInitialAcceptedDamping / kInertia;
     const double first_dt = kFirstTarget - kInitialTime;
     const double expected_v1 = initial[1] * std::exp(-first_rate * first_dt);
     const double expected_q1 =
@@ -211,8 +222,6 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
     Eigen::Vector2d externally_stated;
     externally_stated << observed[0] + 0.05, observed[1] * 0.75;
     system.SetContinuousState(*accepted, externally_stated);
-    auto accepted_component = system.GetMultibodyComponentView(
-        *accepted, system.multibody_component());
     fixture.model.SetRevoluteJointDampingCoefficient(
         &accepted_component.context(), fixture.joint, kNewDamping);
     advancer.SynchronizeAfterAcceptedContextChange();

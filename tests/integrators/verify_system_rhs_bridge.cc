@@ -228,6 +228,7 @@ void CheckDedicatedTrialRhs() {
     Eigen::VectorXd expected(2);
     plan.CalcStateTimeDerivatives(*expected_context, {}, {}, {}, expected);
 
+    SystemRuntimeContext* const trial_observer = trial.get();
     SystemRhsBridge bridge(system, plan, std::move(trial),
                            NoCallTimeAppliedForces{});
     Expect(bridge.continuous_state_size() == 2,
@@ -236,6 +237,8 @@ void CheckDedicatedTrialRhs() {
     bridge.CalcTimeDerivatives(1.25, trial_state, actual);
     Expect(actual == expected,
            "the bridge evaluates the configured trial context through G42");
+    Expect(trial_observer->time_seconds() == 1.25,
+           "the bridge writes the backend trial time into its trial context");
 
     Eigen::VectorXd observed_accepted(2);
     system.CopyContinuousState(*accepted, observed_accepted);
@@ -250,6 +253,11 @@ void CheckDedicatedTrialRhs() {
         "an invalid trial state is refused");
     Expect(actual == Eigen::VectorXd::Constant(2, 23.0),
            "a refused trial leaves the caller's derivative output unchanged");
+    Eigen::VectorXd observed_trial(2);
+    system.CopyContinuousState(*trial_observer, observed_trial);
+    Expect(trial_observer->time_seconds() == 1.25 &&
+               observed_trial == trial_state,
+           "a refused trial changes neither trial time nor trial state");
     system.CopyContinuousState(*accepted, observed_accepted);
     Expect(observed_accepted == accepted_state,
            "a refused RHS trial also cannot change the accepted context");
