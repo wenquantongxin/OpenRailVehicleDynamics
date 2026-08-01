@@ -8,9 +8,9 @@ vendored Drake common support、刚性 topology、double 位姿数学与完整 d
 均已有内部构建目标。第一方运行时拥有单一多体状态、类型化参数、版本缓存与具名工作区；
 G29–G39 已接通模型中立建模、运动学、质量矩阵、逆动力学、具名外力和 O(n) 前向动力学，
 G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原子事务、RHS 桥、真实 CVODE 后端
-以及接受/试算提交边界。G46 已在 Ubuntu 上落下可安装包、离线依赖源码包和独立消费者资格，
-并由 GCC 13 与 Clang 18 实际构建运行；Windows/MSVC 资格尚待真实平台执行，因此当前 Goal
-仍为 G46，当前路书止于 G46。
+以及接受/试算提交边界。G46 已落下可安装包、离线依赖源码包和独立消费者资格，并在
+Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构建并运行同一
+CVODE 消费者。当前 46 个 Goal 已全部完成，后续复杂模型迁移另立路书。
 
 唯一实施依据是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
@@ -107,8 +107,9 @@ cmake --install build
 不依赖系统开发包的离线方式见
 [`distribution/dependencies/README.md`](distribution/dependencies/README.md)：开发者先用显式工具
 组装源码包，普通使用者只需 CMake、C/C++ 工具链和构建器即可完成全部依赖与 ORVD 的构建安装。
-该机制已经在 Ubuntu 24.04 上以 GCC 13 和 Clang 18 运行真实 CVODE 消费者；这不是 Windows
-资格的替代，Windows/MSVC 仍须在真实平台运行同一消费者。
+该机制已经在 Ubuntu 24.04 上以 GCC 13 和 Clang 18、在 Windows 10 上以 Visual Studio 2019
+16.11 / MSVC 19.29 运行同一真实 CVODE 消费者。Windows 构建还验证了迁移后的安装前缀、
+运行期依赖闭包与 Drake 标记动态库阳性对照。
 
 ## GZ18
 
