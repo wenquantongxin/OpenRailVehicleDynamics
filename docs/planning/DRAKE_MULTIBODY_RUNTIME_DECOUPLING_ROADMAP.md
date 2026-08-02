@@ -1,7 +1,9 @@
 # Drake 多体运行时脱耦路书
 
-本文件是 ORVD 当前唯一的实施路书。它把当前 Drake 脱耦基础工作拆成 17 个子目标、46 个原子 Goal。
-每次 Goal 模式只执行其中一个 Goal；不得在执行过程中重新规划整条路线或顺手扩展范围。
+本文件是 ORVD 已完成的 Drake 多体运行时脱耦实施路书。它把底座工作拆成 17 个子目标、
+46 个原子 Goal，执行边界止于 G46；当前作为既有能力与历史完成门的权威记录。后继车辆动力学
+迁移尚未启用，其待启用路书见
+[rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)。
 
 ## 当前状态
 
