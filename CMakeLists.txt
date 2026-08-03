@@ -92,7 +92,7 @@ foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
 endforeach()
 
 # --- Installable package ---
-# Four first-party targets form the documented surface.  The rigid-tree archive
+# Five first-party targets form the documented surface.  The rigid-tree archive
 # is exported only because a static modelling archive must retain its private
 # implementation link edge; no vendored or adapter header is installed.
 set(ORVD_INSTALL_TARGETS

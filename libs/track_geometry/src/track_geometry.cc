@@ -119,25 +119,19 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
 
     // The superelevation bound is a construction-time refusal. A roll of a
     // quarter turn is not a line, and the roll rate is unbounded there, so the
-    // bound is closed rather than open.
-    const auto check_superelevation = [this](double at_station) {
-        const double value = superelevation_.Value(at_station);
-        if (std::abs(value) >= rail_reference_lateral_span_meters_) {
-            throw std::invalid_argument(
-                "TrackGeometry: the superelevation " + Describe(value) +
-                " m at station " + Describe(at_station) +
-                " m reaches or exceeds the rail reference lateral span " +
-                Describe(rail_reference_lateral_span_meters_) +
-                " m; the track roll angle and its rate are undefined there, so "
-                "this is refused rather than clamped");
-        }
-    };
-    for (const double breakpoint :
-         superelevation_.breakpoint_track_stations_meters()) {
-        check_superelevation(breakpoint);
-    }
-    for (const StationNode& node : nodes_) {
-        check_superelevation(node.track_station_meters);
+    // admissible interval is open rather than closed.
+    const TrackScalarProfile::ProfileExtremum superelevation_extremum =
+        superelevation_.MaximumAbsoluteValue();
+    if (std::abs(superelevation_extremum.value) >=
+        rail_reference_lateral_span_meters_) {
+        throw std::invalid_argument(
+            "TrackGeometry: the superelevation " +
+            Describe(superelevation_extremum.value) + " m at station " +
+            Describe(superelevation_extremum.track_station_meters) +
+            " m reaches or exceeds the rail reference lateral span " +
+            Describe(rail_reference_lateral_span_meters_) +
+            " m; the roll-to-superelevation derivative is singular there, so "
+            "finite first-order track-frame kinematics cannot be formed");
     }
 
     // Heading is the exact integral of the curvature; only the horizontal

@@ -592,9 +592,10 @@ add_test(NAME verify_candidate_runtime_dependencies_exclude_shared_drake
 
 # G47's line layer. Three executables, one per group of completion gates, each
 # also compiling the public headers it owns as standalone translation units.
-# Every fixture these run on carries non-zero curvature, superelevation, grade
-# and heading at the same station: with any one of them zero the corresponding
-# assertion collapses into an identity and the gate stops discriminating.
+# The orientation and derivative identities use dedicated non-degenerate
+# fixtures carrying non-zero curvature, superelevation, grade and heading at
+# the same station. Refusal and projection fixtures intentionally vary those
+# quantities to isolate their own contracts.
 add_executable(verify_track_geometry_invariants
     track_geometry/track_geometry_header_self_containment.cc
     track_geometry/track_geometry_segments_header_self_containment.cc

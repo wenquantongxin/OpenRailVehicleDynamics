@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include <Eigen/Core>
 
 // The pose of the track frame in the track inertial frame, and its first
@@ -21,10 +23,24 @@ class TrackGeometry;
 
 class TrackFramePose {
    public:
-    [[nodiscard]] const Eigen::Matrix3d& rotation_inertial_from_track() const {
+    [[nodiscard]] const Eigen::Matrix3d& rotation_inertial_from_track()
+        const & {
         return rotation_inertial_from_track_;
     }
-    [[nodiscard]] const Eigen::Vector3d& origin_in_inertial_meters() const {
+    [[nodiscard]] Eigen::Matrix3d rotation_inertial_from_track() && {
+        return std::move(rotation_inertial_from_track_);
+    }
+    [[nodiscard]] Eigen::Matrix3d rotation_inertial_from_track() const && {
+        return rotation_inertial_from_track_;
+    }
+
+    [[nodiscard]] const Eigen::Vector3d& origin_in_inertial_meters() const & {
+        return origin_in_inertial_meters_;
+    }
+    [[nodiscard]] Eigen::Vector3d origin_in_inertial_meters() && {
+        return std::move(origin_in_inertial_meters_);
+    }
+    [[nodiscard]] Eigen::Vector3d origin_in_inertial_meters() const && {
         return origin_in_inertial_meters_;
     }
 
@@ -42,14 +58,25 @@ class TrackFramePose {
 
 class TrackFrameKinematics {
    public:
-    [[nodiscard]] const TrackFramePose& pose() const { return pose_; }
+    [[nodiscard]] const TrackFramePose& pose() const & { return pose_; }
+    [[nodiscard]] TrackFramePose pose() && { return std::move(pose_); }
+    [[nodiscard]] TrackFramePose pose() const && { return pose_; }
 
     // d(centerline position)/d(track station), expressed in the inertial
     // frame. Its norm is sqrt(1 + grade^2), not one: the track station is
     // planar projected mileage, so only the horizontal projection of this
     // vector is a unit vector.
     [[nodiscard]] const Eigen::Vector3d&
-    centerline_derivative_in_inertial_meters_per_meter() const {
+    centerline_derivative_in_inertial_meters_per_meter() const & {
+        return centerline_derivative_in_inertial_meters_per_meter_;
+    }
+    [[nodiscard]] Eigen::Vector3d
+    centerline_derivative_in_inertial_meters_per_meter() && {
+        return std::move(
+            centerline_derivative_in_inertial_meters_per_meter_);
+    }
+    [[nodiscard]] Eigen::Vector3d
+    centerline_derivative_in_inertial_meters_per_meter() const && {
         return centerline_derivative_in_inertial_meters_per_meter_;
     }
 
@@ -62,7 +89,16 @@ class TrackFrameKinematics {
     // which is the identity the gates check rather than a comment that hopes to
     // be true.
     [[nodiscard]] const Eigen::Vector3d&
-    track_frame_rotation_rate_in_inertial_radians_per_meter() const {
+    track_frame_rotation_rate_in_inertial_radians_per_meter() const & {
+        return track_frame_rotation_rate_in_inertial_radians_per_meter_;
+    }
+    [[nodiscard]] Eigen::Vector3d
+    track_frame_rotation_rate_in_inertial_radians_per_meter() && {
+        return std::move(
+            track_frame_rotation_rate_in_inertial_radians_per_meter_);
+    }
+    [[nodiscard]] Eigen::Vector3d
+    track_frame_rotation_rate_in_inertial_radians_per_meter() const && {
         return track_frame_rotation_rate_in_inertial_radians_per_meter_;
     }
 

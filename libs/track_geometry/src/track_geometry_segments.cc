@@ -1,7 +1,10 @@
 #include "orvd/track_geometry/track_geometry_segments.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 
@@ -66,6 +69,122 @@ bool IsIdenticallyZero(const double* coefficients, std::size_t count) {
     return true;
 }
 
+double PolynomialRoundoffScale(const double* coefficients, std::size_t count,
+                               double local) {
+    double scale = 0.0;
+    const double magnitude = std::abs(local);
+    for (std::size_t index = count; index > 0; --index) {
+        scale = scale * magnitude + std::abs(coefficients[index - 1]);
+    }
+    return scale;
+}
+
+bool IsPolynomialZeroWithinRoundoff(const double* coefficients,
+                                    std::size_t count, double local) {
+    constexpr double kRoundoffFactor = 128.0;
+    const double scale =
+        PolynomialRoundoffScale(coefficients, count, local);
+    if (scale == 0.0) {
+        return true;
+    }
+    return std::abs(EvaluatePolynomial(coefficients, count, local)) / scale <=
+           kRoundoffFactor * std::numeric_limits<double>::epsilon();
+}
+
+void AddUniqueRoot(double root, double lower, double upper,
+                   std::vector<double>& roots) {
+    if (root < lower || root > upper || !std::isfinite(root)) {
+        return;
+    }
+    const double clamped = std::clamp(root, lower, upper);
+    constexpr double kRootMergeFactor = 256.0;
+    for (const double existing : roots) {
+        const double scale =
+            std::max({1.0, std::abs(existing), std::abs(clamped)});
+        if (std::abs(existing - clamped) <=
+            kRootMergeFactor * std::numeric_limits<double>::epsilon() * scale) {
+            return;
+        }
+    }
+    roots.push_back(clamped);
+}
+
+// Finds every real root of a degree-at-most-four polynomial on a closed
+// interval. Recursively finding derivative roots splits the interval into
+// monotone stretches; a sign-changing stretch then has exactly one root. The
+// derivative-root evaluations also retain repeated roots, which do not change
+// sign and would otherwise be missed. This is construction-time work only.
+void FindPolynomialRootsInClosedInterval(const double* coefficients,
+                                         std::size_t count, double lower,
+                                         double upper,
+                                         std::vector<double>& roots) {
+    while (count > 1 && coefficients[count - 1] == 0.0) {
+        --count;
+    }
+    if (count <= 1) {
+        return;
+    }
+    if (count == 2) {
+        AddUniqueRoot(-coefficients[0] / coefficients[1], lower, upper, roots);
+        return;
+    }
+
+    std::array<double, 5> derivative{};
+    for (std::size_t order = 1; order < count; ++order) {
+        derivative[order - 1] =
+            static_cast<double>(order) * coefficients[order];
+    }
+    std::vector<double> critical_points;
+    critical_points.reserve(count);
+    FindPolynomialRootsInClosedInterval(derivative.data(), count - 1, lower,
+                                        upper, critical_points);
+    std::sort(critical_points.begin(), critical_points.end());
+
+    std::vector<double> partitions;
+    partitions.reserve(critical_points.size() + 2);
+    partitions.push_back(lower);
+    for (const double critical : critical_points) {
+        AddUniqueRoot(critical, lower, upper, partitions);
+    }
+    std::sort(partitions.begin(), partitions.end());
+    if (partitions.empty() || partitions.back() != upper) {
+        partitions.push_back(upper);
+    }
+
+    for (const double point : partitions) {
+        if (IsPolynomialZeroWithinRoundoff(coefficients, count, point)) {
+            AddUniqueRoot(point, lower, upper, roots);
+        }
+    }
+    for (std::size_t index = 0; index + 1 < partitions.size(); ++index) {
+        double left = partitions[index];
+        double right = partitions[index + 1];
+        double left_value = EvaluatePolynomial(coefficients, count, left);
+        const double right_value =
+            EvaluatePolynomial(coefficients, count, right);
+        if (std::signbit(left_value) == std::signbit(right_value) ||
+            IsPolynomialZeroWithinRoundoff(coefficients, count, left) ||
+            IsPolynomialZeroWithinRoundoff(coefficients, count, right)) {
+            continue;
+        }
+        for (int iteration = 0; iteration < 80; ++iteration) {
+            const double middle = std::midpoint(left, right);
+            if (middle == left || middle == right) {
+                break;
+            }
+            const double middle_value =
+                EvaluatePolynomial(coefficients, count, middle);
+            if (std::signbit(middle_value) == std::signbit(left_value)) {
+                left = middle;
+                left_value = middle_value;
+            } else {
+                right = middle;
+            }
+        }
+        AddUniqueRoot(std::midpoint(left, right), lower, upper, roots);
+    }
+}
+
 // The quintic Hermite basis as coefficients of the normalised window
 // coordinate. The rows are value, first and second derivative at the window
 // start, then the same three at the window end.
@@ -121,17 +240,41 @@ TrackScalarProfile::TrackScalarProfile(
         RawSegmentPiece piece;
         piece.start_track_station_meters = station;
         piece.end_track_station_meters = station + segment.length_meters;
-        if (segment.shape == TrackScalarSegmentShape::kConstant) {
-            piece.coefficients[0] = segment.start_value;
-            piece.coefficient_count = 1;
-        } else {
-            RequireFinite(segment.end_value, "the end value of " + where);
-            const double length = segment.length_meters;
-            const double change = segment.end_value - segment.start_value;
-            piece.coefficients[0] = segment.start_value;
-            piece.coefficients[2] = 3.0 * change / (length * length);
-            piece.coefficients[3] = -2.0 * change / (length * length * length);
-            piece.coefficient_count = 4;
+        if (!std::isfinite(piece.end_track_station_meters) ||
+            !(piece.end_track_station_meters > station)) {
+            throw std::invalid_argument(
+                "TrackScalarProfile: the endpoint of " + where +
+                " is not a finite representable station strictly after " +
+                Describe(station) + " m");
+        }
+        switch (segment.shape) {
+            case TrackScalarSegmentShape::kConstant:
+                piece.coefficients[0] = segment.start_value;
+                piece.coefficient_count = 1;
+                break;
+            case TrackScalarSegmentShape::kHermiteCubicBlend: {
+                RequireFinite(segment.end_value, "the end value of " + where);
+                const double length = segment.length_meters;
+                const double change = segment.end_value - segment.start_value;
+                piece.coefficients[0] = segment.start_value;
+                piece.coefficients[2] = 3.0 * change / (length * length);
+                piece.coefficients[3] =
+                    -2.0 * change / (length * length * length);
+                piece.coefficient_count = 4;
+                break;
+            }
+            default:
+                throw std::invalid_argument(
+                    "TrackScalarProfile: " + where +
+                    " has an unsupported segment shape");
+        }
+        for (std::size_t order = 0; order < piece.coefficient_count; ++order) {
+            if (!std::isfinite(piece.coefficients[order])) {
+                throw std::invalid_argument(
+                    "TrackScalarProfile: the polynomial coefficients of " +
+                    where + " are not finite for the declared values and "
+                            "length");
+            }
         }
         raw.push_back(piece);
         station = piece.end_track_station_meters;
@@ -168,6 +311,8 @@ TrackScalarProfile::TrackScalarProfile(
                 Describe(seam.boundary_track_station_meters) +
                 " m, which is not an interior boundary between two segments");
         }
+        const double canonical_boundary =
+            raw[left].end_track_station_meters;
         const double half = 0.5 * seam.window_length_meters;
         const double left_length = raw[left].end_track_station_meters -
                                    raw[left].start_track_station_meters;
@@ -183,10 +328,18 @@ TrackScalarProfile::TrackScalarProfile(
         }
         SeamWindow window;
         window.left_segment_index = left;
-        window.start_track_station_meters =
-            seam.boundary_track_station_meters - half;
-        window.end_track_station_meters =
-            seam.boundary_track_station_meters + half;
+        window.start_track_station_meters = canonical_boundary - half;
+        window.end_track_station_meters = canonical_boundary + half;
+        if (!std::isfinite(window.start_track_station_meters) ||
+            !std::isfinite(window.end_track_station_meters) ||
+            !(window.start_track_station_meters < canonical_boundary) ||
+            !(canonical_boundary < window.end_track_station_meters)) {
+            throw std::invalid_argument(
+                "TrackScalarProfile: " + where +
+                " is too narrow to form two finite representable window "
+                "endpoints around station " +
+                Describe(canonical_boundary) + " m");
+        }
         windows.push_back(window);
     }
     std::sort(windows.begin(), windows.end(),
@@ -276,6 +429,11 @@ TrackScalarProfile::TrackScalarProfile(
             double scale = 1.0;
             for (std::size_t order = 0; order < 6; ++order) {
                 seam_piece.coefficients[order] = normalised[order] / scale;
+                if (!std::isfinite(seam_piece.coefficients[order])) {
+                    throw std::invalid_argument(
+                        "TrackScalarProfile: a seam polynomial coefficient is "
+                        "not finite for the declared window");
+                }
                 scale *= width;
             }
             pieces_.push_back(seam_piece);
@@ -301,6 +459,11 @@ TrackScalarProfile::TrackScalarProfile(
                                    piece.end_track_station_meters - origin) -
             EvaluateAntiderivative(piece.coefficients, piece.coefficient_count,
                                    piece.start_track_station_meters - origin);
+        if (!std::isfinite(running_integral)) {
+            throw std::invalid_argument(
+                "TrackScalarProfile: the accumulated profile integral is not "
+                "finite for the declared segments");
+        }
     }
     breakpoints_.push_back(end_track_station_meters_);
 
@@ -311,6 +474,49 @@ TrackScalarProfile::TrackScalarProfile(
             break;
         }
     }
+}
+
+TrackScalarProfile::ProfileExtremum
+TrackScalarProfile::MaximumAbsoluteValue() const {
+    ProfileExtremum extremum;
+    bool have_value = false;
+    const auto consider = [&extremum, &have_value](const Piece& piece,
+                                                   double local) {
+        const double value = EvaluatePolynomial(
+            piece.coefficients, piece.coefficient_count, local);
+        const double station =
+            piece.polynomial_origin_track_station_meters + local;
+        if (!have_value || std::abs(value) > std::abs(extremum.value)) {
+            extremum.value = value;
+            extremum.track_station_meters = station;
+            have_value = true;
+        }
+    };
+
+    for (const Piece& piece : pieces_) {
+        const double lower = piece.start_track_station_meters -
+                             piece.polynomial_origin_track_station_meters;
+        const double upper = piece.end_track_station_meters -
+                             piece.polynomial_origin_track_station_meters;
+        consider(piece, lower);
+        consider(piece, upper);
+
+        std::array<double, 5> derivative{};
+        for (std::size_t order = 1; order < piece.coefficient_count; ++order) {
+            derivative[order - 1] =
+                static_cast<double>(order) * piece.coefficients[order];
+        }
+        std::vector<double> roots;
+        roots.reserve(piece.coefficient_count);
+        FindPolynomialRootsInClosedInterval(
+            derivative.data(),
+            piece.coefficient_count > 1 ? piece.coefficient_count - 1 : 1,
+            lower, upper, roots);
+        for (const double root : roots) {
+            consider(piece, root);
+        }
+    }
+    return extremum;
 }
 
 void TrackScalarProfile::ThrowIfOutsideDomain(

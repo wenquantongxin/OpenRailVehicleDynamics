@@ -12,6 +12,16 @@ target_compile_features(orvd_installation_smoke PRIVATE cxx_std_23)
 target_link_libraries(orvd_installation_smoke
     PRIVATE ORVD::integrators ORVD::track_geometry)
 
+# Keep a separate consumer that receives no include paths or transitive
+# dependencies from another ORVD target. The combined smoke above executes the
+# line calculation; this target independently proves that track_geometry alone
+# carries its installed public-header and Eigen closure.
+add_executable(track_geometry_installation_smoke
+    track_geometry_installation_smoke.cc)
+target_compile_features(track_geometry_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(track_geometry_installation_smoke
+    PRIVATE ORVD::track_geometry)
+
 # This pair is a positive control for the installed-artifact dependency gate.
 # The executable calls an exported function, so linkers cannot discard the
 # Drake-identified shared library as unused.

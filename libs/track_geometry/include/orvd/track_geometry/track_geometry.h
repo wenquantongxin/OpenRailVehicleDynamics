@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -30,11 +31,11 @@
 //
 // Straight and circular stretches integrate in closed form. A Hermite blend or
 // a seam window makes the heading a polynomial whose sine and cosine have no
-// elementary antiderivative, so those stretches are integrated at construction
-// by a fixed-order Gauss-Legendre rule over panels no longer than the node
-// spacing. An evaluation therefore integrates at most one panel, and the
-// accuracy is set by a stated spacing rather than by whatever the caller
-// happens to ask for.
+// elementary antiderivative, so a fixed-order Gauss-Legendre rule over panels
+// no longer than the node spacing precomputes the panel endpoints. A non-node
+// evaluation integrates at most the remaining part of one panel. Accuracy is
+// set by a stated spacing rather than by whatever the caller happens to ask for;
+// arbitrary positive spacings are not claimed to share one error bound.
 //
 // Construction may allocate. An evaluation may not: it neither builds nor grows
 // a dynamic container, looks up no name, formats no string, writes no log and
@@ -46,13 +47,15 @@ namespace orvd::track_geometry {
 class TrackGeometry {
    public:
     // The three profiles must share one station domain. The rail reference
-    // lateral span is the rail-to-rail distance the superelevation is measured
-    // across, so the track roll angle is asin(superelevation / span) and every
-    // admissible superelevation satisfies |superelevation| <= span.
+    // lateral span is the rail-to-rail distance across which superelevation is
+    // measured along the roll-free frame's vertical axis. The track roll angle
+    // is asin(superelevation / span), and every admissible superelevation
+    // satisfies |superelevation| < span. The strict inequality keeps the
+    // first-order roll kinematics finite.
     //
     // Throws std::invalid_argument when the profiles disagree on their domain,
     // when the span or node spacing is not finite and positive, or when any
-    // superelevation in the profile exceeds the span in magnitude. The
+    // superelevation in the profile reaches the span in magnitude. The
     // superelevation bound is refused at construction rather than clamped:
     // clamping would turn a modelling mistake into a plausible line.
     TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
@@ -71,13 +74,33 @@ class TrackGeometry {
         return rail_reference_lateral_span_meters_;
     }
 
-    [[nodiscard]] const TrackScalarProfile& curvature_profile() const {
+    [[nodiscard]] const TrackScalarProfile& curvature_profile() const & {
         return curvature_;
     }
-    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const {
+    [[nodiscard]] TrackScalarProfile curvature_profile() && {
+        return std::move(curvature_);
+    }
+    [[nodiscard]] TrackScalarProfile curvature_profile() const && {
+        return curvature_;
+    }
+
+    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const & {
         return superelevation_;
     }
-    [[nodiscard]] const TrackScalarProfile& grade_profile() const {
+    [[nodiscard]] TrackScalarProfile superelevation_profile() && {
+        return std::move(superelevation_);
+    }
+    [[nodiscard]] TrackScalarProfile superelevation_profile() const && {
+        return superelevation_;
+    }
+
+    [[nodiscard]] const TrackScalarProfile& grade_profile() const & {
+        return grade_;
+    }
+    [[nodiscard]] TrackScalarProfile grade_profile() && {
+        return std::move(grade_);
+    }
+    [[nodiscard]] TrackScalarProfile grade_profile() const && {
         return grade_;
     }
 

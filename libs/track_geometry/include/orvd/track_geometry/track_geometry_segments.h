@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <utility>
 #include <vector>
 
 // One scalar profile along the line: curvature, superelevation or grade.
@@ -23,6 +24,8 @@
 // windows.
 
 namespace orvd::track_geometry {
+
+class TrackGeometry;
 
 enum class TrackScalarSegmentShape {
     // The value holds at start_value for the whole segment.
@@ -88,7 +91,14 @@ class TrackScalarProfile {
     // The stations at which the piecewise definition changes: segment
     // boundaries and seam window edges, with the domain end appended.
     [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
-        const {
+        const & {
+        return breakpoints_;
+    }
+    [[nodiscard]] std::vector<double> breakpoint_track_stations_meters() && {
+        return std::move(breakpoints_);
+    }
+    [[nodiscard]] std::vector<double> breakpoint_track_stations_meters()
+        const && {
         return breakpoints_;
     }
 
@@ -103,6 +113,13 @@ class TrackScalarProfile {
         double track_station_meters) const;
 
    private:
+    friend class TrackGeometry;
+
+    struct ProfileExtremum {
+        double value{0.0};
+        double track_station_meters{0.0};
+    };
+
     struct Piece {
         double start_track_station_meters{0.0};
         double end_track_station_meters{0.0};
@@ -119,6 +136,7 @@ class TrackScalarProfile {
     };
 
     [[nodiscard]] std::size_t PieceIndexAt(double track_station_meters) const;
+    [[nodiscard]] ProfileExtremum MaximumAbsoluteValue() const;
     void ThrowIfOutsideDomain(double track_station_meters) const;
 
     double start_track_station_meters_{0.0};

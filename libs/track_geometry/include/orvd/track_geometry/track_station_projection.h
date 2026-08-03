@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include <Eigen/Core>
 
 // The result of projecting a point in space onto the line centerline.
@@ -23,7 +25,15 @@ class TrackStationProjection {
         return track_station_meters_;
     }
     [[nodiscard]] const Eigen::Vector3d&
-    closest_centerline_point_in_inertial_meters() const {
+    closest_centerline_point_in_inertial_meters() const & {
+        return closest_centerline_point_in_inertial_meters_;
+    }
+    [[nodiscard]] Eigen::Vector3d
+    closest_centerline_point_in_inertial_meters() && {
+        return std::move(closest_centerline_point_in_inertial_meters_);
+    }
+    [[nodiscard]] Eigen::Vector3d
+    closest_centerline_point_in_inertial_meters() const && {
         return closest_centerline_point_in_inertial_meters_;
     }
 

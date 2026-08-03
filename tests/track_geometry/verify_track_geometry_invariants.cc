@@ -13,6 +13,8 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -29,6 +31,21 @@ using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackSeamTransition;
 namespace lines = orvd::track_geometry::test_lines;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<const TrackGeometry&>().curvature_profile()),
+              const TrackScalarProfile&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<TrackGeometry&&>().curvature_profile()),
+              TrackScalarProfile>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const TrackScalarProfile&>()
+                           .breakpoint_track_stations_meters()),
+              const std::vector<double>&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<TrackScalarProfile&&>()
+                           .breakpoint_track_stations_meters()),
+              std::vector<double>>);
 
 int failure_count = 0;
 
@@ -237,6 +254,85 @@ void CheckSeamWindowContinuity() {
     continuous(window_end, "end");
 }
 
+struct HermiteCubicValues {
+    double value;
+    double first_derivative;
+    double second_derivative;
+};
+
+HermiteCubicValues EvaluateIndependentHermiteCubic(
+    double local_station_meters, double length_meters, double start_value,
+    double end_value) {
+    const double normalised = local_station_meters / length_meters;
+    const double change = end_value - start_value;
+    return HermiteCubicValues{
+        start_value +
+            change * (3.0 * normalised * normalised -
+                      2.0 * normalised * normalised * normalised),
+        change * (6.0 * normalised - 6.0 * normalised * normalised) /
+            length_meters,
+        change * (6.0 - 12.0 * normalised) /
+            (length_meters * length_meters)};
+}
+
+void CheckSeamMatchesSixNonzeroBoundaryData() {
+    constexpr double kFirstLength = 4.0;
+    constexpr double kSecondLength = 5.0;
+    constexpr double kBoundary = kFirstLength;
+    constexpr double kWindowLength = 2.0;
+    constexpr double kWindowStart = kBoundary - 0.5 * kWindowLength;
+    constexpr double kWindowEnd = kBoundary + 0.5 * kWindowLength;
+    constexpr double kFirstStart = 0.2;
+    constexpr double kBoundaryValue = 1.4;
+    constexpr double kSecondEnd = -0.7;
+
+    TrackSeamTransition seam;
+    seam.boundary_track_station_meters = kBoundary;
+    seam.window_length_meters = kWindowLength;
+    const TrackScalarProfile profile(
+        0.0,
+        {lines::Blend(kFirstLength, kFirstStart, kBoundaryValue),
+         lines::Blend(kSecondLength, kBoundaryValue, kSecondEnd)},
+        {seam});
+
+    const HermiteCubicValues left = EvaluateIndependentHermiteCubic(
+        kWindowStart, kFirstLength, kFirstStart, kBoundaryValue);
+    const HermiteCubicValues right = EvaluateIndependentHermiteCubic(
+        kWindowEnd - kBoundary, kSecondLength, kBoundaryValue, kSecondEnd);
+    Expect(std::abs(left.first_derivative) > 1.0e-3 &&
+               std::abs(left.second_derivative) > 1.0e-3 &&
+               std::abs(right.first_derivative) > 1.0e-3 &&
+               std::abs(right.second_derivative) > 1.0e-3,
+           "the seam fixture activates all four derivative boundary data");
+
+    const auto matches = [&profile](double station,
+                                    const HermiteCubicValues& expected,
+                                    const char* side) {
+        Expect(NearExact(profile.Value(station), expected.value, 256.0),
+               std::string("the quintic seam matches the independent value at ") +
+                   side);
+        Expect(NearExact(profile.FirstDerivativePerMeter(station),
+                         expected.first_derivative, 512.0),
+               std::string("the quintic seam matches the independent first "
+                           "derivative at ") +
+                   side);
+        Expect(NearExact(profile.SecondDerivativePerMeterSquared(station),
+                         expected.second_derivative, 2048.0),
+               std::string("the quintic seam matches the independent second "
+                           "derivative at ") +
+                   side);
+    };
+    // Piece lookup selects the seam at its left endpoint and the raw right
+    // segment at its right endpoint. The neighbouring nextafter probes verify
+    // the other one-sided values without using a finite-difference tolerance.
+    matches(kWindowStart, left, "the window start");
+    matches(std::nextafter(kWindowStart, -std::numeric_limits<double>::infinity()),
+            left, "the raw side immediately before the window");
+    matches(kWindowEnd, right, "the raw side at the window end");
+    matches(std::nextafter(kWindowEnd, -std::numeric_limits<double>::infinity()),
+            right, "the seam side immediately before the window end");
+}
+
 void CheckQuadratureConvergence() {
     // The same line at three node spacings. Two things have to hold, and only
     // the pair of them is a convergence statement: refining must move the
@@ -337,6 +433,108 @@ void CheckDomainAndSuperelevationRefusals() {
            "is refused at construction rather than clamped into a plausible "
            "line");
 
+    const auto build_constant_superelevation = [](double superelevation,
+                                                  double span) {
+        return TrackGeometry(
+            TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}),
+            TrackScalarProfile(
+                0.0, {lines::Constant(10.0, superelevation)}, {}),
+            TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}), span,
+            1.0);
+    };
+    bool refused_equal_superelevation = false;
+    try {
+        (void)build_constant_superelevation(1.5, 1.5);
+    } catch (const std::invalid_argument&) {
+        refused_equal_superelevation = true;
+    }
+    Expect(refused_equal_superelevation,
+           "a superelevation equal to the reference span is refused because "
+           "the first-order roll kinematics are singular there");
+    bool accepted_below_superelevation = true;
+    try {
+        (void)build_constant_superelevation(std::nextafter(1.5, 0.0), 1.5);
+    } catch (const std::exception&) {
+        accepted_below_superelevation = false;
+    }
+    Expect(accepted_below_superelevation,
+           "a representable superelevation immediately below the strict bound "
+           "remains admissible");
+
+    const auto build_seam_superelevation = [](double span) {
+        TrackSeamTransition seam;
+        seam.boundary_track_station_meters = 1.0;
+        seam.window_length_meters = 1.0;
+        return TrackGeometry(
+            TrackScalarProfile(0.0, {lines::Constant(2.0, 0.0)}, {}),
+            TrackScalarProfile(
+                0.0,
+                {lines::Blend(1.0, 0.0, 0.9),
+                 lines::Blend(1.0, 0.9, 0.0)},
+                {seam}),
+            TrackScalarProfile(0.0, {lines::Constant(2.0, 0.0)}, {}), span,
+            2.0);
+    };
+    bool refused_internal_overshoot = false;
+    try {
+        (void)build_seam_superelevation(0.8);
+    } catch (const std::invalid_argument&) {
+        refused_internal_overshoot = true;
+    }
+    Expect(refused_internal_overshoot,
+           "the superelevation bound is checked at polynomial extrema, so a "
+           "quintic seam cannot cross it between all sampled breakpoints");
+    bool accepted_bounded_seam = true;
+    try {
+        (void)build_seam_superelevation(0.9);
+    } catch (const std::exception&) {
+        accepted_bounded_seam = false;
+    }
+    Expect(accepted_bounded_seam,
+           "the same quintic seam is accepted when its true interior maximum "
+           "lies below the reference span");
+
+    // This profile differs from its unit upper bound only in the last few
+    // binary64 digits. An absolute root tolerance would classify its small
+    // derivative polynomial as identically zero, miss the seam's interior
+    // maximum, and admit a frame whose roll-rate mapping is singular.
+    bool refused_small_scale_internal_maximum = false;
+    try {
+        constexpr double kFirstLength = 4.0;
+        constexpr double kSecondLength = 5.0;
+        constexpr double kTotalLength = kFirstLength + kSecondLength;
+        const double one_step_below_one = std::nextafter(1.0, 0.0);
+        const double two_steps_below_one =
+            std::nextafter(one_step_below_one, 0.0);
+        double eighty_three_steps_below_one = 1.0;
+        for (int step = 0; step < 83; ++step) {
+            eighty_three_steps_below_one =
+                std::nextafter(eighty_three_steps_below_one, 0.0);
+        }
+        TrackSeamTransition seam;
+        seam.boundary_track_station_meters = kFirstLength;
+        seam.window_length_meters = 2.0;
+        (void)TrackGeometry(
+            TrackScalarProfile(
+                0.0, {lines::Constant(kTotalLength, 0.0)}, {}),
+            TrackScalarProfile(
+                0.0,
+                {lines::Blend(kFirstLength, two_steps_below_one,
+                              one_step_below_one),
+                 lines::Blend(kSecondLength, one_step_below_one,
+                              eighty_three_steps_below_one)},
+                {seam}),
+            TrackScalarProfile(
+                0.0, {lines::Constant(kTotalLength, 0.0)}, {}),
+            1.0, kTotalLength);
+    } catch (const std::invalid_argument&) {
+        refused_small_scale_internal_maximum = true;
+    }
+    Expect(refused_small_scale_internal_maximum,
+           "the extremum search is scale-relative, so a seam that reaches the "
+           "strict superelevation bound by only a few binary64 ulps is still "
+           "refused before singular frame kinematics can be evaluated");
+
     bool refused_domain_mismatch = false;
     try {
         TrackScalarProfile curvature_profile(0.0, {lines::Constant(100.0, 0.0)},
@@ -370,6 +568,50 @@ void CheckSupportStarts() {
     Expect(!flat.first_graded_track_station_meters().has_value(),
            "a line with no grade anywhere reports no grade support start at "
            "all, rather than a station that would compare as if it acted");
+}
+
+void CheckProfileInputRefusals() {
+    bool refused_unknown_shape = false;
+    try {
+        TrackScalarSegment bad = lines::Constant(1.0, 0.0);
+        bad.shape = static_cast<orvd::track_geometry::TrackScalarSegmentShape>(99);
+        (void)TrackScalarProfile(0.0, {bad}, {});
+    } catch (const std::invalid_argument&) {
+        refused_unknown_shape = true;
+    }
+    Expect(refused_unknown_shape,
+           "an unknown segment shape is refused rather than interpreted as a "
+           "different polynomial family");
+
+    bool refused_unrepresentable_endpoint = false;
+    try {
+        (void)TrackScalarProfile(1.0e20, {lines::Constant(1.0, 0.0)}, {});
+    } catch (const std::invalid_argument&) {
+        refused_unrepresentable_endpoint = true;
+    }
+    Expect(refused_unrepresentable_endpoint,
+           "a positive segment length too small to advance a large station is "
+           "refused before a zero-width piece is formed");
+
+    bool refused_unrepresentable_window = false;
+    try {
+        constexpr double kLargeStation = 1.0e20;
+        constexpr double kRepresentableSegmentLength = 32768.0;
+        TrackSeamTransition seam;
+        seam.boundary_track_station_meters =
+            kLargeStation + kRepresentableSegmentLength;
+        seam.window_length_meters = 1.0;
+        (void)TrackScalarProfile(
+            kLargeStation,
+            {lines::Constant(kRepresentableSegmentLength, 0.0),
+             lines::Constant(kRepresentableSegmentLength, 1.0)},
+            {seam});
+    } catch (const std::invalid_argument&) {
+        refused_unrepresentable_window = true;
+    }
+    Expect(refused_unrepresentable_window,
+           "a seam too narrow to form distinct floating-point endpoints is "
+           "refused before its width is used as a divisor");
 }
 
 void CheckGravityDirection() {
@@ -427,9 +669,11 @@ int main() {
     CheckTrackFrameLongitudinalAxis();
     CheckTransitionIsHermiteCubic();
     CheckSeamWindowContinuity();
+    CheckSeamMatchesSixNonzeroBoundaryData();
     CheckQuadratureConvergence();
     CheckDomainAndSuperelevationRefusals();
     CheckSupportStarts();
+    CheckProfileInputRefusals();
     CheckGravityDirection();
     CheckGradeSignAndMagnitude();
     if (failure_count != 0) {

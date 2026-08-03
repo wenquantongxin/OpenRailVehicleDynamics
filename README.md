@@ -10,11 +10,13 @@ G29–G39 已接通模型中立建模、运动学、质量矩阵、逆动力学�
 G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原子事务、RHS 桥、真实 CVODE 后端
 以及接受/试算提交边界。G46 已落下可安装包、离线依赖源码包和独立消费者资格，并在
 Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构建并运行同一
-CVODE 消费者。当前 46 个 Goal 已全部完成，后续复杂模型迁移另立路书。
+CVODE 消费者。底座的 46 个 Goal 已全部完成；车辆动力学迁移路书已经启用，当前 G47 的
+轨道几何实现正在对抗复核收口，G48 尚未进入。
 
-唯一实施依据是
-[Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)：
-它定义 17 个子目标、46 个原子 Goal 的顺序与完成门。当前进度以路书中的「当前 Goal」为准。
+底座的实施记录是
+[Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)；
+当前车辆工作的唯一进度权威是
+[轨道车辆动力学迁移与重构路书](docs/planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)。
 
 ## 已锁定的架构决策
 
@@ -55,6 +57,7 @@ OpenRailVehicleDynamics/
 │   ├── product_boundary_gate/  链接边界闸门的判别力自检（开发期）
 │   └── package_distribution/   开发者侧离线源码包组装工具
 ├── libs/
+│   ├── track_geometry/    线路惯性系、轨道几何、轨型系与站位投影
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── multibody_model/   模型中立的程序化多体建模门面
 │   ├── system_assembly/  模型中立系统组装层
@@ -75,8 +78,9 @@ OpenRailVehicleDynamics/
 
 已建模块的 `include/orvd/<module>/` 是公共编译接口头，`src/` 是实现；例如
 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。安装包导出
-`ORVD::multibody_runtime`、`ORVD::multibody_model`、`ORVD::system_assembly` 与
-`ORVD::integrators`；vendored Drake 类型和接入头不安装。尚未开工的模块仍只保留职责骨架。
+`ORVD::track_geometry`、`ORVD::multibody_runtime`、`ORVD::multibody_model`、
+`ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和接入头不安装。
+尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 
@@ -113,9 +117,9 @@ cmake --install build
 
 ## GZ18
 
-GZ18 与 wheel-rail-lab 的复杂动力学模型迁移不在当前路书实施。G46 完成后将依据届时真实
-消费者另建独立路书，逐步迁移车辆组装、力元、静平衡与运行流程；当前不冻结自由度、拓扑或
-力元清单，模型中立运行时的底层接口不由它们提前塑形。
+GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道几何、配置、车辆拓扑、启动状态、
+力元、轮轨接触、数值历史与端到端被动纵切逐 Goal 推进；当前只收口 G47，不以尚不存在的
+后续消费者提前塑造产品接口。
 
 ## 许可证
 

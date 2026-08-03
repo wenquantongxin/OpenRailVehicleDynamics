@@ -13,6 +13,8 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include <Eigen/Dense>
 
@@ -22,7 +24,17 @@
 namespace {
 
 using orvd::track_geometry::TrackGeometry;
+using orvd::track_geometry::TrackStationProjection;
 namespace lines = orvd::track_geometry::test_lines;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<const TrackStationProjection&>()
+                           .closest_centerline_point_in_inertial_meters()),
+              const Eigen::Vector3d&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<TrackStationProjection&&>()
+                           .closest_centerline_point_in_inertial_meters()),
+              Eigen::Vector3d>);
 
 int failure_count = 0;
 
@@ -131,6 +143,16 @@ void CheckProjectionKeepsNoHistory() {
     Expect(first_alone == first_again,
            "projecting a different point in between does not change the result "
            "for the first, so the primitive holds no history");
+}
+
+void CheckTemporaryProjectionOwnsItsPoint() {
+    const TrackGeometry line = lines::MakeCanonicalLine();
+    const Eigen::Vector3d query = PointBesideStation(line, 120.0, 0.6);
+    const auto& projected = line.ProjectPointColdStart(query)
+                                .closest_centerline_point_in_inertial_meters();
+    Expect(projected.allFinite(),
+           "accessing the point through a temporary projection result returns an "
+           "owned value rather than a dangling reference");
 }
 
 void CheckEquidistantMinimaAreRefused() {
@@ -247,6 +269,7 @@ int main() {
     CheckOrthogonalityAndAgreementOnEachShape();
     CheckColdAndSeededAgreeOnAUniqueRoot();
     CheckProjectionKeepsNoHistory();
+    CheckTemporaryProjectionOwnsItsPoint();
     CheckEquidistantMinimaAreRefused();
     CheckSecondOrderConditionIsEnforced();
     CheckArgumentRefusals();

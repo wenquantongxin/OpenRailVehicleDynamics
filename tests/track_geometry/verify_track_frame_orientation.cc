@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <limits>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include <Eigen/Dense>
 
@@ -22,8 +24,25 @@
 namespace {
 
 using orvd::track_geometry::TrackGeometry;
+using orvd::track_geometry::TrackFrameKinematics;
+using orvd::track_geometry::TrackFramePose;
 using orvd::track_geometry::TrackScalarProfile;
 namespace lines = orvd::track_geometry::test_lines;
+
+static_assert(std::is_same_v<
+              decltype(std::declval<const TrackFramePose&>()
+                           .rotation_inertial_from_track()),
+              const Eigen::Matrix3d&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<TrackFramePose&&>()
+                           .rotation_inertial_from_track()),
+              Eigen::Matrix3d>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const TrackFrameKinematics&>().pose()),
+              const TrackFramePose&>);
+static_assert(std::is_same_v<
+              decltype(std::declval<TrackFrameKinematics&&>().pose()),
+              TrackFramePose>);
 
 int failure_count = 0;
 
@@ -97,6 +116,22 @@ void CheckClosedFormRotation() {
     Expect(NearExact(measured.determinant(), 1.0, 16.0),
            "the track frame rotation has unit positive determinant, so the "
            "triad is right-handed rather than mirrored");
+}
+
+void CheckTemporaryAccessorsOwnTheirResults() {
+    const TrackGeometry line =
+        lines::MakeSteepConstantLine(kSteepGrade, kSteepSuperelevationMeters);
+    // A reference bound to this expression must extend the lifetime of a value,
+    // not bind to a member of an already-destroyed TrackFrameKinematics.
+    const auto& rotation = line.EvaluateTrackFrame(kStationMeters)
+                               .pose()
+                               .rotation_inertial_from_track();
+    const auto& origin = line.EvaluateTrackFrame(kStationMeters)
+                             .pose()
+                             .origin_in_inertial_meters();
+    Expect(rotation.allFinite() && origin.allFinite(),
+           "accessing pose members through a temporary kinematics result returns "
+           "owned values rather than dangling references");
 }
 
 void CheckConstructionOrder() {
@@ -259,6 +294,7 @@ void CheckRotationRateIsNotMerelyTheHeadingRate() {
 
 int main() {
     CheckClosedFormRotation();
+    CheckTemporaryAccessorsOwnTheirResults();
     CheckConstructionOrder();
     CheckDegenerateFixtureWouldNotDiscriminate();
     CheckSuperelevationSignByRailHeights();
