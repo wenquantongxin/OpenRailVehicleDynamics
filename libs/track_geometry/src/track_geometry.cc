@@ -43,14 +43,6 @@ constexpr double kEquidistantRelativeTolerance = 1.0e-9;
 // the two refinements land on the same station and have to be merged before the
 // ambiguity test sees them.
 constexpr double kRootMergeRelativeTolerance = 1.0e-9;
-// The heading may turn by at most this much across one node interval. The bound
-// is what makes the projection's interval scan complete: with the heading
-// nearly straight across an interval the objective's first derivative crosses
-// zero at most once inside it, so a bracketing scan cannot step over a minimum.
-// A line that violates it is refused with a request for a finer spacing rather
-// than searched with a grid too coarse to resolve it.
-constexpr double kMaximumHeadingTurnPerNodeIntervalRadians = 0.25;
-
 void RequireFinitePositive(double value, const char* what) {
     if (!std::isfinite(value) || value <= 0.0) {
         throw std::invalid_argument(std::string("TrackGeometry: ") + what +
@@ -185,21 +177,6 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
             -grade_.IntegralFromStart(next.track_station_meters);
     }
 
-    for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
-        const double turn = std::abs(nodes_[index + 1].heading_radians -
-                                     nodes_[index].heading_radians);
-        if (turn > kMaximumHeadingTurnPerNodeIntervalRadians) {
-            throw std::invalid_argument(
-                "TrackGeometry: the heading turns by " + Describe(turn) +
-                " rad across the node interval starting at station " +
-                Describe(nodes_[index].track_station_meters) +
-                " m, past the " +
-                Describe(kMaximumHeadingTurnPerNodeIntervalRadians) +
-                " rad a projection search needs to resolve one minimum per "
-                "interval; reduce the station node spacing below " +
-                Describe(station_node_spacing_meters_) + " m");
-        }
-    }
 }
 
 void TrackGeometry::ThrowIfOutsideDomain(double track_station_meters,

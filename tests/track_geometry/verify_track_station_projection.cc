@@ -304,35 +304,21 @@ void CheckRootsTheNodeGridDoesNotSurround() {
     }
 }
 
-void CheckACoarseGridOnACurveIsRefused() {
-    // The interval scan can only claim completeness while the heading is nearly
-    // straight across one interval. A spacing that lets the heading swing
-    // through a quarter of a radian per interval is refused at construction
-    // with a request for a finer one, rather than searched with a grid too
-    // coarse to resolve it.
-    bool refused = false;
-    std::string message;
-    try {
-        const TrackGeometry too_coarse = lines::MakeTightTurnLine(50.0);
-        (void)too_coarse;
-    } catch (const std::invalid_argument& error) {
-        refused = true;
-        message = error.what();
-    }
-    Expect(refused,
-           "a node spacing that lets the heading turn far within one interval "
-           "is refused at construction");
-    Expect(message.find("node spacing") != std::string::npos,
-           "and the refusal says which parameter to change");
-
+void CheckNodeSpacingDoesNotImposeAFalseProjectionProof() {
+    // Node spacing controls geometric integration accuracy. It cannot certify
+    // how many stationary points an arbitrary query point creates in one
+    // interval, so geometry construction must not reject an otherwise valid
+    // line under a projection-specific heading-turn heuristic.
     bool accepted = true;
     try {
-        const TrackGeometry fine_enough = lines::MakeTightTurnLine(0.5);
-        (void)fine_enough;
+        const TrackGeometry valid_geometry = lines::MakeTightTurnLine(50.0);
+        (void)valid_geometry;
     } catch (const std::exception&) {
         accepted = false;
     }
-    Expect(accepted, "the same line with a finer spacing is accepted");
+    Expect(accepted,
+           "a valid line is not rejected by a heading-turn threshold that "
+           "cannot prove projection-root completeness");
 }
 
 }  // namespace
@@ -340,7 +326,7 @@ void CheckACoarseGridOnACurveIsRefused() {
 int main() {
     CheckOrthogonalityAndAgreementOnEachShape();
     CheckRootsTheNodeGridDoesNotSurround();
-    CheckACoarseGridOnACurveIsRefused();
+    CheckNodeSpacingDoesNotImposeAFalseProjectionProof();
     CheckColdAndSeededAgreeOnAUniqueRoot();
     CheckProjectionKeepsNoHistory();
     CheckTemporaryProjectionOwnsItsPoint();
