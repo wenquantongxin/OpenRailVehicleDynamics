@@ -7,12 +7,16 @@
 ## 固定量
 
 ```
-路书        docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md(唯一进度权威,「当前 Goal」条目)
-Codex 线程  019f8f8b-6fb9-7291-9551-04079771d326(零 Drake 重构方案)
+路书        docs/planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md
+            (唯一进度权威,「当前 Goal」条目;G47 起)
+Codex 线程  019fc40e-d0c6-75b3-b34d-4640982031ec(代码移植与重构)
 Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–20 分钟)
 交接目录    ~/.codex/handoff/(仅供当前裁决或复核请求临时传输)
 交接文件    每步两件:GXX_<step>.stage.txt / GXX_<step>.out.log；结论读完立即删除
 ```
+
+`docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md`(G01–G46)已封存,不再有
+「当前 Goal」;任何时刻只有一个路书文件带该条目。旧 Codex 线程同样封存,不再向其发送载荷。
 
 ## 不变量(任一被破坏即阻塞)
 
@@ -20,7 +24,19 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 - wheel-rail-lab、Drake 源码克隆、`/opt/drake` 只读;仓外探针不落入任何仓库。
 - 仓库内不写机器路径;Drake 位置只经 `CMAKE_PREFIX_PATH` 等标准 CMake 参数传入。
 - Codex 汇报的一切承重数字(通过数、退出码、计数)在采信前第一手复跑;
-  呈报用户时「其声称 / 我复跑」两列并排。
+  呈报用户时「其声称 / 我复跑」两列并排。复跑的对象是**该论断为假的最短路径**,
+  不是它顺带提到的任何事实——机制性论断尤其要先写出「若它为假,哪一个事实会不同」,
+  再去验那一个。
+- **载荷中一律自称 Claude,不用「我」。** 发给 Codex 的每一份 stage 文件都会进入它的
+  上下文;第一人称会让它把 Claude 的判断误当成自己的推论,溯源随之失效。同理,引用
+  Codex 上一轮结论时写明「Codex 上轮称」,不与 Claude 的复跑结果混写。
+- **不在他方写入期间读取并据此下结论。** Codex 线程以 danger-full-access 运行,会边分析
+  边改文件。发送后到收到结论之间,工作区处于中间态:此时读到的缺失、缩水或半成品都不是
+  事实。要下结论必须先确认没有 codex 进程在跑(`ps -eo pid,etime,cmd | grep '[c]odex exec'`),
+  否则只能报告「正在运行,状态未定」。
+- **不得在载荷中要求对方删除文件或成段删除文档内容。** 复核方的最小修复权用于修正,不用于
+  清理;删除只能由该文档的作者或项目负责人裁决。若 Claude 认为某处该删,写明理由并请求裁决,
+  不写成指令。
 - 用户工程铁律优先于 Codex 裁决,冲突即执行铁律,并在下一轮载荷中说明。清单见下节。
 - 向 Codex 发送前工作区必须干净:该线程以 `approval_policy=never` + danger-full-access
   运行,会直接改码并提交。
@@ -73,6 +89,10 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 
 - 不把机器路径、环境状态、固定输出快照、特定提交或固定哈希当作功能正确性的主要证据;
   优先验证行为、接口契约、不变量和实际结果。
+- **本条禁止的是「新增冻结物」,不是「记录出处」。** 规划、裁决与观察文档里的上游提交号、
+  外部工件路径、上游文档编号回答的是「这个决定当初依据什么」,属溯源,应当保留并随讨论增补。
+  禁止的是让它们成为产品运行身份、完成门或数值金标。两者的判据是用途,不是字面出现与否——
+  不得因为文档里出现哈希就去清理它。
 - 探索性脚本与临时探针在任务完成后删除,不归档、不留压缩包或软链接。
 
 ## 一轮六步(G := 路书当前 Goal)
@@ -101,13 +121,13 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 
 ```bash
 repository_root="$(git rev-parse --show-toplevel)"
-cd "$repository_root" && codex exec resume 019f8f8b-6fb9-7291-9551-04079771d326 -m gpt-5.6-sol -c model_reasoning_effort=ultra - < ~/.codex/handoff/GXX_ruling.stage.txt > ~/.codex/handoff/GXX_ruling.out.log 2>&1
+cd "$repository_root" && codex exec resume 019fc40e-d0c6-75b3-b34d-4640982031ec -m gpt-5.6-sol -c model_reasoning_effort=ultra - < ~/.codex/handoff/GXX_ruling.stage.txt > ~/.codex/handoff/GXX_ruling.out.log 2>&1
 ```
 
 - UUID 必须写全:短前缀会被当线程名解析而失败,且 UUIDv7 带时间前缀,同秒会话会撞前缀。
 - `-m` / `-c` 对既有线程是冗余保险,保留不删。
 - 超过约 40 分钟未被唤醒才做活性检查,任一在涨即活:
-  `ps -eo pid,etime,cmd | grep '[e]xec resume 019f8f8b'`;`wc -c` 该轮 out.log。
+  `ps -eo pid,etime,cmd | grep '[c]odex exec'`;`wc -c` 该轮 out.log。
 - 取结论:`grep -n '^codex$' <out.log>` 定位,读最后一块。`exec` 独占行是命令回显,
   不是结论。VS Code 侧 app-server 不自动刷新,也不妨碍 resume,两边互不干扰。
 - 交接文件只是传输介质。不得因为“以后也许复查”保留整份日志；需要长期成立的决定写入
@@ -184,5 +204,5 @@ cd "$repository_root" && codex exec resume 019f8f8b-6fb9-7291-9551-04079771d326 
 
 ## 批次
 
-默认一轮一个 Goal。已裁定的合批照准(G09+G10);新的合批须在上一轮模板 A 中提案并
+默认一轮一个 Goal。当前路书(G47–G55)没有预先裁定的合批;新的合批须在上一轮模板 A 中提案并
 获裁决,不得现场合并。
