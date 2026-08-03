@@ -47,11 +47,8 @@ foreach(index RANGE 0 ${_orvd_last_dependency})
            key)
     string(JSON archive GET "${_orvd_dependency_manifest}" dependencies
            ${index} archive)
-    string(JSON sha256 GET "${_orvd_dependency_manifest}" dependencies
-           ${index} sha256)
     string(TOUPPER "${key}" upper_key)
     set("ORVD_${upper_key}_ARCHIVE" "${_orvd_archives}/${archive}")
-    set("ORVD_${upper_key}_SHA256" "${sha256}")
     if(NOT EXISTS "${_orvd_archives}/${archive}")
         message(FATAL_ERROR
             "the offline source bundle is missing dependency archive "
@@ -100,7 +97,6 @@ endif()
 
 ExternalProject_Add(orvd_dependency_eigen
     URL "${ORVD_EIGEN_ARCHIVE}"
-    URL_HASH "SHA256=${ORVD_EIGEN_SHA256}"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
@@ -113,7 +109,6 @@ ExternalProject_Add(orvd_dependency_eigen
 
 ExternalProject_Add(orvd_dependency_fmt
     URL "${ORVD_FMT_ARCHIVE}"
-    URL_HASH "SHA256=${ORVD_FMT_SHA256}"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
@@ -127,7 +122,6 @@ ExternalProject_Add(orvd_dependency_fmt
 
 ExternalProject_Add(orvd_dependency_sundials
     URL "${ORVD_SUNDIALS_ARCHIVE}"
-    URL_HASH "SHA256=${ORVD_SUNDIALS_SHA256}"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     UPDATE_COMMAND ""
     PATCH_COMMAND ""

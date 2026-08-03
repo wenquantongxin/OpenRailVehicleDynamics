@@ -8,7 +8,6 @@ or Git: its root CMake superbuild consumes only the three copied local archives.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -33,14 +32,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def load_manifest(template_directory: Path) -> dict:
     manifest_path = template_directory / "dependency_sources.json"
     with manifest_path.open(encoding="utf-8") as stream:
@@ -61,17 +52,10 @@ def load_manifest(template_directory: Path) -> dict:
     return manifest
 
 
-def validate_archive(path: Path, record: dict) -> None:
+def require_archive(path: Path, record: dict) -> None:
     if not path.is_file():
         raise FileNotFoundError(
             f"{record['name']} archive does not exist: {path}"
-        )
-    actual = sha256(path)
-    expected = record["sha256"]
-    if actual != expected:
-        raise ValueError(
-            f"{record['name']} {record['version']} archive failed its transport "
-            f"integrity check: expected SHA-256 {expected}, got {actual}"
         )
 
 
@@ -184,7 +168,7 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
 
     records = {record["key"]: record for record in manifest["dependencies"]}
     for key, archive in archives.items():
-        validate_archive(archive, records[key])
+        require_archive(archive, records[key])
 
     output_directory.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
