@@ -321,6 +321,47 @@ void CheckASubMetreWindowIsNotJudgedAgainstAMetre() {
            "the narrowed threshold still recognises a genuine tie");
 }
 
+// The numerical floor follows the root-search and station arithmetic, not an
+// unrelated one-metre magnitude. At this deliberately tiny scale, a seed nudge
+// of a few femtometres is still larger than both the declared-window scale and
+// the actual search resolution, so it must select a side. This is an arithmetic
+// gate, not a physical railway fixture.
+void CheckNumericalResolutionHasNoOneMetreFloor() {
+    constexpr double kLengthMeters = 1.0e-10;
+    constexpr double kNodeSpacingMeters = 1.0e-11;
+    const TrackGeometry line(
+        TrackScalarProfile(0.0, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(0.0, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(
+            0.0,
+            {lines::Blend(kLengthMeters, lines::kArchGrade,
+                          -lines::kArchGrade)},
+            {}),
+        lines::kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+    const double midpoint = 0.5 * kLengthMeters;
+    Eigen::Vector3d point = line.CenterlinePositionInInertialMeters(midpoint);
+    point.z() += 0.5125 * kLengthMeters;
+
+    constexpr double kSeedNudgeMeters = 2.0e-15;
+    const double selected =
+        line.ProjectPointNearSeed(point, midpoint + kSeedNudgeMeters,
+                                  0.49 * kLengthMeters)
+            .track_station_meters();
+    Expect(selected > midpoint,
+           "a seed displacement above the actual arithmetic resolution names "
+           "the nearer branch even when every station is far below one metre");
+
+    bool refused_centered = false;
+    try {
+        (void)line.ProjectPointNearSeed(point, midpoint,
+                                        0.49 * kLengthMeters);
+    } catch (const std::runtime_error&) {
+        refused_centered = true;
+    }
+    Expect(refused_centered,
+           "the same tiny fixture still refuses a genuinely centred seed");
+}
+
 void CheckBoundaryCanonicalisationKeepsTheResidualGate() {
     // A very large positive Hessian can make gradient / Hessian lie within a
     // few station ULPs even while the gradient itself is nowhere near the
@@ -586,6 +627,7 @@ int main() {
     CheckRootsTheNodeGridDoesNotSurround();
     CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin();
     CheckASubMetreWindowIsNotJudgedAgainstAMetre();
+    CheckNumericalResolutionHasNoOneMetreFloor();
     CheckBoundaryCanonicalisationKeepsTheResidualGate();
     CheckMinimaEquallyFarFromTheSeedAreRefused();
     CheckSecondOrderConditionIsEnforced();

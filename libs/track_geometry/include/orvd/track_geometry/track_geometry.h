@@ -36,10 +36,11 @@
 // set by a stated spacing rather than by whatever the caller happens to ask for;
 // arbitrary positive spacings are not claimed to share one error bound.
 //
-// Construction may allocate. An evaluation may not: it neither builds nor grows
-// a dynamic container, looks up no name, formats no string, writes no log and
-// touches no file. The node table and the quadrature coefficients belong to the
-// immutable geometry object.
+// Construction may allocate. A successful evaluation may not: it neither
+// builds nor grows a dynamic container, looks up no name, formats no string,
+// writes no log and touches no file. A rejected evaluation may format its
+// diagnostic before throwing. The node table and the quadrature coefficients
+// belong to the immutable geometry object.
 
 namespace orvd::track_geometry {
 
@@ -53,8 +54,9 @@ class TrackGeometry {
     // first-order roll kinematics finite.
     //
     // Throws std::invalid_argument when the profiles disagree on their domain,
-    // when the span or node spacing is not finite and positive, or when any
-    // superelevation in the profile reaches the span in magnitude. The
+    // when the span or node spacing is not finite and positive, when the
+    // requested node table exceeds the construction resource bound, or when
+    // any superelevation in the profile reaches the span in magnitude. The
     // superelevation bound is refused at construction rather than clamped:
     // clamping would turn a modelling mistake into a plausible line.
     TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
@@ -73,21 +75,30 @@ class TrackGeometry {
         return rail_reference_lateral_span_meters_;
     }
 
-    // Const references only, deliberately. An rvalue overload that moved a
-    // profile out would leave the geometry answering for a domain it no longer
-    // has any pieces to cover: the station bounds are plain doubles and would
-    // still admit a query, and the piece lookup would then compute an index
-    // from an empty vector. A line is a long-lived object, not a value whose
-    // parts a caller takes away.
-    [[nodiscard]] const TrackScalarProfile& curvature_profile() const {
+    // Borrow only from a named, live geometry. Moving a profile out would leave
+    // the geometry answering for a domain it no longer has pieces to cover;
+    // borrowing from an expiring geometry would instead return a dangling
+    // reference. Both rvalue forms are therefore deleted.
+    [[nodiscard]] const TrackScalarProfile& curvature_profile() const & {
         return curvature_;
     }
-    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const {
+    [[nodiscard]] const TrackScalarProfile& curvature_profile() && = delete;
+    [[nodiscard]] const TrackScalarProfile& curvature_profile() const && =
+        delete;
+
+    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const & {
         return superelevation_;
     }
-    [[nodiscard]] const TrackScalarProfile& grade_profile() const {
+    [[nodiscard]] const TrackScalarProfile& superelevation_profile() && =
+        delete;
+    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const && =
+        delete;
+
+    [[nodiscard]] const TrackScalarProfile& grade_profile() const & {
         return grade_;
     }
+    [[nodiscard]] const TrackScalarProfile& grade_profile() && = delete;
+    [[nodiscard]] const TrackScalarProfile& grade_profile() const && = delete;
 
     // Every station argument below is refused when it is not finite or lies
     // outside the domain.

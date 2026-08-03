@@ -560,6 +560,20 @@ TrackScalarProfile::MaximumAbsoluteValue() const {
     return extremum;
 }
 
+void TrackScalarProfile::ShortenDomainEndTo(
+    double end_track_station_meters) {
+    if (!(end_track_station_meters >
+              pieces_.back().start_track_station_meters &&
+          end_track_station_meters <= end_track_station_meters_)) {
+        throw std::invalid_argument(
+            "TrackScalarProfile: an equivalent common domain end must remain "
+            "strictly inside the final piece");
+    }
+    end_track_station_meters_ = end_track_station_meters;
+    pieces_.back().end_track_station_meters = end_track_station_meters;
+    breakpoints_.back() = end_track_station_meters;
+}
+
 void TrackScalarProfile::ThrowIfOutsideDomain(
     double track_station_meters) const {
     if (!std::isfinite(track_station_meters)) {

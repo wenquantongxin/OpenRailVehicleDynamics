@@ -243,13 +243,10 @@ void CheckSuperelevationSignByRailHeights() {
                "the same difference measured along the inertial vertical is "
                "shortened by the tangent norm, which is the pitch showing up");
 
-        // The convention in words. It follows from the signed magnitude above
-        // rather than adding to it, and is written out so that the sign is
-        // stated somewhere as a sign and not only as the sign of a difference.
-        const bool right_is_lower = right_rail.z() > left_rail.z();
-        Expect(right_is_lower == (superelevation > 0.0),
-               "a positive superelevation puts the right rail lower and a "
-               "negative one raises it");
+        // The signed numerical assertion above already proves the convention:
+        // in the +z-down inertial frame, positive superelevation puts the right
+        // rail lower. A second Boolean sign assertion would be its strict
+        // logical subset and would add no independent failure mode.
     }
 }
 

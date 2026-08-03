@@ -9,6 +9,7 @@
 // statement about the rule rather than an accuracy claim pulled from the air.
 
 #include <cmath>
+#include <concepts>
 #include <cstdio>
 #include <limits>
 #include <stdexcept>
@@ -32,31 +33,35 @@ using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackSeamTransition;
 namespace lines = orvd::track_geometry::test_lines;
 
-// An accessor that handed a profile out of an expiring geometry would leave
-// behind an object whose station bounds still admit a query while its pieces
-// are gone, and the piece lookup would then index an empty vector. These say
-// that even an rvalue geometry lends rather than surrenders; reintroducing a
-// move-out overload fails the build here.
-static_assert(std::is_same_v<
-              decltype(std::declval<const TrackGeometry&>().curvature_profile()),
-              const TrackScalarProfile&>);
-static_assert(std::is_same_v<
-              decltype(std::declval<TrackGeometry&&>().curvature_profile()),
-              const TrackScalarProfile&>);
-static_assert(std::is_same_v<
-              decltype(std::declval<TrackGeometry&&>().superelevation_profile()),
-              const TrackScalarProfile&>);
-static_assert(
-    std::is_same_v<decltype(std::declval<TrackGeometry&&>().grade_profile()),
-                   const TrackScalarProfile&>);
-static_assert(std::is_same_v<
-              decltype(std::declval<const TrackScalarProfile&>()
-                           .breakpoint_track_stations_meters()),
-              const std::vector<double>&>);
-static_assert(std::is_same_v<
-              decltype(std::declval<TrackScalarProfile&&>()
-                           .breakpoint_track_stations_meters()),
-              const std::vector<double>&>);
+// A profile borrowed from an expiring geometry, or breakpoints borrowed from an
+// expiring profile, dangle as soon as the full expression ends. Named lvalues
+// may borrow; both const and non-const rvalues must be rejected at compile time.
+template <typename Geometry>
+concept CanBorrowProfiles = requires(Geometry&& geometry) {
+    {
+        std::forward<Geometry>(geometry).curvature_profile()
+    } -> std::same_as<const TrackScalarProfile&>;
+    {
+        std::forward<Geometry>(geometry).superelevation_profile()
+    } -> std::same_as<const TrackScalarProfile&>;
+    {
+        std::forward<Geometry>(geometry).grade_profile()
+    } -> std::same_as<const TrackScalarProfile&>;
+};
+template <typename Profile>
+concept CanBorrowBreakpoints = requires(Profile&& profile) {
+    {
+        std::forward<Profile>(profile).breakpoint_track_stations_meters()
+    } -> std::same_as<const std::vector<double>&>;
+};
+static_assert(CanBorrowProfiles<TrackGeometry&>);
+static_assert(CanBorrowProfiles<const TrackGeometry&>);
+static_assert(!CanBorrowProfiles<TrackGeometry>);
+static_assert(!CanBorrowProfiles<const TrackGeometry>);
+static_assert(CanBorrowBreakpoints<TrackScalarProfile&>);
+static_assert(CanBorrowBreakpoints<const TrackScalarProfile&>);
+static_assert(!CanBorrowBreakpoints<TrackScalarProfile>);
+static_assert(!CanBorrowBreakpoints<const TrackScalarProfile>);
 
 int failure_count = 0;
 
@@ -145,8 +150,8 @@ void CheckCircularPositionAgainstClosedForm() {
 
 // Every line above curves to the right. A left-hand curve is the same line
 // reflected in the plane of the start, and nothing in the integration should
-// prefer one sense over the other, so the mirrored line has to come out as the
-// exact mirror rather than as something close to it.
+// prefer one sense over the other. This is an algebraic symmetry checked to a
+// machine-precision budget, not a bitwise-output contract on libm.
 void CheckLeftHandCurveMirrorsTheRightHandOne() {
     const double curvature = 1.0 / lines::kCanonicalRadiusMeters;
     const auto build = [](double signed_curvature, double superelevation) {
@@ -178,8 +183,9 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
             right.CenterlinePositionInInertialMeters(station);
         const Eigen::Vector3d b =
             left.CenterlinePositionInInertialMeters(station);
-        if (std::abs(a.x() - b.x()) != 0.0 || std::abs(a.y() + b.y()) != 0.0 ||
-            std::abs(a.z() - b.z()) != 0.0) {
+        if (!NearExact(a.x(), b.x(), 128.0) ||
+            !NearExact(a.y(), -b.y(), 128.0) ||
+            !NearExact(a.z(), b.z(), 128.0)) {
             mirrors = false;
         }
         if (std::abs(a.y()) > 1.0) {
@@ -187,16 +193,17 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
         }
         const double roll_right = right.TrackRollRadians(station);
         const double roll_left = left.TrackRollRadians(station);
-        if (roll_right + roll_left != 0.0) {
+        if (!NearExact(roll_right, -roll_left, 16.0)) {
             mirrors = false;
         }
-        if (std::abs(right.SuperelevationMeters(station) +
-                     left.SuperelevationMeters(station)) != 0.0) {
+        if (!NearExact(right.SuperelevationMeters(station),
+                       -left.SuperelevationMeters(station), 16.0)) {
             mirrors = false;
         }
     }
     Expect(mirrors,
-           "a left-hand curve is the exact reflection of the right-hand one in "
+           "a left-hand curve reflects the right-hand one to machine precision "
+           "in "
            "the lateral coordinate, in position, in superelevation and in the "
            "roll angle it implies");
     Expect(separated,
@@ -395,6 +402,19 @@ void CheckSeamQuinticEntersTheCenterline() {
                NearExact(longitudinal.y(), std::sin(boundary_heading), 16.0),
            "the track frame inside the window carries the seam heading, so the "
            "window reaches the pose and not only the profile");
+
+    // Construct the projection query from the independent Simpson position and
+    // the independently integrated heading, not from the product centerline.
+    // This makes the seam reach the station-projection path as well.
+    const Eigen::Vector3d expected_centerline(
+        window_start + horizontal_x, horizontal_y, 0.0);
+    const Eigen::Vector3d expected_right(-std::sin(measured_heading),
+                                         std::cos(measured_heading), 0.0);
+    const auto projection = line.ProjectPointNearSeed(
+        expected_centerline + 0.2 * expected_right, window_end, 0.5);
+    Expect(std::abs(projection.track_station_meters() - window_end) <= 1.0e-10,
+           "the independently reconstructed seam endpoint projects back to "
+           "its station, so the quintic reaches the projection path");
 
     Expect(!line.curvature_profile().IsInsideSeamWindow(
                std::nextafter(window_start, 0.0)),
@@ -738,7 +758,11 @@ void CheckDomainAndSuperelevationRefusals() {
                                  level_profile(first_partition),
                                  lines::kRailReferenceLateralSpanMeters,
                                  lines::kNodeSpacingMeters);
-        (void)line;
+        const double end = line.end_track_station_meters();
+        (void)line.EvaluateTrackFrame(end);
+        (void)line.curvature_profile().Value(end);
+        (void)line.superelevation_profile().Value(end);
+        (void)line.grade_profile().Value(end);
     } catch (const std::invalid_argument&) {
         accepted_equivalent_partitions = false;
     }
@@ -746,6 +770,47 @@ void CheckDomainAndSuperelevationRefusals() {
            "three families that cover the same line through different segment "
            "partitions are accepted, because the domain rule asks them to cover "
            "the same stretch and not to have been added up the same way");
+
+    // The endpoint scale alone is insufficient when a large negative start is
+    // nearly cancelled by positive lengths. The exact binary64 segment values
+    // below describe the same total, but their two addition orders leave small,
+    // different endpoints around zero.
+    const double cancelling_start = -1.0e6;
+    const std::vector<double> one_piece{1.0e6};
+    const std::vector<double> three_pieces{
+        289526.1286321766, 150170.80279580125, 560303.0685720221};
+    const auto offset_profile = [](double start,
+                                   const std::vector<double>& lengths) {
+        std::vector<TrackScalarSegment> segments;
+        segments.reserve(lengths.size());
+        for (const double length : lengths) {
+            segments.push_back(lines::Constant(length, 0.0));
+        }
+        return TrackScalarProfile(start, std::move(segments), {});
+    };
+    const TrackScalarProfile one =
+        offset_profile(cancelling_start, one_piece);
+    const TrackScalarProfile three =
+        offset_profile(cancelling_start, three_pieces);
+    Expect(one.end_track_station_meters() != three.end_track_station_meters() &&
+               std::abs(one.end_track_station_meters() -
+                        three.end_track_station_meters()) > 1.0e-11,
+           "the cancellation fixture produces visibly different rounded "
+           "endpoints before domain canonicalisation");
+    bool accepted_cancelling_partitions = true;
+    try {
+        const TrackGeometry line(
+            offset_profile(cancelling_start, one_piece),
+            offset_profile(cancelling_start, three_pieces),
+            offset_profile(cancelling_start, one_piece),
+            lines::kRailReferenceLateralSpanMeters, 1000.0);
+        (void)line.EvaluateTrackFrame(line.end_track_station_meters());
+    } catch (const std::invalid_argument&) {
+        accepted_cancelling_partitions = false;
+    }
+    Expect(accepted_cancelling_partitions,
+           "equivalent domains remain equivalent when a large start nearly "
+           "cancels the accumulated segment lengths");
 
     // A spacing may be finite and positive and still ask for a node table
     // nothing can hold; the count is also converted to an unsigned integer,
@@ -764,6 +829,20 @@ void CheckDomainAndSuperelevationRefusals() {
            "a node spacing that is finite and positive but would need more "
            "nodes than the table may hold is refused rather than converted out "
            "of range");
+    bool refused_excessive_total = false;
+    try {
+        const TrackGeometry line(
+            level_profile({6000.0, 6000.0}),
+            level_profile({6000.0, 6000.0}),
+            level_profile({6000.0, 6000.0}),
+            lines::kRailReferenceLateralSpanMeters, 0.01);
+        (void)line;
+    } catch (const std::invalid_argument&) {
+        refused_excessive_total = true;
+    }
+    Expect(refused_excessive_total,
+           "the node resource bound applies to the whole line rather than "
+           "being reset independently for each profile stretch");
     bool accepted_fine_spacing = true;
     try {
         const TrackGeometry line(

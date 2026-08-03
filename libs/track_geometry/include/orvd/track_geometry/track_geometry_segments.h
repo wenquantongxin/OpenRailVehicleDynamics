@@ -111,12 +111,17 @@ class TrackScalarProfile {
 
     // The stations at which the piecewise definition changes: segment
     // boundaries and seam window edges, with the domain end appended.
-    // A const reference only: moving the breakpoints out would leave the
-    // profile with station bounds it can no longer resolve into pieces.
+    // Borrow only from a named, live profile. Moving the breakpoints out would
+    // leave station bounds that no longer resolve into pieces; borrowing from
+    // an expiring profile would return a dangling reference.
     [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
-        const {
+        const & {
         return breakpoints_;
     }
+    [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
+        && = delete;
+    [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
+        const && = delete;
 
     // Whether the piece containing the station is a declared seam window.
     [[nodiscard]] bool IsInsideSeamWindow(double track_station_meters) const;
@@ -153,6 +158,7 @@ class TrackScalarProfile {
 
     [[nodiscard]] std::size_t PieceIndexAt(double track_station_meters) const;
     [[nodiscard]] ProfileExtremum MaximumAbsoluteValue() const;
+    void ShortenDomainEndTo(double end_track_station_meters);
     void ThrowIfOutsideDomain(double track_station_meters) const;
 
     double start_track_station_meters_{0.0};

@@ -28,10 +28,11 @@ constexpr double kQuadratureWeights[kQuadraturePointCount] = {
     0.3626837833783620, 0.3626837833783620, 0.3137066458778873,
     0.2223810344533745, 0.1012285362903763};
 
-// The node table is bounded so that a spacing which is merely finite and
-// positive cannot ask for an allocation nothing on the machine can hold, and so
-// that the count never leaves the range a double converts to safely.
-constexpr std::size_t kMaximumStationNodeCount = 1u << 24;
+// Bound the whole immutable node table, not each profile stretch separately.
+// 2^20 nodes still admit a 10 km line at approximately 1 cm spacing while
+// refusing accidental allocations of hundreds of megabytes before conversion
+// or allocation begins.
+constexpr std::size_t kMaximumStationNodeCount = 1u << 20;
 
 constexpr int kMaximumRefinementIterations = 64;
 // The refinement stops when the bracket has closed to this many units in the
@@ -39,6 +40,10 @@ constexpr int kMaximumRefinementIterations = 64;
 // station magnitude; unlike an independently chosen relative tolerance, this
 // asks only for the representable resolution of the station values themselves.
 constexpr double kBracketUlpCount = 4.0;
+// A stationary point whose Newton correction is no larger than this many
+// representable station steps may be canonicalised onto a shared node. This is
+// deliberately distinct from the bracket stopping budget above.
+constexpr double kBoundaryCanonicalisationUlpCount = 64.0;
 // The first derivative of the squared-distance objective has units of metres
 // times metres per metre, so its residual bound scales with the distance.
 constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
@@ -55,7 +60,28 @@ constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
 // larger of the two; neither alone is a bound, and an absolute floor in metres
 // would be neither.
 constexpr double kSeedGapRelativeTolerance = 1.0e-9;
-constexpr double kSeedGapUlpCount = 64.0;
+
+double StationUlp(double station) {
+    const double upward =
+        std::nextafter(station, std::numeric_limits<double>::infinity()) -
+        station;
+    const double downward =
+        station -
+        std::nextafter(station, -std::numeric_limits<double>::infinity());
+    const double finite_upward = std::isfinite(upward) ? upward : 0.0;
+    const double finite_downward = std::isfinite(downward) ? downward : 0.0;
+    return std::max(finite_upward, finite_downward);
+}
+
+double CandidateStationResolution(double station) {
+    const double bracket_resolution =
+        kBracketUlpCount * std::numeric_limits<double>::epsilon() *
+        std::max(1.0, std::abs(station));
+    const double boundary_resolution =
+        kBoundaryCanonicalisationUlpCount * StationUlp(station);
+    return std::max(bracket_resolution, boundary_resolution);
+}
+
 void RequireFinitePositive(double value, const char* what) {
     if (!std::isfinite(value) || value <= 0.0) {
         throw std::invalid_argument(std::string("TrackGeometry: ") + what +
@@ -87,12 +113,25 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
     // different partition rounds differently. Comparing exactly would refuse a
     // large share of perfectly ordinary decimal layouts, so the ends have to
     // agree only to the representable resolution of the accumulation, bounded
-    // by the number of additions each family performed.
-    const auto agrees = [](double left, double right, std::size_t additions) {
-        const double scale = std::max({1.0, std::abs(left), std::abs(right)});
-        const double bound = static_cast<double>(additions + 1) *
-                             std::numeric_limits<double>::epsilon() * scale;
-        return std::abs(left - right) <= bound;
+    // by the number of additions each family performed. The scale includes the
+    // common start: a large negative start can nearly cancel a positive total
+    // length and leave a small endpoint even though every addition took place
+    // at the large station magnitude.
+    const double common_start = curvature_.start_track_station_meters();
+    const auto agrees = [common_start](double left, double right,
+                                       std::size_t additions) {
+        const double scale =
+            std::max({1.0, std::abs(common_start), std::abs(left),
+                      std::abs(right)});
+        // Positive segment lengths make the absolute sum no more than a small
+        // multiple of the largest start/end magnitude. Compare normalised
+        // values so an extreme, but finite, station cannot overflow the bound.
+        const double normalised_difference =
+            std::abs(left / scale - right / scale);
+        const double normalised_bound =
+            4.0 * static_cast<double>(additions + 1) *
+            std::numeric_limits<double>::epsilon();
+        return normalised_difference <= normalised_bound;
     };
     const auto same_domain = [this, &agrees](const TrackScalarProfile& other,
                                              const char* name) {
@@ -117,33 +156,56 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
     same_domain(superelevation_, "superelevation");
     same_domain(grade_, "grade");
 
+    // A tolerant comparison alone is not enough: evaluating the curvature
+    // endpoint would otherwise be an out-of-domain query for whichever family
+    // rounded a little shorter. Canonicalise to the shortest equivalent end so
+    // no profile is ever extrapolated.
+    const double common_end =
+        std::min({curvature_.end_track_station_meters(),
+                  superelevation_.end_track_station_meters(),
+                  grade_.end_track_station_meters()});
+    curvature_.ShortenDomainEndTo(common_end);
+    superelevation_.ShortenDomainEndTo(common_end);
+    grade_.ShortenDomainEndTo(common_end);
+
     // Nodes sit on the curvature profile's breakpoints and subdivide each
     // stretch between them, so an interval never straddles a change of shape.
     const std::vector<double>& breakpoints =
         curvature_.breakpoint_track_stations_meters();
-    nodes_.reserve(breakpoints.size() * 2);
+    // First count the whole line. A per-stretch check is not a total bound: a
+    // multi-piece profile could otherwise request the full limit repeatedly,
+    // and even one stretch at the old limit acquired one extra terminal node.
+    std::size_t total_node_count = 1;
     for (std::size_t index = 0; index + 1 < breakpoints.size(); ++index) {
         const double from = breakpoints[index];
         const double to = breakpoints[index + 1];
         const double length = to - from;
         const double requested_panels =
             std::max(1.0, std::ceil(length / station_node_spacing_meters_));
-        // A spacing may be finite and positive and still be absurd. Converting
-        // an out-of-range double to an unsigned integer is undefined, and even
-        // well inside that range a spacing of a micrometre over a kilometre
-        // asks for a node table of tens of gigabytes. The bound is refused
-        // rather than silently honoured.
-        if (requested_panels > static_cast<double>(kMaximumStationNodeCount)) {
+        const std::size_t remaining =
+            kMaximumStationNodeCount - total_node_count;
+        // A spacing may be finite and positive and still be absurd. Compare in
+        // double before converting, and accumulate against the remaining whole
+        // table budget so neither conversion nor size_t addition can overflow.
+        if (requested_panels > static_cast<double>(remaining)) {
             throw std::invalid_argument(
                 "TrackGeometry: a station node spacing of " +
                 Describe(station_node_spacing_meters_) +
-                " m would need " + Describe(requested_panels) +
-                " nodes over a stretch of " + Describe(length) +
-                " m, past the limit of " +
+                " m would make the whole line exceed the limit of " +
                 std::to_string(kMaximumStationNodeCount) +
-                "; choose a coarser spacing");
+                " station nodes while processing a stretch of " +
+                Describe(length) + " m; choose a coarser spacing");
         }
-        const auto panels = static_cast<std::size_t>(requested_panels);
+        total_node_count += static_cast<std::size_t>(requested_panels);
+    }
+    nodes_.reserve(total_node_count);
+    for (std::size_t index = 0; index + 1 < breakpoints.size(); ++index) {
+        const double from = breakpoints[index];
+        const double to = breakpoints[index + 1];
+        const double length = to - from;
+        const auto panels = static_cast<std::size_t>(
+            std::max(1.0,
+                     std::ceil(length / station_node_spacing_meters_)));
         for (std::size_t panel = 0; panel < panels; ++panel) {
             StationNode node;
             node.track_station_meters =
@@ -482,15 +544,7 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
             const ObjectiveDerivatives boundary_derivatives =
                 EvaluateObjectiveDerivatives(point_in_inertial_meters,
                                              boundary_station);
-            const double station_ulp = std::max(
-                std::nextafter(boundary_station,
-                               std::numeric_limits<double>::infinity()) -
-                    boundary_station,
-                boundary_station -
-                    std::nextafter(
-                        boundary_station,
-                        -std::numeric_limits<double>::infinity()));
-            constexpr double kBoundaryCanonicalisationUlpCount = 64.0;
+            const double station_ulp = StationUlp(boundary_station);
             const Eigen::Vector3d boundary_offset =
                 point_in_inertial_meters -
                 CenterlinePositionUnchecked(boundary_station);
@@ -666,15 +720,21 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
     }
     if (nearest_rival.found) {
         const double separation = nearest_rival_gap - nearest_gap;
-        const double station_magnitude =
-            std::max({std::abs(seed_track_station_meters),
-                      std::abs(nearest.track_station_meters),
-                      std::abs(nearest_rival.track_station_meters), 1.0});
+        // Each returned root can carry either the bracket stopping uncertainty
+        // or the larger shared-node canonicalisation uncertainty. The two gap
+        // subtractions and their difference add representable station error of
+        // their own. Sum those numerical budgets explicitly; 64 is therefore
+        // tied to boundary canonicalisation, not mechanically to the four-ULP
+        // bracket stopping rule.
+        const double numerical_resolution =
+            CandidateStationResolution(nearest.track_station_meters) +
+            CandidateStationResolution(nearest_rival.track_station_meters) +
+            2.0 * StationUlp(seed_track_station_meters) +
+            StationUlp(nearest.track_station_meters) +
+            StationUlp(nearest_rival.track_station_meters);
         const double indistinguishable =
             std::max(kSeedGapRelativeTolerance * search_half_width_meters,
-                     kSeedGapUlpCount *
-                         std::numeric_limits<double>::epsilon() *
-                         station_magnitude);
+                     numerical_resolution);
         if (separation <= indistinguishable) {
             throw std::runtime_error(
                 "TrackGeometry::ProjectPointNearSeed: the minima at stations " +
