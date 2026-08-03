@@ -1,13 +1,17 @@
-// G47 gate 4: projecting a point onto the centerline.
+// G47 gate 4: tracking the branch of the centerline a caller is already on.
 //
 // Orthogonality on its own is not a gate. It holds at a maximum of the distance
 // just as it holds at a minimum, so an implementation that walked uphill and
-// stopped would satisfy it. The checks below therefore pair it with the second
-// derivative of the objective, with agreement against a dense independent scan,
-// and with the refusals the contract owes: a point with two equally near
-// stations, a search interval that reaches outside the line, and a seed whose
-// neighbourhood contains no minimum at all.
+// stopped would satisfy it. The checks below pair it with the second derivative
+// of the objective, with agreement against a dense independent scan, and with
+// the refusals the contract owes: a window holding two minima the same distance
+// from the seed, a window reaching outside the line, a stationary point sitting
+// on the wall of the window, and a seed whose neighbourhood holds no minimum.
+//
+// There is no whole-line search to test, and the last check in this file is the
+// reason there is not one.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -15,7 +19,6 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include <Eigen/Dense>
 
@@ -25,17 +28,18 @@
 namespace {
 
 using orvd::track_geometry::TrackGeometry;
+using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackStationProjection;
 namespace lines = orvd::track_geometry::test_lines;
 
-static_assert(std::is_same_v<
-              decltype(std::declval<const TrackStationProjection&>()
-                           .closest_centerline_point_in_inertial_meters()),
-              const Eigen::Vector3d&>);
-static_assert(std::is_same_v<
-              decltype(std::declval<TrackStationProjection&&>()
-                           .closest_centerline_point_in_inertial_meters()),
-              Eigen::Vector3d>);
+static_assert(
+    std::is_same_v<decltype(std::declval<const TrackStationProjection&>()
+                                .closest_centerline_point_in_inertial_meters()),
+                   const Eigen::Vector3d&>);
+static_assert(
+    std::is_same_v<decltype(std::declval<TrackStationProjection&&>()
+                                .closest_centerline_point_in_inertial_meters()),
+                   Eigen::Vector3d>);
 
 int failure_count = 0;
 
@@ -90,7 +94,8 @@ void CheckOrthogonalityAndAgreementOnEachShape() {
     for (const Probe& probe : probes) {
         const Eigen::Vector3d point =
             PointBesideStation(line, probe.station, 0.8);
-        const auto projection = line.ProjectPointColdStart(point);
+        const auto projection =
+            line.ProjectPointNearSeed(point, probe.station + 2.0, 8.0);
 
         const Eigen::Vector3d offset =
             point - projection.closest_centerline_point_in_inertial_meters();
@@ -103,9 +108,9 @@ void CheckOrthogonalityAndAgreementOnEachShape() {
                    probe.shape + " stretch");
 
         // The independent statement orthogonality cannot make: this is the
-        // nearest station, not merely a stationary one.
+        // nearest station in the window, not merely a stationary one.
         const double scanned = NearestStationByDenseScan(
-            line, point, probe.station - 5.0, probe.station + 5.0, 20000);
+            line, point, probe.station - 6.0, probe.station + 10.0, 40000);
         Expect(std::abs(projection.track_station_meters() - scanned) <= 1.0e-3,
                std::string("the returned station agrees with a dense "
                            "independent scan on the ") +
@@ -118,29 +123,31 @@ void CheckOrthogonalityAndAgreementOnEachShape() {
     }
 }
 
-void CheckColdAndSeededAgreeOnAUniqueRoot() {
+void CheckTheSeedDoesNotDecideTheAnswer() {
+    // Four seeds either side of the same root, each with a window containing
+    // it. A search that merely iterated from the seed could drift; a search of
+    // the declared window cannot.
     const TrackGeometry line = lines::MakeCanonicalLine();
     const double station = 180.0;
     const Eigen::Vector3d point = PointBesideStation(line, station, -1.1);
-    const auto cold = line.ProjectPointColdStart(point);
-    const auto seeded = line.ProjectPointNearSeed(point, station + 3.0, 8.0);
-    Expect(std::abs(cold.track_station_meters() -
-                    seeded.track_station_meters()) <= 1.0e-9,
-           "on a fixture with one minimum the cold start and the seeded query "
-           "converge to the same station");
-    Expect(std::abs(cold.track_station_meters() - station) <= 1.0e-9,
-           "and that station is the one the point was placed beside");
+    for (const double seed :
+         {station - 7.0, station - 0.1, station + 0.1, station + 7.0}) {
+        const auto projection = line.ProjectPointNearSeed(point, seed, 9.0);
+        Expect(std::abs(projection.track_station_meters() - station) <= 1.0e-9,
+               "the branch found from a seed at " + std::to_string(seed) +
+                   " m is the same as from any other seed in the window");
+    }
 }
 
 void CheckProjectionKeepsNoHistory() {
     const TrackGeometry line = lines::MakeCanonicalLine();
     const Eigen::Vector3d first = PointBesideStation(line, 120.0, 0.6);
     const Eigen::Vector3d second = PointBesideStation(line, 260.0, -0.6);
-    const double first_alone = line.ProjectPointColdStart(first)
-                                   .track_station_meters();
-    (void)line.ProjectPointColdStart(second);
-    const double first_again = line.ProjectPointColdStart(first)
-                                   .track_station_meters();
+    const double first_alone =
+        line.ProjectPointNearSeed(first, 120.0, 5.0).track_station_meters();
+    (void)line.ProjectPointNearSeed(second, 260.0, 5.0);
+    const double first_again =
+        line.ProjectPointNearSeed(first, 120.0, 5.0).track_station_meters();
     Expect(first_alone == first_again,
            "projecting a different point in between does not change the result "
            "for the first, so the primitive holds no history");
@@ -148,118 +155,114 @@ void CheckProjectionKeepsNoHistory() {
 
 void CheckTemporaryProjectionOwnsItsPoint() {
     const TrackGeometry line = lines::MakeCanonicalLine();
-    const Eigen::Vector3d query = PointBesideStation(line, 120.0, 0.6);
-    const auto& projected = line.ProjectPointColdStart(query)
-                                .closest_centerline_point_in_inertial_meters();
-    Expect(projected.allFinite(),
-           "accessing the point through a temporary projection result returns an "
-           "owned value rather than a dangling reference");
+    const Eigen::Vector3d point = PointBesideStation(line, 150.0, 0.4);
+    const Eigen::Vector3d taken =
+        line.ProjectPointNearSeed(point, 150.0, 5.0)
+            .closest_centerline_point_in_inertial_meters();
+    Expect(taken.allFinite(),
+           "the point taken from a temporary projection survives the temporary, "
+           "because the rvalue accessor returns a value rather than a reference "
+           "into an object that has already gone");
 }
 
-void CheckEquidistantMinimaAreRefused() {
-    const TrackGeometry line = lines::MakeEquidistantTieLine();
-    // The two straight stretches run parallel, one turn diameter apart. A point
-    // halfway between them is exactly as near to one as to the other.
-    const double half_way_lateral = lines::kTieRadiusMeters;
-    const Eigen::Vector3d point =
-        PointBesideStation(line, 30.0, half_way_lateral);
-
-    bool refused = false;
-    std::string message;
-    try {
-        (void)line.ProjectPointColdStart(point);
-    } catch (const std::runtime_error& error) {
-        refused = true;
-        message = error.what();
+void CheckRootsTheNodeGridDoesNotSurround() {
+    // Roots the grid brackets but that a scan over interior nodes looking for a
+    // low value cannot see. Each was reported as "no projection exists" or as a
+    // pair of equally near stations before the search moved to interval
+    // brackets.
+    struct Case {
+        double length_meters;
+        double node_spacing_meters;
+        double station_meters;
+        const char* description;
+    };
+    const Case cases[] = {
+        {10.0, 20.0, 5.0,
+         "a line short enough that the grid has no interior node at all"},
+        {10.0, 1.0, 0.4, "a root inside the first node interval"},
+        {10.0, 1.0, 9.6, "a root inside the last node interval"},
+        {10.0, 1.0, 2.5, "a root exactly halfway between two nodes"},
+        {10.0, 1.0, 3.0, "a root sitting exactly on a node"},
+    };
+    for (const Case& one : cases) {
+        const TrackGeometry line = lines::MakeLevelStraightLine(
+            one.length_meters, one.node_spacing_meters);
+        const Eigen::Vector3d point(one.station_meters, 1.0, 0.0);
+        bool projected = false;
+        double station = 0.0;
+        try {
+            station = line.ProjectPointNearSeed(point, one.station_meters, 0.3)
+                          .track_station_meters();
+            projected = true;
+        } catch (const std::exception&) {
+        }
+        Expect(projected, std::string("the search finds ") + one.description);
+        Expect(projected && std::abs(station - one.station_meters) <= 1.0e-12,
+               std::string("and returns the station the point was placed "
+                           "beside, for ") +
+                   one.description);
     }
-    Expect(refused,
-           "a point equally near two distinct stations is refused, because the "
-           "nearest station is not a function of that point");
-    Expect(message.find("equally close") != std::string::npos,
-           "the refusal says what went wrong rather than merely failing");
-
-    // The same line still projects an ordinary point, so the fixture has not
-    // simply broken the search.
-    const Eigen::Vector3d ordinary = PointBesideStation(line, 30.0, 1.0);
-    bool ordinary_works = true;
-    try {
-        (void)line.ProjectPointColdStart(ordinary);
-    } catch (const std::exception&) {
-        ordinary_works = false;
-    }
-    Expect(ordinary_works,
-           "a point clearly nearer one stretch than the other still projects "
-           "on the same line");
 }
 
 void CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin() {
-    constexpr double start_station_meters = 1.0e6;
-    constexpr double straight_length_meters = 6.0e-4;
-    constexpr double turn_radius_meters = 1.0e-4;
-    constexpr double half_turn_radians = 3.14159265358979323846;
-    const double half_turn_length_meters =
-        half_turn_radians * turn_radius_meters;
-    const auto level_profile_segments = [&] {
-        return std::vector<orvd::track_geometry::TrackScalarSegment>{
-            lines::Constant(straight_length_meters, 0.0),
-            lines::Constant(half_turn_length_meters, 0.0),
-            lines::Constant(straight_length_meters, 0.0)};
-    };
-    TrackGeometry line(
-        orvd::track_geometry::TrackScalarProfile(
-            start_station_meters,
-            {lines::Constant(straight_length_meters, 0.0),
-             lines::Constant(half_turn_length_meters,
-                             1.0 / turn_radius_meters),
-             lines::Constant(straight_length_meters, 0.0)},
-            {}),
-        orvd::track_geometry::TrackScalarProfile(
-            start_station_meters, level_profile_segments(), {}),
-        orvd::track_geometry::TrackScalarProfile(
-            start_station_meters, level_profile_segments(), {}),
-        lines::kRailReferenceLateralSpanMeters, 5.0e-6);
+    // Two roots a millimetre apart. A duplicate test scaled by the absolute
+    // station would treat them as one; the exact-node identity used instead
+    // does not.
+    const TrackGeometry line = lines::MakeLevelStraightLine(20.0, 1.0);
+    const Eigen::Vector3d first(9.9995, 0.5, 0.0);
+    const Eigen::Vector3d second(10.0005, 0.5, 0.0);
+    const double a =
+        line.ProjectPointNearSeed(first, 10.0, 0.4).track_station_meters();
+    const double b =
+        line.ProjectPointNearSeed(second, 10.0, 0.4).track_station_meters();
+    Expect(std::abs(a - b) > 1.0e-6,
+           "two roots a millimetre apart stay distinct rather than collapsing "
+           "into one another");
+}
 
-    const double first_root_station =
-        start_station_meters + 0.5 * straight_length_meters;
-    const double second_root_station =
-        start_station_meters + 1.5 * straight_length_meters +
-        half_turn_length_meters;
-    const Eigen::Vector3d point =
-        PointBesideStation(line, first_root_station, turn_radius_meters);
-    const double first_local =
-        line.ProjectPointNearSeed(point, first_root_station,
-                                  0.25 * straight_length_meters)
-            .track_station_meters();
-    const double second_local =
-        line.ProjectPointNearSeed(point, second_root_station,
-                                  0.25 * straight_length_meters)
-            .track_station_meters();
-    Expect(std::abs(first_local - first_root_station) <= 1.0e-8 &&
-               std::abs(second_local - second_root_station) <= 1.0e-8 &&
-               second_local > first_local,
-           "two local searches first establish that the translated fixture "
-           "contains two distinct admissible roots");
-
+void CheckMinimaEquallyFarFromTheSeedAreRefused() {
+    // The arch: straight in plan, rising then falling. A point below its apex
+    // is exactly as near to one flank as to the other, and a seed at the apex
+    // is exactly as far from one root as from the other.
+    // The node spacing is what separates the two roots into different brackets;
+    // a grid too coarse to separate them would hand back one of them without
+    // noticing the other, which is why the resolution is a stated property of
+    // the line rather than something the contract can promise on its own.
+    const TrackGeometry line = lines::MakeSymmetricGradeArchLine(1.0);
+    const Eigen::Vector3d point(0.5 * lines::kArchLengthMeters, 0.0, 2.0);
     bool refused = false;
     std::string message;
     try {
-        (void)line.ProjectPointColdStart(point);
+        (void)line.ProjectPointNearSeed(point, 0.5 * lines::kArchLengthMeters,
+                                        4.9);
     } catch (const std::runtime_error& error) {
         refused = true;
         message = error.what();
     }
     Expect(refused,
-           "two distinct equidistant roots remain distinct when the same "
-           "geometry is translated to a large absolute track station");
-    Expect(message.find("equally close") != std::string::npos,
-           "the translated fixture is refused for ambiguity rather than for "
-           "an unrelated search failure");
+           "a window holding two minima the same distance from the seed is "
+           "refused, because which branch the caller is on is then not a "
+           "function of what the caller supplied");
+    Expect(message.find("same distance from the seed") != std::string::npos,
+           "and the refusal says what went wrong");
+
+    // A seed nearer one flank than the other resolves it, so the fixture has
+    // not simply broken the search.
+    bool resolved = true;
+    try {
+        (void)line.ProjectPointNearSeed(point, 2.0, 1.5);
+    } catch (const std::exception&) {
+        resolved = false;
+    }
+    Expect(resolved,
+           "moving the seed onto one flank resolves the same point on the same "
+           "line");
 }
 
 void CheckSecondOrderConditionIsEnforced() {
     // Beyond the centre of curvature the stationary point of the distance is a
-    // maximum, not a minimum: the second derivative of the objective is
-    // one minus the lateral offset over the radius.
+    // maximum, not a minimum: the second derivative of the objective is the
+    // general expression, and it goes negative there.
     const TrackGeometry line = lines::MakeCanonicalLine();
     const double station = 200.0;
     const double beyond_centre = lines::kCanonicalRadiusMeters + 50.0;
@@ -273,8 +276,8 @@ void CheckSecondOrderConditionIsEnforced() {
         refused = true;
     }
     Expect(refused,
-           "a seed at a station whose stationary point is a maximum of the "
-           "distance is refused rather than returned as a projection");
+           "a window whose only stationary point is a maximum of the distance "
+           "is refused rather than returned as a projection");
 
     // A point at the same lateral distance but on the outside of the curve has
     // a genuine minimum there, so the refusal above is about the second-order
@@ -290,6 +293,35 @@ void CheckSecondOrderConditionIsEnforced() {
     Expect(accepted,
            "the mirror-image point outside the curve, at the same distance, is "
            "accepted");
+}
+
+void CheckAStationaryPointOnTheWindowWallIsRefused() {
+    // The contract is strictly interior. A window whose wall lands on the root
+    // is a window in the wrong place, and saying so is more use to the caller
+    // than returning the wall.
+    const TrackGeometry line = lines::MakeLevelStraightLine(20.0, 1.0);
+    const Eigen::Vector3d point(10.0, 0.7, 0.0);
+    bool refused = false;
+    std::string message;
+    try {
+        (void)line.ProjectPointNearSeed(point, 12.0, 2.0);
+    } catch (const std::runtime_error& error) {
+        refused = true;
+        message = error.what();
+    }
+    Expect(refused, "a root sitting on the wall of the window is refused");
+    Expect(message.find("wall of the window") != std::string::npos,
+           "and the refusal points at the window rather than at the line");
+
+    bool accepted = true;
+    try {
+        (void)line.ProjectPointNearSeed(point, 12.0, 3.0);
+    } catch (const std::exception&) {
+        accepted = false;
+    }
+    Expect(accepted,
+           "widening the window so the same root falls strictly inside it "
+           "succeeds");
 }
 
 void CheckArgumentRefusals() {
@@ -310,9 +342,9 @@ void CheckArgumentRefusals() {
     Expect(refuses_invalid_argument([&] {
                Eigen::Vector3d bad = good;
                bad.y() = std::numeric_limits<double>::quiet_NaN();
-               (void)line.ProjectPointColdStart(bad);
+               (void)line.ProjectPointNearSeed(bad, 200.0, 5.0);
            }),
-           "a non-finite point is refused by the cold start");
+           "a non-finite point is refused");
     Expect(refuses_invalid_argument([&] {
                (void)line.ProjectPointNearSeed(good, 5.0, 20.0);
            }),
@@ -328,77 +360,74 @@ void CheckArgumentRefusals() {
            "a seed outside the domain is refused");
 }
 
-void CheckRootsTheNodeGridDoesNotSurround() {
-    // Four configurations an adversarial review produced before any of them had
-    // a test. Each is a root the grid brackets but that a scan over interior
-    // nodes looking for a low value cannot see, so all four used to be reported
-    // as "no projection exists" or as a pair of equally near stations.
-    struct Case {
-        double length_meters;
-        double node_spacing_meters;
-        double station_meters;
-        const char* description;
-    };
-    const Case cases[] = {
-        {10.0, 20.0, 5.0,
-         "a line short enough that the grid has no interior node at all"},
-        {10.0, 1.0, 0.2, "a root inside the first half interval"},
-        {10.0, 1.0, 9.8, "a root inside the last half interval"},
-        {10.0, 1.0, 2.5, "a root exactly halfway between two nodes"},
-        {10.0, 1.0, 3.0, "a root sitting exactly on a node"},
-    };
-    for (const Case& one : cases) {
-        const TrackGeometry line =
-            lines::MakeLevelStraightLine(one.length_meters,
-                                         one.node_spacing_meters);
-        const Eigen::Vector3d point(one.station_meters, 1.0, 0.0);
-        bool projected = false;
-        double station = 0.0;
-        try {
-            station = line.ProjectPointColdStart(point).track_station_meters();
-            projected = true;
-        } catch (const std::exception&) {
+void CheckWhyThereIsNoWholeLineSearch() {
+    // This is the check that explains the shape of the interface. Both fixtures
+    // below defeat any attempt to certify a whole-line nearest-station search
+    // from a construction-time bound on the geometry, which is why the library
+    // takes a seed instead of promising to find the branch by itself.
+    //
+    // The first is straight in plan: its heading is identically zero, so no
+    // bound on how far the heading turns per node interval says anything about
+    // it, yet the line holds two minima the same distance from the point.
+    const TrackGeometry arch = lines::MakeSymmetricGradeArchLine(1.0);
+    const Eigen::Vector3d below_apex(0.5 * lines::kArchLengthMeters, 0.0, 2.0);
+    double first_root = 0.0;
+    double second_root = 0.0;
+    double first_distance = std::numeric_limits<double>::infinity();
+    double second_distance = std::numeric_limits<double>::infinity();
+    const int samples = 200000;
+    for (int index = 0; index <= samples; ++index) {
+        const double station = lines::kArchLengthMeters *
+                               static_cast<double>(index) /
+                               static_cast<double>(samples);
+        const double distance =
+            (below_apex - arch.CenterlinePositionInInertialMeters(station))
+                .norm();
+        if (station < 0.5 * lines::kArchLengthMeters) {
+            if (distance < first_distance) {
+                first_distance = distance;
+                first_root = station;
+            }
+        } else if (distance < second_distance) {
+            second_distance = distance;
+            second_root = station;
         }
-        Expect(projected,
-               std::string("the cold start projects a point beside ") +
-                   one.description);
-        Expect(projected && std::abs(station - one.station_meters) <= 1.0e-12,
-               std::string("and returns the station the point was placed "
-                           "beside, for ") +
-                   one.description);
     }
-}
+    Expect(std::abs(first_root - second_root) > 1.0,
+           "the arch really does have two separated minima");
+    Expect(std::abs(first_distance - second_distance) <= 1.0e-9,
+           "and they are the same distance from the point, so no single "
+           "nearest station exists for it");
+    Expect(arch.HeadingRadians(0.5 * lines::kArchLengthMeters) == 0.0,
+           "while the heading is identically zero, so a bound on the heading "
+           "turn per interval would have let this line through");
 
-void CheckNodeSpacingDoesNotImposeAFalseProjectionProof() {
-    // Node spacing controls geometric integration accuracy. It cannot certify
-    // how many stationary points an arbitrary query point creates in one
-    // interval, so geometry construction must not reject an otherwise valid
-    // line under a projection-specific heading-turn heuristic.
-    bool accepted = true;
-    try {
-        const TrackGeometry valid_geometry = lines::MakeTightTurnLine(50.0);
-        (void)valid_geometry;
-    } catch (const std::exception&) {
-        accepted = false;
-    }
-    Expect(accepted,
-           "a valid line is not rejected by a heading-turn threshold that "
-           "cannot prove projection-root completeness");
+    // The second is a curvature that swings symmetrically: the heading returns
+    // to where it started across the segment while sweeping several radians
+    // inside it, so a net turn measured across an interval says nothing either.
+    const TrackScalarProfile swing(0.0, {lines::Blend(1.0, 10.0, -10.0)}, {});
+    Expect(std::abs(swing.IntegralFromStart(1.0)) <= 1.0e-12,
+           "the swinging curvature leaves the heading unchanged across the "
+           "whole segment");
+    Expect(std::abs(swing.IntegralFromStart(0.5)) > 3.0,
+           "while the heading reaches several radians inside it, so the net "
+           "turn across an interval is not a resolution measure either");
 }
 
 }  // namespace
 
 int main() {
     CheckOrthogonalityAndAgreementOnEachShape();
-    CheckRootsTheNodeGridDoesNotSurround();
-    CheckNodeSpacingDoesNotImposeAFalseProjectionProof();
-    CheckColdAndSeededAgreeOnAUniqueRoot();
+    CheckTheSeedDoesNotDecideTheAnswer();
     CheckProjectionKeepsNoHistory();
     CheckTemporaryProjectionOwnsItsPoint();
-    CheckEquidistantMinimaAreRefused();
+    CheckRootsTheNodeGridDoesNotSurround();
     CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin();
+    CheckMinimaEquallyFarFromTheSeedAreRefused();
     CheckSecondOrderConditionIsEnforced();
+    CheckAStationaryPointOnTheWindowWallIsRefused();
     CheckArgumentRefusals();
+    CheckWhyThereIsNoWholeLineSearch();
     if (failure_count != 0) {
         std::printf("%d track station projection checks failed\n",
                     failure_count);

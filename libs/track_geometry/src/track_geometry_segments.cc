@@ -283,13 +283,26 @@ TrackScalarProfile::TrackScalarProfile(
 
     // Every window is validated against the raw boundaries before any of them
     // is applied, so a rejected profile never half-exists.
+    // The value a segment declares at each of its ends, used both to validate
+    // continuity and to build the seam windows. Reading the declared numbers
+    // rather than evaluating the polynomial keeps the comparison exact: a
+    // Hermite blend reaches its stated end value in arithmetic that need not
+    // reproduce it bit for bit.
+    const auto declared_start_value = [&segments](std::size_t index) {
+        return segments[index].start_value;
+    };
+    const auto declared_end_value = [&segments](std::size_t index) {
+        return segments[index].shape == TrackScalarSegmentShape::kConstant
+                   ? segments[index].start_value
+                   : segments[index].end_value;
+    };
+
     std::vector<SeamWindow> windows;
     windows.reserve(seam_transitions.size());
+    std::vector<bool> has_seam(raw.size(), false);
     for (std::size_t index = 0; index < seam_transitions.size(); ++index) {
         const TrackSeamTransition& seam = seam_transitions[index];
         const std::string where = "seam " + std::to_string(index);
-        RequireFinite(seam.boundary_track_station_meters,
-                      "the boundary station of " + where);
         RequireFinite(seam.window_length_meters, "the window length of " + where);
         if (!(seam.window_length_meters > 0.0)) {
             throw std::invalid_argument(
@@ -297,22 +310,24 @@ TrackScalarProfile::TrackScalarProfile(
                 " must have positive window length, got " +
                 Describe(seam.window_length_meters));
         }
-        std::size_t left = raw.size();
-        for (std::size_t candidate = 0; candidate + 1 < raw.size(); ++candidate) {
-            if (raw[candidate].end_track_station_meters ==
-                seam.boundary_track_station_meters) {
-                left = candidate;
-                break;
-            }
-        }
-        if (left == raw.size()) {
+        const std::size_t left = seam.preceding_segment_index;
+        if (left + 1 >= raw.size()) {
             throw std::invalid_argument(
-                "TrackScalarProfile: " + where + " sits at station " +
-                Describe(seam.boundary_track_station_meters) +
-                " m, which is not an interior boundary between two segments");
+                "TrackScalarProfile: " + where + " names segment " +
+                std::to_string(left) +
+                ", which has no following segment to form a boundary with; the "
+                "profile has " +
+                std::to_string(raw.size()) + " segments");
         }
-        const double canonical_boundary =
-            raw[left].end_track_station_meters;
+        if (has_seam[left]) {
+            throw std::invalid_argument(
+                "TrackScalarProfile: " + where +
+                " names segment " + std::to_string(left) +
+                ", which already carries a seam window; one boundary takes one "
+                "window");
+        }
+        has_seam[left] = true;
+        const double canonical_boundary = raw[left].end_track_station_meters;
         const double half = 0.5 * seam.window_length_meters;
         const double left_length = raw[left].end_track_station_meters -
                                    raw[left].start_track_station_meters;
@@ -342,6 +357,29 @@ TrackScalarProfile::TrackScalarProfile(
         }
         windows.push_back(window);
     }
+
+    // Every boundary without a declared window has to be continuous. A jump
+    // there would make the first station derivative of the track frame
+    // one-sided, and an evaluation would have to answer with one side of it as
+    // though the quantity existed.
+    for (std::size_t index = 0; index + 1 < raw.size(); ++index) {
+        if (has_seam[index]) {
+            continue;
+        }
+        const double leaving = declared_end_value(index);
+        const double arriving = declared_start_value(index + 1);
+        if (leaving != arriving) {
+            throw std::invalid_argument(
+                "TrackScalarProfile: segment " + std::to_string(index) +
+                " ends at " + Describe(leaving) + " while segment " +
+                std::to_string(index + 1) + " starts at " + Describe(arriving) +
+                " with no seam window declared across the boundary at station " +
+                Describe(raw[index].end_track_station_meters) +
+                " m; declare a seam window or make the two values agree, "
+                "because a jump leaves the first derivative undefined there");
+        }
+    }
+
     std::sort(windows.begin(), windows.end(),
               [](const SeamWindow& first, const SeamWindow& second) {
                   return first.start_track_station_meters <

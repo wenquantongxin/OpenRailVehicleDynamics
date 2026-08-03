@@ -287,7 +287,7 @@ void CheckSeamMatchesSixNonzeroBoundaryData() {
     constexpr double kSecondEnd = -0.7;
 
     TrackSeamTransition seam;
-    seam.boundary_track_station_meters = kBoundary;
+    seam.preceding_segment_index = 0;
     seam.window_length_meters = kWindowLength;
     const TrackScalarProfile profile(
         0.0,
@@ -463,7 +463,7 @@ void CheckDomainAndSuperelevationRefusals() {
 
     const auto build_seam_superelevation = [](double span) {
         TrackSeamTransition seam;
-        seam.boundary_track_station_meters = 1.0;
+        seam.preceding_segment_index = 0;
         seam.window_length_meters = 1.0;
         return TrackGeometry(
             TrackScalarProfile(0.0, {lines::Constant(2.0, 0.0)}, {}),
@@ -512,7 +512,7 @@ void CheckDomainAndSuperelevationRefusals() {
                 std::nextafter(eighty_three_steps_below_one, 0.0);
         }
         TrackSeamTransition seam;
-        seam.boundary_track_station_meters = kFirstLength;
+        seam.preceding_segment_index = 0;
         seam.window_length_meters = 2.0;
         (void)TrackGeometry(
             TrackScalarProfile(
@@ -598,8 +598,7 @@ void CheckProfileInputRefusals() {
         constexpr double kLargeStation = 1.0e20;
         constexpr double kRepresentableSegmentLength = 32768.0;
         TrackSeamTransition seam;
-        seam.boundary_track_station_meters =
-            kLargeStation + kRepresentableSegmentLength;
+        seam.preceding_segment_index = 0;
         seam.window_length_meters = 1.0;
         (void)TrackScalarProfile(
             kLargeStation,
@@ -660,9 +659,125 @@ void CheckGradeSignAndMagnitude() {
     }
 }
 
+void CheckSeamIdentityAndContinuityRefusals() {
+    using orvd::track_geometry::TrackScalarSegmentShape;
+    const auto refuses = [](auto&& build, std::string* message) {
+        try {
+            build();
+        } catch (const std::invalid_argument& error) {
+            if (message != nullptr) {
+                *message = error.what();
+            }
+            return true;
+        } catch (...) {
+            return false;
+        }
+        return false;
+    };
+
+    // A boundary where the declared values disagree and no window is declared
+    // across it. The first station derivative of everything built on the
+    // profile does not exist there, so the profile is refused rather than
+    // silently answering with one side of it.
+    std::string discontinuity_message;
+    Expect(refuses(
+               [] {
+                   TrackScalarProfile profile(
+                       0.0,
+                       {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.5)},
+                       {});
+                   (void)profile;
+               },
+               &discontinuity_message),
+           "a boundary whose declared values disagree, with no seam window "
+           "across it, is refused at construction");
+    Expect(discontinuity_message.find("no seam window declared") !=
+               std::string::npos,
+           "and the refusal names the missing declaration rather than the "
+           "numbers");
+
+    // The same two segments become legal once the transition is declared.
+    bool accepted = true;
+    try {
+        TrackSeamTransition seam;
+        seam.preceding_segment_index = 0;
+        seam.window_length_meters = 4.0;
+        TrackScalarProfile profile(
+            0.0, {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.5)},
+            {seam});
+        (void)profile;
+    } catch (const std::exception&) {
+        accepted = false;
+    }
+    Expect(accepted,
+           "declaring a seam window across that same boundary makes it legal, "
+           "so the rule asks for a declaration rather than forbidding the shape");
+
+    // A seam naming a segment with nothing after it has no boundary to sit on.
+    Expect(refuses(
+               [] {
+                   TrackSeamTransition seam;
+                   seam.preceding_segment_index = 1;
+                   seam.window_length_meters = 2.0;
+                   TrackScalarProfile profile(
+                       0.0,
+                       {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.0)},
+                       {seam});
+                   (void)profile;
+               },
+               nullptr),
+           "a seam naming the last segment is refused, because there is no "
+           "following segment to form a boundary with");
+
+    // Two seams on one boundary. Their windows would also overlap, so a
+    // refusal on its own says nothing about which rule fired; the message is
+    // what distinguishes "you named this boundary twice" from "these two
+    // windows collide", and only the first is true here.
+    std::string duplicate_message;
+    Expect(refuses(
+               [] {
+                   TrackSeamTransition first;
+                   first.preceding_segment_index = 0;
+                   first.window_length_meters = 2.0;
+                   TrackSeamTransition second;
+                   second.preceding_segment_index = 0;
+                   second.window_length_meters = 4.0;
+                   TrackScalarProfile profile(
+                       0.0,
+                       {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.0)},
+                       {first, second});
+                   (void)profile;
+               },
+               &duplicate_message),
+           "two seams naming the same segment are refused");
+    Expect(duplicate_message.find("already carries a seam window") !=
+               std::string::npos,
+           "and the refusal names the duplicated boundary rather than reporting "
+           "the collision of the two windows it would have produced");
+
+    // A blend that ends where the next segment starts is continuous by
+    // declaration even though the polynomial arrives there by arithmetic, so
+    // the rule compares what was declared rather than what was computed.
+    bool blend_accepted = true;
+    try {
+        TrackScalarProfile profile(
+            0.0,
+            {lines::Blend(3.0, 0.0, 1.0 / 3.0), lines::Constant(3.0, 1.0 / 3.0)},
+            {});
+        (void)profile;
+    } catch (const std::exception&) {
+        blend_accepted = false;
+    }
+    Expect(blend_accepted,
+           "a blend whose declared end value equals the next segment's declared "
+           "start value is continuous, even where the arithmetic need not land "
+           "on it bit for bit");
+}
+
 }  // namespace
 
 int main() {
+    CheckSeamIdentityAndContinuityRefusals();
     CheckCircularCurvatureOutsideSeamWindows();
     CheckCircularPositionAgainstClosedForm();
     CheckPlanarUnitSpeedAndGradeDerivative();

@@ -123,7 +123,7 @@ inline constexpr double kSeamWindowLengthMeters = 6.0;
 inline TrackGeometry MakeSeamLine() {
     const double curvature = 1.0 / kCanonicalRadiusMeters;
     TrackSeamTransition seam;
-    seam.boundary_track_station_meters = kSeamBoundaryMeters;
+    seam.preceding_segment_index = 0;
     seam.window_length_meters = kSeamWindowLengthMeters;
     TrackScalarProfile curvature_profile(
         0.0,
@@ -138,42 +138,22 @@ inline TrackGeometry MakeSeamLine() {
                          kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
 }
 
-inline constexpr double kTieRadiusMeters = 10.0;
-inline constexpr double kTieStraightLengthMeters = 60.0;
+// A line that is straight in plan and rises then falls: the grade blends
+// symmetrically from uphill to downhill, so the centerline is an arch and a
+// point below its apex is exactly as near to one flank as to the other. This is
+// the shape that shows why a whole-line nearest-station search cannot be
+// certified by any bound on the heading: the heading here is identically zero.
+inline constexpr double kArchLengthMeters = 10.0;
+inline constexpr double kArchGrade = 1.0;
 
-// A tight circular turn, used to exercise the node-spacing resolution bound:
-// at ten metres of radius a half-metre spacing turns the heading by a twentieth
-// of a radian per interval, while fifty metres would sweep several radians.
-inline TrackGeometry MakeTightTurnLine(double node_spacing_meters) {
-    const double curvature = 1.0 / kTieRadiusMeters;
-    return TrackGeometry(TrackScalarProfile(0.0, {Constant(100.0, curvature)},
-                                            {}),
-                         TrackScalarProfile(0.0, {Constant(100.0, 0.0)}, {}),
-                         TrackScalarProfile(0.0, {Constant(100.0, 0.0)}, {}),
-                         kRailReferenceLateralSpanMeters, node_spacing_meters);
-}
-
-// Straight, half turn, straight back: the two straight stretches are parallel
-// and a lateral span apart, so a point halfway between them is exactly as close
-// to one as to the other and the nearest station stops being a function of the
-// point.
-inline TrackGeometry MakeEquidistantTieLine() {
-    const double curvature = 1.0 / kTieRadiusMeters;
-    const double half_turn_length = 3.14159265358979323846 * kTieRadiusMeters;
-    TrackScalarProfile curvature_profile(
-        0.0,
-        {Constant(kTieStraightLengthMeters, 0.0),
-         Constant(half_turn_length, curvature),
-         Constant(kTieStraightLengthMeters, 0.0)},
-        {});
-    const double total =
-        2.0 * kTieStraightLengthMeters + half_turn_length;
-    TrackScalarProfile superelevation_profile(0.0, {Constant(total, 0.0)}, {});
-    TrackScalarProfile grade_profile(0.0, {Constant(total, 0.0)}, {});
-    return TrackGeometry(std::move(curvature_profile),
-                         std::move(superelevation_profile),
-                         std::move(grade_profile),
-                         kRailReferenceLateralSpanMeters, 0.05);
+inline TrackGeometry MakeSymmetricGradeArchLine(double node_spacing_meters) {
+    return TrackGeometry(
+        TrackScalarProfile(0.0, {Constant(kArchLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(0.0, {Constant(kArchLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(0.0,
+                           {Blend(kArchLengthMeters, kArchGrade, -kArchGrade)},
+                           {}),
+        kRailReferenceLateralSpanMeters, node_spacing_meters);
 }
 
 }  // namespace orvd::track_geometry::test_lines

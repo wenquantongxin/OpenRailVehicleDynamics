@@ -142,29 +142,46 @@ class TrackGeometry {
         return grade_.support_start_track_station_meters();
     }
 
-    // Projection onto the centerline. Both queries minimise
+    // Tracks the branch of the centerline the caller is already on.
+    //
+    // This is deliberately not a whole-line search. Finding the nearest station
+    // to an arbitrary point would mean enumerating every minimum of
     //
     //     objective = 0.5 * |point - centerline(station)|^2
     //
-    // and admit a station only when the first derivative of that objective
-    // meets the residual bound, its second derivative is strictly positive, and
-    // the station lies inside the searched domain. The second-derivative test
-    // is the general one,
+    // over the entire line, and no cheap construction-time bound certifies that
+    // enumeration: a line that is straight in plan but rises and falls can put
+    // two equally near minima inside one node interval, and a curvature that
+    // swings symmetrically can leave the heading unchanged across an interval
+    // while sweeping several radians inside it. Rather than promise a search
+    // this library cannot certify, the initial station comes from the caller —
+    // a resolved start-up state carries it, and an accepted step advances it.
+    //
+    // Two stationary points inside one node interval are separated by the node
+    // grid or not at all, so the resolution of the search is a property of the
+    // stated node spacing rather than something this contract can promise on
+    // its own. In production the window is a step's worth of station and the
+    // question does not arise; a caller that widens it takes on the same
+    // resolution question the whole-line search could not answer.
+    //
+    // What is promised is exactly what a bracketed search can deliver: the
+    // minimum strictly inside the declared interval, found by Newton steps kept
+    // inside a bracket that bisection always shrinks. A station is admitted
+    // only when the objective's first derivative meets the residual bound and
+    // its second derivative is strictly positive, the latter in the general
+    // form
     //
     //     objective'' = |centerline'|^2 - (point - centerline) . centerline'',
     //
-    // not the planar special case that a circle would suggest.
+    // not the planar special case a circle would suggest.
     //
-    // The cold start searches the whole domain and throws std::runtime_error
-    // when two distinct minima are equally close, because then the nearest
-    // station is not a function of the point. The seeded query searches only
-    // [seed - half width, seed + half width] and throws std::runtime_error when
-    // the refined station leaves that interval. Neither clamps.
-    //
-    // Both throw std::invalid_argument for a non-finite point, a non-finite or
-    // out-of-domain seed, or a non-positive half width.
-    [[nodiscard]] TrackStationProjection ProjectPointColdStart(
-        const Eigen::Vector3d& point_in_inertial_meters) const;
+    // Throws std::invalid_argument for a non-finite point, a non-finite or
+    // out-of-domain seed, a non-positive half width, or a window reaching
+    // outside the domain; the window is a declared search domain, not a hint to
+    // be clipped. Throws std::runtime_error when the window holds no admissible
+    // minimum strictly inside it, and when two of them are the same distance
+    // from the seed, because then which branch the caller is on is not a
+    // function of what the caller supplied.
     [[nodiscard]] TrackStationProjection ProjectPointNearSeed(
         const Eigen::Vector3d& point_in_inertial_meters,
         double seed_track_station_meters, double search_half_width_meters) const;

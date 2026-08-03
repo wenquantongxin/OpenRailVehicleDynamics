@@ -28,11 +28,13 @@ constexpr double kQuadratureWeights[kQuadraturePointCount] = {
     0.3626837833783620, 0.3626837833783620, 0.3137066458778873,
     0.2223810344533745, 0.1012285362903763};
 
-constexpr int kMaximumRefinementIterations = 32;
-// A station converges when successive iterates agree to this relative bound;
-// stations run to a few thousand metres, so this is a few units in the last
-// place of a double.
-constexpr double kStationRelativeTolerance = 1.0e-13;
+constexpr int kMaximumRefinementIterations = 64;
+// The refinement stops when the bracket has closed to this many units in the
+// last place of its own endpoints. Scaling by the bracket rather than by the
+// absolute station keeps the criterion meaningful on a line whose stations run
+// into the millions, where a relative bound on the station alone would stop
+// while the bracket was still metres wide.
+constexpr double kBracketUlpCount = 4.0;
 // The first derivative of the squared-distance objective has units of metres
 // times metres per metre, so its residual bound scales with the distance.
 constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
@@ -497,8 +499,10 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
         }
         const double motion = std::abs(next - station);
         station = next;
-        if (motion <=
-            kStationRelativeTolerance * std::max(1.0, std::abs(station))) {
+        const double bracket_tolerance =
+            kBracketUlpCount * std::numeric_limits<double>::epsilon() *
+            std::max({1.0, std::abs(low), std::abs(high)});
+        if (motion == 0.0 || high - low <= bracket_tolerance) {
             break;
         }
     }
@@ -518,77 +522,6 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
     candidate.track_station_meters = station;
     candidate.squared_distance_meters_squared = offset.squaredNorm();
     return candidate;
-}
-
-TrackStationProjection TrackGeometry::ProjectPointColdStart(
-    const Eigen::Vector3d& point_in_inertial_meters) const {
-    if (!point_in_inertial_meters.allFinite()) {
-        throw std::invalid_argument(
-            "TrackGeometry::ProjectPointColdStart: the point must be finite");
-    }
-    // Every node interval is examined, including the two at the ends of the
-    // line. Scanning interior nodes for a low value instead would miss a
-    // minimum that falls in the first or last half interval, and would miss
-    // every minimum on a line short enough to have only two nodes.
-    ProjectionCandidate best;
-    ProjectionCandidate runner_up;
-    ProjectionCandidate previous;
-    std::size_t previous_interval_index = 0;
-    for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
-        const ProjectionCandidate refined = RefineBracketedMinimum(
-            point_in_inertial_meters, nodes_[index].track_station_meters,
-            nodes_[index + 1].track_station_meters);
-        if (!refined.found) {
-            continue;
-        }
-        // A minimum sitting on a shared node is bracketed by both neighbouring
-        // intervals. Counting it twice would make every such point look like a
-        // pair of equally near stations.
-        if (previous.found && previous_interval_index + 1 == index &&
-            refined.track_station_meters ==
-                nodes_[index].track_station_meters &&
-            previous.track_station_meters ==
-                nodes_[index].track_station_meters) {
-            continue;
-        }
-        previous = refined;
-        previous_interval_index = index;
-        if (!best.found || refined.squared_distance_meters_squared <
-                               best.squared_distance_meters_squared) {
-            runner_up = best;
-            best = refined;
-        } else if (!runner_up.found ||
-                   refined.squared_distance_meters_squared <
-                       runner_up.squared_distance_meters_squared) {
-            runner_up = refined;
-        }
-    }
-    if (!best.found) {
-        throw std::runtime_error(
-            "TrackGeometry::ProjectPointColdStart: no interior minimum of the "
-            "distance to the centerline exists for this point; the projection "
-            "is not defined here");
-    }
-    if (runner_up.found) {
-        const double best_distance =
-            std::sqrt(best.squared_distance_meters_squared);
-        const double runner_up_distance =
-            std::sqrt(runner_up.squared_distance_meters_squared);
-        const double separation = runner_up_distance - best_distance;
-        if (separation <=
-            kEquidistantRelativeTolerance * std::max(1.0, best_distance)) {
-            throw std::runtime_error(
-                "TrackGeometry::ProjectPointColdStart: two distinct minima at "
-                "stations " +
-                Describe(best.track_station_meters) + " m and " +
-                Describe(runner_up.track_station_meters) +
-                " m are equally close, so the nearest station is not a "
-                "function of this point");
-        }
-    }
-    return TrackStationProjection(
-        best.track_station_meters,
-        CenterlinePositionUnchecked(best.track_station_meters));
 }
 
 TrackStationProjection TrackGeometry::ProjectPointNearSeed(
@@ -614,48 +547,81 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
             "clipped");
     }
 
-    // The declared interval is genuinely searched: its node sub-intervals are
-    // examined in turn and the admissible minimum nearest the seed is returned.
-    // Iterating from the seed alone would make the answer depend on where the
-    // caller happened to start rather than on what the interval contains.
+    // The declared interval is searched by its node sub-intervals rather than
+    // walked from the seed, so the answer depends on what the interval contains
+    // and not on where the caller happened to start.
     ProjectionCandidate nearest;
+    ProjectionCandidate nearest_rival;
     double nearest_gap = std::numeric_limits<double>::infinity();
+    double nearest_rival_gap = std::numeric_limits<double>::infinity();
+    bool saw_endpoint_root = false;
     ProjectionCandidate previous;
-    std::size_t previous_interval_index = 0;
+    bool previous_interval_adjacent = false;
     for (std::size_t index = NodeIndexAtOrBefore(lower);
          index + 1 < nodes_.size() &&
          nodes_[index].track_station_meters < upper;
          ++index) {
-        const double from =
-            std::max(nodes_[index].track_station_meters, lower);
-        const double to =
-            std::min(nodes_[index + 1].track_station_meters, upper);
+        const double from = std::max(nodes_[index].track_station_meters, lower);
+        const double to = std::min(nodes_[index + 1].track_station_meters, upper);
         const ProjectionCandidate refined =
             RefineBracketedMinimum(point_in_inertial_meters, from, to);
         if (!refined.found) {
+            previous_interval_adjacent = false;
             continue;
         }
-        if (previous.found && previous_interval_index + 1 == index &&
-            refined.track_station_meters ==
-                nodes_[index].track_station_meters &&
-            previous.track_station_meters ==
-                nodes_[index].track_station_meters) {
-            continue;
-        }
+        // A root sitting on a shared node is bracketed by both neighbouring
+        // sub-intervals, and the refinement canonicalises it onto the node, so
+        // the duplicate is an exact station match from the immediately
+        // preceding interval.
+        const bool duplicate =
+            previous_interval_adjacent && previous.found &&
+            previous.track_station_meters == refined.track_station_meters;
         previous = refined;
-        previous_interval_index = index;
+        previous_interval_adjacent = true;
+        if (duplicate) {
+            continue;
+        }
+        // The contract is strictly interior: a stationary point sitting on the
+        // wall of the declared window says the window is in the wrong place,
+        // not that the branch has been found.
+        if (refined.track_station_meters <= lower ||
+            refined.track_station_meters >= upper) {
+            saw_endpoint_root = true;
+            continue;
+        }
         const double gap = std::abs(refined.track_station_meters -
                                     seed_track_station_meters);
         if (gap < nearest_gap) {
-            nearest_gap = gap;
+            nearest_rival = nearest;
+            nearest_rival_gap = nearest_gap;
             nearest = refined;
+            nearest_gap = gap;
+        } else if (gap < nearest_rival_gap) {
+            nearest_rival = refined;
+            nearest_rival_gap = gap;
         }
     }
     if (!nearest.found) {
         throw std::runtime_error(
-            "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies in "
-            "the search interval [" +
-            Describe(lower) + ", " + Describe(upper) + "] m");
+            "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies "
+            "strictly inside the search interval [" +
+            Describe(lower) + ", " + Describe(upper) + "] m" +
+            (saw_endpoint_root
+                 ? "; a stationary point sits on the wall of the window, so the "
+                   "window is placed wrongly rather than the branch missing"
+                 : ""));
+    }
+    if (nearest_rival.found) {
+        const double separation = nearest_rival_gap - nearest_gap;
+        if (separation <= kEquidistantRelativeTolerance *
+                              std::max(1.0, search_half_width_meters)) {
+            throw std::runtime_error(
+                "TrackGeometry::ProjectPointNearSeed: the minima at stations " +
+                Describe(nearest.track_station_meters) + " m and " +
+                Describe(nearest_rival.track_station_meters) +
+                " m are the same distance from the seed, so which branch the "
+                "caller is on is not a function of what the caller supplied");
+        }
     }
     return TrackStationProjection(
         nearest.track_station_meters,

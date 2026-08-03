@@ -43,18 +43,29 @@ struct TrackScalarSegment {
 };
 
 struct TrackSeamTransition {
-    // The shared boundary of two adjacent segments, in track station.
-    double boundary_track_station_meters{0.0};
+    // The segment whose end the window straddles; the window is centred on the
+    // boundary between it and the segment that follows. The seam is identified
+    // by topology rather than by a written-out station, so nothing has to match
+    // an accumulated sum of segment lengths under exact floating-point
+    // equality.
+    std::size_t preceding_segment_index{0};
     // The full width of the window, centred on that boundary.
     double window_length_meters{0.0};
 };
 
 class TrackScalarProfile {
    public:
+    // Adjacent segments must agree at the boundary between them unless a seam
+    // window is declared across it: a value that jumps leaves the first station
+    // derivative of everything built on this profile undefined there, and an
+    // evaluation on the right-hand-side path would have to return a number for
+    // a quantity that does not exist.
+    //
     // Throws std::invalid_argument when the start station or any segment or
     // window parameter is not finite, when a segment has non-positive length,
-    // when a seam boundary is not an interior segment boundary, when a window
-    // reaches past either adjacent segment, or when two windows overlap.
+    // when a seam names a segment with no successor, when two seams name the
+    // same segment, when a window reaches past either adjacent segment, when
+    // two windows overlap, or when an undeclared boundary is discontinuous.
     TrackScalarProfile(double start_track_station_meters,
                        std::vector<TrackScalarSegment> segments,
                        std::vector<TrackSeamTransition> seam_transitions);
