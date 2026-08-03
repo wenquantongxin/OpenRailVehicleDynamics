@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -38,6 +39,17 @@ constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
 // Two distinct minima closer than this in relative distance make the nearest
 // station ambiguous.
 constexpr double kEquidistantRelativeTolerance = 1.0e-9;
+// A minimum sitting on a node is bracketed by both neighbouring intervals, so
+// the two refinements land on the same station and have to be merged before the
+// ambiguity test sees them.
+constexpr double kRootMergeRelativeTolerance = 1.0e-9;
+// The heading may turn by at most this much across one node interval. The bound
+// is what makes the projection's interval scan complete: with the heading
+// nearly straight across an interval the objective's first derivative crosses
+// zero at most once inside it, so a bracketing scan cannot step over a minimum.
+// A line that violates it is refused with a request for a finer spacing rather
+// than searched with a grid too coarse to resolve it.
+constexpr double kMaximumHeadingTurnPerNodeIntervalRadians = 0.25;
 
 void RequireFinitePositive(double value, const char* what) {
     if (!std::isfinite(value) || value <= 0.0) {
@@ -171,6 +183,22 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
         next.centerline_position_in_inertial_meters.y() = sum_y + compensation_y;
         next.centerline_position_in_inertial_meters.z() =
             -grade_.IntegralFromStart(next.track_station_meters);
+    }
+
+    for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
+        const double turn = std::abs(nodes_[index + 1].heading_radians -
+                                     nodes_[index].heading_radians);
+        if (turn > kMaximumHeadingTurnPerNodeIntervalRadians) {
+            throw std::invalid_argument(
+                "TrackGeometry: the heading turns by " + Describe(turn) +
+                " rad across the node interval starting at station " +
+                Describe(nodes_[index].track_station_meters) +
+                " m, past the " +
+                Describe(kMaximumHeadingTurnPerNodeIntervalRadians) +
+                " rad a projection search needs to resolve one minimum per "
+                "interval; reduce the station node spacing below " +
+                Describe(station_node_spacing_meters_) + " m");
+        }
     }
 }
 
@@ -392,25 +420,65 @@ TrackFrameKinematics TrackGeometry::EvaluateTrackFrame(
     return TrackFrameKinematics(pose, tangent, rotation_rate);
 }
 
-TrackGeometry::ProjectionCandidate TrackGeometry::RefineFromBracket(
-    const Eigen::Vector3d& point_in_inertial_meters, double initial_station,
-    double lower_bound_station, double upper_bound_station) const {
+TrackGeometry::ObjectiveDerivatives TrackGeometry::EvaluateObjectiveDerivatives(
+    const Eigen::Vector3d& point_in_inertial_meters,
+    double track_station_meters) const {
+    const Eigen::Vector3d centerline =
+        CenterlinePositionUnchecked(track_station_meters);
+    const Eigen::Vector3d first =
+        CenterlineDerivativeUnchecked(track_station_meters);
+    const Eigen::Vector3d second =
+        CenterlineSecondDerivativeUnchecked(track_station_meters);
+    const Eigen::Vector3d offset = point_in_inertial_meters - centerline;
+    ObjectiveDerivatives derivatives;
+    derivatives.gradient = -offset.dot(first);
+    derivatives.hessian = first.squaredNorm() - offset.dot(second);
+    return derivatives;
+}
+
+TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
+    const Eigen::Vector3d& point_in_inertial_meters, double lower_bound_station,
+    double upper_bound_station) const {
     ProjectionCandidate candidate;
-    double station = initial_station;
+    if (!(upper_bound_station > lower_bound_station)) {
+        return candidate;
+    }
+    double low = lower_bound_station;
+    double high = upper_bound_station;
+    const double gradient_at_low =
+        EvaluateObjectiveDerivatives(point_in_inertial_meters, low).gradient;
+    const double gradient_at_high =
+        EvaluateObjectiveDerivatives(point_in_inertial_meters, high).gradient;
+    // Walking downhill from the start of the interval and uphill at its end is
+    // exactly the condition for a minimum to lie between them. Anything else is
+    // reported as "not here" rather than searched anyway.
+    if (gradient_at_low > 0.0 || gradient_at_high < 0.0) {
+        return candidate;
+    }
+
+    double station = 0.5 * (low + high);
     for (int iteration = 0; iteration < kMaximumRefinementIterations;
          ++iteration) {
-        const Eigen::Vector3d centerline = CenterlinePositionUnchecked(station);
-        const Eigen::Vector3d first = CenterlineDerivativeUnchecked(station);
-        const Eigen::Vector3d second =
-            CenterlineSecondDerivativeUnchecked(station);
-        const Eigen::Vector3d offset = point_in_inertial_meters - centerline;
-        const double gradient = -offset.dot(first);
-        const double hessian = first.squaredNorm() - offset.dot(second);
-        if (!(hessian > 0.0)) {
-            return candidate;
+        const ObjectiveDerivatives derivatives =
+            EvaluateObjectiveDerivatives(point_in_inertial_meters, station);
+        if (derivatives.gradient <= 0.0) {
+            low = station;
+        } else {
+            high = station;
         }
-        double next = station - gradient / hessian;
-        next = std::clamp(next, lower_bound_station, upper_bound_station);
+        double next = derivatives.hessian > 0.0
+                          ? station - derivatives.gradient / derivatives.hessian
+                          : 0.5 * (low + high);
+        // A Newton step that leaves the bracket is discarded for a bisection
+        // step, so the bracket shrinks every iteration whatever the geometry
+        // does and the loop cannot stall or wander off. The bounds are closed:
+        // once a Newton step has landed on the root the bracket end moves onto
+        // it, and rejecting the very same value for failing a strict inequality
+        // would throw the iterate back into the interior and leave nothing but
+        // bisection to finish the job.
+        if (!(next >= low && next <= high)) {
+            next = 0.5 * (low + high);
+        }
         const double motion = std::abs(next - station);
         station = next;
         if (motion <=
@@ -418,16 +486,16 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineFromBracket(
             break;
         }
     }
-    const Eigen::Vector3d centerline = CenterlinePositionUnchecked(station);
+
+    const ObjectiveDerivatives derivatives =
+        EvaluateObjectiveDerivatives(point_in_inertial_meters, station);
+    const Eigen::Vector3d offset =
+        point_in_inertial_meters - CenterlinePositionUnchecked(station);
     const Eigen::Vector3d first = CenterlineDerivativeUnchecked(station);
-    const Eigen::Vector3d second = CenterlineSecondDerivativeUnchecked(station);
-    const Eigen::Vector3d offset = point_in_inertial_meters - centerline;
-    const double gradient = -offset.dot(first);
-    const double hessian = first.squaredNorm() - offset.dot(second);
-    const double gradient_bound =
-        kObjectiveGradientRelativeTolerance *
-        (offset.norm() * first.norm() + 1.0);
-    if (!(hessian > 0.0) || std::abs(gradient) > gradient_bound) {
+    const double gradient_bound = kObjectiveGradientRelativeTolerance *
+                                  (offset.norm() * first.norm() + 1.0);
+    if (!(derivatives.hessian > 0.0) ||
+        std::abs(derivatives.gradient) > gradient_bound) {
         return candidate;
     }
     candidate.found = true;
@@ -442,31 +510,31 @@ TrackStationProjection TrackGeometry::ProjectPointColdStart(
         throw std::invalid_argument(
             "TrackGeometry::ProjectPointColdStart: the point must be finite");
     }
+    // Every node interval is examined, including the two at the ends of the
+    // line. Scanning interior nodes for a low value instead would miss a
+    // minimum that falls in the first or last half interval, and would miss
+    // every minimum on a line short enough to have only two nodes.
     ProjectionCandidate best;
     ProjectionCandidate runner_up;
-    for (std::size_t index = 1; index + 1 < nodes_.size(); ++index) {
-        const double here =
-            (point_in_inertial_meters -
-             nodes_[index].centerline_position_in_inertial_meters)
-                .squaredNorm();
-        const double before =
-            (point_in_inertial_meters -
-             nodes_[index - 1].centerline_position_in_inertial_meters)
-                .squaredNorm();
-        const double after =
-            (point_in_inertial_meters -
-             nodes_[index + 1].centerline_position_in_inertial_meters)
-                .squaredNorm();
-        if (here > before || here > after) {
-            continue;
-        }
-        const ProjectionCandidate refined = RefineFromBracket(
+    ProjectionCandidate previous;
+    for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
+        const ProjectionCandidate refined = RefineBracketedMinimum(
             point_in_inertial_meters, nodes_[index].track_station_meters,
-            nodes_[index - 1].track_station_meters,
             nodes_[index + 1].track_station_meters);
         if (!refined.found) {
             continue;
         }
+        // A minimum sitting on a shared node is bracketed by both neighbouring
+        // intervals. Counting it twice would make every such point look like a
+        // pair of equally near stations.
+        if (previous.found &&
+            std::abs(refined.track_station_meters -
+                     previous.track_station_meters) <=
+                kRootMergeRelativeTolerance *
+                    std::max(1.0, std::abs(refined.track_station_meters))) {
+            continue;
+        }
+        previous = refined;
         if (!best.found || refined.squared_distance_meters_squared <
                                best.squared_distance_meters_squared) {
             runner_up = best;
@@ -527,18 +595,51 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
             "] m; the interval is a declared search domain, not a hint to be "
             "clipped");
     }
-    const ProjectionCandidate refined = RefineFromBracket(
-        point_in_inertial_meters, seed_track_station_meters, lower, upper);
-    if (!refined.found) {
+
+    // The declared interval is genuinely searched: its node sub-intervals are
+    // examined in turn and the admissible minimum nearest the seed is returned.
+    // Iterating from the seed alone would make the answer depend on where the
+    // caller happened to start rather than on what the interval contains.
+    ProjectionCandidate nearest;
+    double nearest_gap = std::numeric_limits<double>::infinity();
+    ProjectionCandidate previous;
+    for (std::size_t index = NodeIndexAtOrBefore(lower);
+         index + 1 < nodes_.size() &&
+         nodes_[index].track_station_meters < upper;
+         ++index) {
+        const double from =
+            std::max(nodes_[index].track_station_meters, lower);
+        const double to =
+            std::min(nodes_[index + 1].track_station_meters, upper);
+        const ProjectionCandidate refined =
+            RefineBracketedMinimum(point_in_inertial_meters, from, to);
+        if (!refined.found) {
+            continue;
+        }
+        if (previous.found &&
+            std::abs(refined.track_station_meters -
+                     previous.track_station_meters) <=
+                kRootMergeRelativeTolerance *
+                    std::max(1.0, std::abs(refined.track_station_meters))) {
+            continue;
+        }
+        previous = refined;
+        const double gap = std::abs(refined.track_station_meters -
+                                    seed_track_station_meters);
+        if (gap < nearest_gap) {
+            nearest_gap = gap;
+            nearest = refined;
+        }
+    }
+    if (!nearest.found) {
         throw std::runtime_error(
             "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies in "
             "the search interval [" +
-            Describe(lower) + ", " + Describe(upper) +
-            "] m for the given seed");
+            Describe(lower) + ", " + Describe(upper) + "] m");
     }
     return TrackStationProjection(
-        refined.track_station_meters,
-        CenterlinePositionUnchecked(refined.track_station_meters));
+        nearest.track_station_meters,
+        CenterlinePositionUnchecked(nearest.track_station_meters));
 }
 
 }  // namespace orvd::track_geometry

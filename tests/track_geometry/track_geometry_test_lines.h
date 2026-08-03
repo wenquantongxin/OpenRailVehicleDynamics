@@ -101,6 +101,19 @@ inline TrackGeometry MakeSteepConstantLine(double grade,
                          kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
 }
 
+// A level straight stretch of stated length and node spacing. Used to put a
+// projection root where a scan over interior nodes cannot see it: in the first
+// or last half interval, exactly between two nodes, or on a line short enough
+// that the grid has no interior node at all.
+inline TrackGeometry MakeLevelStraightLine(double length_meters,
+                                           double node_spacing_meters) {
+    return TrackGeometry(
+        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        kRailReferenceLateralSpanMeters, node_spacing_meters);
+}
+
 // A straight stretch meeting a circular one with a declared seam window across
 // the boundary. Outside the window the circular curvature is exactly the
 // reciprocal of the radius; inside it the quintic runs.
@@ -125,13 +138,25 @@ inline TrackGeometry MakeSeamLine() {
                          kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
 }
 
+inline constexpr double kTieRadiusMeters = 10.0;
+inline constexpr double kTieStraightLengthMeters = 60.0;
+
+// A tight circular turn, used to exercise the node-spacing resolution bound:
+// at ten metres of radius a half-metre spacing turns the heading by a twentieth
+// of a radian per interval, while fifty metres would sweep several radians.
+inline TrackGeometry MakeTightTurnLine(double node_spacing_meters) {
+    const double curvature = 1.0 / kTieRadiusMeters;
+    return TrackGeometry(TrackScalarProfile(0.0, {Constant(100.0, curvature)},
+                                            {}),
+                         TrackScalarProfile(0.0, {Constant(100.0, 0.0)}, {}),
+                         TrackScalarProfile(0.0, {Constant(100.0, 0.0)}, {}),
+                         kRailReferenceLateralSpanMeters, node_spacing_meters);
+}
+
 // Straight, half turn, straight back: the two straight stretches are parallel
 // and a lateral span apart, so a point halfway between them is exactly as close
 // to one as to the other and the nearest station stops being a function of the
 // point.
-inline constexpr double kTieRadiusMeters = 10.0;
-inline constexpr double kTieStraightLengthMeters = 60.0;
-
 inline TrackGeometry MakeEquidistantTieLine() {
     const double curvature = 1.0 / kTieRadiusMeters;
     const double half_turn_length = 3.14159265358979323846 * kTieRadiusMeters;

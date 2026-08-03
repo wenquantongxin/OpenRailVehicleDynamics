@@ -263,10 +263,84 @@ void CheckArgumentRefusals() {
            "a seed outside the domain is refused");
 }
 
+void CheckRootsTheNodeGridDoesNotSurround() {
+    // Four configurations an adversarial review produced before any of them had
+    // a test. Each is a root the grid brackets but that a scan over interior
+    // nodes looking for a low value cannot see, so all four used to be reported
+    // as "no projection exists" or as a pair of equally near stations.
+    struct Case {
+        double length_meters;
+        double node_spacing_meters;
+        double station_meters;
+        const char* description;
+    };
+    const Case cases[] = {
+        {10.0, 20.0, 5.0,
+         "a line short enough that the grid has no interior node at all"},
+        {10.0, 1.0, 0.2, "a root inside the first half interval"},
+        {10.0, 1.0, 9.8, "a root inside the last half interval"},
+        {10.0, 1.0, 2.5, "a root exactly halfway between two nodes"},
+        {10.0, 1.0, 3.0, "a root sitting exactly on a node"},
+    };
+    for (const Case& one : cases) {
+        const TrackGeometry line =
+            lines::MakeLevelStraightLine(one.length_meters,
+                                         one.node_spacing_meters);
+        const Eigen::Vector3d point(one.station_meters, 1.0, 0.0);
+        bool projected = false;
+        double station = 0.0;
+        try {
+            station = line.ProjectPointColdStart(point).track_station_meters();
+            projected = true;
+        } catch (const std::exception&) {
+        }
+        Expect(projected,
+               std::string("the cold start projects a point beside ") +
+                   one.description);
+        Expect(projected && std::abs(station - one.station_meters) <= 1.0e-12,
+               std::string("and returns the station the point was placed "
+                           "beside, for ") +
+                   one.description);
+    }
+}
+
+void CheckACoarseGridOnACurveIsRefused() {
+    // The interval scan can only claim completeness while the heading is nearly
+    // straight across one interval. A spacing that lets the heading swing
+    // through a quarter of a radian per interval is refused at construction
+    // with a request for a finer one, rather than searched with a grid too
+    // coarse to resolve it.
+    bool refused = false;
+    std::string message;
+    try {
+        const TrackGeometry too_coarse = lines::MakeTightTurnLine(50.0);
+        (void)too_coarse;
+    } catch (const std::invalid_argument& error) {
+        refused = true;
+        message = error.what();
+    }
+    Expect(refused,
+           "a node spacing that lets the heading turn far within one interval "
+           "is refused at construction");
+    Expect(message.find("node spacing") != std::string::npos,
+           "and the refusal says which parameter to change");
+
+    bool accepted = true;
+    try {
+        const TrackGeometry fine_enough = lines::MakeTightTurnLine(0.5);
+        (void)fine_enough;
+    } catch (const std::exception&) {
+        accepted = false;
+    }
+    Expect(accepted, "the same line with a finer spacing is accepted");
+}
+
 }  // namespace
 
 int main() {
     CheckOrthogonalityAndAgreementOnEachShape();
+    CheckRootsTheNodeGridDoesNotSurround();
+    CheckACoarseGridOnACurveIsRefused();
     CheckColdAndSeededAgreeOnAUniqueRoot();
     CheckProjectionKeepsNoHistory();
     CheckTemporaryProjectionOwnsItsPoint();

@@ -210,8 +210,22 @@ class TrackGeometry {
     // is constant and by the fixed Gauss-Legendre rule otherwise.
     [[nodiscard]] Eigen::Vector2d HorizontalDisplacementFromNode(
         std::size_t node_index, double to_track_station_meters) const;
-    [[nodiscard]] ProjectionCandidate RefineFromBracket(
-        const Eigen::Vector3d& point_in_inertial_meters, double initial_station,
+    struct ObjectiveDerivatives {
+        double gradient{0.0};
+        double hessian{0.0};
+    };
+    [[nodiscard]] ObjectiveDerivatives EvaluateObjectiveDerivatives(
+        const Eigen::Vector3d& point_in_inertial_meters,
+        double track_station_meters) const;
+    // Locates the minimum in a station interval across which the objective's
+    // first derivative changes from non-positive to non-negative, by Newton
+    // steps kept inside a bracket that bisection always shrinks. The sign
+    // change is what makes the search certified: an interval that does not
+    // bracket one is reported as holding no minimum rather than being walked
+    // hopefully from a starting guess and then judged by whether it happened to
+    // arrive somewhere plausible.
+    [[nodiscard]] ProjectionCandidate RefineBracketedMinimum(
+        const Eigen::Vector3d& point_in_inertial_meters,
         double lower_bound_station, double upper_bound_station) const;
 
     TrackScalarProfile curvature_;
