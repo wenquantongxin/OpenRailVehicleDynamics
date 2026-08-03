@@ -630,3 +630,17 @@ target_link_libraries(verify_track_station_projection
     PRIVATE orvd_track_geometry)
 add_test(NAME verify_track_station_projection
          COMMAND verify_track_station_projection)
+
+# G48's strict human-authored configuration boundary. One non-degenerate record
+# exercises both admitted segment shapes and a seam; the refusal table changes
+# one property at a time. The JSON parser remains private to the product library.
+add_executable(verify_track_geometry_json_loading
+    configuration/load_track_geometry_header_self_containment.cc
+    configuration/verify_track_geometry_json_loading.cc)
+orvd_configure_first_party_target(verify_track_geometry_json_loading)
+target_link_libraries(verify_track_geometry_json_loading
+    PRIVATE orvd_configuration)
+add_test(NAME verify_track_geometry_json_loading
+         COMMAND verify_track_geometry_json_loading
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)

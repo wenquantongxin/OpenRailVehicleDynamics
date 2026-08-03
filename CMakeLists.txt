@@ -64,6 +64,8 @@ find_package(SUNDIALS 7.7.0 EXACT CONFIG REQUIRED
 # The result is an executable that links cleanly and cannot start, which is worse
 # than a build failure because it survives every check that stops at linking.
 find_package(fmt 9.1.0 CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
+find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
+    NO_SYSTEM_ENVIRONMENT_PATH)
 
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: multibody_runtime + internal rigid tree
@@ -79,6 +81,7 @@ find_package(fmt 9.1.0 CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 set(ORVD_PRODUCT_MODULE_DIRECTORIES
     external/drake_mbtree
     libs/track_geometry
+    libs/configuration
     libs/multibody_runtime
     libs/multibody_model
     libs/system_assembly
@@ -92,11 +95,12 @@ foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
 endforeach()
 
 # --- Installable package ---
-# Five first-party targets form the documented surface.  The rigid-tree archive
+# Six first-party targets form the documented surface. The rigid-tree archive
 # is exported only because a static modelling archive must retain its private
 # implementation link edge; no vendored or adapter header is installed.
 set(ORVD_INSTALL_TARGETS
     orvd_track_geometry
+    orvd_configuration
     orvd_multibody_runtime
     orvd_multibody_model
     orvd_system_assembly
@@ -109,13 +113,19 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 foreach(orvd_public_module
-        track_geometry multibody_runtime multibody_model system_assembly
+        track_geometry configuration multibody_runtime multibody_model system_assembly
         integrators)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
             FILES_MATCHING PATTERN "*.h")
 endforeach()
+
+install(DIRECTORY
+        "${CMAKE_CURRENT_SOURCE_DIR}/track_library/geometries/"
+        DESTINATION
+        "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/track_library/geometries"
+        FILES_MATCHING PATTERN "*.json")
 
 set(ORVD_INSTALL_CMAKEDIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/OpenRailVehicleDynamics")

@@ -60,6 +60,13 @@ if(NOT EXISTS "${original_prefix}")
 endif()
 file(RENAME "${original_prefix}" "${relocated_prefix}")
 
+set(installed_track_geometry
+    "${relocated_prefix}/share/OpenRailVehicleDynamics/track_library/geometries/straight_level_2000m.json")
+if(NOT EXISTS "${installed_track_geometry}")
+    message(FATAL_ERROR
+        "the relocated prefix has no installed track geometry record")
+endif()
+
 file(GLOB_RECURSE package_configs LIST_DIRECTORIES FALSE
      "${relocated_prefix}/*OpenRailVehicleDynamicsConfig.cmake")
 list(LENGTH package_configs package_config_count)
@@ -143,6 +150,10 @@ run_checked(
 
 find_single_executable(smoke_executable orvd_installation_smoke
                        "${consumer_build}")
+find_single_executable(configuration_smoke_executable
+                       configuration_installation_smoke "${consumer_build}")
+find_single_executable(track_geometry_smoke_executable
+                       track_geometry_installation_smoke "${consumer_build}")
 find_single_executable(drake_probe_executable drake_loading_probe
                        "${consumer_build}")
 get_filename_component(smoke_runtime_directory "${smoke_executable}" DIRECTORY)
@@ -150,6 +161,10 @@ get_filename_component(drake_probe_runtime_directory
                        "${drake_probe_executable}" DIRECTORY)
 
 run_checked("running the relocated independent consumer" "${smoke_executable}")
+run_checked("running the configuration-only installed consumer"
+            "${configuration_smoke_executable}" "${installed_track_geometry}")
+run_checked("running the track-geometry-only installed consumer"
+            "${track_geometry_smoke_executable}")
 run_checked("running the Drake-marker positive control"
             "${drake_probe_executable}")
 run_checked(

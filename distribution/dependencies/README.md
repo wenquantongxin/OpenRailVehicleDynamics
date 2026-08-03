@@ -10,8 +10,9 @@ cmake --build build
 ```
 
 默认安装到 `build/install`；也可在配置时显式设置 `CMAKE_INSTALL_PREFIX`。生成后的包已携带
-Eigen 3.4.0、fmt 9.1.0 与 SUNDIALS 7.7.0 的锁定源码归档和许可证，超级构建只读取这些本地
-文件，不含下载、更新或补丁步骤。三个依赖与 ORVD 由同一工具链构建，ORVD 仍通过产品根中
+Eigen 3.4.0、fmt 9.1.0、nlohmann/json 3.12.0 与 SUNDIALS 7.7.0 的具名源码归档和许可证，
+超级构建只读取这些本地文件，不含下载、更新或补丁步骤。四个依赖与 ORVD 由同一工具链构建，
+ORVD 仍通过产品根中
 唯一的 `find_package()` 路径消费安装前缀。
 
 Windows 上可使用 Visual Studio 生成器：
@@ -30,6 +31,9 @@ SUNDIALS 配置只启用 CVODE 软件包，关闭全部当前不消费的并行�
 SUNDIALS 7.7.0 上游仍无条件构建一组基础矩阵、线性/非线性求解模块；本项目不维护私有补丁
 裁剪这些上游强制模块。ORVD 只链接 `cvode`、`nvecserial`、`sunmatrixdense`、
 `sunlinsoldense` 与 `core` 目标。
+
+`nlohmann/json` 只参与配置静态库的编译；其类型不会进入 ORVD 公共头或安装导出依赖。已安装
+消费者无需再次查找该包。
 
 依赖清单只记录版本、上游 URL、归档文件名和许可证路径，不在仓库中固化或校验归档哈希。
 如需核对下载完整性，由开发者在取得归档时于仓库外单次完成，不保存校验值或结果。

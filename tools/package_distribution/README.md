@@ -1,6 +1,6 @@
 # 官方源码包组装工具
 
-`assemble_source_bundle.py` 是开发者侧的组包工具。它接收三份已经取得的官方源码归档，按
+`assemble_source_bundle.py` 是开发者侧的组包工具。它接收四份已经取得的官方源码归档，按
 `distribution/dependencies/dependency_sources.json` 中的具名版本与归档文件名组装包，复制 ORVD 源码，
 并从归档中提取声明的许可证材料。它只接受干净的 Git checkout、只复制 Git 已跟踪
 文件，不会覆盖已有输出目录，也不会把未跟踪的机器文件、Git 元数据或编译产物带入包中。
@@ -12,6 +12,7 @@ python3 tools/package_distribution/assemble_source_bundle.py \
   --output-directory /tmp/orvd-source-bundle \
   --eigen-archive /path/to/eigen-3.4.0.tar.gz \
   --fmt-archive /path/to/fmt-9.1.0.tar.gz \
+  --nlohmann-json-archive /path/to/nlohmann-json-3.12.0.tar.xz \
   --sundials-archive /path/to/sundials-7.7.0.tar.gz
 ```
 

@@ -10,8 +10,8 @@ G29–G39 已接通模型中立建模、运动学、质量矩阵、逆动力学�
 G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原子事务、RHS 桥、真实 CVODE 后端
 以及接受/试算提交边界。G46 已落下可安装包、离线依赖源码包和独立消费者资格，并在
 Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构建并运行同一
-CVODE 消费者。底座的 46 个 Goal 已全部完成；车辆动力学迁移路书已经启用，当前 G47 的
-轨道几何实现正在对抗复核收口，G48 尚未进入。
+CVODE 消费者。底座的 46 个 Goal 已全部完成；车辆动力学迁移路书已经启用，G47 轨道几何与
+G48 严格 JSON 线路配置已经签收，当前按项目负责人要求暂停，不进入 G49 车型装配。
 
 底座的实施记录是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)；
@@ -58,12 +58,15 @@ OpenRailVehicleDynamics/
 │   └── package_distribution/   开发者侧离线源码包组装工具
 ├── libs/
 │   ├── track_geometry/    线路惯性系、轨道几何、轨型系与站位投影
+│   ├── configuration/     严格 JSON 的一次性类型化加载边界
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── multibody_model/   模型中立的程序化多体建模门面
 │   ├── system_assembly/  模型中立系统组装层
 │   ├── integrators/      抽象推进器与 CVODE 后端
 │   ├── forces/           力元
 │   └── equilibrium/      静平衡
+├── track_library/
+│   └── geometries/       可安装的线路几何 JSON 记录
 └── tests/
     ├── comparison/       必需观测与容差判定
     ├── contract/         模型中立场景与观测语义
@@ -78,17 +81,19 @@ OpenRailVehicleDynamics/
 
 已建模块的 `include/orvd/<module>/` 是公共编译接口头，`src/` 是实现；例如
 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。安装包导出
-`ORVD::track_geometry`、`ORVD::multibody_runtime`、`ORVD::multibody_model`、
+`ORVD::track_geometry`、`ORVD::configuration`、`ORVD::multibody_runtime`、`ORVD::multibody_model`、
 `ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和接入头不安装。
 尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 
-Eigen 3.4.0、fmt 9.1.0 与精确版本 SUNDIALS 7.7.0 是当前产品的必需依赖，缺失时配置立即
-失败。开发构建可通过标准 CMake 搜索前缀提供依赖；离线源码包则携带三者的锁定官方归档与
-许可证，由同一工具链安装到私有前缀后仍经唯一的 `find_package()` 路径消费。SUNDIALS 只启用
+Eigen 3.4.0、fmt 9.1.0、nlohmann/json 3.12.0 与精确版本 SUNDIALS 7.7.0 是当前产品的构建
+依赖，缺失时配置立即失败。开发构建可通过标准 CMake 搜索前缀提供依赖；离线源码包则携带四者
+的具名官方归档与许可证，由同一工具链安装到私有前缀后仍经唯一的 `find_package()` 路径消费。
+SUNDIALS 只启用
 CVODE 软件包、串行向量和稠密求解所需目标，关闭 OpenMP、MPI、BLAS、LAPACK 等当前无消费者
-后端；上游无条件构建的基础模块不作私有补丁裁剪。Ceres 尚无消费者，因此不查找、不设选项、
+后端；上游无条件构建的基础模块不作私有补丁裁剪。nlohmann/json 只编译进配置实现，不进入
+公共头或安装包依赖。Ceres 尚无消费者，因此不查找、不设选项、
 不进源码包。
 
 ## 构建与安装
@@ -118,8 +123,7 @@ cmake --install build
 ## GZ18
 
 GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道几何、配置、车辆拓扑、启动状态、
-力元、轮轨接触、数值历史与端到端被动纵切逐 Goal 推进；当前只收口 G47，不以尚不存在的
-后续消费者提前塑造产品接口。
+力元、轮轨接触、数值历史与端到端被动纵切逐 Goal 推进；G48 完成后暂停，不自动进入车型装配。
 
 ## 许可证
 

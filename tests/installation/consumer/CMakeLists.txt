@@ -4,13 +4,30 @@ project(orvd_installation_consumer LANGUAGES CXX)
 
 find_package(OpenRailVehicleDynamics CONFIG REQUIRED)
 
+if(TARGET nlohmann_json::nlohmann_json)
+    message(FATAL_ERROR
+        "the installed ORVD package unexpectedly imports nlohmann/json")
+endif()
+get_target_property(orvd_configuration_links
+    ORVD::configuration INTERFACE_LINK_LIBRARIES)
+if("${orvd_configuration_links}" MATCHES "nlohmann")
+    message(FATAL_ERROR
+        "ORVD::configuration leaks nlohmann/json: ${orvd_configuration_links}")
+endif()
+
 add_executable(orvd_installation_smoke installation_smoke.cc)
 target_compile_features(orvd_installation_smoke PRIVATE cxx_std_23)
-# Two exported targets, because two installed header surfaces have to be
-# reachable: the integrator chain and the line layer, which is a peer of it
-# rather than a dependency.
 target_link_libraries(orvd_installation_smoke
     PRIVATE ORVD::integrators ORVD::track_geometry)
+
+# Keep the strict configuration target isolated from every other ORVD target.
+# This prevents another target from accidentally supplying a missing public
+# include or link dependency and hiding a broken installed export.
+add_executable(configuration_installation_smoke
+    configuration_installation_smoke.cc)
+target_compile_features(configuration_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(configuration_installation_smoke
+    PRIVATE ORVD::configuration)
 
 # Keep a separate consumer that receives no include paths or transitive
 # dependencies from another ORVD target. The combined smoke above executes the

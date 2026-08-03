@@ -2,7 +2,7 @@
 """Assembles the offline, CMake-only ORVD source bundle.
 
 This is a developer packaging tool. The resulting bundle does not need Python
-or Git: its root CMake superbuild consumes only the three copied local archives.
+or Git: its root CMake superbuild consumes only the four copied local archives.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--source-root", type=Path, default=DEFAULT_SOURCE_ROOT)
     parser.add_argument("--eigen-archive", type=Path, required=True)
     parser.add_argument("--fmt-archive", type=Path, required=True)
+    parser.add_argument("--nlohmann-json-archive", type=Path, required=True)
     parser.add_argument("--sundials-archive", type=Path, required=True)
     return parser.parse_args()
 
@@ -41,13 +42,15 @@ def load_manifest(template_directory: Path) -> dict:
             f"unsupported dependency manifest schema in {manifest_path}"
         )
     records = manifest.get("dependencies")
-    if not isinstance(records, list) or {item.get("key") for item in records} != {
-        "eigen",
-        "fmt",
-        "sundials",
-    }:
+    expected_keys = {"eigen", "fmt", "nlohmann_json", "sundials"}
+    if (
+        not isinstance(records, list)
+        or len(records) != len(expected_keys)
+        or {item.get("key") for item in records} != expected_keys
+    ):
         raise ValueError(
-            f"{manifest_path} must contain exactly eigen, fmt and sundials"
+            f"{manifest_path} must contain exactly eigen, fmt, nlohmann_json "
+            "and sundials"
         )
     return manifest
 
@@ -154,6 +157,7 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
     archives = {
         "eigen": arguments.eigen_archive.resolve(),
         "fmt": arguments.fmt_archive.resolve(),
+        "nlohmann_json": arguments.nlohmann_json_archive.resolve(),
         "sundials": arguments.sundials_archive.resolve(),
     }
 

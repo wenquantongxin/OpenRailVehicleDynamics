@@ -30,6 +30,17 @@
       ]
     },
     {
+      "key": "nlohmann_json",
+      "name": "nlohmann/json",
+      "version": "3.12.0",
+      "archive": "nlohmann-json-3.12.0.tar.xz",
+      "source_directory": "json",
+      "source_url": "https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz",
+      "license_paths": [
+        "LICENSE.MIT"
+      ]
+    },
+    {
       "key": "sundials",
       "name": "SUNDIALS",
       "version": "7.7.0",

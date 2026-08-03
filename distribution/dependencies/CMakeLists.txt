@@ -35,9 +35,9 @@ endif()
 
 string(JSON _orvd_dependency_count LENGTH "${_orvd_dependency_manifest}"
        dependencies)
-if(NOT _orvd_dependency_count EQUAL 3)
+if(NOT _orvd_dependency_count EQUAL 4)
     message(FATAL_ERROR
-        "the bundle must declare exactly Eigen, fmt and SUNDIALS; found "
+        "the bundle must declare exactly Eigen, fmt, nlohmann/json and SUNDIALS; found "
         "${_orvd_dependency_count} records")
 endif()
 
@@ -56,7 +56,7 @@ foreach(index RANGE 0 ${_orvd_last_dependency})
     endif()
 endforeach()
 
-foreach(required_key IN ITEMS EIGEN FMT SUNDIALS)
+foreach(required_key IN ITEMS EIGEN FMT NLOHMANN_JSON SUNDIALS)
     if(NOT DEFINED "ORVD_${required_key}_ARCHIVE")
         message(FATAL_ERROR
             "the dependency manifest has no '${required_key}' record")
@@ -120,6 +120,17 @@ ExternalProject_Add(orvd_dependency_fmt
         -DFMT_TEST:BOOL=OFF
         -DFMT_FUZZ:BOOL=OFF)
 
+ExternalProject_Add(orvd_dependency_nlohmann_json
+    URL "${ORVD_NLOHMANN_JSON_ARCHIVE}"
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    UPDATE_COMMAND ""
+    PATCH_COMMAND ""
+    CMAKE_ARGS
+        ${_orvd_cxx_cache_args}
+        -DJSON_BuildTests:BOOL=OFF
+        -DJSON_Install:BOOL=ON
+        -DJSON_MultipleHeaders:BOOL=ON)
+
 ExternalProject_Add(orvd_dependency_sundials
     URL "${ORVD_SUNDIALS_ARCHIVE}"
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
@@ -178,6 +189,7 @@ ExternalProject_Add(orvd_product
     DEPENDS
         orvd_dependency_eigen
         orvd_dependency_fmt
+        orvd_dependency_nlohmann_json
         orvd_dependency_sundials
         orvd_dependency_licenses
     CMAKE_ARGS
@@ -186,6 +198,7 @@ ExternalProject_Add(orvd_product
         -DORVD_BUILD_DRAKE_REFERENCE_TESTS:BOOL=OFF
         "-DEigen3_DIR:PATH=${CMAKE_INSTALL_PREFIX}/share/eigen3/cmake"
         "-Dfmt_DIR:PATH=${CMAKE_INSTALL_PREFIX}/lib/cmake/fmt"
+        "-Dnlohmann_json_DIR:PATH=${CMAKE_INSTALL_PREFIX}/share/cmake/nlohmann_json"
         "-DSUNDIALS_DIR:PATH=${CMAKE_INSTALL_PREFIX}/lib/cmake/sundials")
 
 message(STATUS
