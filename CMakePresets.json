@@ -61,6 +61,13 @@
       }
     },
     {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "drake-reference",
       "configurePreset": "drake-reference",
       "output": {

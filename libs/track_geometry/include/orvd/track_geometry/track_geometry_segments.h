@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <utility>
 #include <vector>
 
 // One scalar profile along the line: curvature, superelevation or grade.
@@ -61,11 +60,22 @@ class TrackScalarProfile {
     // evaluation on the right-hand-side path would have to return a number for
     // a quantity that does not exist.
     //
-    // Throws std::invalid_argument when the start station or any segment or
-    // window parameter is not finite, when a segment has non-positive length,
-    // when a seam names a segment with no successor, when two seams name the
-    // same segment, when a window reaches past either adjacent segment, when
-    // two windows overlap, or when an undeclared boundary is discontinuous.
+    // Throws std::invalid_argument on every declaration this profile cannot
+    // stand behind, in four groups:
+    //
+    //   * the profile has no segments, so no domain to evaluate on;
+    //   * a stated number is not finite, a segment length is not positive, a
+    //     window length is not positive, or a segment shape is not one this
+    //     library knows;
+    //   * a seam names a segment with no successor, two seams name the same
+    //     segment, a window reaches past either adjacent segment, two windows
+    //     overlap, or an undeclared boundary is discontinuous;
+    //   * the declaration is representable one number at a time but not as a
+    //     whole in binary64 — a segment whose end station does not land
+    //     strictly after its start, a window too narrow to have two distinct
+    //     endpoints, or a coefficient or accumulated integral that comes out
+    //     non-finite. These last are refused rather than rounded into
+    //     something plausible.
     TrackScalarProfile(double start_track_station_meters,
                        std::vector<TrackScalarSegment> segments,
                        std::vector<TrackSeamTransition> seam_transitions);
@@ -101,15 +111,10 @@ class TrackScalarProfile {
 
     // The stations at which the piecewise definition changes: segment
     // boundaries and seam window edges, with the domain end appended.
+    // A const reference only: moving the breakpoints out would leave the
+    // profile with station bounds it can no longer resolve into pieces.
     [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
-        const & {
-        return breakpoints_;
-    }
-    [[nodiscard]] std::vector<double> breakpoint_track_stations_meters() && {
-        return std::move(breakpoints_);
-    }
-    [[nodiscard]] std::vector<double> breakpoint_track_stations_meters()
-        const && {
+        const {
         return breakpoints_;
     }
 

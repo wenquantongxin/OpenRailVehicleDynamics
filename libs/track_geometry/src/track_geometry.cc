@@ -28,6 +28,11 @@ constexpr double kQuadratureWeights[kQuadraturePointCount] = {
     0.3626837833783620, 0.3626837833783620, 0.3137066458778873,
     0.2223810344533745, 0.1012285362903763};
 
+// The node table is bounded so that a spacing which is merely finite and
+// positive cannot ask for an allocation nothing on the machine can hold, and so
+// that the count never leaves the range a double converts to safely.
+constexpr std::size_t kMaximumStationNodeCount = 1u << 24;
+
 constexpr int kMaximumRefinementIterations = 64;
 // The refinement stops when the bracket has closed to this many units in the
 // last place of its endpoints. The ULP size necessarily follows the absolute
@@ -37,9 +42,20 @@ constexpr double kBracketUlpCount = 4.0;
 // The first derivative of the squared-distance objective has units of metres
 // times metres per metre, so its residual bound scales with the distance.
 constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
-// Two distinct minima closer than this in relative distance make the nearest
-// station ambiguous.
-constexpr double kEquidistantRelativeTolerance = 1.0e-9;
+// What separates the two candidates is measured in station distance from the
+// seed, and two scales bear on whether that separation means anything.
+//
+// One is the declared search half width: inside a window the caller says is
+// this wide, a difference a billionth of that width is not a difference the
+// caller can have meant. The other is the representable resolution of the
+// station values themselves. Stations are absolute mileages, so at a large
+// station origin the last bits of two nearly equal gaps are noise no matter how
+// narrow the window is, and a purely width-relative test would read that noise
+// as a real ordering and pick a branch out of it. The threshold is therefore the
+// larger of the two; neither alone is a bound, and an absolute floor in metres
+// would be neither.
+constexpr double kSeedGapRelativeTolerance = 1.0e-9;
+constexpr double kSeedGapUlpCount = 64.0;
 void RequireFinitePositive(double value, const char* what) {
     if (!std::isfinite(value) || value <= 0.0) {
         throw std::invalid_argument(std::string("TrackGeometry: ") + what +
@@ -65,12 +81,28 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
     RequireFinitePositive(station_node_spacing_meters,
                           "the station node spacing");
 
-    const auto same_domain = [this](const TrackScalarProfile& other,
-                                    const char* name) {
+    // The end station of each family is a running sum of its own segment
+    // lengths, so two families that cover the same line to the last decimal
+    // still need not agree bit for bit: the same total reached through a
+    // different partition rounds differently. Comparing exactly would refuse a
+    // large share of perfectly ordinary decimal layouts, so the ends have to
+    // agree only to the representable resolution of the accumulation, bounded
+    // by the number of additions each family performed.
+    const auto agrees = [](double left, double right, std::size_t additions) {
+        const double scale = std::max({1.0, std::abs(left), std::abs(right)});
+        const double bound = static_cast<double>(additions + 1) *
+                             std::numeric_limits<double>::epsilon() * scale;
+        return std::abs(left - right) <= bound;
+    };
+    const auto same_domain = [this, &agrees](const TrackScalarProfile& other,
+                                             const char* name) {
+        const std::size_t additions =
+            other.breakpoint_track_stations_meters().size() +
+            curvature_.breakpoint_track_stations_meters().size();
         if (other.start_track_station_meters() !=
                 curvature_.start_track_station_meters() ||
-            other.end_track_station_meters() !=
-                curvature_.end_track_station_meters()) {
+            !agrees(other.end_track_station_meters(),
+                    curvature_.end_track_station_meters(), additions)) {
             throw std::invalid_argument(
                 std::string("TrackGeometry: the ") + name +
                 " profile covers [" +
@@ -94,8 +126,24 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
         const double from = breakpoints[index];
         const double to = breakpoints[index + 1];
         const double length = to - from;
-        const auto panels = static_cast<std::size_t>(
-            std::max(1.0, std::ceil(length / station_node_spacing_meters_)));
+        const double requested_panels =
+            std::max(1.0, std::ceil(length / station_node_spacing_meters_));
+        // A spacing may be finite and positive and still be absurd. Converting
+        // an out-of-range double to an unsigned integer is undefined, and even
+        // well inside that range a spacing of a micrometre over a kilometre
+        // asks for a node table of tens of gigabytes. The bound is refused
+        // rather than silently honoured.
+        if (requested_panels > static_cast<double>(kMaximumStationNodeCount)) {
+            throw std::invalid_argument(
+                "TrackGeometry: a station node spacing of " +
+                Describe(station_node_spacing_meters_) +
+                " m would need " + Describe(requested_panels) +
+                " nodes over a stretch of " + Describe(length) +
+                " m, past the limit of " +
+                std::to_string(kMaximumStationNodeCount) +
+                "; choose a coarser spacing");
+        }
+        const auto panels = static_cast<std::size_t>(requested_panels);
         for (std::size_t panel = 0; panel < panels; ++panel) {
             StationNode node;
             node.track_station_meters =
@@ -618,8 +666,16 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
     }
     if (nearest_rival.found) {
         const double separation = nearest_rival_gap - nearest_gap;
-        if (separation <= kEquidistantRelativeTolerance *
-                              std::max(1.0, search_half_width_meters)) {
+        const double station_magnitude =
+            std::max({std::abs(seed_track_station_meters),
+                      std::abs(nearest.track_station_meters),
+                      std::abs(nearest_rival.track_station_meters), 1.0});
+        const double indistinguishable =
+            std::max(kSeedGapRelativeTolerance * search_half_width_meters,
+                     kSeedGapUlpCount *
+                         std::numeric_limits<double>::epsilon() *
+                         station_magnitude);
+        if (separation <= indistinguishable) {
             throw std::runtime_error(
                 "TrackGeometry::ProjectPointNearSeed: the minima at stations " +
                 Describe(nearest.track_station_meters) + " m and " +

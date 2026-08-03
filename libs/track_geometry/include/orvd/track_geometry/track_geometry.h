@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <optional>
-#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -74,33 +73,19 @@ class TrackGeometry {
         return rail_reference_lateral_span_meters_;
     }
 
-    [[nodiscard]] const TrackScalarProfile& curvature_profile() const & {
+    // Const references only, deliberately. An rvalue overload that moved a
+    // profile out would leave the geometry answering for a domain it no longer
+    // has any pieces to cover: the station bounds are plain doubles and would
+    // still admit a query, and the piece lookup would then compute an index
+    // from an empty vector. A line is a long-lived object, not a value whose
+    // parts a caller takes away.
+    [[nodiscard]] const TrackScalarProfile& curvature_profile() const {
         return curvature_;
     }
-    [[nodiscard]] TrackScalarProfile curvature_profile() && {
-        return std::move(curvature_);
-    }
-    [[nodiscard]] TrackScalarProfile curvature_profile() const && {
-        return curvature_;
-    }
-
-    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const & {
+    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const {
         return superelevation_;
     }
-    [[nodiscard]] TrackScalarProfile superelevation_profile() && {
-        return std::move(superelevation_);
-    }
-    [[nodiscard]] TrackScalarProfile superelevation_profile() const && {
-        return superelevation_;
-    }
-
-    [[nodiscard]] const TrackScalarProfile& grade_profile() const & {
-        return grade_;
-    }
-    [[nodiscard]] TrackScalarProfile grade_profile() && {
-        return std::move(grade_);
-    }
-    [[nodiscard]] TrackScalarProfile grade_profile() const && {
+    [[nodiscard]] const TrackScalarProfile& grade_profile() const {
         return grade_;
     }
 

@@ -118,20 +118,51 @@ void CheckClosedFormRotation() {
            "triad is right-handed rather than mirrored");
 }
 
+// The kinematics and the pose are values an evaluation produces, so a reference
+// bound to a member of one that is already expiring would dangle. Reading the
+// members and finding them finite proves nothing — freed storage usually still
+// holds finite bit patterns. What settles it is the static type: on an rvalue
+// the accessors must yield a value, so the reference below extends a lifetime
+// instead of binding into a corpse. Deleting the rvalue overloads fails the
+// build here rather than leaving a test that passes by luck.
+static_assert(
+    std::is_same_v<decltype(std::declval<const TrackFrameKinematics&>().pose()),
+                   const TrackFramePose&>);
+static_assert(
+    std::is_same_v<decltype(std::declval<TrackFrameKinematics&&>().pose()),
+                   TrackFramePose>);
+static_assert(std::is_same_v<decltype(std::declval<TrackFramePose&&>()
+                                          .rotation_inertial_from_track()),
+                             Eigen::Matrix3d>);
+static_assert(std::is_same_v<decltype(std::declval<TrackFramePose&&>()
+                                          .origin_in_inertial_meters()),
+                             Eigen::Vector3d>);
+static_assert(
+    std::is_same_v<decltype(std::declval<TrackFrameKinematics&&>()
+                                .centerline_derivative_in_inertial_meters_per_meter()),
+                   Eigen::Vector3d>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<TrackFrameKinematics&&>()
+                     .track_frame_rotation_rate_in_inertial_radians_per_meter()),
+        Eigen::Vector3d>);
+
 void CheckTemporaryAccessorsOwnTheirResults() {
     const TrackGeometry line =
         lines::MakeSteepConstantLine(kSteepGrade, kSteepSuperelevationMeters);
-    // A reference bound to this expression must extend the lifetime of a value,
-    // not bind to a member of an already-destroyed TrackFrameKinematics.
-    const auto& rotation = line.EvaluateTrackFrame(kStationMeters)
-                               .pose()
-                               .rotation_inertial_from_track();
-    const auto& origin = line.EvaluateTrackFrame(kStationMeters)
-                             .pose()
-                             .origin_in_inertial_meters();
-    Expect(rotation.allFinite() && origin.allFinite(),
-           "accessing pose members through a temporary kinematics result returns "
-           "owned values rather than dangling references");
+    // The value that chain produces has to be the value the const-reference
+    // path gives, not merely something finite.
+    const auto& through_temporaries = line.EvaluateTrackFrame(kStationMeters)
+                                          .pose()
+                                          .rotation_inertial_from_track();
+    const auto kinematics = line.EvaluateTrackFrame(kStationMeters);
+    Expect((through_temporaries -
+            kinematics.pose().rotation_inertial_from_track())
+                   .cwiseAbs()
+                   .maxCoeff() == 0.0,
+           "a rotation read through a chain of temporaries equals the one read "
+           "from a named result, so the copy the rvalue overloads make carries "
+           "the values rather than a view of released storage");
 }
 
 void CheckConstructionOrder() {
@@ -152,11 +183,13 @@ void CheckConstructionOrder() {
     Expect((correct_order - reversed_order).cwiseAbs().maxCoeff() > 1.0e-3,
            "on this fixture the two construction orders give visibly different "
            "matrices, so the next check has something to separate");
-    Expect((measured - correct_order).cwiseAbs().maxCoeff() <= 16.0 * kMachine,
-           "the roll is applied about the roll-free frame's own longitudinal "
-           "axis after that frame is built, not about the inertial axis before");
+    // That the measured rotation equals the correct order is already the
+    // closed-form check above, on this same fixture at this same station. What
+    // is left for this gate to say is the negative one.
     Expect((measured - reversed_order).cwiseAbs().maxCoeff() > 1.0e-3,
-           "the track frame is not the reversed construction order");
+           "the roll is applied about the roll-free frame's own longitudinal "
+           "axis after that frame is built, not about the inertial axis before, "
+           "so the track frame is not the reversed construction order");
 }
 
 void CheckDegenerateFixtureWouldNotDiscriminate() {
@@ -210,8 +243,9 @@ void CheckSuperelevationSignByRailHeights() {
                "the same difference measured along the inertial vertical is "
                "shortened by the tangent norm, which is the pitch showing up");
 
-        // The sign statement itself: positive superelevation puts the right
-        // rail lower, and the inertial frame has its z axis downward.
+        // The convention in words. It follows from the signed magnitude above
+        // rather than adding to it, and is written out so that the sign is
+        // stated somewhere as a sign and not only as the sign of a difference.
         const bool right_is_lower = right_rail.z() > left_rail.z();
         Expect(right_is_lower == (superelevation > 0.0),
                "a positive superelevation puts the right rail lower and a "

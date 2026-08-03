@@ -260,6 +260,67 @@ void CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin() {
            "than for an unrelated search failure");
 }
 
+// The other side of that threshold. Two stationary points are indistinguishable
+// only against a scale the caller declared or against the resolution of the
+// station values themselves; a fixed distance in metres is neither. The same
+// one-millimetre arch, now at the origin, with a seed nudged a ten-billionth of
+// a metre off centre: the nudge is minute in absolute terms and enormous
+// against both scales that bear on it, so the search has to name a branch
+// rather than call the two equal.
+void CheckASubMetreWindowIsNotJudgedAgainstAMetre() {
+    constexpr double kLengthMeters = 1.0e-3;
+    constexpr double kNodeSpacingMeters = 1.0e-4;
+    const TrackGeometry line(
+        TrackScalarProfile(0.0, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(0.0, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(
+            0.0,
+            {lines::Blend(kLengthMeters, lines::kArchGrade,
+                          -lines::kArchGrade)},
+            {}),
+        lines::kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+    const double length = line.end_track_station_meters() -
+                          line.start_track_station_meters();
+    const double midpoint = 0.5 * length;
+    Eigen::Vector3d point = line.CenterlinePositionInInertialMeters(midpoint);
+    point.z() += 0.5125 * length;
+
+    const double half_width = 0.49 * length;
+    const double nudge = 1.0e-10;
+    const double right_root =
+        line.ProjectPointNearSeed(point, 0.8 * length, 0.15 * length)
+            .track_station_meters();
+
+    // The seed sits a hair to the right of centre, so the right root is nearer
+    // by twice the nudge. Both the declared window and the station resolution
+    // are far below that difference; only a threshold of about a metre, applied
+    // to a window half a millimetre wide, would erase it.
+    const double resolved =
+        line.ProjectPointNearSeed(point, midpoint + nudge, half_width)
+            .track_station_meters();
+    Expect(std::abs(resolved - right_root) <= 1.0e-12,
+           "a seed nudged off centre inside a half-millimetre window names the "
+           "nearer branch instead of being told the two are the same distance "
+           "away");
+    Expect(2.0 * nudge < 1.0e-9 &&
+               2.0 * nudge > 1.0e3 * std::numeric_limits<double>::epsilon(),
+           "that difference is below the retired absolute threshold and far "
+           "above the resolution of the stations involved, so the check "
+           "separates the two rules");
+
+    // And the centred seed, on the same fixture and the same window, is still
+    // refused: the threshold was narrowed, not abandoned.
+    bool refused = false;
+    try {
+        (void)line.ProjectPointNearSeed(point, midpoint, half_width);
+    } catch (const std::runtime_error&) {
+        refused = true;
+    }
+    Expect(refused,
+           "the same query with the seed exactly centred is still refused, so "
+           "the narrowed threshold still recognises a genuine tie");
+}
+
 void CheckBoundaryCanonicalisationKeepsTheResidualGate() {
     // A very large positive Hessian can make gradient / Hessian lie within a
     // few station ULPs even while the gradient itself is nowhere near the
@@ -524,6 +585,7 @@ int main() {
     CheckTemporaryProjectionOwnsItsPoint();
     CheckRootsTheNodeGridDoesNotSurround();
     CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin();
+    CheckASubMetreWindowIsNotJudgedAgainstAMetre();
     CheckBoundaryCanonicalisationKeepsTheResidualGate();
     CheckMinimaEquallyFarFromTheSeedAreRefused();
     CheckSecondOrderConditionIsEnforced();

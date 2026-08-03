@@ -37,6 +37,10 @@ namespace orvd::track_geometry {
 // The gravitational acceleration a vehicle assembler must install when it
 // builds a model against this line. The magnitude is the caller's to choose;
 // the direction is not.
+//
+// Throws std::invalid_argument when the magnitude is not finite and positive. A
+// negative magnitude is refused rather than honoured: it would be a way to flip
+// the direction past the one definition this header exists to hold.
 [[nodiscard]] Eigen::Vector3d GravitationalAccelerationInInertial(
     double magnitude_meters_per_second_squared);
 
