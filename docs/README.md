@@ -7,7 +7,7 @@
 | [planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) | **已完成底座路书**：17 个子目标、46 个原子 Goal、依赖关系与完成门；全部 Goal 已完成，执行边界止于 G46。 |
 | [planning/rail_vehicle_dynamics_migration/DISCUSSION_AND_DECISION_LOG.md](planning/rail_vehicle_dynamics_migration/DISCUSSION_AND_DECISION_LOG.md) | **车辆迁移讨论与裁决账本**：逐轮记录分歧、裁决、项目负责人的总规划与待决问题；不定义实施顺序。 |
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md](planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md) | **车辆迁移协作观察簿**：Codex、Claude 等共同维护的源码事实、规划初期五组只读清单快照、假设和开放问题。 |
-| [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **待激活车辆迁移路书**：当前无 Goal、无实施授权；项目负责人显式启用后才成为唯一现行实施路书。 |
+| [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **现行车辆迁移路书**：6 个子目标、9 个原子 Goal（G47–G55）；已由项目负责人启用，当前 Goal 为 G47，是唯一带「当前 Goal」的进度权威。 |
 | [engineering/FIRST_PARTY_ENGINEERING_RULES.md](engineering/FIRST_PARTY_ENGINEERING_RULES.md) | **第一方工程约束**：命名、兼容层、输入解析、检查深度、热路径与验收依据；即刻生效。 |
 | [adr/](adr/) | **架构决策记录**：方案 B、单一 Context、CVODE 优先等已接受决策。 |
 | [design/MULTIBODY_RUNTIME_CONTRACT.md](design/MULTIBODY_RUNTIME_CONTRACT.md) | **多体运行时契约**：落位树对 systems 类型、状态、参数与缓存的逐项消费与处置，以及目标依赖方向。G20 的产物，G21–G28 的输入。 |
@@ -23,7 +23,7 @@
 
 1. 先读已完成底座路书，确认 ORVD 已有能力及 G46 的边界。
 2. 车辆迁移讨论阶段依次读裁决账本和协作观察簿；不得把其中的假设当作实施命令。
-3. 只有待激活车辆迁移路书出现当前 Goal 后，才按其中的前置产物和完成门实施。
+3. 按现行车辆迁移路书的「当前 Goal」推进；只实施该 Goal 的唯一产物，并逐条满足其完成门。
 4. 写第一方代码前读第一方工程约束；它即刻生效，不随 Goal 变化。
 5. 遇到长期架构取舍时读对应 ADR。
 6. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
