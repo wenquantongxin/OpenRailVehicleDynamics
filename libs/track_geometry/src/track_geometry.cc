@@ -39,10 +39,6 @@ constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
 // Two distinct minima closer than this in relative distance make the nearest
 // station ambiguous.
 constexpr double kEquidistantRelativeTolerance = 1.0e-9;
-// A minimum sitting on a node is bracketed by both neighbouring intervals, so
-// the two refinements land on the same station and have to be merged before the
-// ambiguity test sees them.
-constexpr double kRootMergeRelativeTolerance = 1.0e-9;
 void RequireFinitePositive(double value, const char* what) {
     if (!std::isfinite(value) || value <= 0.0) {
         throw std::invalid_argument(std::string("TrackGeometry: ") + what +
@@ -426,6 +422,49 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
         EvaluateObjectiveDerivatives(point_in_inertial_meters, low).gradient;
     const double gradient_at_high =
         EvaluateObjectiveDerivatives(point_in_inertial_meters, high).gradient;
+
+    // A minimum exactly on a shared node belongs to both adjacent closed
+    // intervals. Canonicalise such a root to the node itself so duplicate
+    // removal can use interval topology and exact station identity instead of
+    // a distance tolerance that grows with the arbitrary station origin.
+    const auto candidate_at_boundary =
+        [this, &point_in_inertial_meters](double boundary_station) {
+            ProjectionCandidate boundary_candidate;
+            const ObjectiveDerivatives boundary_derivatives =
+                EvaluateObjectiveDerivatives(point_in_inertial_meters,
+                                             boundary_station);
+            const double station_ulp = std::max(
+                std::nextafter(boundary_station,
+                               std::numeric_limits<double>::infinity()) -
+                    boundary_station,
+                boundary_station -
+                    std::nextafter(
+                        boundary_station,
+                        -std::numeric_limits<double>::infinity()));
+            constexpr double kBoundaryCanonicalisationUlpCount = 64.0;
+            if (boundary_derivatives.hessian > 0.0 &&
+                std::abs(boundary_derivatives.gradient /
+                         boundary_derivatives.hessian) <=
+                    kBoundaryCanonicalisationUlpCount * station_ulp) {
+                const Eigen::Vector3d boundary_offset =
+                    point_in_inertial_meters -
+                    CenterlinePositionUnchecked(boundary_station);
+                boundary_candidate.found = true;
+                boundary_candidate.track_station_meters = boundary_station;
+                boundary_candidate.squared_distance_meters_squared =
+                    boundary_offset.squaredNorm();
+            }
+            return boundary_candidate;
+        };
+    if (const ProjectionCandidate at_low = candidate_at_boundary(low);
+        at_low.found) {
+        return at_low;
+    }
+    if (const ProjectionCandidate at_high = candidate_at_boundary(high);
+        at_high.found) {
+        return at_high;
+    }
+
     // Walking downhill from the start of the interval and uphill at its end is
     // exactly the condition for a minimum to lie between them. Anything else is
     // reported as "not here" rather than searched anyway.
@@ -494,6 +533,7 @@ TrackStationProjection TrackGeometry::ProjectPointColdStart(
     ProjectionCandidate best;
     ProjectionCandidate runner_up;
     ProjectionCandidate previous;
+    std::size_t previous_interval_index = 0;
     for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
         const ProjectionCandidate refined = RefineBracketedMinimum(
             point_in_inertial_meters, nodes_[index].track_station_meters,
@@ -504,14 +544,15 @@ TrackStationProjection TrackGeometry::ProjectPointColdStart(
         // A minimum sitting on a shared node is bracketed by both neighbouring
         // intervals. Counting it twice would make every such point look like a
         // pair of equally near stations.
-        if (previous.found &&
-            std::abs(refined.track_station_meters -
-                     previous.track_station_meters) <=
-                kRootMergeRelativeTolerance *
-                    std::max(1.0, std::abs(refined.track_station_meters))) {
+        if (previous.found && previous_interval_index + 1 == index &&
+            refined.track_station_meters ==
+                nodes_[index].track_station_meters &&
+            previous.track_station_meters ==
+                nodes_[index].track_station_meters) {
             continue;
         }
         previous = refined;
+        previous_interval_index = index;
         if (!best.found || refined.squared_distance_meters_squared <
                                best.squared_distance_meters_squared) {
             runner_up = best;
@@ -580,6 +621,7 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
     ProjectionCandidate nearest;
     double nearest_gap = std::numeric_limits<double>::infinity();
     ProjectionCandidate previous;
+    std::size_t previous_interval_index = 0;
     for (std::size_t index = NodeIndexAtOrBefore(lower);
          index + 1 < nodes_.size() &&
          nodes_[index].track_station_meters < upper;
@@ -593,14 +635,15 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
         if (!refined.found) {
             continue;
         }
-        if (previous.found &&
-            std::abs(refined.track_station_meters -
-                     previous.track_station_meters) <=
-                kRootMergeRelativeTolerance *
-                    std::max(1.0, std::abs(refined.track_station_meters))) {
+        if (previous.found && previous_interval_index + 1 == index &&
+            refined.track_station_meters ==
+                nodes_[index].track_station_meters &&
+            previous.track_station_meters ==
+                nodes_[index].track_station_meters) {
             continue;
         }
         previous = refined;
+        previous_interval_index = index;
         const double gap = std::abs(refined.track_station_meters -
                                     seed_track_station_meters);
         if (gap < nearest_gap) {

@@ -15,6 +15,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <Eigen/Dense>
 
@@ -191,6 +192,70 @@ void CheckEquidistantMinimaAreRefused() {
            "on the same line");
 }
 
+void CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin() {
+    constexpr double start_station_meters = 1.0e6;
+    constexpr double straight_length_meters = 6.0e-4;
+    constexpr double turn_radius_meters = 1.0e-4;
+    constexpr double half_turn_radians = 3.14159265358979323846;
+    const double half_turn_length_meters =
+        half_turn_radians * turn_radius_meters;
+    const auto level_profile_segments = [&] {
+        return std::vector<orvd::track_geometry::TrackScalarSegment>{
+            lines::Constant(straight_length_meters, 0.0),
+            lines::Constant(half_turn_length_meters, 0.0),
+            lines::Constant(straight_length_meters, 0.0)};
+    };
+    TrackGeometry line(
+        orvd::track_geometry::TrackScalarProfile(
+            start_station_meters,
+            {lines::Constant(straight_length_meters, 0.0),
+             lines::Constant(half_turn_length_meters,
+                             1.0 / turn_radius_meters),
+             lines::Constant(straight_length_meters, 0.0)},
+            {}),
+        orvd::track_geometry::TrackScalarProfile(
+            start_station_meters, level_profile_segments(), {}),
+        orvd::track_geometry::TrackScalarProfile(
+            start_station_meters, level_profile_segments(), {}),
+        lines::kRailReferenceLateralSpanMeters, 5.0e-6);
+
+    const double first_root_station =
+        start_station_meters + 0.5 * straight_length_meters;
+    const double second_root_station =
+        start_station_meters + 1.5 * straight_length_meters +
+        half_turn_length_meters;
+    const Eigen::Vector3d point =
+        PointBesideStation(line, first_root_station, turn_radius_meters);
+    const double first_local =
+        line.ProjectPointNearSeed(point, first_root_station,
+                                  0.25 * straight_length_meters)
+            .track_station_meters();
+    const double second_local =
+        line.ProjectPointNearSeed(point, second_root_station,
+                                  0.25 * straight_length_meters)
+            .track_station_meters();
+    Expect(std::abs(first_local - first_root_station) <= 1.0e-8 &&
+               std::abs(second_local - second_root_station) <= 1.0e-8 &&
+               second_local > first_local,
+           "two local searches first establish that the translated fixture "
+           "contains two distinct admissible roots");
+
+    bool refused = false;
+    std::string message;
+    try {
+        (void)line.ProjectPointColdStart(point);
+    } catch (const std::runtime_error& error) {
+        refused = true;
+        message = error.what();
+    }
+    Expect(refused,
+           "two distinct equidistant roots remain distinct when the same "
+           "geometry is translated to a large absolute track station");
+    Expect(message.find("equally close") != std::string::npos,
+           "the translated fixture is refused for ambiguity rather than for "
+           "an unrelated search failure");
+}
+
 void CheckSecondOrderConditionIsEnforced() {
     // Beyond the centre of curvature the stationary point of the distance is a
     // maximum, not a minimum: the second derivative of the objective is
@@ -331,6 +396,7 @@ int main() {
     CheckProjectionKeepsNoHistory();
     CheckTemporaryProjectionOwnsItsPoint();
     CheckEquidistantMinimaAreRefused();
+    CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin();
     CheckSecondOrderConditionIsEnforced();
     CheckArgumentRefusals();
     if (failure_count != 0) {
