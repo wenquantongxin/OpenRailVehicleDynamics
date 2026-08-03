@@ -1,0 +1,550 @@
+#include "orvd/track_geometry/track_geometry.h"
+
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+#include <Eigen/Geometry>
+
+namespace orvd::track_geometry {
+namespace {
+
+std::string Describe(double value) { return std::to_string(value); }
+
+// An eight-point Gauss-Legendre rule on [-1, 1]. Fixed order and fixed panel
+// length make the quadrature error a stated property of the node spacing rather
+// than something an adaptive rule decides per call, and keep the evaluation
+// free of any allocation.
+constexpr int kQuadraturePointCount = 8;
+constexpr double kQuadratureAbscissae[kQuadraturePointCount] = {
+    -0.9602898564975363, -0.7966664774136267, -0.5255324099163290,
+    -0.1834346424956498, 0.1834346424956498,  0.5255324099163290,
+    0.7966664774136267,  0.9602898564975363};
+constexpr double kQuadratureWeights[kQuadraturePointCount] = {
+    0.1012285362903763, 0.2223810344533745, 0.3137066458778873,
+    0.3626837833783620, 0.3626837833783620, 0.3137066458778873,
+    0.2223810344533745, 0.1012285362903763};
+
+constexpr int kMaximumRefinementIterations = 32;
+// A station converges when successive iterates agree to this relative bound;
+// stations run to a few thousand metres, so this is a few units in the last
+// place of a double.
+constexpr double kStationRelativeTolerance = 1.0e-13;
+// The first derivative of the squared-distance objective has units of metres
+// times metres per metre, so its residual bound scales with the distance.
+constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
+// Two distinct minima closer than this in relative distance make the nearest
+// station ambiguous.
+constexpr double kEquidistantRelativeTolerance = 1.0e-9;
+
+void RequireFinitePositive(double value, const char* what) {
+    if (!std::isfinite(value) || value <= 0.0) {
+        throw std::invalid_argument(std::string("TrackGeometry: ") + what +
+                                    " must be finite and positive, got " +
+                                    Describe(value));
+    }
+}
+
+}  // namespace
+
+TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
+                             TrackScalarProfile superelevation_meters,
+                             TrackScalarProfile centerline_upward_grade,
+                             double rail_reference_lateral_span_meters,
+                             double station_node_spacing_meters)
+    : curvature_(std::move(curvature_radians_per_meter)),
+      superelevation_(std::move(superelevation_meters)),
+      grade_(std::move(centerline_upward_grade)),
+      rail_reference_lateral_span_meters_(rail_reference_lateral_span_meters),
+      station_node_spacing_meters_(station_node_spacing_meters) {
+    RequireFinitePositive(rail_reference_lateral_span_meters,
+                          "the rail reference lateral span");
+    RequireFinitePositive(station_node_spacing_meters,
+                          "the station node spacing");
+
+    const auto same_domain = [this](const TrackScalarProfile& other,
+                                    const char* name) {
+        if (other.start_track_station_meters() !=
+                curvature_.start_track_station_meters() ||
+            other.end_track_station_meters() !=
+                curvature_.end_track_station_meters()) {
+            throw std::invalid_argument(
+                std::string("TrackGeometry: the ") + name +
+                " profile covers [" +
+                Describe(other.start_track_station_meters()) + ", " +
+                Describe(other.end_track_station_meters()) +
+                "] m while the curvature profile covers [" +
+                Describe(curvature_.start_track_station_meters()) + ", " +
+                Describe(curvature_.end_track_station_meters()) +
+                "] m; one line has one station domain");
+        }
+    };
+    same_domain(superelevation_, "superelevation");
+    same_domain(grade_, "grade");
+
+    // Nodes sit on the curvature profile's breakpoints and subdivide each
+    // stretch between them, so an interval never straddles a change of shape.
+    const std::vector<double>& breakpoints =
+        curvature_.breakpoint_track_stations_meters();
+    nodes_.reserve(breakpoints.size() * 2);
+    for (std::size_t index = 0; index + 1 < breakpoints.size(); ++index) {
+        const double from = breakpoints[index];
+        const double to = breakpoints[index + 1];
+        const double length = to - from;
+        const auto panels = static_cast<std::size_t>(
+            std::max(1.0, std::ceil(length / station_node_spacing_meters_)));
+        for (std::size_t panel = 0; panel < panels; ++panel) {
+            StationNode node;
+            node.track_station_meters =
+                from + length * static_cast<double>(panel) /
+                           static_cast<double>(panels);
+            nodes_.push_back(node);
+        }
+    }
+    StationNode last_node;
+    last_node.track_station_meters = curvature_.end_track_station_meters();
+    nodes_.push_back(last_node);
+
+    for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
+        const double midpoint =
+            0.5 * (nodes_[index].track_station_meters +
+                   nodes_[index + 1].track_station_meters);
+        nodes_[index].interval_has_constant_curvature =
+            curvature_.LocalPolynomialDegree(midpoint) == 0;
+        nodes_[index].interval_curvature_radians_per_meter =
+            curvature_.Value(midpoint);
+    }
+
+    // The superelevation bound is a construction-time refusal. A roll of a
+    // quarter turn is not a line, and the roll rate is unbounded there, so the
+    // bound is closed rather than open.
+    const auto check_superelevation = [this](double at_station) {
+        const double value = superelevation_.Value(at_station);
+        if (std::abs(value) >= rail_reference_lateral_span_meters_) {
+            throw std::invalid_argument(
+                "TrackGeometry: the superelevation " + Describe(value) +
+                " m at station " + Describe(at_station) +
+                " m reaches or exceeds the rail reference lateral span " +
+                Describe(rail_reference_lateral_span_meters_) +
+                " m; the track roll angle and its rate are undefined there, so "
+                "this is refused rather than clamped");
+        }
+    };
+    for (const double breakpoint :
+         superelevation_.breakpoint_track_stations_meters()) {
+        check_superelevation(breakpoint);
+    }
+    for (const StationNode& node : nodes_) {
+        check_superelevation(node.track_station_meters);
+    }
+
+    // Heading is the exact integral of the curvature; only the horizontal
+    // position needs quadrature, and only where the curvature is not constant.
+    //
+    // The horizontal position is a running sum over the nodes, so its error
+    // would otherwise grow with the node count and a finer spacing would make
+    // the absolute position worse even as the quadrature got better. Neumaier
+    // compensation removes that growth, which keeps "refine the spacing and the
+    // position stops moving" a statement about the rule rather than a race
+    // between two error sources.
+    nodes_.front().heading_radians = 0.0;
+    nodes_.front().centerline_position_in_inertial_meters =
+        Eigen::Vector3d::Zero();
+    double sum_x = 0.0;
+    double sum_y = 0.0;
+    double compensation_x = 0.0;
+    double compensation_y = 0.0;
+    const auto accumulate = [](double& sum, double& compensation, double term) {
+        const double total = sum + term;
+        if (std::abs(sum) >= std::abs(term)) {
+            compensation += (sum - total) + term;
+        } else {
+            compensation += (term - total) + sum;
+        }
+        sum = total;
+    };
+    for (std::size_t index = 0; index + 1 < nodes_.size(); ++index) {
+        StationNode& next = nodes_[index + 1];
+        next.heading_radians =
+            curvature_.IntegralFromStart(next.track_station_meters);
+        const Eigen::Vector2d step =
+            HorizontalDisplacementFromNode(index, next.track_station_meters);
+        accumulate(sum_x, compensation_x, step.x());
+        accumulate(sum_y, compensation_y, step.y());
+        next.centerline_position_in_inertial_meters.x() = sum_x + compensation_x;
+        next.centerline_position_in_inertial_meters.y() = sum_y + compensation_y;
+        next.centerline_position_in_inertial_meters.z() =
+            -grade_.IntegralFromStart(next.track_station_meters);
+    }
+}
+
+void TrackGeometry::ThrowIfOutsideDomain(double track_station_meters,
+                                         const char* argument_name) const {
+    if (!std::isfinite(track_station_meters)) {
+        throw std::invalid_argument(std::string("TrackGeometry: ") +
+                                    argument_name + " must be finite, got " +
+                                    Describe(track_station_meters));
+    }
+    if (track_station_meters < start_track_station_meters() ||
+        track_station_meters > end_track_station_meters()) {
+        throw std::invalid_argument(
+            std::string("TrackGeometry: ") + argument_name + " " +
+            Describe(track_station_meters) + " m is outside the domain [" +
+            Describe(start_track_station_meters()) + ", " +
+            Describe(end_track_station_meters()) +
+            "] m; this line neither extrapolates nor clamps");
+    }
+}
+
+std::size_t TrackGeometry::NodeIndexAtOrBefore(
+    double track_station_meters) const {
+    std::size_t low = 0;
+    std::size_t high = nodes_.size() - 1;
+    while (low < high) {
+        const std::size_t middle = low + (high - low + 1) / 2;
+        if (nodes_[middle].track_station_meters <= track_station_meters) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    // The final node starts no interval, so a station that lands on it belongs
+    // to the interval that ends there.
+    if (low + 1 == nodes_.size() && low > 0) {
+        --low;
+    }
+    return low;
+}
+
+double TrackGeometry::HeadingRadiansUnchecked(
+    double track_station_meters) const {
+    return curvature_.IntegralFromStart(track_station_meters);
+}
+
+Eigen::Vector2d TrackGeometry::HorizontalDisplacementFromNode(
+    std::size_t node_index, double to_track_station_meters) const {
+    const StationNode& node = nodes_[node_index];
+    const double from = node.track_station_meters;
+    const double length = to_track_station_meters - from;
+    if (length == 0.0) {
+        return Eigen::Vector2d::Zero();
+    }
+    const double heading_at_node = node.heading_radians;
+    if (node.interval_has_constant_curvature) {
+        // The half-angle form of the circular chord. Written as a difference of
+        // sines divided by the curvature it would subtract two nearly equal
+        // numbers and then multiply the remainder by the radius, which on a
+        // gentle curve with short panels loses most of the significant digits.
+        // This form has no cancellation and degrades to the straight case on
+        // its own, so there is no separate branch to keep consistent.
+        const double half_turn =
+            0.5 * node.interval_curvature_radians_per_meter * length;
+        const double heading_at_middle = heading_at_node + half_turn;
+        const double chord_ratio =
+            half_turn == 0.0 ? 1.0 : std::sin(half_turn) / half_turn;
+        return Eigen::Vector2d(
+            length * chord_ratio * std::cos(heading_at_middle),
+            length * chord_ratio * std::sin(heading_at_middle));
+    }
+    const double half = 0.5 * length;
+    const double middle = 0.5 * (from + to_track_station_meters);
+    Eigen::Vector2d displacement = Eigen::Vector2d::Zero();
+    for (int point = 0; point < kQuadraturePointCount; ++point) {
+        const double station = middle + half * kQuadratureAbscissae[point];
+        const double heading = curvature_.IntegralFromStart(station);
+        displacement.x() += kQuadratureWeights[point] * std::cos(heading);
+        displacement.y() += kQuadratureWeights[point] * std::sin(heading);
+    }
+    return half * displacement;
+}
+
+Eigen::Vector3d TrackGeometry::CenterlinePositionUnchecked(
+    double track_station_meters) const {
+    const std::size_t index = NodeIndexAtOrBefore(track_station_meters);
+    const Eigen::Vector2d step =
+        HorizontalDisplacementFromNode(index, track_station_meters);
+    const Eigen::Vector3d& base =
+        nodes_[index].centerline_position_in_inertial_meters;
+    return Eigen::Vector3d(
+        base.x() + step.x(), base.y() + step.y(),
+        -grade_.IntegralFromStart(track_station_meters));
+}
+
+Eigen::Vector3d TrackGeometry::CenterlineDerivativeUnchecked(
+    double track_station_meters) const {
+    const double heading = HeadingRadiansUnchecked(track_station_meters);
+    return Eigen::Vector3d(std::cos(heading), std::sin(heading),
+                           -grade_.Value(track_station_meters));
+}
+
+Eigen::Vector3d TrackGeometry::CenterlineSecondDerivativeUnchecked(
+    double track_station_meters) const {
+    const double heading = HeadingRadiansUnchecked(track_station_meters);
+    const double curvature = curvature_.Value(track_station_meters);
+    return Eigen::Vector3d(
+        -curvature * std::sin(heading), curvature * std::cos(heading),
+        -grade_.FirstDerivativePerMeter(track_station_meters));
+}
+
+double TrackGeometry::CurvatureRadiansPerMeter(
+    double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return curvature_.Value(track_station_meters);
+}
+
+double TrackGeometry::SuperelevationMeters(double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return superelevation_.Value(track_station_meters);
+}
+
+double TrackGeometry::CenterlineUpwardGrade(
+    double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return grade_.Value(track_station_meters);
+}
+
+double TrackGeometry::HeadingRadians(double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return HeadingRadiansUnchecked(track_station_meters);
+}
+
+double TrackGeometry::TrackRollRadians(double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return std::asin(superelevation_.Value(track_station_meters) /
+                     rail_reference_lateral_span_meters_);
+}
+
+Eigen::Vector3d TrackGeometry::CenterlinePositionInInertialMeters(
+    double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return CenterlinePositionUnchecked(track_station_meters);
+}
+
+Eigen::Vector3d TrackGeometry::CenterlineDerivativeInInertialMetersPerMeter(
+    double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+    return CenterlineDerivativeUnchecked(track_station_meters);
+}
+
+TrackFrameKinematics TrackGeometry::EvaluateTrackFrame(
+    double track_station_meters) const {
+    ThrowIfOutsideDomain(track_station_meters, "the track station");
+
+    const double heading = HeadingRadiansUnchecked(track_station_meters);
+    const double curvature = curvature_.Value(track_station_meters);
+    const double grade = grade_.Value(track_station_meters);
+    const double grade_rate =
+        grade_.FirstDerivativePerMeter(track_station_meters);
+    const double cosine = std::cos(heading);
+    const double sine = std::sin(heading);
+    const double slope_norm = std::sqrt(1.0 + grade * grade);
+    const double slope_norm_rate = grade * grade_rate / slope_norm;
+
+    // The roll-free tangent frame: x along the three-dimensional unit tangent,
+    // y horizontal and pointing to the track's right, z completing the triad.
+    const Eigen::Vector3d tangent(cosine, sine, -grade);
+    const Eigen::Vector3d roll_free_x = tangent / slope_norm;
+    const Eigen::Vector3d roll_free_y(-sine, cosine, 0.0);
+    const Eigen::Vector3d roll_free_z = roll_free_x.cross(roll_free_y);
+
+    const Eigen::Vector3d tangent_rate(-curvature * sine, curvature * cosine,
+                                       -grade_rate);
+    const Eigen::Vector3d roll_free_x_rate =
+        tangent_rate / slope_norm - roll_free_x * (slope_norm_rate / slope_norm);
+    const Eigen::Vector3d roll_free_y_rate(-curvature * cosine,
+                                           -curvature * sine, 0.0);
+    const Eigen::Vector3d roll_free_z_rate =
+        roll_free_x_rate.cross(roll_free_y) + roll_free_x.cross(roll_free_y_rate);
+
+    Eigen::Matrix3d rotation_roll_free;
+    rotation_roll_free.col(0) = roll_free_x;
+    rotation_roll_free.col(1) = roll_free_y;
+    rotation_roll_free.col(2) = roll_free_z;
+
+    // A positive superelevation puts the right rail lower, which is a positive
+    // roll about the roll-free x axis: it turns +y toward +z, and +z is down.
+    const double superelevation = superelevation_.Value(track_station_meters);
+    const double superelevation_rate =
+        superelevation_.FirstDerivativePerMeter(track_station_meters);
+    const double sine_roll = superelevation / rail_reference_lateral_span_meters_;
+    const double roll = std::asin(sine_roll);
+    const double roll_rate =
+        (superelevation_rate / rail_reference_lateral_span_meters_) /
+        std::sqrt(1.0 - sine_roll * sine_roll);
+    const double cosine_roll = std::cos(roll);
+    const double sine_roll_value = std::sin(roll);
+
+    Eigen::Matrix3d roll_about_x = Eigen::Matrix3d::Identity();
+    roll_about_x(1, 1) = cosine_roll;
+    roll_about_x(1, 2) = -sine_roll_value;
+    roll_about_x(2, 1) = sine_roll_value;
+    roll_about_x(2, 2) = cosine_roll;
+    const Eigen::Matrix3d rotation = rotation_roll_free * roll_about_x;
+
+    // The rotation rate of the roll-free frame, then the roll about its own x
+    // axis. Half the sum of column cross products is the angular velocity of an
+    // orthonormal triad, which avoids writing three special cases by hand.
+    const Eigen::Vector3d roll_free_rate =
+        0.5 * (roll_free_x.cross(roll_free_x_rate) +
+               roll_free_y.cross(roll_free_y_rate) +
+               roll_free_z.cross(roll_free_z_rate));
+    const Eigen::Vector3d rotation_rate =
+        roll_free_rate + roll_rate * roll_free_x;
+
+    const TrackFramePose pose(rotation,
+                              CenterlinePositionUnchecked(track_station_meters));
+    return TrackFrameKinematics(pose, tangent, rotation_rate);
+}
+
+TrackGeometry::ProjectionCandidate TrackGeometry::RefineFromBracket(
+    const Eigen::Vector3d& point_in_inertial_meters, double initial_station,
+    double lower_bound_station, double upper_bound_station) const {
+    ProjectionCandidate candidate;
+    double station = initial_station;
+    for (int iteration = 0; iteration < kMaximumRefinementIterations;
+         ++iteration) {
+        const Eigen::Vector3d centerline = CenterlinePositionUnchecked(station);
+        const Eigen::Vector3d first = CenterlineDerivativeUnchecked(station);
+        const Eigen::Vector3d second =
+            CenterlineSecondDerivativeUnchecked(station);
+        const Eigen::Vector3d offset = point_in_inertial_meters - centerline;
+        const double gradient = -offset.dot(first);
+        const double hessian = first.squaredNorm() - offset.dot(second);
+        if (!(hessian > 0.0)) {
+            return candidate;
+        }
+        double next = station - gradient / hessian;
+        next = std::clamp(next, lower_bound_station, upper_bound_station);
+        const double motion = std::abs(next - station);
+        station = next;
+        if (motion <=
+            kStationRelativeTolerance * std::max(1.0, std::abs(station))) {
+            break;
+        }
+    }
+    const Eigen::Vector3d centerline = CenterlinePositionUnchecked(station);
+    const Eigen::Vector3d first = CenterlineDerivativeUnchecked(station);
+    const Eigen::Vector3d second = CenterlineSecondDerivativeUnchecked(station);
+    const Eigen::Vector3d offset = point_in_inertial_meters - centerline;
+    const double gradient = -offset.dot(first);
+    const double hessian = first.squaredNorm() - offset.dot(second);
+    const double gradient_bound =
+        kObjectiveGradientRelativeTolerance *
+        (offset.norm() * first.norm() + 1.0);
+    if (!(hessian > 0.0) || std::abs(gradient) > gradient_bound) {
+        return candidate;
+    }
+    candidate.found = true;
+    candidate.track_station_meters = station;
+    candidate.squared_distance_meters_squared = offset.squaredNorm();
+    return candidate;
+}
+
+TrackStationProjection TrackGeometry::ProjectPointColdStart(
+    const Eigen::Vector3d& point_in_inertial_meters) const {
+    if (!point_in_inertial_meters.allFinite()) {
+        throw std::invalid_argument(
+            "TrackGeometry::ProjectPointColdStart: the point must be finite");
+    }
+    ProjectionCandidate best;
+    ProjectionCandidate runner_up;
+    for (std::size_t index = 1; index + 1 < nodes_.size(); ++index) {
+        const double here =
+            (point_in_inertial_meters -
+             nodes_[index].centerline_position_in_inertial_meters)
+                .squaredNorm();
+        const double before =
+            (point_in_inertial_meters -
+             nodes_[index - 1].centerline_position_in_inertial_meters)
+                .squaredNorm();
+        const double after =
+            (point_in_inertial_meters -
+             nodes_[index + 1].centerline_position_in_inertial_meters)
+                .squaredNorm();
+        if (here > before || here > after) {
+            continue;
+        }
+        const ProjectionCandidate refined = RefineFromBracket(
+            point_in_inertial_meters, nodes_[index].track_station_meters,
+            nodes_[index - 1].track_station_meters,
+            nodes_[index + 1].track_station_meters);
+        if (!refined.found) {
+            continue;
+        }
+        if (!best.found || refined.squared_distance_meters_squared <
+                               best.squared_distance_meters_squared) {
+            runner_up = best;
+            best = refined;
+        } else if (!runner_up.found ||
+                   refined.squared_distance_meters_squared <
+                       runner_up.squared_distance_meters_squared) {
+            runner_up = refined;
+        }
+    }
+    if (!best.found) {
+        throw std::runtime_error(
+            "TrackGeometry::ProjectPointColdStart: no interior minimum of the "
+            "distance to the centerline exists for this point; the projection "
+            "is not defined here");
+    }
+    if (runner_up.found) {
+        const double best_distance =
+            std::sqrt(best.squared_distance_meters_squared);
+        const double runner_up_distance =
+            std::sqrt(runner_up.squared_distance_meters_squared);
+        const double separation = runner_up_distance - best_distance;
+        if (separation <=
+            kEquidistantRelativeTolerance * std::max(1.0, best_distance)) {
+            throw std::runtime_error(
+                "TrackGeometry::ProjectPointColdStart: two distinct minima at "
+                "stations " +
+                Describe(best.track_station_meters) + " m and " +
+                Describe(runner_up.track_station_meters) +
+                " m are equally close, so the nearest station is not a "
+                "function of this point");
+        }
+    }
+    return TrackStationProjection(
+        best.track_station_meters,
+        CenterlinePositionUnchecked(best.track_station_meters));
+}
+
+TrackStationProjection TrackGeometry::ProjectPointNearSeed(
+    const Eigen::Vector3d& point_in_inertial_meters,
+    double seed_track_station_meters, double search_half_width_meters) const {
+    if (!point_in_inertial_meters.allFinite()) {
+        throw std::invalid_argument(
+            "TrackGeometry::ProjectPointNearSeed: the point must be finite");
+    }
+    ThrowIfOutsideDomain(seed_track_station_meters, "the seed track station");
+    RequireFinitePositive(search_half_width_meters, "the search half width");
+    const double lower = seed_track_station_meters - search_half_width_meters;
+    const double upper = seed_track_station_meters + search_half_width_meters;
+    if (lower < start_track_station_meters() ||
+        upper > end_track_station_meters()) {
+        throw std::invalid_argument(
+            "TrackGeometry::ProjectPointNearSeed: the search interval [" +
+            Describe(lower) + ", " + Describe(upper) +
+            "] m reaches outside the domain [" +
+            Describe(start_track_station_meters()) + ", " +
+            Describe(end_track_station_meters()) +
+            "] m; the interval is a declared search domain, not a hint to be "
+            "clipped");
+    }
+    const ProjectionCandidate refined = RefineFromBracket(
+        point_in_inertial_meters, seed_track_station_meters, lower, upper);
+    if (!refined.found) {
+        throw std::runtime_error(
+            "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies in "
+            "the search interval [" +
+            Describe(lower) + ", " + Describe(upper) +
+            "] m for the given seed");
+    }
+    return TrackStationProjection(
+        refined.track_station_meters,
+        CenterlinePositionUnchecked(refined.track_station_meters));
+}
+
+}  // namespace orvd::track_geometry

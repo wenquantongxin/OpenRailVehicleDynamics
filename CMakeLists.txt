@@ -78,6 +78,7 @@ find_package(fmt 9.1.0 CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 # are supposed to link Drake.
 set(ORVD_PRODUCT_MODULE_DIRECTORIES
     external/drake_mbtree
+    libs/track_geometry
     libs/multibody_runtime
     libs/multibody_model
     libs/system_assembly
@@ -95,6 +96,7 @@ endforeach()
 # is exported only because a static modelling archive must retain its private
 # implementation link edge; no vendored or adapter header is installed.
 set(ORVD_INSTALL_TARGETS
+    orvd_track_geometry
     orvd_multibody_runtime
     orvd_multibody_model
     orvd_system_assembly
@@ -107,7 +109,8 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 foreach(orvd_public_module
-        multibody_runtime multibody_model system_assembly integrators)
+        track_geometry multibody_runtime multibody_model system_assembly
+        integrators)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

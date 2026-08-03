@@ -9,6 +9,7 @@
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
+#include "orvd/track_geometry/track_geometry.h"
 
 namespace {
 
@@ -20,11 +21,44 @@ using orvd::multibody_runtime::RigidBodyInertiaParameters;
 using orvd::system_assembly::CompiledSystemPlan;
 using orvd::system_assembly::SystemAssemblyDescription;
 using orvd::system_assembly::SystemInstance;
+using orvd::track_geometry::TrackGeometry;
+using orvd::track_geometry::TrackScalarProfile;
+using orvd::track_geometry::TrackScalarSegment;
+using orvd::track_geometry::TrackScalarSegmentShape;
 
 bool Near(double measured, double expected) {
     return std::abs(measured - expected) <=
            1.0e-8 *
                std::max({1.0, std::abs(measured), std::abs(expected)});
+}
+
+// The installed line layer, exercised through its own public header rather than
+// merely linked: a straight, level stretch whose centerline and track frame
+// have closed-form values, so a consumer that compiled against a stale header
+// or an empty archive would not reach the end of this function.
+int RunInstalledLineSmoke() {
+    TrackScalarSegment level;
+    level.length_meters = 100.0;
+    level.shape = TrackScalarSegmentShape::kConstant;
+    level.start_value = 0.0;
+    level.end_value = 0.0;
+    const TrackGeometry line(TrackScalarProfile(0.0, {level}, {}),
+                             TrackScalarProfile(0.0, {level}, {}),
+                             TrackScalarProfile(0.0, {level}, {}), 1.5, 1.0);
+    const auto kinematics = line.EvaluateTrackFrame(40.0);
+    const Eigen::Vector3d origin = kinematics.pose().origin_in_inertial_meters();
+    const Eigen::Matrix3d rotation =
+        kinematics.pose().rotation_inertial_from_track();
+    if (!Near(origin.x(), 40.0) || !Near(origin.y(), 0.0) ||
+        !Near(origin.z(), 0.0) ||
+        (rotation - Eigen::Matrix3d::Identity()).cwiseAbs().maxCoeff() > 1.0e-12) {
+        std::fprintf(stderr,
+                     "installed ORVD line smoke produced origin (% .17g, % .17g,"
+                     " % .17g) on a straight level line\n",
+                     origin.x(), origin.y(), origin.z());
+        return 1;
+    }
+    return 0;
 }
 
 }  // namespace
@@ -90,6 +124,9 @@ int main() {
                 "expected t=% .17g q=% .17g v=% .17g\n",
                 context->time_seconds(), observed[0], observed[1],
                 kTargetTime, expected_position, expected_velocity);
+            return 1;
+        }
+        if (RunInstalledLineSmoke() != 0) {
             return 1;
         }
     } catch (const std::exception& error) {

@@ -589,3 +589,43 @@ add_test(NAME verify_candidate_runtime_dependencies_exclude_shared_drake
          COMMAND ${CMAKE_COMMAND}
                  -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_candidate_observations>
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake)
+
+# G47's line layer. Three executables, one per group of completion gates, each
+# also compiling the public headers it owns as standalone translation units.
+# Every fixture these run on carries non-zero curvature, superelevation, grade
+# and heading at the same station: with any one of them zero the corresponding
+# assertion collapses into an identity and the gate stops discriminating.
+add_executable(verify_track_geometry_invariants
+    track_geometry/track_geometry_header_self_containment.cc
+    track_geometry/track_geometry_segments_header_self_containment.cc
+    track_geometry/track_inertial_frame_header_self_containment.cc
+    track_geometry/verify_track_geometry_invariants.cc)
+orvd_configure_first_party_target(verify_track_geometry_invariants)
+target_include_directories(verify_track_geometry_invariants
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_track_geometry_invariants
+    PRIVATE orvd_track_geometry)
+add_test(NAME verify_track_geometry_invariants
+         COMMAND verify_track_geometry_invariants)
+
+add_executable(verify_track_frame_orientation
+    track_geometry/track_frame_pose_header_self_containment.cc
+    track_geometry/verify_track_frame_orientation.cc)
+orvd_configure_first_party_target(verify_track_frame_orientation)
+target_include_directories(verify_track_frame_orientation
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_track_frame_orientation
+    PRIVATE orvd_track_geometry)
+add_test(NAME verify_track_frame_orientation
+         COMMAND verify_track_frame_orientation)
+
+add_executable(verify_track_station_projection
+    track_geometry/track_station_projection_header_self_containment.cc
+    track_geometry/verify_track_station_projection.cc)
+orvd_configure_first_party_target(verify_track_station_projection)
+target_include_directories(verify_track_station_projection
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_track_station_projection
+    PRIVATE orvd_track_geometry)
+add_test(NAME verify_track_station_projection
+         COMMAND verify_track_station_projection)

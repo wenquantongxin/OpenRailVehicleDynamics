@@ -6,7 +6,11 @@ find_package(OpenRailVehicleDynamics CONFIG REQUIRED)
 
 add_executable(orvd_installation_smoke installation_smoke.cc)
 target_compile_features(orvd_installation_smoke PRIVATE cxx_std_23)
-target_link_libraries(orvd_installation_smoke PRIVATE ORVD::integrators)
+# Two exported targets, because two installed header surfaces have to be
+# reachable: the integrator chain and the line layer, which is a peer of it
+# rather than a dependency.
+target_link_libraries(orvd_installation_smoke
+    PRIVATE ORVD::integrators ORVD::track_geometry)
 
 # This pair is a positive control for the installed-artifact dependency gate.
 # The executable calls an exported function, so linkers cannot discard the
