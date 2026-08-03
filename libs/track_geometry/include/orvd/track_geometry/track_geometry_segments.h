@@ -60,22 +60,10 @@ class TrackScalarProfile {
     // evaluation on the right-hand-side path would have to return a number for
     // a quantity that does not exist.
     //
-    // Throws std::invalid_argument on every declaration this profile cannot
-    // stand behind, in four groups:
-    //
-    //   * the profile has no segments, so no domain to evaluate on;
-    //   * a stated number is not finite, a segment length is not positive, a
-    //     window length is not positive, or a segment shape is not one this
-    //     library knows;
-    //   * a seam names a segment with no successor, two seams name the same
-    //     segment, a window reaches past either adjacent segment, two windows
-    //     overlap, or an undeclared boundary is discontinuous;
-    //   * the declaration is representable one number at a time but not as a
-    //     whole in binary64 — a segment whose end station does not land
-    //     strictly after its start, a window too narrow to have two distinct
-    //     endpoints, or a coefficient or accumulated integral that comes out
-    //     non-finite. These last are refused rather than rounded into
-    //     something plausible.
+    // Throws std::invalid_argument for an empty profile, non-finite or invalid
+    // segment data, invalid or overlapping seams, discontinuous undeclared
+    // boundaries, or a declaration that cannot be represented as a valid
+    // binary64 profile.
     TrackScalarProfile(double start_track_station_meters,
                        std::vector<TrackScalarSegment> segments,
                        std::vector<TrackSeamTransition> seam_transitions);
@@ -109,30 +97,6 @@ class TrackScalarProfile {
         return support_start_track_station_meters_;
     }
 
-    // The stations at which the piecewise definition changes: segment
-    // boundaries and seam window edges, with the domain end appended.
-    // Borrow only from a named, live profile. Moving the breakpoints out would
-    // leave station bounds that no longer resolve into pieces; borrowing from
-    // an expiring profile would return a dangling reference.
-    [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
-        const & {
-        return breakpoints_;
-    }
-    [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
-        && = delete;
-    [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
-        const && = delete;
-
-    // Whether the piece containing the station is a declared seam window.
-    [[nodiscard]] bool IsInsideSeamWindow(double track_station_meters) const;
-
-    // The degree of the local polynomial, with trailing zero coefficients
-    // trimmed. A degree of zero says the profile is locally constant, which is
-    // what lets a centerline integrate in closed form over that stretch instead
-    // of falling back on quadrature.
-    [[nodiscard]] std::size_t LocalPolynomialDegree(
-        double track_station_meters) const;
-
    private:
     friend class TrackGeometry;
 
@@ -153,9 +117,16 @@ class TrackScalarProfile {
         // one term, a Hermite blend four, a seam window six.
         double coefficients[6]{};
         std::size_t coefficient_count{1};
-        bool is_seam_window{false};
     };
 
+    [[nodiscard]] const std::vector<double>& breakpoint_track_stations_meters()
+        const {
+        return breakpoints_;
+    }
+    // A degree of zero lets TrackGeometry use the closed-form constant-
+    // curvature path instead of quadrature.
+    [[nodiscard]] std::size_t LocalPolynomialDegree(
+        double track_station_meters) const;
     [[nodiscard]] std::size_t PieceIndexAt(double track_station_meters) const;
     [[nodiscard]] ProfileExtremum MaximumAbsoluteValue() const;
     void ShortenDomainEndTo(double end_track_station_meters);

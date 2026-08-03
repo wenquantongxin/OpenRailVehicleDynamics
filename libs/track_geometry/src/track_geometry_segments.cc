@@ -311,9 +311,7 @@ TrackScalarProfile::TrackScalarProfile(
                 Describe(seam.window_length_meters));
         }
         const std::size_t left = seam.preceding_segment_index;
-        // Compare before adding one: SIZE_MAX is a valid value of the public
-        // unsigned field, and `left + 1` would wrap to zero before this guard
-        // could reject it. `raw` is known non-empty above.
+        // Compare before adding one to avoid unsigned wraparound.
         if (left >= raw.size() - 1) {
             throw std::invalid_argument(
                 "TrackScalarProfile: " + where + " names segment " +
@@ -447,7 +445,6 @@ TrackScalarProfile::TrackScalarProfile(
             seam_piece.polynomial_origin_track_station_meters =
                 window.start_track_station_meters;
             seam_piece.coefficient_count = 6;
-            seam_piece.is_seam_window = true;
             const double width = window.end_track_station_meters -
                                  window.start_track_station_meters;
             const double boundary[6] = {
@@ -644,12 +641,6 @@ double TrackScalarProfile::IntegralFromStart(
                                   track_station_meters - origin) -
            EvaluateAntiderivative(piece.coefficients, piece.coefficient_count,
                                   piece.start_track_station_meters - origin);
-}
-
-bool TrackScalarProfile::IsInsideSeamWindow(
-    double track_station_meters) const {
-    ThrowIfOutsideDomain(track_station_meters);
-    return pieces_[PieceIndexAt(track_station_meters)].is_seam_window;
 }
 
 std::size_t TrackScalarProfile::LocalPolynomialDegree(

@@ -138,11 +138,8 @@ inline TrackGeometry MakeSeamLine() {
                          kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
 }
 
-// A line that is straight in plan and rises then falls: the grade blends
-// symmetrically from uphill to downhill, so the centerline is an arch and a
-// point below its apex is exactly as near to one flank as to the other. This is
-// the shape that shows why a whole-line nearest-station search cannot be
-// certified by any bound on the heading: the heading here is identically zero.
+// A line that is straight in plan and rises then falls, producing two local
+// projection minima for a point below its apex.
 inline constexpr double kArchLengthMeters = 10.0;
 inline constexpr double kArchGrade = 1.0;
 

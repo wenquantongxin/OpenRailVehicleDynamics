@@ -35,52 +35,11 @@ constexpr double kQuadratureWeights[kQuadraturePointCount] = {
 constexpr std::size_t kMaximumStationNodeCount = 1u << 20;
 
 constexpr int kMaximumRefinementIterations = 64;
-// The refinement stops when the bracket has closed to this many units in the
-// last place of its endpoints. The ULP size necessarily follows the absolute
-// station magnitude; unlike an independently chosen relative tolerance, this
-// asks only for the representable resolution of the station values themselves.
+// Stop once the bracket reaches the representable resolution of its endpoints.
 constexpr double kBracketUlpCount = 4.0;
-// A stationary point whose Newton correction is no larger than this many
-// representable station steps may be canonicalised onto a shared node. This is
-// deliberately distinct from the bracket stopping budget above.
-constexpr double kBoundaryCanonicalisationUlpCount = 64.0;
 // The first derivative of the squared-distance objective has units of metres
 // times metres per metre, so its residual bound scales with the distance.
 constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
-// What separates the two candidates is measured in station distance from the
-// seed, and two scales bear on whether that separation means anything.
-//
-// One is the declared search half width: inside a window the caller says is
-// this wide, a difference a billionth of that width is not a difference the
-// caller can have meant. The other is the representable resolution of the
-// station values themselves. Stations are absolute mileages, so at a large
-// station origin the last bits of two nearly equal gaps are noise no matter how
-// narrow the window is, and a purely width-relative test would read that noise
-// as a real ordering and pick a branch out of it. The threshold is therefore the
-// larger of the two; neither alone is a bound, and an absolute floor in metres
-// would be neither.
-constexpr double kSeedGapRelativeTolerance = 1.0e-9;
-
-double StationUlp(double station) {
-    const double upward =
-        std::nextafter(station, std::numeric_limits<double>::infinity()) -
-        station;
-    const double downward =
-        station -
-        std::nextafter(station, -std::numeric_limits<double>::infinity());
-    const double finite_upward = std::isfinite(upward) ? upward : 0.0;
-    const double finite_downward = std::isfinite(downward) ? downward : 0.0;
-    return std::max(finite_upward, finite_downward);
-}
-
-double CandidateStationResolution(double station) {
-    const double bracket_resolution =
-        kBracketUlpCount * std::numeric_limits<double>::epsilon() *
-        std::max(1.0, std::abs(station));
-    const double boundary_resolution =
-        kBoundaryCanonicalisationUlpCount * StationUlp(station);
-    return std::max(bracket_resolution, boundary_resolution);
-}
 
 void RequireFinitePositive(double value, const char* what) {
     if (!std::isfinite(value) || value <= 0.0) {
@@ -107,25 +66,16 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
     RequireFinitePositive(station_node_spacing_meters,
                           "the station node spacing");
 
-    // The end station of each family is a running sum of its own segment
-    // lengths, so two families that cover the same line to the last decimal
-    // still need not agree bit for bit: the same total reached through a
-    // different partition rounds differently. Comparing exactly would refuse a
-    // large share of perfectly ordinary decimal layouts, so the ends have to
-    // agree only to the representable resolution of the accumulation, bounded
-    // by the number of additions each family performed. The scale includes the
-    // common start: a large negative start can nearly cancel a positive total
-    // length and leave a small endpoint even though every addition took place
-    // at the large station magnitude.
+    // Different segment partitions can accumulate the same declared endpoint
+    // with slightly different rounding. Bound that difference by the number of
+    // additions at the start/end station scale.
     const double common_start = curvature_.start_track_station_meters();
     const auto agrees = [common_start](double left, double right,
                                        std::size_t additions) {
         const double scale =
             std::max({1.0, std::abs(common_start), std::abs(left),
                       std::abs(right)});
-        // Positive segment lengths make the absolute sum no more than a small
-        // multiple of the largest start/end magnitude. Compare normalised
-        // values so an extreme, but finite, station cannot overflow the bound.
+        // Compare normalised values so the bound itself cannot overflow.
         const double normalised_difference =
             std::abs(left / scale - right / scale);
         const double normalised_bound =
@@ -529,55 +479,29 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
     }
     double low = lower_bound_station;
     double high = upper_bound_station;
-    const double gradient_at_low =
-        EvaluateObjectiveDerivatives(point_in_inertial_meters, low).gradient;
-    const double gradient_at_high =
-        EvaluateObjectiveDerivatives(point_in_inertial_meters, high).gradient;
+    const ObjectiveDerivatives at_low =
+        EvaluateObjectiveDerivatives(point_in_inertial_meters, low);
+    const ObjectiveDerivatives at_high =
+        EvaluateObjectiveDerivatives(point_in_inertial_meters, high);
 
-    // A minimum exactly on a shared node belongs to both adjacent closed
-    // intervals. Canonicalise such a root to the node itself so duplicate
-    // removal can use interval topology and exact station identity instead of
-    // a distance tolerance that grows with the arbitrary station origin.
-    const auto candidate_at_boundary =
-        [this, &point_in_inertial_meters](double boundary_station) {
-            ProjectionCandidate boundary_candidate;
-            const ObjectiveDerivatives boundary_derivatives =
-                EvaluateObjectiveDerivatives(point_in_inertial_meters,
-                                             boundary_station);
-            const double station_ulp = StationUlp(boundary_station);
-            const Eigen::Vector3d boundary_offset =
-                point_in_inertial_meters -
-                CenterlinePositionUnchecked(boundary_station);
-            const Eigen::Vector3d boundary_first =
-                CenterlineDerivativeUnchecked(boundary_station);
-            const double gradient_bound =
-                kObjectiveGradientRelativeTolerance *
-                (boundary_offset.norm() * boundary_first.norm() + 1.0);
-            if (boundary_derivatives.hessian > 0.0 &&
-                std::abs(boundary_derivatives.gradient) <= gradient_bound &&
-                std::abs(boundary_derivatives.gradient /
-                         boundary_derivatives.hessian) <=
-                    kBoundaryCanonicalisationUlpCount * station_ulp) {
-                boundary_candidate.found = true;
-                boundary_candidate.track_station_meters = boundary_station;
-                boundary_candidate.squared_distance_meters_squared =
-                    boundary_offset.squaredNorm();
-            }
-            return boundary_candidate;
-        };
-    if (const ProjectionCandidate at_low = candidate_at_boundary(low);
-        at_low.found) {
-        return at_low;
+    // An exact root on a shared node belongs to both adjacent closed intervals.
+    // Return the node itself so the caller can remove that duplicate by exact
+    // station identity. A non-zero computed gradient belongs to one side only.
+    if (at_low.gradient == 0.0 && at_low.hessian > 0.0) {
+        candidate.found = true;
+        candidate.track_station_meters = low;
+        return candidate;
     }
-    if (const ProjectionCandidate at_high = candidate_at_boundary(high);
-        at_high.found) {
-        return at_high;
+    if (at_high.gradient == 0.0 && at_high.hessian > 0.0) {
+        candidate.found = true;
+        candidate.track_station_meters = high;
+        return candidate;
     }
 
     // Walking downhill from the start of the interval and uphill at its end is
     // exactly the condition for a minimum to lie between them. Anything else is
     // reported as "not here" rather than searched anyway.
-    if (gradient_at_low > 0.0 || gradient_at_high < 0.0) {
+    if (at_low.gradient > 0.0 || at_high.gradient < 0.0) {
         return candidate;
     }
 
@@ -627,7 +551,6 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
     }
     candidate.found = true;
     candidate.track_station_meters = station;
-    candidate.squared_distance_meters_squared = offset.squaredNorm();
     return candidate;
 }
 
@@ -657,13 +580,7 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
     // The declared interval is searched by its node sub-intervals rather than
     // walked from the seed, so the answer depends on what the interval contains
     // and not on where the caller happened to start.
-    ProjectionCandidate nearest;
-    ProjectionCandidate nearest_rival;
-    double nearest_gap = std::numeric_limits<double>::infinity();
-    double nearest_rival_gap = std::numeric_limits<double>::infinity();
-    bool saw_endpoint_root = false;
-    ProjectionCandidate previous;
-    bool previous_interval_adjacent = false;
+    ProjectionCandidate unique_minimum;
     for (std::size_t index = NodeIndexAtOrBefore(lower);
          index + 1 < nodes_.size() &&
          nodes_[index].track_station_meters < upper;
@@ -673,19 +590,13 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
         const ProjectionCandidate refined =
             RefineBracketedMinimum(point_in_inertial_meters, from, to);
         if (!refined.found) {
-            previous_interval_adjacent = false;
             continue;
         }
-        // A root sitting on a shared node is bracketed by both neighbouring
-        // sub-intervals, and the refinement canonicalises it onto the node, so
-        // the duplicate is an exact station match from the immediately
-        // preceding interval.
-        const bool duplicate =
-            previous_interval_adjacent && previous.found &&
-            previous.track_station_meters == refined.track_station_meters;
-        previous = refined;
-        previous_interval_adjacent = true;
-        if (duplicate) {
+        // An exact root on a shared node is returned by both neighbouring
+        // sub-intervals; remove the duplicate by exact station identity.
+        if (unique_minimum.found &&
+            unique_minimum.track_station_meters ==
+                refined.track_station_meters) {
             continue;
         }
         // The contract is strictly interior: a stationary point sitting on the
@@ -693,60 +604,25 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
         // not that the branch has been found.
         if (refined.track_station_meters <= lower ||
             refined.track_station_meters >= upper) {
-            saw_endpoint_root = true;
             continue;
         }
-        const double gap = std::abs(refined.track_station_meters -
-                                    seed_track_station_meters);
-        if (gap < nearest_gap) {
-            nearest_rival = nearest;
-            nearest_rival_gap = nearest_gap;
-            nearest = refined;
-            nearest_gap = gap;
-        } else if (gap < nearest_rival_gap) {
-            nearest_rival = refined;
-            nearest_rival_gap = gap;
+        if (unique_minimum.found) {
+            throw std::runtime_error(
+                "TrackGeometry::ProjectPointNearSeed: more than one "
+                "admissible minimum lies strictly inside the search window; "
+                "shrink the window or correct the seed");
         }
+        unique_minimum = refined;
     }
-    if (!nearest.found) {
+    if (!unique_minimum.found) {
         throw std::runtime_error(
             "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies "
             "strictly inside the search interval [" +
-            Describe(lower) + ", " + Describe(upper) + "] m" +
-            (saw_endpoint_root
-                 ? "; a stationary point sits on the wall of the window, so the "
-                   "window is placed wrongly rather than the branch missing"
-                 : ""));
-    }
-    if (nearest_rival.found) {
-        const double separation = nearest_rival_gap - nearest_gap;
-        // Each returned root can carry either the bracket stopping uncertainty
-        // or the larger shared-node canonicalisation uncertainty. The two gap
-        // subtractions and their difference add representable station error of
-        // their own. Sum those numerical budgets explicitly; 64 is therefore
-        // tied to boundary canonicalisation, not mechanically to the four-ULP
-        // bracket stopping rule.
-        const double numerical_resolution =
-            CandidateStationResolution(nearest.track_station_meters) +
-            CandidateStationResolution(nearest_rival.track_station_meters) +
-            2.0 * StationUlp(seed_track_station_meters) +
-            StationUlp(nearest.track_station_meters) +
-            StationUlp(nearest_rival.track_station_meters);
-        const double indistinguishable =
-            std::max(kSeedGapRelativeTolerance * search_half_width_meters,
-                     numerical_resolution);
-        if (separation <= indistinguishable) {
-            throw std::runtime_error(
-                "TrackGeometry::ProjectPointNearSeed: the minima at stations " +
-                Describe(nearest.track_station_meters) + " m and " +
-                Describe(nearest_rival.track_station_meters) +
-                " m are the same distance from the seed, so which branch the "
-                "caller is on is not a function of what the caller supplied");
-        }
+            Describe(lower) + ", " + Describe(upper) + "] m");
     }
     return TrackStationProjection(
-        nearest.track_station_meters,
-        CenterlinePositionUnchecked(nearest.track_station_meters));
+        unique_minimum.track_station_meters,
+        CenterlinePositionUnchecked(unique_minimum.track_station_meters));
 }
 
 }  // namespace orvd::track_geometry

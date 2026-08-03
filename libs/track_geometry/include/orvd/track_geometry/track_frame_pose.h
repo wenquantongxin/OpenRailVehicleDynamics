@@ -7,15 +7,7 @@
 // The pose of the track frame in the track inertial frame, and its first
 // derivative with respect to track station.
 //
-// These are values the line produces, not values a caller hands in, so their
-// constructors are reachable only from TrackGeometry. They are fixed-size and
-// returned by value: no output parameter is needed to keep an evaluation free
-// of heap traffic, and pretending otherwise would only make the call sites
-// harder to read.
-//
-// The multibody layer has its own rigid pose type with a deliberately private
-// constructor, tied to the model that produces it. Reusing it here would mean
-// widening that friendship for a layer that does not touch multibody at all.
+// These fixed-size values are produced by TrackGeometry and returned by value.
 
 namespace orvd::track_geometry {
 

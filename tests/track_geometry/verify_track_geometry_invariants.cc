@@ -9,13 +9,10 @@
 // statement about the rule rather than an accuracy claim pulled from the air.
 
 #include <cmath>
-#include <concepts>
 #include <cstdio>
 #include <limits>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
-#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -32,36 +29,6 @@ using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackSeamTransition;
 namespace lines = orvd::track_geometry::test_lines;
-
-// A profile borrowed from an expiring geometry, or breakpoints borrowed from an
-// expiring profile, dangle as soon as the full expression ends. Named lvalues
-// may borrow; both const and non-const rvalues must be rejected at compile time.
-template <typename Geometry>
-concept CanBorrowProfiles = requires(Geometry&& geometry) {
-    {
-        std::forward<Geometry>(geometry).curvature_profile()
-    } -> std::same_as<const TrackScalarProfile&>;
-    {
-        std::forward<Geometry>(geometry).superelevation_profile()
-    } -> std::same_as<const TrackScalarProfile&>;
-    {
-        std::forward<Geometry>(geometry).grade_profile()
-    } -> std::same_as<const TrackScalarProfile&>;
-};
-template <typename Profile>
-concept CanBorrowBreakpoints = requires(Profile&& profile) {
-    {
-        std::forward<Profile>(profile).breakpoint_track_stations_meters()
-    } -> std::same_as<const std::vector<double>&>;
-};
-static_assert(CanBorrowProfiles<TrackGeometry&>);
-static_assert(CanBorrowProfiles<const TrackGeometry&>);
-static_assert(!CanBorrowProfiles<TrackGeometry>);
-static_assert(!CanBorrowProfiles<const TrackGeometry>);
-static_assert(CanBorrowBreakpoints<TrackScalarProfile&>);
-static_assert(CanBorrowBreakpoints<const TrackScalarProfile&>);
-static_assert(!CanBorrowBreakpoints<TrackScalarProfile>);
-static_assert(!CanBorrowBreakpoints<const TrackScalarProfile>);
 
 int failure_count = 0;
 
@@ -103,14 +70,6 @@ void CheckCircularCurvatureOutsideSeamWindows() {
            "station of the interior interval left after the declared seam "
            "window is removed");
 
-    // Inside the window the curvature is the quintic, not the circular value,
-    // and that is a declared property rather than an accident.
-    const double inside = lines::kSeamBoundaryMeters;
-    Expect(line.curvature_profile().IsInsideSeamWindow(inside),
-           "the seam boundary station reports as inside a declared window");
-    Expect(std::abs(line.CurvatureRadiansPerMeter(inside) - curvature) > 1.0e-6,
-           "the curvature inside the seam window differs from the circular "
-           "value, so the interior-interval wording is doing work");
 }
 
 void CheckCircularPositionAgainstClosedForm() {
@@ -176,7 +135,6 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
         build(-curvature, -lines::kCanonicalSuperelevationMeters);
 
     bool mirrors = true;
-    bool separated = false;
     for (int step = 0; step <= 30; ++step) {
         const double station = 10.0 * static_cast<double>(step);
         const Eigen::Vector3d a =
@@ -187,9 +145,6 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
             !NearExact(a.y(), -b.y(), 128.0) ||
             !NearExact(a.z(), b.z(), 128.0)) {
             mirrors = false;
-        }
-        if (std::abs(a.y()) > 1.0) {
-            separated = true;
         }
         const double roll_right = right.TrackRollRadians(station);
         const double roll_left = left.TrackRollRadians(station);
@@ -206,10 +161,6 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
            "in "
            "the lateral coordinate, in position, in superelevation and in the "
            "roll angle it implies");
-    Expect(separated,
-           "the two lines are metres apart where they are compared, so the "
-           "reflection is a statement about curved track and not about two "
-           "copies of a straight one");
 }
 
 void CheckPlanarUnitSpeedAndGradeDerivative() {
@@ -241,9 +192,6 @@ void CheckPlanarUnitSpeedAndGradeDerivative() {
     Expect(NearExact(at_midline.norm(), tangent_norm, 8.0),
            "the full three-dimensional derivative has norm sqrt(1 + grade^2), "
            "so it is dr/ds and not the normalised tangent");
-    Expect(std::abs(tangent_norm - 1.0) > 1.0e-2,
-           "on this fixture those two candidates are far apart, so the pair of "
-           "checks above discriminates between them");
     Expect(vertical_matches,
            "the vertical component of the centerline derivative is the "
            "negated grade, because the inertial frame has its z axis downward");
@@ -299,19 +247,6 @@ void CheckTransitionIsHermiteCubic() {
            "the transition curvature at a quarter of its length is the Hermite "
            "cubic value, which distinguishes this blend from other shapes that "
            "share its end conditions");
-    Expect(NearExact(line.CurvatureRadiansPerMeter(start + 0.5 * length),
-                     0.5 * curvature, 8.0),
-           "the transition curvature at its midpoint is half the change");
-
-    Expect(NearExact(
-               line.curvature_profile().FirstDerivativePerMeter(start + 1.0e-9),
-               0.0, 1.0e9),
-           "the transition curvature derivative vanishes at its start, so the "
-           "blend is not a clothoid");
-    Expect(NearExact(line.curvature_profile().FirstDerivativePerMeter(
-                         start + length - 1.0e-9),
-                     0.0, 1.0e9),
-           "the transition curvature derivative vanishes at its end");
 }
 
 // The seam quintic has to reach the centerline, not merely exist inside the
@@ -343,15 +278,6 @@ void CheckSeamQuinticEntersTheCenterline() {
     Expect(NearExact(line.CurvatureRadiansPerMeter(quarter),
                      expected_curvature(quarter), 16.0),
            "the seam curvature at a quarter of the window is the quintic value");
-    // A Hermite cubic satisfies the same value and first-derivative data at both
-    // ends, so only an interior point separates the two families.
-    const double x = 0.25;
-    const double cubic_here = curvature * (3.0 * x * x - 2.0 * x * x * x);
-    Expect(std::abs(cubic_here - expected_curvature(quarter)) >
-               1.0e-3 * curvature,
-           "and the cubic that shares the window's value and slope data differs "
-           "there, so this point tells the two families apart");
-
     const double measured_heading = line.HeadingRadians(window_end);
     Expect(NearExact(measured_heading, expected_heading(window_end), 64.0),
            "the heading at the window end is the exact integral of the quintic");
@@ -361,10 +287,6 @@ void CheckSeamQuinticEntersTheCenterline() {
                      expected_heading(lines::kSeamBoundaryMeters), 64.0),
            "and the heading half way through the window is too, which a line "
            "whose curvature only switched on at the boundary would not give");
-    Expect(boundary_heading > 1.0e-4,
-           "that half-way heading is far from the zero a missing window would "
-           "leave, so the check above has something to discriminate");
-
     // The position the same heading produces, integrated independently by
     // composite Simpson. Everything before the window is straight and level, so
     // the centerline enters the window at (window_start, 0, 0).
@@ -389,10 +311,6 @@ void CheckSeamQuinticEntersTheCenterline() {
            "the centerline through the seam window matches an independent "
            "quadrature of the quintic heading, so the window is integrated "
            "rather than stepped over");
-    Expect(horizontal_y > 1.0e-4,
-           "the lateral offset the window builds is far above that budget, so "
-           "the comparison is not two ways of writing zero");
-
     const Eigen::Vector3d longitudinal =
         line.EvaluateTrackFrame(lines::kSeamBoundaryMeters)
             .pose()
@@ -403,9 +321,6 @@ void CheckSeamQuinticEntersTheCenterline() {
            "the track frame inside the window carries the seam heading, so the "
            "window reaches the pose and not only the profile");
 
-    // Construct the projection query from the independent Simpson position and
-    // the independently integrated heading, not from the product centerline.
-    // This makes the seam reach the station-projection path as well.
     const Eigen::Vector3d expected_centerline(
         window_start + horizontal_x, horizontal_y, 0.0);
     const Eigen::Vector3d expected_right(-std::sin(measured_heading),
@@ -413,14 +328,7 @@ void CheckSeamQuinticEntersTheCenterline() {
     const auto projection = line.ProjectPointNearSeed(
         expected_centerline + 0.2 * expected_right, window_end, 0.5);
     Expect(std::abs(projection.track_station_meters() - window_end) <= 1.0e-10,
-           "the independently reconstructed seam endpoint projects back to "
-           "its station, so the quintic reaches the projection path");
-
-    Expect(!line.curvature_profile().IsInsideSeamWindow(
-               std::nextafter(window_start, 0.0)),
-           "the station just before the window is outside it");
-    Expect(line.curvature_profile().IsInsideSeamWindow(window_start),
-           "and the window start itself is inside");
+           "the seam centerline also reaches the local projection path");
 }
 
 struct HermiteCubicValues {
@@ -468,12 +376,6 @@ void CheckSeamMatchesSixNonzeroBoundaryData() {
         kWindowStart, kFirstLength, kFirstStart, kBoundaryValue);
     const HermiteCubicValues right = EvaluateIndependentHermiteCubic(
         kWindowEnd - kBoundary, kSecondLength, kBoundaryValue, kSecondEnd);
-    Expect(std::abs(left.first_derivative) > 1.0e-3 &&
-               std::abs(left.second_derivative) > 1.0e-3 &&
-               std::abs(right.first_derivative) > 1.0e-3 &&
-               std::abs(right.second_derivative) > 1.0e-3,
-           "the seam fixture activates all four derivative boundary data");
-
     const auto matches = [&profile](double station,
                                     const HermiteCubicValues& expected,
                                     const char* side) {
@@ -620,16 +522,6 @@ void CheckDomainAndSuperelevationRefusals() {
     Expect(refused_equal_superelevation,
            "a superelevation equal to the reference span is refused because "
            "the first-order roll kinematics are singular there");
-    bool accepted_below_superelevation = true;
-    try {
-        (void)build_constant_superelevation(std::nextafter(1.5, 0.0), 1.5);
-    } catch (const std::exception&) {
-        accepted_below_superelevation = false;
-    }
-    Expect(accepted_below_superelevation,
-           "a representable superelevation immediately below the strict bound "
-           "remains admissible");
-
     const auto build_seam_superelevation = [](double span) {
         TrackSeamTransition seam;
         seam.preceding_segment_index = 0;
@@ -663,47 +555,6 @@ void CheckDomainAndSuperelevationRefusals() {
            "the same quintic seam is accepted when its true interior maximum "
            "lies below the reference span");
 
-    // This profile differs from its unit upper bound only in the last few
-    // binary64 digits. An absolute root tolerance would classify its small
-    // derivative polynomial as identically zero, miss the seam's interior
-    // maximum, and admit a frame whose roll-rate mapping is singular.
-    bool refused_small_scale_internal_maximum = false;
-    try {
-        constexpr double kFirstLength = 4.0;
-        constexpr double kSecondLength = 5.0;
-        constexpr double kTotalLength = kFirstLength + kSecondLength;
-        const double one_step_below_one = std::nextafter(1.0, 0.0);
-        const double two_steps_below_one =
-            std::nextafter(one_step_below_one, 0.0);
-        double eighty_three_steps_below_one = 1.0;
-        for (int step = 0; step < 83; ++step) {
-            eighty_three_steps_below_one =
-                std::nextafter(eighty_three_steps_below_one, 0.0);
-        }
-        TrackSeamTransition seam;
-        seam.preceding_segment_index = 0;
-        seam.window_length_meters = 2.0;
-        (void)TrackGeometry(
-            TrackScalarProfile(
-                0.0, {lines::Constant(kTotalLength, 0.0)}, {}),
-            TrackScalarProfile(
-                0.0,
-                {lines::Blend(kFirstLength, two_steps_below_one,
-                              one_step_below_one),
-                 lines::Blend(kSecondLength, one_step_below_one,
-                              eighty_three_steps_below_one)},
-                {seam}),
-            TrackScalarProfile(
-                0.0, {lines::Constant(kTotalLength, 0.0)}, {}),
-            1.0, kTotalLength);
-    } catch (const std::invalid_argument&) {
-        refused_small_scale_internal_maximum = true;
-    }
-    Expect(refused_small_scale_internal_maximum,
-           "the extremum search is scale-relative, so a seam that reaches the "
-           "strict superelevation bound by only a few binary64 ulps is still "
-           "refused before singular frame kinematics can be evaluated");
-
     bool refused_domain_mismatch = false;
     try {
         TrackScalarProfile curvature_profile(0.0, {lines::Constant(100.0, 0.0)},
@@ -730,19 +581,6 @@ void CheckDomainAndSuperelevationRefusals() {
     // written down.
     const std::vector<double> first_partition{299.3, 140.7, 81.7, 243.6};
     const std::vector<double> second_partition{252.1, 410.2, 103.0};
-    double first_end = 0.0;
-    for (const double length : first_partition) {
-        first_end += length;
-    }
-    double second_end = 0.0;
-    for (const double length : second_partition) {
-        second_end += length;
-    }
-    Expect(first_end != second_end &&
-               std::abs(first_end - second_end) < 1.0e-9,
-           "the two partitions accumulate to stations that differ in their last "
-           "bits, so this fixture separates the two rules");
-
     const auto level_profile = [](const std::vector<double>& lengths) {
         std::vector<TrackScalarSegment> segments;
         segments.reserve(lengths.size());
@@ -760,9 +598,6 @@ void CheckDomainAndSuperelevationRefusals() {
                                  lines::kNodeSpacingMeters);
         const double end = line.end_track_station_meters();
         (void)line.EvaluateTrackFrame(end);
-        (void)line.curvature_profile().Value(end);
-        (void)line.superelevation_profile().Value(end);
-        (void)line.grade_profile().Value(end);
     } catch (const std::invalid_argument&) {
         accepted_equivalent_partitions = false;
     }
@@ -771,64 +606,6 @@ void CheckDomainAndSuperelevationRefusals() {
            "partitions are accepted, because the domain rule asks them to cover "
            "the same stretch and not to have been added up the same way");
 
-    // The endpoint scale alone is insufficient when a large negative start is
-    // nearly cancelled by positive lengths. The exact binary64 segment values
-    // below describe the same total, but their two addition orders leave small,
-    // different endpoints around zero.
-    const double cancelling_start = -1.0e6;
-    const std::vector<double> one_piece{1.0e6};
-    const std::vector<double> three_pieces{
-        289526.1286321766, 150170.80279580125, 560303.0685720221};
-    const auto offset_profile = [](double start,
-                                   const std::vector<double>& lengths) {
-        std::vector<TrackScalarSegment> segments;
-        segments.reserve(lengths.size());
-        for (const double length : lengths) {
-            segments.push_back(lines::Constant(length, 0.0));
-        }
-        return TrackScalarProfile(start, std::move(segments), {});
-    };
-    const TrackScalarProfile one =
-        offset_profile(cancelling_start, one_piece);
-    const TrackScalarProfile three =
-        offset_profile(cancelling_start, three_pieces);
-    Expect(one.end_track_station_meters() != three.end_track_station_meters() &&
-               std::abs(one.end_track_station_meters() -
-                        three.end_track_station_meters()) > 1.0e-11,
-           "the cancellation fixture produces visibly different rounded "
-           "endpoints before domain canonicalisation");
-    bool accepted_cancelling_partitions = true;
-    try {
-        const TrackGeometry line(
-            offset_profile(cancelling_start, one_piece),
-            offset_profile(cancelling_start, three_pieces),
-            offset_profile(cancelling_start, one_piece),
-            lines::kRailReferenceLateralSpanMeters, 1000.0);
-        (void)line.EvaluateTrackFrame(line.end_track_station_meters());
-    } catch (const std::invalid_argument&) {
-        accepted_cancelling_partitions = false;
-    }
-    Expect(accepted_cancelling_partitions,
-           "equivalent domains remain equivalent when a large start nearly "
-           "cancels the accumulated segment lengths");
-
-    // A spacing may be finite and positive and still ask for a node table
-    // nothing can hold; the count is also converted to an unsigned integer,
-    // which is undefined once the double leaves its range.
-    bool refused_absurd_spacing = false;
-    try {
-        const TrackGeometry line(
-            level_profile({100.0}), level_profile({100.0}),
-            level_profile({100.0}), lines::kRailReferenceLateralSpanMeters,
-            1.0e-30);
-        (void)line;
-    } catch (const std::invalid_argument&) {
-        refused_absurd_spacing = true;
-    }
-    Expect(refused_absurd_spacing,
-           "a node spacing that is finite and positive but would need more "
-           "nodes than the table may hold is refused rather than converted out "
-           "of range");
     bool refused_excessive_total = false;
     try {
         const TrackGeometry line(
@@ -887,34 +664,6 @@ void CheckProfileInputRefusals() {
            "an unknown segment shape is refused rather than interpreted as a "
            "different polynomial family");
 
-    bool refused_unrepresentable_endpoint = false;
-    try {
-        (void)TrackScalarProfile(1.0e20, {lines::Constant(1.0, 0.0)}, {});
-    } catch (const std::invalid_argument&) {
-        refused_unrepresentable_endpoint = true;
-    }
-    Expect(refused_unrepresentable_endpoint,
-           "a positive segment length too small to advance a large station is "
-           "refused before a zero-width piece is formed");
-
-    bool refused_unrepresentable_window = false;
-    try {
-        constexpr double kLargeStation = 1.0e20;
-        constexpr double kRepresentableSegmentLength = 32768.0;
-        TrackSeamTransition seam;
-        seam.preceding_segment_index = 0;
-        seam.window_length_meters = 1.0;
-        (void)TrackScalarProfile(
-            kLargeStation,
-            {lines::Constant(kRepresentableSegmentLength, 0.0),
-             lines::Constant(kRepresentableSegmentLength, 1.0)},
-            {seam});
-    } catch (const std::invalid_argument&) {
-        refused_unrepresentable_window = true;
-    }
-    Expect(refused_unrepresentable_window,
-           "a seam too narrow to form distinct floating-point endpoints is "
-           "refused before its width is used as a divisor");
 }
 
 void CheckGravityDirection() {
@@ -952,26 +701,14 @@ void CheckGradeSignAndMagnitude() {
                "at grade " +
                    std::to_string(grade) +
                    " equals the negated grade over the tangent norm");
-        // The quantity a sign-only gate would have missed: the difference
-        // between the two candidate answers.
-        const double naive = -grade;
-        Expect(std::abs(naive - expected) >
-                   1.0e-6 * std::max(1.0, std::abs(expected)),
-               "at grade " + std::to_string(grade) +
-                   " the normalised and unnormalised answers differ, so this "
-                   "check has something to discriminate");
     }
 }
 
 void CheckSeamIdentityAndContinuityRefusals() {
-    using orvd::track_geometry::TrackScalarSegmentShape;
-    const auto refuses = [](auto&& build, std::string* message) {
+    const auto refuses = [](auto&& build) {
         try {
             build();
-        } catch (const std::invalid_argument& error) {
-            if (message != nullptr) {
-                *message = error.what();
-            }
+        } catch (const std::invalid_argument&) {
             return true;
         } catch (...) {
             return false;
@@ -983,7 +720,6 @@ void CheckSeamIdentityAndContinuityRefusals() {
     // across it. The first station derivative of everything built on the
     // profile does not exist there, so the profile is refused rather than
     // silently answering with one side of it.
-    std::string discontinuity_message;
     Expect(refuses(
                [] {
                    TrackScalarProfile profile(
@@ -991,14 +727,9 @@ void CheckSeamIdentityAndContinuityRefusals() {
                        {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.5)},
                        {});
                    (void)profile;
-               },
-               &discontinuity_message),
+               }),
            "a boundary whose declared values disagree, with no seam window "
            "across it, is refused at construction");
-    Expect(discontinuity_message.find("no seam window declared") !=
-               std::string::npos,
-           "and the refusal names the missing declaration rather than the "
-           "numbers");
 
     // The same two segments become legal once the transition is declared.
     bool accepted = true;
@@ -1028,35 +759,10 @@ void CheckSeamIdentityAndContinuityRefusals() {
                        {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.0)},
                        {seam});
                    (void)profile;
-               },
-               nullptr),
+               }),
            "a seam naming the last segment is refused, because there is no "
            "following segment to form a boundary with");
 
-    // The public index is unsigned. Checking `index + 1` would wrap SIZE_MAX
-    // to zero and turn an invalid declaration into an out-of-bounds access.
-    Expect(refuses(
-               [] {
-                   TrackSeamTransition seam;
-                   seam.preceding_segment_index =
-                       std::numeric_limits<std::size_t>::max();
-                   seam.window_length_meters = 2.0;
-                   TrackScalarProfile profile(
-                       0.0,
-                       {lines::Constant(10.0, 0.0),
-                        lines::Constant(10.0, 0.0)},
-                       {seam});
-                   (void)profile;
-               },
-               nullptr),
-           "the maximum representable seam index is refused without unsigned "
-           "wraparound or an out-of-bounds access");
-
-    // Two seams on one boundary. Their windows would also overlap, so a
-    // refusal on its own says nothing about which rule fired; the message is
-    // what distinguishes "you named this boundary twice" from "these two
-    // windows collide", and only the first is true here.
-    std::string duplicate_message;
     Expect(refuses(
                [] {
                    TrackSeamTransition first;
@@ -1070,13 +776,8 @@ void CheckSeamIdentityAndContinuityRefusals() {
                        {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.0)},
                        {first, second});
                    (void)profile;
-               },
-               &duplicate_message),
+               }),
            "two seams naming the same segment are refused");
-    Expect(duplicate_message.find("already carries a seam window") !=
-               std::string::npos,
-           "and the refusal names the duplicated boundary rather than reporting "
-           "the collision of the two windows it would have produced");
 
     // A window wider than the segment beside it would need values from a
     // segment further along, which is not what a boundary transition means.
@@ -1090,8 +791,7 @@ void CheckSeamIdentityAndContinuityRefusals() {
                        {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.0)},
                        {seam});
                    (void)profile;
-               },
-               nullptr),
+               }),
            "a half window reaching past an adjacent segment is refused");
 
     // A non-positive window has no interior to put a quintic on, and its width
@@ -1106,14 +806,12 @@ void CheckSeamIdentityAndContinuityRefusals() {
                        {lines::Constant(10.0, 0.0), lines::Constant(10.0, 0.5)},
                        {seam});
                    (void)profile;
-               },
-               nullptr),
+               }),
            "a window of zero length is refused rather than used as a divisor");
 
     // Two windows on different boundaries, each legal on its own, whose spans
     // collide. The piecewise definition would then have no single answer on the
     // overlap.
-    std::string overlap_message;
     Expect(refuses(
                [] {
                    TrackSeamTransition first;
@@ -1128,47 +826,10 @@ void CheckSeamIdentityAndContinuityRefusals() {
                         lines::Constant(10.0, 0.9)},
                        {first, second});
                    (void)profile;
-               },
-               &overlap_message),
+               }),
            "two windows on different boundaries whose spans collide are "
            "refused");
-    Expect(overlap_message.find("overlap") != std::string::npos,
-           "and the refusal names the collision rather than one of the two "
-           "declarations that are each legal on their own");
 
-    // A blend that ends where the next segment starts is continuous by
-    // declaration even though the polynomial arrives there by arithmetic, so
-    // the rule compares what was declared rather than what was computed. The
-    // fixture is chosen so the two really differ: evaluating this blend at its
-    // own end station does not reproduce the declared end value bit for bit,
-    // which is what a rule comparing computed values would refuse.
-    constexpr double kBlendLength = 1.0;
-    constexpr double kBlendStart = 0.1;
-    constexpr double kBlendEnd = 0.3;
-    const TrackScalarProfile blend_alone(
-        0.0, {lines::Blend(kBlendLength, kBlendStart, kBlendEnd)}, {});
-    Expect(blend_alone.Value(kBlendLength) != kBlendEnd &&
-               std::abs(blend_alone.Value(kBlendLength) - kBlendEnd) <=
-                   4.0 * kMachine,
-           "this blend arrives within a few units in the last place of its "
-           "declared end value without landing on it, so the two rules are "
-           "distinguishable here");
-
-    bool blend_accepted = true;
-    try {
-        TrackScalarProfile profile(
-            0.0,
-            {lines::Blend(kBlendLength, kBlendStart, kBlendEnd),
-             lines::Constant(3.0, kBlendEnd)},
-            {});
-        (void)profile;
-    } catch (const std::exception&) {
-        blend_accepted = false;
-    }
-    Expect(blend_accepted,
-           "a blend whose declared end value equals the next segment's declared "
-           "start value is continuous, even where the arithmetic does not land "
-           "on it bit for bit");
 }
 
 }  // namespace

@@ -75,31 +75,6 @@ class TrackGeometry {
         return rail_reference_lateral_span_meters_;
     }
 
-    // Borrow only from a named, live geometry. Moving a profile out would leave
-    // the geometry answering for a domain it no longer has pieces to cover;
-    // borrowing from an expiring geometry would instead return a dangling
-    // reference. Both rvalue forms are therefore deleted.
-    [[nodiscard]] const TrackScalarProfile& curvature_profile() const & {
-        return curvature_;
-    }
-    [[nodiscard]] const TrackScalarProfile& curvature_profile() && = delete;
-    [[nodiscard]] const TrackScalarProfile& curvature_profile() const && =
-        delete;
-
-    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const & {
-        return superelevation_;
-    }
-    [[nodiscard]] const TrackScalarProfile& superelevation_profile() && =
-        delete;
-    [[nodiscard]] const TrackScalarProfile& superelevation_profile() const && =
-        delete;
-
-    [[nodiscard]] const TrackScalarProfile& grade_profile() const & {
-        return grade_;
-    }
-    [[nodiscard]] const TrackScalarProfile& grade_profile() && = delete;
-    [[nodiscard]] const TrackScalarProfile& grade_profile() const && = delete;
-
     // Every station argument below is refused when it is not finite or lies
     // outside the domain.
     [[nodiscard]] double CurvatureRadiansPerMeter(
@@ -138,47 +113,22 @@ class TrackGeometry {
         return grade_.support_start_track_station_meters();
     }
 
-    // Tracks the branch of the centerline the caller is already on.
-    //
-    // This is deliberately not a whole-line search. Finding the nearest station
-    // to an arbitrary point would mean enumerating every minimum of
-    //
-    //     objective = 0.5 * |point - centerline(station)|^2
-    //
-    // over the entire line, and no cheap construction-time bound certifies that
-    // enumeration: a line that is straight in plan but rises and falls can put
-    // two equally near minima inside one node interval, and a curvature that
-    // swings symmetrically can leave the heading unchanged across an interval
-    // while sweeping several radians inside it. Rather than promise a search
-    // this library cannot certify, the initial station comes from the caller —
-    // a resolved start-up state carries it, and an accepted step advances it.
-    //
-    // Two stationary points inside one node interval are separated by the node
-    // grid or not at all, so the resolution of the search is a property of the
-    // stated node spacing rather than something this contract can promise on
-    // its own. The caller must supply a seed, a local window and a geometry
-    // resolution that isolate the branch being tracked. Multiple stationary
-    // points hidden inside one node interval are outside this primitive's
-    // completeness contract.
-    //
-    // Under that resolution precondition, each minimum bracketed by a node
-    // sub-interval is refined by Newton steps kept inside a bracket that
-    // bisection always shrinks. The admitted candidate closest in station to
-    // the seed is returned. A station is admitted only when the objective's
-    // first derivative meets the residual bound and its second derivative is
-    // strictly positive, the latter in the general form
+    // Tracks the branch of the centerline already isolated by the caller's seed
+    // and local window; this is not a whole-line search. The window must contain
+    // exactly one admissible minimum at the declared node resolution. A station
+    // is admissible only when the objective's first derivative meets the
+    // residual bound and its second derivative is strictly positive:
     //
     //     objective'' = |centerline'|^2 - (point - centerline) . centerline'',
     //
-    // not the planar special case a circle would suggest.
+    // Multiple stationary points hidden inside one node interval remain outside
+    // the completeness contract.
     //
     // Throws std::invalid_argument for a non-finite point, a non-finite or
     // out-of-domain seed, a non-positive half width, or a window reaching
     // outside the domain; the window is a declared search domain, not a hint to
-    // be clipped. Throws std::runtime_error when the window holds no admissible
-    // minimum strictly inside it, and when two of them are the same distance
-    // from the seed, because then which branch the caller is on is not a
-    // function of what the caller supplied.
+    // be clipped. Throws std::runtime_error unless exactly one admissible
+    // minimum lies strictly inside the window.
     [[nodiscard]] TrackStationProjection ProjectPointNearSeed(
         const Eigen::Vector3d& point_in_inertial_meters,
         double seed_track_station_meters, double search_half_width_meters) const;
@@ -199,7 +149,6 @@ class TrackGeometry {
 
     struct ProjectionCandidate {
         double track_station_meters{0.0};
-        double squared_distance_meters_squared{0.0};
         bool found{false};
     };
 
@@ -231,13 +180,9 @@ class TrackGeometry {
     [[nodiscard]] ObjectiveDerivatives EvaluateObjectiveDerivatives(
         const Eigen::Vector3d& point_in_inertial_meters,
         double track_station_meters) const;
-    // Locates the minimum in a station interval across which the objective's
-    // first derivative changes from non-positive to non-negative, by Newton
-    // steps kept inside a bracket that bisection always shrinks. The sign
-    // change is what makes the search certified: an interval that does not
-    // bracket one is reported as holding no minimum rather than being walked
-    // hopefully from a starting guess and then judged by whether it happened to
-    // arrive somewhere plausible.
+    // Accepts a qualified endpoint root or refines an interior root bracketed
+    // by a non-positive-to-non-negative gradient change. Newton steps remain
+    // inside a bracket that bisection always shrinks.
     [[nodiscard]] ProjectionCandidate RefineBracketedMinimum(
         const Eigen::Vector3d& point_in_inertial_meters,
         double lower_bound_station, double upper_bound_station) const;

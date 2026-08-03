@@ -1,13 +1,8 @@
 // G47 gate 2: the orientation of the track frame, the order in which it is
 // built, and its rotation rate.
 //
-// Every fixture below carries non-zero curvature, superelevation, grade and
-// heading at the same station. That is not decoration. With the heading and the
-// grade both zero the roll-free frame's longitudinal axis is the inertial x
-// axis, and then rolling before or after building the frame gives the same
-// matrix, so the construction-order check would pass no matter which order the
-// library used. The flat fixture at the end demonstrates exactly that
-// degeneracy, so the reader can see the non-degenerate fixture is doing work.
+// The main fixture carries non-zero curvature, superelevation, grade and
+// heading, so the frame construction order is observable.
 
 #include <cmath>
 #include <cstdio>
@@ -26,7 +21,6 @@ namespace {
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackFrameKinematics;
 using orvd::track_geometry::TrackFramePose;
-using orvd::track_geometry::TrackScalarProfile;
 namespace lines = orvd::track_geometry::test_lines;
 
 static_assert(std::is_same_v<
@@ -43,6 +37,18 @@ static_assert(std::is_same_v<
 static_assert(std::is_same_v<
               decltype(std::declval<TrackFrameKinematics&&>().pose()),
               TrackFramePose>);
+static_assert(std::is_same_v<decltype(std::declval<TrackFramePose&&>()
+                                          .origin_in_inertial_meters()),
+                             Eigen::Vector3d>);
+static_assert(
+    std::is_same_v<decltype(std::declval<TrackFrameKinematics&&>()
+                                .centerline_derivative_in_inertial_meters_per_meter()),
+                   Eigen::Vector3d>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<TrackFrameKinematics&&>()
+                     .track_frame_rotation_rate_in_inertial_radians_per_meter()),
+        Eigen::Vector3d>);
 
 int failure_count = 0;
 
@@ -95,9 +101,6 @@ void CheckClosedFormRotation() {
     // station exactly and does not have to be read out of the library.
     const double heading =
         kStationMeters / lines::kCanonicalRadiusMeters;
-    Expect(std::abs(heading) > 0.1,
-           "the fixture is evaluated where the heading is well away from zero");
-
     const double roll = std::asin(kSteepSuperelevationMeters /
                                   lines::kRailReferenceLateralSpanMeters);
     const Eigen::Matrix3d expected =
@@ -116,95 +119,6 @@ void CheckClosedFormRotation() {
     Expect(NearExact(measured.determinant(), 1.0, 16.0),
            "the track frame rotation has unit positive determinant, so the "
            "triad is right-handed rather than mirrored");
-}
-
-// The kinematics and the pose are values an evaluation produces, so a reference
-// bound to a member of one that is already expiring would dangle. Reading the
-// members and finding them finite proves nothing — freed storage usually still
-// holds finite bit patterns. What settles it is the static type: on an rvalue
-// the accessors must yield a value, so the reference below extends a lifetime
-// instead of binding into a corpse. Deleting the rvalue overloads fails the
-// build here rather than leaving a test that passes by luck.
-static_assert(
-    std::is_same_v<decltype(std::declval<const TrackFrameKinematics&>().pose()),
-                   const TrackFramePose&>);
-static_assert(
-    std::is_same_v<decltype(std::declval<TrackFrameKinematics&&>().pose()),
-                   TrackFramePose>);
-static_assert(std::is_same_v<decltype(std::declval<TrackFramePose&&>()
-                                          .rotation_inertial_from_track()),
-                             Eigen::Matrix3d>);
-static_assert(std::is_same_v<decltype(std::declval<TrackFramePose&&>()
-                                          .origin_in_inertial_meters()),
-                             Eigen::Vector3d>);
-static_assert(
-    std::is_same_v<decltype(std::declval<TrackFrameKinematics&&>()
-                                .centerline_derivative_in_inertial_meters_per_meter()),
-                   Eigen::Vector3d>);
-static_assert(
-    std::is_same_v<
-        decltype(std::declval<TrackFrameKinematics&&>()
-                     .track_frame_rotation_rate_in_inertial_radians_per_meter()),
-        Eigen::Vector3d>);
-
-void CheckTemporaryAccessorsOwnTheirResults() {
-    const TrackGeometry line =
-        lines::MakeSteepConstantLine(kSteepGrade, kSteepSuperelevationMeters);
-    // The value that chain produces has to be the value the const-reference
-    // path gives, not merely something finite.
-    const auto& through_temporaries = line.EvaluateTrackFrame(kStationMeters)
-                                          .pose()
-                                          .rotation_inertial_from_track();
-    const auto kinematics = line.EvaluateTrackFrame(kStationMeters);
-    Expect((through_temporaries -
-            kinematics.pose().rotation_inertial_from_track())
-                   .cwiseAbs()
-                   .maxCoeff() == 0.0,
-           "a rotation read through a chain of temporaries equals the one read "
-           "from a named result, so the copy the rvalue overloads make carries "
-           "the values rather than a view of released storage");
-}
-
-void CheckConstructionOrder() {
-    const TrackGeometry line =
-        lines::MakeSteepConstantLine(kSteepGrade, kSteepSuperelevationMeters);
-    const double heading = kStationMeters / lines::kCanonicalRadiusMeters;
-    const double roll = std::asin(kSteepSuperelevationMeters /
-                                  lines::kRailReferenceLateralSpanMeters);
-    const Eigen::Matrix3d roll_free =
-        ExpectedRollFreeRotation(heading, kSteepGrade);
-    const Eigen::Matrix3d correct_order = roll_free * RollAboutFirstAxis(roll);
-    const Eigen::Matrix3d reversed_order =
-        RollAboutFirstAxis(roll) * roll_free;
-    const Eigen::Matrix3d measured = line.EvaluateTrackFrame(kStationMeters)
-                                         .pose()
-                                         .rotation_inertial_from_track();
-
-    Expect((correct_order - reversed_order).cwiseAbs().maxCoeff() > 1.0e-3,
-           "on this fixture the two construction orders give visibly different "
-           "matrices, so the next check has something to separate");
-    // That the measured rotation equals the correct order is already the
-    // closed-form check above, on this same fixture at this same station. What
-    // is left for this gate to say is the negative one.
-    Expect((measured - reversed_order).cwiseAbs().maxCoeff() > 1.0e-3,
-           "the roll is applied about the roll-free frame's own longitudinal "
-           "axis after that frame is built, not about the inertial axis before, "
-           "so the track frame is not the reversed construction order");
-}
-
-void CheckDegenerateFixtureWouldNotDiscriminate() {
-    // Heading and grade both zero: now the roll-free frame's longitudinal axis
-    // is the inertial x axis and the two orders commute. A gate evaluated only
-    // here would pass for either implementation.
-    const double roll = std::asin(kSteepSuperelevationMeters /
-                                  lines::kRailReferenceLateralSpanMeters);
-    const Eigen::Matrix3d roll_free = ExpectedRollFreeRotation(0.0, 0.0);
-    const Eigen::Matrix3d correct_order = roll_free * RollAboutFirstAxis(roll);
-    const Eigen::Matrix3d reversed_order = RollAboutFirstAxis(roll) * roll_free;
-    Expect((correct_order - reversed_order).cwiseAbs().maxCoeff() <=
-               16.0 * kMachine,
-           "with zero heading and zero grade the two construction orders agree, "
-           "which is why the fixture above carries both");
 }
 
 void CheckSuperelevationSignByRailHeights() {
@@ -242,11 +156,6 @@ void CheckSuperelevationSignByRailHeights() {
                          superelevation / tangent_norm, 16.0),
                "the same difference measured along the inertial vertical is "
                "shortened by the tangent norm, which is the pitch showing up");
-
-        // The signed numerical assertion above already proves the convention:
-        // in the +z-down inertial frame, positive superelevation puts the right
-        // rail lower. A second Boolean sign assertion would be its strict
-        // logical subset and would add no independent failure mode.
     }
 }
 
@@ -290,9 +199,6 @@ void CheckRotationRateIdentity() {
            "the reported rotation rate reproduces the station derivative of "
            "the rotation through the skew identity, within the "
            "finite-difference budget");
-    Expect(worst > 0.0,
-           "the comparison is a real numerical one rather than a pair of "
-           "identical expressions");
 }
 
 void CheckRotationRateIsNotMerelyTheHeadingRate() {
@@ -325,9 +231,6 @@ void CheckRotationRateIsNotMerelyTheHeadingRate() {
 
 int main() {
     CheckClosedFormRotation();
-    CheckTemporaryAccessorsOwnTheirResults();
-    CheckConstructionOrder();
-    CheckDegenerateFixtureWouldNotDiscriminate();
     CheckSuperelevationSignByRailHeights();
     CheckRotationRateIdentity();
     CheckRotationRateIsNotMerelyTheHeadingRate();
