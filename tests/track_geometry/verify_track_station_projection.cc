@@ -205,19 +205,108 @@ void CheckRootsTheNodeGridDoesNotSurround() {
 }
 
 void CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin() {
-    // Two roots a millimetre apart. A duplicate test scaled by the absolute
-    // station would treat them as one; the exact-node identity used instead
-    // does not.
-    const TrackGeometry line = lines::MakeLevelStraightLine(20.0, 1.0);
-    const Eigen::Vector3d first(9.9995, 0.5, 0.0);
-    const Eigen::Vector3d second(10.0005, 0.5, 0.0);
-    const double a =
-        line.ProjectPointNearSeed(first, 10.0, 0.4).track_station_meters();
-    const double b =
-        line.ProjectPointNearSeed(second, 10.0, 0.4).track_station_meters();
-    Expect(std::abs(a - b) > 1.0e-6,
-           "two roots a millimetre apart stay distinct rather than collapsing "
-           "into one another");
+    // A one-millimetre version of the symmetric grade arch, translated to a
+    // one-million-metre station origin. The one query has two minima about
+    // 0.612 mm apart. The retired relative merge tolerance grew to 1 mm at
+    // this origin and collapsed them; topology-based duplicate removal must
+    // keep them distinct so the equal seed-distance refusal can see both.
+    constexpr double kStartStationMeters = 1.0e6;
+    constexpr double kLengthMeters = 1.0e-3;
+    constexpr double kNodeSpacingMeters = 1.0e-4;
+    const TrackGeometry line(
+        TrackScalarProfile(
+            kStartStationMeters, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(
+            kStartStationMeters, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(
+            kStartStationMeters,
+            {lines::Blend(kLengthMeters, lines::kArchGrade,
+                          -lines::kArchGrade)},
+            {}),
+        lines::kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+    const double start = line.start_track_station_meters();
+    const double end = line.end_track_station_meters();
+    const double length = end - start;
+    const double midpoint = 0.5 * (start + end);
+    Eigen::Vector3d point =
+        line.CenterlinePositionInInertialMeters(midpoint);
+    point.z() += 0.5125 * length;
+
+    const double left =
+        line.ProjectPointNearSeed(point, start + 0.2 * length,
+                                  0.15 * length)
+            .track_station_meters();
+    const double right =
+        line.ProjectPointNearSeed(point, start + 0.8 * length,
+                                  0.15 * length)
+            .track_station_meters();
+    Expect(right - left > 0.5 * length && right - left < 1.0e-3,
+           "two local windows first establish distinct sub-millimetre roots "
+           "at the translated station origin");
+
+    bool refused = false;
+    std::string message;
+    try {
+        (void)line.ProjectPointNearSeed(point, midpoint, 0.49 * length);
+    } catch (const std::runtime_error& error) {
+        refused = true;
+        message = error.what();
+    }
+    Expect(refused,
+           "one wide local window retains both roots at a million-metre "
+           "station origin and refuses their equal seed distance");
+    Expect(message.find("same distance from the seed") != std::string::npos,
+           "the translated fixture is refused for branch ambiguity rather "
+           "than for an unrelated search failure");
+}
+
+void CheckBoundaryCanonicalisationKeepsTheResidualGate() {
+    // A very large positive Hessian can make gradient / Hessian lie within a
+    // few station ULPs even while the gradient itself is nowhere near the
+    // public stationary-point residual. Canonicalising a shared-node root is a
+    // duplicate-removal device; it must not bypass candidate qualification.
+    constexpr double kStartStationMeters = 99.999;
+    constexpr double kLengthMeters = 0.002;
+    constexpr double kNodeSpacingMeters = 0.001;
+    constexpr double kCurvaturePerMeter = 1.0e10;
+    const TrackGeometry line(
+        TrackScalarProfile(
+            kStartStationMeters,
+            {lines::Constant(kLengthMeters, kCurvaturePerMeter)}, {}),
+        TrackScalarProfile(
+            kStartStationMeters, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        TrackScalarProfile(
+            kStartStationMeters, {lines::Constant(kLengthMeters, 0.0)}, {}),
+        lines::kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+    const double node = kStartStationMeters + kNodeSpacingMeters;
+    const auto frame = line.EvaluateTrackFrame(node);
+    const Eigen::Vector3d tangent =
+        line.CenterlineDerivativeInInertialMetersPerMeter(node);
+    const Eigen::Vector3d point =
+        frame.pose().origin_in_inertial_meters() + 0.005 * tangent -
+        frame.pose().rotation_inertial_from_track().col(1);
+
+    bool respected = false;
+    try {
+        const auto projection =
+            line.ProjectPointNearSeed(point, node, 0.00075);
+        const double station = projection.track_station_meters();
+        const Eigen::Vector3d projected_tangent =
+            line.CenterlineDerivativeInInertialMetersPerMeter(station);
+        const Eigen::Vector3d offset =
+            point - projection.closest_centerline_point_in_inertial_meters();
+        const double gradient = std::abs(offset.dot(projected_tangent));
+        const double bound =
+            1.0e-10 * (offset.norm() * projected_tangent.norm() + 1.0);
+        respected = gradient <= bound;
+    } catch (const std::runtime_error&) {
+        // This deliberately under-resolved extreme-curvature fixture need not
+        // yield a branch, but it must never return a non-stationary point.
+        respected = true;
+    }
+    Expect(respected,
+           "shared-node canonicalisation cannot admit a candidate that fails "
+           "the same first-derivative residual as every refined candidate");
 }
 
 void CheckMinimaEquallyFarFromTheSeedAreRefused() {
@@ -257,6 +346,18 @@ void CheckMinimaEquallyFarFromTheSeedAreRefused() {
     Expect(resolved,
            "moving the seed onto one flank resolves the same point on the same "
            "line");
+
+    // Keep both minima in the declared window and move only the seed. This
+    // directly exercises the branch-selection rule instead of shrinking the
+    // window until only one candidate remains.
+    const double left =
+        line.ProjectPointNearSeed(point, 4.5, 4.4).track_station_meters();
+    const double right =
+        line.ProjectPointNearSeed(point, 5.5, 4.4).track_station_meters();
+    Expect(left < 0.5 * lines::kArchLengthMeters &&
+               right > 0.5 * lines::kArchLengthMeters,
+           "when two non-equidistant branches remain in the window, the "
+           "candidate nearest the supplied seed is selected");
 }
 
 void CheckSecondOrderConditionIsEnforced() {
@@ -423,6 +524,7 @@ int main() {
     CheckTemporaryProjectionOwnsItsPoint();
     CheckRootsTheNodeGridDoesNotSurround();
     CheckDistinctRootsAreNotMergedByAnAbsoluteStationOrigin();
+    CheckBoundaryCanonicalisationKeepsTheResidualGate();
     CheckMinimaEquallyFarFromTheSeedAreRefused();
     CheckSecondOrderConditionIsEnforced();
     CheckAStationaryPointOnTheWindowWallIsRefused();

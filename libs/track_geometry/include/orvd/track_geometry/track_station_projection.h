@@ -6,14 +6,13 @@
 
 // The result of projecting a point in space onto the line centerline.
 //
-// The projection primitive keeps no history. A cold start searches the whole
-// admissible domain; a seeded query searches a stated interval around a seed
-// the caller supplies. Neither remembers anything between calls, so nothing an
-// integrator rejects can leak into the next evaluation through this object.
-// A consumer that wants a predicted seed computes the prediction itself and
-// passes the predicted station in; the line layer does not take a station rate
-// or a step length, because it has no way to tell an accepted step from a
-// trial one.
+// The projection primitive keeps no history. A seeded query searches a stated
+// interval around a seed the caller supplies; there is deliberately no
+// whole-line cold-start query. Nothing an integrator rejects can therefore leak
+// into the next evaluation through this object. A consumer that wants a
+// predicted seed computes the prediction itself and passes the predicted
+// station in; the line layer does not take a station rate or a step length,
+// because it has no way to tell an accepted step from a trial one.
 
 namespace orvd::track_geometry {
 

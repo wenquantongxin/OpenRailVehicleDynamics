@@ -30,10 +30,9 @@ constexpr double kQuadratureWeights[kQuadraturePointCount] = {
 
 constexpr int kMaximumRefinementIterations = 64;
 // The refinement stops when the bracket has closed to this many units in the
-// last place of its own endpoints. Scaling by the bracket rather than by the
-// absolute station keeps the criterion meaningful on a line whose stations run
-// into the millions, where a relative bound on the station alone would stop
-// while the bracket was still metres wide.
+// last place of its endpoints. The ULP size necessarily follows the absolute
+// station magnitude; unlike an independently chosen relative tolerance, this
+// asks only for the representable resolution of the station values themselves.
 constexpr double kBracketUlpCount = 4.0;
 // The first derivative of the squared-distance objective has units of metres
 // times metres per metre, so its residual bound scales with the distance.
@@ -444,13 +443,19 @@ TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
                         boundary_station,
                         -std::numeric_limits<double>::infinity()));
             constexpr double kBoundaryCanonicalisationUlpCount = 64.0;
+            const Eigen::Vector3d boundary_offset =
+                point_in_inertial_meters -
+                CenterlinePositionUnchecked(boundary_station);
+            const Eigen::Vector3d boundary_first =
+                CenterlineDerivativeUnchecked(boundary_station);
+            const double gradient_bound =
+                kObjectiveGradientRelativeTolerance *
+                (boundary_offset.norm() * boundary_first.norm() + 1.0);
             if (boundary_derivatives.hessian > 0.0 &&
+                std::abs(boundary_derivatives.gradient) <= gradient_bound &&
                 std::abs(boundary_derivatives.gradient /
                          boundary_derivatives.hessian) <=
                     kBoundaryCanonicalisationUlpCount * station_ulp) {
-                const Eigen::Vector3d boundary_offset =
-                    point_in_inertial_meters -
-                    CenterlinePositionUnchecked(boundary_station);
                 boundary_candidate.found = true;
                 boundary_candidate.track_station_meters = boundary_station;
                 boundary_candidate.squared_distance_meters_squared =

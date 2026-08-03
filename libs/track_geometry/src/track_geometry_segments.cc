@@ -311,7 +311,10 @@ TrackScalarProfile::TrackScalarProfile(
                 Describe(seam.window_length_meters));
         }
         const std::size_t left = seam.preceding_segment_index;
-        if (left + 1 >= raw.size()) {
+        // Compare before adding one: SIZE_MAX is a valid value of the public
+        // unsigned field, and `left + 1` would wrap to zero before this guard
+        // could reject it. `raw` is known non-empty above.
+        if (left >= raw.size() - 1) {
             throw std::invalid_argument(
                 "TrackScalarProfile: " + where + " names segment " +
                 std::to_string(left) +

@@ -729,6 +729,25 @@ void CheckSeamIdentityAndContinuityRefusals() {
            "a seam naming the last segment is refused, because there is no "
            "following segment to form a boundary with");
 
+    // The public index is unsigned. Checking `index + 1` would wrap SIZE_MAX
+    // to zero and turn an invalid declaration into an out-of-bounds access.
+    Expect(refuses(
+               [] {
+                   TrackSeamTransition seam;
+                   seam.preceding_segment_index =
+                       std::numeric_limits<std::size_t>::max();
+                   seam.window_length_meters = 2.0;
+                   TrackScalarProfile profile(
+                       0.0,
+                       {lines::Constant(10.0, 0.0),
+                        lines::Constant(10.0, 0.0)},
+                       {seam});
+                   (void)profile;
+               },
+               nullptr),
+           "the maximum representable seam index is refused without unsigned "
+           "wraparound or an out-of-bounds access");
+
     // Two seams on one boundary. Their windows would also overlap, so a
     // refusal on its own says nothing about which rule fired; the message is
     // what distinguishes "you named this boundary twice" from "these two

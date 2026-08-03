@@ -160,16 +160,17 @@ class TrackGeometry {
     // Two stationary points inside one node interval are separated by the node
     // grid or not at all, so the resolution of the search is a property of the
     // stated node spacing rather than something this contract can promise on
-    // its own. In production the window is a step's worth of station and the
-    // question does not arise; a caller that widens it takes on the same
-    // resolution question the whole-line search could not answer.
+    // its own. The caller must supply a seed, a local window and a geometry
+    // resolution that isolate the branch being tracked. Multiple stationary
+    // points hidden inside one node interval are outside this primitive's
+    // completeness contract.
     //
-    // What is promised is exactly what a bracketed search can deliver: the
-    // minimum strictly inside the declared interval, found by Newton steps kept
-    // inside a bracket that bisection always shrinks. A station is admitted
-    // only when the objective's first derivative meets the residual bound and
-    // its second derivative is strictly positive, the latter in the general
-    // form
+    // Under that resolution precondition, each minimum bracketed by a node
+    // sub-interval is refined by Newton steps kept inside a bracket that
+    // bisection always shrinks. The admitted candidate closest in station to
+    // the seed is returned. A station is admitted only when the objective's
+    // first derivative meets the residual bound and its second derivative is
+    // strictly positive, the latter in the general form
     //
     //     objective'' = |centerline'|^2 - (point - centerline) . centerline'',
     //
