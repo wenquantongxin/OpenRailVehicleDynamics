@@ -35,7 +35,6 @@ using SystemIdentity = std::uint64_t;
 /// The stable identity of the first multibody component in one system.
 class MultibodyComponentIndex {
    public:
-    [[nodiscard]] bool is_valid() const { return system_identity_ != 0; }
     [[nodiscard]] bool operator==(const MultibodyComponentIndex&) const =
         default;
 
@@ -55,7 +54,6 @@ class MultibodyComponentIndex {
 /// neither an array subscript nor interchangeable with another force family.
 class TranslationalSpringDamperIndex {
    public:
-    [[nodiscard]] bool is_valid() const { return system_identity_ != 0; }
     [[nodiscard]] bool operator==(
         const TranslationalSpringDamperIndex&) const = default;
 
@@ -72,7 +70,6 @@ class TranslationalSpringDamperIndex {
 /// One series spring-viscous damper's force-state component.
 class SeriesSpringViscousDamperIndex {
    public:
-    [[nodiscard]] bool is_valid() const { return system_identity_ != 0; }
     [[nodiscard]] bool operator==(
         const SeriesSpringViscousDamperIndex&) const = default;
 
@@ -259,8 +256,9 @@ class SystemInstance {
 
     /// Accepts a finite time and complete `[q; v; z]` state as one transaction.
     ///
-    /// Every check precedes every write: the size, the time, the finiteness of
-    /// the force state, and then the model's own conditions on q and v, which
+    /// Every check precedes every write: the time and complete state are
+    /// validated, including the force-state finiteness and the model's own
+    /// conditions on q and v, which
     /// that facade validates before it writes anything of its own.  A refusal
     /// therefore leaves time, q, v and z all unchanged — including a refusal
     /// that only the force state earns, which is checked before q and v are

@@ -394,6 +394,37 @@ void CheckRejections(const VehicleDefinition& vehicle) {
             "a programmatically modified body needs finite positive mass before "
             "the inertia conversion divides by it");
 
+    VehicleDefinition singular_inertia = vehicle;
+    singular_inertia.rigid_bodies.front()
+        .inertia_moments_about_center_of_mass_kilogram_square_meters.setZero();
+    singular_inertia.rigid_bodies.front()
+        .inertia_products_about_center_of_mass_kilogram_square_meters.setZero();
+    refuses(std::move(singular_inertia),
+            "a programmatically modified free body needs a positive-definite "
+            "centre-of-mass inertia before the parallel-axis shift");
+
+    VehicleDefinition welded_point_mass = vehicle;
+    bool changed_welded_body = false;
+    for (auto& body : welded_point_mass.rigid_bodies) {
+        if (body.name == "front_carbody_interface_body") {
+            body.inertia_moments_about_center_of_mass_kilogram_square_meters
+                .setZero();
+            body.inertia_products_about_center_of_mass_kilogram_square_meters
+                .setZero();
+            changed_welded_body = true;
+        }
+    }
+    Expect(changed_welded_body,
+           "the constrained-point-mass fixture found its welded interface body");
+    try {
+        static_cast<void>(
+            AssembleVehicleMultibodyModel(welded_point_mass, kGravityMagnitude));
+    } catch (const std::exception&) {
+        Expect(false,
+               "a constrained point mass remains a valid vehicle component; "
+               "only a free body's singular rotational inertia is refused");
+    }
+
     VehicleDefinition orphan = vehicle;
     for (auto& body : orphan.rigid_bodies) {
         if (body.name == "front_bogie_frame") {
@@ -518,7 +549,9 @@ void CheckForcePlanAndParameterOwnership(const VehicleDefinition& vehicle,
     using orvd::system_assembly::SystemAssemblyDescription;
     using orvd::system_assembly::SystemInstance;
 
-    const auto plan = orvd::configuration::BuildVehicleForcePlan(vehicle, model);
+    VehicleDefinition plan_source = vehicle;
+    const auto plan =
+        orvd::configuration::BuildVehicleForcePlan(plan_source, model);
     Expect(plan->translational_spring_damper_count() == 20 &&
                plan->roll_spring_damper_couple_count() == 2 &&
                plan->series_spring_viscous_damper_count() == 2 &&
@@ -649,8 +682,7 @@ void CheckForcePlanAndParameterOwnership(const VehicleDefinition& vehicle,
            "slice of the state block");
 
     // A record edited after the plan was compiled cannot reach it.
-    VehicleDefinition edited = vehicle;
-    edited.translational_spring_dampers.front().stiffness_newtons_per_meter *=
+    plan_source.translational_spring_dampers.front().stiffness_newtons_per_meter *=
         3.0;
     Eigen::VectorXd after_edit(109);
     compiled.CalcStateTimeDerivatives(*first, after_edit);

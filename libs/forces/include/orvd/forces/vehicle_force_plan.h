@@ -23,9 +23,10 @@
 // caller, so two contexts of one system can be evaluated without sharing a
 // buffer. That is why this class has no scratch of its own.
 //
-// Each element is evaluated exactly once per call, in the order the arrays hold
-// them: translational, then roll, then series, then clipped. The order is fixed
-// so that a wrench buffer index means the same thing on every call.
+// Each element is evaluated exactly once per call. Cross-family output order is
+// deliberately not a public contract: the only consumer accumulates the whole
+// typed plan, and startup lookup resolves names to typed slots rather than to a
+// wrench-buffer position.
 
 namespace orvd::system_assembly {
 class SystemInstance;
@@ -44,8 +45,10 @@ class VehicleForcePlan {
     // or one body, if an algebraic stiffness or damping is negative or not
     // finite, if a series element's stiffness or damping is not positive — a
     // series element with either at zero has no time constant and is not this
-    // family — or if a clipped damper's curve is not a strictly ascending run
-    // of finite, non-negative forces starting at the origin.
+    // family — or if stiffness divided by damping is not finite. A clipped
+    // damper curve must start at the origin, ascend strictly in velocity and
+    // state finite non-negative force.
+    // Throws std::invalid_argument if an endpoint is the world frame.
     // Throws std::logic_error if the model is not finalized.
     VehicleForcePlan(
         const multibody_model::MultibodyModel& model,
@@ -54,6 +57,18 @@ class VehicleForcePlan {
         std::vector<SeriesSpringViscousDamper> series_spring_viscous_dampers,
         std::vector<SaturatedPiecewiseLinearDamper>
             saturated_piecewise_linear_dampers);
+    VehicleForcePlan(
+        multibody_model::MultibodyModel&&,
+        std::vector<TranslationalSpringDamper>,
+        std::vector<RollSpringDamperCouple>,
+        std::vector<SeriesSpringViscousDamper>,
+        std::vector<SaturatedPiecewiseLinearDamper>) = delete;
+    VehicleForcePlan(
+        const multibody_model::MultibodyModel&&,
+        std::vector<TranslationalSpringDamper>,
+        std::vector<RollSpringDamperCouple>,
+        std::vector<SeriesSpringViscousDamper>,
+        std::vector<SaturatedPiecewiseLinearDamper>) = delete;
 
     VehicleForcePlan(const VehicleForcePlan&) = delete;
     VehicleForcePlan& operator=(const VehicleForcePlan&) = delete;
@@ -116,10 +131,14 @@ class VehicleForcePlan {
         std::span<multibody_model::AppliedBodyWrench> body_wrenches,
         Eigen::Ref<Eigen::VectorXd> series_force_derivatives) const;
 
-    /// The force a saturated piecewise linear damper produces at one relative
-    /// velocity. Exposed because it is the whole constitutive content of that
-    /// family and a gate has to be able to sample it without an assembled
-    /// vehicle around it.
+    /// The force a saturated piecewise linear damper produces at one finite
+    /// relative velocity. Exposed because it is the whole constitutive content
+    /// of that family and a gate has to be able to sample it without an
+    /// assembled vehicle around it.
+    ///
+    /// @throws std::invalid_argument if the raw damper does not satisfy the
+    /// same curve contract enforced by the plan constructor, or if the query
+    /// velocity is not finite.
     [[nodiscard]] static double SaturatedPiecewiseLinearDamperForce(
         const SaturatedPiecewiseLinearDamper& damper,
         double relative_velocity_meters_per_second);

@@ -5,7 +5,6 @@
 
 #include <Eigen/Core>
 
-#include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_model_handles.h"
 
 // The force elements a rail vehicle's suspension is made of, named by what they
@@ -117,16 +116,9 @@ struct SaturatedPiecewiseLinearDamper {
     ForceElementEnd reference_end;
     ForceElementEnd opposite_end;
     ForceElementAxis axis{ForceElementAxis::kLateral};
-    // Ascending in velocity, first point at zero velocity and zero force.
+    // Strictly ascending in velocity, with finite non-negative force and the
+    // first point at zero velocity and zero force.
     std::vector<SaturatedPiecewiseLinearDamperPoint> curve;
-};
-
-// The wrench pair one translational or one roll element produces. Both entries
-// are always written; a roll element writes zero force and equal and opposite
-// moments, and its two application points are the two frame origins.
-struct ForceElementWrenchPair {
-    multibody_model::AppliedBodyWrench on_reference_body;
-    multibody_model::AppliedBodyWrench on_opposite_body;
 };
 
 }  // namespace orvd::forces

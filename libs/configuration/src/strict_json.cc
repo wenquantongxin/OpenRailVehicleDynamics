@@ -205,6 +205,8 @@ Json ParseStrictJson(const std::string& document) {
     return Json::parse(document);
 }
 
+namespace {
+
 bool IsExactlyRepresentableAsBinary64(std::uint64_t magnitude) {
     const unsigned int width = std::bit_width(magnitude);
     if (width <= 53U) {
@@ -215,6 +217,8 @@ bool IsExactlyRepresentableAsBinary64(std::uint64_t magnitude) {
         (std::uint64_t{1} << discarded_bits) - 1U;
     return (magnitude & discarded_mask) == 0U;
 }
+
+}  // namespace
 
 void RequireObject(const Json& value, const std::string& path) {
     if (!value.is_object()) {

@@ -6,7 +6,8 @@ add_library(orvd_configuration STATIC
     src/assemble_vehicle_multibody_model.cc
     src/load_track_geometry.cc
     src/load_vehicle_definition.cc
-    src/strict_json.cc)
+    src/strict_json.cc
+    src/vehicle_definition_inertia.cc)
 
 orvd_configure_first_party_target(orvd_configuration)
 

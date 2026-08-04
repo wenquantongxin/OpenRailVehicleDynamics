@@ -9,6 +9,7 @@
 
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
 #include "orvd/track_geometry/track_inertial_frame.h"
+#include "vehicle_definition_inertia.h"
 
 namespace orvd::configuration {
 namespace {
@@ -35,6 +36,8 @@ multibody_runtime::RigidBodyInertiaParameters UnitInertiaAboutBodyOrigin(
         throw std::invalid_argument("rigid body '" + body.name +
                                     "' must have finite positive mass");
     }
+    internal::ThrowIfSingularFreeBodyCenterOfMassInertia(
+        body, "rigid body '" + body.name + "'");
     const Eigen::Vector3d& c = body.center_of_mass_in_body_frame_meters;
     const Eigen::Vector3d& moments =
         body.inertia_moments_about_center_of_mass_kilogram_square_meters;

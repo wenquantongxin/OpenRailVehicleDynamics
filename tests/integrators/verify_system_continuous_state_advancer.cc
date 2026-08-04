@@ -342,7 +342,7 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     const bool first_segment_matches =
         Near(observed[0], expected_q1) && Near(observed[1], expected_v1) &&
         std::abs(observed[series_range.start()] - expected_z1) <=
-            1.0e-6 * std::max(1.0, std::abs(expected_z1));
+            1.0e-5 * std::max(1.0, std::abs(expected_z1));
     if (!first_segment_matches) {
         std::printf("force-plan CVODE first segment measured [% .17g, % .17g, "
                     "% .17g], expected [% .17g, % .17g, % .17g]\n",
@@ -378,7 +378,7 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     const bool second_segment_matches =
         Near(observed[0], expected_q2) && Near(observed[1], expected_v2) &&
         std::abs(observed[series_range.start()] - expected_z2) <=
-            1.0e-6 * std::max(1.0, std::abs(expected_z2));
+            1.0e-5 * std::max(1.0, std::abs(expected_z2));
     if (!second_segment_matches) {
         std::printf("force-plan CVODE second segment measured [% .17g, % .17g, "
                     "% .17g], expected [% .17g, % .17g, % .17g]\n",

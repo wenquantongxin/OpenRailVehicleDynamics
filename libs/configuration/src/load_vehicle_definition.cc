@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "strict_json.h"
+#include "vehicle_definition_inertia.h"
 
 namespace orvd::configuration {
 namespace {
@@ -86,6 +87,7 @@ VehicleRigidBodyDefinition ParseRigidBody(const Json& value,
                 "inertia_products_about_center_of_mass_kilogram_square_meters"),
             path +
                 ".inertia_products_about_center_of_mass_kilogram_square_meters");
+    internal::ThrowIfSingularFreeBodyCenterOfMassInertia(body, path);
     return body;
 }
 

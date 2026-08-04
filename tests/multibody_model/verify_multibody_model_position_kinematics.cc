@@ -500,17 +500,37 @@ void CheckAFrameOriginResolvesToItsNamedRigidBody() {
         model.AddRigidBody("root", SolidishBody(2.0));
     const RigidBodyHandle welded_child =
         model.AddRigidBody("welded_child", SolidishBody(1.0));
-    model.AddWeldJoint("root_weld", model.world_frame(),
-                       model.body_frame(root));
+
+    FixedFramePoseParameters root_child_mount_pose;
+    root_child_mount_pose.R_PF = RotationAboutY(0.43);
+    root_child_mount_pose.p_PoFo_P = Eigen::Vector3d(-0.32, 0.51, 0.27);
+    const FrameHandle root_child_mount = model.AddFixedFrame(
+        "root_child_mount", root, root_child_mount_pose);
+
+    FixedFramePoseParameters child_weld_pose;
+    child_weld_pose.R_PF = RotationAboutX(-0.31);
+    child_weld_pose.p_PoFo_P = Eigen::Vector3d(0.18, -0.22, 0.39);
+    const FrameHandle child_weld =
+        model.AddFixedFrame("child_weld", welded_child, child_weld_pose);
 
     FixedFramePoseParameters child_mount_pose;
     child_mount_pose.p_PoFo_P = Eigen::Vector3d(0.41, -0.29, 0.17);
     const FrameHandle child_mount = model.AddFixedFrame(
         "child_mount", welded_child, child_mount_pose);
-    model.AddWeldJoint("child_weld", model.body_frame(root),
-                       model.body_frame(welded_child));
+    model.AddWeldJoint("child_weld_joint", root_child_mount, child_weld);
+    model.DeclareFreeBody(root);
     model.Finalize();
     const auto context = model.CreateDefaultContext();
+
+    const auto root_positions = model.GetFreeBodyPositionRange(root);
+    Eigen::VectorXd positions =
+        Eigen::VectorXd::Zero(model.num_generalized_positions());
+    constexpr double kRootYaw = 0.37;
+    positions[root_positions.start()] = std::cos(kRootYaw / 2.0);
+    positions[root_positions.start() + 3] = std::sin(kRootYaw / 2.0);
+    positions.segment<3>(root_positions.start() + 4) =
+        Eigen::Vector3d(1.1, -0.8, 0.6);
+    model.SetGeneralizedPositions(context.get(), positions);
 
     const auto mounted =
         model.CalcFrameOriginAsBodyFixedPoint(*context, child_mount);
@@ -520,6 +540,11 @@ void CheckAFrameOriginResolvesToItsNamedRigidBody() {
                "a frame on a welded child resolves to that named child and "
                "its own body-fixed point rather than being folded into its "
                "parent body");
+    ExpectTrue((model.CalcPoseInWorld(*context, child_mount).translation() -
+                child_mount_pose.p_PoFo_P)
+                       .norm() > 0.5,
+               "the fixture separates body-fixed coordinates from world "
+               "coordinates by a visible amount");
 
     const auto body_origin = model.CalcFrameOriginAsBodyFixedPoint(
         *context, model.body_frame(welded_child));

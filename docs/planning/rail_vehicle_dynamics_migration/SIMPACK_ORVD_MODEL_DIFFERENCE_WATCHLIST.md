@@ -172,6 +172,51 @@ centerline_upward_grade_ORVD = -vertical_slope_reference
 - ORVD `libs/track_geometry/include/orvd/track_geometry/track_geometry.h`、
   `libs/track_geometry/src/track_geometry.cc`：正上坡字段与中心线竖向导数。
 
+### MD-004 — FE86 帮助页的显示式遗漏输入速度项
+
+- 车型：共性
+- 层级：串联弹簧—黏性阻尼本构与状态口径
+- 状态：**已裁决；ORVD 本构由同库另一推导交叉支持，不按不完整显示式改写**
+
+#### 疑点
+
+SIMPACK QCH FileId 37668 的 FE86 数学页把同一弹簧伸长 `xs` 的导数也写进阻尼力，随后将
+内部伸长状态写成只含 `xs·cs/ds` 的正号齐次式，未出现总端点相对速度输入项。若只读这一页，容易
+误判 ORVD 的 Maxwell 方程多出了一项或符号相反。
+
+#### 交叉核实
+
+同一 QCH 的 FileId 37652（FE80，Force States Option 2）保留了完整的输入速度项。对其同拓扑
+推导令第二刚度为零，可得：
+
+```text
+ẋs = v_relative - (K/C) xs
+F = K xs
+dF/dt = K v_relative - (K/C) F
+```
+
+这与 ORVD 的活动实现一致。故当前证据说明 FE86 页的最终显示式不完整，不说明 SIMPACK 求解器
+内部实现错误。
+
+两端状态口径也不同：SIMPACK Type-86 以串联弹簧伸长 `xs`（米）表达动态状态，ORVD 直接以
+同一支路的力 `F`（牛）表达，二者由 `F=K·xs` 一一换算。GZ18 的一系 Type-86 模板虽残留
+`force.st.dyn/st.equi` 字段，但串联刚度为零，不能据字段存在把它们算作活动 Maxwell 状态；ORVD
+只为两条串联刚度非零的二系横向减振器声明状态。
+
+#### 迁移约束
+
+- 后续复核必须同时核对状态量纲与完整微分方程，不得把 `xs` 和 `F` 的数值直接逐项比较。
+- 仅凭休眠的状态字段不得增加 ORVD 状态维数；活动性由本构参数与真实消费者共同决定。
+
+#### 源码锚点
+
+- SIMPACK QCH FileId 37668：FE86 数学页及不完整显示式。
+- SIMPACK QCH FileId 37652：FE80 Force States Option 2 的完整状态推导。
+- ORVD `libs/forces/include/orvd/forces/vehicle_force_elements.h`、
+  `libs/forces/src/vehicle_force_plan.cc`：以力为状态的串联本构。
+- WRL `mbs_simpack/vehicle_GZ18/database/mbs_db_substructure/bogie_motor.spck`：一系与二系
+  Type-86 参数及残留状态字段。
+
 ## 新条目模板
 
 ```markdown

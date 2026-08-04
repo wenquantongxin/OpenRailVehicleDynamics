@@ -53,6 +53,14 @@ class SystemAssemblyDescription {
     /// different model.
     SystemAssemblyDescription(const multibody_model::MultibodyModel& model,
                               const forces::VehicleForcePlan& force_plan);
+    SystemAssemblyDescription(multibody_model::MultibodyModel&&,
+                              const forces::VehicleForcePlan&) = delete;
+    SystemAssemblyDescription(const multibody_model::MultibodyModel&&,
+                              const forces::VehicleForcePlan&) = delete;
+    SystemAssemblyDescription(const multibody_model::MultibodyModel&,
+                              forces::VehicleForcePlan&&) = delete;
+    SystemAssemblyDescription(const multibody_model::MultibodyModel&,
+                              const forces::VehicleForcePlan&&) = delete;
     SystemAssemblyDescription(multibody_model::MultibodyModel&&) = delete;
     SystemAssemblyDescription(const multibody_model::MultibodyModel&&) =
         delete;

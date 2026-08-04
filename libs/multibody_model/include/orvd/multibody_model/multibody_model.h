@@ -394,9 +394,9 @@ class MultibodyModel {
     /// coordinates in the child's own body frame; welding does not replace the
     /// endpoint's named-body identity.
     ///
-    /// @throws std::invalid_argument if the frame or context is foreign, or if
-    /// `frame` is the world frame, which has no rigid body that can receive a
-    /// wrench.
+    /// @throws std::invalid_argument if the frame handle is invalid, the frame
+    /// or context is foreign, or `frame` is the world frame, which has no rigid
+    /// body that can receive a wrench.
     /// @throws std::logic_error if the model is not finalized.
     [[nodiscard]] BodyFixedPoint CalcFrameOriginAsBodyFixedPoint(
         const MultibodyEvaluationContext& context, FrameHandle frame) const;

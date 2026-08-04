@@ -171,6 +171,74 @@ void RequireUniqueName(const std::string& name, const std::string& what,
     }
 }
 
+std::string ElementDescription(std::string_view family, std::size_t index,
+                               const std::string& name) {
+    if (name.empty()) {
+        return std::string(family) + " at index " + std::to_string(index);
+    }
+    return std::string(family) + " '" + name + "'";
+}
+
+void ValidateSaturatedDamperCurve(
+    const SaturatedPiecewiseLinearDamper& element, const std::string& what) {
+    if (element.curve.size() < 2) {
+        Reject(what + " needs at least two curve points");
+    }
+    if (element.curve.front().relative_velocity_meters_per_second != 0.0 ||
+        element.curve.front().force_newtons != 0.0) {
+        Reject(what +
+               " must start at the origin; the curve states the non-negative "
+               "half and the other half is its odd reflection");
+    }
+    for (std::size_t point = 0; point < element.curve.size(); ++point) {
+        const auto& current = element.curve[point];
+        if (!std::isfinite(current.relative_velocity_meters_per_second) ||
+            !std::isfinite(current.force_newtons)) {
+            Reject(what + " has a curve point that is not finite");
+        }
+        if (current.force_newtons < 0.0) {
+            Reject(what +
+                   " has a negative force on its non-negative velocity half, "
+                   "which would create rather than dissipate energy");
+        }
+        if (point == 0) {
+            continue;
+        }
+        const auto& previous = element.curve[point - 1];
+        if (!(current.relative_velocity_meters_per_second >
+              previous.relative_velocity_meters_per_second)) {
+            Reject(what +
+                   " has curve points that do not ascend strictly in "
+                   "velocity");
+        }
+    }
+}
+
+double EvaluateValidatedSaturatedDamperCurve(
+    const SaturatedPiecewiseLinearDamper& damper,
+    double relative_velocity_meters_per_second) {
+    const double sign = relative_velocity_meters_per_second < 0.0 ? -1.0 : 1.0;
+    const double speed = std::abs(relative_velocity_meters_per_second);
+    const auto& curve = damper.curve;
+    if (speed >= curve.back().relative_velocity_meters_per_second) {
+        return sign * curve.back().force_newtons;
+    }
+    for (std::size_t point = 1; point < curve.size(); ++point) {
+        const auto& upper = curve[point];
+        if (speed <= upper.relative_velocity_meters_per_second) {
+            const auto& lower = curve[point - 1];
+            const double span = upper.relative_velocity_meters_per_second -
+                                lower.relative_velocity_meters_per_second;
+            const double fraction =
+                (speed - lower.relative_velocity_meters_per_second) / span;
+            return sign * (lower.force_newtons +
+                           fraction * (upper.force_newtons -
+                                       lower.force_newtons));
+        }
+    }
+    return sign * curve.back().force_newtons;
+}
+
 }  // namespace
 
 VehicleForcePlan::VehicleForcePlan(
@@ -193,20 +261,20 @@ VehicleForcePlan::VehicleForcePlan(
     std::unordered_set<std::string> names;
     for (std::size_t index = 0; index < translational_.size(); ++index) {
         const auto& element = translational_[index];
-        const std::string what =
-            "translational spring-damper " + std::to_string(index);
+        const std::string what = ElementDescription(
+            "translational spring-damper", index, element.name);
         RequireUniqueName(element.name, what, &names);
         RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
         RequirePassive(element.stiffness_newtons_per_meter,
-                       what + "'s stiffness");
+                       what + " stiffness");
         RequirePassive(element.damping_newton_seconds_per_meter,
-                       what + "'s damping");
+                       what + " damping");
     }
     for (std::size_t index = 0; index < roll_.size(); ++index) {
         const auto& element = roll_[index];
-        const std::string what =
-            "roll spring-damper couple " + std::to_string(index);
+        const std::string what = ElementDescription(
+            "roll spring-damper couple", index, element.name);
         RequireUniqueName(element.name, what, &names);
         RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
@@ -220,8 +288,8 @@ VehicleForcePlan::VehicleForcePlan(
     }
     for (std::size_t index = 0; index < series_.size(); ++index) {
         const auto& element = series_[index];
-        const std::string what =
-            "series spring-viscous damper " + std::to_string(index);
+        const std::string what = ElementDescription(
+            "series spring-viscous damper", index, element.name);
         RequireUniqueName(element.name, what, &names);
         RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
@@ -238,43 +306,22 @@ VehicleForcePlan::VehicleForcePlan(
                    "either at zero it is an algebraic element and carries no "
                    "state");
         }
+        if (!std::isfinite(element.series_stiffness_newtons_per_meter /
+                           element.series_damping_newton_seconds_per_meter)) {
+            Reject(what +
+                   " has stiffness divided by damping outside the finite "
+                   "binary64 range");
+        }
     }
     for (std::size_t index = 0; index < clipped_.size(); ++index) {
         const auto& element = clipped_[index];
-        const std::string what =
-            "saturated piecewise linear damper " + std::to_string(index);
+        const std::string what = ElementDescription(
+            "saturated piecewise linear damper", index, element.name);
         RequireUniqueName(element.name, what, &names);
         RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
         (void)AxisIndex(element.axis);
-        if (element.curve.size() < 2) {
-            Reject(what + " needs at least two curve points");
-        }
-        if (element.curve.front().relative_velocity_meters_per_second != 0.0 ||
-            element.curve.front().force_newtons != 0.0) {
-            Reject(what +
-                   " must start at the origin; the curve states the non-negative "
-                   "half and the other half is its odd reflection");
-        }
-        for (std::size_t point = 0; point < element.curve.size(); ++point) {
-            const auto& current = element.curve[point];
-            if (!std::isfinite(current.relative_velocity_meters_per_second) ||
-                !std::isfinite(current.force_newtons)) {
-                Reject(what + " has a curve point that is not finite");
-            }
-            if (current.force_newtons < 0.0) {
-                Reject(what +
-                       " has a negative force on its non-negative velocity "
-                       "half, which would create rather than dissipate energy");
-            }
-            if (point > 0 &&
-                !(current.relative_velocity_meters_per_second >
-                  element.curve[point - 1].relative_velocity_meters_per_second)) {
-                Reject(what +
-                       " has curve points that do not ascend strictly in "
-                       "velocity");
-            }
-        }
+        ValidateSaturatedDamperCurve(element, what);
     }
 }
 
@@ -303,28 +350,14 @@ int VehicleForcePlan::FindSeriesSpringViscousDamperOrdinal(
 double VehicleForcePlan::SaturatedPiecewiseLinearDamperForce(
     const SaturatedPiecewiseLinearDamper& damper,
     double relative_velocity_meters_per_second) {
-    // The curve states the non-negative half; the other half is its odd
-    // reflection, so the sign is taken out and put back.
-    const double sign = relative_velocity_meters_per_second < 0.0 ? -1.0 : 1.0;
-    const double speed = std::abs(relative_velocity_meters_per_second);
-    const auto& curve = damper.curve;
-    if (speed >= curve.back().relative_velocity_meters_per_second) {
-        return sign * curve.back().force_newtons;
+    const std::string what = ElementDescription(
+        "saturated piecewise linear damper", 0, damper.name);
+    ValidateSaturatedDamperCurve(damper, what);
+    if (!std::isfinite(relative_velocity_meters_per_second)) {
+        Reject(what + " was queried at a non-finite relative velocity");
     }
-    for (std::size_t point = 1; point < curve.size(); ++point) {
-        const auto& upper = curve[point];
-        if (speed <= upper.relative_velocity_meters_per_second) {
-            const auto& lower = curve[point - 1];
-            const double span = upper.relative_velocity_meters_per_second -
-                                lower.relative_velocity_meters_per_second;
-            const double fraction =
-                (speed - lower.relative_velocity_meters_per_second) / span;
-            return sign * (lower.force_newtons +
-                           fraction * (upper.force_newtons -
-                                       lower.force_newtons));
-        }
-    }
-    return sign * curve.back().force_newtons;
+    return EvaluateValidatedSaturatedDamperCurve(
+        damper, relative_velocity_meters_per_second);
 }
 
 void VehicleForcePlan::CalcAppliedForces(
@@ -425,7 +458,7 @@ void VehicleForcePlan::CalcAppliedForces(
             *model_, context, element.reference_end, element.opposite_end);
         const int axis = AxisIndex(element.axis);
         Eigen::Vector3d force_in_reference = Eigen::Vector3d::Zero();
-        force_in_reference[axis] = SaturatedPiecewiseLinearDamperForce(
+        force_in_reference[axis] = EvaluateValidatedSaturatedDamperCurve(
             element, motion.velocity_in_reference_frame_meters_per_second[axis]);
         EmitTranslationalWrenchPair(
             *model_, motion.reference_point, motion.opposite_point,

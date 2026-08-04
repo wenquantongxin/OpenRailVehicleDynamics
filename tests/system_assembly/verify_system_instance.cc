@@ -362,8 +362,6 @@ void CheckNamedForceSlotsAndContextParameterCopy() {
         system.GetSeriesSpringViscousDamperIndexByName("named_series");
     const auto series_range =
         system.series_spring_damper_force_state_range(series_slot);
-    Expect(nominal_slot.is_valid() && series_slot.is_valid(),
-           "named force slots resolve to valid typed indices");
     Expect(series_range.start() == 5 && series_range.size() == 1,
            "a named series slot resolves past an earlier declaration to its "
            "own force-state component");

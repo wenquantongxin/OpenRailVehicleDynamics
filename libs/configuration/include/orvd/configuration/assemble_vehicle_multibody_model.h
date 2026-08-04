@@ -34,13 +34,14 @@ namespace orvd::configuration {
 // be copied nor moved: it hands out handles that are only valid against the one
 // model that made them.
 //
-// Throws std::invalid_argument when the vehicle name is empty, a body mass is not
-// finite and positive, the magnitude is not finite and positive, or when the
-// multibody layer refuses any part of the description — a repeated
-// name, an unusable joint axis, a negative damping, a body with no path to the
-// world, a relation that would close a loop, or mass properties no body can
-// have. Those diagnostics come from the layer that owns the rule and are not
-// restated here.
+// Throws std::invalid_argument when the vehicle name is empty, a body mass is
+// not finite and positive, a freely moving body's centre-of-mass inertia is not
+// finite and positive-definite, the gravity magnitude is not finite and
+// positive, or when the multibody layer refuses any part of the
+// description — a repeated name, an unusable joint axis, a negative damping, a
+// body with no path to the world, a relation that would close a loop, or mass
+// properties no body can have. Those diagnostics come from the layer that owns
+// the rule and are not restated here.
 [[nodiscard]] std::unique_ptr<multibody_model::MultibodyModel>
 AssembleVehicleMultibodyModel(
     const VehicleDefinition& vehicle,
@@ -64,8 +65,9 @@ AssembleVehicleMultibodyModel(
 // Passive algebraic elements require non-negative stiffness and damping; a
 // series element requires both strictly positive, since with either at zero it
 // has no time constant and is an algebraic element of a different family.  A
-// clipped damper curve must be an ascending run of finite, non-negative forces
-// starting at the origin.
+// clipped damper curve must start at the origin, ascend strictly in velocity
+// and state finite non-negative force. The world frame cannot be a
+// force-element end.
 [[nodiscard]] std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     const VehicleDefinition& vehicle,
     const multibody_model::MultibodyModel& model);

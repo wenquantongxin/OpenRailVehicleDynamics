@@ -85,6 +85,16 @@ if(NOT package_config_count EQUAL 1)
         "the relocated prefix contains ${package_config_count} package config "
         "files instead of one: ${package_configs}")
 endif()
+list(GET package_configs 0 installed_package_config)
+file(READ "${installed_package_config}" installed_package_config_text)
+string(FIND "${installed_package_config_text}"
+       "find_dependency(fmt 9.1.0 CONFIG NO_SYSTEM_ENVIRONMENT_PATH)"
+       isolated_fmt_dependency_position)
+if(isolated_fmt_dependency_position EQUAL -1)
+    message(FATAL_ERROR
+        "the installed package does not isolate fmt lookup from PATH-provided "
+        "toolchains")
+endif()
 
 # Relocation is a property of installed CMake metadata, not of debug strings in
 # compiled archives.  Inspect only the files a future find_package() reads.

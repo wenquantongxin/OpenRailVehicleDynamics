@@ -4,6 +4,8 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <Eigen/Core>
@@ -25,6 +27,13 @@ using orvd::forces::VehicleForcePlan;
 using orvd::multibody_model::AppliedBodyWrench;
 using orvd::multibody_model::MultibodyModel;
 
+static_assert(!std::is_constructible_v<
+              VehicleForcePlan, MultibodyModel&&,
+              std::vector<TranslationalSpringDamper>,
+              std::vector<RollSpringDamperCouple>,
+              std::vector<SeriesSpringViscousDamper>,
+              std::vector<SaturatedPiecewiseLinearDamper>>);
+
 constexpr double kMachine = std::numeric_limits<double>::epsilon();
 
 int failure_count = 0;
@@ -39,11 +48,11 @@ void Expect(bool condition, const std::string& description) {
 // A fixture whose two ends do not coincide, whose reference end is rotated and
 // turning, and whose relative motion is non-zero along all three axes.
 //
-// The vehicle's own nominal configuration cannot be used for any of this: its
-// force elements attach at pairs of points that sit on top of each other, so the
-// displacement between the ends is zero, the support moment is identically zero,
-// and every wrong way of emitting the pair agrees with the right one. A fixture
-// has to be built for the purpose.
+// The vehicle's default context cannot be used for this contract: every
+// generalized velocity is zero, while the side-roll and clipped families also
+// emit zero wrench there. That makes the virtual-power checks degenerate even
+// though several attachment pairs are metres apart. A purpose-built fixture
+// supplies non-zero relative motion and non-collinear attachment geometry.
 struct TwoBodyFixture {
     std::unique_ptr<MultibodyModel> model;
     ForceElementEnd reference_end;
@@ -297,15 +306,9 @@ void CheckFullWrenchAndPower() {
     // Both forces moved to the midpoint: still balanced, for any moment centre,
     // because a pair of equal and opposite forces at one point always is. Only
     // the per-body assertion and the power identity see this one.
-    const Eigen::Vector3d midpoint =
-        0.5 * (motion.reference_point_in_world + motion.opposite_point_in_world);
-    const Eigen::Vector3d midpoint_moment =
-        (midpoint - moment_centre).cross(force_in_world) +
-        (midpoint - moment_centre).cross(-force_in_world);
-    Expect(midpoint_moment.cwiseAbs().maxCoeff() <= 1.0e-12 * scale,
-           "moving both forces to the midpoint balances too, so a gate that "
-           "only checked the balance would pass an implementation the contract "
-           "forbids");
+    // Moving both forces to their midpoint would remain balanced by algebra;
+    // the product-independent balance above therefore cannot distinguish that
+    // wrong implementation. The endpoint-power check below can.
 
     // The endpoint power identity, which does see the midpoint variant.
     const double applied_power = AppliedPower(fixture, wrenches);
@@ -595,6 +598,19 @@ void CheckPlanRefusals() {
         std::printf("FAIL %s\n", description.c_str());
         ++failure_count;
     };
+    const auto refusal_mentions = [](auto&& build, std::string_view fragment,
+                                     const std::string& description) {
+        try {
+            build();
+        } catch (const std::exception& error) {
+            if (std::string_view(error.what()).find(fragment) !=
+                std::string_view::npos) {
+                return;
+            }
+        }
+        std::printf("FAIL %s\n", description.c_str());
+        ++failure_count;
+    };
     refuses(
         [&] {
             VehicleForcePlan plan(
@@ -628,6 +644,19 @@ void CheckPlanRefusals() {
         },
         "a series element with zero stiffness is refused: it has no time "
         "constant and belongs to another family");
+    refusal_mentions(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model, {}, {},
+                {SeriesSpringViscousDamper{
+                    "overflowing_series", fixture.reference_end,
+                    fixture.opposite_end, ForceElementAxis::kLateral, 1.0e9,
+                    1.0e-300}},
+                {});
+        },
+        "overflowing_series",
+        "a series element whose stiffness-to-damping ratio overflows is "
+        "refused by name before it can produce NaN");
     refuses(
         [&] {
             VehicleForcePlan plan(
@@ -641,6 +670,16 @@ void CheckPlanRefusals() {
                      SaturatedPiecewiseLinearDamperPoint{0.01, 9000.0}}}});
         },
         "a curve whose velocities do not ascend is refused");
+    refuses(
+        [&] {
+            SaturatedPiecewiseLinearDamper empty;
+            empty.name = "empty_curve";
+            static_cast<void>(
+                VehicleForcePlan::SaturatedPiecewiseLinearDamperForce(empty,
+                                                                       0.0));
+        },
+        "the public constitutive sampler rejects an empty raw curve instead "
+        "of dereferencing it");
     refuses(
         [&] {
             VehicleForcePlan plan(
@@ -677,7 +716,7 @@ void CheckPlanRefusals() {
                 {});
         },
         "force-element names are unique across constitutive families");
-    refuses(
+    refusal_mentions(
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
@@ -687,7 +726,8 @@ void CheckPlanRefusals() {
                     Eigen::Vector3d::Zero()}},
                 {}, {}, {});
         },
-        "a negative translational stiffness is refused");
+        "active_spring",
+        "a negative translational stiffness is refused with the element name");
     refuses(
         [&] {
             VehicleForcePlan plan(

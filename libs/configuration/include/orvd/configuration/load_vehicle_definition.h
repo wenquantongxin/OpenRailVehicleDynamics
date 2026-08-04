@@ -19,18 +19,18 @@ namespace orvd::configuration {
 // JSON-to-record conversion; a C++ caller may subsequently make explicit edits
 // before passing the record to the assembler.
 //
-// Three further refusals are made here because they are properties of the record
-// that only this layer can report against a JSON path: a name referred to but
-// never declared, an empty vehicle name, and a mass that is not positive. The
-// last is not a
-// restatement of what the multibody layer checks — that layer accepts a massless
-// body, which is a legitimate frame carrier, but a record's inertia is stated
-// about the centre of mass and dividing it by zero produces a diagnostic
-// pointing at the unit inertia rather than at the mass the author wrote.
+// Further refusals are made here when only this layer can identify the offending
+// JSON path: references to undeclared names, an empty vehicle or force-element
+// name, force-element names repeated across constitutive families, a body mass
+// that is not positive, and a freely moving body's singular centre-of-mass
+// inertia. A six-degree-of-freedom body needs nonsingular rotational inertia;
+// constrained bodies remain subject to the multibody layer's full topology-
+// aware mass-property checks.
 //
 // Everything else the multibody layer already decides is left to it: repeated
-// names, a body with no path to the world, a relation that would close a loop,
-// an unusable joint axis, a negative damping, a rotation that is not a rotation.
+// topology names, a body with no path to the world, a relation that would close
+// a loop, an unusable joint axis, a negative damping, or a rotation that is not
+// a rotation.
 // Checking those twice would give two diagnostics for one mistake and let the
 // two drift apart.
 //

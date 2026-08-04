@@ -316,6 +316,11 @@ void CheckRejections(const std::filesystem::path& path) {
         {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0",
                      "\"mass_kilograms\": 0.0"),
          {"$.rigid_bodies[0].mass_kilograms", "positive number of kilograms"}},
+        {ReplaceOnce(valid,
+                     "{\"x\": 60000.0, \"y\": 1300000.0, \"z\": 1330000.0}",
+                     "{\"x\": 0.0, \"y\": 0.0, \"z\": 0.0}"),
+         {"$.rigid_bodies[0]", "positive-definite",
+          "centre-of-mass inertia"}},  // This fixture body moves freely.
         // Reference integrity, at the JSON path that names the absent entity.
         {ReplaceOnce(valid,
                      "\"parent_frame_name\": "
