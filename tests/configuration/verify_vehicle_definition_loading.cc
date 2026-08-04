@@ -19,6 +19,16 @@ using orvd::configuration::LoadVehicleDefinitionFromJsonFile;
 constexpr std::string_view kRecord = R"json({
   "schema_version": 1,
   "vehicle_name": "assembly_fixture",
+  "mechanical_definition_identifier": "assembly_fixture_reference_mechanics",
+  "mechanical_track_station_layout": {
+    "reference_body_name": "carbody",
+    "free_body_station_offsets": [
+      {"station_offset_meters": 0.0, "body_name": "carbody"},
+      {"station_offset_meters": 8.75,
+       "body_name": "front_bogie_leading_wheelset"}
+    ],
+    "wheelset_body_names": ["front_bogie_leading_wheelset"]
+  },
   "rigid_bodies": [
     {
       "name": "carbody",

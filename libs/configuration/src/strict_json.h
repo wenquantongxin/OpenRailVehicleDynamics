@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 
+#include <Eigen/Core>
 #include <nlohmann/json.hpp>
 
 // Strict reading of human-authored product configuration, shared by every
@@ -76,5 +77,26 @@ void RequireExactKeys(const Json& object, const std::string& path,
 [[nodiscard]] bool RequireBool(const Json& value, const std::string& path);
 [[nodiscard]] std::size_t RequireIndex(const Json& value,
                                        const std::string& path);
+
+// A name a record uses to bind itself to something else: non-empty and drawn
+// from letters, digits, '.', '_' and '-'. The character set is the point. It
+// keeps a stray space or a control character from producing two identifiers
+// that compare unequal while reading the same, and it settles now that an
+// identifier is a name rather than a path, so no later goal has to defend
+// against '/' or '..' reaching a file lookup. `what` names the kind of
+// identifier for the diagnostic.
+[[nodiscard]] std::string RequireIdentifier(const Json& value,
+                                            const std::string& path,
+                                            std::string_view what);
+
+// The `{x, y, z}` object every three-component quantity in this module is
+// written as. Spelling the components out is what lets a diagnostic name the
+// offending one.
+[[nodiscard]] Eigen::Vector3d RequireFiniteVector3(const Json& value,
+                                                   const std::string& path);
+
+// "<array_path>[<index>]", the path prefix for one element of an array.
+[[nodiscard]] std::string ElementPath(const std::string& array_path,
+                                      std::size_t index);
 
 }  // namespace orvd::configuration::strict_json

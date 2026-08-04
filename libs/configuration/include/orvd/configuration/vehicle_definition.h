@@ -152,8 +152,40 @@ struct VehicleSaturatedPiecewiseLinearDamperDefinition {
     std::vector<VehicleSaturatedPiecewiseLinearDamperPointDefinition> curve;
 };
 
+// Where one free body sits along the track, measured from the layout reference
+// body. This is mechanical: the same numbers hold wherever on a line the
+// vehicle is placed. They live here rather than in a start-up state, which
+// would otherwise carry a second authority for the same fact.
+struct VehicleFreeBodyStationOffsetDefinition {
+    std::string body_name;
+    double station_offset_meters{0.0};
+};
+
+// Which body the longitudinal layout is measured from, where each free body
+// sits relative to it, and which of those bodies are wheelsets.
+//
+// A start-up domain contract needs the station of the foremost axle before any
+// state is written, and a start-up assembly needs every free body's station to
+// place it on the line. Both read this record; neither recomputes it.
+struct VehicleMechanicalTrackStationLayoutDefinition {
+    std::string reference_body_name;
+    std::vector<VehicleFreeBodyStationOffsetDefinition>
+        free_body_station_offsets;
+    std::vector<std::string> wheelset_body_names;
+};
+
 struct VehicleDefinition {
     std::string vehicle_name;
+    // Names the mechanical content of this record. Equality is identity: two
+    // records carrying the same identifier are taken to be the same mechanical
+    // definition. Whether a user who edits a mechanical parameter also updates
+    // this identifier is the caller's responsibility. This module computes no
+    // content digest, compares no parameter element by element, and never
+    // revises the identifier on its own; a claim of automatic numerical
+    // identity detection would be false.
+    std::string mechanical_definition_identifier;
+    VehicleMechanicalTrackStationLayoutDefinition
+        mechanical_track_station_layout;
     std::vector<VehicleRigidBodyDefinition> rigid_bodies;
     std::vector<VehicleFixedFrameDefinition> fixed_frames;
     std::vector<VehicleRevoluteJointDefinition> revolute_joints;

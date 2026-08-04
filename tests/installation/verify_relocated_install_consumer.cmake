@@ -77,6 +77,12 @@ if(NOT EXISTS "${installed_vehicle_definition}")
         "the relocated prefix has no installed vehicle definition record")
 endif()
 
+# The start-up state sits in a subdirectory of the vehicle library, so it is
+# carried by the same recursive install rule. The consumer below loads it for
+# real rather than this script only asserting the file arrived.
+set(installed_startup_state
+    "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/gz18/startup_states/moving_startup_60kmh.json")
+
 file(GLOB_RECURSE package_configs LIST_DIRECTORIES FALSE
      "${relocated_prefix}/*OpenRailVehicleDynamicsConfig.cmake")
 list(LENGTH package_configs package_config_count)
@@ -183,7 +189,7 @@ get_filename_component(drake_probe_runtime_directory
 run_checked("running the relocated independent consumer" "${smoke_executable}")
 run_checked("running the configuration-only installed consumer"
             "${configuration_smoke_executable}" "${installed_track_geometry}"
-            "${installed_vehicle_definition}")
+            "${installed_vehicle_definition}" "${installed_startup_state}")
 run_checked("running the track-geometry-only installed consumer"
             "${track_geometry_smoke_executable}")
 run_checked("running the Drake-marker positive control"

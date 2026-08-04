@@ -1,6 +1,25 @@
 {
   "schema_version": 1,
   "vehicle_name": "GZ18",
+  "mechanical_definition_identifier": "gz18_reference_mechanics",
+  "mechanical_track_station_layout": {
+    "reference_body_name": "carbody",
+    "free_body_station_offsets": [
+      { "body_name": "carbody", "station_offset_meters": 0.0 },
+      { "body_name": "front_bogie_frame", "station_offset_meters": 7.85 },
+      { "body_name": "front_leading_wheelset", "station_offset_meters": 9.1 },
+      { "body_name": "front_trailing_wheelset", "station_offset_meters": 6.6 },
+      { "body_name": "rear_bogie_frame", "station_offset_meters": -7.85 },
+      { "body_name": "rear_leading_wheelset", "station_offset_meters": -6.6 },
+      { "body_name": "rear_trailing_wheelset", "station_offset_meters": -9.1 }
+    ],
+    "wheelset_body_names": [
+      "front_leading_wheelset",
+      "front_trailing_wheelset",
+      "rear_leading_wheelset",
+      "rear_trailing_wheelset"
+    ]
+  },
   "rigid_bodies": [
     {
       "name": "carbody",

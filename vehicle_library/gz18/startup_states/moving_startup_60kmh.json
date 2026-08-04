@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "vehicle_binding": {
+    "vehicle_name": "GZ18",
+    "mechanical_definition_identifier": "gz18_reference_mechanics"
+  },
+  "wheel_rail_binding": {
+    "wheel_profile_identifier": "LM.prw",
+    "rail_profile_identifier": "UIC60.prr",
+    "wheel_rail_contact_strategy_identifier": "gz18_reference_wheel_rail_contact"
+  },
+  "load_condition_identifier": "gz18_reference_load_condition",
+  "gravitational_acceleration_meters_per_second_squared": 9.81,
+  "running_direction": "increasing_track_station",
+  "initial_longitudinal_speed_meters_per_second": 16.666666666666668,
+  "rail_profile_reference_vertical_offset_meters": -0.0003055705255365684,
+  "target_wheel_support_forces": [
+    {
+      "wheelset_body_name": "front_leading_wheelset",
+      "left_support_force_newtons": 68295.99375,
+      "right_support_force_newtons": 68295.99375
+    },
+    {
+      "wheelset_body_name": "front_trailing_wheelset",
+      "left_support_force_newtons": 68295.99375,
+      "right_support_force_newtons": 68295.99375
+    },
+    {
+      "wheelset_body_name": "rear_leading_wheelset",
+      "left_support_force_newtons": 68295.99375,
+      "right_support_force_newtons": 68295.99375
+    },
+    {
+      "wheelset_body_name": "rear_trailing_wheelset",
+      "left_support_force_newtons": 68295.99375,
+      "right_support_force_newtons": 68295.99375
+    }
+  ],
+  "free_body_startup_states": [
+    {
+      "body_name": "carbody",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": 0.0,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "body_name": "front_bogie_frame",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": 0.0,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "body_name": "rear_bogie_frame",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": 0.0,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "body_name": "front_leading_wheelset",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.42,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": -39.659715290819015,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "body_name": "front_trailing_wheelset",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.42,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": -39.659715290819015,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "body_name": "rear_leading_wheelset",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.42,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": -39.659715290819015,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "body_name": "rear_trailing_wheelset",
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.42,
+      "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": -39.659715290819015,
+        "z": 0.0
+      },
+      "body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": {
+        "x": 16.666666666666668,
+        "y": 0.0,
+        "z": 0.0
+      }
+    }
+  ],
+  "revolute_joint_startup_states": [
+    {
+      "joint_name": "front_leading_right_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "front_leading_left_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "front_trailing_right_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "front_trailing_left_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "rear_leading_right_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "rear_leading_left_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "rear_trailing_right_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    },
+    {
+      "joint_name": "rear_trailing_left_axlebox_carrier_pivot",
+      "position_radians": 0.0,
+      "rate_radians_per_second": 39.659715290819015
+    }
+  ],
+  "series_spring_viscous_damper_force_states": [
+    {
+      "element_name": "front_lateral_damper",
+      "reference_end_axial_force_newtons": 0.0
+    },
+    {
+      "element_name": "rear_lateral_damper",
+      "reference_end_axial_force_newtons": 0.0
+    }
+  ],
+  "translational_spring_damper_nominal_forces": [
+    {
+      "element_name": "front_left_air_spring",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 74926.3275
+      }
+    },
+    {
+      "element_name": "front_right_air_spring",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 74926.3275
+      }
+    },
+    {
+      "element_name": "front_leading_left_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "front_leading_right_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "front_trailing_left_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "front_trailing_right_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "front_leading_left_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "front_leading_right_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "front_trailing_left_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "front_trailing_right_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "rear_left_air_spring",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 74926.3275
+      }
+    },
+    {
+      "element_name": "rear_right_air_spring",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 74926.3275
+      }
+    },
+    {
+      "element_name": "rear_leading_left_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "rear_leading_right_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "rear_trailing_left_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "rear_trailing_right_primary_suspension",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": -59290.41375
+      }
+    },
+    {
+      "element_name": "rear_leading_left_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "rear_leading_right_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "rear_trailing_left_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "element_name": "rear_trailing_right_axlebox_carrier_bushing",
+      "force_on_reference_end_in_reference_frame_newtons": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    }
+  ]
+}

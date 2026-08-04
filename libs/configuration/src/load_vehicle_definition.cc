@@ -14,6 +14,7 @@
 namespace orvd::configuration {
 namespace {
 
+using strict_json::ElementPath;
 using strict_json::Json;
 using strict_json::ParseStrictJson;
 using strict_json::ReadWholeFile;
@@ -21,20 +22,14 @@ using strict_json::RequireArray;
 using strict_json::RequireBool;
 using strict_json::RequireExactKeys;
 using strict_json::RequireFiniteNumber;
+using strict_json::RequireFiniteVector3;
+using strict_json::RequireIdentifier;
 using strict_json::RequireObject;
 using strict_json::RequireString;
 using strict_json::ThrowExpected;
 
-std::string ElementPath(const std::string& array_path, std::size_t index) {
-    return array_path + "[" + std::to_string(index) + "]";
-}
-
 Eigen::Vector3d RequireVector(const Json& value, const std::string& path) {
-    RequireExactKeys(value, path, {"x", "y", "z"});
-    return Eigen::Vector3d(
-        RequireFiniteNumber(value.at("x"), path + ".x"),
-        RequireFiniteNumber(value.at("y"), path + ".y"),
-        RequireFiniteNumber(value.at("z"), path + ".z"));
+    return RequireFiniteVector3(value, path);
 }
 
 // The rotation is a tagged form rather than nine bare numbers. Every named frame
@@ -282,6 +277,56 @@ void RequireDeclared(const std::unordered_set<std::string>& declared,
     }
 }
 
+VehicleFreeBodyStationOffsetDefinition ParseFreeBodyStationOffset(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(value, path, {"body_name", "station_offset_meters"});
+    VehicleFreeBodyStationOffsetDefinition offset;
+    offset.body_name = RequireString(value.at("body_name"), path + ".body_name");
+    if (offset.body_name.empty()) {
+        ThrowExpected(path + ".body_name", "a non-empty rigid-body name");
+    }
+    offset.station_offset_meters = RequireFiniteNumber(
+        value.at("station_offset_meters"), path + ".station_offset_meters");
+    return offset;
+}
+
+VehicleMechanicalTrackStationLayoutDefinition ParseMechanicalTrackStationLayout(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"reference_body_name", "free_body_station_offsets",
+                      "wheelset_body_names"});
+    VehicleMechanicalTrackStationLayoutDefinition layout;
+    layout.reference_body_name = RequireString(
+        value.at("reference_body_name"), path + ".reference_body_name");
+    if (layout.reference_body_name.empty()) {
+        ThrowExpected(path + ".reference_body_name",
+                      "a non-empty rigid-body name");
+    }
+
+    const std::string offsets_path = path + ".free_body_station_offsets";
+    const Json& offsets = value.at("free_body_station_offsets");
+    RequireArray(offsets, offsets_path);
+    layout.free_body_station_offsets.reserve(offsets.size());
+    for (std::size_t index = 0; index < offsets.size(); ++index) {
+        layout.free_body_station_offsets.push_back(ParseFreeBodyStationOffset(
+            offsets[index], ElementPath(offsets_path, index)));
+    }
+
+    const std::string wheelsets_path = path + ".wheelset_body_names";
+    const Json& wheelsets = value.at("wheelset_body_names");
+    RequireArray(wheelsets, wheelsets_path);
+    layout.wheelset_body_names.reserve(wheelsets.size());
+    for (std::size_t index = 0; index < wheelsets.size(); ++index) {
+        const std::string element_path = ElementPath(wheelsets_path, index);
+        std::string name = RequireString(wheelsets[index], element_path);
+        if (name.empty()) {
+            ThrowExpected(element_path, "a non-empty rigid-body name");
+        }
+        layout.wheelset_body_names.push_back(std::move(name));
+    }
+    return layout;
+}
+
 }  // namespace
 
 VehicleDefinition LoadVehicleDefinitionFromJsonFile(
@@ -290,7 +335,9 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         ReadWholeFile(configuration_path, "vehicle definition");
     const Json root = ParseStrictJson(document);
     RequireExactKeys(root, "$",
-                     {"schema_version", "vehicle_name", "rigid_bodies",
+                     {"schema_version", "vehicle_name",
+                      "mechanical_definition_identifier",
+                      "mechanical_track_station_layout", "rigid_bodies",
                       "fixed_frames", "revolute_joints", "weld_joints",
                       "translational_spring_dampers",
                       "roll_spring_damper_couples",
@@ -308,6 +355,14 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     if (vehicle.vehicle_name.empty()) {
         ThrowExpected("$.vehicle_name", "a non-empty string");
     }
+    vehicle.mechanical_definition_identifier =
+        RequireIdentifier(root.at("mechanical_definition_identifier"),
+                          "$.mechanical_definition_identifier",
+                          "mechanical definition identifier");
+    vehicle.mechanical_track_station_layout =
+        ParseMechanicalTrackStationLayout(
+            root.at("mechanical_track_station_layout"),
+            "$.mechanical_track_station_layout");
     vehicle.rigid_bodies = ParseArray<VehicleRigidBodyDefinition>(
         root, "rigid_bodies", ParseRigidBody);
     vehicle.fixed_frames = ParseArray<VehicleFixedFrameDefinition>(
@@ -337,9 +392,90 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     // body?" and "is this a frame a joint may attach to?".
     std::unordered_set<std::string> body_names;
     std::unordered_set<std::string> frame_names;
+    std::unordered_set<std::string> free_body_names;
     for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
         body_names.insert(body.name);
         frame_names.insert(body.name);
+        if (body.moves_freely_in_world) {
+            free_body_names.insert(body.name);
+        }
+    }
+
+    // The layout must name every free body once and nothing else. A free body
+    // without a station has no place on the line; a station for a body that is
+    // not free names a coordinate nobody owns. Neither is caught downstream,
+    // because a start-up assembly reads this table by name and would simply not
+    // look for what is missing.
+    {
+        const VehicleMechanicalTrackStationLayoutDefinition& layout =
+            vehicle.mechanical_track_station_layout;
+        const std::string path = "$.mechanical_track_station_layout";
+        std::unordered_map<std::string, double> offset_of_body;
+        for (std::size_t index = 0; index < layout.free_body_station_offsets.size();
+             ++index) {
+            const VehicleFreeBodyStationOffsetDefinition& offset =
+                layout.free_body_station_offsets[index];
+            const std::string element_path =
+                ElementPath(path + ".free_body_station_offsets", index);
+            if (!free_body_names.contains(offset.body_name)) {
+                throw std::invalid_argument(
+                    element_path + ".body_name names '" + offset.body_name +
+                    "', which this description does not declare as a rigid "
+                    "body that moves freely in the world; only a free body has "
+                    "a station of its own");
+            }
+            const auto [first, inserted] =
+                offset_of_body.emplace(offset.body_name,
+                                       offset.station_offset_meters);
+            if (!inserted) {
+                throw std::invalid_argument(
+                    element_path + ".body_name repeats '" + offset.body_name +
+                    "', which already has a station offset");
+            }
+        }
+        for (const std::string& free_body : free_body_names) {
+            if (!offset_of_body.contains(free_body)) {
+                throw std::invalid_argument(
+                    path + ".free_body_station_offsets omits the free body '" +
+                    free_body +
+                    "'; every free body needs a station before it can be "
+                    "placed on a line");
+            }
+        }
+
+        const auto reference = offset_of_body.find(layout.reference_body_name);
+        if (reference == offset_of_body.end()) {
+            throw std::invalid_argument(
+                path + ".reference_body_name names '" +
+                layout.reference_body_name +
+                "', which is not one of the free bodies this layout places");
+        }
+        if (reference->second != 0.0) {
+            throw std::invalid_argument(
+                path + ".reference_body_name names '" +
+                layout.reference_body_name + "', whose station offset is " +
+                std::to_string(reference->second) +
+                " m rather than zero; the reference body is what the other "
+                "offsets are measured from");
+        }
+
+        std::unordered_set<std::string> wheelset_names;
+        for (std::size_t index = 0; index < layout.wheelset_body_names.size();
+             ++index) {
+            const std::string& name = layout.wheelset_body_names[index];
+            const std::string element_path =
+                ElementPath(path + ".wheelset_body_names", index);
+            if (!offset_of_body.contains(name)) {
+                throw std::invalid_argument(
+                    element_path + " names '" + name +
+                    "', which is not one of the free bodies this layout "
+                    "places");
+            }
+            if (!wheelset_names.insert(name).second) {
+                throw std::invalid_argument(element_path + " repeats '" + name +
+                                            "'");
+            }
+        }
     }
     for (std::size_t index = 0; index < vehicle.fixed_frames.size(); ++index) {
         const VehicleFixedFrameDefinition& frame = vehicle.fixed_frames[index];

@@ -310,4 +310,44 @@ bool RequireBool(const Json& value, const std::string& path) {
     return value.get<bool>();
 }
 
+std::string RequireIdentifier(const Json& value, const std::string& path,
+                              std::string_view what) {
+    const std::string identifier = RequireString(value, path);
+    if (identifier.empty()) {
+        ThrowExpected(path, std::string("a non-empty ") + std::string(what));
+    }
+    for (const char character : identifier) {
+        const bool admitted = (character >= 'A' && character <= 'Z') ||
+                              (character >= 'a' && character <= 'z') ||
+                              (character >= '0' && character <= '9') ||
+                              character == '.' || character == '_' ||
+                              character == '-';
+        if (!admitted) {
+            throw std::invalid_argument(
+                path + " is a " + std::string(what) + " '" + identifier +
+                "' containing a character outside [A-Za-z0-9._-]; an "
+                "identifier is a name, not a path or a sentence");
+        }
+    }
+    if (identifier.find("..") != std::string::npos) {
+        throw std::invalid_argument(path + " is a " + std::string(what) +
+                                    " '" + identifier +
+                                    "' containing '..'; an identifier names "
+                                    "an object, it does not traverse to one");
+    }
+    return identifier;
+}
+
+Eigen::Vector3d RequireFiniteVector3(const Json& value,
+                                     const std::string& path) {
+    RequireExactKeys(value, path, {"x", "y", "z"});
+    return Eigen::Vector3d(RequireFiniteNumber(value.at("x"), path + ".x"),
+                           RequireFiniteNumber(value.at("y"), path + ".y"),
+                           RequireFiniteNumber(value.at("z"), path + ".z"));
+}
+
+std::string ElementPath(const std::string& array_path, std::size_t index) {
+    return array_path + "[" + std::to_string(index) + "]";
+}
+
 }  // namespace orvd::configuration::strict_json

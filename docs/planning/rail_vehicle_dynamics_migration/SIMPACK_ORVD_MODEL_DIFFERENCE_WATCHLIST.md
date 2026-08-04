@@ -42,7 +42,9 @@
 
 ## 活跃候选
 
-- MD-002：GZ18 活动曲线的超高模式整数与实际滚转基准尚未建立可靠映射，须在 G51 前核实。
+- MD-002：GZ18 活动曲线的超高模式整数与实际滚转基准尚未建立可靠映射。**不再是 G51 的阻塞**：
+  G51 的启动域要求曲率、超高与纵坡在首轴之后才开始作用，因此其唯一合法线路上超高恒为零，
+  `kind` 在零超高处不产生可观测差异。改为在第一个承载非零超高或曲线的场景之前核实。
 
 ## 已筛查条目
 
@@ -216,6 +218,21 @@ dF/dt = K v_relative - (K/C) F
   `libs/forces/src/vehicle_force_plan.cc`：以力为状态的串联本构。
 - WRL `mbs_simpack/vehicle_GZ18/database/mbs_db_substructure/bogie_motor.spck`：一系与二系
   Type-86 参数及残留状态字段。
+
+### MD-005 — `LM.prw` 自称 ERRI S1002（已否证，非差异）
+
+- 车型：GZ18、IRW、SH17 共性
+- 层级：轮型资产身份
+- 状态：**已否证；不是开放差异，无需下游处置**
+
+`LM.prw` 的头部数据段有 `comment = 'ERRI S1002 Wheel Profile, according to Nefzger, ...'`，看上去
+像文件自称是另一个型面。横向比对否证了这一读法：同一句注释**逐字**出现在 `LM.prw`、`S1002.prw`
+与 `DIN5573-28.prw` 三个不同型面里，而 DIN5573-28 显然不是 S1002。这是随机文档模板里未被改写的
+样板字段，不构成身份主张。`LM.prw` 与 `S1002.prw` 的点数据不同，且 `LM.prw` 自己的文件头注释块
+写的是 `File Name : LM.prw`。
+
+G51 的启动记录按源模型 `rwpair.wheel.prof.file` 的字面值记 `LM.prw`，既不改写为 S1002，也不
+简写为 `LM`。G52 加载真实型面时无需为此额外登记两个名称。
 
 ## 新条目模板
 

@@ -676,3 +676,27 @@ target_link_libraries(verify_vehicle_force_elements
     PRIVATE orvd_forces)
 add_test(NAME verify_vehicle_force_elements
          COMMAND verify_vehicle_force_elements)
+
+add_executable(verify_gz18_startup_assembly
+    configuration/resolved_startup_state_header_self_containment.cc
+    configuration/load_resolved_startup_state_header_self_containment.cc
+    configuration/assembled_vehicle_system_header_self_containment.cc
+    configuration/assemble_resolved_initial_context_header_self_containment.cc
+    configuration/verify_gz18_startup_assembly.cc)
+orvd_configure_first_party_target(verify_gz18_startup_assembly)
+target_link_libraries(verify_gz18_startup_assembly
+    PRIVATE orvd_configuration)
+add_test(NAME verify_gz18_startup_assembly
+         COMMAND verify_gz18_startup_assembly
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json)
+
+add_executable(verify_resolved_startup_state_loading
+    configuration/verify_resolved_startup_state_loading.cc)
+orvd_configure_first_party_target(verify_resolved_startup_state_loading)
+target_link_libraries(verify_resolved_startup_state_loading
+    PRIVATE orvd_configuration)
+add_test(NAME verify_resolved_startup_state_loading
+         COMMAND verify_resolved_startup_state_loading
+             ${CMAKE_CURRENT_BINARY_DIR}/resolved-startup-state-fixtures)

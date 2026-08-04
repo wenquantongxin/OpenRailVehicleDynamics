@@ -5,16 +5,19 @@
 
 #include <Eigen/Core>
 
+#include "orvd/configuration/assemble_resolved_initial_context.h"
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
+#include "orvd/configuration/assembled_vehicle_system.h"
+#include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 3) {
+        if (argc != 4) {
             throw std::invalid_argument(
-                "expected the installed track geometry and vehicle definition "
-                "paths");
+                "expected the installed track geometry, vehicle definition and "
+                "resolved start-up state paths");
         }
         const auto line =
             orvd::configuration::LoadTrackGeometryFromJsonFile(argv[1]);
@@ -47,6 +50,26 @@ int main(int argc, char* argv[]) {
             std::fprintf(stderr,
                          "installed vehicle record did not assemble and "
                          "compile into the vehicle it describes\n");
+            return 1;
+        }
+
+        // The installed start-up state, placed on the installed line. This is
+        // the whole chain a consumer of the package walks: three installed
+        // records in, one runtime context out.
+        const auto startup =
+            orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
+        const auto system = orvd::configuration::AssembleVehicleSystem(
+            vehicle,
+            startup.gravitational_acceleration_meters_per_second_squared);
+        const auto resolved =
+            orvd::configuration::AssembleResolvedInitialContext(
+                *system, startup, line, 20.0);
+        if (resolved.wheelset_placements().size() != 4 ||
+            resolved.context().generalized_positions().size() != 57 ||
+            resolved.context().series_spring_damper_forces().size() != 2) {
+            std::fprintf(stderr,
+                         "installed start-up state did not assemble into the "
+                         "context it describes\n");
             return 1;
         }
     } catch (const std::exception& error) {
