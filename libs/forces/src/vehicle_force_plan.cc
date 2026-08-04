@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 #include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
@@ -12,6 +13,7 @@ namespace orvd::forces {
 namespace {
 
 using multibody_model::AppliedBodyWrench;
+using multibody_model::BodyFixedPoint;
 using multibody_model::FrameHandle;
 using multibody_model::MultibodyEvaluationContext;
 using multibody_model::MultibodyModel;
@@ -38,6 +40,8 @@ int AxisIndex(ForceElementAxis axis) {
 // reference frame, because that is the frame the constitutive constants are
 // stated in.
 struct RelativeMotion {
+    BodyFixedPoint reference_point;
+    BodyFixedPoint opposite_point;
     Eigen::Vector3d displacement_in_reference_frame_meters;
     Eigen::Matrix3d rotation_of_opposite_in_reference;
     Eigen::Vector3d velocity_in_reference_frame_meters_per_second;
@@ -50,14 +54,20 @@ struct RelativeMotion {
 
 RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
                                   const MultibodyEvaluationContext& context,
-                                  FrameHandle reference, FrameHandle opposite) {
-    const auto reference_pose = model.CalcPoseInWorld(context, reference);
-    const auto opposite_pose = model.CalcPoseInWorld(context, opposite);
+                                  const ForceElementEnd& reference,
+                                  const ForceElementEnd& opposite) {
+    const auto reference_pose =
+        model.CalcPoseInWorld(context, reference.frame);
+    const auto opposite_pose = model.CalcPoseInWorld(context, opposite.frame);
     const auto relative_velocity =
         model.CalcFrameSpatialVelocityRelativeToFrameExpressedInFrame(
-            context, opposite, reference, reference);
+            context, opposite.frame, reference.frame, reference.frame);
 
     RelativeMotion motion;
+    motion.reference_point =
+        model.CalcFrameOriginAsBodyFixedPoint(context, reference.frame);
+    motion.opposite_point =
+        model.CalcFrameOriginAsBodyFixedPoint(context, opposite.frame);
     motion.rotation_of_reference_in_world = reference_pose.rotation();
     motion.displacement_in_world_meters =
         opposite_pose.translation() - reference_pose.translation();
@@ -88,64 +98,76 @@ RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
 // forces at points that are not the ones the element attaches to, and the
 // endpoint virtual power would no longer equal the constitutive power.
 void EmitTranslationalWrenchPair(
-    const MultibodyModel& model, const ForceElementEnd& reference,
-    const ForceElementEnd& opposite,
+    const MultibodyModel& model, const BodyFixedPoint& reference,
+    const BodyFixedPoint& opposite,
     const Eigen::Vector3d& force_on_reference_in_world,
     const Eigen::Vector3d& displacement_in_world,
     std::span<AppliedBodyWrench> destination) {
     const FrameHandle world = model.world_frame();
     destination[0] = AppliedBodyWrench{
-        reference.body, reference.point_in_body_frame_meters, world,
+        reference.body, reference.position_in_body_frame_meters, world,
         displacement_in_world.cross(force_on_reference_in_world),
         force_on_reference_in_world};
     destination[1] = AppliedBodyWrench{
-        opposite.body, opposite.point_in_body_frame_meters, world,
+        opposite.body, opposite.position_in_body_frame_meters, world,
         Eigen::Vector3d::Zero(), -force_on_reference_in_world};
 }
 
 // A pure couple: equal and opposite moments, no force, and therefore no
 // dependence on where the two application points are.
 void EmitCoupleWrenchPair(const MultibodyModel& model,
-                          const ForceElementEnd& reference,
-                          const ForceElementEnd& opposite,
+                          const BodyFixedPoint& reference,
+                          const BodyFixedPoint& opposite,
                           const Eigen::Vector3d& moment_on_reference_in_world,
                           std::span<AppliedBodyWrench> destination) {
     const FrameHandle world = model.world_frame();
     destination[0] = AppliedBodyWrench{
-        reference.body, reference.point_in_body_frame_meters, world,
+        reference.body, reference.position_in_body_frame_meters, world,
         moment_on_reference_in_world, Eigen::Vector3d::Zero()};
     destination[1] = AppliedBodyWrench{
-        opposite.body, opposite.point_in_body_frame_meters, world,
+        opposite.body, opposite.position_in_body_frame_meters, world,
         -moment_on_reference_in_world, Eigen::Vector3d::Zero()};
 }
 
 void RequireDistinctLiveEnds(const MultibodyModel& model,
+                             const MultibodyEvaluationContext& context,
                              const ForceElementEnd& reference,
                              const ForceElementEnd& opposite,
                              const std::string& what) {
     if (reference.frame == opposite.frame) {
         Reject(what + " names one frame as both of its ends");
     }
-    if (reference.body == opposite.body) {
+    const BodyFixedPoint reference_point =
+        model.CalcFrameOriginAsBodyFixedPoint(context, reference.frame);
+    const BodyFixedPoint opposite_point =
+        model.CalcFrameOriginAsBodyFixedPoint(context, opposite.frame);
+    if (reference_point.body == opposite_point.body) {
         Reject(what +
                " has both ends on one body, so it could exert no relative "
                "force");
-    }
-    // Asking the model where each frame is validates every handle against it.
-    const auto context = model.CreateDefaultContext();
-    (void)model.CalcPoseInWorld(*context, reference.frame);
-    (void)model.CalcPoseInWorld(*context, opposite.frame);
-    (void)model.CalcPoseInWorld(*context, reference.body);
-    (void)model.CalcPoseInWorld(*context, opposite.body);
-    if (!reference.point_in_body_frame_meters.allFinite() ||
-        !opposite.point_in_body_frame_meters.allFinite()) {
-        Reject(what + " has an application point that is not finite");
     }
 }
 
 void RequireFinite(const Eigen::Vector3d& value, const std::string& what) {
     if (!value.allFinite()) {
         Reject(what + " is not finite");
+    }
+}
+
+void RequirePassive(const Eigen::Vector3d& value, const std::string& what) {
+    RequireFinite(value, what);
+    if ((value.array() < 0.0).any()) {
+        Reject(what + " has a negative component");
+    }
+}
+
+void RequireUniqueName(const std::string& name, const std::string& what,
+                       std::unordered_set<std::string>* names) {
+    if (name.empty()) {
+        Reject(what + " needs a non-empty name");
+    }
+    if (!names->insert(name).second) {
+        Reject("more than one force element is named '" + name + "'");
     }
 }
 
@@ -167,32 +189,41 @@ VehicleForcePlan::VehicleForcePlan(
         throw std::logic_error(
             "VehicleForcePlan requires a finalized multibody model");
     }
+    const auto validation_context = model.CreateDefaultContext();
+    std::unordered_set<std::string> names;
     for (std::size_t index = 0; index < translational_.size(); ++index) {
         const auto& element = translational_[index];
         const std::string what =
             "translational spring-damper " + std::to_string(index);
-        RequireDistinctLiveEnds(model, element.reference_end,
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
-        RequireFinite(element.stiffness_newtons_per_meter, what + "'s stiffness");
-        RequireFinite(element.damping_newton_seconds_per_meter,
-                      what + "'s damping");
+        RequirePassive(element.stiffness_newtons_per_meter,
+                       what + "'s stiffness");
+        RequirePassive(element.damping_newton_seconds_per_meter,
+                       what + "'s damping");
     }
     for (std::size_t index = 0; index < roll_.size(); ++index) {
         const auto& element = roll_[index];
         const std::string what =
             "roll spring-damper couple " + std::to_string(index);
-        RequireDistinctLiveEnds(model, element.reference_end,
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
         if (!std::isfinite(element.stiffness_newton_meters_per_radian) ||
-            !std::isfinite(element.damping_newton_meter_seconds_per_radian)) {
-            Reject(what + " has a stiffness or damping that is not finite");
+            element.stiffness_newton_meters_per_radian < 0.0 ||
+            !std::isfinite(element.damping_newton_meter_seconds_per_radian) ||
+            element.damping_newton_meter_seconds_per_radian < 0.0) {
+            Reject(what +
+                   " needs finite non-negative stiffness and damping");
         }
     }
     for (std::size_t index = 0; index < series_.size(); ++index) {
         const auto& element = series_[index];
         const std::string what =
             "series spring-viscous damper " + std::to_string(index);
-        RequireDistinctLiveEnds(model, element.reference_end,
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
         (void)AxisIndex(element.axis);
         // Either constant at zero leaves the constitutive law without a time
@@ -212,7 +243,8 @@ VehicleForcePlan::VehicleForcePlan(
         const auto& element = clipped_[index];
         const std::string what =
             "saturated piecewise linear damper " + std::to_string(index);
-        RequireDistinctLiveEnds(model, element.reference_end,
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
                                 element.opposite_end, what);
         (void)AxisIndex(element.axis);
         if (element.curve.size() < 2) {
@@ -230,6 +262,11 @@ VehicleForcePlan::VehicleForcePlan(
                 !std::isfinite(current.force_newtons)) {
                 Reject(what + " has a curve point that is not finite");
             }
+            if (current.force_newtons < 0.0) {
+                Reject(what +
+                       " has a negative force on its non-negative velocity "
+                       "half, which would create rather than dissipate energy");
+            }
             if (point > 0 &&
                 !(current.relative_velocity_meters_per_second >
                   element.curve[point - 1].relative_velocity_meters_per_second)) {
@@ -239,6 +276,28 @@ VehicleForcePlan::VehicleForcePlan(
             }
         }
     }
+}
+
+int VehicleForcePlan::FindTranslationalSpringDamperOrdinal(
+    std::string_view name) const {
+    for (std::size_t index = 0; index < translational_.size(); ++index) {
+        if (translational_[index].name == name) {
+            return static_cast<int>(index);
+        }
+    }
+    Reject("no translational spring-damper is named '" + std::string(name) +
+           "'");
+}
+
+int VehicleForcePlan::FindSeriesSpringViscousDamperOrdinal(
+    std::string_view name) const {
+    for (std::size_t index = 0; index < series_.size(); ++index) {
+        if (series_[index].name == name) {
+            return static_cast<int>(index);
+        }
+    }
+    Reject("no series spring-viscous damper is named '" + std::string(name) +
+           "'");
 }
 
 double VehicleForcePlan::SaturatedPiecewiseLinearDamperForce(
@@ -294,9 +353,8 @@ void VehicleForcePlan::CalcAppliedForces(
     std::size_t slot = 0;
     for (std::size_t index = 0; index < translational_.size(); ++index) {
         const auto& element = translational_[index];
-        const RelativeMotion motion =
-            CalcRelativeMotion(*model_, context, element.reference_end.frame,
-                               element.opposite_end.frame);
+        const RelativeMotion motion = CalcRelativeMotion(
+            *model_, context, element.reference_end, element.opposite_end);
         // The opposite end moving away from the reference end in the reference
         // frame's own axes stretches the element, and the force on the
         // reference end follows it: the element pulls its reference end toward
@@ -308,7 +366,7 @@ void VehicleForcePlan::CalcAppliedForces(
                 motion.velocity_in_reference_frame_meters_per_second) +
             nominal_forces.segment<3>(3 * static_cast<Eigen::Index>(index));
         EmitTranslationalWrenchPair(
-            *model_, element.reference_end, element.opposite_end,
+            *model_, motion.reference_point, motion.opposite_point,
             motion.rotation_of_reference_in_world * force_in_reference,
             motion.displacement_in_world_meters, body_wrenches.subspan(slot, 2));
         slot += 2;
@@ -316,7 +374,7 @@ void VehicleForcePlan::CalcAppliedForces(
 
     for (const auto& element : roll_) {
         const RelativeMotion motion = CalcRelativeMotion(
-            *model_, context, element.reference_end.frame, element.opposite_end.frame);
+            *model_, context, element.reference_end, element.opposite_end);
         // The linear roll coordinate is the (2,1) entry of the relative
         // rotation in Eigen's zero-based indexing — the third row, second
         // column — which is sin(roll) for a pure roll and equals the roll angle
@@ -332,8 +390,8 @@ void VehicleForcePlan::CalcAppliedForces(
         // involved.
         const Eigen::Vector3d moment_in_world =
             motion.rotation_of_reference_in_world * Eigen::Vector3d(moment, 0.0, 0.0);
-        EmitCoupleWrenchPair(*model_, element.reference_end,
-                             element.opposite_end, moment_in_world,
+        EmitCoupleWrenchPair(*model_, motion.reference_point,
+                             motion.opposite_point, moment_in_world,
                              body_wrenches.subspan(slot, 2));
         slot += 2;
     }
@@ -341,7 +399,7 @@ void VehicleForcePlan::CalcAppliedForces(
     for (std::size_t index = 0; index < series_.size(); ++index) {
         const auto& element = series_[index];
         const RelativeMotion motion = CalcRelativeMotion(
-            *model_, context, element.reference_end.frame, element.opposite_end.frame);
+            *model_, context, element.reference_end, element.opposite_end);
         const int axis = AxisIndex(element.axis);
         const double relative_velocity =
             motion.velocity_in_reference_frame_meters_per_second[axis];
@@ -356,7 +414,7 @@ void VehicleForcePlan::CalcAppliedForces(
         Eigen::Vector3d force_in_reference = Eigen::Vector3d::Zero();
         force_in_reference[axis] = force;
         EmitTranslationalWrenchPair(
-            *model_, element.reference_end, element.opposite_end,
+            *model_, motion.reference_point, motion.opposite_point,
             motion.rotation_of_reference_in_world * force_in_reference,
             motion.displacement_in_world_meters, body_wrenches.subspan(slot, 2));
         slot += 2;
@@ -364,13 +422,13 @@ void VehicleForcePlan::CalcAppliedForces(
 
     for (const auto& element : clipped_) {
         const RelativeMotion motion = CalcRelativeMotion(
-            *model_, context, element.reference_end.frame, element.opposite_end.frame);
+            *model_, context, element.reference_end, element.opposite_end);
         const int axis = AxisIndex(element.axis);
         Eigen::Vector3d force_in_reference = Eigen::Vector3d::Zero();
         force_in_reference[axis] = SaturatedPiecewiseLinearDamperForce(
             element, motion.velocity_in_reference_frame_meters_per_second[axis]);
         EmitTranslationalWrenchPair(
-            *model_, element.reference_end, element.opposite_end,
+            *model_, motion.reference_point, motion.opposite_point,
             motion.rotation_of_reference_in_world * force_in_reference,
             motion.displacement_in_world_meters, body_wrenches.subspan(slot, 2));
         slot += 2;

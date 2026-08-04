@@ -300,6 +300,15 @@ void CheckRejections(const std::filesystem::path& path) {
         {ReplaceOnce(valid, "\"vehicle_name\": \"assembly_fixture\"",
                      "\"vehicle_name\": \"\""),
          {"$.vehicle_name", "non-empty string"}},
+        {ReplaceOnce(valid, "\"name\": \"front_left_air_spring\"",
+                     "\"name\": \"\""),
+         {"$.translational_spring_dampers[0].name",
+          "non-empty force-element name"}},
+        {ReplaceOnce(valid, "\"name\": \"front_anti_roll_bar\"",
+                     "\"name\": \"front_left_air_spring\""),
+         {"$.roll_spring_damper_couples[0].name",
+          "front_left_air_spring", "first declared at",
+          "$.translational_spring_dampers[0].name"}},
         // A massless body is a legitimate frame carrier to the multibody layer,
         // but a record states inertia about the centre of mass, and dividing it
         // by zero would surface as a complaint about the unit inertia rather

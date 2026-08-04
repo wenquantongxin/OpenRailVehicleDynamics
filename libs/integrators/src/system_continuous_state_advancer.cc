@@ -27,7 +27,7 @@ class SystemContinuousStateAdvancer::Implementation final {
                    accepted_context.time_seconds()),
                no_call_time_applied_forces) {
         system_->CopyContinuousState(*accepted_context_, candidate_state_);
-        rhs_.SynchronizeJointDampingFrom(*accepted_context_);
+        rhs_.SynchronizeContextParametersFrom(*accepted_context_);
         backend_ = std::make_unique<CvodeContinuousStateAdvancer>(
             rhs_, accepted_context_->time_seconds(), candidate_state_,
             std::move(tolerances));
@@ -67,7 +67,7 @@ class SystemContinuousStateAdvancer::Implementation final {
     void SynchronizeAfterAcceptedContextChange() {
         requires_synchronization_ = true;
         system_->CopyContinuousState(*accepted_context_, candidate_state_);
-        rhs_.SynchronizeJointDampingFrom(*accepted_context_);
+        rhs_.SynchronizeContextParametersFrom(*accepted_context_);
         backend_->ReinitializeAfterExternalChange(
             accepted_context_->time_seconds(), candidate_state_);
         requires_synchronization_ = false;

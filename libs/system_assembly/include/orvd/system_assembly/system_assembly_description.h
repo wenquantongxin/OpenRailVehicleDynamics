@@ -46,7 +46,8 @@ class SystemAssemblyDescription {
     /// there is follows from which constitutive families the vehicle has.
     ///
     /// The plan must have been compiled against the same model and must outlive
-    /// this description.
+    /// this description and every `SystemInstance`, `CompiledSystemPlan` and
+    /// advancer derived from it.
     ///
     /// @throws std::invalid_argument if the plan was compiled against a
     /// different model.

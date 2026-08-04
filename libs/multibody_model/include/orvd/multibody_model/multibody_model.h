@@ -385,6 +385,22 @@ class MultibodyModel {
     [[nodiscard]] RigidPose CalcPoseInWorld(
         const MultibodyEvaluationContext& context, FrameHandle frame) const;
 
+    /// Resolves a frame origin to the rigid body and body-fixed point where a
+    /// wrench at that origin must be applied.
+    ///
+    /// The answer comes from the finalized model and the frame parameters in
+    /// `context`; it is not reconstructed from an external model record.  A
+    /// frame fixed to a welded child still resolves to that named child and to
+    /// coordinates in the child's own body frame; welding does not replace the
+    /// endpoint's named-body identity.
+    ///
+    /// @throws std::invalid_argument if the frame or context is foreign, or if
+    /// `frame` is the world frame, which has no rigid body that can receive a
+    /// wrench.
+    /// @throws std::logic_error if the model is not finalized.
+    [[nodiscard]] BodyFixedPoint CalcFrameOriginAsBodyFixedPoint(
+        const MultibodyEvaluationContext& context, FrameHandle frame) const;
+
     // --- Velocity and spatial kinematics -----------------------------------
 
     /// The spatial velocity of rigid body B's frame, measured in the world

@@ -36,12 +36,17 @@ int main(int argc, char* argv[]) {
         }
         const auto model =
             orvd::configuration::AssembleVehicleMultibodyModel(vehicle, 9.81);
+        const auto force_plan =
+            orvd::configuration::BuildVehicleForcePlan(vehicle, *model);
         if (!model->is_finalized() || total_mass_kilograms != 55695.0 ||
             model->num_generalized_positions() != 57 ||
-            model->num_generalized_velocities() != 50) {
+            model->num_generalized_velocities() != 50 ||
+            force_plan->translational_spring_damper_count() != 20 ||
+            force_plan->series_spring_viscous_damper_count() != 2 ||
+            force_plan->body_wrench_count() != 56) {
             std::fprintf(stderr,
-                         "installed vehicle record did not assemble into the "
-                         "vehicle it describes\n");
+                         "installed vehicle record did not assemble and "
+                         "compile into the vehicle it describes\n");
             return 1;
         }
     } catch (const std::exception& error) {

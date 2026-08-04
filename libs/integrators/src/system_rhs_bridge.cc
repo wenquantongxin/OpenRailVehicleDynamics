@@ -35,15 +35,9 @@ int SystemRhsBridge::continuous_state_size() const {
     return system_->continuous_state_size();
 }
 
-void SystemRhsBridge::SynchronizeJointDampingFrom(
-    system_assembly::SystemRuntimeContext& source_context) {
-    const auto component = system_->multibody_component();
-    const auto source =
-        system_->GetMultibodyComponentView(source_context, component);
-    const auto trial =
-        system_->GetMultibodyComponentView(*trial_context_, component);
-    source.model().CopyJointDampingParameters(source.context(),
-                                              &trial.context());
+void SystemRhsBridge::SynchronizeContextParametersFrom(
+    const system_assembly::SystemRuntimeContext& source_context) {
+    system_->CopyContextLocalParameters(source_context, *trial_context_);
 }
 
 void SystemRhsBridge::CalcTimeDerivatives(

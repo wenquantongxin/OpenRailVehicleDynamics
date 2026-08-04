@@ -494,6 +494,70 @@ void CheckAVelocityWriteLeavesThePositionsWhereTheyWere() {
                "and a position write does move it");
 }
 
+void CheckAFrameOriginResolvesToItsNamedRigidBody() {
+    MultibodyModel model;
+    const RigidBodyHandle root =
+        model.AddRigidBody("root", SolidishBody(2.0));
+    const RigidBodyHandle welded_child =
+        model.AddRigidBody("welded_child", SolidishBody(1.0));
+    model.AddWeldJoint("root_weld", model.world_frame(),
+                       model.body_frame(root));
+
+    FixedFramePoseParameters child_mount_pose;
+    child_mount_pose.p_PoFo_P = Eigen::Vector3d(0.41, -0.29, 0.17);
+    const FrameHandle child_mount = model.AddFixedFrame(
+        "child_mount", welded_child, child_mount_pose);
+    model.AddWeldJoint("child_weld", model.body_frame(root),
+                       model.body_frame(welded_child));
+    model.Finalize();
+    const auto context = model.CreateDefaultContext();
+
+    const auto mounted =
+        model.CalcFrameOriginAsBodyFixedPoint(*context, child_mount);
+    ExpectTrue(mounted.body == welded_child &&
+                   mounted.position_in_body_frame_meters ==
+                       child_mount_pose.p_PoFo_P,
+               "a frame on a welded child resolves to that named child and "
+               "its own body-fixed point rather than being folded into its "
+               "parent body");
+
+    const auto body_origin = model.CalcFrameOriginAsBodyFixedPoint(
+        *context, model.body_frame(welded_child));
+    ExpectTrue(body_origin.body == welded_child &&
+                   body_origin.position_in_body_frame_meters ==
+                       Eigen::Vector3d::Zero(),
+               "a body frame resolves to its own body origin");
+    ExpectTrue(RefusalMentions(
+                   [&] {
+                       (void)model.CalcFrameOriginAsBodyFixedPoint(
+                           *context, model.world_frame());
+                   },
+                   "world frame"),
+               "the world frame is refused because no rigid body receives its "
+               "wrench");
+
+    MultibodyModel other;
+    const RigidBodyHandle other_body =
+        other.AddRigidBody("other", SolidishBody(1.0));
+    other.DeclareFreeBody(other_body);
+    other.Finalize();
+    const auto other_context = other.CreateDefaultContext();
+    ExpectTrue(RefusalMentions(
+                   [&] {
+                       (void)model.CalcFrameOriginAsBodyFixedPoint(
+                           *other_context, child_mount);
+                   },
+                   "different model"),
+               "frame-origin resolution rejects a foreign context");
+    ExpectTrue(RefusalMentions(
+                   [&] {
+                       (void)model.CalcFrameOriginAsBodyFixedPoint(
+                           *context, other.body_frame(other_body));
+                   },
+                   "different model"),
+               "frame-origin resolution rejects a foreign frame");
+}
+
 // --- Ownership ---------------------------------------------------------------
 
 void CheckAContextFromAnotherModelIsRefused() {
@@ -565,6 +629,7 @@ int main() {
     CheckAFreeBodyIsPlacedByItsOwnCoordinates();
     CheckASafeNonUnitQuaternionIsUsedAndNotRewritten();
     CheckAVelocityWriteLeavesThePositionsWhereTheyWere();
+    CheckAFrameOriginResolvesToItsNamedRigidBody();
     CheckAContextFromAnotherModelIsRefused();
     CheckACoordinateVectorOfTheWrongSizeIsRefused();
 

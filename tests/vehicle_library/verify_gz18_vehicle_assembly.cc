@@ -532,6 +532,49 @@ void CheckForcePlanAndParameterOwnership(const VehicleDefinition& vehicle,
            "each of the twenty-eight elements produces exactly two body "
            "wrenches");
 
+    // Once the multibody model has been assembled, its frames are the sole
+    // authority for wrench landing points.  Mutating the source record before
+    // compiling a force plan must not pair the model's frame kinematics with a
+    // body or point reconstructed from that now-different record.
+    VehicleDefinition edited_record = vehicle;
+    const std::string reference_name =
+        edited_record.translational_spring_dampers.front()
+            .reference_frame_name;
+    bool edited_reference_frame = false;
+    for (auto& frame : edited_record.fixed_frames) {
+        if (frame.name == reference_name) {
+            frame.body_name = "carbody";
+            frame.position_in_body_frame_meters =
+                Eigen::Vector3d(91.0, -82.0, 73.0);
+            edited_reference_frame = true;
+            break;
+        }
+    }
+    Expect(edited_reference_frame,
+           "the record-edit regression found the first element's reference "
+           "frame");
+    const auto plan_from_edited_record =
+        orvd::configuration::BuildVehicleForcePlan(edited_record, model);
+    const auto evaluation_context = model.CreateDefaultContext();
+    std::vector<orvd::multibody_model::AppliedBodyWrench> edited_wrenches(
+        static_cast<std::size_t>(plan_from_edited_record->body_wrench_count()));
+    Eigen::VectorXd zero_series = Eigen::VectorXd::Zero(
+        plan_from_edited_record->series_spring_damper_force_state_count());
+    Eigen::VectorXd zero_nominal = Eigen::VectorXd::Zero(
+        plan_from_edited_record->nominal_force_component_count());
+    Eigen::VectorXd series_derivatives = Eigen::VectorXd::Zero(
+        plan_from_edited_record->series_spring_damper_force_state_count());
+    plan_from_edited_record->CalcAppliedForces(
+        *evaluation_context, zero_series, zero_nominal, edited_wrenches,
+        series_derivatives);
+    const auto model_attachment = model.CalcFrameOriginAsBodyFixedPoint(
+        *evaluation_context, model.GetFrameByName(reference_name));
+    Expect(edited_wrenches.front().body == model_attachment.body &&
+               edited_wrenches.front().point_position_in_body_frame_meters ==
+                   model_attachment.position_in_body_frame_meters,
+           "editing a record after model assembly cannot tear a force end's "
+           "frame away from its model-owned body and application point");
+
     const SystemAssemblyDescription description(model, *plan);
     const SystemInstance system(description);
     const CompiledSystemPlan compiled(system);
@@ -551,8 +594,13 @@ void CheckForcePlanAndParameterOwnership(const VehicleDefinition& vehicle,
                first->nominal_forces() == Eigen::VectorXd::Zero(60),
            "a fresh context starts with every nominal force at zero: G50 makes "
            "the slot, a resolved start-up state fills it");
-    system.SetNominalForce(*first, 0, Eigen::Vector3d(11.0, -22.0, 33.0));
-    system.SetNominalForce(*second, 0, Eigen::Vector3d(-44.0, 55.0, -66.0));
+    const auto front_left_air_spring =
+        system.GetTranslationalSpringDamperIndexByName(
+            "front_left_air_spring");
+    system.SetNominalForce(*first, front_left_air_spring,
+                           Eigen::Vector3d(11.0, -22.0, 33.0));
+    system.SetNominalForce(*second, front_left_air_spring,
+                           Eigen::Vector3d(-44.0, 55.0, -66.0));
     Expect(first->nominal_forces().segment<3>(0) ==
                    Eigen::Vector3d(11.0, -22.0, 33.0) &&
                second->nominal_forces().segment<3>(0) ==
@@ -577,16 +625,25 @@ void CheckForcePlanAndParameterOwnership(const VehicleDefinition& vehicle,
     // velocity and zero force it is zero, so give it a force to relax.
     Eigen::VectorXd state(109);
     system.CopyContinuousState(*first, state);
-    state.segment<2>(107) << 5000.0, -3000.0;
+    const auto front_series = system.series_spring_damper_force_state_range(
+        system.GetSeriesSpringViscousDamperIndexByName(
+            "front_lateral_damper"));
+    const auto rear_series = system.series_spring_damper_force_state_range(
+        system.GetSeriesSpringViscousDamperIndexByName(
+            "rear_lateral_damper"));
+    state[front_series.start()] = 5000.0;
+    state[rear_series.start()] = -3000.0;
     system.SetTimeAndContinuousState(*first, 0.0, state);
     Eigen::VectorXd relaxing(109);
     compiled.CalcStateTimeDerivatives(*first, relaxing);
     // dF/dt = K v - (K/C) F, and with the vehicle at rest v is zero, so the
     // rate is exactly -(K/C) F with K/C = 1e9 / 6e4.
     const double rate_constant = 1.0e9 / 6.0e4;
-    Expect(std::abs(relaxing[107] + rate_constant * 5000.0) <=
+    Expect(std::abs(relaxing[front_series.start()] +
+                    rate_constant * 5000.0) <=
                    1.0e-6 * rate_constant * 5000.0 &&
-               std::abs(relaxing[108] - rate_constant * 3000.0) <=
+               std::abs(relaxing[rear_series.start()] -
+                        rate_constant * 3000.0) <=
                    1.0e-6 * rate_constant * 3000.0,
            "each series element relaxes at its own time constant, into its own "
            "slice of the state block");

@@ -73,9 +73,9 @@ class SystemContinuousStateAdvancer final {
     /// Copies the accepted state and admitted context-local parameters into the
     /// trial/backend configuration, then reinitializes numerical history.
     ///
-    /// Call this after an external accepted-state or joint-damping change, and
-    /// after a failed advance.  It is deliberately explicit and is not part of
-    /// the RHS hot path.
+    /// Call this after an external accepted-state or admitted context-local
+    /// physical-parameter change, and after a failed advance.  It is
+    /// deliberately explicit and is not part of the RHS hot path.
     void SynchronizeAfterAcceptedContextChange();
 
    private:

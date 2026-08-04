@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -48,7 +49,44 @@ class MultibodyComponentIndex {
     int ordinal_{-1};
 };
 
-/// One frozen block in the future whole-system continuous vector.
+/// A translational spring-damper's context-local nominal-force slot.
+///
+/// Resolved once by name, then carried as a system-bound typed index.  It is
+/// neither an array subscript nor interchangeable with another force family.
+class TranslationalSpringDamperIndex {
+   public:
+    [[nodiscard]] bool is_valid() const { return system_identity_ != 0; }
+    [[nodiscard]] bool operator==(
+        const TranslationalSpringDamperIndex&) const = default;
+
+   private:
+    friend class SystemInstance;
+    TranslationalSpringDamperIndex(internal::SystemIdentity system_identity,
+                                   int ordinal)
+        : system_identity_(system_identity), ordinal_(ordinal) {}
+
+    internal::SystemIdentity system_identity_{0};
+    int ordinal_{-1};
+};
+
+/// One series spring-viscous damper's force-state component.
+class SeriesSpringViscousDamperIndex {
+   public:
+    [[nodiscard]] bool is_valid() const { return system_identity_ != 0; }
+    [[nodiscard]] bool operator==(
+        const SeriesSpringViscousDamperIndex&) const = default;
+
+   private:
+    friend class SystemInstance;
+    SeriesSpringViscousDamperIndex(internal::SystemIdentity system_identity,
+                                   int ordinal)
+        : system_identity_(system_identity), ordinal_(ordinal) {}
+
+    internal::SystemIdentity system_identity_{0};
+    int ordinal_{-1};
+};
+
+/// One frozen block in the whole-system continuous vector.
 class SystemContinuousStateRange {
    public:
     [[nodiscard]] int start() const { return start_; }
@@ -118,9 +156,10 @@ class SystemRuntimeContext {
     std::unique_ptr<multibody_model::ForwardDynamicsWorkspace>
         forward_dynamics_workspace_;
     Eigen::VectorXd series_spring_damper_forces_;
-    /// Context-local, written once by a start-up assembly and read thereafter.
-    /// It is not part of the continuous state: nothing integrates it, and an
-    /// ODE backend never sees it.
+    /// Context-local, written by start-up assembly and read thereafter.  It is
+    /// not part of the continuous state and nothing integrates it; the system
+    /// bridge explicitly copies it into its trial context so RHS evaluations
+    /// nevertheless see the accepted value.
     Eigen::VectorXd nominal_forces_;
     /// The wrenches the force plan produces, sized once. It belongs to the
     /// context so that two contexts of one system never write one buffer.
@@ -185,6 +224,18 @@ class SystemInstance {
     [[nodiscard]] SystemContinuousStateRange
     series_spring_damper_force_state_range() const;
 
+    /// Resolves a force-element name once at setup time.  Evaluation remains
+    /// entirely ordinal and performs no string lookup.
+    [[nodiscard]] TranslationalSpringDamperIndex
+    GetTranslationalSpringDamperIndexByName(std::string_view name) const;
+    [[nodiscard]] SeriesSpringViscousDamperIndex
+    GetSeriesSpringViscousDamperIndexByName(std::string_view name) const;
+
+    /// The one-component state range belonging to a named series element.
+    [[nodiscard]] SystemContinuousStateRange
+    series_spring_damper_force_state_range(
+        SeriesSpringViscousDamperIndex element) const;
+
     [[nodiscard]] int continuous_state_size() const;
 
     /// Creates the default physical state at an explicit finite accepted time.
@@ -225,8 +276,20 @@ class SystemInstance {
     ///
     /// @throws std::invalid_argument if the context is foreign, the index is
     /// out of range, or the force is not finite; nothing is written.
-    void SetNominalForce(SystemRuntimeContext& context, int element_index,
-                         const Eigen::Vector3d& force_in_reference_frame) const;
+    void SetNominalForce(
+        SystemRuntimeContext& context,
+        TranslationalSpringDamperIndex element,
+        const Eigen::Vector3d&
+            nominal_force_on_reference_end_in_reference_frame_newtons) const;
+
+    /// Copies every currently admitted context-local physical parameter.
+    ///
+    /// Today these are joint damping and translational-element nominal forces.
+    /// Time, q, v, z and evaluation scratch are deliberately not copied.  Both
+    /// context identities are checked before either destination category is
+    /// written.
+    void CopyContextLocalParameters(const SystemRuntimeContext& source,
+                                    SystemRuntimeContext& destination) const;
 
     /// Resolves the stable component index to direct references.  No name or
     /// run-time type lookup occurs on this path.

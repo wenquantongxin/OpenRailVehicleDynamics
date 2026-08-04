@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -372,9 +373,28 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         RequireDeclared(frame_names, reference, path + ".reference_frame_name");
         RequireDeclared(frame_names, opposite, path + ".opposite_frame_name");
     };
+    std::unordered_map<std::string, std::string> force_name_paths;
+    const auto require_force_name = [&force_name_paths](
+                                        const std::string& array_key,
+                                        std::size_t index,
+                                        const std::string& name) {
+        const std::string path =
+            ElementPath("$." + array_key, index) + ".name";
+        if (name.empty()) {
+            ThrowExpected(path, "a non-empty force-element name");
+        }
+        const auto [first, inserted] = force_name_paths.emplace(name, path);
+        if (!inserted) {
+            throw std::invalid_argument(
+                path + " repeats force-element name '" + name +
+                "', first declared at " + first->second);
+        }
+    };
     for (std::size_t index = 0;
          index < vehicle.translational_spring_dampers.size(); ++index) {
         const auto& element = vehicle.translational_spring_dampers[index];
+        require_force_name("translational_spring_dampers", index,
+                           element.name);
         require_force_ends("translational_spring_dampers", index,
                            element.reference_frame_name,
                            element.opposite_frame_name);
@@ -382,6 +402,8 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     for (std::size_t index = 0;
          index < vehicle.roll_spring_damper_couples.size(); ++index) {
         const auto& element = vehicle.roll_spring_damper_couples[index];
+        require_force_name("roll_spring_damper_couples", index,
+                           element.name);
         require_force_ends("roll_spring_damper_couples", index,
                            element.reference_frame_name,
                            element.opposite_frame_name);
@@ -389,6 +411,8 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     for (std::size_t index = 0;
          index < vehicle.series_spring_viscous_dampers.size(); ++index) {
         const auto& element = vehicle.series_spring_viscous_dampers[index];
+        require_force_name("series_spring_viscous_dampers", index,
+                           element.name);
         require_force_ends("series_spring_viscous_dampers", index,
                            element.reference_frame_name,
                            element.opposite_frame_name);
@@ -396,6 +420,8 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     for (std::size_t index = 0;
          index < vehicle.saturated_piecewise_linear_dampers.size(); ++index) {
         const auto& element = vehicle.saturated_piecewise_linear_dampers[index];
+        require_force_name("saturated_piecewise_linear_dampers", index,
+                           element.name);
         require_force_ends("saturated_piecewise_linear_dampers", index,
                            element.reference_frame_name,
                            element.opposite_frame_name);

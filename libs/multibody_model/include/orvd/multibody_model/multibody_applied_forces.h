@@ -6,6 +6,16 @@
 
 namespace orvd::multibody_model {
 
+/// A point fixed to a named rigid body, expressed in that body's own frame.
+///
+/// This is the wrench-application identity behind a model-frame origin. Keeping
+/// the body and point together prevents a caller from pairing a frame's
+/// kinematics with a different wrench application point.
+struct BodyFixedPoint {
+    RigidBodyHandle body;
+    Eigen::Vector3d position_in_body_frame_meters;
+};
+
 /// A spatial force on a rigid body at body-fixed point Q, expressed in E.
 /// The torque is about Q; Q is both the application point and moment reference.
 struct AppliedBodyWrench {

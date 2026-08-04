@@ -1002,6 +1002,28 @@ RigidPose MultibodyModel::CalcPoseInWorld(
     return MakePose(X_WF.rotation().matrix(), X_WF.translation());
 }
 
+BodyFixedPoint MultibodyModel::CalcFrameOriginAsBodyFixedPoint(
+    const MultibodyEvaluationContext& context, FrameHandle frame) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("resolve a frame origin as a body-fixed point");
+    Implementation::RequireOwnContext(
+        model, &context, "resolve frame origins from");
+    const int frame_ordinal = model.Resolve(
+        frame, static_cast<int>(model.frame_names_.size()), "frame");
+    const int body_ordinal = model.frame_body_[frame_ordinal];
+    if (body_ordinal == 0) {
+        Reject("the world frame has no rigid body that can receive a wrench");
+    }
+
+    const auto& tree_context = context.implementation_->tree_context();
+    const auto& frame_body_poses = model.tree_.EvalFrameBodyPoses(tree_context);
+    const auto& tree_frame =
+        model.tree_.get_frame(model.tree_frame_[frame_ordinal]);
+    return BodyFixedPoint{
+        model.MakeHandle<RigidBodyHandle>(body_ordinal),
+        tree_frame.get_X_LF(frame_body_poses).translation()};
+}
+
 // --- Velocity and spatial kinematics -----------------------------------------
 
 FrameSpatialVelocity

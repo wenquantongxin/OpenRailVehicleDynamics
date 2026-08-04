@@ -3,9 +3,10 @@
 /// @file
 /// The compiled evaluation order of the first executable system.
 ///
-/// The admitted graph currently contains one multibody component and no
-/// event-producing component.  Its static order is therefore one operation:
-/// assemble the three typed force inputs and evaluate [qdot; vdot] once.  The
+/// The admitted graph currently contains one multibody component, a frozen
+/// typed vehicle-force plan when present, and no event-producing component.
+/// Its static order evaluates every vehicle force once, assembles the resulting
+/// body wrenches, and evaluates [qdot; vdot; zdot] once.  The
 /// component's existing versioned caches and its preallocated forward-dynamics
 /// workspace remain the only cache/workspace mechanisms; this plan does not
 /// build a second dependency graph.

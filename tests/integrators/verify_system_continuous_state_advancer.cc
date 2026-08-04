@@ -7,6 +7,7 @@
 
 #include <Eigen/Dense>
 
+#include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
@@ -264,6 +265,131 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
            "the other context retains its original damping parameter");
 }
 
+void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
+    constexpr double kSliderMass = 2.0;
+    constexpr double kSeriesStiffness = 8.0;
+    constexpr double kSeriesDamping = 2.0;
+    constexpr double kInitialSeriesForce = 120.0;
+
+    MultibodyModel model;
+    const auto anchor =
+        model.AddRigidBody("force_anchor", MakeInertia(1.0, 1.0));
+    const auto series_anchor =
+        model.AddRigidBody("series_anchor", MakeInertia(1.0, 1.0));
+    const auto slider =
+        model.AddRigidBody("force_slider", MakeInertia(kSliderMass, 1.0));
+    model.AddWeldJoint("force_anchor_weld", model.world_frame(),
+                       model.body_frame(anchor));
+    model.AddWeldJoint("series_anchor_weld", model.world_frame(),
+                       model.body_frame(series_anchor));
+    model.AddPrismaticJoint("slider_joint", model.body_frame(anchor),
+                            model.body_frame(slider),
+                            Eigen::Vector3d::UnitX(), 0.0);
+    model.SetGravityVector(Eigen::Vector3d::Zero());
+    model.Finalize();
+
+    orvd::forces::VehicleForcePlan force_plan(
+        model,
+        {orvd::forces::TranslationalSpringDamper{
+            "nominal_driver",
+            orvd::forces::ForceElementEnd{model.body_frame(anchor)},
+            orvd::forces::ForceElementEnd{model.body_frame(slider)},
+            Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()}},
+        {},
+        {orvd::forces::SeriesSpringViscousDamper{
+            "series_decay",
+            orvd::forces::ForceElementEnd{model.body_frame(anchor)},
+            orvd::forces::ForceElementEnd{model.body_frame(series_anchor)},
+            orvd::forces::ForceElementAxis::kLongitudinal,
+            kSeriesStiffness, kSeriesDamping}},
+        {});
+    const SystemAssemblyDescription description(model, force_plan);
+    const SystemInstance system(description);
+    const CompiledSystemPlan plan(system);
+    auto accepted = system.CreateDefaultRuntimeContext(0.0);
+    const auto nominal_slot =
+        system.GetTranslationalSpringDamperIndexByName("nominal_driver");
+    const auto series_range = system.series_spring_damper_force_state_range(
+        system.GetSeriesSpringViscousDamperIndexByName("series_decay"));
+
+    Eigen::Vector3d state;
+    state << 0.25, 0.4, kInitialSeriesForce;
+    system.SetContinuousState(*accepted, state);
+    constexpr double kFirstNominalForce = 6.0;
+    system.SetNominalForce(
+        *accepted, nominal_slot,
+        Eigen::Vector3d(kFirstNominalForce, 0.0, 0.0));
+
+    Eigen::VectorXd absolute_tolerances(3);
+    absolute_tolerances << 1.0e-12, 1.0e-12, 1.0e-7;
+    SystemContinuousStateAdvancer advancer(
+        system, plan, *accepted,
+        ContinuousStateErrorTolerances(1.0e-11, absolute_tolerances),
+        NoCallTimeAppliedForces{});
+
+    constexpr double kFirstTarget = 0.2;
+    const double first_acceleration = -kFirstNominalForce / kSliderMass;
+    const double expected_q1 =
+        state[0] + state[1] * kFirstTarget +
+        0.5 * first_acceleration * kFirstTarget * kFirstTarget;
+    const double expected_v1 = state[1] + first_acceleration * kFirstTarget;
+    const double expected_z1 =
+        kInitialSeriesForce *
+        std::exp(-(kSeriesStiffness / kSeriesDamping) * kFirstTarget);
+    advancer.AdvanceTo(kFirstTarget);
+    Eigen::VectorXd observed(3);
+    system.CopyContinuousState(*accepted, observed);
+    const bool first_segment_matches =
+        Near(observed[0], expected_q1) && Near(observed[1], expected_v1) &&
+        std::abs(observed[series_range.start()] - expected_z1) <=
+            1.0e-6 * std::max(1.0, std::abs(expected_z1));
+    if (!first_segment_matches) {
+        std::printf("force-plan CVODE first segment measured [% .17g, % .17g, "
+                    "% .17g], expected [% .17g, % .17g, % .17g]\n",
+                    observed[0], observed[1], observed[series_range.start()],
+                    expected_q1, expected_v1, expected_z1);
+    }
+    Expect(first_segment_matches,
+           "the real force plan, RHS bridge and CVODE reproduce constant "
+           "nominal-force acceleration and the Maxwell exponential state");
+
+    constexpr double kRestartedSeriesForce = -75.0;
+    Eigen::VectorXd restarted_state = observed;
+    restarted_state[series_range.start()] = kRestartedSeriesForce;
+    system.SetContinuousState(*accepted, restarted_state);
+    constexpr double kSecondNominalForce = -4.0;
+    system.SetNominalForce(
+        *accepted, nominal_slot,
+        Eigen::Vector3d(kSecondNominalForce, 0.0, 0.0));
+    advancer.SynchronizeAfterAcceptedContextChange();
+    constexpr double kSecondTarget = 0.35;
+    const double second_dt = kSecondTarget - kFirstTarget;
+    const double second_acceleration = -kSecondNominalForce / kSliderMass;
+    const double expected_q2 =
+        restarted_state[0] + restarted_state[1] * second_dt +
+        0.5 * second_acceleration * second_dt * second_dt;
+    const double expected_v2 =
+        restarted_state[1] + second_acceleration * second_dt;
+    const double expected_z2 =
+        kRestartedSeriesForce *
+        std::exp(-(kSeriesStiffness / kSeriesDamping) * second_dt);
+    advancer.AdvanceTo(kSecondTarget);
+    system.CopyContinuousState(*accepted, observed);
+    const bool second_segment_matches =
+        Near(observed[0], expected_q2) && Near(observed[1], expected_v2) &&
+        std::abs(observed[series_range.start()] - expected_z2) <=
+            1.0e-6 * std::max(1.0, std::abs(expected_z2));
+    if (!second_segment_matches) {
+        std::printf("force-plan CVODE second segment measured [% .17g, % .17g, "
+                    "% .17g], expected [% .17g, % .17g, % .17g]\n",
+                    observed[0], observed[1], observed[series_range.start()],
+                    expected_q2, expected_v2, expected_z2);
+    }
+    Expect(second_segment_matches,
+           "explicit accepted-context synchronization updates nominal force "
+           "and restarts CVODE from the externally replaced Maxwell state");
+}
+
 void CheckRealRhsFailureRequiresSynchronization() {
     MultibodyModel model;
     const auto massless = model.AddRigidBody("massless", MakeInertia(0.0, 0.0));
@@ -327,6 +453,7 @@ void CheckForeignAcceptedContextIsRejected() {
 int main() {
     CheckAtomicAcceptedTimeAndState();
     CheckRealCvodeCommitAndDampingSynchronization();
+    CheckRealForcePlanCvodeAndNominalForceSynchronization();
     CheckRealRhsFailureRequiresSynchronization();
     CheckForeignAcceptedContextIsRejected();
     if (failure_count != 0) {

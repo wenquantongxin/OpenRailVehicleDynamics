@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -37,19 +38,12 @@ namespace orvd::forces {
 // components a property of the family instead of a property of the data.
 enum class ForceElementAxis { kLongitudinal, kLateral, kVertical };
 
-// One end of a force element.
-//
-// The frame answers the kinematic question — where the other end is and how
-// fast it is moving, in this end's own axes. The body and the point answer the
-// dynamic one — where the wrench lands. They are not redundant: the multibody
-// facade takes a wrench at a body-fixed point, and this end's point is that
-// frame's origin in that body. A builder resolves all three from the one record
-// entry that declares the frame, so they cannot disagree with each other unless
-// the builder is wrong, which is what the assembly gate is for.
+// One end of a force element.  The frame is its sole identity.  The multibody
+// model resolves the frame origin's carrier body and body-fixed position from
+// its current context when the wrench is emitted, so there is no second copy of
+// that identity for a mutable vehicle record to contradict.
 struct ForceElementEnd {
     multibody_model::FrameHandle frame;
-    multibody_model::RigidBodyHandle body;
-    Eigen::Vector3d point_in_body_frame_meters{Eigen::Vector3d::Zero()};
 };
 
 // A spring and a viscous damper in parallel, acting between two frames, with a
@@ -59,6 +53,7 @@ struct ForceElementEnd {
 // resolved start-up state supplies to a context, not part of what the vehicle
 // is, so the plan reads it from the context each evaluation.
 struct TranslationalSpringDamper {
+    std::string name;
     ForceElementEnd reference_end;
     ForceElementEnd opposite_end;
     Eigen::Vector3d stiffness_newtons_per_meter{Eigen::Vector3d::Zero()};
@@ -76,6 +71,7 @@ struct TranslationalSpringDamper {
 // produces is already a moment in physical space: it is not a generalized force
 // conjugate to an Euler angle and does not pass through any attitude map.
 struct RollSpringDamperCouple {
+    std::string name;
     ForceElementEnd reference_end;
     ForceElementEnd opposite_end;
     double stiffness_newton_meters_per_radian{0.0};
@@ -94,6 +90,7 @@ struct RollSpringDamperCouple {
 // header that carries continuous state, and it is the reason the system's state
 // has a third block at all.
 struct SeriesSpringViscousDamper {
+    std::string name;
     ForceElementEnd reference_end;
     ForceElementEnd opposite_end;
     ForceElementAxis axis{ForceElementAxis::kLateral};
@@ -107,14 +104,16 @@ struct SeriesSpringViscousDamper {
 // The curve is stated by its breakpoints for non-negative velocity, starting at
 // the origin; the negative half is its odd reflection and is not written down,
 // so a table cannot be asymmetric by transcription. Beyond the last breakpoint
-// the force holds at that breakpoint's value: a real damper's relief valve does
-// not keep growing, and extrapolating a line would invent force nobody stated.
+// the force holds at that breakpoint's value.  For GZ18 the final declared
+// segment is flat, so this continuation preserves the source curve rather than
+// inventing a new slope outside it.
 struct SaturatedPiecewiseLinearDamperPoint {
     double relative_velocity_meters_per_second{0.0};
     double force_newtons{0.0};
 };
 
 struct SaturatedPiecewiseLinearDamper {
+    std::string name;
     ForceElementEnd reference_end;
     ForceElementEnd opposite_end;
     ForceElementAxis axis{ForceElementAxis::kLateral};

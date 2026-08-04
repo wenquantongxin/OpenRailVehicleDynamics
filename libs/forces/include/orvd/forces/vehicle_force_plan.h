@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <Eigen/Core>
@@ -11,10 +12,10 @@
 // The frozen set of force elements one vehicle carries, and the one place they
 // are evaluated.
 //
-// The plan is built once and never changes. It holds resolved handles and
-// constitutive constants, not names and not a reference to the record it was
-// built from: a record that is edited afterwards has no way to reach a plan
-// already compiled from it.
+// The plan is built once and never changes. It holds names for setup-time slot
+// resolution, resolved frame handles and constitutive constants, but no
+// reference to the record it was built from: a record that is edited afterwards
+// has no way to reach a plan already compiled from it.
 //
 // The plan is also read-only at evaluation. Everything that varies — the state
 // the series elements carry, the nominal force each translational element is
@@ -26,19 +27,25 @@
 // them: translational, then roll, then series, then clipped. The order is fixed
 // so that a wrench buffer index means the same thing on every call.
 
+namespace orvd::system_assembly {
+class SystemInstance;
+}
+
 namespace orvd::forces {
 
 class VehicleForcePlan {
    public:
     // Builds the plan against `model`, which must be finalized and must outlive
-    // the plan. Every frame handle must belong to that model.
+    // the plan and every system compiled from it. Every frame handle must
+    // belong to that model.
     //
-    // Throws std::invalid_argument if any handle is foreign or invalid, if an
-    // element's two ends are the same frame, if a stiffness or damping is not
+    // Throws std::invalid_argument if an element name is empty or repeated, if
+    // any handle is foreign or invalid, if an element's two ends are one frame
+    // or one body, if an algebraic stiffness or damping is negative or not
     // finite, if a series element's stiffness or damping is not positive — a
     // series element with either at zero has no time constant and is not this
-    // family — or if a clipped damper's curve is not a strictly ascending run of
-    // finite points starting at the origin.
+    // family — or if a clipped damper's curve is not a strictly ascending run
+    // of finite, non-negative forces starting at the origin.
     // Throws std::logic_error if the model is not finalized.
     VehicleForcePlan(
         const multibody_model::MultibodyModel& model,
@@ -118,6 +125,13 @@ class VehicleForcePlan {
         double relative_velocity_meters_per_second);
 
    private:
+    friend class system_assembly::SystemInstance;
+
+    [[nodiscard]] int FindTranslationalSpringDamperOrdinal(
+        std::string_view name) const;
+    [[nodiscard]] int FindSeriesSpringViscousDamperOrdinal(
+        std::string_view name) const;
+
     const multibody_model::MultibodyModel* model_;
     std::vector<TranslationalSpringDamper> translational_;
     std::vector<RollSpringDamperCouple> roll_;

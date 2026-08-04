@@ -90,27 +90,21 @@ forces::ForceElementAxis ParseAxis(const std::string& axis,
                                 "' this library does not know");
 }
 
-// Where a force element's end attaches, resolved once. The frame answers the
-// kinematic question and the body plus point answer where the wrench lands;
-// both come from the one record entry that declared the frame, so the two
-// cannot disagree.
+// Where a force element's end attaches, resolved once by name.  The finalized
+// model remains authoritative for the frame's carrier body and body-fixed
+// origin; an edited source record cannot tear those apart afterwards.
 struct EndResolver {
     const MultibodyModel* model;
-    const std::unordered_map<std::string, Eigen::Vector3d>* frame_points;
-    const std::unordered_map<std::string, std::string>* frame_bodies;
 
     forces::ForceElementEnd operator()(const std::string& frame_name,
                                        const std::string& what) const {
-        const auto point = frame_points->find(frame_name);
-        const auto body = frame_bodies->find(frame_name);
-        if (point == frame_points->end() || body == frame_bodies->end()) {
+        try {
+            return forces::ForceElementEnd{model->GetFrameByName(frame_name)};
+        } catch (const std::invalid_argument&) {
             throw std::invalid_argument(what + " names frame '" + frame_name +
-                                        "', which the vehicle description does "
-                                        "not declare");
+                                        "', which the assembled model does not "
+                                        "contain");
         }
-        return forces::ForceElementEnd{
-            model->GetFrameByName(frame_name),
-            model->GetRigidBodyByName(body->second), point->second};
     }
 };
 
@@ -118,25 +112,14 @@ struct EndResolver {
 
 std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     const VehicleDefinition& vehicle, const MultibodyModel& model) {
-    // A body's own frame sits at that body's origin; a declared frame sits where
-    // the record put it. Both are endpoints a force element may name.
-    std::unordered_map<std::string, Eigen::Vector3d> frame_points;
-    std::unordered_map<std::string, std::string> frame_bodies;
-    for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
-        frame_points.emplace(body.name, Eigen::Vector3d::Zero());
-        frame_bodies.emplace(body.name, body.name);
-    }
-    for (const VehicleFixedFrameDefinition& frame : vehicle.fixed_frames) {
-        frame_points.emplace(frame.name, frame.position_in_body_frame_meters);
-        frame_bodies.emplace(frame.name, frame.body_name);
-    }
-    const EndResolver resolve{&model, &frame_points, &frame_bodies};
+    const EndResolver resolve{&model};
 
     std::vector<forces::TranslationalSpringDamper> translational;
     translational.reserve(vehicle.translational_spring_dampers.size());
     for (const auto& element : vehicle.translational_spring_dampers) {
         const std::string what = "translational spring-damper '" + element.name + "'";
         translational.push_back(forces::TranslationalSpringDamper{
+            element.name,
             resolve(element.reference_frame_name, what + " reference end"),
             resolve(element.opposite_frame_name, what + " opposite end"),
             element.stiffness_newtons_per_meter,
@@ -148,6 +131,7 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     for (const auto& element : vehicle.roll_spring_damper_couples) {
         const std::string what = "roll spring-damper couple '" + element.name + "'";
         roll.push_back(forces::RollSpringDamperCouple{
+            element.name,
             resolve(element.reference_frame_name, what + " reference end"),
             resolve(element.opposite_frame_name, what + " opposite end"),
             element.stiffness_newton_meters_per_radian,
@@ -159,6 +143,7 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     for (const auto& element : vehicle.series_spring_viscous_dampers) {
         const std::string what = "series spring-viscous damper '" + element.name + "'";
         series.push_back(forces::SeriesSpringViscousDamper{
+            element.name,
             resolve(element.reference_frame_name, what + " reference end"),
             resolve(element.opposite_frame_name, what + " opposite end"),
             ParseAxis(element.axis, what),
@@ -178,6 +163,7 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
                 point.relative_velocity_meters_per_second, point.force_newtons});
         }
         clipped.push_back(forces::SaturatedPiecewiseLinearDamper{
+            element.name,
             resolve(element.reference_frame_name, what + " reference end"),
             resolve(element.opposite_frame_name, what + " opposite end"),
             ParseAxis(element.axis, what), std::move(curve)});

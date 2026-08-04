@@ -101,6 +101,42 @@ SystemInstance::series_spring_damper_force_state_range() const {
         series_spring_damper_force_state_count_);
 }
 
+TranslationalSpringDamperIndex
+SystemInstance::GetTranslationalSpringDamperIndexByName(
+    std::string_view name) const {
+    if (force_plan_ == nullptr) {
+        Reject("this system has no vehicle force plan, so it has no "
+               "translational spring-damper named slots");
+    }
+    return TranslationalSpringDamperIndex(
+        identity_, force_plan_->FindTranslationalSpringDamperOrdinal(name));
+}
+
+SeriesSpringViscousDamperIndex
+SystemInstance::GetSeriesSpringViscousDamperIndexByName(
+    std::string_view name) const {
+    if (force_plan_ == nullptr) {
+        Reject("this system has no vehicle force plan, so it has no series "
+               "spring-viscous damper named slots");
+    }
+    return SeriesSpringViscousDamperIndex(
+        identity_, force_plan_->FindSeriesSpringViscousDamperOrdinal(name));
+}
+
+SystemContinuousStateRange
+SystemInstance::series_spring_damper_force_state_range(
+    SeriesSpringViscousDamperIndex element) const {
+    if (element.system_identity_ != identity_ || element.ordinal_ < 0 ||
+        element.ordinal_ >= series_spring_damper_force_state_count_) {
+        Reject("the series spring-viscous damper index belongs to a different "
+               "system or names no element of this system");
+    }
+    return SystemContinuousStateRange(
+        generalized_position_count_ + generalized_velocity_count_ +
+            element.ordinal_,
+        1);
+}
+
 int SystemInstance::continuous_state_size() const {
     return generalized_position_count_ + generalized_velocity_count_ +
            series_spring_damper_force_state_count_;
@@ -181,23 +217,35 @@ void SystemInstance::SetTimeAndContinuousState(
 }
 
 void SystemInstance::SetNominalForce(
-    SystemRuntimeContext& context, int element_index,
-    const Eigen::Vector3d& force_in_reference_frame) const {
+    SystemRuntimeContext& context, TranslationalSpringDamperIndex element,
+    const Eigen::Vector3d&
+        nominal_force_on_reference_end_in_reference_frame_newtons) const {
     if (context.issuer_ != identity_) {
         Reject("the runtime context belongs to a different system");
     }
-    if (element_index < 0 ||
-        3 * element_index + 2 >= nominal_force_component_count_ + 0 ||
-        3 * element_index >= nominal_force_component_count_) {
-        Reject("the nominal force index " + std::to_string(element_index) +
-               " names no translational element of this system; nothing was "
+    if (element.system_identity_ != identity_ || element.ordinal_ < 0 ||
+        3 * element.ordinal_ + 2 >= nominal_force_component_count_) {
+        Reject("the translational spring-damper index belongs to a different "
+               "system or names no element of this system; nothing was "
                "written");
     }
-    if (!force_in_reference_frame.allFinite()) {
+    if (!nominal_force_on_reference_end_in_reference_frame_newtons.allFinite()) {
         Reject("a nominal force must be finite; nothing was written");
     }
-    context.nominal_forces_.segment<3>(3 * element_index) =
-        force_in_reference_frame;
+    context.nominal_forces_.segment<3>(3 * element.ordinal_) =
+        nominal_force_on_reference_end_in_reference_frame_newtons;
+}
+
+void SystemInstance::CopyContextLocalParameters(
+    const SystemRuntimeContext& source,
+    SystemRuntimeContext& destination) const {
+    if (source.issuer_ != identity_ || destination.issuer_ != identity_) {
+        Reject("both runtime contexts must belong to this system before "
+               "context-local parameters can be copied; nothing was written");
+    }
+    multibody_model_->CopyJointDampingParameters(
+        *source.multibody_context_, destination.multibody_context_.get());
+    destination.nominal_forces_ = source.nominal_forces_;
 }
 
 MultibodyComponentView SystemInstance::GetMultibodyComponentView(

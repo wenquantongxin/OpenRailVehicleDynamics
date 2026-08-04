@@ -243,16 +243,21 @@ struct SeriesFixture {
     orvd::forces::VehicleForcePlan plan;
 
     SeriesFixture()
-        : plan(mechanism.model, {}, {},
+        : plan(mechanism.model,
+               {orvd::forces::TranslationalSpringDamper{
+                   "test_translation",
+                   orvd::forces::ForceElementEnd{
+                       mechanism.model.GetFrameByName("rotor")},
+                   orvd::forces::ForceElementEnd{
+                       mechanism.model.GetFrameByName("slider")},
+                   Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()}},
+               {},
                {orvd::forces::SeriesSpringViscousDamper{
+                   "test_series",
                    orvd::forces::ForceElementEnd{
-                       mechanism.model.GetFrameByName("rotor"),
-                       mechanism.model.GetRigidBodyByName("rotor"),
-                       Eigen::Vector3d::Zero()},
+                       mechanism.model.GetFrameByName("rotor")},
                    orvd::forces::ForceElementEnd{
-                       mechanism.model.GetFrameByName("slider"),
-                       mechanism.model.GetRigidBodyByName("slider"),
-                       Eigen::Vector3d::Zero()},
+                       mechanism.model.GetFrameByName("slider")},
                    orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}},
                {}) {}
 };
@@ -325,12 +330,124 @@ void CheckOneTransactionOverEveryBlock() {
            "one context's force state is not the other's");
 }
 
+void CheckNamedForceSlotsAndContextParameterCopy() {
+    const Fixture fixture;
+    const auto rotor = fixture.model.GetFrameByName("rotor");
+    const auto slider = fixture.model.GetFrameByName("slider");
+    const orvd::forces::VehicleForcePlan plan(
+        fixture.model,
+        {orvd::forces::TranslationalSpringDamper{
+             "first_translation", orvd::forces::ForceElementEnd{rotor},
+             orvd::forces::ForceElementEnd{slider}, Eigen::Vector3d::Zero(),
+             Eigen::Vector3d::Zero()},
+         orvd::forces::TranslationalSpringDamper{
+             "named_translation", orvd::forces::ForceElementEnd{rotor},
+             orvd::forces::ForceElementEnd{slider}, Eigen::Vector3d::Zero(),
+             Eigen::Vector3d::Zero()}},
+        {},
+        {orvd::forces::SeriesSpringViscousDamper{
+             "first_series", orvd::forces::ForceElementEnd{rotor},
+             orvd::forces::ForceElementEnd{slider},
+             orvd::forces::ForceElementAxis::kLateral, 3.0e5, 8.0e3},
+         orvd::forces::SeriesSpringViscousDamper{
+             "named_series", orvd::forces::ForceElementEnd{rotor},
+             orvd::forces::ForceElementEnd{slider},
+             orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}},
+        {});
+    const SystemAssemblyDescription description(fixture.model, plan);
+    const SystemInstance system(description);
+    const auto nominal_slot =
+        system.GetTranslationalSpringDamperIndexByName("named_translation");
+    const auto series_slot =
+        system.GetSeriesSpringViscousDamperIndexByName("named_series");
+    const auto series_range =
+        system.series_spring_damper_force_state_range(series_slot);
+    Expect(nominal_slot.is_valid() && series_slot.is_valid(),
+           "named force slots resolve to valid typed indices");
+    Expect(series_range.start() == 5 && series_range.size() == 1,
+           "a named series slot resolves past an earlier declaration to its "
+           "own force-state component");
+    ExpectInvalidArgument(
+        [&] {
+            (void)system.GetTranslationalSpringDamperIndexByName("absent");
+        },
+        "an absent translational element name is refused at setup");
+    ExpectInvalidArgument(
+        [&] { (void)system.GetSeriesSpringViscousDamperIndexByName("absent"); },
+        "an absent series element name is refused at setup");
+
+    auto source = system.CreateDefaultRuntimeContext(1.0);
+    auto destination = system.CreateDefaultRuntimeContext(2.0);
+    Eigen::VectorXd source_state(6);
+    source_state << 0.1, 0.2, 0.3, 0.4, 51.0, -62.0;
+    Eigen::VectorXd destination_state(6);
+    destination_state << -0.7, 0.8, -0.9, 1.0, -73.0, 84.0;
+    system.SetContinuousState(*source, source_state);
+    system.SetContinuousState(*destination, destination_state);
+    const Eigen::Vector3d nominal(17.0, -23.0, 31.0);
+    system.SetNominalForce(*source, nominal_slot, nominal);
+    system.CopyContextLocalParameters(*source, *destination);
+    Expect(destination->nominal_forces().segment<3>(0).isZero() &&
+               destination->nominal_forces().segment<3>(3) == nominal,
+           "name resolution reaches the named declaration rather than a raw "
+           "default index, and context-parameter copy preserves that slot");
+    Eigen::VectorXd observed_destination(6);
+    system.CopyContinuousState(*destination, observed_destination);
+    Expect(destination->time_seconds() == 2.0 &&
+               observed_destination == destination_state,
+           "context-parameter copy leaves a distinct time and every q, v and "
+           "series-force component untouched");
+
+    const SystemInstance other_system(description);
+    const auto foreign_nominal_slot =
+        other_system.GetTranslationalSpringDamperIndexByName(
+            "named_translation");
+    const auto foreign_series_slot =
+        other_system.GetSeriesSpringViscousDamperIndexByName("named_series");
+    auto foreign_context = other_system.CreateDefaultRuntimeContext(3.0);
+    other_system.SetNominalForce(
+        *foreign_context, foreign_nominal_slot,
+        Eigen::Vector3d(-101.0, 102.0, -103.0));
+    const Eigen::VectorXd before = destination->nominal_forces();
+    ExpectInvalidArgument(
+        [&] {
+            system.SetNominalForce(*destination, foreign_nominal_slot,
+                                   Eigen::Vector3d::Ones());
+        },
+        "a named nominal-force index cannot cross system instances");
+    ExpectInvalidArgument(
+        [&] {
+            (void)system.series_spring_damper_force_state_range(
+                foreign_series_slot);
+        },
+        "a named series-force index cannot cross system instances");
+    Expect(destination->nominal_forces() == before,
+           "foreign named-slot refusals leave the destination unchanged");
+
+    const Eigen::VectorXd foreign_before = foreign_context->nominal_forces();
+    ExpectInvalidArgument(
+        [&] {
+            system.CopyContextLocalParameters(*source, *foreign_context);
+        },
+        "context-parameter copy checks a foreign destination before writing");
+    Expect(foreign_context->nominal_forces() == foreign_before,
+           "a foreign-destination refusal leaves its parameters unchanged");
+    ExpectInvalidArgument(
+        [&] {
+            system.CopyContextLocalParameters(*foreign_context, *destination);
+        },
+        "context-parameter copy checks a foreign source before writing");
+    Expect(destination->nominal_forces() == before,
+           "a foreign-source refusal leaves the destination unchanged");
+}
+
 }  // namespace
 
 int main() {
     CheckFrozenLayoutAndSingleOwnership();
     CheckContextLocalDampingAndIsolation();
     CheckOneTransactionOverEveryBlock();
+    CheckNamedForceSlotsAndContextParameterCopy();
     if (failure_count != 0) {
         std::printf("%d system instance checks failed\n", failure_count);
         return 1;

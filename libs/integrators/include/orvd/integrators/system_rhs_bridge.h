@@ -29,8 +29,8 @@ struct NoCallTimeAppliedForces final {};
 /// semantics.  Context-local parameters are not silently mirrored; explicit
 /// accepted/trial synchronization belongs to the G45 transaction boundary.
 /// Construction also requires `NoCallTimeAppliedForces`, making the current
-/// graph's empty call-time force input an explicit choice rather than a silent
-/// loss of the three typed G42 inputs.
+/// graph's empty call-time force input an explicit choice rather than implying
+/// an arbitrary external-force source that is not part of this system graph.
 /// `system` and `plan` are borrowed and must outlive the bridge.
 class SystemRhsBridge final : public ContinuousStateRhs {
    public:
@@ -64,10 +64,11 @@ class SystemRhsBridge final : public ContinuousStateRhs {
 
     [[nodiscard]] int continuous_state_size() const override;
 
-    /// Copies the currently admitted context-local joint damping into the trial
-    /// context.  The source is borrowed only for this call.
-    void SynchronizeJointDampingFrom(
-        system_assembly::SystemRuntimeContext& source_context);
+    /// Copies every currently admitted context-local physical parameter into
+    /// the trial context.  The source is borrowed only for this call; time and
+    /// continuous state are not part of this synchronization.
+    void SynchronizeContextParametersFrom(
+        const system_assembly::SystemRuntimeContext& source_context);
 
     void CalcTimeDerivatives(
         double time_seconds,

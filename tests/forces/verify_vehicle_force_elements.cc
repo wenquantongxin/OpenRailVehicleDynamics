@@ -47,6 +47,7 @@ void Expect(bool condition, const std::string& description) {
 struct TwoBodyFixture {
     std::unique_ptr<MultibodyModel> model;
     ForceElementEnd reference_end;
+    ForceElementEnd same_body_end;
     ForceElementEnd opposite_end;
     std::unique_ptr<orvd::multibody_model::MultibodyEvaluationContext> context;
 
@@ -67,6 +68,10 @@ struct TwoBodyFixture {
         reference_pose.p_PoFo_P = Eigen::Vector3d(0.31, -0.17, 0.23);
         const auto reference_frame =
             model->AddFixedFrame("reference_attachment", first, reference_pose);
+        orvd::multibody_runtime::FixedFramePoseParameters same_body_pose;
+        same_body_pose.p_PoFo_P = Eigen::Vector3d(-0.09, 0.16, 0.28);
+        const auto same_body_frame =
+            model->AddFixedFrame("same_body_attachment", first, same_body_pose);
 
         orvd::multibody_runtime::FixedFramePoseParameters opposite_pose;
         opposite_pose.p_PoFo_P = Eigen::Vector3d(-0.41, 0.29, -0.13);
@@ -77,10 +82,9 @@ struct TwoBodyFixture {
         model->DeclareFreeBody(second);
         model->Finalize();
 
-        reference_end = ForceElementEnd{reference_frame, first,
-                                        reference_pose.p_PoFo_P};
-        opposite_end =
-            ForceElementEnd{opposite_frame, second, opposite_pose.p_PoFo_P};
+        reference_end = ForceElementEnd{reference_frame};
+        same_body_end = ForceElementEnd{same_body_frame};
+        opposite_end = ForceElementEnd{opposite_frame};
         context = model->CreateDefaultContext();
         SetState();
     }
@@ -207,8 +211,8 @@ void CheckFullWrenchAndPower() {
     const Eigen::Vector3d damping(410.0, 230.0, 370.0);
     VehicleForcePlan plan(
         *fixture.model,
-        {TranslationalSpringDamper{fixture.reference_end, fixture.opposite_end,
-                                   stiffness, damping}},
+        {TranslationalSpringDamper{"test_translation", fixture.reference_end,
+                                   fixture.opposite_end, stiffness, damping}},
         {}, {}, {});
     Eigen::VectorXd no_state(0);
     Eigen::VectorXd nominal(3);
@@ -251,12 +255,16 @@ void CheckFullWrenchAndPower() {
     Expect(wrenches[1].torque_about_point_newton_metres ==
                Eigen::Vector3d::Zero(),
            "the opposite end receives no free moment");
-    Expect(wrenches[0].body == fixture.reference_end.body &&
-               wrenches[1].body == fixture.opposite_end.body &&
+    const auto reference_point = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+        *fixture.context, fixture.reference_end.frame);
+    const auto opposite_point = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+        *fixture.context, fixture.opposite_end.frame);
+    Expect(wrenches[0].body == reference_point.body &&
+               wrenches[1].body == opposite_point.body &&
                wrenches[0].point_position_in_body_frame_meters ==
-                   fixture.reference_end.point_in_body_frame_meters &&
+                   reference_point.position_in_body_frame_meters &&
                wrenches[1].point_position_in_body_frame_meters ==
-                   fixture.opposite_end.point_in_body_frame_meters,
+                   opposite_point.position_in_body_frame_meters,
            "each wrench lands on the body and at the point its end names");
 
     // Balance about an arbitrary origin.
@@ -335,8 +343,8 @@ void CheckTranslationalEnergyIdentity() {
     const Eigen::Vector3d damping(410.0, 230.0, 370.0);
     VehicleForcePlan plan(
         *fixture.model,
-        {TranslationalSpringDamper{fixture.reference_end, fixture.opposite_end,
-                                   stiffness, damping}},
+        {TranslationalSpringDamper{"test_translation", fixture.reference_end,
+                                   fixture.opposite_end, stiffness, damping}},
         {}, {}, {});
     Eigen::VectorXd no_state(0);
     Eigen::VectorXd nominal(3);
@@ -375,7 +383,8 @@ void CheckSeriesEnergyIdentity() {
     constexpr double kDamping = 9.0e3;
     VehicleForcePlan plan(
         *fixture.model, {}, {},
-        {SeriesSpringViscousDamper{fixture.reference_end, fixture.opposite_end,
+        {SeriesSpringViscousDamper{"test_series", fixture.reference_end,
+                                   fixture.opposite_end,
                                    ForceElementAxis::kLateral, kStiffness,
                                    kDamping}},
         {});
@@ -403,7 +412,7 @@ void CheckSeriesEnergyIdentity() {
 void CheckClippedDamperLawAndDissipation() {
     const TwoBodyFixture fixture;
     SaturatedPiecewiseLinearDamper damper{
-        fixture.reference_end, fixture.opposite_end,
+        "test_clipped", fixture.reference_end, fixture.opposite_end,
         ForceElementAxis::kLongitudinal,
         {SaturatedPiecewiseLinearDamperPoint{0.0, 0.0},
          SaturatedPiecewiseLinearDamperPoint{0.02, 12000.0},
@@ -471,8 +480,8 @@ void CheckRollCoupleAndItsFiniteAttitudeResidual() {
     constexpr double kDamping = 2.5e2;
     VehicleForcePlan plan(
         *fixture.model, {},
-        {RollSpringDamperCouple{fixture.reference_end, fixture.opposite_end,
-                                kStiffness, kDamping}},
+        {RollSpringDamperCouple{"test_roll", fixture.reference_end,
+                                fixture.opposite_end, kStiffness, kDamping}},
         {}, {});
     Eigen::VectorXd none(0);
     Eigen::VectorXd derivatives(0);
@@ -543,95 +552,17 @@ void CheckRollCoupleAndItsFiniteAttitudeResidual() {
 // Gate 1 — the analytic oracle for the series law
 // ---------------------------------------------------------------------------
 
-void CheckSeriesAnalyticOracle() {
-    // A synthetic channel with a gentle time constant, so the transient and the
-    // asymptote are both visible in one interval. No vehicle number appears.
+void CheckSeriesAnalyticDerivative() {
+    // The full time-domain analytic response is checked through the real
+    // VehicleForcePlan -> SystemRhsBridge -> CVODE chain in the integrator
+    // gate.  This family-level gate keeps only the independent one-step law.
     constexpr double kStiffness = 2000.0;
     constexpr double kDamping = 500.0;
-    constexpr double kTimeConstant = kDamping / kStiffness;  // 0.25 s
-    constexpr double kVelocity = 0.7;
-    constexpr double kInitialForce = -120.0;
-    const double asymptote = kDamping * kVelocity;
-
-    // dF/dt = K v - (K/C) F, integrated by classical Runge-Kutta so that the
-    // comparison is against the constitutive law and not against an integrator's
-    // own behaviour.
-    const auto rate = [&](double force) {
-        return kStiffness * kVelocity - (kStiffness / kDamping) * force;
-    };
-    const double step = 1.0e-5;
-    double force = kInitialForce;
-    double worst_relative_error = 0.0;
-    std::vector<double> sample_times;
-    std::vector<double> sample_excess;
-    for (int index = 1; index <= 200000; ++index) {
-        const double k1 = rate(force);
-        const double k2 = rate(force + 0.5 * step * k1);
-        const double k3 = rate(force + 0.5 * step * k2);
-        const double k4 = rate(force + step * k3);
-        force += step * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
-        const double time = step * static_cast<double>(index);
-        const double exact =
-            asymptote + (kInitialForce - asymptote) * std::exp(-time / kTimeConstant);
-        worst_relative_error =
-            std::max(worst_relative_error,
-                     std::abs(force - exact) / std::max(1.0, std::abs(exact)));
-        if (index % 5000 == 0 && time <= 0.6) {
-            sample_times.push_back(time);
-            sample_excess.push_back(force - asymptote);
-        }
-    }
-    Expect(worst_relative_error <= 1.0e-10,
-           "the integrated series force matches the exact first-order solution "
-           "F(t) = C v + (F0 - C v) exp(-t K / C)");
-    // How much of the initial excess an exact solution still carries after the
-    // interval integrated. Asserting against that rather than against a round
-    // number keeps this a statement about the approach to C v instead of a
-    // statement about how long the loop happened to run.
-    const double final_time = step * 200000.0;
-    const double exact_remaining_excess =
-        std::abs(kInitialForce - asymptote) * std::exp(-final_time / kTimeConstant);
-    Expect(std::abs(force - asymptote) <= 2.0 * exact_remaining_excess,
-           "with a constant relative velocity the force approaches C v at the "
-           "rate the exact solution does");
-    Expect(exact_remaining_excess <= 1.0e-3 * std::abs(asymptote),
-           "and by the end of the interval that remainder is a thousandth of "
-           "the asymptote, so the limit is C v");
-    Expect(std::abs(asymptote - kStiffness * kVelocity) >
-               0.5 * std::abs(asymptote),
-           "that asymptote is far from what the stiffness would give, so the "
-           "two constants are told apart rather than assumed");
-
-    // The time constant, identified from the response by a log-linear fit
-    // rather than restated from the constants that produced it.
-    double sum_time = 0.0;
-    double sum_log = 0.0;
-    double sum_time_log = 0.0;
-    double sum_time_squared = 0.0;
-    const auto count = static_cast<double>(sample_times.size());
-    for (std::size_t index = 0; index < sample_times.size(); ++index) {
-        const double time = sample_times[index];
-        const double log_excess = std::log(std::abs(sample_excess[index]));
-        sum_time += time;
-        sum_log += log_excess;
-        sum_time_log += time * log_excess;
-        sum_time_squared += time * time;
-    }
-    const double slope = (count * sum_time_log - sum_time * sum_log) /
-                         (count * sum_time_squared - sum_time * sum_time);
-    const double identified_time_constant = -1.0 / slope;
-    Expect(count >= 5.0, "the fit has enough samples to be a fit");
-    Expect(std::abs(identified_time_constant - kTimeConstant) <=
-               1.0e-6 * kTimeConstant,
-           "the time constant identified from the decay equals damping over "
-           "stiffness");
-
-    // The same law, evaluated through the plan rather than by the test's own
-    // arithmetic, must give the same rate.
     const TwoBodyFixture fixture;
     VehicleForcePlan plan(
         *fixture.model, {}, {},
-        {SeriesSpringViscousDamper{fixture.reference_end, fixture.opposite_end,
+        {SeriesSpringViscousDamper{"test_series", fixture.reference_end,
+                                   fixture.opposite_end,
                                    ForceElementAxis::kLateral, kStiffness,
                                    kDamping}},
         {});
@@ -668,7 +599,7 @@ void CheckPlanRefusals() {
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
-                {TranslationalSpringDamper{fixture.reference_end,
+                {TranslationalSpringDamper{"same_end", fixture.reference_end,
                                            fixture.reference_end,
                                            Eigen::Vector3d::Ones(),
                                            Eigen::Vector3d::Zero()}},
@@ -678,8 +609,18 @@ void CheckPlanRefusals() {
     refuses(
         [&] {
             VehicleForcePlan plan(
+                *fixture.model,
+                {TranslationalSpringDamper{
+                    "same_body", fixture.reference_end, fixture.same_body_end,
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}},
+                {}, {}, {});
+        },
+        "two distinct frames on the same body are refused as force ends");
+    refuses(
+        [&] {
+            VehicleForcePlan plan(
                 *fixture.model, {}, {},
-                {SeriesSpringViscousDamper{fixture.reference_end,
+                {SeriesSpringViscousDamper{"zero_series", fixture.reference_end,
                                            fixture.opposite_end,
                                            ForceElementAxis::kLateral, 0.0,
                                            1000.0}},
@@ -692,7 +633,8 @@ void CheckPlanRefusals() {
             VehicleForcePlan plan(
                 *fixture.model, {}, {}, {},
                 {SaturatedPiecewiseLinearDamper{
-                    fixture.reference_end, fixture.opposite_end,
+                    "unordered_curve", fixture.reference_end,
+                    fixture.opposite_end,
                     ForceElementAxis::kLateral,
                     {SaturatedPiecewiseLinearDamperPoint{0.0, 0.0},
                      SaturatedPiecewiseLinearDamperPoint{0.02, 12000.0},
@@ -704,12 +646,70 @@ void CheckPlanRefusals() {
             VehicleForcePlan plan(
                 *fixture.model, {}, {}, {},
                 {SaturatedPiecewiseLinearDamper{
-                    fixture.reference_end, fixture.opposite_end,
+                    "missing_origin", fixture.reference_end,
+                    fixture.opposite_end,
                     ForceElementAxis::kLateral,
                     {SaturatedPiecewiseLinearDamperPoint{0.01, 500.0},
                      SaturatedPiecewiseLinearDamperPoint{0.02, 12000.0}}}});
         },
         "a curve that does not start at the origin is refused");
+    refuses(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model,
+                {TranslationalSpringDamper{
+                    "", fixture.reference_end, fixture.opposite_end,
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}},
+                {}, {}, {});
+        },
+        "an empty force-element name is refused");
+    refuses(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model,
+                {TranslationalSpringDamper{
+                    "duplicate", fixture.reference_end, fixture.opposite_end,
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}},
+                {},
+                {SeriesSpringViscousDamper{
+                    "duplicate", fixture.reference_end, fixture.opposite_end,
+                    ForceElementAxis::kLateral, 1000.0, 100.0}},
+                {});
+        },
+        "force-element names are unique across constitutive families");
+    refuses(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model,
+                {TranslationalSpringDamper{
+                    "active_spring", fixture.reference_end,
+                    fixture.opposite_end, Eigen::Vector3d(-1.0, 2.0, 3.0),
+                    Eigen::Vector3d::Zero()}},
+                {}, {}, {});
+        },
+        "a negative translational stiffness is refused");
+    refuses(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model, {},
+                {RollSpringDamperCouple{
+                    "active_roll", fixture.reference_end,
+                    fixture.opposite_end, 1000.0, -1.0}},
+                {}, {});
+        },
+        "a negative roll damping coefficient is refused");
+    refuses(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model, {}, {}, {},
+                {SaturatedPiecewiseLinearDamper{
+                    "active_curve", fixture.reference_end,
+                    fixture.opposite_end, ForceElementAxis::kLateral,
+                    {SaturatedPiecewiseLinearDamperPoint{0.0, 0.0},
+                     SaturatedPiecewiseLinearDamperPoint{0.02, -10.0}}}});
+        },
+        "a negative force on the non-negative half of a damper curve is "
+        "refused");
 }
 
 }  // namespace
@@ -721,7 +721,7 @@ int main() {
         CheckSeriesEnergyIdentity();
         CheckClippedDamperLawAndDissipation();
         CheckRollCoupleAndItsFiniteAttitudeResidual();
-        CheckSeriesAnalyticOracle();
+        CheckSeriesAnalyticDerivative();
         CheckPlanRefusals();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "vehicle force elements failed: %s\n",
