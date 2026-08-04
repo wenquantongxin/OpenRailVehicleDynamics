@@ -114,6 +114,20 @@ inline TrackGeometry MakeLevelStraightLine(double length_meters,
         kRailReferenceLateralSpanMeters, node_spacing_meters);
 }
 
+// A level circular line for projection checks in which grade and
+// superelevation cannot mask the planar distance Hessian.
+inline TrackGeometry MakeLevelCircularLine(double radius_meters,
+                                           double length_meters,
+                                           double node_spacing_meters) {
+    const double curvature = 1.0 / radius_meters;
+    return TrackGeometry(
+        TrackScalarProfile(0.0,
+                           {Constant(length_meters, curvature)}, {}),
+        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        kRailReferenceLateralSpanMeters, node_spacing_meters);
+}
+
 // A straight stretch meeting a circular one with a declared seam window across
 // the boundary. Outside the window the circular curvature is exactly the
 // reciprocal of the radius; inside it the quintic runs.

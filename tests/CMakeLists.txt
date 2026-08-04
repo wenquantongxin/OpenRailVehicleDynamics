@@ -558,6 +558,7 @@ if(NOT CMAKE_CROSSCOMPILING)
             -DCMAKE_MAKE_PROGRAM_PATH=${CMAKE_MAKE_PROGRAM}
             -DBUILD_CONFIG=${orvd_installation_build_config}
             -DEXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
+            -DINSTALL_DATADIR=${CMAKE_INSTALL_DATADIR}
             -DMULTI_CONFIG=${orvd_installation_multi_config}
             -DDEPENDENCY_PREFIX_PATH=${orvd_installation_dependency_prefix_path}
             -DEIGEN3_CONFIG_DIR=${Eigen3_DIR}

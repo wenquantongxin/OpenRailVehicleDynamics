@@ -56,8 +56,19 @@ constexpr std::string_view kNondegenerateRecord = R"json({
     "segments": [
       {
         "shape": "constant",
-        "length_meters": 40.0,
+        "length_meters": 10.0,
         "centerline_upward_grade": 0.02
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 20.0,
+        "start_centerline_upward_grade": 0.02,
+        "end_centerline_upward_grade": 0.04
+      },
+      {
+        "shape": "constant",
+        "length_meters": 10.0,
+        "centerline_upward_grade": 0.04
       }
     ],
     "seam_transitions": []
@@ -140,12 +151,14 @@ void CheckNondegenerateRecordAndLifetime(
             "record domain was not mapped");
     Require(geometry.rail_reference_lateral_span_meters() == 1.6,
             "record reference span was not mapped");
-    Require(Near(geometry.CurvatureRadiansPerMeter(27.0), 0.005),
-            "Hermite curvature segment was not mapped");
-    Require(Near(geometry.SuperelevationMeters(27.0), 0.04),
-            "Hermite superelevation segment was not mapped");
-    Require(geometry.CenterlineUpwardGrade(27.0) == 0.02,
-            "constant grade segment was not mapped");
+    // A Hermite blend has the same value after swapping its ends at the exact
+    // midpoint. Non-midpoint probes make the three field mappings directional.
+    Require(Near(geometry.CurvatureRadiansPerMeter(22.0), 0.0015625),
+            "Hermite curvature segment direction was not mapped");
+    Require(Near(geometry.SuperelevationMeters(17.0), 0.0125),
+            "Hermite superelevation segment direction was not mapped");
+    Require(Near(geometry.CenterlineUpwardGrade(22.0), 0.023125),
+            "Hermite grade segment direction was not mapped");
     Require(std::abs(geometry.CurvatureRadiansPerMeter(16.5)) > 1.0e-15,
             "declared seam transition did not enter the profile");
 
@@ -169,11 +182,15 @@ void CheckStrictRejections(const std::filesystem::path& path) {
         std::vector<std::string> fragments;
     };
     const std::vector<RejectionCase> cases{
+        {ReplaceOnce(valid, "\"schema_version\": 1,",
+                     "\"schema_version\": 1, \"schema_version\": 1,"),
+         {"duplicate JSON object key at $.schema_version"}},
         {ReplaceOnce(valid,
                      "\"curvature_radians_per_meter\": 0.0\n      }",
                      "\"curvature_radians_per_meter\": 0.0, "
                      "\"curvature_radians_per_meter\": 0.0\n      }"),
-         {"curvature_radians_per_meter"}},
+         {"duplicate JSON object key at "
+          "$.curvature_profile.segments[0].curvature_radians_per_meter"}},
         {ReplaceOnce(valid,
                      "\"curvature_radians_per_meter\": 0.0\n      }",
                      "\"curvature_radians_per_meter\": 0.0,\n"
@@ -190,6 +207,12 @@ void CheckStrictRejections(const std::filesystem::path& path) {
                      "\"rail_reference_lateral_span_meters\": 1.6",
                      "\"rail_reference_lateral_span_meters\": 1e400"),
          {"$.rail_reference_lateral_span_meters", "not representable"}},
+        {ReplaceOnce(valid, "\"start_track_station_meters\": 7.0",
+                     "\"start_track_station_meters\": 1e-400"),
+         {"$.start_track_station_meters", "underflows binary64"}},
+        {ReplaceOnce(valid, "\"start_track_station_meters\": 7.0",
+                     "\"start_track_station_meters\": 9007199254740993"),
+         {"$.start_track_station_meters", "exactly representable"}},
         {ReplaceOnce(valid, "\"schema_version\": 1",
                      "\"schema_version\": 2"),
          {"$.schema_version"}},
@@ -201,6 +224,12 @@ void CheckStrictRejections(const std::filesystem::path& path) {
     for (const auto& rejection : cases) {
         ExpectInvalid(path, rejection.contents, rejection.fragments);
     }
+
+    std::string nul_terminated_prefix = valid;
+    nul_terminated_prefix.push_back('\0');
+    nul_terminated_prefix += valid;
+    ExpectInvalid(path, std::move(nul_terminated_prefix),
+                  {"NUL byte", "before the end of the file"});
 }
 
 }  // namespace

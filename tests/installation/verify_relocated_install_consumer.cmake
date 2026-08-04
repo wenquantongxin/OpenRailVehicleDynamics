@@ -8,7 +8,8 @@ foreach(required_variable
         CMAKE_GENERATOR_NAME
         CMAKE_CXX_COMPILER_PATH
         BUILD_CONFIG
-        EXECUTABLE_SUFFIX)
+        EXECUTABLE_SUFFIX
+        INSTALL_DATADIR)
     if(NOT DEFINED ${required_variable})
         message(FATAL_ERROR "${required_variable} was not given")
     endif()
@@ -60,8 +61,10 @@ if(NOT EXISTS "${original_prefix}")
 endif()
 file(RENAME "${original_prefix}" "${relocated_prefix}")
 
+set(installed_track_geometry_directory
+    "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/track_library/geometries")
 set(installed_track_geometry
-    "${relocated_prefix}/share/OpenRailVehicleDynamics/track_library/geometries/straight_level_2000m.json")
+    "${installed_track_geometry_directory}/straight_level_2000m.json")
 if(NOT EXISTS "${installed_track_geometry}")
     message(FATAL_ERROR
         "the relocated prefix has no installed track geometry record")

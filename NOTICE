@@ -101,7 +101,7 @@ SUNDIALS 7.7.0
 
   ORVD resolves these components through the configured SUNDIALS CMake package
   and links them into the first numerical backend. The G46 offline source bundle
-  carries the locked upstream archive, LICENSE and NOTICE; a development build
+  carries the selected upstream archive, LICENSE and NOTICE; a development build
   may instead provide the same package through a standard CMake search prefix.
 
 

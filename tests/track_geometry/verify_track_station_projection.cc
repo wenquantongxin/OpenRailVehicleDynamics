@@ -175,13 +175,16 @@ void CheckMultipleMinimaAreRefused() {
 
 void CheckSecondOrderConditionIsEnforced() {
     // Beyond the centre of curvature the stationary point of the distance is a
-    // maximum, not a minimum: the second derivative of the objective is the
-    // general expression, and it goes negative there.
-    const TrackGeometry line = lines::MakeCanonicalLine();
+    // maximum, not a minimum. Keep the line planar so grade or superelevation
+    // cannot hide the sign of the planar distance Hessian. These are ordinary
+    // railway dimensions: a 150 m curve and a point 151 m toward its centre.
+    constexpr double kRadiusMeters = 150.0;
+    constexpr double kLateralOffsetMeters = 151.0;
+    const TrackGeometry line =
+        lines::MakeLevelCircularLine(kRadiusMeters, 300.0, 0.5);
     const double station = 200.0;
-    const double beyond_centre = lines::kCanonicalRadiusMeters + 50.0;
     const Eigen::Vector3d point =
-        PointBesideStation(line, station, beyond_centre);
+        PointBesideStation(line, station, kLateralOffsetMeters);
 
     bool refused = false;
     try {
@@ -197,7 +200,7 @@ void CheckSecondOrderConditionIsEnforced() {
     // a genuine minimum there, so the refusal above is about the second-order
     // condition and not about the distance being large.
     const Eigen::Vector3d outside =
-        PointBesideStation(line, station, -beyond_centre);
+        PointBesideStation(line, station, -kLateralOffsetMeters);
     bool accepted = true;
     try {
         (void)line.ProjectPointNearSeed(outside, station, 20.0);
