@@ -458,6 +458,8 @@ int main(int argc, char** argv) {
             }
             for (std::size_t i = 0;
                  i < edited.revolute_joint_startup_states.size(); ++i) {
+                edited.revolute_joint_startup_states[i].position_radians =
+                    0.01 * static_cast<double>(i + 1);
                 edited.revolute_joint_startup_states[i]
                     .rate_per_common_wheel_spin_magnitude =
                     0.25 + 0.125 * static_cast<double>(i);
