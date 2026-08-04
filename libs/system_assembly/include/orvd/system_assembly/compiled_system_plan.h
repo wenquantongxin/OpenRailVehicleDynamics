@@ -20,8 +20,11 @@
 
 #include <Eigen/Dense>
 
-#include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/system_assembly/system_instance.h"
+
+namespace orvd::forces {
+class VehicleForcePlan;
+}
 
 namespace orvd::system_assembly {
 
@@ -43,24 +46,28 @@ class CompiledSystemPlan {
         return derivative_component_;
     }
 
-    /// Evaluates the current accepted state without writing q, v or any
-    /// context-local physical parameter.  Logical caches and the model-bound
-    /// call workspace may be updated and reused.
+    /// Evaluates the current accepted state without writing q, v, z or any
+    /// context-local physical parameter.  Logical caches, the model-bound call
+    /// workspace and the context's own scratch may be updated and reused.
     ///
-    /// The caller owns the already-sized output.  Validation and failure
-    /// atomicity are the multibody facade's existing contract.
+    /// There is no call-time applied force. A system's forces are the vehicle's
+    /// own force elements; a caller who wants to apply an arbitrary wrench for
+    /// research or for a unit test calls the multibody facade directly, which
+    /// keeps that entry point and is one layer below this one. Carrying an
+    /// always-empty span through this level would only make the system look as
+    /// though it had a second force source that nothing supplies.
+    ///
+    /// The caller owns the already-sized output, which is [qdot; vdot; zdot].
+    /// Validation and failure atomicity are the multibody facade's existing
+    /// contract.
     void CalcStateTimeDerivatives(
         SystemRuntimeContext& context,
-        std::span<const multibody_model::AppliedBodyWrench> body_wrenches,
-        std::span<const multibody_model::AppliedRevoluteJointTorque>
-            revolute_joint_torques,
-        std::span<const multibody_model::AppliedPrismaticJointForce>
-            prismatic_joint_forces,
         Eigen::VectorXd& state_time_derivatives) const;
 
    private:
     const SystemInstance* system_;
     MultibodyComponentIndex derivative_component_;
+    const forces::VehicleForcePlan* force_plan_;
 };
 
 }  // namespace orvd::system_assembly

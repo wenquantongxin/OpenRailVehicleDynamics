@@ -640,5 +640,227 @@
       "parent_frame_name": "rear_carbody_interface_mount",
       "child_frame_name": "rear_carbody_interface_body"
     }
+  ],
+  "translational_spring_dampers": [
+    {
+      "name": "front_left_air_spring",
+      "reference_frame_name": "front_left_air_spring_bogie_side_attachment",
+      "opposite_frame_name": "front_left_air_spring_carbody_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 185000.0, "y": 185000.0, "z": 230000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 20000.0}
+    },
+    {
+      "name": "front_right_air_spring",
+      "reference_frame_name": "front_right_air_spring_bogie_side_attachment",
+      "opposite_frame_name": "front_right_air_spring_carbody_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 185000.0, "y": 185000.0, "z": 230000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 20000.0}
+    },
+    {
+      "name": "front_leading_left_primary_suspension",
+      "reference_frame_name": "front_leading_left_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "front_leading_left_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "front_leading_right_primary_suspension",
+      "reference_frame_name": "front_leading_right_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "front_leading_right_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "front_trailing_left_primary_suspension",
+      "reference_frame_name": "front_trailing_left_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "front_trailing_left_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "front_trailing_right_primary_suspension",
+      "reference_frame_name": "front_trailing_right_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "front_trailing_right_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "front_leading_left_axlebox_carrier_bushing",
+      "reference_frame_name": "front_leading_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "front_leading_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_leading_right_axlebox_carrier_bushing",
+      "reference_frame_name": "front_leading_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "front_leading_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_trailing_left_axlebox_carrier_bushing",
+      "reference_frame_name": "front_trailing_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "front_trailing_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_trailing_right_axlebox_carrier_bushing",
+      "reference_frame_name": "front_trailing_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "front_trailing_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_left_air_spring",
+      "reference_frame_name": "rear_left_air_spring_bogie_side_attachment",
+      "opposite_frame_name": "rear_left_air_spring_carbody_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 185000.0, "y": 185000.0, "z": 230000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 20000.0}
+    },
+    {
+      "name": "rear_right_air_spring",
+      "reference_frame_name": "rear_right_air_spring_bogie_side_attachment",
+      "opposite_frame_name": "rear_right_air_spring_carbody_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 185000.0, "y": 185000.0, "z": 230000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 20000.0}
+    },
+    {
+      "name": "rear_leading_left_primary_suspension",
+      "reference_frame_name": "rear_leading_left_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "rear_leading_left_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "rear_leading_right_primary_suspension",
+      "reference_frame_name": "rear_leading_right_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "rear_leading_right_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "rear_trailing_left_primary_suspension",
+      "reference_frame_name": "rear_trailing_left_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "rear_trailing_left_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "rear_trailing_right_primary_suspension",
+      "reference_frame_name": "rear_trailing_right_primary_suspension_bogie_side_attachment",
+      "opposite_frame_name": "rear_trailing_right_primary_suspension_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 0.0, "y": 0.0, "z": 1400000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 10000.0}
+    },
+    {
+      "name": "rear_leading_left_axlebox_carrier_bushing",
+      "reference_frame_name": "rear_leading_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "rear_leading_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_leading_right_axlebox_carrier_bushing",
+      "reference_frame_name": "rear_leading_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "rear_leading_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_trailing_left_axlebox_carrier_bushing",
+      "reference_frame_name": "rear_trailing_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "rear_trailing_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_trailing_right_axlebox_carrier_bushing",
+      "reference_frame_name": "rear_trailing_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "opposite_frame_name": "rear_trailing_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "stiffness_newtons_per_meter": {"x": 17000000.0, "y": 9000000.0, "z": 17000000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 0.0}
+    }
+  ],
+  "roll_spring_damper_couples": [
+    {
+      "name": "front_anti_roll_bar",
+      "reference_frame_name": "front_anti_roll_bar_bogie_side_attachment",
+      "opposite_frame_name": "front_anti_roll_bar_carbody_side_attachment",
+      "stiffness_newton_meters_per_radian": 3500000.0,
+      "damping_newton_meter_seconds_per_radian": 0.0
+    },
+    {
+      "name": "rear_anti_roll_bar",
+      "reference_frame_name": "rear_anti_roll_bar_bogie_side_attachment",
+      "opposite_frame_name": "rear_anti_roll_bar_carbody_side_attachment",
+      "stiffness_newton_meters_per_radian": 3500000.0,
+      "damping_newton_meter_seconds_per_radian": 0.0
+    }
+  ],
+  "series_spring_viscous_dampers": [
+    {
+      "name": "front_lateral_damper",
+      "reference_frame_name": "front_lateral_damper_bogie_side_attachment",
+      "opposite_frame_name": "front_lateral_damper_carbody_side_attachment",
+      "axis": "lateral",
+      "series_stiffness_newtons_per_meter": 1000000000.0,
+      "series_damping_newton_seconds_per_meter": 60000.0
+    },
+    {
+      "name": "rear_lateral_damper",
+      "reference_frame_name": "rear_lateral_damper_bogie_side_attachment",
+      "opposite_frame_name": "rear_lateral_damper_carbody_side_attachment",
+      "axis": "lateral",
+      "series_stiffness_newtons_per_meter": 1000000000.0,
+      "series_damping_newton_seconds_per_meter": 60000.0
+    }
+  ],
+  "saturated_piecewise_linear_dampers": [
+    {
+      "name": "front_left_yaw_damper",
+      "reference_frame_name": "front_left_yaw_damper_bogie_side_attachment",
+      "opposite_frame_name": "front_left_yaw_damper_carbody_side_attachment",
+      "axis": "longitudinal",
+      "curve": [
+        {"relative_velocity_meters_per_second": 0.0, "force_newtons": 0.0},
+        {"relative_velocity_meters_per_second": 0.02, "force_newtons": 12000.0},
+        {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
+      ]
+    },
+    {
+      "name": "front_right_yaw_damper",
+      "reference_frame_name": "front_right_yaw_damper_bogie_side_attachment",
+      "opposite_frame_name": "front_right_yaw_damper_carbody_side_attachment",
+      "axis": "longitudinal",
+      "curve": [
+        {"relative_velocity_meters_per_second": 0.0, "force_newtons": 0.0},
+        {"relative_velocity_meters_per_second": 0.02, "force_newtons": 12000.0},
+        {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
+      ]
+    },
+    {
+      "name": "rear_left_yaw_damper",
+      "reference_frame_name": "rear_left_yaw_damper_bogie_side_attachment",
+      "opposite_frame_name": "rear_left_yaw_damper_carbody_side_attachment",
+      "axis": "longitudinal",
+      "curve": [
+        {"relative_velocity_meters_per_second": 0.0, "force_newtons": 0.0},
+        {"relative_velocity_meters_per_second": 0.02, "force_newtons": 12000.0},
+        {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
+      ]
+    },
+    {
+      "name": "rear_right_yaw_damper",
+      "reference_frame_name": "rear_right_yaw_damper_bogie_side_attachment",
+      "opposite_frame_name": "rear_right_yaw_damper_carbody_side_attachment",
+      "axis": "longitudinal",
+      "curve": [
+        {"relative_velocity_meters_per_second": 0.0, "force_newtons": 0.0},
+        {"relative_velocity_meters_per_second": 0.02, "force_newtons": 12000.0},
+        {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
+      ]
+    }
   ]
 }

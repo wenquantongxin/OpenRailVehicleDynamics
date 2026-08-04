@@ -7,6 +7,7 @@
 #include <Eigen/Dense>
 
 #include "orvd/multibody_model/multibody_model.h"
+#include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 #include "orvd/system_assembly/system_instance.h"
 
@@ -231,11 +232,105 @@ void CheckContextLocalDampingAndIsolation() {
                6.0, "a refused write leaves prismatic damping unchanged");
 }
 
+// ---------------------------------------------------------------------------
+// Gate 2 — one transaction over every state block
+// ---------------------------------------------------------------------------
+
+// A fixture whose system carries a force state block, so that the transaction
+// has more than one block to be atomic over.
+struct SeriesFixture {
+    Fixture mechanism;
+    orvd::forces::VehicleForcePlan plan;
+
+    SeriesFixture()
+        : plan(mechanism.model, {}, {},
+               {orvd::forces::SeriesSpringViscousDamper{
+                   orvd::forces::ForceElementEnd{
+                       mechanism.model.GetFrameByName("rotor"),
+                       mechanism.model.GetRigidBodyByName("rotor"),
+                       Eigen::Vector3d::Zero()},
+                   orvd::forces::ForceElementEnd{
+                       mechanism.model.GetFrameByName("slider"),
+                       mechanism.model.GetRigidBodyByName("slider"),
+                       Eigen::Vector3d::Zero()},
+                   orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}},
+               {}) {}
+};
+
+void CheckOneTransactionOverEveryBlock() {
+    const SeriesFixture fixture;
+    const SystemAssemblyDescription description(fixture.mechanism.model,
+                                                fixture.plan);
+    const SystemInstance system(description);
+    Expect(system.continuous_state_size() == 5,
+           "the state is q, v and the one series force");
+    Expect(system.series_spring_damper_force_state_range().start() == 4 &&
+               system.series_spring_damper_force_state_range().size() == 1,
+           "the force block sits after q and v");
+
+    auto context = system.CreateDefaultRuntimeContext(3.5);
+    Eigen::VectorXd accepted(5);
+    accepted << 0.4, 1.2, -0.7, 0.3, 250.0;
+    system.SetTimeAndContinuousState(*context, 3.5, accepted);
+
+    Eigen::VectorXd observed(5);
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == accepted,
+           "a successful transaction writes every block, including the force "
+           "state");
+
+    // A state that is legal in q and v and illegal only in its force component.
+    // The force block is checked before the model is asked to write anything,
+    // so this must leave q, v, the force and the time all untouched.
+    Eigen::VectorXd bad_force(5);
+    bad_force << 9.9, 9.9, 9.9, 9.9,
+        std::numeric_limits<double>::quiet_NaN();
+    ExpectInvalidArgument([&] { system.SetTimeAndContinuousState(*context, 7.0, bad_force); },
+                  "a state whose only fault is its force component is refused");
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == accepted && context->time_seconds() == 3.5,
+           "and that refusal leaves the time and all three blocks exactly as "
+           "they were: q and v are not written before the force is checked");
+
+    // The mirror case: a state whose fault is in q, which the model refuses on
+    // its own account. The force must not have been written either.
+    Eigen::VectorXd bad_position(5);
+    bad_position << std::numeric_limits<double>::quiet_NaN(), 1.0, 1.0, 1.0,
+        4242.0;
+    ExpectInvalidArgument(
+        [&] { system.SetTimeAndContinuousState(*context, 9.0, bad_position); },
+        "a state whose fault is in q is refused");
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == accepted && context->time_seconds() == 3.5,
+           "and that refusal leaves the force state untouched too, so neither "
+           "half of the write can land without the other");
+
+    // A wrong length is refused before anything is examined.
+    Eigen::VectorXd wrong_length(4);
+    wrong_length.setZero();
+    ExpectInvalidArgument(
+        [&] { system.SetTimeAndContinuousState(*context, 1.0, wrong_length); },
+        "a state of the wrong length is refused");
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == accepted && context->time_seconds() == 3.5,
+           "and leaves everything unchanged");
+
+    // Two contexts of one system hold their own force state.
+    auto other = system.CreateDefaultRuntimeContext(0.0);
+    Eigen::VectorXd other_state(5);
+    other_state << 0.0, 0.0, 0.0, 0.0, -880.0;
+    system.SetTimeAndContinuousState(*other, 0.0, other_state);
+    system.CopyContinuousState(*context, observed);
+    Expect(observed[4] == 250.0,
+           "one context's force state is not the other's");
+}
+
 }  // namespace
 
 int main() {
     CheckFrozenLayoutAndSingleOwnership();
     CheckContextLocalDampingAndIsolation();
+    CheckOneTransactionOverEveryBlock();
     if (failure_count != 0) {
         std::printf("%d system instance checks failed\n", failure_count);
         return 1;

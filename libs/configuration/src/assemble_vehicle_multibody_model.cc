@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
 #include "orvd/track_geometry/track_inertial_frame.h"
@@ -73,7 +75,118 @@ FrameHandle ResolveFrame(
     return found->second;
 }
 
+forces::ForceElementAxis ParseAxis(const std::string& axis,
+                                   const std::string& what) {
+    if (axis == "longitudinal") {
+        return forces::ForceElementAxis::kLongitudinal;
+    }
+    if (axis == "lateral") {
+        return forces::ForceElementAxis::kLateral;
+    }
+    if (axis == "vertical") {
+        return forces::ForceElementAxis::kVertical;
+    }
+    throw std::invalid_argument(what + " states an axis '" + axis +
+                                "' this library does not know");
+}
+
+// Where a force element's end attaches, resolved once. The frame answers the
+// kinematic question and the body plus point answer where the wrench lands;
+// both come from the one record entry that declared the frame, so the two
+// cannot disagree.
+struct EndResolver {
+    const MultibodyModel* model;
+    const std::unordered_map<std::string, Eigen::Vector3d>* frame_points;
+    const std::unordered_map<std::string, std::string>* frame_bodies;
+
+    forces::ForceElementEnd operator()(const std::string& frame_name,
+                                       const std::string& what) const {
+        const auto point = frame_points->find(frame_name);
+        const auto body = frame_bodies->find(frame_name);
+        if (point == frame_points->end() || body == frame_bodies->end()) {
+            throw std::invalid_argument(what + " names frame '" + frame_name +
+                                        "', which the vehicle description does "
+                                        "not declare");
+        }
+        return forces::ForceElementEnd{
+            model->GetFrameByName(frame_name),
+            model->GetRigidBodyByName(body->second), point->second};
+    }
+};
+
 }  // namespace
+
+std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
+    const VehicleDefinition& vehicle, const MultibodyModel& model) {
+    // A body's own frame sits at that body's origin; a declared frame sits where
+    // the record put it. Both are endpoints a force element may name.
+    std::unordered_map<std::string, Eigen::Vector3d> frame_points;
+    std::unordered_map<std::string, std::string> frame_bodies;
+    for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
+        frame_points.emplace(body.name, Eigen::Vector3d::Zero());
+        frame_bodies.emplace(body.name, body.name);
+    }
+    for (const VehicleFixedFrameDefinition& frame : vehicle.fixed_frames) {
+        frame_points.emplace(frame.name, frame.position_in_body_frame_meters);
+        frame_bodies.emplace(frame.name, frame.body_name);
+    }
+    const EndResolver resolve{&model, &frame_points, &frame_bodies};
+
+    std::vector<forces::TranslationalSpringDamper> translational;
+    translational.reserve(vehicle.translational_spring_dampers.size());
+    for (const auto& element : vehicle.translational_spring_dampers) {
+        const std::string what = "translational spring-damper '" + element.name + "'";
+        translational.push_back(forces::TranslationalSpringDamper{
+            resolve(element.reference_frame_name, what + " reference end"),
+            resolve(element.opposite_frame_name, what + " opposite end"),
+            element.stiffness_newtons_per_meter,
+            element.damping_newton_seconds_per_meter});
+    }
+
+    std::vector<forces::RollSpringDamperCouple> roll;
+    roll.reserve(vehicle.roll_spring_damper_couples.size());
+    for (const auto& element : vehicle.roll_spring_damper_couples) {
+        const std::string what = "roll spring-damper couple '" + element.name + "'";
+        roll.push_back(forces::RollSpringDamperCouple{
+            resolve(element.reference_frame_name, what + " reference end"),
+            resolve(element.opposite_frame_name, what + " opposite end"),
+            element.stiffness_newton_meters_per_radian,
+            element.damping_newton_meter_seconds_per_radian});
+    }
+
+    std::vector<forces::SeriesSpringViscousDamper> series;
+    series.reserve(vehicle.series_spring_viscous_dampers.size());
+    for (const auto& element : vehicle.series_spring_viscous_dampers) {
+        const std::string what = "series spring-viscous damper '" + element.name + "'";
+        series.push_back(forces::SeriesSpringViscousDamper{
+            resolve(element.reference_frame_name, what + " reference end"),
+            resolve(element.opposite_frame_name, what + " opposite end"),
+            ParseAxis(element.axis, what),
+            element.series_stiffness_newtons_per_meter,
+            element.series_damping_newton_seconds_per_meter});
+    }
+
+    std::vector<forces::SaturatedPiecewiseLinearDamper> clipped;
+    clipped.reserve(vehicle.saturated_piecewise_linear_dampers.size());
+    for (const auto& element : vehicle.saturated_piecewise_linear_dampers) {
+        const std::string what =
+            "saturated piecewise linear damper '" + element.name + "'";
+        std::vector<forces::SaturatedPiecewiseLinearDamperPoint> curve;
+        curve.reserve(element.curve.size());
+        for (const auto& point : element.curve) {
+            curve.push_back(forces::SaturatedPiecewiseLinearDamperPoint{
+                point.relative_velocity_meters_per_second, point.force_newtons});
+        }
+        clipped.push_back(forces::SaturatedPiecewiseLinearDamper{
+            resolve(element.reference_frame_name, what + " reference end"),
+            resolve(element.opposite_frame_name, what + " opposite end"),
+            ParseAxis(element.axis, what), std::move(curve)});
+    }
+
+    return std::make_unique<forces::VehicleForcePlan>(
+        model, std::move(translational), std::move(roll), std::move(series),
+        std::move(clipped));
+}
 
 std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
     const VehicleDefinition& vehicle,

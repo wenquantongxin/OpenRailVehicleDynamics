@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "orvd/configuration/vehicle_definition.h"
+#include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
 
 namespace orvd::configuration {
@@ -44,5 +45,25 @@ namespace orvd::configuration {
 AssembleVehicleMultibodyModel(
     const VehicleDefinition& vehicle,
     double gravitational_acceleration_magnitude_meters_per_second_squared);
+
+// Compiles the vehicle's force elements against an assembled model.
+//
+// Every element the description states becomes exactly one entry of the plan,
+// with its frame names resolved to the handles and body-fixed application points
+// the model gave them. The description is read once here and not retained: a
+// record edited afterwards cannot reach a plan already compiled from it.
+//
+// The model must be the one this description was assembled into, and must
+// outlive the plan.
+//
+// Throws std::invalid_argument when an element names a frame the model does not
+// have, when its two ends are the same frame or lie on one body, when a
+// constitutive constant is not usable — a series element needs a positive
+// stiffness and damping, since with either at zero it has no time constant and
+// is an algebraic element of a different family — or when a clipped damper's
+// curve is not an ascending run of finite points starting at the origin.
+[[nodiscard]] std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
+    const VehicleDefinition& vehicle,
+    const multibody_model::MultibodyModel& model);
 
 }  // namespace orvd::configuration

@@ -102,14 +102,14 @@ void CheckStaticEvaluationAndStatePurity() {
     const Eigen::VectorXd accepted_velocities =
         context->generalized_velocities();
 
-    const std::array torque{
-        AppliedRevoluteJointTorque{fixture.joint, 1.25}};
     Eigen::VectorXd derivatives(2);
-    plan.CalcStateTimeDerivatives(*context, {}, torque, {}, derivatives);
+    plan.CalcStateTimeDerivatives(*context, derivatives);
     ExpectNear(derivatives[0], 2.0,
                "the static plan evaluates qdot = N(q)v first");
-    // Izz = mass * unit Izz = 1.0; damping contributes -0.3 * 2.
-    ExpectNear(derivatives[1], 0.65,
+    // Izz = mass * unit Izz = 1.0; damping contributes -0.3 * 2. The system
+    // carries no call-time applied force, so the joint torque that used to be
+    // passed here is gone and only damping remains.
+    ExpectNear(derivatives[1], -0.6,
                "the static plan assembles forces and evaluates vdot once");
     Expect(context->generalized_positions() == accepted_positions,
            "a successful derivative trial does not write accepted q");
@@ -121,8 +121,8 @@ void CheckStaticEvaluationAndStatePurity() {
     Eigen::VectorXd accepted_damping_force(1);
     fixture.model.CalcJointDampingAppliedGeneralizedForces(
         component.context(), accepted_damping_force);
-    plan.CalcStateTimeDerivatives(*context, {}, torque, {}, derivatives);
-    ExpectNear(derivatives[1], 0.25,
+    plan.CalcStateTimeDerivatives(*context, derivatives);
+    ExpectNear(derivatives[1], -1.0,
                "the next static evaluation reads context-local damping");
     Eigen::VectorXd observed_damping_force(1);
     fixture.model.CalcJointDampingAppliedGeneralizedForces(
@@ -130,12 +130,18 @@ void CheckStaticEvaluationAndStatePurity() {
     Expect(observed_damping_force == accepted_damping_force,
            "a successful evaluation does not write physical parameters");
 
+    // The call-time applied-force entry point lives one layer below: the system
+    // has no such input, and a caller who wants an arbitrary wrench for research
+    // or for a unit test reaches the facade directly. These three refusals are
+    // therefore stated against the facade, which still owns them.
+    Eigen::VectorXd facade_derivatives(2);
     const std::array invalid_torque{AppliedRevoluteJointTorque{
         fixture.joint, std::numeric_limits<double>::quiet_NaN()}};
     ExpectInvalidArgument(
         [&] {
-            plan.CalcStateTimeDerivatives(*context, {}, invalid_torque, {},
-                                          derivatives);
+            fixture.model.CalcStateTimeDerivatives(
+                component.context(), {}, invalid_torque, {},
+                component.forward_dynamics_workspace(), facade_derivatives);
         },
         "an invalid revolute torque trial fails explicitly");
     const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -144,19 +150,31 @@ void CheckStaticEvaluationAndStatePurity() {
         Eigen::Vector3d::Zero(), Eigen::Vector3d(nan, 0.0, 0.0)}};
     ExpectInvalidArgument(
         [&] {
-            plan.CalcStateTimeDerivatives(*context, invalid_body_wrench, {},
-                                          {}, derivatives);
+            fixture.model.CalcStateTimeDerivatives(
+                component.context(), invalid_body_wrench, {}, {},
+                component.forward_dynamics_workspace(), facade_derivatives);
         },
-        "the plan forwards and rejects an invalid body wrench");
+        "the facade rejects an invalid body wrench");
     const std::array wrong_kind_prismatic_force{
         AppliedPrismaticJointForce{fixture.joint, 1.0}};
     ExpectInvalidArgument(
         [&] {
-            plan.CalcStateTimeDerivatives(*context, {}, {},
-                                          wrong_kind_prismatic_force,
-                                          derivatives);
+            fixture.model.CalcStateTimeDerivatives(
+                component.context(), {}, {}, wrong_kind_prismatic_force,
+                component.forward_dynamics_workspace(), facade_derivatives);
         },
-        "the plan forwards and rejects a wrong-kind prismatic force");
+        "the facade rejects a wrong-kind prismatic force");
+
+    // And the plan itself refuses an output of the wrong length before it
+    // evaluates anything.
+    Eigen::VectorXd wrong_size(3);
+    wrong_size.setConstant(11.0);
+    ExpectInvalidArgument(
+        [&] { plan.CalcStateTimeDerivatives(*context, wrong_size); },
+        "the plan refuses a derivative output of the wrong size");
+    Expect(wrong_size == Eigen::VectorXd::Constant(3, 11.0),
+           "that refusal precedes any write to the output");
+
     Expect(context->generalized_positions() == accepted_positions,
            "rejected derivative trials do not write accepted q");
     Expect(context->generalized_velocities() == accepted_velocities,
@@ -167,7 +185,7 @@ void CheckStaticEvaluationAndStatePurity() {
            "rejected derivative trials do not write physical parameters");
 
     auto other_context = system.CreateDefaultRuntimeContext(0.0);
-    plan.CalcStateTimeDerivatives(*other_context, {}, {}, {}, derivatives);
+    plan.CalcStateTimeDerivatives(*other_context, derivatives);
     ExpectNear(derivatives[0], 0.0,
                "each accepted context is evaluated through its own state");
 }
@@ -184,8 +202,7 @@ void CheckForeignContextRefusal() {
     derivatives.setConstant(17.0);
     bool refused = false;
     try {
-        plan.CalcStateTimeDerivatives(*foreign_context, {}, {}, {},
-                                      derivatives);
+        plan.CalcStateTimeDerivatives(*foreign_context, derivatives);
     } catch (const std::invalid_argument&) {
         refused = true;
     }

@@ -226,7 +226,7 @@ void CheckDedicatedTrialRhs() {
     trial_state << 0.4, 2.0;
     system.SetContinuousState(*expected_context, trial_state);
     Eigen::VectorXd expected(2);
-    plan.CalcStateTimeDerivatives(*expected_context, {}, {}, {}, expected);
+    plan.CalcStateTimeDerivatives(*expected_context, expected);
 
     SystemRuntimeContext* const trial_observer = trial.get();
     SystemRhsBridge bridge(system, plan, std::move(trial),

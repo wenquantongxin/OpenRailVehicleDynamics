@@ -17,7 +17,7 @@ target_include_directories(orvd_system_assembly
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-target_link_libraries(orvd_system_assembly PUBLIC orvd_multibody_model)
+target_link_libraries(orvd_system_assembly PUBLIC orvd_forces orvd_multibody_model)
 
 set_target_properties(orvd_system_assembly PROPERTIES
     EXPORT_NAME system_assembly)

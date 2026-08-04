@@ -137,6 +137,123 @@ VehicleWeldJointDefinition ParseWeldJoint(const Json& value,
     return joint;
 }
 
+// Every force element states both ends and which one is the reference. The
+// three fields are read together so a reader sees the whole endpoint contract
+// at one place.
+struct ForceElementEnds {
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
+};
+
+ForceElementEnds ParseEnds(const Json& value, const std::string& path) {
+    return ForceElementEnds{
+        RequireString(value.at("reference_frame_name"),
+                      path + ".reference_frame_name"),
+        RequireString(value.at("opposite_frame_name"),
+                      path + ".opposite_frame_name")};
+}
+
+std::string ParseAxis(const Json& value, const std::string& path) {
+    const std::string axis = RequireString(value, path);
+    if (axis != "longitudinal" && axis != "lateral" && axis != "vertical") {
+        ThrowExpected(path, "'longitudinal', 'lateral' or 'vertical'");
+    }
+    return axis;
+}
+
+VehicleTranslationalSpringDamperDefinition ParseTranslationalSpringDamper(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"name", "reference_frame_name", "opposite_frame_name",
+                      "stiffness_newtons_per_meter",
+                      "damping_newton_seconds_per_meter"});
+    VehicleTranslationalSpringDamperDefinition element;
+    element.name = RequireString(value.at("name"), path + ".name");
+    const ForceElementEnds ends = ParseEnds(value, path);
+    element.reference_frame_name = ends.reference_frame_name;
+    element.opposite_frame_name = ends.opposite_frame_name;
+    element.stiffness_newtons_per_meter =
+        RequireVector(value.at("stiffness_newtons_per_meter"),
+                      path + ".stiffness_newtons_per_meter");
+    element.damping_newton_seconds_per_meter =
+        RequireVector(value.at("damping_newton_seconds_per_meter"),
+                      path + ".damping_newton_seconds_per_meter");
+    return element;
+}
+
+VehicleRollSpringDamperCoupleDefinition ParseRollSpringDamperCouple(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"name", "reference_frame_name", "opposite_frame_name",
+                      "stiffness_newton_meters_per_radian",
+                      "damping_newton_meter_seconds_per_radian"});
+    VehicleRollSpringDamperCoupleDefinition element;
+    element.name = RequireString(value.at("name"), path + ".name");
+    const ForceElementEnds ends = ParseEnds(value, path);
+    element.reference_frame_name = ends.reference_frame_name;
+    element.opposite_frame_name = ends.opposite_frame_name;
+    element.stiffness_newton_meters_per_radian =
+        RequireFiniteNumber(value.at("stiffness_newton_meters_per_radian"),
+                            path + ".stiffness_newton_meters_per_radian");
+    element.damping_newton_meter_seconds_per_radian = RequireFiniteNumber(
+        value.at("damping_newton_meter_seconds_per_radian"),
+        path + ".damping_newton_meter_seconds_per_radian");
+    return element;
+}
+
+VehicleSeriesSpringViscousDamperDefinition ParseSeriesSpringViscousDamper(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"name", "reference_frame_name", "opposite_frame_name",
+                      "axis", "series_stiffness_newtons_per_meter",
+                      "series_damping_newton_seconds_per_meter"});
+    VehicleSeriesSpringViscousDamperDefinition element;
+    element.name = RequireString(value.at("name"), path + ".name");
+    const ForceElementEnds ends = ParseEnds(value, path);
+    element.reference_frame_name = ends.reference_frame_name;
+    element.opposite_frame_name = ends.opposite_frame_name;
+    element.axis = ParseAxis(value.at("axis"), path + ".axis");
+    element.series_stiffness_newtons_per_meter =
+        RequireFiniteNumber(value.at("series_stiffness_newtons_per_meter"),
+                            path + ".series_stiffness_newtons_per_meter");
+    element.series_damping_newton_seconds_per_meter = RequireFiniteNumber(
+        value.at("series_damping_newton_seconds_per_meter"),
+        path + ".series_damping_newton_seconds_per_meter");
+    return element;
+}
+
+VehicleSaturatedPiecewiseLinearDamperDefinition
+ParseSaturatedPiecewiseLinearDamper(const Json& value,
+                                    const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"name", "reference_frame_name", "opposite_frame_name",
+                      "axis", "curve"});
+    VehicleSaturatedPiecewiseLinearDamperDefinition element;
+    element.name = RequireString(value.at("name"), path + ".name");
+    const ForceElementEnds ends = ParseEnds(value, path);
+    element.reference_frame_name = ends.reference_frame_name;
+    element.opposite_frame_name = ends.opposite_frame_name;
+    element.axis = ParseAxis(value.at("axis"), path + ".axis");
+    const Json& curve = value.at("curve");
+    const std::string curve_path = path + ".curve";
+    RequireArray(curve, curve_path);
+    element.curve.reserve(curve.size());
+    for (std::size_t point = 0; point < curve.size(); ++point) {
+        const std::string point_path = ElementPath(curve_path, point);
+        RequireExactKeys(curve[point], point_path,
+                         {"relative_velocity_meters_per_second",
+                          "force_newtons"});
+        element.curve.push_back(
+            VehicleSaturatedPiecewiseLinearDamperPointDefinition{
+                RequireFiniteNumber(
+                    curve[point].at("relative_velocity_meters_per_second"),
+                    point_path + ".relative_velocity_meters_per_second"),
+                RequireFiniteNumber(curve[point].at("force_newtons"),
+                                    point_path + ".force_newtons")});
+    }
+    return element;
+}
+
 template <typename Element, typename Parse>
 std::vector<Element> ParseArray(const Json& root, const std::string& key,
                                 Parse parse) {
@@ -171,7 +288,11 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     const Json root = ParseStrictJson(document);
     RequireExactKeys(root, "$",
                      {"schema_version", "vehicle_name", "rigid_bodies",
-                      "fixed_frames", "revolute_joints", "weld_joints"});
+                      "fixed_frames", "revolute_joints", "weld_joints",
+                      "translational_spring_dampers",
+                      "roll_spring_damper_couples",
+                      "series_spring_viscous_dampers",
+                      "saturated_piecewise_linear_dampers"});
 
     if (!root.at("schema_version").is_number_integer() ||
         root.at("schema_version") != 1) {
@@ -193,6 +314,21 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     vehicle.weld_joints =
         ParseArray<VehicleWeldJointDefinition>(root, "weld_joints",
                                                ParseWeldJoint);
+    vehicle.translational_spring_dampers =
+        ParseArray<VehicleTranslationalSpringDamperDefinition>(
+            root, "translational_spring_dampers",
+            ParseTranslationalSpringDamper);
+    vehicle.roll_spring_damper_couples =
+        ParseArray<VehicleRollSpringDamperCoupleDefinition>(
+            root, "roll_spring_damper_couples", ParseRollSpringDamperCouple);
+    vehicle.series_spring_viscous_dampers =
+        ParseArray<VehicleSeriesSpringViscousDamperDefinition>(
+            root, "series_spring_viscous_dampers",
+            ParseSeriesSpringViscousDamper);
+    vehicle.saturated_piecewise_linear_dampers =
+        ParseArray<VehicleSaturatedPiecewiseLinearDamperDefinition>(
+            root, "saturated_piecewise_linear_dampers",
+            ParseSaturatedPiecewiseLinearDamper);
 
     // Bodies and frames share one namespace, so one set answers both "is this a
     // body?" and "is this a frame a joint may attach to?".
@@ -225,6 +361,44 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                         path + ".parent_frame_name");
         RequireDeclared(frame_names, joint.child_frame_name,
                         path + ".child_frame_name");
+    }
+
+    const auto require_force_ends = [&frame_names](
+                                        const std::string& array_key,
+                                        std::size_t index,
+                                        const std::string& reference,
+                                        const std::string& opposite) {
+        const std::string path = ElementPath("$." + array_key, index);
+        RequireDeclared(frame_names, reference, path + ".reference_frame_name");
+        RequireDeclared(frame_names, opposite, path + ".opposite_frame_name");
+    };
+    for (std::size_t index = 0;
+         index < vehicle.translational_spring_dampers.size(); ++index) {
+        const auto& element = vehicle.translational_spring_dampers[index];
+        require_force_ends("translational_spring_dampers", index,
+                           element.reference_frame_name,
+                           element.opposite_frame_name);
+    }
+    for (std::size_t index = 0;
+         index < vehicle.roll_spring_damper_couples.size(); ++index) {
+        const auto& element = vehicle.roll_spring_damper_couples[index];
+        require_force_ends("roll_spring_damper_couples", index,
+                           element.reference_frame_name,
+                           element.opposite_frame_name);
+    }
+    for (std::size_t index = 0;
+         index < vehicle.series_spring_viscous_dampers.size(); ++index) {
+        const auto& element = vehicle.series_spring_viscous_dampers[index];
+        require_force_ends("series_spring_viscous_dampers", index,
+                           element.reference_frame_name,
+                           element.opposite_frame_name);
+    }
+    for (std::size_t index = 0;
+         index < vehicle.saturated_piecewise_linear_dampers.size(); ++index) {
+        const auto& element = vehicle.saturated_piecewise_linear_dampers[index];
+        require_force_ends("saturated_piecewise_linear_dampers", index,
+                           element.reference_frame_name,
+                           element.opposite_frame_name);
     }
     return vehicle;
 }

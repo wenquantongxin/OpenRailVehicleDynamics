@@ -5,8 +5,11 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include <Eigen/Dense>
+
+#include "orvd/multibody_model/multibody_applied_forces.h"
 
 namespace orvd::multibody_model {
 class ForwardDynamicsWorkspace;
@@ -14,8 +17,13 @@ class MultibodyEvaluationContext;
 class MultibodyModel;
 }
 
+namespace orvd::forces {
+class VehicleForcePlan;
+}
+
 namespace orvd::system_assembly {
 
+class CompiledSystemPlan;
 class SystemAssemblyDescription;
 class SystemInstance;
 
@@ -59,10 +67,12 @@ class SystemContinuousStateRange {
 
 /// The root runtime context for one `SystemInstance`.
 ///
-/// It owns exactly one accepted time and one multibody evaluation context.
-/// That context in turn owns the G21 state store; this class does not mirror q
-/// or v.  The model-bound forward-dynamics workspace is created beside it once
-/// and reused.
+/// It owns exactly one accepted time, one multibody evaluation context, and the
+/// force-element state that belongs to no body.  The multibody context in turn
+/// owns the G21 state store; this class does not mirror q or v.  The model-bound
+/// forward-dynamics workspace and the scratch the plan needs to reach that
+/// facade are created beside it once and reused, so that two contexts of one
+/// system can be evaluated without sharing a buffer.
 class SystemRuntimeContext {
    public:
     ~SystemRuntimeContext();
@@ -74,13 +84,32 @@ class SystemRuntimeContext {
 
     [[nodiscard]] const Eigen::VectorXd& generalized_positions() const;
     [[nodiscard]] const Eigen::VectorXd& generalized_velocities() const;
+
+    /// The force of each series spring-viscous damper, in newtons, acting on
+    /// that element's reference end along its stated axis.  Empty when the
+    /// system declares no such element.
+    [[nodiscard]] const Eigen::VectorXd& series_spring_damper_forces() const {
+        return series_spring_damper_forces_;
+    }
+
+    /// The nominal force each translational element is preloaded with, three
+    /// components per element, in that element's reference frame and acting on
+    /// its reference end.  Zero until a resolved start-up state states them.
+    [[nodiscard]] const Eigen::VectorXd& nominal_forces() const {
+        return nominal_forces_;
+    }
+
     [[nodiscard]] double time_seconds() const { return time_seconds_; }
 
    private:
     friend class SystemInstance;
+    friend class CompiledSystemPlan;
     SystemRuntimeContext(internal::SystemIdentity issuer,
                          const multibody_model::MultibodyModel& model,
-                         double initial_time_seconds);
+                         double initial_time_seconds,
+                         int series_spring_damper_force_state_count,
+                         int nominal_force_component_count,
+                         int body_wrench_count);
 
     internal::SystemIdentity issuer_;
     double time_seconds_;
@@ -88,6 +117,19 @@ class SystemRuntimeContext {
         multibody_context_;
     std::unique_ptr<multibody_model::ForwardDynamicsWorkspace>
         forward_dynamics_workspace_;
+    Eigen::VectorXd series_spring_damper_forces_;
+    /// Context-local, written once by a start-up assembly and read thereafter.
+    /// It is not part of the continuous state: nothing integrates it, and an
+    /// ODE backend never sees it.
+    Eigen::VectorXd nominal_forces_;
+    /// The wrenches the force plan produces, sized once. It belongs to the
+    /// context so that two contexts of one system never write one buffer.
+    std::vector<multibody_model::AppliedBodyWrench> body_wrenches_;
+    Eigen::VectorXd series_force_derivatives_;
+    /// Scratch for the multibody facade's own [qdot; vdot], which is shorter
+    /// than this system's state.  It belongs to the context and not to the
+    /// frozen plan, so two contexts never write the same buffer.
+    Eigen::VectorXd multibody_state_time_derivatives_;
 };
 
 /// A short-lived, non-owning view of the executable multibody component.
@@ -127,40 +169,64 @@ class SystemInstance {
     SystemInstance(SystemInstance&&) = delete;
     SystemInstance& operator=(SystemInstance&&) = delete;
 
+    /// The vehicle's force elements, or null when the system carries none.
+    [[nodiscard]] const forces::VehicleForcePlan* force_plan() const {
+        return force_plan_;
+    }
+
     [[nodiscard]] MultibodyComponentIndex multibody_component() const;
     [[nodiscard]] SystemContinuousStateRange generalized_positions_state_range()
         const;
     [[nodiscard]] SystemContinuousStateRange generalized_velocities_state_range()
         const;
+
+    /// Where the series spring-viscous dampers' force state sits in the
+    /// contiguous vector.  A size of zero says the system declared none.
+    [[nodiscard]] SystemContinuousStateRange
+    series_spring_damper_force_state_range() const;
+
     [[nodiscard]] int continuous_state_size() const;
 
     /// Creates the default physical state at an explicit finite accepted time.
     [[nodiscard]] std::unique_ptr<SystemRuntimeContext>
     CreateDefaultRuntimeContext(double initial_time_seconds) const;
 
-    /// Copies the frozen `[q; v]` continuous-state layout into `output`.
+    /// Copies the frozen `[q; v; z]` continuous-state layout into `output`.
     /// `output` must already have `continuous_state_size()` entries.
     void CopyContinuousState(
         const SystemRuntimeContext& context,
         Eigen::Ref<Eigen::VectorXd> output) const;
 
-    /// Replaces the frozen `[q; v]` state as one transaction.
+    /// Replaces the frozen `[q; v; z]` state as one transaction.
     ///
-    /// This is the contiguous-vector bridge used by ODE backends.  The input
-    /// is mapped directly into the authoritative multibody state; no mirrored
-    /// system state is kept.  The accepted time is retained.
+    /// This is the contiguous-vector bridge used by ODE backends.  The q and v
+    /// parts are mapped directly into the authoritative multibody state; no
+    /// mirrored system state is kept.  The accepted time is retained.
     void SetContinuousState(
         SystemRuntimeContext& context,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
 
-    /// Accepts a finite time and complete `[q; v]` state as one transaction.
+    /// Accepts a finite time and complete `[q; v; z]` state as one transaction.
     ///
-    /// Every check, including the model-aware quaternion condition and both
-    /// state-version successors, precedes the write.  A refusal therefore
-    /// leaves time, q, v and their versions unchanged.
+    /// Every check precedes every write: the size, the time, the finiteness of
+    /// the force state, and then the model's own conditions on q and v, which
+    /// that facade validates before it writes anything of its own.  A refusal
+    /// therefore leaves time, q, v and z all unchanged — including a refusal
+    /// that only the force state earns, which is checked before q and v are
+    /// touched.
     void SetTimeAndContinuousState(
         SystemRuntimeContext& context, double time_seconds,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
+
+    /// States the nominal force of one translational element in this context.
+    ///
+    /// A start-up assembly writes these once; they are read on every evaluation
+    /// and never integrated.  Two contexts of one system hold their own.
+    ///
+    /// @throws std::invalid_argument if the context is foreign, the index is
+    /// out of range, or the force is not finite; nothing is written.
+    void SetNominalForce(SystemRuntimeContext& context, int element_index,
+                         const Eigen::Vector3d& force_in_reference_frame) const;
 
     /// Resolves the stable component index to direct references.  No name or
     /// run-time type lookup occurs on this path.
@@ -175,6 +241,9 @@ class SystemInstance {
     const multibody_model::MultibodyModel* multibody_model_;
     int generalized_position_count_{};
     int generalized_velocity_count_{};
+    int series_spring_damper_force_state_count_{};
+    int nominal_force_component_count_{};
+    const forces::VehicleForcePlan* force_plan_{nullptr};
 };
 
 }  // namespace orvd::system_assembly

@@ -63,8 +63,7 @@ void SystemRhsBridge::CalcTimeDerivatives(
 
     system_->SetTimeAndContinuousState(*trial_context_, time_seconds,
                                        continuous_state);
-    plan_->CalcStateTimeDerivatives(*trial_context_, {}, {}, {},
-                                    derivative_buffer_);
+    plan_->CalcStateTimeDerivatives(*trial_context_, derivative_buffer_);
     state_time_derivatives = derivative_buffer_;
 }
 

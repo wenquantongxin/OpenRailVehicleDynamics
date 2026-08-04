@@ -90,6 +90,47 @@ constexpr std::string_view kRecord = R"json({
       "parent_frame_name": "front_carbody_interface_mount",
       "child_frame_name": "front_carbody_interface_body"
     }
+  ],
+  "translational_spring_dampers": [
+    {
+      "name": "front_left_air_spring",
+      "reference_frame_name": "front_bogie_leading_left_axlebox_pivot",
+      "opposite_frame_name": "carbody",
+      "stiffness_newtons_per_meter": {"x": 185000.0, "y": 190000.0, "z": 230000.0},
+      "damping_newton_seconds_per_meter": {"x": 0.0, "y": 0.0, "z": 20000.0}
+    }
+  ],
+  "roll_spring_damper_couples": [
+    {
+      "name": "front_anti_roll_bar",
+      "reference_frame_name": "front_bogie_leading_left_axlebox_pivot",
+      "opposite_frame_name": "carbody",
+      "stiffness_newton_meters_per_radian": 1500000.0,
+      "damping_newton_meter_seconds_per_radian": 250.0
+    }
+  ],
+  "series_spring_viscous_dampers": [
+    {
+      "name": "front_lateral_damper",
+      "reference_frame_name": "front_bogie_leading_left_axlebox_pivot",
+      "opposite_frame_name": "carbody",
+      "axis": "lateral",
+      "series_stiffness_newtons_per_meter": 1000000000.0,
+      "series_damping_newton_seconds_per_meter": 60000.0
+    }
+  ],
+  "saturated_piecewise_linear_dampers": [
+    {
+      "name": "front_left_yaw_damper",
+      "reference_frame_name": "front_bogie_leading_left_axlebox_pivot",
+      "opposite_frame_name": "carbody",
+      "axis": "longitudinal",
+      "curve": [
+        {"relative_velocity_meters_per_second": 0.0, "force_newtons": 0.0},
+        {"relative_velocity_meters_per_second": 0.02, "force_newtons": 12000.0},
+        {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
+      ]
+    }
   ]
 })json";
 
@@ -147,8 +188,41 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
     Require(vehicle.rigid_bodies.size() == 4 &&
                 vehicle.fixed_frames.size() == 2 &&
                 vehicle.revolute_joints.size() == 1 &&
-                vehicle.weld_joints.size() == 1,
+                vehicle.weld_joints.size() == 1 &&
+                vehicle.translational_spring_dampers.size() == 1 &&
+                vehicle.roll_spring_damper_couples.size() == 1 &&
+                vehicle.series_spring_viscous_dampers.size() == 1 &&
+                vehicle.saturated_piecewise_linear_dampers.size() == 1,
             "record does not carry the entities it declares");
+
+    // Each constitutive family maps its own fields, in its own order. The three
+    // stiffness components differ so a transposed read fails.
+    const auto& translational = vehicle.translational_spring_dampers.front();
+    Require(translational.reference_frame_name ==
+                    "front_bogie_leading_left_axlebox_pivot" &&
+                translational.opposite_frame_name == "carbody",
+            "a force element's two ends were exchanged");
+    Require(translational.stiffness_newtons_per_meter ==
+                    Eigen::Vector3d(185000.0, 190000.0, 230000.0) &&
+                translational.damping_newton_seconds_per_meter ==
+                    Eigen::Vector3d(0.0, 0.0, 20000.0),
+            "translational constants were not mapped in order");
+    Require(vehicle.roll_spring_damper_couples.front()
+                        .stiffness_newton_meters_per_radian == 1500000.0 &&
+                vehicle.roll_spring_damper_couples.front()
+                        .damping_newton_meter_seconds_per_radian == 250.0,
+            "roll couple constants were not mapped, or were exchanged");
+    const auto& series = vehicle.series_spring_viscous_dampers.front();
+    Require(series.axis == "lateral" &&
+                series.series_stiffness_newtons_per_meter == 1.0e9 &&
+                series.series_damping_newton_seconds_per_meter == 60000.0,
+            "series constants were not mapped, or stiffness and damping were "
+            "exchanged");
+    const auto& clipped = vehicle.saturated_piecewise_linear_dampers.front();
+    Require(clipped.axis == "longitudinal" && clipped.curve.size() == 3 &&
+                clipped.curve[1].relative_velocity_meters_per_second == 0.02 &&
+                clipped.curve[1].force_newtons == 12000.0,
+            "the clipped damper's curve was not mapped in order");
 
     const auto& carbody = vehicle.rigid_bodies.front();
     Require(carbody.name == "carbody" && carbody.moves_freely_in_world,
@@ -248,6 +322,24 @@ void CheckRejections(const std::filesystem::path& path) {
         {ReplaceOnce(valid, "\"body_name\": \"carbody\",",
                      "\"body_name\": \"no_such_body\","),
          {"$.fixed_frames[0].body_name", "no_such_body"}},
+        // The axis is a closed vocabulary, and a force element's ends must be
+        // declared like any other reference.
+        {ReplaceOnce(valid, "\"axis\": \"lateral\"", "\"axis\": \"sideways\""),
+         {"$.series_spring_viscous_dampers[0].axis", "lateral"}},
+        {ReplaceOnce(valid,
+                     "\"reference_frame_name\": "
+                     "\"front_bogie_leading_left_axlebox_pivot\",\n      "
+                     "\"opposite_frame_name\": \"carbody\",\n      "
+                     "\"stiffness_newtons_per_meter\"",
+                     "\"reference_frame_name\": \"no_such_frame\",\n      "
+                     "\"opposite_frame_name\": \"carbody\",\n      "
+                     "\"stiffness_newtons_per_meter\""),
+         {"$.translational_spring_dampers[0].reference_frame_name",
+          "no_such_frame"}},
+        {ReplaceOnce(valid, "\"force_newtons\": 12000.0}\n      ]",
+                     "\"force_newtons\": 12000.0, \"slope\": 1.0}\n      ]"),
+         {"$.saturated_piecewise_linear_dampers[0].curve[2].slope",
+          "unknown key"}},
         // The rotation form is a closed vocabulary, not a free string.
         {ReplaceOnce(valid,
                      "\"rotation_in_body_frame\": {\"form\": "

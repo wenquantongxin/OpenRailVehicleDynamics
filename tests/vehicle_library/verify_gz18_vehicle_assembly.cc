@@ -14,6 +14,7 @@
 #include <Eigen/Geometry>
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
+#include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
@@ -436,10 +437,17 @@ void CheckRejections(const VehicleDefinition& vehicle) {
 
 // The assembled vehicle has to be something the rest of the product can pick up.
 // This drives it once through the system-assembly chain and asks the only
-// question that has a closed-form answer with no forces applied: does the whole
-// vehicle fall, and does it fall the way this project's frame says down is. It
-// is also the end-to-end statement of the gravity direction — a model built with
-// the multibody layer's own default would accelerate the other way here.
+// question that has a closed-form answer: with no force elements attached, does
+// the whole vehicle fall, and does it fall the way this project's frame says
+// down is. It is the end-to-end statement of the gravity direction — a model
+// built with the multibody layer's own default would accelerate the other way.
+//
+// The system here deliberately carries no force plan. The record's suspension
+// is not slack in the default configuration: every free body sits at the world
+// origin, so an air spring's two ends are metres apart and the element is
+// enormously stretched. That is a property of the configuration, not a defect,
+// and a start-up state will place the bodies where the suspension is at rest.
+// Until then, gravity alone is the only thing whose answer is known.
 void CheckTheVehicleFallsTheWayDownIs(const VehicleDefinition& vehicle,
                                       const MultibodyModel& model) {
     using orvd::system_assembly::CompiledSystemPlan;
@@ -453,11 +461,13 @@ void CheckTheVehicleFallsTheWayDownIs(const VehicleDefinition& vehicle,
     Expect(system.continuous_state_size() ==
                model.num_generalized_positions() +
                    model.num_generalized_velocities(),
-           "the system carries the vehicle's own coordinates and nothing else");
+           "a system with no force plan carries the vehicle's coordinates and "
+           "nothing else, which is what makes the free fall below a closed-form "
+           "answer");
 
     auto runtime = system.CreateDefaultRuntimeContext(0.0);
     Eigen::VectorXd derivative(system.continuous_state_size());
-    plan.CalcStateTimeDerivatives(*runtime, {}, {}, {}, derivative);
+    plan.CalcStateTimeDerivatives(*runtime, derivative);
     Expect(derivative.allFinite(),
            "the assembled GZ18 right-hand side is finite");
 
@@ -498,6 +508,99 @@ void CheckTheVehicleFallsTheWayDownIs(const VehicleDefinition& vehicle,
            "gravity would give");
 }
 
+// ---------------------------------------------------------------------------
+// Gate 5 — the force plan, and who owns the nominal forces
+// ---------------------------------------------------------------------------
+
+void CheckForcePlanAndParameterOwnership(const VehicleDefinition& vehicle,
+                                         const MultibodyModel& model) {
+    using orvd::system_assembly::CompiledSystemPlan;
+    using orvd::system_assembly::SystemAssemblyDescription;
+    using orvd::system_assembly::SystemInstance;
+
+    const auto plan = orvd::configuration::BuildVehicleForcePlan(vehicle, model);
+    Expect(plan->translational_spring_damper_count() == 20 &&
+               plan->roll_spring_damper_couple_count() == 2 &&
+               plan->series_spring_viscous_damper_count() == 2 &&
+               plan->saturated_piecewise_linear_damper_count() == 4,
+           "the plan holds every element the record states, one per instance, "
+           "grouped by real constitutive family");
+    Expect(plan->series_spring_damper_force_state_count() == 2,
+           "only the series family carries state, so the state block is two "
+           "components wide");
+    Expect(plan->body_wrench_count() == 56,
+           "each of the twenty-eight elements produces exactly two body "
+           "wrenches");
+
+    const SystemAssemblyDescription description(model, *plan);
+    const SystemInstance system(description);
+    const CompiledSystemPlan compiled(system);
+    Expect(system.continuous_state_size() == 109,
+           "the system's state is the vehicle's coordinates plus the two "
+           "series forces");
+    Expect(system.series_spring_damper_force_state_range().start() == 107 &&
+               system.series_spring_damper_force_state_range().size() == 2,
+           "the force state sits after q and v, adjacent to them");
+
+    // The nominal forces belong to a context, not to the record and not to the
+    // compiled plan. Two contexts of one system hold their own, and neither the
+    // record nor the plan changes when one is written.
+    auto first = system.CreateDefaultRuntimeContext(0.0);
+    auto second = system.CreateDefaultRuntimeContext(0.0);
+    Expect(first->nominal_forces().size() == 60 &&
+               first->nominal_forces() == Eigen::VectorXd::Zero(60),
+           "a fresh context starts with every nominal force at zero: G50 makes "
+           "the slot, a resolved start-up state fills it");
+    system.SetNominalForce(*first, 0, Eigen::Vector3d(11.0, -22.0, 33.0));
+    system.SetNominalForce(*second, 0, Eigen::Vector3d(-44.0, 55.0, -66.0));
+    Expect(first->nominal_forces().segment<3>(0) ==
+                   Eigen::Vector3d(11.0, -22.0, 33.0) &&
+               second->nominal_forces().segment<3>(0) ==
+                   Eigen::Vector3d(-44.0, 55.0, -66.0),
+           "two contexts hold different nominal forces without contaminating "
+           "each other");
+    Expect(first->nominal_forces().segment<3>(3) == Eigen::Vector3d::Zero(),
+           "writing one element's nominal force leaves the others alone");
+
+    // And the difference reaches the dynamics: the same state under two
+    // different preloads gives two different derivatives.
+    Eigen::VectorXd first_derivative(109);
+    Eigen::VectorXd second_derivative(109);
+    compiled.CalcStateTimeDerivatives(*first, first_derivative);
+    compiled.CalcStateTimeDerivatives(*second, second_derivative);
+    Expect((first_derivative - second_derivative).cwiseAbs().maxCoeff() > 1.0e-6,
+           "a context's nominal force reaches the right-hand side, so the slot "
+           "is consumed rather than merely stored");
+
+    // The state derivative of the series block is the constitutive law's, and
+    // it is not zero merely because the vehicle is at rest: at zero relative
+    // velocity and zero force it is zero, so give it a force to relax.
+    Eigen::VectorXd state(109);
+    system.CopyContinuousState(*first, state);
+    state.segment<2>(107) << 5000.0, -3000.0;
+    system.SetTimeAndContinuousState(*first, 0.0, state);
+    Eigen::VectorXd relaxing(109);
+    compiled.CalcStateTimeDerivatives(*first, relaxing);
+    // dF/dt = K v - (K/C) F, and with the vehicle at rest v is zero, so the
+    // rate is exactly -(K/C) F with K/C = 1e9 / 6e4.
+    const double rate_constant = 1.0e9 / 6.0e4;
+    Expect(std::abs(relaxing[107] + rate_constant * 5000.0) <=
+                   1.0e-6 * rate_constant * 5000.0 &&
+               std::abs(relaxing[108] - rate_constant * 3000.0) <=
+                   1.0e-6 * rate_constant * 3000.0,
+           "each series element relaxes at its own time constant, into its own "
+           "slice of the state block");
+
+    // A record edited after the plan was compiled cannot reach it.
+    VehicleDefinition edited = vehicle;
+    edited.translational_spring_dampers.front().stiffness_newtons_per_meter *=
+        3.0;
+    Eigen::VectorXd after_edit(109);
+    compiled.CalcStateTimeDerivatives(*first, after_edit);
+    Expect(after_edit == relaxing,
+           "editing the record leaves an already compiled plan untouched");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -515,6 +618,7 @@ int main(int argc, char* argv[]) {
         CheckGeometricInvariants(vehicle, *model);
         CheckAssemblyIsAllAndOnly(vehicle, *model);
         CheckTheVehicleFallsTheWayDownIs(vehicle, *model);
+        CheckForcePlanAndParameterOwnership(vehicle, *model);
         CheckRejections(vehicle);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "GZ18 vehicle assembly failed: %s\n", error.what());

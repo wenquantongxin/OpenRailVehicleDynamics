@@ -468,7 +468,7 @@ add_executable(verify_system_assembly_description
     system_assembly/verify_system_assembly_description.cc)
 orvd_configure_first_party_target(verify_system_assembly_description)
 target_link_libraries(verify_system_assembly_description
-    PRIVATE orvd_system_assembly)
+    PRIVATE orvd_forces orvd_system_assembly)
 add_test(NAME verify_system_assembly_description
          COMMAND verify_system_assembly_description)
 
@@ -666,3 +666,13 @@ target_link_libraries(verify_gz18_vehicle_assembly
 add_test(NAME verify_gz18_vehicle_assembly
          COMMAND verify_gz18_vehicle_assembly
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json)
+
+add_executable(verify_vehicle_force_elements
+    forces/vehicle_force_elements_header_self_containment.cc
+    forces/vehicle_force_plan_header_self_containment.cc
+    forces/verify_vehicle_force_elements.cc)
+orvd_configure_first_party_target(verify_vehicle_force_elements)
+target_link_libraries(verify_vehicle_force_elements
+    PRIVATE orvd_forces)
+add_test(NAME verify_vehicle_force_elements
+         COMMAND verify_vehicle_force_elements)

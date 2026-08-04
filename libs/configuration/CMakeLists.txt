@@ -16,7 +16,7 @@ target_include_directories(orvd_configuration
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_configuration
-    PUBLIC orvd_multibody_model orvd_track_geometry
+    PUBLIC orvd_forces orvd_multibody_model orvd_track_geometry
     PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 set_target_properties(orvd_configuration PROPERTIES

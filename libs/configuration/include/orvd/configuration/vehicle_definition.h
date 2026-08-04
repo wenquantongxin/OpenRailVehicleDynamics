@@ -99,12 +99,73 @@ struct VehicleWeldJointDefinition {
     std::string child_frame_name;
 };
 
+// The force elements, named by real constitutive law. Each states which of its
+// two ends is the reference end: the relative motion the law reads and the force
+// it produces are expressed there, and that end carries the support moment.
+// Swapping the two ends leaves every force and moment balance intact while
+// moving that support moment to the other body, so which end is which is stated
+// rather than inferred.
+//
+// A nominal force — the preload a suspension element carries at rest — is not
+// here. It belongs to a resolved start-up state, not to what the vehicle is, and
+// a later Goal supplies it per context.
+
+struct VehicleTranslationalSpringDamperDefinition {
+    std::string name;
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
+    Eigen::Vector3d stiffness_newtons_per_meter{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d damping_newton_seconds_per_meter{Eigen::Vector3d::Zero()};
+};
+
+struct VehicleRollSpringDamperCoupleDefinition {
+    std::string name;
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
+    double stiffness_newton_meters_per_radian{0.0};
+    double damping_newton_meter_seconds_per_radian{0.0};
+};
+
+struct VehicleSeriesSpringViscousDamperDefinition {
+    std::string name;
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
+    // "longitudinal", "lateral" or "vertical", in the reference frame.
+    std::string axis;
+    double series_stiffness_newtons_per_meter{0.0};
+    double series_damping_newton_seconds_per_meter{0.0};
+};
+
+struct VehicleSaturatedPiecewiseLinearDamperPointDefinition {
+    double relative_velocity_meters_per_second{0.0};
+    double force_newtons{0.0};
+};
+
+struct VehicleSaturatedPiecewiseLinearDamperDefinition {
+    std::string name;
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
+    std::string axis;
+    // The non-negative half of an odd curve, starting at the origin and
+    // ascending in velocity. The negative half is its reflection and is not
+    // written down, so a curve cannot be asymmetric by transcription.
+    std::vector<VehicleSaturatedPiecewiseLinearDamperPointDefinition> curve;
+};
+
 struct VehicleDefinition {
     std::string vehicle_name;
     std::vector<VehicleRigidBodyDefinition> rigid_bodies;
     std::vector<VehicleFixedFrameDefinition> fixed_frames;
     std::vector<VehicleRevoluteJointDefinition> revolute_joints;
     std::vector<VehicleWeldJointDefinition> weld_joints;
+    std::vector<VehicleTranslationalSpringDamperDefinition>
+        translational_spring_dampers;
+    std::vector<VehicleRollSpringDamperCoupleDefinition>
+        roll_spring_damper_couples;
+    std::vector<VehicleSeriesSpringViscousDamperDefinition>
+        series_spring_viscous_dampers;
+    std::vector<VehicleSaturatedPiecewiseLinearDamperDefinition>
+        saturated_piecewise_linear_dampers;
 };
 
 }  // namespace orvd::configuration

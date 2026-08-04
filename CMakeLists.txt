@@ -95,7 +95,7 @@ foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
 endforeach()
 
 # --- Installable package ---
-# Six first-party targets form the documented surface. The rigid-tree archive
+# Seven first-party targets form the documented surface. The rigid-tree archive
 # is exported only because a static modelling archive must retain its private
 # implementation link edge; no vendored or adapter header is installed.
 set(ORVD_INSTALL_TARGETS
@@ -103,6 +103,7 @@ set(ORVD_INSTALL_TARGETS
     orvd_configuration
     orvd_multibody_runtime
     orvd_multibody_model
+    orvd_forces
     orvd_system_assembly
     orvd_integrators
     orvd_rigid_multibody_tree)
@@ -113,8 +114,8 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 foreach(orvd_public_module
-        track_geometry configuration multibody_runtime multibody_model system_assembly
-        integrators)
+        track_geometry configuration multibody_runtime multibody_model forces
+        system_assembly integrators)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
