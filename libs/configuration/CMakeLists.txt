@@ -3,7 +3,10 @@
 # not need the parser or its headers.
 
 add_library(orvd_configuration STATIC
-    src/load_track_geometry.cc)
+    src/assemble_vehicle_multibody_model.cc
+    src/load_track_geometry.cc
+    src/load_vehicle_definition.cc
+    src/strict_json.cc)
 
 orvd_configure_first_party_target(orvd_configuration)
 
@@ -13,7 +16,7 @@ target_include_directories(orvd_configuration
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_configuration
-    PUBLIC orvd_track_geometry
+    PUBLIC orvd_multibody_model orvd_track_geometry
     PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 set_target_properties(orvd_configuration PROPERTIES

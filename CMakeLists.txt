@@ -127,6 +127,12 @@ install(DIRECTORY
         "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/track_library/geometries"
         FILES_MATCHING PATTERN "*.json")
 
+install(DIRECTORY
+        "${CMAKE_CURRENT_SOURCE_DIR}/vehicle_library/gz18/"
+        DESTINATION
+        "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/gz18"
+        FILES_MATCHING PATTERN "*.json")
+
 set(ORVD_INSTALL_CMAKEDIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/OpenRailVehicleDynamics")
 configure_package_config_file(

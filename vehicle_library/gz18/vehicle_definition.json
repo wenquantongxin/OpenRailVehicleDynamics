@@ -1,0 +1,644 @@
+{
+  "schema_version": 1,
+  "vehicle_name": "GZ18",
+  "rigid_bodies": [
+    {
+      "name": "carbody",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 30549.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -1.346},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 60845.0, "y": 1315247.0, "z": 1344928.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_bogie_frame",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 8900.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.557},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1650.0, "y": 3419.0, "z": 4994.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_leading_right_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_leading_left_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_trailing_right_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_trailing_left_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_secondary_suspension_seat",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_leading_wheelset",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 1834.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1059.0, "y": 1650.0, "z": 1074.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "front_trailing_wheelset",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 1834.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1059.0, "y": 1650.0, "z": 1074.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_bogie_frame",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 8900.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.557},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1650.0, "y": 3419.0, "z": 4994.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_leading_right_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_leading_left_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_trailing_right_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_trailing_left_axlebox_carrier",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_secondary_suspension_seat",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 1.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.0, "y": 1.0, "z": 1.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_leading_wheelset",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 1834.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1059.0, "y": 1650.0, "z": 1074.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "rear_trailing_wheelset",
+      "moves_freely_in_world": true,
+      "mass_kilograms": 1834.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1059.0, "y": 1650.0, "z": 1074.0},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
+    }
+  ],
+  "fixed_frames": [
+    {
+      "name": "front_secondary_suspension_seat_carbody_side_attachment",
+      "body_name": "carbody",
+      "position_in_body_frame_meters": {"x": 7.85, "y": 0.0, "z": -1.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_secondary_suspension_seat_carbody_side_attachment",
+      "body_name": "carbody",
+      "position_in_body_frame_meters": {"x": -7.85, "y": 0.0, "z": -1.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_right_primary_suspension_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 1.25, "y": 1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_left_primary_suspension_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 1.25, "y": -1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_right_primary_suspension_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": -1.25, "y": 1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_left_primary_suspension_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": -1.25, "y": -1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.77, "y": 1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.77, "y": -1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": -0.77, "y": 1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": -0.77, "y": -1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_right_air_spring_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.95, "z": -0.638},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_left_air_spring_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -0.95, "z": -0.638},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_lateral_damper_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_anti_roll_bar_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_left_yaw_damper_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.2, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_right_yaw_damper_bogie_side_attachment",
+      "body_name": "front_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.2, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "front_leading_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": -0.48, "y": 0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_right_primary_suspension_axlebox_side_attachment",
+      "body_name": "front_leading_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "front_leading_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": -0.48, "y": -0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_left_primary_suspension_axlebox_side_attachment",
+      "body_name": "front_leading_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "front_trailing_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.48, "y": 0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_right_primary_suspension_axlebox_side_attachment",
+      "body_name": "front_trailing_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "front_trailing_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.48, "y": -0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_left_primary_suspension_axlebox_side_attachment",
+      "body_name": "front_trailing_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_right_air_spring_carbody_side_attachment",
+      "body_name": "front_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.95, "z": 0.362},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_left_air_spring_carbody_side_attachment",
+      "body_name": "front_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -0.95, "z": 0.362},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_lateral_damper_carbody_side_attachment",
+      "body_name": "front_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_anti_roll_bar_carbody_side_attachment",
+      "body_name": "front_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_left_yaw_damper_carbody_side_attachment",
+      "body_name": "front_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.2, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_right_yaw_damper_carbody_side_attachment",
+      "body_name": "front_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.2, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "front_leading_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_leading_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "front_leading_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "front_trailing_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "front_trailing_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "front_trailing_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_right_primary_suspension_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 1.25, "y": 1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_left_primary_suspension_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 1.25, "y": -1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_right_primary_suspension_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": -1.25, "y": 1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_left_primary_suspension_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": -1.25, "y": -1.0, "z": -0.438},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.77, "y": 1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.77, "y": -1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_right_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": -0.77, "y": 1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_left_axlebox_carrier_bushing_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": -0.77, "y": -1.055, "z": -0.4335},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_right_air_spring_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.95, "z": -0.638},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_left_air_spring_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -0.95, "z": -0.638},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_lateral_damper_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_anti_roll_bar_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_left_yaw_damper_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.2, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_right_yaw_damper_bogie_side_attachment",
+      "body_name": "rear_bogie_frame",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.2, "z": -0.557},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "rear_leading_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": -0.48, "y": 0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_right_primary_suspension_axlebox_side_attachment",
+      "body_name": "rear_leading_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "rear_leading_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": -0.48, "y": -0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_left_primary_suspension_axlebox_side_attachment",
+      "body_name": "rear_leading_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_right_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "rear_trailing_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.48, "y": 0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_right_primary_suspension_axlebox_side_attachment",
+      "body_name": "rear_trailing_right_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_left_axlebox_carrier_bushing_axlebox_side_attachment",
+      "body_name": "rear_trailing_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.48, "y": -0.055, "z": -0.0135},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_left_primary_suspension_axlebox_side_attachment",
+      "body_name": "rear_trailing_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": -0.018},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_right_air_spring_carbody_side_attachment",
+      "body_name": "rear_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.95, "z": 0.362},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_left_air_spring_carbody_side_attachment",
+      "body_name": "rear_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -0.95, "z": 0.362},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_lateral_damper_carbody_side_attachment",
+      "body_name": "rear_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_anti_roll_bar_carbody_side_attachment",
+      "body_name": "rear_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_left_yaw_damper_carbody_side_attachment",
+      "body_name": "rear_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.2, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_right_yaw_damper_carbody_side_attachment",
+      "body_name": "rear_secondary_suspension_seat",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.2, "z": 0.443},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "rear_leading_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_leading_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "rear_leading_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "rear_trailing_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_trailing_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "body_name": "rear_trailing_wheelset",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -1.0, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    }
+  ],
+  "revolute_joints": [
+    {
+      "name": "front_leading_right_axlebox_carrier_pivot",
+      "parent_frame_name": "front_leading_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "front_leading_right_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "front_leading_left_axlebox_carrier_pivot",
+      "parent_frame_name": "front_leading_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "front_leading_left_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "front_trailing_right_axlebox_carrier_pivot",
+      "parent_frame_name": "front_trailing_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "front_trailing_right_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "front_trailing_left_axlebox_carrier_pivot",
+      "parent_frame_name": "front_trailing_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "front_trailing_left_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "rear_leading_right_axlebox_carrier_pivot",
+      "parent_frame_name": "rear_leading_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "rear_leading_right_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "rear_leading_left_axlebox_carrier_pivot",
+      "parent_frame_name": "rear_leading_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "rear_leading_left_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "rear_trailing_right_axlebox_carrier_pivot",
+      "parent_frame_name": "rear_trailing_right_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "rear_trailing_right_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    },
+    {
+      "name": "rear_trailing_left_axlebox_carrier_pivot",
+      "parent_frame_name": "rear_trailing_left_axlebox_carrier_pivot_wheelset_side_attachment",
+      "child_frame_name": "rear_trailing_left_axlebox_carrier",
+      "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
+      "damping_newton_metre_seconds_per_radian": 0.0
+    }
+  ],
+  "weld_joints": [
+    {
+      "name": "front_secondary_suspension_seat_weld",
+      "parent_frame_name": "front_secondary_suspension_seat_carbody_side_attachment",
+      "child_frame_name": "front_secondary_suspension_seat"
+    },
+    {
+      "name": "rear_secondary_suspension_seat_weld",
+      "parent_frame_name": "rear_secondary_suspension_seat_carbody_side_attachment",
+      "child_frame_name": "rear_secondary_suspension_seat"
+    }
+  ]
+}

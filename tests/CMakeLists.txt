@@ -645,3 +645,24 @@ add_test(NAME verify_track_geometry_json_loading
          COMMAND verify_track_geometry_json_loading
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
+
+add_executable(verify_vehicle_definition_loading
+    configuration/vehicle_definition_header_self_containment.cc
+    configuration/load_vehicle_definition_header_self_containment.cc
+    configuration/verify_vehicle_definition_loading.cc)
+orvd_configure_first_party_target(verify_vehicle_definition_loading)
+target_link_libraries(verify_vehicle_definition_loading
+    PRIVATE orvd_configuration)
+add_test(NAME verify_vehicle_definition_loading
+         COMMAND verify_vehicle_definition_loading
+             ${CMAKE_CURRENT_BINARY_DIR}/vehicle-definition-fixtures)
+
+add_executable(verify_gz18_vehicle_assembly
+    vehicle_library/assemble_vehicle_multibody_model_header_self_containment.cc
+    vehicle_library/verify_gz18_vehicle_assembly.cc)
+orvd_configure_first_party_target(verify_gz18_vehicle_assembly)
+target_link_libraries(verify_gz18_vehicle_assembly
+    PRIVATE orvd_configuration orvd_system_assembly)
+add_test(NAME verify_gz18_vehicle_assembly
+         COMMAND verify_gz18_vehicle_assembly
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json)
