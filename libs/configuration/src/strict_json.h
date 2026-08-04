@@ -83,7 +83,7 @@ void RequireExactKeys(const Json& object, const std::string& path,
 // keeps a stray space or a control character from producing two identifiers
 // that compare unequal while reading the same, and it settles now that an
 // identifier is a name rather than a path, so no later goal has to defend
-// against '/' or '..' reaching a file lookup. `what` names the kind of
+// against a path separator reaching a file lookup. `what` names the kind of
 // identifier for the diagnostic.
 [[nodiscard]] std::string RequireIdentifier(const Json& value,
                                             const std::string& path,

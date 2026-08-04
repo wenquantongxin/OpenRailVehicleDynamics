@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -126,33 +125,6 @@ void RequireStationInsideLine(double station, const std::string& body_name,
     }
 }
 
-void RequireSupportBeginsAfterForemostAxle(
-    const std::optional<double>& support_start, const std::string& family,
-    double foremost_axle_station) {
-    if (!support_start.has_value()) {
-        return;
-    }
-    if (*support_start > foremost_axle_station) {
-        return;
-    }
-    const double violation = foremost_axle_station - *support_start;
-    if (violation == 0.0) {
-        Reject("the " + family + " support begins at station " +
-               Describe(*support_start) +
-               " m, which is not strictly after the foremost axle station " +
-               Describe(foremost_axle_station) +
-               " m; a vehicle resolved on level tangent track may not start "
-               "with an axle already at the point where a family begins to "
-               "act");
-    }
-    Reject("the " + family + " support begins at station " +
-           Describe(*support_start) + " m, which is " + Describe(violation) +
-           " m before the foremost axle station " +
-           Describe(foremost_axle_station) +
-           " m; a vehicle resolved on level tangent track may not start inside "
-           "a stretch it was not resolved for");
-}
-
 }  // namespace
 
 ResolvedInitialContext::ResolvedInitialContext(
@@ -236,6 +208,14 @@ ResolvedInitialContext AssembleResolvedInitialContext(
     RequireSameNames(stated, binding.wheelset_body_names,
                      "target wheel support force");
 
+    stated.clear();
+    for (const WheelsetStartupKinematics& wheelset :
+         startup_state.wheelset_startup_kinematics) {
+        stated.push_back(wheelset.wheelset_body_name);
+    }
+    RequireSameNames(stated, binding.wheelset_body_names,
+                     "wheelset start-up kinematics");
+
     std::vector<std::string> free_body_names;
     for (const VehicleFreeBodyStationOffset& offset :
          binding.free_body_station_offsets) {
@@ -286,31 +266,30 @@ ResolvedInitialContext AssembleResolvedInitialContext(
         station_of_body.emplace(body.body_name, station);
     }
 
-    // 5. The start-up domain. Only the increasing-station direction is
-    // admitted, so the foremost axle is the greatest wheelset station.
-    double foremost_axle_station = 0.0;
-    bool have_axle = false;
-    for (const std::string& wheelset : binding.wheelset_body_names) {
-        const double station = station_of_body.at(wheelset);
-        if (!have_axle || station > foremost_axle_station) {
-            foremost_axle_station = station;
-            have_axle = true;
+    // 5. Expand the two shared GZ18 start-up authorities before touching a
+    // context. The record remains editable C++, so arithmetic overflow is
+    // rejected here even when no JSON loader was involved.
+    const double common_wheel_spin_magnitude =
+        startup_state.initial_longitudinal_speed_meters_per_second /
+        startup_state.common_startup_effective_rolling_radius_meters;
+    if (!std::isfinite(common_wheel_spin_magnitude)) {
+        Reject("initial_longitudinal_speed_meters_per_second divided by "
+               "common_startup_effective_rolling_radius_meters is not "
+               "finite");
+    }
+    std::unordered_map<std::string, Eigen::Vector3d>
+        wheelset_spin_of_body;
+    for (const WheelsetStartupKinematics& wheelset :
+         startup_state.wheelset_startup_kinematics) {
+        const Eigen::Vector3d spin =
+            wheelset.forward_spin_axis_in_body_frame *
+            common_wheel_spin_magnitude;
+        if (!spin.allFinite()) {
+            Reject("the generated spin of wheelset '" +
+                   wheelset.wheelset_body_name + "' is not finite");
         }
+        wheelset_spin_of_body.emplace(wheelset.wheelset_body_name, spin);
     }
-    if (!have_axle) {
-        Reject(
-            "this vehicle declares no wheelset, so no foremost axle station "
-            "exists to hold the start-up domain contract against");
-    }
-    RequireSupportBeginsAfterForemostAxle(
-        line.first_curved_track_station_meters(), "curvature",
-        foremost_axle_station);
-    RequireSupportBeginsAfterForemostAxle(
-        line.first_superelevated_track_station_meters(), "superelevation",
-        foremost_axle_station);
-    RequireSupportBeginsAfterForemostAxle(
-        line.first_graded_track_station_meters(), "grade",
-        foremost_axle_station);
 
     // 6. Names to handles, indices and ranges. Nothing below indexes by
     // declaration order: the model's arrangement is its own business.
@@ -430,12 +409,10 @@ ResolvedInitialContext AssembleResolvedInitialContext(
     Eigen::VectorXd continuous_state =
         Eigen::VectorXd::Zero(instance.continuous_state_size());
     for (const PlacedBody& placed : placed_bodies) {
-        // The track frame's rotation is the identity at every body of every
-        // admissible start-up: the domain contract puts curvature,
-        // superelevation and grade all strictly after the foremost axle, and
-        // every body stands at or before it. The general formula is written
-        // out anyway, because it is the formula; what varies today is the
-        // origin, which moves with the station.
+        // The complete formula is used on every line. The bundled GZ18 demo is
+        // qualified only on straight, level, zero-superelevation track, but a
+        // researcher may deliberately place the same input on another line;
+        // this layer does not prohibit or silently simplify that experiment.
         const track_geometry::TrackFramePose pose =
             line.EvaluateTrackFrame(placed.station_meters).pose();
         const Eigen::Quaterniond rotation_inertial_from_track(
@@ -460,14 +437,29 @@ ResolvedInitialContext AssembleResolvedInitialContext(
         // Both stated velocities are inertial velocities; only the basis they
         // are written in differs, so this is a change of basis and nothing
         // else. No transport term of the track frame enters.
-        const Eigen::Vector3d angular_velocity_in_inertial =
-            rotation_inertial_from_body *
+        Eigen::Vector3d angular_velocity_in_body =
             placed.state
-                ->body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second;
+                ->additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second;
+        const auto wheelset_spin =
+            wheelset_spin_of_body.find(placed.state->body_name);
+        if (wheelset_spin != wheelset_spin_of_body.end()) {
+            angular_velocity_in_body += wheelset_spin->second;
+        }
+        if (!angular_velocity_in_body.allFinite()) {
+            Reject("the expanded angular velocity of '" +
+                   placed.state->body_name + "' is not finite");
+        }
+        const Eigen::Vector3d angular_velocity_in_inertial =
+            rotation_inertial_from_body * angular_velocity_in_body;
+        const Eigen::Vector3d origin_velocity_in_track(
+            startup_state.initial_longitudinal_speed_meters_per_second,
+            placed.state
+                ->body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second,
+            placed.state
+                ->body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second);
         const Eigen::Vector3d origin_velocity_in_inertial =
             pose.rotation_inertial_from_track() *
-            placed.state
-                ->body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second;
+            origin_velocity_in_track;
         const int velocity_start =
             position_count + placed.velocities.start();
         continuous_state.segment<3>(velocity_start) =
@@ -476,10 +468,17 @@ ResolvedInitialContext AssembleResolvedInitialContext(
             origin_velocity_in_inertial;
     }
     for (const PlacedJoint& placed : placed_joints) {
+        const double rate =
+            placed.state->rate_per_common_wheel_spin_magnitude *
+            common_wheel_spin_magnitude;
+        if (!std::isfinite(rate)) {
+            Reject("the generated rate of joint '" +
+                   placed.state->joint_name + "' is not finite");
+        }
         continuous_state[placed.positions.start()] =
             placed.state->position_radians;
         continuous_state[position_count + placed.velocities.start()] =
-            placed.state->rate_radians_per_second;
+            rate;
     }
     for (const PlacedSeriesForce& placed : placed_series) {
         continuous_state[placed.range.start()] =

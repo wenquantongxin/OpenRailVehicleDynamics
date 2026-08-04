@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "strict_json.h"
+#include "vehicle_definition_invariants.h"
 #include "vehicle_definition_inertia.h"
 
 namespace orvd::configuration {
@@ -392,91 +393,13 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     // body?" and "is this a frame a joint may attach to?".
     std::unordered_set<std::string> body_names;
     std::unordered_set<std::string> frame_names;
-    std::unordered_set<std::string> free_body_names;
     for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
         body_names.insert(body.name);
         frame_names.insert(body.name);
-        if (body.moves_freely_in_world) {
-            free_body_names.insert(body.name);
-        }
     }
 
-    // The layout must name every free body once and nothing else. A free body
-    // without a station has no place on the line; a station for a body that is
-    // not free names a coordinate nobody owns. Neither is caught downstream,
-    // because a start-up assembly reads this table by name and would simply not
-    // look for what is missing.
-    {
-        const VehicleMechanicalTrackStationLayoutDefinition& layout =
-            vehicle.mechanical_track_station_layout;
-        const std::string path = "$.mechanical_track_station_layout";
-        std::unordered_map<std::string, double> offset_of_body;
-        for (std::size_t index = 0; index < layout.free_body_station_offsets.size();
-             ++index) {
-            const VehicleFreeBodyStationOffsetDefinition& offset =
-                layout.free_body_station_offsets[index];
-            const std::string element_path =
-                ElementPath(path + ".free_body_station_offsets", index);
-            if (!free_body_names.contains(offset.body_name)) {
-                throw std::invalid_argument(
-                    element_path + ".body_name names '" + offset.body_name +
-                    "', which this description does not declare as a rigid "
-                    "body that moves freely in the world; only a free body has "
-                    "a station of its own");
-            }
-            const auto [first, inserted] =
-                offset_of_body.emplace(offset.body_name,
-                                       offset.station_offset_meters);
-            if (!inserted) {
-                throw std::invalid_argument(
-                    element_path + ".body_name repeats '" + offset.body_name +
-                    "', which already has a station offset");
-            }
-        }
-        for (const std::string& free_body : free_body_names) {
-            if (!offset_of_body.contains(free_body)) {
-                throw std::invalid_argument(
-                    path + ".free_body_station_offsets omits the free body '" +
-                    free_body +
-                    "'; every free body needs a station before it can be "
-                    "placed on a line");
-            }
-        }
-
-        const auto reference = offset_of_body.find(layout.reference_body_name);
-        if (reference == offset_of_body.end()) {
-            throw std::invalid_argument(
-                path + ".reference_body_name names '" +
-                layout.reference_body_name +
-                "', which is not one of the free bodies this layout places");
-        }
-        if (reference->second != 0.0) {
-            throw std::invalid_argument(
-                path + ".reference_body_name names '" +
-                layout.reference_body_name + "', whose station offset is " +
-                std::to_string(reference->second) +
-                " m rather than zero; the reference body is what the other "
-                "offsets are measured from");
-        }
-
-        std::unordered_set<std::string> wheelset_names;
-        for (std::size_t index = 0; index < layout.wheelset_body_names.size();
-             ++index) {
-            const std::string& name = layout.wheelset_body_names[index];
-            const std::string element_path =
-                ElementPath(path + ".wheelset_body_names", index);
-            if (!offset_of_body.contains(name)) {
-                throw std::invalid_argument(
-                    element_path + " names '" + name +
-                    "', which is not one of the free bodies this layout "
-                    "places");
-            }
-            if (!wheelset_names.insert(name).second) {
-                throw std::invalid_argument(element_path + " repeats '" + name +
-                                            "'");
-            }
-        }
-    }
+    internal::RequireVehicleMechanicalTrackStationLayoutInvariants(vehicle,
+                                                                    "$");
     for (std::size_t index = 0; index < vehicle.fixed_frames.size(); ++index) {
         const VehicleFixedFrameDefinition& frame = vehicle.fixed_frames[index];
         RequireDeclared(body_names, frame.body_name,

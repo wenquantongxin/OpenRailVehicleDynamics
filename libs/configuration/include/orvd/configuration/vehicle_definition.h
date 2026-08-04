@@ -164,9 +164,9 @@ struct VehicleFreeBodyStationOffsetDefinition {
 // Which body the longitudinal layout is measured from, where each free body
 // sits relative to it, and which of those bodies are wheelsets.
 //
-// A start-up domain contract needs the station of the foremost axle before any
-// state is written, and a start-up assembly needs every free body's station to
-// place it on the line. Both read this record; neither recomputes it.
+// A start-up assembly needs every free body's station to place it on the line,
+// and later contact consumers need to identify the wheelset subset. Both read
+// this record; neither recomputes the mechanical layout.
 struct VehicleMechanicalTrackStationLayoutDefinition {
     std::string reference_body_name;
     std::vector<VehicleFreeBodyStationOffsetDefinition>

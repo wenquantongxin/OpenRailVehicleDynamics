@@ -329,12 +329,6 @@ std::string RequireIdentifier(const Json& value, const std::string& path,
                 "identifier is a name, not a path or a sentence");
         }
     }
-    if (identifier.find("..") != std::string::npos) {
-        throw std::invalid_argument(path + " is a " + std::string(what) +
-                                    " '" + identifier +
-                                    "' containing '..'; an identifier names "
-                                    "an object, it does not traverse to one");
-    }
     return identifier;
 }
 

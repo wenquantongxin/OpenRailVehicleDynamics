@@ -16,9 +16,9 @@ namespace orvd::configuration {
 // a missing, unknown or repeated key, a wrong type, a number the file states
 // but binary64 cannot hold, an identifier outside its character set, a running
 // direction outside the closed vocabulary, and the record's own numeric
-// invariants — every value finite, each quaternion of unit norm, the speed and
-// gravity strictly positive, each target wheel load positive, and no name
-// repeated inside its family.
+// invariants — every value finite, each quaternion and wheel-spin axis of unit
+// norm, the speed, effective rolling radius and gravity strictly positive,
+// each target wheel load positive, and no name repeated inside its family.
 //
 // What it deliberately does not do is anything that needs a second object. It
 // does not know how many free bodies a vehicle has, does not compare an

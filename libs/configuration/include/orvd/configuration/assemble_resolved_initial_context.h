@@ -92,9 +92,9 @@ class ResolvedInitialContext {
 // context.
 //
 // The station of the vehicle's layout reference body is this run's argument,
-// not a field of the record: the same resolved identity is valid wherever it is
-// admissible, and a record carrying an absolute mileage would disagree with the
-// next scene that used it. Every other body's station is that argument plus its
+// not a field of the record: the same resolved identity can be assembled at any
+// in-domain placement, and a record carrying an absolute mileage would disagree
+// with the next scene that used it. Every other body's station is that argument plus its
 // mechanical offset, from the vehicle definition, plus whatever the resolution
 // moved.
 //
@@ -115,11 +115,12 @@ class ResolvedInitialContext {
 // under another is not the system this state describes, and no tolerance makes
 // that less true.
 //
-// Start-up domain: every free body must lie inside the line's station domain,
-// and each of curvature, superelevation and grade must begin strictly after the
-// foremost axle. A family that is identically zero over the whole line places no
-// constraint. Only the increasing-station direction is admitted, so "foremost"
-// is the greatest wheelset station.
+// Every free body must lie inside the line's station domain. The bundled GZ18
+// demonstration is qualified on straight, level, zero-superelevation track;
+// this general research entry point deliberately also accepts a body or a
+// wheelset on curved, graded or superelevated track. Such a modified start is
+// assembled by the stated formulas but is not claimed to reproduce the source
+// tool's complete type-7 railway-joint transport kinematics.
 //
 // Call this before constructing a `SystemContinuousStateAdvancer` on the
 // returned context. An advancer copies the state and the context-local
@@ -129,9 +130,8 @@ class ResolvedInitialContext {
 // Throws std::invalid_argument when the record violates its own invariants,
 // when an identifier or gravity disagrees with the assembled system, when a
 // name family is not exactly the system's, when a name resolves to nothing,
-// when a body's station is outside the line, or when the start-up domain
-// contract is violated; the diagnostic states the offending amount, the support
-// start and the foremost axle station where those apply.
+// or when a body's station is outside the line; the diagnostic states the
+// offending amount where it applies.
 [[nodiscard]] ResolvedInitialContext AssembleResolvedInitialContext(
     const AssembledVehicleSystem& system,
     const ResolvedStartupState& startup_state,

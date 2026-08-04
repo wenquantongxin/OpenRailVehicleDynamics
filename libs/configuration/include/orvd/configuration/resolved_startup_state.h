@@ -10,24 +10,26 @@
 //
 // This module loads such a state; it does not solve for one. There is no
 // equilibrium search, no preload solver and no iteration here, and none is
-// coming: the numbers below are inputs, and a routine that recomputed one of
-// them from the others would be answering a question this record has already
-// answered.
+// coming: the numbers below are inputs. The only expansion is the explicit
+// Vehicle-Globals-style relation stated below; it is part of the record's
+// contract, not an equilibrium or contact solve.
 //
 // Two consequences run through the field names.
 //
-// First, nothing is derived. The wheelset spin is stated, not computed from the
-// speed and a nominal rolling radius — the resolved value follows from the
-// contact rolling radius under the resolved rail offset, which is not the
-// nominal radius, and a loader that recomputed it would silently change the
-// physics. That the two happen to agree in some other vehicle is not an error
-// either; equality is not the test.
+// First, the vehicle start velocity and the common start-up effective rolling
+// radius are the two authorities for the level-tangent GZ18 start-up. Their
+// quotient is expanded into the four wheelset spins and the eight axlebox
+// carrier pivot rates. The effective radius is not the nominal wheel radius:
+// it belongs to the wheel/rail profiles, contact strategy, load condition and
+// resolved rail offset named by this record. Other angular velocity components
+// remain explicit and are added after that expansion.
 //
 // Second, nothing carries absolute mileage. Where the vehicle sits on a line is
 // a property of the run, not of the resolved state, so a body's longitudinal
 // place is written as an offset from the vehicle's mechanical layout, and the
 // layout itself belongs to the vehicle definition. The same resolved identity
-// can then start at any admissible station of any admissible line.
+// can then be assembled at any in-domain station; only the bundled straight,
+// level demonstration carries reference-tool qualification.
 //
 // The state is expressed in the local track frame at each body's own station,
 // because that is the frame a human author can write down and check. The
@@ -38,12 +40,12 @@ namespace orvd::configuration {
 
 // Along which way the track station runs as the vehicle moves forward.
 //
-// Only the increasing direction is admitted. Reverse and through-zero start-up
-// wait on qualification of the longitudinal creepage and creep force near and
-// across zero speed, which has not been settled against the reference tool;
-// running strictly forward avoids the question entirely. This is a physics
-// debt, not a missing accessor: adding a support-end query to the line would
-// not discharge it.
+// Only the increasing direction is admitted, and zero or negative V0 is
+// refused. Near-zero and later through-zero wheel-rail physics has not been
+// qualified against the reference tool; accepting a positive scalar is not a
+// claim that those regimes have been validated. This is a physics debt, not a
+// missing accessor: adding a support-end query to the line would not discharge
+// it.
 enum class StartupRunningDirection {
     kIncreasingTrackStation,
 };
@@ -79,11 +81,13 @@ struct StartupWheelRailBinding {
 // so the mechanical layout keeps its single authority and this record states
 // only what the resolution moved.
 //
-// The two velocities are inertial velocities. Only the basis differs: the
-// angular one is written in the body frame because that is where a wheelset's
-// spin is legible, and the origin velocity in the local track frame because
-// that is where a forward speed is. Neither is a velocity relative to the track
-// frame, and assembling one adds no transport term.
+// The additional angular velocity is an inertial angular velocity expressed in
+// the body frame. For a wheelset it is added to the pure-rolling spin generated
+// from the common effective radius; for another body it is the whole stated
+// angular velocity. The lateral and vertical origin velocities are inertial
+// velocity components expressed in the local track frame. The longitudinal
+// component is generated from the vehicle start velocity instead of being
+// copied into every body as a second authority.
 struct FreeBodyStartupState {
     std::string body_name;
     // The rotation taking body-frame components to local-track-frame
@@ -95,11 +99,23 @@ struct FreeBodyStartupState {
     double lateral_offset_in_local_track_frame_meters{0.0};
     double vertical_offset_in_local_track_frame_meters{0.0};
     Eigen::Vector3d
-        body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second{
+        additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second{
             Eigen::Vector3d::Zero()};
-    Eigen::Vector3d
-        body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second{
-            Eigen::Vector3d::Zero()};
+    double
+        body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second{
+            0.0};
+    double
+        body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second{
+            0.0};
+};
+
+// How one wheelset spins when the vehicle moves toward increasing station.
+// The axis is a unit vector in the wheelset body frame and includes the sign;
+// GZ18 therefore states (0,-1,0). Its magnitude is V0 divided by the common
+// start-up effective rolling radius.
+struct WheelsetStartupKinematics {
+    std::string wheelset_body_name;
+    Eigen::Vector3d forward_spin_axis_in_body_frame{Eigen::Vector3d::Zero()};
 };
 
 // One revolute joint's resolved coordinate and rate. Weld joints have no
@@ -108,7 +124,10 @@ struct FreeBodyStartupState {
 struct RevoluteJointStartupState {
     std::string joint_name;
     double position_radians{0.0};
-    double rate_radians_per_second{0.0};
+    // Multiplied by the positive common wheel-spin magnitude V0/r_eff. GZ18's
+    // eight axlebox carrier pivots use +1 so that their physical rotation
+    // cancels the wheelset's -y spin.
+    double rate_per_common_wheel_spin_magnitude{0.0};
 };
 
 // One series spring-viscous element's internal force state, along that
@@ -161,13 +180,23 @@ struct ResolvedStartupState {
     double gravitational_acceleration_meters_per_second_squared{0.0};
     StartupRunningDirection running_direction{
         StartupRunningDirection::kIncreasingTrackStation};
-    // The forward speed of the layout reference body along the line. Strictly
-    // positive: the direction is carried by the enumeration above, and a zero
-    // or negative value would be a second, disagreeing authority for it.
+    // The Vehicle Globals style station speed applied to every GZ18 free body
+    // represented by a General Rail Track Joint in the source model. Strictly
+    // positive: the direction is carried by the enumeration above.
+    //
+    // This expansion is qualified for the bundled straight, level, zero-
+    // superelevation GZ18 start-up. Other line geometries remain accepted for
+    // research use, but this module does not claim that simply using this value
+    // reproduces the source tool's complete Joint-7 transport kinematics there.
     double initial_longitudinal_speed_meters_per_second{0.0};
+    // The common rolling radius that reproduces the qualified moving start-up
+    // spin under this record's wheel/rail identities, load condition and rail
+    // profile offset. It is a consumed model input, not a nominal wheel radius
+    // and not an output snapshot used as a test oracle.
+    double common_startup_effective_rolling_radius_meters{0.0};
     // Where the vehicle sits on the line is deliberately absent. A resolved
-    // start-up state is an identity, not a placement: the same one is valid at
-    // every admissible station of every admissible line, so the station of the
+    // start-up state is an identity, not a placement: the same one can be
+    // assembled at every in-domain station of a line, so the station of the
     // layout reference body is a run's argument to the assembly, not a field
     // here. Storing it would make this record disagree with the next scene that
     // used it.
@@ -179,6 +208,7 @@ struct ResolvedStartupState {
     // discard the resolution this record exists to carry.
     double rail_profile_reference_vertical_offset_meters{0.0};
     std::vector<WheelsetTargetSupportForces> target_wheel_support_forces;
+    std::vector<WheelsetStartupKinematics> wheelset_startup_kinematics;
     std::vector<FreeBodyStartupState> free_body_startup_states;
     std::vector<RevoluteJointStartupState> revolute_joint_startup_states;
     std::vector<SeriesSpringViscousDamperForceState>

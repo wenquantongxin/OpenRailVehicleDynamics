@@ -4,6 +4,7 @@
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 #include "orvd/system_assembly/system_assembly_description.h"
+#include "vehicle_definition_invariants.h"
 
 namespace orvd::configuration {
 namespace {
@@ -73,6 +74,8 @@ AssembledVehicleSystem::~AssembledVehicleSystem() = default;
 std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
     const VehicleDefinition& vehicle,
     double gravitational_acceleration_magnitude_meters_per_second_squared) {
+    internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
+        vehicle, "vehicle definition");
     VehicleBinding binding = CaptureBinding(vehicle);
 
     std::unique_ptr<multibody_model::MultibodyModel> model =

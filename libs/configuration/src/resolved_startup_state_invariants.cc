@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -14,6 +15,7 @@ namespace {
 // refused rather than normalised, because normalising answers a different
 // question from the one the author asked.
 constexpr double kUnitQuaternionNormTolerance = 1.0e-12;
+constexpr double kUnitVectorNormTolerance = 1.0e-12;
 
 std::string Describe(double value) { return std::to_string(value); }
 
@@ -31,6 +33,23 @@ void RequireFiniteVector(const Eigen::Vector3d& value,
                          const std::string& what) {
     if (!value.allFinite()) {
         Reject(what + " has a component that is not finite");
+    }
+}
+
+void RequireIdentifier(std::string_view identifier, const std::string& what) {
+    if (identifier.empty()) {
+        Reject(what + " is empty");
+    }
+    for (const char character : identifier) {
+        const bool admitted = (character >= 'A' && character <= 'Z') ||
+                              (character >= 'a' && character <= 'z') ||
+                              (character >= '0' && character <= '9') ||
+                              character == '.' || character == '_' ||
+                              character == '-';
+        if (!admitted) {
+            Reject(what + " is '" + std::string(identifier) +
+                   "', which contains a character outside [A-Za-z0-9._-]");
+        }
     }
 }
 
@@ -58,27 +77,18 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
     if (state.vehicle_binding.vehicle_name.empty()) {
         Reject(field("vehicle_binding.vehicle_name") + " is empty");
     }
-    if (state.vehicle_binding.mechanical_definition_identifier.empty()) {
-        Reject(field("vehicle_binding.mechanical_definition_identifier") +
-               " is empty");
-    }
-    if (state.wheel_rail_binding.wheel_profile_identifier.empty()) {
-        Reject(field("wheel_rail_binding.wheel_profile_identifier") +
-               " is empty");
-    }
-    if (state.wheel_rail_binding.rail_profile_identifier.empty()) {
-        Reject(field("wheel_rail_binding.rail_profile_identifier") +
-               " is empty");
-    }
-    if (state.wheel_rail_binding.wheel_rail_contact_strategy_identifier
-            .empty()) {
-        Reject(field(
-                   "wheel_rail_binding.wheel_rail_contact_strategy_identifier") +
-               " is empty");
-    }
-    if (state.load_condition_identifier.empty()) {
-        Reject(field("load_condition_identifier") + " is empty");
-    }
+    RequireIdentifier(
+        state.vehicle_binding.mechanical_definition_identifier,
+        field("vehicle_binding.mechanical_definition_identifier"));
+    RequireIdentifier(state.wheel_rail_binding.wheel_profile_identifier,
+                      field("wheel_rail_binding.wheel_profile_identifier"));
+    RequireIdentifier(state.wheel_rail_binding.rail_profile_identifier,
+                      field("wheel_rail_binding.rail_profile_identifier"));
+    RequireIdentifier(
+        state.wheel_rail_binding.wheel_rail_contact_strategy_identifier,
+        field("wheel_rail_binding.wheel_rail_contact_strategy_identifier"));
+    RequireIdentifier(state.load_condition_identifier,
+                      field("load_condition_identifier"));
 
     const std::string gravity_field =
         field("gravitational_acceleration_meters_per_second_squared");
@@ -102,6 +112,25 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
                " m/s; this is a magnitude, and the direction it runs in is "
                "stated by running_direction, so zero and negative speeds are "
                "refused rather than reinterpreted");
+    }
+
+    switch (state.running_direction) {
+        case StartupRunningDirection::kIncreasingTrackStation:
+            break;
+        default:
+            Reject(field("running_direction") +
+                   " is not a supported running-direction value");
+    }
+
+    const std::string radius_field =
+        field("common_startup_effective_rolling_radius_meters");
+    RequireFinite(state.common_startup_effective_rolling_radius_meters,
+                  radius_field);
+    if (!(state.common_startup_effective_rolling_radius_meters > 0.0)) {
+        Reject(radius_field + " is " +
+               Describe(state.common_startup_effective_rolling_radius_meters) +
+               " m, but the effective rolling radius must be strictly "
+               "positive");
     }
 
     RequireFinite(state.rail_profile_reference_vertical_offset_meters,
@@ -129,6 +158,25 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
     RequireDistinctNames(names, field("target_wheel_support_forces"));
 
     names.clear();
+    for (const WheelsetStartupKinematics& wheelset :
+         state.wheelset_startup_kinematics) {
+        const std::string what =
+            field("wheelset_startup_kinematics['" +
+                  wheelset.wheelset_body_name + "']");
+        RequireFiniteVector(wheelset.forward_spin_axis_in_body_frame,
+                            what + ".forward_spin_axis_in_body_frame");
+        const double norm = wheelset.forward_spin_axis_in_body_frame.norm();
+        if (std::abs(norm - 1.0) > kUnitVectorNormTolerance) {
+            Reject(what + ".forward_spin_axis_in_body_frame has norm " +
+                   Describe(norm) +
+                   ", not one; the axis includes direction and is refused "
+                   "rather than normalised");
+        }
+        names.push_back(wheelset.wheelset_body_name);
+    }
+    RequireDistinctNames(names, field("wheelset_startup_kinematics"));
+
+    names.clear();
     for (const FreeBodyStartupState& body : state.free_body_startup_states) {
         const std::string what =
             field("free_body_startup_states['" + body.body_name + "']");
@@ -151,14 +199,19 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
                       what + ".vertical_offset_in_local_track_frame_meters");
         RequireFiniteVector(
             body
-                .body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second,
-            what + ".body_angular_velocity_in_inertial_expressed_in_body_"
+                .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second,
+            what + ".additional_body_angular_velocity_in_inertial_expressed_in_body_"
                    "frame_radians_per_second");
-        RequireFiniteVector(
+        RequireFinite(
             body
-                .body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second,
-            what + ".body_origin_velocity_in_inertial_expressed_in_local_"
-                   "track_frame_meters_per_second");
+                .body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second,
+            what + ".body_origin_lateral_velocity_in_inertial_expressed_in_"
+                   "local_track_frame_meters_per_second");
+        RequireFinite(
+            body
+                .body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second,
+            what + ".body_origin_vertical_velocity_in_inertial_expressed_in_"
+                   "local_track_frame_meters_per_second");
         names.push_back(body.body_name);
     }
     RequireDistinctNames(names, field("free_body_startup_states"));
@@ -169,8 +222,8 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
         const std::string what =
             field("revolute_joint_startup_states['" + joint.joint_name + "']");
         RequireFinite(joint.position_radians, what + ".position_radians");
-        RequireFinite(joint.rate_radians_per_second,
-                      what + ".rate_radians_per_second");
+        RequireFinite(joint.rate_per_common_wheel_spin_magnitude,
+                      what + ".rate_per_common_wheel_spin_magnitude");
         names.push_back(joint.joint_name);
     }
     RequireDistinctNames(names, field("revolute_joint_startup_states"));

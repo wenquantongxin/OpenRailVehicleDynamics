@@ -11,6 +11,7 @@ add_library(orvd_configuration STATIC
     src/load_vehicle_definition.cc
     src/resolved_startup_state_invariants.cc
     src/strict_json.cc
+    src/vehicle_definition_invariants.cc
     src/vehicle_definition_inertia.cc)
 
 orvd_configure_first_party_target(orvd_configuration)

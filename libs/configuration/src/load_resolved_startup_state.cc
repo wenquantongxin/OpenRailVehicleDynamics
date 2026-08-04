@@ -108,6 +108,24 @@ WheelsetTargetSupportForces ParseTargetSupportForces(const Json& value,
     return forces;
 }
 
+WheelsetStartupKinematics ParseWheelsetStartupKinematics(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"wheelset_body_name",
+                      "forward_spin_axis_in_body_frame"});
+    WheelsetStartupKinematics kinematics;
+    kinematics.wheelset_body_name = RequireString(
+        value.at("wheelset_body_name"), path + ".wheelset_body_name");
+    if (kinematics.wheelset_body_name.empty()) {
+        ThrowExpected(path + ".wheelset_body_name",
+                      "a non-empty rigid-body name");
+    }
+    kinematics.forward_spin_axis_in_body_frame = RequireFiniteVector3(
+        value.at("forward_spin_axis_in_body_frame"),
+        path + ".forward_spin_axis_in_body_frame");
+    return kinematics;
+}
+
 FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
                                                const std::string& path) {
     RequireExactKeys(
@@ -116,10 +134,12 @@ FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
          "resolved_track_station_offset_from_mechanical_layout_meters",
          "lateral_offset_in_local_track_frame_meters",
          "vertical_offset_in_local_track_frame_meters",
-         "body_angular_velocity_in_inertial_expressed_in_body_frame_radians_"
-         "per_second",
-         "body_origin_velocity_in_inertial_expressed_in_local_track_frame_"
-         "meters_per_second"});
+         "additional_body_angular_velocity_in_inertial_expressed_in_body_"
+         "frame_radians_per_second",
+         "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_"
+         "frame_meters_per_second",
+         "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_"
+         "frame_meters_per_second"});
     FreeBodyStartupState body;
     body.body_name = RequireString(value.at("body_name"), path + ".body_name");
     if (body.body_name.empty()) {
@@ -141,23 +161,32 @@ FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
         value.at("vertical_offset_in_local_track_frame_meters"),
         path + ".vertical_offset_in_local_track_frame_meters");
     body
-        .body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
+        .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
         RequireFiniteVector3(
             value.at(
-                "body_angular_velocity_in_inertial_expressed_in_body_frame_"
-                "radians_per_second"),
+                "additional_body_angular_velocity_in_inertial_expressed_in_"
+                "body_frame_radians_per_second"),
             path +
-                ".body_angular_velocity_in_inertial_expressed_in_body_frame_"
-                "radians_per_second");
+                ".additional_body_angular_velocity_in_inertial_expressed_in_"
+                "body_frame_radians_per_second");
     body
-        .body_origin_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second =
-        RequireFiniteVector3(
+        .body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second =
+        RequireFiniteNumber(
             value.at(
-                "body_origin_velocity_in_inertial_expressed_in_local_track_"
-                "frame_meters_per_second"),
+                "body_origin_lateral_velocity_in_inertial_expressed_in_local_"
+                "track_frame_meters_per_second"),
             path +
-                ".body_origin_velocity_in_inertial_expressed_in_local_track_"
-                "frame_meters_per_second");
+                ".body_origin_lateral_velocity_in_inertial_expressed_in_"
+                "local_track_frame_meters_per_second");
+    body
+        .body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second =
+        RequireFiniteNumber(
+            value.at(
+                "body_origin_vertical_velocity_in_inertial_expressed_in_local_"
+                "track_frame_meters_per_second"),
+            path +
+                ".body_origin_vertical_velocity_in_inertial_expressed_in_"
+                "local_track_frame_meters_per_second");
     return body;
 }
 
@@ -165,7 +194,7 @@ RevoluteJointStartupState ParseRevoluteJointStartupState(
     const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
                      {"joint_name", "position_radians",
-                      "rate_radians_per_second"});
+                      "rate_per_common_wheel_spin_magnitude"});
     RevoluteJointStartupState joint;
     joint.joint_name =
         RequireString(value.at("joint_name"), path + ".joint_name");
@@ -174,9 +203,9 @@ RevoluteJointStartupState ParseRevoluteJointStartupState(
     }
     joint.position_radians = RequireFiniteNumber(value.at("position_radians"),
                                                  path + ".position_radians");
-    joint.rate_radians_per_second =
-        RequireFiniteNumber(value.at("rate_radians_per_second"),
-                            path + ".rate_radians_per_second");
+    joint.rate_per_common_wheel_spin_magnitude = RequireFiniteNumber(
+        value.at("rate_per_common_wheel_spin_magnitude"),
+        path + ".rate_per_common_wheel_spin_magnitude");
     return joint;
 }
 
@@ -243,15 +272,17 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
          "load_condition_identifier",
          "gravitational_acceleration_meters_per_second_squared",
          "running_direction", "initial_longitudinal_speed_meters_per_second",
+         "common_startup_effective_rolling_radius_meters",
          "rail_profile_reference_vertical_offset_meters",
-         "target_wheel_support_forces", "free_body_startup_states",
+         "target_wheel_support_forces", "wheelset_startup_kinematics",
+         "free_body_startup_states",
          "revolute_joint_startup_states",
          "series_spring_viscous_damper_force_states",
          "translational_spring_damper_nominal_forces"});
 
     if (!root.at("schema_version").is_number_integer() ||
-        root.at("schema_version") != 1) {
-        ThrowExpected("$.schema_version", "the integer 1");
+        root.at("schema_version") != 2) {
+        ThrowExpected("$.schema_version", "the integer 2");
     }
 
     ResolvedStartupState state;
@@ -273,6 +304,10 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
     state.initial_longitudinal_speed_meters_per_second = RequireFiniteNumber(
         root.at("initial_longitudinal_speed_meters_per_second"),
         "$.initial_longitudinal_speed_meters_per_second");
+    state.common_startup_effective_rolling_radius_meters =
+        RequireFiniteNumber(
+            root.at("common_startup_effective_rolling_radius_meters"),
+            "$.common_startup_effective_rolling_radius_meters");
     state.rail_profile_reference_vertical_offset_meters = RequireFiniteNumber(
         root.at("rail_profile_reference_vertical_offset_meters"),
         "$.rail_profile_reference_vertical_offset_meters");
@@ -280,6 +315,10 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
     state.target_wheel_support_forces =
         ParseArray<WheelsetTargetSupportForces>(
             root, "target_wheel_support_forces", ParseTargetSupportForces);
+    state.wheelset_startup_kinematics =
+        ParseArray<WheelsetStartupKinematics>(
+            root, "wheelset_startup_kinematics",
+            ParseWheelsetStartupKinematics);
     state.free_body_startup_states = ParseArray<FreeBodyStartupState>(
         root, "free_body_startup_states", ParseFreeBodyStartupState);
     state.revolute_joint_startup_states =
