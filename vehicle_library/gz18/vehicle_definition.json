@@ -63,7 +63,7 @@
         {"x": 0.0, "y": 0.0, "z": 0.0}
     },
     {
-      "name": "front_secondary_suspension_seat",
+      "name": "front_carbody_interface_body",
       "moves_freely_in_world": false,
       "mass_kilograms": 1.0,
       "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
@@ -143,7 +143,7 @@
         {"x": 0.0, "y": 0.0, "z": 0.0}
     },
     {
-      "name": "rear_secondary_suspension_seat",
+      "name": "rear_carbody_interface_body",
       "moves_freely_in_world": false,
       "mass_kilograms": 1.0,
       "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
@@ -175,13 +175,13 @@
   ],
   "fixed_frames": [
     {
-      "name": "front_secondary_suspension_seat_carbody_side_attachment",
+      "name": "front_carbody_interface_mount",
       "body_name": "carbody",
       "position_in_body_frame_meters": {"x": 7.85, "y": 0.0, "z": -1.0},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
-      "name": "rear_secondary_suspension_seat_carbody_side_attachment",
+      "name": "rear_carbody_interface_mount",
       "body_name": "carbody",
       "position_in_body_frame_meters": {"x": -7.85, "y": 0.0, "z": -1.0},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
@@ -320,37 +320,37 @@
     },
     {
       "name": "front_right_air_spring_carbody_side_attachment",
-      "body_name": "front_secondary_suspension_seat",
+      "body_name": "front_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 0.95, "z": 0.362},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "front_left_air_spring_carbody_side_attachment",
-      "body_name": "front_secondary_suspension_seat",
+      "body_name": "front_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": -0.95, "z": 0.362},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "front_lateral_damper_carbody_side_attachment",
-      "body_name": "front_secondary_suspension_seat",
+      "body_name": "front_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "front_anti_roll_bar_carbody_side_attachment",
-      "body_name": "front_secondary_suspension_seat",
+      "body_name": "front_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "front_left_yaw_damper_carbody_side_attachment",
-      "body_name": "front_secondary_suspension_seat",
+      "body_name": "front_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": -1.2, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "front_right_yaw_damper_carbody_side_attachment",
-      "body_name": "front_secondary_suspension_seat",
+      "body_name": "front_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 1.2, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
@@ -512,37 +512,37 @@
     },
     {
       "name": "rear_right_air_spring_carbody_side_attachment",
-      "body_name": "rear_secondary_suspension_seat",
+      "body_name": "rear_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 0.95, "z": 0.362},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "rear_left_air_spring_carbody_side_attachment",
-      "body_name": "rear_secondary_suspension_seat",
+      "body_name": "rear_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": -0.95, "z": 0.362},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "rear_lateral_damper_carbody_side_attachment",
-      "body_name": "rear_secondary_suspension_seat",
+      "body_name": "rear_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "rear_anti_roll_bar_carbody_side_attachment",
-      "body_name": "rear_secondary_suspension_seat",
+      "body_name": "rear_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "rear_left_yaw_damper_carbody_side_attachment",
-      "body_name": "rear_secondary_suspension_seat",
+      "body_name": "rear_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": -1.2, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
     {
       "name": "rear_right_yaw_damper_carbody_side_attachment",
-      "body_name": "rear_secondary_suspension_seat",
+      "body_name": "rear_carbody_interface_body",
       "position_in_body_frame_meters": {"x": 0.0, "y": 1.2, "z": 0.443},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
     },
@@ -631,14 +631,14 @@
   ],
   "weld_joints": [
     {
-      "name": "front_secondary_suspension_seat_weld",
-      "parent_frame_name": "front_secondary_suspension_seat_carbody_side_attachment",
-      "child_frame_name": "front_secondary_suspension_seat"
+      "name": "front_carbody_interface_body_weld",
+      "parent_frame_name": "front_carbody_interface_mount",
+      "child_frame_name": "front_carbody_interface_body"
     },
     {
-      "name": "rear_secondary_suspension_seat_weld",
-      "parent_frame_name": "rear_secondary_suspension_seat_carbody_side_attachment",
-      "child_frame_name": "rear_secondary_suspension_seat"
+      "name": "rear_carbody_interface_body_weld",
+      "parent_frame_name": "rear_carbody_interface_mount",
+      "child_frame_name": "rear_carbody_interface_body"
     }
   ]
 }

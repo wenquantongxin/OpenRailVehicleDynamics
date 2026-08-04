@@ -68,7 +68,7 @@ struct VehicleRigidBodyDefinition {
 };
 
 // A frame fixed to a body: an attachment point, a measurement point, or the
-// mounting seat a weld needs because a weld itself carries no relative pose.
+// mounting frame a weld needs because a weld itself carries no relative pose.
 struct VehicleFixedFrameDefinition {
     std::string name;
     std::string body_name;

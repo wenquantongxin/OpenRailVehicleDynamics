@@ -1,0 +1,193 @@
+# GZ18 / IRW 参考模型与 ORVD 动力学模型差异观察表
+
+## 文档职责
+
+本文件专门登记 GZ18、IRW 的 SIMPACK 参考模型与 ORVD 第一方动力学模型之间可能存在的机械、
+力元、轮轨、控制或数值时相差异。重点是 WRL 多轮宏观闭合与误差归因仍可能遗漏、但在迁移时
+重新阅读源模型才暴露的“漏网项”。
+
+本文件不是实施路书，也不是数值验收清单。条目只有在形成明确裁决后，才进入
+[DISCUSSION_AND_DECISION_LOG.md](DISCUSSION_AND_DECISION_LOG.md) 或
+[MIGRATION_ROADMAP.md](MIGRATION_ROADMAP.md)。历史结果、提交标识和工件路径只能作为调查入口，
+不得成为 ORVD 产品身份、运行时依赖或数值金标。
+
+## 记录边界
+
+只登记下列问题：
+
+- 两端实际消费的拓扑、参数、作用点、表达坐标系或更新时相可能不同；
+- WRL 曾以等效合并、占位体、默认值或车型专用逻辑代替参考模型中的另一种表达；
+- 宏观响应可能因抵消、工况未激发或观测量不足而掩盖局部差异；
+- 迁移时容易把休眠定义误认成活动物理，或把另一车型的实现误套到当前车型。
+
+不登记普通的代码组织差异、已经明确裁决的坐标换基、纯命名差异，以及没有实际消费者的孤立
+参数或标记，除非它们足以诱发迁移误建。
+
+引用参考模型时保留其 `$B_DUM`、`$M_DUM_*` 等原始标识。ORVD 不把 `DUM` 解释成物理部件，
+而将两具承担子模型连接职责的刚体命名为 `front_carbody_interface_body` 与
+`rear_carbody_interface_body`；其零自由度刚性约束仍采用多体动力学通用术语 `weld`。
+
+## 状态口径
+
+| 状态 | 含义 |
+|---|---|
+| 待核实 | 已有具体疑点，但尚未同时核对两端的实际消费者。 |
+| 已确认差异 | 已证明两端活动动力学语义不同，尚未裁决 ORVD 应采用哪一种。 |
+| 已裁决 | 差异成立，且迁移处置已经明确。 |
+| 已否证 | 表面结构不同，但两端活动动力学同义，或疑点来自休眠定义、错误类比。 |
+| 重新打开 | 新证据使先前结论失效，需要重新核验。 |
+
+每个条目应回答：参考模型真正计算了什么、WRL/ORVD 真正计算了什么、差异是否进入力或状态、
+可能影响哪些工况，以及最小下一步是什么。仅看到同名参数或标记不足以判定差异。
+
+## 活跃候选
+
+- MD-002：GZ18 活动曲线的超高模式整数与实际滚转基准尚未建立可靠映射，须在 G51 前核实。
+
+## 已筛查条目
+
+### MD-001 — GZ18 二系垂向阻尼是否错误地使用了空气弹簧作用点
+
+- 车型：GZ18
+- 层级：二系悬挂力元与作用点
+- 状态：**已否证；`Csd` 的路由、作用点和力臂不是 SIMPACK—WRL 差异，ORVD 尚待 G50 实现**
+
+#### 疑点
+
+GZ18 的 SIMPACK 子结构定义了 `$M_BF_SD_{L,R}` 与 `$M_DUM_SD_{L,R}`。前、后两个转向架实例
+合计 8 个二系垂向减振器标记；WRL 的 GZ18 建树没有创建它们，而是把 `Csd=20 kN·s/m`
+作为空气弹簧竖向阻尼。若 SIMPACK 另有独立垂向减振器连接这些 SD 标记，两端就会因纵向、横向
+作用点不同而产生不同的支承矩。
+
+#### 核实结果
+
+该推断不成立：GZ18 的 SIMPACK 活动模型也没有用这些 SD 标记连接任何力元。
+
+1. `bogie_motor.spck` 每个转向架确实定义 4 个 SD 标记：BF 左右各一、DUM 左右各一；主模型
+   实例化前后两个转向架，因此共有 8 个。
+2. GZ18 整个 SPCK 树中没有 `force.from` 或 `force.to` 引用这些 SD 标记；`$_Ksd` 只有定义，
+   没有活动消费者。
+3. SIMPACK 的 `$F_AirSpring_A/B` 实际连接 `$M_BF_SS_{L,R}` 与 `$M_DUM_SS_{L,R}`，并把
+   `$_Csd*1000` 写入 Type-5 力元的竖向并联阻尼参数。
+4. WRL GZ18 使用相同的 SS 端点，并以 `d_air=(0,0,Csd)` 构造空气弹簧衬套。因此就所质疑的
+   `Csd` 竖向阻尼而言，两端路由、作用点和力臂一致；本条不提前声称尚未迁入的 ORVD 力元已同义。
+5. 后转向架虽把 `bsd_x` 覆盖为 `-0.44 m`，该值只改变未被力元消费的 SD 标记，不进入动力学。
+   前转向架中 `b2=bsd_y=1.9 m`、`h2=hsd=0.638 m`、`bsd_x=0`，SD 与 SS 位置本来就重合。
+6. SH17 确实创建独立 SD 标记并将它们接入竖向 Maxwell 通道；这是另一车型的活动机械定义，
+   不能反推 GZ18 也应采用该表达。
+
+#### 迁移约束
+
+- G49 不因这 8 个休眠 SPCK 标记扩充 GZ18 活动机械图。
+- G49 中源模型的两具 `$B_DUM` 只按真实职责建为前、后车体接口体，不把它们误称为二系悬挂承座。
+- G50 应继续把 `Csd` 作为空气弹簧 SS 端点间的竖向阻尼，不得仅凭 `Ksd/Csd` 名称或 SH17
+  实现，额外创建独立 GZ18 二系垂向减振器。
+- 只有在参考模型以后新增了实际引用 SD 标记的力元，或取得与当前 SPCK 相矛盾的活动模型证据时，
+  才把本条重新打开。
+
+#### 源码锚点
+
+- WRL `mbs_simpack/vehicle_GZ18/main_model/vehicle_GZ18.spck`：前后转向架子结构实例及后架
+  `bsd_x=-440 mm` 覆盖。
+- WRL `mbs_simpack/vehicle_GZ18/database/mbs_db_substructure/bogie_motor.spck`：SD 标记定义；
+  `$F_AirSpring_A/B` 的 SS 端点与 `Dz=$_Csd*1000`。
+- WRL `scripts_cpp/rigid_wheelset/src/gz18_marker_frames.cc`：GZ18 SS 标记。
+- WRL `scripts_cpp/rigid_wheelset/src/gz18_force_elements.cc`：空气弹簧 `d_air.z=Csd` 及 SS 端点。
+- WRL `scripts_cpp/rigid_wheelset/src/sh17_marker_frames.cc`、`sh17_force_elements.cc`：仅作
+  “另一车型确有独立 SD 通道”的反例。
+- WRL `mbs_simpack/vehicle_GZ18/GZ18列车的SIMPACK设置整理.md`：参数和活动消费者的既有说明。
+
+### MD-002 — GZ18 活动曲线的超高模式整数表示什么
+
+- 车型：GZ18
+- 层级：轨道几何与启动身份
+- 状态：**待核实；不得把未经验证的整数映射写成已确认差异**
+
+#### 已知事实与未证映射
+
+1. GZ18 活动线路是地图式线路（Cartographic Track）`$Trk_Curve_R300m_60kmph`。其
+   `track.cart.superelev.kind=1`、`track.cart.superelev.reflen=1.500 m`，超高全幅值为
+   `0.120 m`。
+2. SIMPACK QCH 定义三种应用方式：绕中心线、绕内轨、绕外轨。绕内轨时线路中心抬升 `u/2`，
+   绕外轨时下降 `u/2`；但已核对的 QCH 文字没有给出这三项与 SPCK 整数的明确对应表。
+3. SIMPACK 系统默认的 `track.cart.superelev.kind` 同样是 `1`。这使“零基枚举下 1=绕内轨”和
+   “一基枚举下 1=绕中心线”都不能仅靠选项排列排除；目前不得采用任一推断。
+4. WRL 的线路中心只由水平曲线与纵坡积分得到，随后在该中心线上施加超高滚转。ORVD G47 的
+   `TrackGeometry` 也保持中心线不随超高移动，只把无侧滚切向系绕自身纵轴滚转。两者均为绕中心线
+   语义。
+
+同一 SPCK 还含 `track.meas.superelev.reflen=1.506 m`。当前活动线路走地图式定义且
+`track.cart.superelev.fromfile=0`，现有证据指向 `1.500 m` 才是活动参考长；G51 仍须把这一点与
+最终运行入口一并确认，不能仅因两个字段都存在就任选其一。
+
+#### 条件性动力学影响
+
+若 `kind=1` 经验证为绕中心线，则此疑点被否证。若它表示绕内轨或外轨，则全幅 `u=0.120 m`
+会使线路中心相对 WRL／ORVD 产生 `0.060 m` 的竖向平移；该差异改变轨道系原点而不仅是姿态，
+可能进入启动高度、轮轨压缩量与接触力。历史启动状态或预载轨道偏移是否吸收了它，必须另行核对。
+
+#### 最小裁决
+
+G51 接入已解析启动状态前，先从 SIMPACK 的已求值线路中心或一个不含车辆的受控线路查询中确定
+`kind=1` 的实际滚转基准，同时确认活动参考长。只有映射确定后，才裁决 ORVD 是否需要承载该配置。
+核对只需比较同一站位上的线路中心位置与轨型系姿态，不需要车辆运行，也不把输出或哈希纳入 Git。
+
+#### 源码锚点
+
+- SIMPACK QCH `Cartographic Track: User Interface`：`Kind` 与 `Reference baselength`。
+- SIMPACK 2021x `run/conf/defaults.sys`：地图式超高模式的系统默认整数同为 `1`。
+- WRL `mbs_simpack/vehicle_GZ18/main_model/vehicle_GZ18.spck`：活动线路、
+  `track.cart.superelev.kind`、地图式／测量参考长。
+- WRL `scripts_python/rwc/track.py`、`scripts_cpp/drake_sim/src/track_scenario_crv300m.cc`：
+  线路中心积分与超高角构造。
+- ORVD `libs/track_geometry/src/track_geometry.cc`：中心线与无侧滚切向系上的超高滚转。
+
+### MD-003 — 纵坡正号在参考模型与 ORVD 之间相反
+
+- 车型：共性
+- 层级：轨道几何坐标口径
+- 状态：**已裁决；当前来源线路为零纵坡，转换规则尚未被活动工况触发**
+
+#### 两端实际语义
+
+参考线路采用 `+z` 向下，纵坡参数 `p>0` 时按 `z += p·ds` 积分，即正值表示下坡。ORVD 的字段
+`centerline_upward_grade` 则把上坡定义为正，并明确
+`d(centerline z)/d(track_station) = -centerline_upward_grade`。因此接口转换唯一为：
+
+```text
+centerline_upward_grade_ORVD = -vertical_slope_reference
+```
+
+当前已核对的 GZ18／IRW 来源线路纵坡均为零，所以同号误搬不会改变现有工况，也不会被现有宏观
+回归自动发现。
+
+#### 迁移约束
+
+以后引入首条非零纵坡线路时，加载或一次性迁移步骤必须显式执行上述换号，并以中心线竖向导数
+核对；不得把参考模型字段直接复用为 ORVD 的 `centerline_upward_grade`。
+
+#### 源码锚点
+
+- WRL `scripts_python/rwc/track.py`：参考线路的 `z += p*ds` 积分。
+- ORVD `libs/track_geometry/include/orvd/track_geometry/track_geometry.h`、
+  `libs/track_geometry/src/track_geometry.cc`：正上坡字段与中心线竖向导数。
+
+## 新条目模板
+
+```markdown
+### MD-NNN — 简短问题名
+
+- 车型：GZ18 / IRW / 共性
+- 层级：拓扑 / 力元 / 轮轨 / 控制 / 数值时相 / 其他
+- 状态：待核实 / 已确认差异 / 已裁决 / 已否证 / 重新打开
+
+#### 疑点
+
+#### 两端实际消费者
+
+#### 动力学影响
+
+#### 最小核验或裁决
+
+#### 源码锚点
+```

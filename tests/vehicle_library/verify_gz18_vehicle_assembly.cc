@@ -270,18 +270,14 @@ void CheckGeometricInvariants(const VehicleDefinition& vehicle,
     // The bogie centre distance, on the carbody-side weld mounting frames. In
     // the default configuration every free body sits at the world origin, so
     // the two bogie frames are not where this distance lives; the carbody's
-    // mounting seats are.
+    // carbody interface mounts are.
     const double bogie_centre_distance =
-        FramePositionInWorld(model, *context,
-                             "front_secondary_suspension_seat_carbody_side_"
-                             "attachment")
+        FramePositionInWorld(model, *context, "front_carbody_interface_mount")
             .x() -
-        FramePositionInWorld(model, *context,
-                             "rear_secondary_suspension_seat_carbody_side_"
-                             "attachment")
+        FramePositionInWorld(model, *context, "rear_carbody_interface_mount")
             .x();
     Expect(std::abs(bogie_centre_distance - 15.7) <= 1.0e-12,
-           "the two weld mounting seats are one bogie centre distance apart");
+           "the two carbody interface mounts are one bogie centre distance apart");
 
     // Discriminating power, stated on a frame that actually has a lateral
     // coordinate to flip. On a mid-plane frame the same mutation changes

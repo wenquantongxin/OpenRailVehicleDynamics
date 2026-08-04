@@ -31,7 +31,7 @@ constexpr std::string_view kRecord = R"json({
         {"x": 110.0, "y": -220.0, "z": 330.0}
     },
     {
-      "name": "carbody_secondary_suspension_seat_front",
+      "name": "front_carbody_interface_body",
       "moves_freely_in_world": false,
       "mass_kilograms": 1.0,
       "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
@@ -63,7 +63,7 @@ constexpr std::string_view kRecord = R"json({
   ],
   "fixed_frames": [
     {
-      "name": "carbody_secondary_suspension_seat_front_weld_seat",
+      "name": "front_carbody_interface_mount",
       "body_name": "carbody",
       "position_in_body_frame_meters": {"x": 7.85, "y": 0.0, "z": -1.0},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
@@ -86,9 +86,9 @@ constexpr std::string_view kRecord = R"json({
   ],
   "weld_joints": [
     {
-      "name": "carbody_secondary_suspension_seat_front_weld",
-      "parent_frame_name": "carbody_secondary_suspension_seat_front_weld_seat",
-      "child_frame_name": "carbody_secondary_suspension_seat_front"
+      "name": "front_carbody_interface_body_weld",
+      "parent_frame_name": "front_carbody_interface_mount",
+      "child_frame_name": "front_carbody_interface_body"
     }
   ]
 })json";
@@ -189,9 +189,9 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
     Require(revolute.damping_newton_metre_seconds_per_radian == 0.0,
             "revolute damping was not mapped");
     Require(vehicle.weld_joints.front().parent_frame_name ==
-                    "carbody_secondary_suspension_seat_front_weld_seat" &&
+                    "front_carbody_interface_mount" &&
                 vehicle.weld_joints.front().child_frame_name ==
-                    "carbody_secondary_suspension_seat_front",
+                    "front_carbody_interface_body",
             "weld endpoints were not mapped, or were exchanged");
 }
 
@@ -242,7 +242,7 @@ void CheckRejections(const std::filesystem::path& path) {
           "never declares"}},
         {ReplaceOnce(valid,
                      "\"child_frame_name\": "
-                     "\"carbody_secondary_suspension_seat_front\"",
+                     "\"front_carbody_interface_body\"",
                      "\"child_frame_name\": \"no_such_body\""),
          {"$.weld_joints[0].child_frame_name", "no_such_body"}},
         {ReplaceOnce(valid, "\"body_name\": \"carbody\",",
