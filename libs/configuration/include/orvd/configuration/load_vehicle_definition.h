@@ -15,9 +15,14 @@ namespace orvd::configuration {
 // substitution, default insertion or retained DOM storage: the returned
 // description owns everything it carries.
 //
-// Two further refusals are made here because they are properties of the record
+// The returned value is intentionally mutable. Strictness applies to this one
+// JSON-to-record conversion; a C++ caller may subsequently make explicit edits
+// before passing the record to the assembler.
+//
+// Three further refusals are made here because they are properties of the record
 // that only this layer can report against a JSON path: a name referred to but
-// never declared, and a mass that is not positive. The second is not a
+// never declared, an empty vehicle name, and a mass that is not positive. The
+// last is not a
 // restatement of what the multibody layer checks — that layer accepts a massless
 // body, which is a legitimate frame carrier, but a record's inertia is stated
 // about the centre of mass and dividing it by zero produces a diagnostic

@@ -11,9 +11,11 @@
 #include <span>
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 #include "orvd/configuration/load_vehicle_definition.h"
+#include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 #include "orvd/system_assembly/system_instance.h"
@@ -39,218 +41,118 @@ void Expect(bool condition, const std::string& description) {
 }
 
 // ---------------------------------------------------------------------------
-// Gate 1 — the inertia conversion, checked three ways that cannot fail together
+// Gate 1 — the complete inertia conversion, read from the assembled model
 // ---------------------------------------------------------------------------
 
-Eigen::Matrix3d StatedInertiaAboutCenterOfMass(
-    const VehicleRigidBodyDefinition& body) {
-    const Eigen::Vector3d& moments =
-        body.inertia_moments_about_center_of_mass_kilogram_square_meters;
-    const Eigen::Vector3d& products =
-        body.inertia_products_about_center_of_mass_kilogram_square_meters;
-    Eigen::Matrix3d inertia;
-    inertia << moments.x(), products.x(), products.y(),
-        products.x(), moments.y(), products.z(),
-        products.y(), products.z(), moments.z();
-    return inertia;
+void CheckCompleteSpatialInertiaAssembly() {
+    VehicleDefinition probe;
+    probe.vehicle_name = "complete_spatial_inertia_probe";
+    VehicleRigidBodyDefinition body;
+    body.name = "probe_body";
+    body.moves_freely_in_world = true;
+    body.mass_kilograms = 5.0;
+    body.center_of_mass_in_body_frame_meters = Eigen::Vector3d(0.2, -0.3, 0.4);
+    body.inertia_moments_about_center_of_mass_kilogram_square_meters =
+        Eigen::Vector3d(2.1, 2.8, 3.4);
+    body.inertia_products_about_center_of_mass_kilogram_square_meters =
+        Eigen::Vector3d(0.11, -0.07, 0.09);
+    probe.rigid_bodies.push_back(body);
+
+    const auto model = AssembleVehicleMultibodyModel(probe, kGravityMagnitude);
+    const auto context = model->CreateDefaultContext();
+    Eigen::MatrixXd mass_matrix(model->num_generalized_velocities(),
+                                model->num_generalized_velocities());
+    model->CalcGeneralizedMassMatrix(*context, mass_matrix);
+    Expect(mass_matrix.allFinite(),
+           "the assembled synthetic mass matrix is finite");
+    const auto range =
+        model->GetFreeBodyVelocityRange(model->GetRigidBodyByName(body.name));
+    Expect(range.size() == 6,
+           "the synthetic free body exposes one complete spatial inertia block");
+
+    Eigen::Matrix<double, 6, 6> expected;
+    expected << 3.35, 0.41, -0.47, 0.0, -2.0, -1.5,
+        0.41, 3.80, 0.69, 2.0, 0.0, -1.0,
+        -0.47, 0.69, 4.05, 1.5, 1.0, 0.0,
+        0.0, 2.0, 1.5, 5.0, 0.0, 0.0,
+        -2.0, 0.0, 1.0, 0.0, 5.0, 0.0,
+        -1.5, -1.0, 0.0, 0.0, 0.0, 5.0;
+    const Eigen::Matrix<double, 6, 6> actual =
+        mass_matrix.block<6, 6>(range.start(), range.start());
+    const double scale = expected.cwiseAbs().maxCoeff();
+    Expect((actual - expected).cwiseAbs().maxCoeff() <=
+               64.0 * kMachine * scale,
+           "the assembler carries mass, signed centre of mass, all three inertia "
+           "matrix off-diagonal entries and the full parallel-axis shift into "
+           "the finalized model");
 }
 
-// The textbook inverse, written from the definition rather than by solving the
-// forward map algebraically. Solving it would give a pair that agrees exactly
-// for any shift term at all, including a wrong one.
-Eigen::Matrix3d InvertToCenterOfMass(
-    const Eigen::Matrix3d& unit_inertia_about_body_origin, double mass,
-    const Eigen::Vector3d& center_of_mass) {
-    const Eigen::Matrix3d shift =
-        center_of_mass.squaredNorm() * Eigen::Matrix3d::Identity() -
-        center_of_mass * center_of_mass.transpose();
-    return mass * (unit_inertia_about_body_origin - shift);
-}
+void CheckRevoluteAxisAndDampingAssembly() {
+    VehicleDefinition probe;
+    probe.vehicle_name = "revolute_axis_and_damping_probe";
 
-// The same conversion reached without the parallel axis theorem at all: six
-// point masses of m/6 on the principal axes reproduce any admissible inertia,
-// and once placed they can simply be summed about the body origin. Nothing here
-// can share a mistake with the production code.
-Eigen::Matrix3d InertiaAboutOriginFromSixPointMasses(
-    const Eigen::Matrix3d& inertia_about_center_of_mass, double mass,
-    const Eigen::Vector3d& center_of_mass) {
-    const double xx = inertia_about_center_of_mass(0, 0);
-    const double yy = inertia_about_center_of_mass(1, 1);
-    const double zz = inertia_about_center_of_mass(2, 2);
-    const double a_squared = 1.5 * (-xx + yy + zz) / mass;
-    const double b_squared = 1.5 * (xx - yy + zz) / mass;
-    const double c_squared = 1.5 * (xx + yy - zz) / mass;
-    if (a_squared < 0.0 || b_squared < 0.0 || c_squared < 0.0) {
-        throw std::runtime_error(
-            "a body's principal moments do not admit a six-point-mass model");
-    }
-    const double particle_mass = mass / 6.0;
-    const Eigen::Vector3d offsets(std::sqrt(a_squared), std::sqrt(b_squared),
-                                  std::sqrt(c_squared));
-    Eigen::Matrix3d inertia = Eigen::Matrix3d::Zero();
-    for (int axis = 0; axis < 3; ++axis) {
-        for (const double sign : {1.0, -1.0}) {
-            Eigen::Vector3d particle = center_of_mass;
-            particle[axis] += sign * offsets[axis];
-            inertia += particle_mass *
-                       (particle.squaredNorm() * Eigen::Matrix3d::Identity() -
-                        particle * particle.transpose());
-        }
-    }
-    return inertia;
-}
+    VehicleRigidBodyDefinition carrier;
+    carrier.name = "carrier";
+    carrier.moves_freely_in_world = true;
+    carrier.mass_kilograms = 1.0;
+    carrier.inertia_moments_about_center_of_mass_kilogram_square_meters =
+        Eigen::Vector3d::Ones();
+    probe.rigid_bodies.push_back(carrier);
 
-Eigen::Matrix3d SkewSymmetric(const Eigen::Vector3d& v) {
-    Eigen::Matrix3d skew = Eigen::Matrix3d::Zero();
-    skew(0, 1) = -v.z();
-    skew(0, 2) = v.y();
-    skew(1, 0) = v.z();
-    skew(1, 2) = -v.x();
-    skew(2, 0) = -v.y();
-    skew(2, 1) = v.x();
-    return skew;
-}
+    VehicleRigidBodyDefinition rotor = carrier;
+    rotor.name = "rotor";
+    rotor.moves_freely_in_world = false;
+    probe.rigid_bodies.push_back(rotor);
+    const Eigen::Vector3d axis = Eigen::Vector3d(2.0, -3.0, 6.0).normalized();
+    probe.revolute_joints.push_back(
+        {"pivot", "carrier", "rotor", axis, 3.0});
 
-void CheckInertiaConversion(const VehicleDefinition& vehicle,
-                            const MultibodyModel& model) {
-    int bodies_with_offset_center_of_mass = 0;
-    double worst_round_trip = 0.0;
-    double worst_point_mass_gap = 0.0;
+    const auto model = AssembleVehicleMultibodyModel(probe, kGravityMagnitude);
+    // The assembled model owns its values. Destroying the mutable source record
+    // after assembly must not change or invalidate the finalized model.
+    probe = VehicleDefinition{};
+    const auto joint = model->GetJointByName("pivot");
+    const auto rotor_handle = model->GetRigidBodyByName("rotor");
+    auto context = model->CreateDefaultContext();
 
-    for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
-        const Eigen::Matrix3d stated = StatedInertiaAboutCenterOfMass(body);
-        const Eigen::Vector3d& center_of_mass =
-            body.center_of_mass_in_body_frame_meters;
-        if (center_of_mass.norm() > 0.0) {
-            ++bodies_with_offset_center_of_mass;
-        }
+    constexpr double kAngle = 0.43;
+    Eigen::VectorXd positions = context->generalized_positions();
+    positions[model->GetJointPositionRange(joint).start()] = kAngle;
+    model->SetGeneralizedPositions(context.get(), positions);
+    const Eigen::Matrix3d actual_rotation =
+        model->CalcPoseInWorld(*context, rotor_handle).rotation();
+    Expect(actual_rotation.allFinite(),
+           "the synthetic joint rotation is finite");
+    const Eigen::Matrix3d expected_rotation =
+        Eigen::AngleAxisd(kAngle, axis).toRotationMatrix();
+    Expect((actual_rotation - expected_rotation).cwiseAbs().maxCoeff() <=
+               32.0 * kMachine,
+           "a positive revolute coordinate turns the child about the arbitrary "
+           "three-component axis stated by the mutable record");
+    Expect((actual_rotation -
+            Eigen::AngleAxisd(kAngle, Eigen::Vector3d::UnitY())
+                .toRotationMatrix())
+               .cwiseAbs()
+               .maxCoeff() > 0.1,
+           "the axis check distinguishes the record value from a hard-coded y "
+           "axis");
 
-        // What the assembler produced, read back through the same shape the
-        // multibody layer stores: the unit inertia about the body origin.
-        const Eigen::Matrix3d about_origin =
-            InertiaAboutOriginFromSixPointMasses(stated, body.mass_kilograms,
-                                                 center_of_mass);
-        const Eigen::Matrix3d unit_about_origin =
-            about_origin / body.mass_kilograms;
-        const Eigen::Matrix3d recovered = InvertToCenterOfMass(
-            unit_about_origin, body.mass_kilograms, center_of_mass);
-
-        const double scale = stated.cwiseAbs().maxCoeff();
-        worst_round_trip = std::max(
-            worst_round_trip,
-            (recovered - stated).cwiseAbs().maxCoeff() / scale);
-
-        // The physical anchor and the parallel axis theorem must agree; the
-        // anchor never writes the theorem down.
-        const Eigen::Matrix3d by_theorem =
-            stated + body.mass_kilograms *
-                         (center_of_mass.squaredNorm() *
-                              Eigen::Matrix3d::Identity() -
-                          center_of_mass * center_of_mass.transpose());
-        worst_point_mass_gap =
-            std::max(worst_point_mass_gap,
-                     (about_origin - by_theorem).cwiseAbs().maxCoeff() / scale);
-    }
-
-    Expect(bodies_with_offset_center_of_mass == 3,
-           "exactly three bodies have an offset centre of mass, so the shift "
-           "term is exercised at all rather than being a run of zeros");
-    Expect(worst_round_trip <= 16.0 * kMachine,
-           "the inertia round trip closes on every body");
-    Expect(worst_point_mass_gap <= 64.0 * kMachine,
-           "the parallel axis theorem agrees with a six-point-mass model that "
-           "never writes the theorem down");
-
-    // The third layer. The parallel axis map is even in the centre-of-mass
-    // offset, so the two checks above pass unchanged whichever sign it carries;
-    // the mass matrix coupling block is odd in it and therefore shows whether
-    // the assembler carried the sign through.
-    //
-    // What this cannot do — and what no committed check can — is tell whether
-    // the sign the record states is the one the source model states. A record
-    // and a model built from it agree by construction. That comparison is the
-    // one-off audit against the source, and this gate does not stand in for it.
-    const auto context = model.CreateDefaultContext();
-    Eigen::MatrixXd mass_matrix(model.num_generalized_velocities(),
-                                model.num_generalized_velocities());
-    model.CalcGeneralizedMassMatrix(*context, mass_matrix);
-
-    // The block belongs to the whole rigid sub-assembly a free body carries,
-    // not to that body alone: anything welded to it moves with it. So the
-    // expected first moment is the composite one, which means this check also
-    // sees the weld poses — a weld mounted at the wrong station would move the
-    // composite centre of mass and show up right here.
-    std::map<std::string, const VehicleRigidBodyDefinition*> by_name;
-    for (const auto& body : vehicle.rigid_bodies) {
-        by_name.emplace(body.name, &body);
-    }
-    std::map<std::string, const orvd::configuration::VehicleFixedFrameDefinition*>
-        frame_by_name;
-    for (const auto& frame : vehicle.fixed_frames) {
-        frame_by_name.emplace(frame.name, &frame);
-    }
-
-    double worst_coupling_gap = 0.0;
-    double largest_coupling_magnitude = 0.0;
-    double largest_weld_contribution = 0.0;
-    for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
-        if (!body.moves_freely_in_world) {
-            continue;
-        }
-        double carried_mass = body.mass_kilograms;
-        Eigen::Vector3d first_moment =
-            body.mass_kilograms * body.center_of_mass_in_body_frame_meters;
-        const Eigen::Vector3d bare_first_moment = first_moment;
-
-        for (const auto& weld : vehicle.weld_joints) {
-            const auto seat = frame_by_name.find(weld.parent_frame_name);
-            if (seat == frame_by_name.end() ||
-                seat->second->body_name != body.name) {
-                continue;
-            }
-            const auto welded = by_name.find(weld.child_frame_name);
-            Expect(welded != by_name.end(),
-                   "a weld's child is a body's own frame, so the composite "
-                   "first moment can be formed from the record alone");
-            if (welded == by_name.end()) {
-                continue;
-            }
-            const Eigen::Vector3d welded_center_of_mass =
-                seat->second->position_in_body_frame_meters +
-                seat->second->rotation_in_body_frame *
-                    welded->second->center_of_mass_in_body_frame_meters;
-            carried_mass += welded->second->mass_kilograms;
-            first_moment +=
-                welded->second->mass_kilograms * welded_center_of_mass;
-        }
-        largest_weld_contribution =
-            std::max(largest_weld_contribution,
-                     (first_moment - bare_first_moment).cwiseAbs().maxCoeff());
-
-        const auto handle = model.GetRigidBodyByName(body.name);
-        const auto range = model.GetFreeBodyVelocityRange(handle);
-        const Eigen::Matrix3d coupling =
-            mass_matrix.block<3, 3>(range.start(), range.start() + 3);
-        const Eigen::Matrix3d expected = SkewSymmetric(first_moment);
-        const double scale = std::max(1.0, expected.cwiseAbs().maxCoeff());
-        worst_coupling_gap =
-            std::max(worst_coupling_gap,
-                     (coupling - expected).cwiseAbs().maxCoeff() / scale);
-        largest_coupling_magnitude =
-            std::max(largest_coupling_magnitude, expected.cwiseAbs().maxCoeff());
-        Expect(carried_mass > 0.0, "a free body carries positive mass");
-    }
-    Expect(largest_weld_contribution > 1.0,
-           "the welded bodies move the composite first moment measurably, so "
-           "this check sees the weld mounting poses and not only the free "
-           "bodies' own centres of mass");
-    Expect(worst_coupling_gap <= 64.0 * kMachine,
-           "the assembled mass matrix carries the centre of mass with the sign "
-           "the record states");
-    Expect(largest_coupling_magnitude > 1.0e4,
-           "that coupling block is far from zero on this vehicle, so the check "
-           "above distinguishes a flipped centre of mass rather than comparing "
-           "two ways of writing nothing");
+    constexpr double kJointVelocity = 2.0;
+    Eigen::VectorXd velocities = context->generalized_velocities();
+    const auto velocity_range = model->GetJointVelocityRange(joint);
+    velocities[velocity_range.start()] = kJointVelocity;
+    model->SetGeneralizedVelocities(context.get(), velocities);
+    Eigen::VectorXd damping_force(model->num_generalized_velocities());
+    model->CalcJointDampingAppliedGeneralizedForces(*context, damping_force);
+    Expect(damping_force.allFinite(),
+           "the synthetic joint damping force is finite");
+    Eigen::VectorXd expected_force =
+        Eigen::VectorXd::Zero(model->num_generalized_velocities());
+    expected_force[velocity_range.start()] = -3.0 * kJointVelocity;
+    Expect((damping_force - expected_force).cwiseAbs().maxCoeff() <=
+               16.0 * kMachine,
+           "the assembler carries a nonzero revolute damping coefficient and "
+           "its opposing-force sign into the finalized model");
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +170,29 @@ Eigen::Vector3d FramePositionInWorld(const MultibodyModel& model,
 void CheckGeometricInvariants(const VehicleDefinition& vehicle,
                               const MultibodyModel& model) {
     const auto context = model.CreateDefaultContext();
+
+    // A weld has no pose of its own. The parent mounting frame and the child
+    // body frame must therefore coincide after assembly. This checks the actual
+    // endpoint wiring directly, without rebuilding the rigid sub-assembly's
+    // mass properties in test code.
+    for (const auto& weld : vehicle.weld_joints) {
+        const auto parent_pose =
+            model.CalcPoseInWorld(*context,
+                                  model.GetFrameByName(weld.parent_frame_name));
+        const auto child_pose =
+            model.CalcPoseInWorld(*context,
+                                  model.GetFrameByName(weld.child_frame_name));
+        Expect((parent_pose.translation() - child_pose.translation())
+                       .cwiseAbs()
+                       .maxCoeff() <=
+                   1.0e-12 &&
+                   (parent_pose.rotation() - child_pose.rotation())
+                           .cwiseAbs()
+                           .maxCoeff() <=
+                       1.0e-12,
+               "each welded child's body frame coincides with its named "
+               "mounting frame");
+    }
 
     // Mirror symmetry, over exactly the frames that have a lateral coordinate
     // to mirror. A frame on the longitudinal mid-plane has nothing to say here,
@@ -397,6 +322,10 @@ void CheckAssemblyIsAllAndOnly(const VehicleDefinition& vehicle,
                                 vehicle.weld_joints.size()),
            "free bodies produced no named joints, so the count is the record's "
            "joints and nothing else");
+    Expect(model.num_generalized_positions() == 57 &&
+               model.num_generalized_velocities() == 50,
+           "seven free bodies and eight revolute joints give the declared GZ18 "
+           "coordinate dimensions");
 
     int declared_free = 0;
     for (const auto& body : vehicle.rigid_bodies) {
@@ -413,6 +342,19 @@ void CheckAssemblyIsAllAndOnly(const VehicleDefinition& vehicle,
     for (const auto& joint : vehicle.revolute_joints) {
         static_cast<void>(model.GetJointByName(joint.name));
     }
+    Expect(vehicle.revolute_joints.size() == 8,
+           "the GZ18 record carries all eight axlebox-carrier pivots");
+    bool all_pivots_follow_the_source_type = true;
+    for (const auto& joint : vehicle.revolute_joints) {
+        all_pivots_follow_the_source_type =
+            all_pivots_follow_the_source_type &&
+            joint.axis_in_parent_frame == Eigen::Vector3d::UnitY() &&
+            joint.damping_newton_metre_seconds_per_radian == 0.0;
+    }
+    Expect(all_pivots_follow_the_source_type,
+           "every GZ18 type-2 pivot uses its derived positive-y axis and the "
+           "source joint type's ideal zero damping, recorded explicitly in "
+           "ORVD");
     for (const auto& joint : vehicle.weld_joints) {
         static_cast<void>(model.GetJointByName(joint.name));
     }
@@ -424,28 +366,6 @@ void CheckAssemblyIsAllAndOnly(const VehicleDefinition& vehicle,
     Expect(total_mass == 55695.0,
            "the ten placeholder bodies are still carrying their mass into the "
            "vehicle total");
-}
-
-void CheckStableIndexingAcrossTwoAssemblies(const VehicleDefinition& vehicle) {
-    const auto first = AssembleVehicleMultibodyModel(vehicle, kGravityMagnitude);
-    const auto second = AssembleVehicleMultibodyModel(vehicle, kGravityMagnitude);
-    bool same_order = first->num_rigid_bodies() == second->num_rigid_bodies();
-    for (int index = 0; same_order && index < first->num_rigid_bodies();
-         ++index) {
-        same_order = first->GetRigidBody(index) == second->GetRigidBody(index);
-    }
-    Expect(!same_order,
-           "handles are not a cross-assembly identity: two models built from "
-           "one record hand out different ones, so a caller must index by name");
-    Expect(first->num_generalized_positions() ==
-                   second->num_generalized_positions() &&
-               first->num_generalized_velocities() ==
-                   second->num_generalized_velocities(),
-           "two assemblies of one record give the same coordinate counts");
-    Expect(first->num_generalized_positions() == 57 &&
-               first->num_generalized_velocities() == 50,
-           "seven free bodies and eight revolute joints give 57 positions and "
-           "50 velocities");
 }
 
 void CheckRejections(const VehicleDefinition& vehicle) {
@@ -465,6 +385,17 @@ void CheckRejections(const VehicleDefinition& vehicle) {
     unknown_frame.revolute_joints.front().parent_frame_name = "no_such_frame";
     refuses(std::move(unknown_frame),
             "a joint naming a frame the assembler cannot resolve is refused");
+
+    VehicleDefinition unnamed = vehicle;
+    unnamed.vehicle_name.clear();
+    refuses(std::move(unnamed),
+            "a programmatically constructed record needs a vehicle identity");
+
+    VehicleDefinition massless = vehicle;
+    massless.rigid_bodies.front().mass_kilograms = 0.0;
+    refuses(std::move(massless),
+            "a programmatically modified body needs finite positive mass before "
+            "the inertia conversion divides by it");
 
     VehicleDefinition orphan = vehicle;
     for (auto& body : orphan.rigid_bodies) {
@@ -513,7 +444,8 @@ void CheckRejections(const VehicleDefinition& vehicle) {
 // vehicle fall, and does it fall the way this project's frame says down is. It
 // is also the end-to-end statement of the gravity direction — a model built with
 // the multibody layer's own default would accelerate the other way here.
-void CheckTheVehicleFallsTheWayDownIs(const MultibodyModel& model) {
+void CheckTheVehicleFallsTheWayDownIs(const VehicleDefinition& vehicle,
+                                      const MultibodyModel& model) {
     using orvd::system_assembly::CompiledSystemPlan;
     using orvd::system_assembly::SystemAssemblyDescription;
     using orvd::system_assembly::SystemInstance;
@@ -530,15 +462,20 @@ void CheckTheVehicleFallsTheWayDownIs(const MultibodyModel& model) {
     auto runtime = system.CreateDefaultRuntimeContext(0.0);
     Eigen::VectorXd derivative(system.continuous_state_size());
     plan.CalcStateTimeDerivatives(*runtime, {}, {}, {}, derivative);
+    Expect(derivative.allFinite(),
+           "the assembled GZ18 right-hand side is finite");
 
     const int velocity_start = model.num_generalized_positions();
     double worst_angular = 0.0;
     double worst_translational = 0.0;
-    for (const auto& body : {std::string("carbody"),
-                             std::string("front_bogie_frame"),
-                             std::string("rear_leading_wheelset")}) {
+    int checked_free_bodies = 0;
+    for (const auto& body : vehicle.rigid_bodies) {
+        if (!body.moves_freely_in_world) {
+            continue;
+        }
+        ++checked_free_bodies;
         const auto range =
-            model.GetFreeBodyVelocityRange(model.GetRigidBodyByName(body));
+            model.GetFreeBodyVelocityRange(model.GetRigidBodyByName(body.name));
         for (int index = 0; index < 3; ++index) {
             worst_angular = std::max(
                 worst_angular,
@@ -555,6 +492,8 @@ void CheckTheVehicleFallsTheWayDownIs(const MultibodyModel& model) {
                          .cwiseAbs()
                          .maxCoeff());
     }
+    Expect(checked_free_bodies == 7,
+           "the gravity smoke traversed every GZ18 free body");
     Expect(worst_angular <= 1.0e-12,
            "an unforced vehicle does not start rotating");
     Expect(worst_translational <= 1.0e-12,
@@ -575,11 +514,11 @@ int main(int argc, char* argv[]) {
         const auto model =
             AssembleVehicleMultibodyModel(vehicle, kGravityMagnitude);
 
-        CheckInertiaConversion(vehicle, *model);
+        CheckCompleteSpatialInertiaAssembly();
+        CheckRevoluteAxisAndDampingAssembly();
         CheckGeometricInvariants(vehicle, *model);
         CheckAssemblyIsAllAndOnly(vehicle, *model);
-        CheckStableIndexingAcrossTwoAssemblies(vehicle);
-        CheckTheVehicleFallsTheWayDownIs(*model);
+        CheckTheVehicleFallsTheWayDownIs(vehicle, *model);
         CheckRejections(vehicle);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "GZ18 vehicle assembly failed: %s\n", error.what());

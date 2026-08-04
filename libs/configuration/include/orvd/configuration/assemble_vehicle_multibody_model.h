@@ -9,12 +9,11 @@ namespace orvd::configuration {
 
 // Builds the multibody model one vehicle description states, and nothing else.
 //
-// Every entity of the description becomes exactly one modelling call: a rigid
-// body, a fixed frame, a revolute or weld joint, or a free-body declaration.
-// Nothing is inferred, defaulted or added. A description that names something it
-// did not declare is refused; a field the description carries that no modelling
-// call consumes cannot exist, because the structured binding this function reads
-// the description through would not compile if one did.
+// Every topology entity of the current description becomes exactly one modelling
+// call: a rigid body, a fixed frame, a revolute or weld joint, or a free-body
+// declaration. Nothing is inferred or added. The function consumes the record's
+// call-time value and retains no reference to it. New record fields require an
+// explicit consumer and a direct test; the compiler cannot prove that by itself.
 //
 // The inertia the description states is about each body's centre of mass, and
 // the multibody layer wants a unit inertia about the body origin. The parallel
@@ -34,8 +33,9 @@ namespace orvd::configuration {
 // be copied nor moved: it hands out handles that are only valid against the one
 // model that made them.
 //
-// Throws std::invalid_argument when the magnitude is not finite and positive, or
-// when the multibody layer refuses any part of the description — a repeated
+// Throws std::invalid_argument when the vehicle name is empty, a body mass is not
+// finite and positive, the magnitude is not finite and positive, or when the
+// multibody layer refuses any part of the description — a repeated
 // name, an unusable joint axis, a negative damping, a body with no path to the
 // world, a relation that would close a loop, or mass properties no body can
 // have. Those diagnostics come from the layer that owns the rule and are not

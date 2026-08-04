@@ -5,7 +5,8 @@
 | `toolchain/` | 工具链自检：Eigen 运算与 C++23 能力 |
 | `contract/` | 模型中立场景与观测语义，以及其自检 |
 | `comparison/` | 必需观测集合与容差判定（判定方独占） |
-| `configuration/` | 人工编写 JSON 的严格加载边界与类型化线路几何转换 |
+| `configuration/` | 人工编写 JSON 的严格加载边界，以及线路与车型的类型化转换 |
+| `vehicle_library/` | GZ18 车型记录、通用装配器、拓扑与动力学口径 |
 | `topology/` | vendored topology 的索引与顺序结构契约 |
 | `math/` | 四个 double 位姿组合函数的代数与输出重叠契约 |
 | `multibody_model/` | 程序化建模门面的加入期语义、最终化、运动学、质量矩阵、逆/前向动力学与外力 |

@@ -25,6 +25,13 @@
 // instead; converting is the assembler's job, and the converted numbers are
 // never written back into a record. Storing both would make it possible for a
 // record to disagree with itself.
+//
+// This is deliberately a mutable value record. A C++ research workflow may
+// construct one directly or load JSON and then edit it before assembly. The
+// assembler reads that call-time value into a new model and retains no reference
+// to it, so later edits do not alter a model that has already been finalized.
+// JSON strictness describes only the file-to-record boundary; it is not a ban on
+// explicit C++ modelling.
 
 namespace orvd::configuration {
 
@@ -53,7 +60,9 @@ struct VehicleRigidBodyDefinition {
     Eigen::Vector3d inertia_moments_about_center_of_mass_kilogram_square_meters{
         Eigen::Vector3d::Zero()};
 
-    // Ixy, Ixz, Iyz about the centre of mass, expressed in the body frame.
+    // The (x,y), (x,z), and (y,z) entries of the symmetric inertia matrix about
+    // the centre of mass, expressed in the body frame. With h = I*w, these are
+    // the conventional negative products, for example Ixy = -integral(x*y dm).
     Eigen::Vector3d inertia_products_about_center_of_mass_kilogram_square_meters{
         Eigen::Vector3d::Zero()};
 };

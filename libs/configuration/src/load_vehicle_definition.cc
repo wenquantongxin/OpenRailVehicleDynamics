@@ -181,6 +181,9 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     VehicleDefinition vehicle;
     vehicle.vehicle_name =
         RequireString(root.at("vehicle_name"), "$.vehicle_name");
+    if (vehicle.vehicle_name.empty()) {
+        ThrowExpected("$.vehicle_name", "a non-empty string");
+    }
     vehicle.rigid_bodies = ParseArray<VehicleRigidBodyDefinition>(
         root, "rigid_bodies", ParseRigidBody);
     vehicle.fixed_frames = ParseArray<VehicleFixedFrameDefinition>(

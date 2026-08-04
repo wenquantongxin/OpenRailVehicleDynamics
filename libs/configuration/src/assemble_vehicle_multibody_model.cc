@@ -1,5 +1,6 @@
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -27,6 +28,11 @@ using multibody_model::RigidBodyHandle;
 // source, not against anything the record and the model can check between them.
 multibody_runtime::RigidBodyInertiaParameters UnitInertiaAboutBodyOrigin(
     const VehicleRigidBodyDefinition& body) {
+    if (!std::isfinite(body.mass_kilograms) ||
+        !(body.mass_kilograms > 0.0)) {
+        throw std::invalid_argument("rigid body '" + body.name +
+                                    "' must have finite positive mass");
+    }
     const Eigen::Vector3d& c = body.center_of_mass_in_body_frame_meters;
     const Eigen::Vector3d& moments =
         body.inertia_moments_about_center_of_mass_kilogram_square_meters;
@@ -72,6 +78,10 @@ FrameHandle ResolveFrame(
 std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
     const VehicleDefinition& vehicle,
     double gravitational_acceleration_magnitude_meters_per_second_squared) {
+    if (vehicle.vehicle_name.empty()) {
+        throw std::invalid_argument(
+            "a vehicle description must have a non-empty vehicle name");
+    }
     auto model = std::make_unique<MultibodyModel>();
     model->SetGravityVector(track_geometry::GravitationalAccelerationInInertial(
         gravitational_acceleration_magnitude_meters_per_second_squared));
