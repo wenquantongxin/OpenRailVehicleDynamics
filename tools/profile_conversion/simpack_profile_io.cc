@@ -441,23 +441,22 @@ SimpackProfile ReadSimpackProfile(const std::filesystem::path& profile_path,
         std::reverse(vertical.begin(), vertical.end());
     }
 
-    SimpackProfile profile{
+    SimpackProfileMetadata metadata{traversal};
+    if (is_wheel) {
+        metadata.flange_width_measurement_depth_meters =
+            RequireNumber(profile_path, header, "meas.pos.e");
+        metadata.flange_slope_measurement_depth_meters =
+            RequireNumber(profile_path, header, "meas.pos.qr");
+    }
+    metadata.comment = RequireQuoted(profile_path, spline, "comment");
+    return SimpackProfile{
         ProfilePoints::FromAuthoredOrder(
             is_wheel ? ProfileRole::kWheel : ProfileRole::kRail,
             std::move(identifier), std::move(lateral), std::move(vertical)),
-        SimpackProfileMetadata{}};
-    if (is_wheel) {
-        profile.metadata.flange_width_measurement_depth_meters =
-            RequireNumber(profile_path, header, "meas.pos.e");
-        profile.metadata.flange_slope_measurement_depth_meters =
-            RequireNumber(profile_path, header, "meas.pos.qr");
-    }
-    profile.metadata.comment = RequireQuoted(profile_path, spline, "comment");
-    profile.metadata.traversal_direction = traversal;
-    return profile;
+        std::move(metadata)};
 }
 
-ProfileTraversalDirection DeclaredTraversalForRole(
+ProfileTraversalDirection CanonicalTraversalForOrvdExport(
     wheel_rail_contact::ProfileRole role) {
     return role == wheel_rail_contact::ProfileRole::kWheel
                ? ProfileTraversalDirection::kDescendingLateral
@@ -528,9 +527,18 @@ void WriteSimpackProfile(const std::filesystem::path& profile_path,
     const std::span<const double> lateral = profile.points.authored_lateral_meters();
     const std::span<const double> vertical =
         profile.points.authored_vertical_meters();
-    for (std::size_t index = 0; index < lateral.size(); ++index) {
-        output << FormatCoordinate(lateral[index]) << " "
-               << FormatCoordinate(vertical[index]) << "\n";
+    const bool authored_ascending = lateral.front() < lateral.back();
+    for (std::size_t output_index = 0; output_index < lateral.size();
+         ++output_index) {
+        // The local file is canonicalised without changing the product value
+        // object: its rows are ascending, while `inversion` above alone carries
+        // the effective SIMPACK polygon traversal. This separation also keeps a
+        // descending JSON author order from flipping the material side.
+        const std::size_t source_index = authored_ascending
+            ? output_index
+            : lateral.size() - 1U - output_index;
+        output << FormatCoordinate(lateral[source_index]) << " "
+               << FormatCoordinate(vertical[source_index]) << "\n";
     }
     output << "    point.end\n";
     output << "  spline.end\n";

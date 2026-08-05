@@ -49,6 +49,9 @@ enum class ProfileTraversalDirection {
 // contact geometry; it exists so that a round trip back to the reference tool
 // does not lose what the asset said about itself.
 struct SimpackProfileMetadata {
+    explicit SimpackProfileMetadata(ProfileTraversalDirection traversal)
+        : traversal_direction(traversal) {}
+
     // Present only for a wheel profile: the depths below the taping line at
     // which flange width and flange slope are dimensioned.
     double flange_width_measurement_depth_meters{0.0};
@@ -57,8 +60,7 @@ struct SimpackProfileMetadata {
     // The wheel assets in circulation declare a descending traversal and store
     // their rows ascending; the rail asset declares an ascending one. Both are
     // reproduced on the way out.
-    ProfileTraversalDirection traversal_direction{
-        ProfileTraversalDirection::kAscendingLateral};
+    ProfileTraversalDirection traversal_direction;
 };
 
 struct SimpackProfile {
@@ -79,13 +81,12 @@ struct SimpackProfile {
 [[nodiscard]] SimpackProfile ReadSimpackProfile(
     const std::filesystem::path& profile_path, std::string identifier);
 
-// The traversal every observed asset of that role declares: descending across a
-// wheel, ascending across a rail. It is the answer for a profile that arrived
-// as this project's own record, which does not carry a traversal because
-// nothing in the contact geometry consumes one — the material side is settled
-// there by the role and the vertical sign convention, not by the order the
-// points are listed in.
-[[nodiscard]] ProfileTraversalDirection DeclaredTraversalForRole(
+// The traversal used when this project's canonical profile record is exported:
+// descending across a wheel, ascending across a rail. This answer assumes the
+// ORVD profile frame and role; it is not a claim that a role alone determines
+// the traversal of an arbitrary supplier file. An imported SIMPACK file keeps
+// its own effective traversal in `SimpackProfileMetadata` instead.
+[[nodiscard]] ProfileTraversalDirection CanonicalTraversalForOrvdExport(
     wheel_rail_contact::ProfileRole role);
 
 // Writes one profile in the canonical minimal form: the full key set at its

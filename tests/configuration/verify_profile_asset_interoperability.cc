@@ -21,8 +21,10 @@
 namespace {
 
 using orvd::configuration::LoadProfilePointsFromJsonFile;
+using orvd::profile_conversion::CanonicalTraversalForOrvdExport;
 using orvd::profile_conversion::ReadSimpackProfile;
 using orvd::profile_conversion::SimpackProfile;
+using orvd::profile_conversion::SimpackProfileMetadata;
 using orvd::profile_conversion::WriteProfilePointsJson;
 using orvd::profile_conversion::WriteSimpackProfile;
 using orvd::wheel_rail_contact::ProfilePoints;
@@ -152,6 +154,10 @@ int main(int argc, char** argv) {
     const std::filesystem::path json_path = scratch / "synthetic_wheel.json";
     const std::filesystem::path returned_path = scratch / "returned_wheel.prw";
     const std::filesystem::path precise_path = scratch / "precise_rail.prr";
+    const std::filesystem::path descending_json_path =
+        scratch / "descending_wheel.json";
+    const std::filesystem::path descending_simpack_path =
+        scratch / "descending_wheel.prw";
     const std::filesystem::path wrong_role_path =
         scratch / "wheel_written_as_rail.prr";
     const std::string valid = SimpackWheelDocument();
@@ -241,12 +247,53 @@ int main(int argc, char** argv) {
              0.0012345678901234567,
              std::nextafter(0.0045,
                             std::numeric_limits<double>::infinity())});
-        WriteSimpackProfile(precise_path, SimpackProfile{precise, {}});
+        WriteSimpackProfile(
+            precise_path,
+            SimpackProfile{
+                precise,
+                SimpackProfileMetadata{
+                    CanonicalTraversalForOrvdExport(precise.role())}});
         const SimpackProfile returned =
             ReadSimpackProfile(precise_path, "precision_rail");
         Require(SamePoints(precise, returned.points),
                 "the reference-format writer did not preserve binary64 "
                 "profile coordinates");
+    }
+
+    {
+        // Product records retain a monotone descending author order because it
+        // can set the phase of a preprocessing grid. The local SIMPACK writer
+        // canonicalises only its output rows to ascending and carries the
+        // material side separately through `inversion`; it must not combine a
+        // descending JSON list with the wheel default and reverse the effective
+        // polygon traversal.
+        const ProfilePoints descending = ProfilePoints::FromAuthoredOrder(
+            ProfileRole::kWheel, "descending_wheel", {0.04, 0.0, -0.04},
+            {-0.002, 0.0, 0.011});
+        WriteProfilePointsJson(descending_json_path, descending);
+        const ProfilePoints from_descending_json =
+            LoadProfilePointsFromJsonFile(descending_json_path);
+        Require(from_descending_json.authored_lateral_meters().front() == 0.04 &&
+                    from_descending_json.authored_lateral_meters().back() ==
+                        -0.04,
+                "the product JSON did not preserve its descending author order");
+
+        WriteSimpackProfile(
+            descending_simpack_path,
+            SimpackProfile{
+                from_descending_json,
+                SimpackProfileMetadata{CanonicalTraversalForOrvdExport(
+                    from_descending_json.role())}});
+        const SimpackProfile returned =
+            ReadSimpackProfile(descending_simpack_path, "descending_wheel");
+        Require(returned.metadata.traversal_direction ==
+                    orvd::profile_conversion::ProfileTraversalDirection::
+                        kDescendingLateral,
+                "a descending JSON wheel flipped the SIMPACK material side");
+        Require(returned.points.authored_lateral_meters().front() == -0.04 &&
+                    returned.points.authored_lateral_meters().back() == 0.04 &&
+                    returned.points.authored_vertical_meters().front() == 0.011,
+                "canonical SIMPACK output did not keep point coordinates paired");
     }
 
     {
@@ -258,7 +305,11 @@ int main(int argc, char** argv) {
         RequireRefusal(
             [&] {
                 WriteSimpackProfile(wrong_role_path,
-                                    SimpackProfile{from_simpack, {}});
+                                    SimpackProfile{
+                                        from_simpack,
+                                        SimpackProfileMetadata{
+                                            CanonicalTraversalForOrvdExport(
+                                                from_simpack.role())}});
             },
             "extension contradicts",
             "a wheel profile written through a rail-profile extension");

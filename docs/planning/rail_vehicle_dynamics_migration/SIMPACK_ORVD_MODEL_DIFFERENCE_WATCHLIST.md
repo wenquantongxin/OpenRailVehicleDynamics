@@ -234,6 +234,59 @@ dF/dt = K v_relative - (K/C) F
 G51 的启动记录按源模型 `rwpair.wheel.prof.file` 的字面值记 `LM.prw`，既不改写为 S1002，也不
 简写为 `LM`。G52 加载真实型面时无需为此额外登记两个名称。
 
+### MD-006 — SIMPACK 型面遍历语义在 WRL 数值路径中被显式左右侧口径取代
+
+- 车型：GZ18、IRW、SH17 共性
+- 层级：轮轨型面格式、接触几何输入口径
+- 状态：**已裁决；ORVD 数值路径复现近期 WRL，SIMPACK 本地互操作另行保留遍历声明**
+
+#### 两端实际语义
+
+SIMPACK QCH FileId 39502 明确把 `inversion` 定义为点列次序反转，并说明点列遍历方向决定型面
+多边形的接触外侧与内侧。因此它不是无意义的文件排版字段。当前本地资产的原始点行都按横坐标
+升序书写；`LM.prw`、`S1002.prw`、`DIN5573-28.prw` 声明 `inversion=1`，SIMPACK 的有效遍历
+为横坐标降序；`UIC60.prr` 声明 `inversion=0`，有效遍历为升序。
+
+WRL 的活动数值路径采用另一套承载方式。冻结脚本只提取坐标行并按横坐标升序排序，不读取
+`inversion`；生成头也只保存升序坐标数组。接触几何构造器再按显式 `WheelSide` 对左侧横坐标
+取反，并对车轮、钢轨点列重新升序排序。故近期 GZ18 与 IRW 资格化运行消费的是“型面角色、
+显式左右侧、坐标符号和升序点列”的组合，运行时不消费 SIMPACK 多边形遍历声明。
+
+这是一处真实的语义承载差异，但尚无证据表明它导致当前四份资格化型面的数值结果错误：近期
+WRL 的接触几何已经在上述显式左右侧口径下闭合。不能反过来把 QCH 的遍历声明重新混入 ORVD
+数值预处理。尤其 IRW 的源横坐标重离散先以输入数组首尾确定网格相位，再对结果排序；机械反转
+输入会把不能整除步长的余量短段移到另一端。当前资格化相位来自 WRL 冻结器的升序数组，不来自
+SIMPACK 的有效遍历。GZ18 的弧长重扫则先在显式右侧升序点列上运行，不受该元数据控制。
+
+#### 迁移裁决
+
+- ORVD 随包资格化 JSON 继续只承载规范型面角色、坐标约定与升序点列；通用值类型仍可保留
+  严格单调的作者顺序，供明确依赖起点相位的预处理使用。G52 数值求解遵循近期 WRL 的显式
+  左右侧与镜像／排序语义，不把 `inversion` 变成运行时物理参数。
+- 本地 `.prw/.prr` 兼容读写必须遵循 QCH：读取时在归一化点列前解析有效遍历方向，写回时用
+  `inversion` 恢复同一有效遍历。坐标逐位相同不足以证明互操作往返同义。
+- 从 ORVD JSON 新写 SIMPACK 文件时，当前受支持的规范口径采用车轮降序、钢轨升序的有效遍历；
+  这是本批已核实资产与坐标角色的转换合同，不宣称为所有未知供应商文件的普遍定律。超出该
+  规范口径的文件必须保留其读取所得遍历元数据，或响亮拒绝，不得静默猜测。
+- ORVD 提交 `3ed5d49` 已把 SIMPACK 遍历方向放在开发期兼容元数据中，并保持产品点列升序；
+  该分层与本条裁决一致。后续 G52b/G52c 只需验证真实接触消费者仍不反向读取这项元数据。
+
+#### 源码与文档锚点
+
+- SIMPACK QCH FileId 39502，`Rail and Wheel Profile (.prr and .prw) Files`：`inversion`
+  与型面外侧／内侧定义。
+- WRL `model_data/profiles/wheel/{LM,S1002,DIN5573-28}.prw`、
+  `model_data/profiles/rail/UIC60.prr`：原始点行和 `inversion` 声明。
+- WRL `scripts_cpp/tools/freeze_gz18_assets.py`：`load_profile_points()` 只提取坐标并排序；
+  `generate_profile_header()` 只写坐标数组。
+- WRL `scripts_cpp/rigid_wheelset/src/gz18_contact_model_config.cc`、
+  `scripts_cpp/irw/src/irw_contact_model_config.cc`：近期活动人格向核心传入生成数组。
+- WRL `scripts_cpp/rwc_core/src/contact_geometry.cc`：`MirrorAndSortProfile()`、弧长重扫与源横坐标
+  重离散的实际消费顺序。
+- ORVD `tools/profile_conversion/simpack_profile_io.{h,cc}`：开发期兼容元数据与 QCH 同义写回。
+
+本条由 CodeX 于 2026-08-05 对 QCH 与近期 WRL 活动路径分层复核。
+
 ## 新条目模板
 
 ```markdown

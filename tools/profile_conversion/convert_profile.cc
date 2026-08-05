@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "orvd/configuration/load_profile_points.h"
 #include "profile_json_writer.h"
@@ -52,16 +53,17 @@ int main(int argc, char** argv) {
             if (argc != 4) {
                 return Usage();
             }
-            orvd::profile_conversion::SimpackProfile profile{
-                orvd::configuration::LoadProfilePointsFromJsonFile(argv[2]),
-                orvd::profile_conversion::SimpackProfileMetadata{}};
-            profile.metadata.comment = profile.points.identifier();
+            auto points =
+                orvd::configuration::LoadProfilePointsFromJsonFile(argv[2]);
             // The record this came from states no traversal, because nothing in
-            // the contact geometry consumes one. The role does, and every asset
-            // of that role in circulation agrees on it.
-            profile.metadata.traversal_direction =
-                orvd::profile_conversion::DeclaredTraversalForRole(
-                    profile.points.role());
+            // the contact geometry consumes one. The canonical ORVD profile
+            // frame and role determine the local-export traversal instead.
+            orvd::profile_conversion::SimpackProfileMetadata metadata{
+                orvd::profile_conversion::CanonicalTraversalForOrvdExport(
+                    points.role())};
+            metadata.comment = points.identifier();
+            orvd::profile_conversion::SimpackProfile profile{
+                std::move(points), std::move(metadata)};
             orvd::profile_conversion::WriteSimpackProfile(argv[3], profile);
             std::printf("wrote %s with %zu points\n", argv[3],
                         profile.points.size());
