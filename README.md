@@ -11,8 +11,9 @@ G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原�
 以及接受/试算提交边界。G46 已落下可安装包、离线依赖源码包和独立消费者资格，并在
 Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构建并运行同一
 CVODE 消费者。底座的 46 个 Goal 已全部完成；车辆动力学迁移路书已经启用，G47 轨道几何、
-G48 严格 JSON 线路配置和 G49 GZ18 车型装配已经签收，当前按项目负责人要求暂停，不进入 G50
-车辆力元。
+G48 严格 JSON 线路配置、G49 GZ18 车型装配、G50 复合连续状态与 GZ18 车辆力元、G51 已解析启动
+状态与初始上下文装配均已签收。当前进入 G52 轮轨型面与串行接触核心，按 G52a／G52b／G52c 三个
+强制审查子步推进，第一子步 G52a 已启用。
 
 底座的实施记录是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)；
@@ -26,6 +27,7 @@ G48 严格 JSON 线路配置和 G49 GZ18 车型装配已经签收，当前按项
 | [ADR-0001](docs/adr/0001-vendor-tree-behind-allowlist.md) | 方案 B：先按允许清单 vendor Drake 刚性多体树与拓扑（仅 `double`），再逐步替换 |
 | [ADR-0002](docs/adr/0002-single-authoritative-context.md) | 单一权威 Context：状态只有一个所有者，树与子系统均为零复制视图 |
 | [ADR-0003](docs/adr/0003-abstract-advancer-cvode-first.md) | 抽象推进器接口，首版唯一后端为 CVODE |
+| [ADR-0004](docs/adr/0004-focused-dynamics-qualification.md) | 多模型本地性质门，单个高耦合在线漂移门 |
 
 ## 数值验收口径
 
@@ -59,7 +61,7 @@ OpenRailVehicleDynamics/
 │   └── package_distribution/   开发者侧离线源码包组装工具
 ├── libs/
 │   ├── track_geometry/    线路惯性系、轨道几何、轨型系与站位投影
-│   ├── configuration/     严格 JSON 的一次性类型化加载边界
+│   ├── configuration/     严格 JSON 的一次性类型化加载边界、车辆装配与初始上下文装配
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── multibody_model/   模型中立的程序化多体建模门面
 │   ├── system_assembly/  模型中立系统组装层
@@ -70,24 +72,37 @@ OpenRailVehicleDynamics/
 │   └── geometries/       可安装的线路几何 JSON 记录
 ├── vehicle_library/
 │   └── gz18/             可安装的 GZ18 车型 JSON 记录
+│       └── startup_states/  可安装的已解析启动状态 JSON 记录
 └── tests/
     ├── comparison/       必需观测与容差判定
+    ├── configuration/    线路、车型与启动状态 JSON 的严格加载边界及初始上下文装配
     ├── contract/         模型中立场景与观测语义
-    ├── configuration/    线路与车型 JSON 的严格加载边界
     ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
+    ├── forces/           力元与复合连续状态
+    ├── header_diagnostics/ vendored 刚性树接入头的自包含（这些头不安装）
+    ├── installation/     迁移后安装前缀的消费者资格
+    ├── integrators/      推进器后端与接受事务
     ├── math/             double 位姿组合的代数与输出重叠契约
     ├── multibody_model/  程序化建模门面的加入与拒绝语义
     ├── multibody_runtime/ 多体状态、类型化缓存、刚性树全对象链接与最小模型契约
+    ├── orvd_candidate/   第一方候选实现的跨进程发射器
+    ├── system_assembly/  系统实例与编译计划
     ├── topology/         vendored topology 的索引与顺序结构契约
     ├── toolchain/        工具链自检（Eigen + C++23）
+    ├── track_geometry/   轨道几何与站位投影
     ├── vehicle_library/  GZ18 车型记录与多体装配
     └── unit/             单元测试
 ```
 
+轮轨接触核心 `libs/wheel_rail_contact/` 与型面转换工具 `tools/profile_conversion/` 由 G52 建立，
+上表随其落地补齐。
+
 已建模块的 `include/orvd/<module>/` 是公共编译接口头，`src/` 是实现；例如
 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。安装包导出
 `ORVD::track_geometry`、`ORVD::configuration`、`ORVD::multibody_runtime`、`ORVD::multibody_model`、
-`ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和接入头不安装。
+`ORVD::forces`、`ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和接入头不安装。
+安装包还带上可安装的线路几何、GZ18 车型与已解析启动状态 JSON 记录；当前所有加载器都只接受调用方
+给出的确切路径，按安装数据根解析资产的能力是 G52 的产物，尚未落地。
 尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
@@ -127,8 +142,14 @@ cmake --install build
 
 ## GZ18
 
-GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道几何、配置、车辆拓扑、启动状态、
-力元、轮轨接触、数值历史与端到端被动纵切逐 Goal 推进；G49 已完成，当前暂停于 G50 前。
+GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道几何、配置、车辆拓扑、力元、启动状态、
+轮轨接触、数值历史与端到端被动纵切逐 Goal 推进。已落位的是：随包线路几何与 GZ18 车型记录、
+十七体多体装配、复合连续状态与车辆力元、以及 60 km/h 已解析移动启动状态及其初始上下文装配。
+当前在做轮轨型面与串行接触核心。
+
+轮轨型面资产的边界已经定下，实现随 G52 落地：ORVD 将随包发布本项目自有、自包含的 JSON 型面记录，
+它是运行时型面的唯一真源；第一方设施同时提供与 SIMPACK `.prw/.prr` 的语义读写与双向转换，供本地
+科研核对使用。供应商型面文件不进入本仓库、不随安装包发布，也不作为运行时权威。项目不依赖 CONTACT。
 
 ## 许可证
 
