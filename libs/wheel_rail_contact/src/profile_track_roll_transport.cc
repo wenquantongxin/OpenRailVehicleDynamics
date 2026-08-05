@@ -21,7 +21,6 @@ ProfileTrackRollTransport ComputeProfileTrackRollTransport(
     const Eigen::Vector3d& shared_track_origin_in_inertial_meters,
     const Eigen::Matrix3d& shared_rotation_inertial_from_track,
     const Eigen::Vector3d& shared_body_position_in_track_meters,
-    double shared_lateral_meters, double shared_vertical_meters,
     const Eigen::Vector3d& profile_track_origin_in_inertial_meters,
     const Eigen::Matrix3d& profile_rotation_inertial_from_track) {
     const Eigen::Matrix3d shared_rotation_track_from_inertial =
@@ -56,9 +55,10 @@ ProfileTrackRollTransport ComputeProfileTrackRollTransport(
     ProfileTrackRollTransport transport;
     transport.roll_offset_radians =
         ResolveRollYawPitch(shared_from_profile).roll_radians;
-    transport.lateral_offset_meters = body_in_profile_track.y() - shared_lateral_meters;
+    transport.lateral_offset_meters =
+        body_in_profile_track.y() - shared_body_position_in_track_meters.y();
     transport.vertical_offset_meters =
-        body_in_profile_track.z() - shared_vertical_meters;
+        body_in_profile_track.z() - shared_body_position_in_track_meters.z();
     return transport;
 }
 

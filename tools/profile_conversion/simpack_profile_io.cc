@@ -6,6 +6,7 @@
 #include <cmath>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <map>
 #include <span>
 #include <sstream>
@@ -158,10 +159,30 @@ const std::vector<std::string>& SplineKeyOrder() {
     return keys;
 }
 
+void RequireRoleMatchesExtension(const std::filesystem::path& profile_path,
+                                 bool is_wheel) {
+    const std::string extension = profile_path.extension().string();
+    const bool extension_says_wheel = extension == ".prw";
+    const bool extension_says_rail = extension == ".prr";
+    if (!extension_says_wheel && !extension_says_rail) {
+        Reject(profile_path, "has the extension '" + extension +
+                                 "', which names neither a wheel nor a rail "
+                                 "profile");
+    }
+    if (is_wheel != extension_says_wheel) {
+        Reject(profile_path,
+               "declares a role its extension contradicts; the two are the only "
+               "statements of what this file is and they must agree");
+    }
+}
+
 std::string FormatCoordinate(double value) {
     std::ostringstream stream;
     stream.setf(std::ios::scientific, std::ios::floatfield);
-    stream.precision(14);
+    // In scientific notation precision counts digits after the decimal point.
+    // max_digits10 significant digits are sufficient to recover any binary64
+    // value exactly, so one fewer belongs after the leading digit.
+    stream.precision(std::numeric_limits<double>::max_digits10 - 1);
     stream << value;
     return stream.str();
 }
@@ -320,19 +341,7 @@ SimpackProfile ReadSimpackProfile(const std::filesystem::path& profile_path,
     }
     const bool is_wheel = declared_role == 1.0;
 
-    const std::string extension = profile_path.extension().string();
-    const bool extension_says_wheel = extension == ".prw";
-    const bool extension_says_rail = extension == ".prr";
-    if (!extension_says_wheel && !extension_says_rail) {
-        Reject(profile_path, "has the extension '" + extension +
-                                 "', which names neither a wheel nor a rail "
-                                 "profile");
-    }
-    if (is_wheel != extension_says_wheel) {
-        Reject(profile_path,
-               "declares a role its extension contradicts; the two are the only "
-               "statements of what this file is and they must agree");
-    }
+    RequireRoleMatchesExtension(profile_path, is_wheel);
 
     std::vector<std::string> header_keys{"version", "type"};
     if (is_wheel) {
@@ -441,14 +450,16 @@ SimpackProfile ReadSimpackProfile(const std::filesystem::path& profile_path,
 
 void WriteSimpackProfile(const std::filesystem::path& profile_path,
                          const SimpackProfile& profile) {
+    const bool is_wheel =
+        profile.points.role() == wheel_rail_contact::ProfileRole::kWheel;
+    // Validate before opening with truncation: a role/extension mistake must
+    // not destroy an existing local research asset.
+    RequireRoleMatchesExtension(profile_path, is_wheel);
     std::ofstream output(profile_path, std::ios::binary | std::ios::trunc);
     if (!output) {
         throw std::runtime_error("SIMPACK profile '" + profile_path.string() +
                                  "' cannot be opened for writing");
     }
-    const bool is_wheel =
-        profile.points.role() == wheel_rail_contact::ProfileRole::kWheel;
-
     output << "! Written by OpenRailVehicleDynamics for local research use.\n";
     output << "! Profile identifier : " << profile.points.identifier() << "\n";
     output << "\n";

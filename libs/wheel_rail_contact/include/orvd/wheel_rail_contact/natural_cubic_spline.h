@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <span>
+#include <utility>
 #include <vector>
 
 // The natural cubic spline the wheel and rail profile surfaces are built on.
@@ -56,7 +57,13 @@ class NaturalCubicSpline {
     // at every knot while giving its own behaviour in between, which is how a
     // profile representation is handed to a consumer that wants a different
     // interpolant on the same nodes.
-    [[nodiscard]] std::span<const double> nodal_slopes() const {
+    [[nodiscard]] std::span<const double> nodal_slopes() const & {
+        return nodal_slopes_;
+    }
+    [[nodiscard]] std::vector<double> nodal_slopes() && {
+        return std::move(nodal_slopes_);
+    }
+    [[nodiscard]] std::vector<double> nodal_slopes() const && {
         return nodal_slopes_;
     }
 

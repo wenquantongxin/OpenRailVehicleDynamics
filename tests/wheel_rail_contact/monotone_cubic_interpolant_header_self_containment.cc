@@ -11,3 +11,8 @@ static_assert(
                                                OutsideDerivativeRule::
                                                    kZeroOutsideKnots)),
                    orvd::wheel_rail_contact::MonotoneCubicInterpolant>);
+static_assert(std::is_same_v<
+              decltype(std::declval<orvd::wheel_rail_contact::
+                                        MonotoneCubicInterpolant&&>()
+                           .knots()),
+              std::vector<double>>);

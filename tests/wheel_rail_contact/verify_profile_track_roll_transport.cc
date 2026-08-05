@@ -67,7 +67,7 @@ int main() {
         const Eigen::Vector3d origin(12.0, -4.0, 3.0);
         const Eigen::Vector3d body(0.7, 0.004, -0.6);
         const ProfileTrackRollTransport upright = ComputeProfileTrackRollTransport(
-            origin, Eigen::Matrix3d::Identity(), body, body.y(), body.z(), origin,
+            origin, Eigen::Matrix3d::Identity(), body, origin,
             Eigen::Matrix3d::Identity());
         Require(upright.roll_offset_radians == 0.0 &&
                     upright.lateral_offset_meters == 0.0 &&
@@ -79,11 +79,24 @@ int main() {
         // inertial frame and back is not the identity in binary arithmetic.
         const Eigen::Matrix3d attitude = ArbitraryAttitude(0.13, 0.4, -0.09);
         const ProfileTrackRollTransport tilted = ComputeProfileTrackRollTransport(
-            origin, attitude, body, body.y(), body.z(), origin, attitude);
+            origin, attitude, body, origin, attitude);
         Require(std::abs(tilted.roll_offset_radians) < 1.0e-15 &&
                     std::abs(tilted.lateral_offset_meters) < 1.0e-15 &&
                     std::abs(tilted.vertical_offset_meters) < 1.0e-15,
                 "coincident poses produced a correction larger than rounding");
+
+        // The same cancellation check at a realistic long-line coordinate.
+        // Forming two absolute body positions first loses the micrometre-scale
+        // correction even though the two origins are exactly the same.
+        const Eigen::Vector3d distant_origin(10000.0, -10000.0, 10000.0);
+        const ProfileTrackRollTransport distant =
+            ComputeProfileTrackRollTransport(distant_origin, attitude, body,
+                                             distant_origin, attitude);
+        Require(std::abs(distant.roll_offset_radians) < 1.0e-15 &&
+                    std::abs(distant.lateral_offset_meters) < 1.0e-15 &&
+                    std::abs(distant.vertical_offset_meters) < 1.0e-15,
+                "coincident poses at a long-line coordinate lost the local "
+                "transport correction to cancellation");
     }
 
     {
@@ -96,7 +109,7 @@ int main() {
         const Eigen::Matrix3d profile = shared * RollAbout(relative_roll);
         const Eigen::Vector3d body(0.0, 0.004, -0.6);
         const ProfileTrackRollTransport transport = ComputeProfileTrackRollTransport(
-            origin, shared, body, body.y(), body.z(), origin, profile);
+            origin, shared, body, origin, profile);
         Require(std::abs(transport.roll_offset_radians - relative_roll) < 1.0e-14,
                 "a pure relative roll was not reported as itself");
     }
@@ -109,7 +122,7 @@ int main() {
         const Eigen::Vector3d body(0.0, 0.004, -0.6);
         const Eigen::Vector3d shift(0.0, 0.011, -0.007);
         const ProfileTrackRollTransport transport = ComputeProfileTrackRollTransport(
-            origin, attitude, body, body.y(), body.z(), origin + shift, attitude);
+            origin, attitude, body, origin + shift, attitude);
         Require(transport.roll_offset_radians == 0.0,
                 "a pure translation produced a roll");
         Require(std::abs(transport.lateral_offset_meters + shift.y()) < 1.0e-15 &&
@@ -130,8 +143,8 @@ int main() {
         const Eigen::Vector3d body(0.0, 0.004, -0.6);
 
         const ProfileTrackRollTransport direct = ComputeProfileTrackRollTransport(
-            shared_origin, shared_attitude, body, body.y(), body.z(),
-            profile_origin, profile_attitude);
+            shared_origin, shared_attitude, body, profile_origin,
+            profile_attitude);
         Require(std::abs(direct.roll_offset_radians) > 1.0e-4 &&
                     std::abs(direct.lateral_offset_meters) > 1.0e-4 &&
                     std::abs(direct.vertical_offset_meters) > 1.0e-4,
@@ -142,7 +155,7 @@ int main() {
         const Eigen::Vector3d global_translation(-120.0, 33.0, 7.5);
         const ProfileTrackRollTransport moved = ComputeProfileTrackRollTransport(
             global_translation + global_rotation * shared_origin,
-            global_rotation * shared_attitude, body, body.y(), body.z(),
+            global_rotation * shared_attitude, body,
             global_translation + global_rotation * profile_origin,
             global_rotation * profile_attitude);
         Require(std::abs(moved.roll_offset_radians -
@@ -167,11 +180,11 @@ int main() {
         const Eigen::Vector3d with_reach(0.9, 0.004, -0.6);
         const Eigen::Vector3d without_reach(0.0, 0.004, -0.6);
         const ProfileTrackRollTransport reaching = ComputeProfileTrackRollTransport(
-            shared_origin, shared_attitude, with_reach, with_reach.y(),
-            with_reach.z(), profile_origin, profile_attitude);
+            shared_origin, shared_attitude, with_reach, profile_origin,
+            profile_attitude);
         const ProfileTrackRollTransport flat = ComputeProfileTrackRollTransport(
-            shared_origin, shared_attitude, without_reach, without_reach.y(),
-            without_reach.z(), profile_origin, profile_attitude);
+            shared_origin, shared_attitude, without_reach, profile_origin,
+            profile_attitude);
         Require(std::abs(reaching.lateral_offset_meters -
                          flat.lateral_offset_meters) > 1.0e-3,
                 "the longitudinal component of the body position does not reach "

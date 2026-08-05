@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -148,6 +149,9 @@ int main(int argc, char** argv) {
     const std::filesystem::path simpack_path = scratch / "synthetic_wheel.prw";
     const std::filesystem::path json_path = scratch / "synthetic_wheel.json";
     const std::filesystem::path returned_path = scratch / "returned_wheel.prw";
+    const std::filesystem::path precise_path = scratch / "precise_rail.prr";
+    const std::filesystem::path wrong_role_path =
+        scratch / "wheel_written_as_rail.prr";
     const std::string valid = SimpackWheelDocument();
 
     ProfilePoints from_simpack = ProfilePoints::FromAuthoredOrder(
@@ -194,6 +198,51 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "profile asset interoperability failed: %s\n",
                      error.what());
         return 1;
+    }
+
+    {
+        // The writer must retain enough decimal digits to reconstruct every
+        // binary64 coordinate. These nextafter values sit beside ordinary
+        // profile-scale decimals and lose bits with a 15-significant-digit
+        // formatter.
+        const ProfilePoints precise = ProfilePoints::FromAuthoredOrder(
+            ProfileRole::kRail, "precision_rail",
+            {std::nextafter(-0.0645,
+                            -std::numeric_limits<double>::infinity()),
+             0.0,
+             std::nextafter(0.0715,
+                            std::numeric_limits<double>::infinity())},
+            {std::nextafter(-0.0135,
+                            -std::numeric_limits<double>::infinity()),
+             0.0012345678901234567,
+             std::nextafter(0.0045,
+                            std::numeric_limits<double>::infinity())});
+        WriteSimpackProfile(precise_path, SimpackProfile{precise, {}});
+        const SimpackProfile returned =
+            ReadSimpackProfile(precise_path, "precision_rail");
+        Require(SamePoints(precise, returned.points),
+                "the reference-format writer did not preserve binary64 "
+                "profile coordinates");
+    }
+
+    {
+        // Refuse a role/extension mismatch before opening with truncation. The
+        // local converter must not destroy the very asset whose name exposed
+        // the caller's mistake.
+        const std::string sentinel = "keep this local asset\n";
+        Write(wrong_role_path, sentinel);
+        RequireRefusal(
+            [&] {
+                WriteSimpackProfile(wrong_role_path,
+                                    SimpackProfile{from_simpack, {}});
+            },
+            "extension contradicts",
+            "a wheel profile written through a rail-profile extension");
+        std::ifstream preserved(wrong_role_path, std::ios::binary);
+        const std::string contents((std::istreambuf_iterator<char>(preserved)),
+                                   std::istreambuf_iterator<char>());
+        Require(contents == sentinel,
+                "a refused role/extension mismatch truncated an existing file");
     }
 
     // The reference format carries nine preprocessing steps and the qualified
@@ -323,6 +372,8 @@ int main(int argc, char** argv) {
     std::filesystem::remove(simpack_path, ignored);
     std::filesystem::remove(json_path, ignored);
     std::filesystem::remove(returned_path, ignored);
+    std::filesystem::remove(precise_path, ignored);
+    std::filesystem::remove(wrong_role_path, ignored);
 
     if (failures != 0) {
         return 1;

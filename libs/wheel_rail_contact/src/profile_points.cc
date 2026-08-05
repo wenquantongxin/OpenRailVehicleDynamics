@@ -50,20 +50,23 @@ ProfilePoints ProfilePoints::FromAuthoredOrder(ProfileRole role,
         }
     }
 
-    // A repeated lateral coordinate is refused here rather than at the first
-    // interpolant that trips over it, because by then the diagnostic names a
-    // spline and not the asset that is actually wrong.
-    std::vector<std::size_t> order(lateral_meters.size());
-    std::iota(order.begin(), order.end(), std::size_t{0});
-    std::sort(order.begin(), order.end(),
-              [&lateral_meters](std::size_t left, std::size_t right) {
-                  return lateral_meters[left] < lateral_meters[right];
-              });
-    for (std::size_t index = 0; index + 1 < order.size(); ++index) {
-        if (lateral_meters[order[index]] == lateral_meters[order[index + 1]]) {
-            Reject("'" + identifier + "' repeats the lateral coordinate " +
-                   std::to_string(lateral_meters[order[index]]) +
-                   " m; every point needs its own");
+    // Preserve either authored direction, but reject a list that doubles back.
+    // Sorting such a list later would quietly turn it into a different surface.
+    if (lateral_meters[1] == lateral_meters[0]) {
+        Reject("'" + identifier + "' repeats the lateral coordinate " +
+               std::to_string(lateral_meters[0]) +
+               " m; every point needs its own");
+    }
+    const bool increases = lateral_meters[1] > lateral_meters[0];
+    for (std::size_t index = 1; index < lateral_meters.size(); ++index) {
+        const bool keeps_direction =
+            increases ? lateral_meters[index] > lateral_meters[index - 1]
+                      : lateral_meters[index] < lateral_meters[index - 1];
+        if (!keeps_direction) {
+            Reject("'" + identifier +
+                   "' does not run strictly in one lateral direction at "
+                   "point index " +
+                   std::to_string(index));
         }
     }
 

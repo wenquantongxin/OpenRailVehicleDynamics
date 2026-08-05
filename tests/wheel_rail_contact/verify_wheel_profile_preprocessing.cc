@@ -123,6 +123,16 @@ double WorstOutlineDifference(const WheelProfileOutline& left,
 int main() {
     const ProfilePoints wheel = MakeSyntheticWheelProfile("synthetic_wheel");
 
+    RequireRefusal(
+        [] {
+            (void)ProfilePoints::FromAuthoredOrder(
+                ProfileRole::kWheel, "zigzag_wheel",
+                std::vector<double>{0.0, 0.02, 0.01},
+                std::vector<double>{0.0, -0.001, -0.002});
+        },
+        "one lateral direction",
+        "a profile whose authored lateral coordinate doubles back");
+
     const WheelProfilePreprocessing plain{WheelProfilePreprocessingConfiguration{}};
     const WheelProfilePreprocessing rescanning{
         WheelProfilePreprocessingConfiguration{0.0015, 0.0}};

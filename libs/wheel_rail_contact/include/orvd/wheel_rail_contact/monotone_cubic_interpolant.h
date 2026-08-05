@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <span>
+#include <utility>
 #include <vector>
 
 // A shape-preserving piecewise cubic Hermite interpolant over owned knots.
@@ -73,9 +74,19 @@ class MonotoneCubicInterpolant {
     [[nodiscard]] double EvaluateFirstDerivative(double abscissa) const;
     [[nodiscard]] double EvaluateSecondDerivative(double abscissa) const;
 
-    [[nodiscard]] std::span<const double> knots() const { return knots_; }
-    [[nodiscard]] std::span<const double> values() const { return values_; }
-    [[nodiscard]] std::span<const double> nodal_slopes() const {
+    [[nodiscard]] std::span<const double> knots() const & { return knots_; }
+    [[nodiscard]] std::vector<double> knots() && { return std::move(knots_); }
+    [[nodiscard]] std::vector<double> knots() const && { return knots_; }
+    [[nodiscard]] std::span<const double> values() const & { return values_; }
+    [[nodiscard]] std::vector<double> values() && { return std::move(values_); }
+    [[nodiscard]] std::vector<double> values() const && { return values_; }
+    [[nodiscard]] std::span<const double> nodal_slopes() const & {
+        return nodal_slopes_;
+    }
+    [[nodiscard]] std::vector<double> nodal_slopes() && {
+        return std::move(nodal_slopes_);
+    }
+    [[nodiscard]] std::vector<double> nodal_slopes() const && {
         return nodal_slopes_;
     }
     [[nodiscard]] std::size_t size() const { return knots_.size(); }

@@ -54,11 +54,8 @@ struct ProfileTrackRollTransport {
 // `shared_*` describe the track frame at the station the pipeline is working
 // in: the origin's position in the inertial frame, the rotation taking track
 // components to inertial components, and the carrier body's position relative
-// to that origin expressed in that track frame. `shared_lateral_meters` and
-// `shared_vertical_meters` are the two body coordinates the pipeline is
-// currently using; they are ordinarily the corresponding components of
-// `shared_body_position_in_track_meters`, and are taken separately because the
-// caller is the one entitled to say what it is using.
+// to that origin expressed in that track frame. That one position is the sole
+// authority for all three body coordinates.
 //
 // `profile_*` describe the track frame at the station the profile section is
 // taken at, in the same two parts.
@@ -68,7 +65,6 @@ struct ProfileTrackRollTransport {
     const Eigen::Vector3d& shared_track_origin_in_inertial_meters,
     const Eigen::Matrix3d& shared_rotation_inertial_from_track,
     const Eigen::Vector3d& shared_body_position_in_track_meters,
-    double shared_lateral_meters, double shared_vertical_meters,
     const Eigen::Vector3d& profile_track_origin_in_inertial_meters,
     const Eigen::Matrix3d& profile_rotation_inertial_from_track);
 

@@ -224,6 +224,23 @@ int main() {
     }
 
     {
+        // The weighted harmonic mean on a non-uniform grid. Swapping the two
+        // interval weights is invisible on a uniform table, so pin the formula
+        // with unequal spacings and unequal secants.
+        const std::vector<double> knots{0.0, 1.0, 4.0};
+        const std::vector<double> values{0.0, 2.0, 5.0};
+        std::vector<double> slopes(knots.size(), 0.0);
+        ComputeShapePreservingNodalSlopes(knots, values, slopes);
+        const double expected = 12.0 / (7.0 / 2.0 + 5.0 / 1.0);
+        const double swapped = 12.0 / (5.0 / 2.0 + 7.0 / 1.0);
+        Require(std::abs(slopes[1] - expected) < 4.0e-15,
+                "the non-uniform interior slope uses the wrong harmonic "
+                "weights");
+        Require(std::abs(expected - swapped) > 0.1,
+                "the non-uniform fixture cannot distinguish swapped weights");
+    }
+
+    {
         // The endpoint limiter. On a table whose first two secants straddle a
         // turning point sharply enough, the unlimited one-sided formula
         // overshoots three times the first secant; the limit is what stops it.

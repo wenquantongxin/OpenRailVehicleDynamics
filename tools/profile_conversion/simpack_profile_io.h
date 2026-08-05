@@ -69,7 +69,9 @@ struct SimpackProfile {
 // wanted. What is preserved is the meaning: role, frame, unit, order and the
 // points themselves.
 //
-// Throws std::runtime_error when the file cannot be written.
+// Throws std::invalid_argument when the role and file extension disagree or
+// the extension is not `.prw`/`.prr`. Throws std::runtime_error when the file
+// cannot be written.
 void WriteSimpackProfile(const std::filesystem::path& profile_path,
                          const SimpackProfile& profile);
 

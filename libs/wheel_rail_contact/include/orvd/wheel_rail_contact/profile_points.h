@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 // A wheel or rail profile as a list of measured points, owned.
@@ -55,12 +56,15 @@ class ProfilePoints {
     // The order is preserved exactly, including a descending list: the order is
     // information one preprocessing strategy consumes. What is checked is that
     // the points are usable at all — at least two of them, every coordinate
-    // finite, and no two points sharing a lateral coordinate, since a repeated
-    // abscissa makes every interpolant on this list ill-posed.
+    // finite, and a lateral coordinate that runs strictly in one direction.
+    // Sorting a list that doubles back would turn a malformed profile into a
+    // plausible but different surface; a repeated abscissa is likewise
+    // ill-posed for every interpolant on this list.
     //
     // Throws std::invalid_argument when the two spans differ in length, when
     // there are fewer than two points, when a coordinate is not finite, when a
-    // lateral coordinate repeats, or when the identifier is empty.
+    // lateral coordinate repeats or reverses direction, or when the identifier
+    // is empty.
     [[nodiscard]] static ProfilePoints FromAuthoredOrder(
         ProfileRole role, std::string identifier,
         std::vector<double> lateral_meters, std::vector<double> vertical_meters);
@@ -70,12 +74,26 @@ class ProfilePoints {
     // The name this asset is known by, without a file extension. It is an
     // identity, not a path: what file it came from is the caller's business and
     // changes with the installation.
-    [[nodiscard]] const std::string& identifier() const { return identifier_; }
+    [[nodiscard]] const std::string& identifier() const & { return identifier_; }
+    [[nodiscard]] std::string identifier() && { return std::move(identifier_); }
+    [[nodiscard]] std::string identifier() const && { return identifier_; }
 
-    [[nodiscard]] std::span<const double> authored_lateral_meters() const {
+    [[nodiscard]] std::span<const double> authored_lateral_meters() const & {
         return lateral_meters_;
     }
-    [[nodiscard]] std::span<const double> authored_vertical_meters() const {
+    [[nodiscard]] std::vector<double> authored_lateral_meters() && {
+        return std::move(lateral_meters_);
+    }
+    [[nodiscard]] std::vector<double> authored_lateral_meters() const && {
+        return lateral_meters_;
+    }
+    [[nodiscard]] std::span<const double> authored_vertical_meters() const & {
+        return vertical_meters_;
+    }
+    [[nodiscard]] std::vector<double> authored_vertical_meters() && {
+        return std::move(vertical_meters_);
+    }
+    [[nodiscard]] std::vector<double> authored_vertical_meters() const && {
         return vertical_meters_;
     }
     [[nodiscard]] std::size_t size() const { return lateral_meters_.size(); }
@@ -103,10 +121,22 @@ class SideResolvedProfile {
    public:
     [[nodiscard]] ProfileRole role() const { return role_; }
     [[nodiscard]] WheelSide side() const { return side_; }
-    [[nodiscard]] std::span<const double> lateral_meters() const {
+    [[nodiscard]] std::span<const double> lateral_meters() const & {
         return lateral_meters_;
     }
-    [[nodiscard]] std::span<const double> vertical_meters() const {
+    [[nodiscard]] std::vector<double> lateral_meters() && {
+        return std::move(lateral_meters_);
+    }
+    [[nodiscard]] std::vector<double> lateral_meters() const && {
+        return lateral_meters_;
+    }
+    [[nodiscard]] std::span<const double> vertical_meters() const & {
+        return vertical_meters_;
+    }
+    [[nodiscard]] std::vector<double> vertical_meters() && {
+        return std::move(vertical_meters_);
+    }
+    [[nodiscard]] std::vector<double> vertical_meters() const && {
         return vertical_meters_;
     }
     [[nodiscard]] std::size_t size() const { return lateral_meters_.size(); }
