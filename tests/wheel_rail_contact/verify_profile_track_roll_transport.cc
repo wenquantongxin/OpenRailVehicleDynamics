@@ -14,6 +14,8 @@ namespace {
 
 using orvd::wheel_rail_contact::ComputeProfileTrackRollTransport;
 using orvd::wheel_rail_contact::ProfileTrackRollTransport;
+using orvd::wheel_rail_contact::ProfileTrackRollTransportPolicy;
+using orvd::wheel_rail_contact::ProfileTrackRollTransportStrategy;
 using orvd::wheel_rail_contact::ResolveRollYawPitch;
 using orvd::wheel_rail_contact::RollYawPitchAngles;
 
@@ -189,6 +191,47 @@ int main() {
                          flat.lateral_offset_meters) > 1.0e-3,
                 "the longitudinal component of the body position does not reach "
                 "the answer");
+    }
+
+    {
+        // The two named policies, each on the same non-degenerate geometry.
+        // Both branches have to be reachable and both have to be distinguishable
+        // from each other, or the selection layer proves nothing.
+        const Eigen::Vector3d shared_origin(10.0, -3.0, 2.0);
+        const Eigen::Matrix3d shared_attitude = ArbitraryAttitude(-0.25, 0.4, 0.15);
+        const Eigen::Vector3d profile_origin(10.25, -2.95, 2.03);
+        const Eigen::Matrix3d profile_attitude = ArbitraryAttitude(-0.19, 0.43, 0.12);
+        const Eigen::Vector3d body(0.0, 0.004, -0.6);
+
+        const ProfileTrackRollTransportStrategy applying{
+            ProfileTrackRollTransportPolicy::kApplied};
+        const ProfileTrackRollTransportStrategy suppressing{
+            ProfileTrackRollTransportPolicy::kSuppressed};
+        Require(applying.policy() == ProfileTrackRollTransportPolicy::kApplied &&
+                    suppressing.policy() ==
+                        ProfileTrackRollTransportPolicy::kSuppressed,
+                "a strategy did not keep the policy it was built with");
+
+        const ProfileTrackRollTransport applied =
+            applying.Compute(shared_origin, shared_attitude, body, profile_origin,
+                             profile_attitude);
+        const ProfileTrackRollTransport bare = ComputeProfileTrackRollTransport(
+            shared_origin, shared_attitude, body, profile_origin,
+            profile_attitude);
+        Require(applied.roll_offset_radians == bare.roll_offset_radians &&
+                    applied.lateral_offset_meters == bare.lateral_offset_meters &&
+                    applied.vertical_offset_meters == bare.vertical_offset_meters,
+                "the applying policy is not the mathematics it selects");
+
+        const ProfileTrackRollTransport suppressed =
+            suppressing.Compute(shared_origin, shared_attitude, body,
+                                profile_origin, profile_attitude);
+        Require(suppressed.roll_offset_radians == 0.0 &&
+                    suppressed.lateral_offset_meters == 0.0 &&
+                    suppressed.vertical_offset_meters == 0.0,
+                "the suppressing policy produced a correction");
+        Require(std::abs(applied.roll_offset_radians) > 1.0e-4,
+                "the fixture cannot tell the two policies apart");
     }
 
     if (failures != 0) {

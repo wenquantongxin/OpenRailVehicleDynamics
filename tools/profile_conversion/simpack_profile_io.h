@@ -25,23 +25,40 @@
 // file parses, the point list is merely wrong.
 //
 // The one step that is not at identity is the order inversion, which the wheel
-// assets do declare. It reverses the row order and is harmless on those files
-// only because their rows already ascend in the lateral coordinate. It is
-// applied here rather than assumed away, and a file whose rows are not
-// monotone after applying it is refused rather than sorted into something
-// plausible.
+// assets do declare. It reverses the row order, and the resulting order is a
+// statement about the surface, not about the file: which way a profile polygon
+// is traversed is how the reference tool is told which side of it is material.
+// The value object below always holds its points ascending, because every
+// interpolant needs a strictly increasing abscissa, so the traversal direction
+// cannot live in the point list. It is carried beside it instead, and written
+// back out as the same declaration it came in as. Reading it, normalising the
+// list and then emitting no declaration at all would preserve the coordinates
+// and quietly change what the file says about the surface.
 
 namespace orvd::profile_conversion {
 
-// What the reader keeps beside the point list. These carry no meaning for the
-// contact geometry and exist so that a round trip back to the reference tool
-// does not lose the file's own measurement metadata.
+// Which way the reference tool traverses the profile polygon. The point list
+// this project keeps is always ascending; this says what the asset declared,
+// and it is the direction, not the storage order, that carries meaning there.
+enum class ProfileTraversalDirection {
+    kAscendingLateral,
+    kDescendingLateral,
+};
+
+// What the reader keeps beside the point list. None of it means anything to the
+// contact geometry; it exists so that a round trip back to the reference tool
+// does not lose what the asset said about itself.
 struct SimpackProfileMetadata {
     // Present only for a wheel profile: the depths below the taping line at
     // which flange width and flange slope are dimensioned.
     double flange_width_measurement_depth_meters{0.0};
     double flange_slope_measurement_depth_meters{0.0};
     std::string comment;
+    // The wheel assets in circulation declare a descending traversal and store
+    // their rows ascending; the rail asset declares an ascending one. Both are
+    // reproduced on the way out.
+    ProfileTraversalDirection traversal_direction{
+        ProfileTraversalDirection::kAscendingLateral};
 };
 
 struct SimpackProfile {
@@ -61,6 +78,15 @@ struct SimpackProfile {
 // that is not two finite numbers.
 [[nodiscard]] SimpackProfile ReadSimpackProfile(
     const std::filesystem::path& profile_path, std::string identifier);
+
+// The traversal every observed asset of that role declares: descending across a
+// wheel, ascending across a rail. It is the answer for a profile that arrived
+// as this project's own record, which does not carry a traversal because
+// nothing in the contact geometry consumes one — the material side is settled
+// there by the role and the vertical sign convention, not by the order the
+// points are listed in.
+[[nodiscard]] ProfileTraversalDirection DeclaredTraversalForRole(
+    wheel_rail_contact::ProfileRole role);
 
 // Writes one profile in the canonical minimal form: the full key set at its
 // identity values, the declared role, and the point rows ascending.

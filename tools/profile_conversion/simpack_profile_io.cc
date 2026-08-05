@@ -413,6 +413,11 @@ SimpackProfile ReadSimpackProfile(const std::filesystem::path& profile_path,
     // After the declared inversion the row order must be monotone. A profile
     // that is not is a multi-section one, which this reader does not implement,
     // and sorting it into something plausible would invent a surface.
+    //
+    // The order at this point is the traversal the asset declares. It is
+    // recorded before the list is normalised, because the value object below
+    // always holds its points ascending and the direction would otherwise be
+    // thrown away.
     bool ascending = true;
     bool descending = true;
     for (std::size_t index = 0; index + 1 < lateral.size(); ++index) {
@@ -428,6 +433,9 @@ SimpackProfile ReadSimpackProfile(const std::filesystem::path& profile_path,
                "does not run monotonically across the profile once its declared "
                "order inversion is applied");
     }
+    const ProfileTraversalDirection traversal =
+        descending ? ProfileTraversalDirection::kDescendingLateral
+                   : ProfileTraversalDirection::kAscendingLateral;
     if (descending) {
         std::reverse(lateral.begin(), lateral.end());
         std::reverse(vertical.begin(), vertical.end());
@@ -445,7 +453,15 @@ SimpackProfile ReadSimpackProfile(const std::filesystem::path& profile_path,
             RequireNumber(profile_path, header, "meas.pos.qr");
     }
     profile.metadata.comment = RequireQuoted(profile_path, spline, "comment");
+    profile.metadata.traversal_direction = traversal;
     return profile;
+}
+
+ProfileTraversalDirection DeclaredTraversalForRole(
+    wheel_rail_contact::ProfileRole role) {
+    return role == wheel_rail_contact::ProfileRole::kWheel
+               ? ProfileTraversalDirection::kDescendingLateral
+               : ProfileTraversalDirection::kAscendingLateral;
 }
 
 void WriteSimpackProfile(const std::filesystem::path& profile_path,
@@ -494,7 +510,14 @@ void WriteSimpackProfile(const std::filesystem::path& profile_path,
     output << "    bound.z.max    = " << FormatCoordinate(0.0) << "\n";
     output << "    mirror.y       =  0\n";
     output << "    mirror.z       =  0\n";
-    output << "    inversion      =  0\n";
+    // The rows below are written ascending, so the declaration is what carries
+    // the traversal the asset asked for.
+    output << "    inversion      =  "
+           << (profile.metadata.traversal_direction ==
+                       ProfileTraversalDirection::kDescendingLateral
+                   ? 1
+                   : 0)
+           << "\n";
     output << "    units.len      = 'm'\n";
     output << "    units.ang      = 'rad'\n";
     output << "    units.len.f    = " << FormatCoordinate(1.0) << "\n";

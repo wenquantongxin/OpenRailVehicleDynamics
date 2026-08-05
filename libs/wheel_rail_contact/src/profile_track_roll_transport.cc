@@ -62,4 +62,20 @@ ProfileTrackRollTransport ComputeProfileTrackRollTransport(
     return transport;
 }
 
+ProfileTrackRollTransport ProfileTrackRollTransportStrategy::Compute(
+    const Eigen::Vector3d& shared_track_origin_in_inertial_meters,
+    const Eigen::Matrix3d& shared_rotation_inertial_from_track,
+    const Eigen::Vector3d& shared_body_position_in_track_meters,
+    const Eigen::Vector3d& profile_track_origin_in_inertial_meters,
+    const Eigen::Matrix3d& profile_rotation_inertial_from_track) const {
+    if (policy_ == ProfileTrackRollTransportPolicy::kSuppressed) {
+        return ProfileTrackRollTransport{};
+    }
+    return ComputeProfileTrackRollTransport(
+        shared_track_origin_in_inertial_meters, shared_rotation_inertial_from_track,
+        shared_body_position_in_track_meters,
+        profile_track_origin_in_inertial_meters,
+        profile_rotation_inertial_from_track);
+}
+
 }  // namespace orvd::wheel_rail_contact

@@ -73,9 +73,11 @@ std::string ReplaceOnce(std::string document, std::string_view needle,
     return document;
 }
 
-// A minimal but complete file in the reference format. The rows descend in the
-// lateral coordinate and the file declares the order inversion that reverses
-// them, which is the one preprocessing step the qualified assets actually use.
+// A minimal but complete file in the reference format, shaped like the wheel
+// assets in circulation: the rows ascend in the lateral coordinate and the file
+// declares the order inversion, so the traversal it asks for is descending.
+// That declaration is the one preprocessing step the qualified assets use, and
+// the only one whose effect the point list alone cannot show.
 std::string SimpackWheelDocument() {
     return R"(! a synthetic wheel profile
   header.begin
@@ -109,11 +111,11 @@ std::string SimpackWheelDocument() {
     point.begin
       !
       ! y value (lengths unit)  z value (lengths unit)
- 4.00000000000000e-02 -2.00000000000000e-03
- 2.00000000000000e-02 -1.00000000000000e-03
- 0.00000000000000e+00 0.00000000000000e+00
--2.00000000000000e-02 3.00000000000000e-03
 -4.00000000000000e-02 1.10000000000000e-02
+-2.00000000000000e-02 3.00000000000000e-03
+ 0.00000000000000e+00 0.00000000000000e+00
+ 2.00000000000000e-02 -1.00000000000000e-03
+ 4.00000000000000e-02 -2.00000000000000e-03
     point.end
   spline.end
 )";
@@ -164,13 +166,12 @@ int main(int argc, char** argv) {
         Require(read.points.role() == ProfileRole::kWheel,
                 "the declared wheel role did not survive reading");
         Require(read.points.size() == 5, "a point was lost while reading");
-        // The file's rows descend and it declares the inversion, so the value
-        // object must come out ascending. A reader that ignored the flag would
-        // land on the same list only by accident; one that ignored it here
-        // would come out descending.
+        // Whatever the file's storage order, the value object holds its points
+        // ascending, because every interpolant built on it needs a strictly
+        // increasing abscissa.
         Require(read.points.authored_lateral_meters().front() == -0.04 &&
                     read.points.authored_lateral_meters().back() == 0.04,
-                "the declared order inversion was not applied");
+                "the value object does not hold its points ascending");
         Require(read.points.authored_vertical_meters().front() == 0.011,
                 "the point rows were reordered without their partners");
         Require(read.metadata.flange_width_measurement_depth_meters == 0.01 &&
@@ -189,6 +190,29 @@ int main(int argc, char** argv) {
         Require(SamePoints(from_json, returned.points),
                 "a profile carried out to the reference format and back is not "
                 "the same profile");
+        // The file stores its rows ascending and declares the inversion, so the
+        // traversal it asks for is descending. The point list this project
+        // keeps is always ascending, so the direction has to survive beside it;
+        // a converter that normalised the list and emitted no declaration would
+        // preserve every coordinate and quietly change what the file says about
+        // the surface. Neither the coordinates nor their order can show this —
+        // only the declaration can.
+        Require(read.metadata.traversal_direction ==
+                    orvd::profile_conversion::ProfileTraversalDirection::
+                        kDescendingLateral,
+                "the declared traversal direction was not recorded");
+        Require(returned.metadata.traversal_direction ==
+                    read.metadata.traversal_direction,
+                "the declared traversal direction did not survive the round "
+                "trip");
+        {
+            std::ifstream emitted(returned_path, std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(emitted)),
+                                   std::istreambuf_iterator<char>());
+            Require(text.find("inversion      =  1") != std::string::npos,
+                    "the round trip wrote a traversal declaration the source "
+                    "did not make");
+        }
         Require(returned.metadata.flange_width_measurement_depth_meters ==
                         read.metadata.flange_width_measurement_depth_meters &&
                     returned.metadata.flange_slope_measurement_depth_meters ==
@@ -243,6 +267,28 @@ int main(int argc, char** argv) {
                                    std::istreambuf_iterator<char>());
         Require(contents == sentinel,
                 "a refused role/extension mismatch truncated an existing file");
+    }
+
+    // The same rows without the declaration ask for the opposite traversal, and
+    // must come back out that way. Without this the recording above could be a
+    // constant.
+    {
+        Write(simpack_path,
+              ReplaceOnce(valid, "inversion      =  1", "inversion      =  0"));
+        const SimpackProfile plain =
+            ReadSimpackProfile(simpack_path, "synthetic_wheel");
+        Require(plain.metadata.traversal_direction ==
+                    orvd::profile_conversion::ProfileTraversalDirection::
+                        kAscendingLateral,
+                "a file declaring no inversion was recorded as descending");
+        Require(SamePoints(plain.points, from_simpack),
+                "the declaration changed the point list");
+        WriteSimpackProfile(returned_path, plain);
+        std::ifstream emitted(returned_path, std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(emitted)),
+                               std::istreambuf_iterator<char>());
+        Require(text.find("inversion      =  0") != std::string::npos,
+                "an ascending traversal was written back as a descending one");
     }
 
     // The reference format carries nine preprocessing steps and the qualified

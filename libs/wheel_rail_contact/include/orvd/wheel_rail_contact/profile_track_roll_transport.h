@@ -84,4 +84,49 @@ struct RollYawPitchAngles {
 [[nodiscard]] RollYawPitchAngles ResolveRollYawPitch(
     const Eigen::Matrix3d& rotation);
 
+// Whether a vehicle type carries the correction at all.
+//
+// Two reference vehicles were qualified with two different answers, and
+// reproducing either one means reproducing its answer. This is therefore a
+// property of the vehicle, chosen once when its contact model is built and
+// fixed for that model's life — not a runtime switch, and not a boolean a
+// caller may flip between evaluations. When one answer is qualified for both
+// vehicles, the losing one is deleted together with this enumeration and with
+// the selection it exists to express.
+enum class ProfileTrackRollTransportPolicy {
+    kSuppressed,
+    kApplied,
+};
+
+// The policy bound to the mathematics.
+//
+// The suppressed branch returns three exact zeros rather than a correction
+// nobody applies, so a consumer reads one shape of answer under both policies
+// and keeps no branch of its own. The two are named states of one object rather
+// than two call sites, because a caller that had to remember which to call
+// would eventually not.
+class ProfileTrackRollTransportStrategy {
+   public:
+    explicit ProfileTrackRollTransportStrategy(
+        ProfileTrackRollTransportPolicy policy)
+        : policy_(policy) {}
+
+    [[nodiscard]] ProfileTrackRollTransportPolicy policy() const {
+        return policy_;
+    }
+
+    // Under the suppressed policy this ignores its arguments and returns zeros;
+    // under the applied one it is `ComputeProfileTrackRollTransport`.
+    [[nodiscard]] ProfileTrackRollTransport Compute(
+        const Eigen::Vector3d& shared_track_origin_in_inertial_meters,
+        const Eigen::Matrix3d& shared_rotation_inertial_from_track,
+        const Eigen::Vector3d& shared_body_position_in_track_meters,
+        const Eigen::Vector3d& profile_track_origin_in_inertial_meters,
+        const Eigen::Matrix3d& profile_rotation_inertial_from_track) const;
+
+   private:
+    ProfileTrackRollTransportPolicy policy_{
+        ProfileTrackRollTransportPolicy::kSuppressed};
+};
+
 }  // namespace orvd::wheel_rail_contact

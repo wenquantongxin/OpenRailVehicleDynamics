@@ -56,6 +56,12 @@ int main(int argc, char** argv) {
                 orvd::configuration::LoadProfilePointsFromJsonFile(argv[2]),
                 orvd::profile_conversion::SimpackProfileMetadata{}};
             profile.metadata.comment = profile.points.identifier();
+            // The record this came from states no traversal, because nothing in
+            // the contact geometry consumes one. The role does, and every asset
+            // of that role in circulation agrees on it.
+            profile.metadata.traversal_direction =
+                orvd::profile_conversion::DeclaredTraversalForRole(
+                    profile.points.role());
             orvd::profile_conversion::WriteSimpackProfile(argv[3], profile);
             std::printf("wrote %s with %zu points\n", argv[3],
                         profile.points.size());
