@@ -371,6 +371,119 @@ int main() {
     }
 
     {
+        // The rail profile's frame is a live input, not a constant.
+        //
+        // On a perfect line it is the laying cant at the nominal offset, and
+        // every other fixture here leaves it at the identity. Under track
+        // irregularity it is neither: the irregularity displaces the rail's
+        // cross-section and turns it, and that is the seam through which a
+        // future irregularity model reaches the relative velocity. These checks
+        // exist to show the seam carries load — that displacing and rotating
+        // the frame changes what the contact does — and equally that it reaches
+        // only what it should.
+        const WheelRailContactResult plain = model.Evaluate(rolling, workspace);
+        Require(plain.count == 1, "the rail-frame fixture lost its patch");
+
+        const Eigen::Vector3d displacement(0.0, 0.05, 0.01);
+        WheelRailContactInput displaced = rolling;
+        displaced.rail_frame.origin_track_meters += displacement;
+        const WheelRailContactResult moved = model.Evaluate(displaced, workspace);
+        Require(moved.count == 1, "a displaced rail frame lost its patch");
+
+        const Eigen::Matrix3d turn =
+            Eigen::AngleAxisd(0.03, Eigen::Vector3d::UnitX()).toRotationMatrix();
+        WheelRailContactInput turned = rolling;
+        turned.rail_frame.rotation_track_from_profile = turn;
+        const WheelRailContactResult rotated = model.Evaluate(turned, workspace);
+        Require(rotated.count == 1, "a rotated rail frame lost its patch");
+
+        if (plain.count == 1 && moved.count == 1 && rotated.count == 1) {
+            // The frame places the contact point, and places it exactly.
+            Require((moved.patches[0].wrench.contact_point_meters -
+                     (plain.patches[0].wrench.contact_point_meters + displacement))
+                            .cwiseAbs()
+                            .maxCoeff() < 1.0e-15,
+                    "displacing the rail frame did not displace the contact "
+                    "point by the same vector");
+            Require((rotated.patches[0].wrench.contact_point_meters -
+                     turn * plain.patches[0].wrench.contact_point_meters)
+                            .cwiseAbs()
+                            .maxCoeff() < 1.0e-15,
+                    "rotating the rail frame did not rotate the contact point "
+                    "about the frame's origin");
+
+            // Moving the contact point moves it relative to the axle, so the
+            // wheel's material there is travelling differently and the
+            // creepages follow. This is the whole reason the frame is an input.
+            Require(std::abs(moved.patches[0].creepages.longitudinal -
+                             plain.patches[0].creepages.longitudinal) > 1.0e-3,
+                    "displacing the rail frame did not reach the creepages, so "
+                    "the relative velocity is not being formed at the contact "
+                    "point the frame places");
+            Require(std::abs(rotated.patches[0].creepages.longitudinal -
+                             plain.patches[0].creepages.longitudinal) > 1.0e-4,
+                    "rotating the rail frame did not reach the creepages");
+            // It reaches the translational creepages and not the spin, and that
+            // is right rather than a gap: the spin is the wheel's own angular
+            // velocity resolved onto the contact normal, and the profile frame
+            // places the contact point without turning that normal. The normal
+            // is turned by the rail's surface slope, which is a separate input.
+            Require(rotated.patches[0].creepages.spin_per_meter ==
+                        plain.patches[0].creepages.spin_per_meter,
+                    "rotating the rail frame turned the contact normal, which "
+                    "only the rail's own surface slope may do");
+
+            // And it reaches nothing upstream. The patch's shape is solved in
+            // the rail's own cross-section, where the frame has not been
+            // applied yet and cannot be seen.
+            const auto& reference_patch = plain.patches[0].geometry;
+            const auto& displaced_patch = moved.patches[0].geometry;
+            const auto& rotated_patch = rotated.patches[0].geometry;
+            Require(displaced_patch.vertical_penetration_meters ==
+                            reference_patch.vertical_penetration_meters &&
+                        displaced_patch.arc_width_meters ==
+                            reference_patch.arc_width_meters &&
+                        displaced_patch.rail_slope_angle_radians ==
+                            reference_patch.rail_slope_angle_radians &&
+                        displaced_patch.centroid_lateral_meters ==
+                            reference_patch.centroid_lateral_meters,
+                    "displacing the rail frame changed the patch's own shape, "
+                    "which is solved before the frame is applied");
+            Require(rotated_patch.vertical_penetration_meters ==
+                            reference_patch.vertical_penetration_meters &&
+                        rotated_patch.rail_slope_angle_radians ==
+                            reference_patch.rail_slope_angle_radians,
+                    "rotating the rail frame changed the patch's own shape");
+
+            // The origin enters only through the lever from the axle to the
+            // contact. Moving the rail and the wheel together by the same
+            // vector therefore changes nothing about the relative motion — a
+            // covariance the construction must have and an accidental use of
+            // the origin as an absolute position would break.
+            WheelRailContactInput together = displaced;
+            together.wheel.origin_track_meters += displacement;
+            const WheelRailContactResult carried =
+                model.Evaluate(together, workspace);
+            Require(carried.count == 1, "the covariance fixture lost its patch");
+            if (carried.count == 1) {
+                RequireClose(carried.patches[0].creepages.longitudinal,
+                             plain.patches[0].creepages.longitudinal, 1.0e-12,
+                             "moving the rail and the wheel together changed the "
+                             "longitudinal creepage, so the frame's origin is "
+                             "being used as an absolute position");
+                RequireClose(carried.patches[0].creepages.spin_per_meter,
+                             plain.patches[0].creepages.spin_per_meter, 1.0e-12,
+                             "moving the rail and the wheel together changed the "
+                             "spin");
+                RequireClose(carried.patches[0].normal.normal_force_newtons,
+                             plain.patches[0].normal.normal_force_newtons, 1.0e-12,
+                             "moving the rail and the wheel together changed the "
+                             "normal force");
+            }
+        }
+    }
+
+    {
         // A wheel lifted clear carries nothing, and a wheel separating fast
         // enough carries nothing either — the geometry still sees the overlap,
         // and the model reports the difference rather than emitting a patch
