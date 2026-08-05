@@ -130,4 +130,21 @@ void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
                                        std::span<const double> values,
                                        std::span<double> slopes_out);
 
+// The same rule, over memory the caller owns.
+//
+// The rule needs one spacing and one secant per interval. Where the nodes move
+// every step — a curve rebuilt each time a solver is called — allocating those
+// two arrays per call is the difference between a solver that allocates nothing
+// and one that allocates twice per wheel per derivative evaluation. Both spans
+// must hold at least `knots.size() - 1` entries; their contents on entry are
+// ignored and on exit are unspecified.
+//
+// Throws under the same conditions as the allocating form, and additionally
+// when either scratch span is too short.
+void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
+                                       std::span<const double> values,
+                                       std::span<double> slopes_out,
+                                       std::span<double> spacing_scratch,
+                                       std::span<double> secant_scratch);
+
 }  // namespace orvd::wheel_rail_contact

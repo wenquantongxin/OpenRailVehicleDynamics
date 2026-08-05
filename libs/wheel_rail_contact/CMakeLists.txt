@@ -9,12 +9,21 @@
 # directory.
 
 add_library(orvd_wheel_rail_contact STATIC
+    src/contact_creepage.cc
+    src/contact_geometry.cc
+    src/contact_wrench.cc
+    src/kalker_coefficient_table.cc
     src/monotone_cubic_interpolant.cc
     src/natural_cubic_spline.cc
+    src/normal_contact_force.cc
     src/profile_arc_length.cc
     src/profile_points.cc
     src/profile_track_roll_transport.cc
-    src/wheel_profile_preprocessing.cc)
+    src/rail_gauge_datum.cc
+    src/tangential_contact_force.cc
+    src/wheel_profile_preprocessing.cc
+    src/wheel_rail_contact_model.cc
+    src/wheel_rail_pose.cc)
 
 orvd_configure_first_party_target(orvd_wheel_rail_contact)
 

@@ -67,6 +67,20 @@ double EndpointSlope(double near_spacing, double far_spacing, double near_secant
 void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
                                        std::span<const double> values,
                                        std::span<double> slopes_out) {
+    // The allocating form. The rule itself lives in the overload below; this one
+    // exists so that a caller who is not on a hot path does not have to think
+    // about where two temporary arrays come from.
+    const std::size_t count = knots.size();
+    std::vector<double> spacings(count == 0 ? 0 : count - 1, 0.0);
+    std::vector<double> secants(count == 0 ? 0 : count - 1, 0.0);
+    ComputeShapePreservingNodalSlopes(knots, values, slopes_out, spacings, secants);
+}
+
+void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
+                                       std::span<const double> values,
+                                       std::span<double> slopes_out,
+                                       std::span<double> spacings,
+                                       std::span<double> secants) {
     RequireUsableNodes(knots, values);
     if (slopes_out.size() != knots.size()) {
         Reject("the slope output must have one entry per knot, but there are " +
@@ -75,6 +89,12 @@ void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
     }
 
     const std::size_t count = knots.size();
+    if (spacings.size() < count - 1 || secants.size() < count - 1) {
+        Reject("the two scratch spans must each hold one entry per interval, "
+               "which is " + std::to_string(count - 1) + ", but they hold " +
+               std::to_string(spacings.size()) + " and " +
+               std::to_string(secants.size()));
+    }
     if (count == 2) {
         const double secant = (values[1] - values[0]) / (knots[1] - knots[0]);
         slopes_out[0] = secant;
@@ -82,8 +102,6 @@ void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
         return;
     }
 
-    std::vector<double> spacings(count - 1, 0.0);
-    std::vector<double> secants(count - 1, 0.0);
     for (std::size_t node = 0; node + 1 < count; ++node) {
         spacings[node] = knots[node + 1] - knots[node];
         secants[node] = (values[node + 1] - values[node]) / spacings[node];

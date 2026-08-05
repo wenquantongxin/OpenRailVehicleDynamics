@@ -669,6 +669,66 @@ target_link_libraries(verify_wheel_profile_preprocessing
 add_test(NAME verify_wheel_profile_preprocessing
          COMMAND verify_wheel_profile_preprocessing)
 
+add_executable(verify_wheel_rail_pose
+    wheel_rail_contact/rail_gauge_datum_header_self_containment.cc
+    wheel_rail_contact/wheel_rail_pose_header_self_containment.cc
+    wheel_rail_contact/verify_wheel_rail_pose.cc)
+orvd_configure_first_party_target(verify_wheel_rail_pose)
+target_link_libraries(verify_wheel_rail_pose PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_wheel_rail_pose COMMAND verify_wheel_rail_pose)
+
+add_executable(verify_contact_wrench
+    wheel_rail_contact/contact_wrench_header_self_containment.cc
+    wheel_rail_contact/verify_contact_wrench.cc)
+orvd_configure_first_party_target(verify_contact_wrench)
+target_link_libraries(verify_contact_wrench PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_contact_wrench COMMAND verify_contact_wrench)
+
+add_executable(verify_kalker_coefficient_table
+    wheel_rail_contact/kalker_coefficient_table_header_self_containment.cc
+    wheel_rail_contact/verify_kalker_coefficient_table.cc)
+orvd_configure_first_party_target(verify_kalker_coefficient_table)
+target_link_libraries(verify_kalker_coefficient_table
+    PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_kalker_coefficient_table
+         COMMAND verify_kalker_coefficient_table)
+
+add_executable(verify_contact_geometry
+    wheel_rail_contact/contact_geometry_header_self_containment.cc
+    wheel_rail_contact/verify_contact_geometry.cc)
+orvd_configure_first_party_target(verify_contact_geometry)
+target_link_libraries(verify_contact_geometry PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_contact_geometry COMMAND verify_contact_geometry)
+
+add_executable(verify_normal_contact_force
+    wheel_rail_contact/normal_contact_force_header_self_containment.cc
+    wheel_rail_contact/verify_normal_contact_force.cc)
+orvd_configure_first_party_target(verify_normal_contact_force)
+target_link_libraries(verify_normal_contact_force PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_normal_contact_force COMMAND verify_normal_contact_force)
+
+add_executable(verify_contact_creepage
+    wheel_rail_contact/contact_creepage_header_self_containment.cc
+    wheel_rail_contact/verify_contact_creepage.cc)
+orvd_configure_first_party_target(verify_contact_creepage)
+target_link_libraries(verify_contact_creepage PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_contact_creepage COMMAND verify_contact_creepage)
+
+add_executable(verify_tangential_contact_force
+    wheel_rail_contact/tangential_contact_force_header_self_containment.cc
+    wheel_rail_contact/verify_tangential_contact_force.cc)
+orvd_configure_first_party_target(verify_tangential_contact_force)
+target_link_libraries(verify_tangential_contact_force PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_tangential_contact_force COMMAND verify_tangential_contact_force)
+
+add_executable(verify_wheel_rail_contact_model
+    wheel_rail_contact/wheel_rail_contact_model_header_self_containment.cc
+    wheel_rail_contact/verify_wheel_rail_contact_model.cc)
+orvd_configure_first_party_target(verify_wheel_rail_contact_model)
+target_link_libraries(verify_wheel_rail_contact_model PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_wheel_rail_contact_model
+         COMMAND verify_wheel_rail_contact_model)
+
 add_executable(verify_profile_track_roll_transport
     wheel_rail_contact/profile_track_roll_transport_header_self_containment.cc
     wheel_rail_contact/verify_profile_track_roll_transport.cc)

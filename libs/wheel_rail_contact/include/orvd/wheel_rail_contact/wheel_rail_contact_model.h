@@ -1,0 +1,193 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+
+#include <Eigen/Core>
+
+#include "orvd/wheel_rail_contact/contact_creepage.h"
+#include "orvd/wheel_rail_contact/contact_geometry.h"
+#include "orvd/wheel_rail_contact/contact_wrench.h"
+#include "orvd/wheel_rail_contact/kalker_coefficient_table.h"
+#include "orvd/wheel_rail_contact/normal_contact_force.h"
+#include "orvd/wheel_rail_contact/profile_points.h"
+#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
+#include "orvd/wheel_rail_contact/tangential_contact_force.h"
+#include "orvd/wheel_rail_contact/wheel_profile_preprocessing.h"
+#include "orvd/wheel_rail_contact/wheel_rail_pose.h"
+
+// One wheel against one rail: from where the wheelset is to what the contact
+// does to it.
+//
+// This is the whole contact model, assembled from the pieces around it. It owns
+// the geometry solver, the normal law, the creep coefficients and the
+// tangential solver, and it is immutable after construction — two evaluations
+// in any order give the same answers, provided each has its own workspace.
+//
+// ## What the caller must supply, and why it is not less
+//
+// Four things, and none of them is derivable from the others:
+//
+// - **The pose**, reduced to the four scalars the geometry solves against.
+// - **The rail profile's frame** — where the rail's own cross-section sits in
+//   the track frame and how it is turned. On a perfect line this is the laying
+//   cant at the nominal offset. Under track irregularity it is not: the
+//   irregularity displaces the rail and turns it, and it is *here* that the
+//   difference enters the relative velocity. Taking it as an input rather than
+//   reconstructing it from the pose is what keeps this model usable when an
+//   irregularity model arrives.
+// - **The wheel body's motion** — where its origin is, how fast it is moving
+//   and turning. The relative velocity at a contact point is a property of the
+//   rigid body, not of the contact, and it cannot be recovered from the pose
+//   scalars.
+// - **The advance rate and the wheel's own rotation rate**, which set the speed
+//   the creepages are measured against.
+//
+// ## The rail is a construction, not a body
+//
+// The rail has no state and no inertia in this model: it is a shape the line
+// carries. So its material point at the contact is stationary by construction,
+// and the relative velocity is the wheel's material velocity alone. That is a
+// modelling decision with a consequence worth naming: a rail that deflects
+// under load, or a track that moves, is not represented, and adding one means
+// giving the rail a velocity here rather than correcting the forces later.
+//
+// ## What comes out
+//
+// One paired wrench per patch, reduced about the rail material point and
+// written in the track frame, plus the intermediate quantities each stage
+// produced. The pair is emitted from one set of numbers, so the two halves
+// cancel exactly at that point by construction; what the pair buys is that a
+// consumer transporting or rotating the two sides differently is caught.
+
+namespace orvd::wheel_rail_contact {
+
+struct WheelRailContactConfiguration {
+    ContactGeometryConfiguration geometry;
+    NormalContactConfiguration normal;
+    CreepageConfiguration creepage;
+    FrictionLaw friction;
+    TangentialContactConfiguration tangential;
+    // The material both force laws use. It overrides whatever the two
+    // sub-configurations carry, so that the normal law and the tangential
+    // solver cannot be given different steel.
+    ContactMaterial material;
+    // What the creep coefficients do when the contact ellipse leaves the
+    // tabulated range of shapes.
+    OutsideTableRule creep_coefficients_outside_table{OutsideTableRule::kAsymptotic};
+};
+
+// Where the rail's own cross-section sits, in the track frame.
+struct RailProfileFrame {
+    Eigen::Vector3d origin_track_meters{Eigen::Vector3d::Zero()};
+    Eigen::Matrix3d rotation_track_from_profile{Eigen::Matrix3d::Identity()};
+};
+
+// How the wheel is moving, in the track frame.
+struct WheelBodyMotion {
+    Eigen::Vector3d origin_track_meters{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d velocity_track_meters_per_second{Eigen::Vector3d::Zero()};
+    Eigen::Vector3d angular_velocity_track_radians_per_second{
+        Eigen::Vector3d::Zero()};
+    // How fast the contact advances along the line.
+    double arc_rate_meters_per_second{0.0};
+    // The wheel's rotation about its own axle, negative running forward.
+    double wheel_pitch_rate_radians_per_second{0.0};
+};
+
+struct WheelRailContactInput {
+    ContactPoseScalars pose;
+    RailProfileFrame rail_frame;
+    WheelBodyMotion wheel;
+    // The profile/track roll correction, when the vehicle type applies one.
+    //
+    // Its three offsets reach exactly two places, and this is the second of
+    // them: the lateral, vertical and roll offsets all enter the pose reduction
+    // upstream of this model, and the roll offset additionally tilts the frame
+    // the contact resolves its forces in. It reaches nothing else — not the
+    // relative velocity, not the contact point, not the patch's shape. Under a
+    // suppressed policy it is three zeros and the evaluation is bit-for-bit the
+    // one without it.
+    ProfileTrackRollTransport roll_transport;
+};
+
+struct WheelRailContactPatchResult {
+    // The interaction, both halves, about the contact point and in the track
+    // frame.
+    PairedContactWrench wrench;
+
+    // What each stage produced, kept because a force that comes out wrong is
+    // almost never wrong in the last stage.
+    ContactPatch geometry;
+    NormalContactResult normal;
+    Creepages creepages;
+    TangentialContactResult tangential;
+    double friction_coefficient{0.0};
+    double approach_speed_meters_per_second{0.0};
+    // The angle of the frame the creepages were resolved in and the force was
+    // written in. It is the rail's slope angle plus the roll transport's
+    // offset, and it is reported because a consumer resolving anything else
+    // into this contact's axes must use the same angle rather than rebuild it.
+    double contact_frame_angle_radians{0.0};
+};
+
+struct WheelRailContactResult {
+    std::array<WheelRailContactPatchResult, kMaxContactPatches> patches{};
+    std::size_t count{0};
+    // The patches the geometry found before any force law rejected one. A count
+    // that differs from `count` means a patch was in contact geometrically but
+    // carried no load.
+    std::size_t geometric_patch_count{0};
+};
+
+// The buffers one evaluation needs. One per context; never shared between
+// threads.
+class WheelRailContactWorkspace {
+  public:
+    WheelRailContactWorkspace() = default;
+
+  private:
+    friend class WheelRailContactModel;
+
+    ContactGeometryWorkspace geometry_;
+    TangentialContactWorkspace tangential_;
+};
+
+class WheelRailContactModel {
+  public:
+    // Throws std::invalid_argument when a profile or a configuration number is
+    // unusable; the message names which.
+    WheelRailContactModel(const ProfilePoints& wheel_profile,
+                          const ProfilePoints& rail_profile, WheelSide side,
+                          const WheelProfilePreprocessingConfiguration& preparation,
+                          const WheelRailContactConfiguration& configuration);
+
+    // Evaluates every patch at one pose. Allocates nothing once the workspace
+    // has been through one evaluation at its widest pose, and throws nothing.
+    [[nodiscard]] WheelRailContactResult Evaluate(
+        const WheelRailContactInput& input,
+        WheelRailContactWorkspace& workspace) const;
+
+    void PrepareWorkspace(WheelRailContactWorkspace& workspace) const;
+
+    [[nodiscard]] const ContactGeometrySolver& geometry() const {
+        return geometry_;
+    }
+    [[nodiscard]] const NormalContactLaw& normal_law() const { return normal_law_; }
+    [[nodiscard]] const TangentialContactSolver& tangential_solver() const {
+        return tangential_solver_;
+    }
+    [[nodiscard]] const KalkerCoefficientTable& creep_coefficients() const {
+        return creep_coefficients_;
+    }
+
+  private:
+    ContactGeometrySolver geometry_;
+    NormalContactLaw normal_law_;
+    KalkerCoefficientTable creep_coefficients_;
+    TangentialContactSolver tangential_solver_;
+    CreepageConfiguration creepage_;
+    FrictionLaw friction_;
+};
+
+}  // namespace orvd::wheel_rail_contact
