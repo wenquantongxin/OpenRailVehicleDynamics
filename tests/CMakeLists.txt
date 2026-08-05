@@ -646,6 +646,52 @@ add_test(NAME verify_track_geometry_json_loading
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
 
+# G52a's profile layer: the two interpolants a surface is read through, the two
+# admitted wheel-profile preparations and their mutual exclusion, and the roll
+# transport mathematics. Every gate is a property the implementation claims, not
+# a remembered table of numbers.
+add_executable(verify_profile_interpolants
+    wheel_rail_contact/natural_cubic_spline_header_self_containment.cc
+    wheel_rail_contact/monotone_cubic_interpolant_header_self_containment.cc
+    wheel_rail_contact/verify_profile_interpolants.cc)
+orvd_configure_first_party_target(verify_profile_interpolants)
+target_link_libraries(verify_profile_interpolants PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_profile_interpolants COMMAND verify_profile_interpolants)
+
+add_executable(verify_wheel_profile_preprocessing
+    wheel_rail_contact/profile_points_header_self_containment.cc
+    wheel_rail_contact/profile_arc_length_header_self_containment.cc
+    wheel_rail_contact/wheel_profile_preprocessing_header_self_containment.cc
+    wheel_rail_contact/verify_wheel_profile_preprocessing.cc)
+orvd_configure_first_party_target(verify_wheel_profile_preprocessing)
+target_link_libraries(verify_wheel_profile_preprocessing
+    PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_wheel_profile_preprocessing
+         COMMAND verify_wheel_profile_preprocessing)
+
+add_executable(verify_profile_track_roll_transport
+    wheel_rail_contact/profile_track_roll_transport_header_self_containment.cc
+    wheel_rail_contact/verify_profile_track_roll_transport.cc)
+orvd_configure_first_party_target(verify_profile_track_roll_transport)
+target_link_libraries(verify_profile_track_roll_transport
+    PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_profile_track_roll_transport
+         COMMAND verify_profile_track_roll_transport)
+
+# The product record and the local interoperability path meet here: a profile
+# must survive a trip out to the reference format and back with its meaning
+# intact, and every preprocessing step the reader does not implement must be
+# refused rather than ignored.
+add_executable(verify_profile_asset_interoperability
+    configuration/load_profile_points_header_self_containment.cc
+    configuration/verify_profile_asset_interoperability.cc)
+orvd_configure_first_party_target(verify_profile_asset_interoperability)
+target_link_libraries(verify_profile_asset_interoperability
+    PRIVATE orvd_configuration orvd_profile_conversion)
+add_test(NAME verify_profile_asset_interoperability
+         COMMAND verify_profile_asset_interoperability
+             ${CMAKE_CURRENT_BINARY_DIR}/profile-fixtures)
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc

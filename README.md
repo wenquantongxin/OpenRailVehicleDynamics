@@ -13,7 +13,9 @@ Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构
 CVODE 消费者。底座的 46 个 Goal 已全部完成；车辆动力学迁移路书已经启用，G47 轨道几何、
 G48 严格 JSON 线路配置、G49 GZ18 车型装配、G50 复合连续状态与 GZ18 车辆力元、G51 已解析启动
 状态与初始上下文装配均已签收。当前进入 G52 轮轨型面与串行接触核心，按 G52a／G52b／G52c 三个
-强制审查子步推进，第一子步 G52a 已启用。
+强制审查子步推进。G52a 已落下型面值对象、第一方 JSON 型面记录及其严格加载、与 SIMPACK
+`.prw/.prr` 的语义读写与双向转换、自然三次与单调保形两种插值原语、弧长求积与站点求根，
+以及两套车轮型面预处理及其构造期互斥和型面/轨道侧滚横垂输运的数学。
 
 底座的实施记录是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)；
@@ -61,6 +63,7 @@ OpenRailVehicleDynamics/
 │   └── package_distribution/   开发者侧离线源码包组装工具
 ├── libs/
 │   ├── track_geometry/    线路惯性系、轨道几何、轨型系与站位投影
+│   ├── wheel_rail_contact/ 型面点列、插值原语、车轮型面预处理与侧滚横垂输运
 │   ├── configuration/     严格 JSON 的一次性类型化加载边界、车辆装配与初始上下文装配
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── multibody_model/   模型中立的程序化多体建模门面
@@ -91,16 +94,15 @@ OpenRailVehicleDynamics/
     ├── toolchain/        工具链自检（Eigen + C++23）
     ├── track_geometry/   轨道几何与站位投影
     ├── vehicle_library/  GZ18 车型记录与多体装配
+    ├── wheel_rail_contact/ 插值原语、型面预处理与侧滚横垂输运
     └── unit/             单元测试
 ```
 
-轮轨接触核心 `libs/wheel_rail_contact/` 与型面转换工具 `tools/profile_conversion/` 由 G52 建立，
-上表随其落地补齐。
-
 已建模块的 `include/orvd/<module>/` 是公共编译接口头，`src/` 是实现；例如
 `#include "orvd/multibody_runtime/multibody_state_instance.h"`。安装包导出
-`ORVD::track_geometry`、`ORVD::configuration`、`ORVD::multibody_runtime`、`ORVD::multibody_model`、
-`ORVD::forces`、`ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和接入头不安装。
+`ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、`ORVD::multibody_runtime`、
+`ORVD::multibody_model`、`ORVD::forces`、`ORVD::system_assembly` 与 `ORVD::integrators`；
+vendored Drake 类型和接入头不安装。`tools/profile_conversion/` 是开发期工具，不导出、不安装。
 安装包还带上可安装的线路几何、GZ18 车型与已解析启动状态 JSON 记录；当前所有加载器都只接受调用方
 给出的确切路径，按安装数据根解析资产的能力是 G52 的产物，尚未落地。
 尚未开工的模块仍只保留职责骨架。
@@ -147,9 +149,11 @@ GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道
 十七体多体装配、复合连续状态与车辆力元、以及 60 km/h 已解析移动启动状态及其初始上下文装配。
 当前在做轮轨型面与串行接触核心。
 
-轮轨型面资产的边界已经定下，实现随 G52 落地：ORVD 将随包发布本项目自有、自包含的 JSON 型面记录，
-它是运行时型面的唯一真源；第一方设施同时提供与 SIMPACK `.prw/.prr` 的语义读写与双向转换，供本地
-科研核对使用。供应商型面文件不进入本仓库、不随安装包发布，也不作为运行时权威。项目不依赖 CONTACT。
+轮轨型面资产的边界：ORVD 随包发布本项目自有、自包含的 JSON 型面记录，它是运行时型面的唯一真源；
+第一方设施同时提供与 SIMPACK `.prw/.prr` 的语义读写与双向转换（`tools/profile_conversion/`），
+供本地科研核对使用。该兼容通路只实现资格化资产用到的那个子集，对它未实现的平移、镜像、旋转、
+缩放与裁剪声明一律响亮拒绝，而不是默默忽略。供应商型面文件不进入本仓库、不随安装包发布，也不作为
+运行时权威；随包 JSON 型面资产本身由 G52c 落地。项目不依赖 CONTACT。
 
 ## 许可证
 
