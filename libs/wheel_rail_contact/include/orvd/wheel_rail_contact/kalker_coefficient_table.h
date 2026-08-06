@@ -18,7 +18,7 @@
 // The tabulation is two-dimensional — semi-axis ratio against Poisson ratio —
 // but a material's Poisson ratio does not change while a vehicle runs. So the
 // Poisson axis is collapsed once, when the table is built, and what remains is
-// a one-dimensional lookup that the contact solver can call twice per patch per
+// a one-dimensional lookup that the contact solver can call once per patch per
 // step without thinking about it.
 //
 // The collapse is a quadratic through the three tabulated Poisson nodes

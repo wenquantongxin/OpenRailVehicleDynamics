@@ -107,8 +107,6 @@ NormalContactGeometry Patch(double width, double length, double area) {
     geometry.longitudinal_length_meters = length;
     geometry.cross_section_area_square_meters = area;
     geometry.vertical_penetration_meters = 1.5 * area / width;
-    geometry.rolling_radius_meters = 0.42;
-    geometry.common_normal_angle_radians = 0.0;
     return geometry;
 }
 
@@ -230,8 +228,6 @@ int main() {
                      "sphere on a plane");
         RequireClose(result.normal_force_newtons, result.elastic_force_newtons, 0.0,
                      "a patch with no closing speed acquired a damping force");
-        Require(!result.used_estimated_length,
-                "a patch with a resolved length was reported as estimated");
     }
 
     {
@@ -307,40 +303,14 @@ int main() {
                      "the two parts of a saturated force do not sum to the total");
     }
 
-    {
-        // With no resolved length the law falls back to the chord a cylinder of
-        // the effective radius cuts, and says that it did.
-        NormalContactGeometry geometry = Patch(0.012, 0.0135, 8.0e-7);
-        geometry.longitudinal_length_meters = 0.0;
-        const NormalContactResult result = law.Solve(geometry, 0.0);
-        Require(result.in_contact && result.used_estimated_length,
-                "a patch with no resolved length was not reported as estimated");
-        const double effective_radius = geometry.rolling_radius_meters;
-        RequireClose(result.longitudinal_semi_axis_meters,
-                     std::sqrt(2.0 * effective_radius *
-                               geometry.vertical_penetration_meters),
-                     1.0e-14,
-                     "the estimated semi-axis is not the circular chord's half "
-                     "length");
-
-        // The contact angle enters the estimate and only the estimate: it
-        // lengthens the effective radius by the reciprocal of its cosine.
-        geometry.common_normal_angle_radians = 0.6;
-        const NormalContactResult tilted = law.Solve(geometry, 0.0);
-        RequireClose(tilted.longitudinal_semi_axis_meters,
-                     std::sqrt(2.0 * effective_radius / std::cos(0.6) *
-                               geometry.vertical_penetration_meters),
-                     1.0e-14,
-                     "the contact angle does not lengthen the effective radius in "
-                     "the estimated length");
-
-        NormalContactGeometry resolved = Patch(0.012, 0.0135, 8.0e-7);
-        resolved.common_normal_angle_radians = 0.6;
-        RequireClose(law.Solve(resolved, 0.0).longitudinal_semi_axis_meters,
-                     0.5 * 0.0135, 0.0,
-                     "the contact angle reached a resolved length, which it must "
-                     "not");
-    }
+    RequireRefusal(
+        [&] {
+            NormalContactGeometry geometry = Patch(0.012, 0.0135, 8.0e-7);
+            geometry.longitudinal_length_meters = 0.0;
+            (void)law.Solve(geometry, 0.0);
+        },
+        "three-dimensional longitudinal length",
+        "a positive patch without a resolved longitudinal length");
 
     {
         // The gates. A patch that has stopped touching comes back empty, not as
@@ -351,8 +321,7 @@ int main() {
             Require(!result.in_contact && result.normal_force_newtons == 0.0 &&
                         result.longitudinal_semi_axis_meters == 0.0 &&
                         result.lateral_semi_axis_meters == 0.0 &&
-                        result.equivalent_penetration_meters == 0.0 &&
-                        !result.used_estimated_length,
+                        result.equivalent_penetration_meters == 0.0,
                     what);
         };
         NormalContactGeometry lifted = Patch(0.012, 0.0135, 8.0e-7);
@@ -364,9 +333,6 @@ int main() {
         NormalContactGeometry narrow = Patch(0.012, 0.0135, 8.0e-7);
         narrow.arc_width_meters = 0.0;
         rejected(narrow, "a patch with no width produced a force");
-        NormalContactGeometry pointlike = Patch(0.012, 0.0135, 8.0e-7);
-        pointlike.rolling_radius_meters = 1.0e-12;
-        rejected(pointlike, "a wheel with no radius produced a force");
         NormalContactGeometry broken = Patch(0.012, 0.0135, 8.0e-7);
         broken.cross_section_area_square_meters = std::nan("");
         rejected(broken, "a patch with a non-finite area produced a force");

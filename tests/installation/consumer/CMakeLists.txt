@@ -39,6 +39,15 @@ target_compile_features(track_geometry_installation_smoke PRIVATE cxx_std_23)
 target_link_libraries(track_geometry_installation_smoke
     PRIVATE ORVD::track_geometry)
 
+# Keep the contact library isolated as well: this proves its installed public
+# header and static archive are sufficient without an in-tree include path or
+# another ORVD target incidentally carrying its dependencies.
+add_executable(wheel_rail_contact_installation_smoke
+    wheel_rail_contact_installation_smoke.cc)
+target_compile_features(wheel_rail_contact_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(wheel_rail_contact_installation_smoke
+    PRIVATE ORVD::wheel_rail_contact)
+
 # This pair is a positive control for the installed-artifact dependency gate.
 # The executable calls an exported function, so linkers cannot discard the
 # Drake-identified shared library as unused.

@@ -16,11 +16,11 @@
 // ## The frame is built from the rail's slope, not from the common normal
 //
 // There are two candidate angles at a contact and they are not the same. The
-// common normal is the direction the normal force acts along. The frame the
-// creepages are resolved in is built from the rail's own surface slope plus its
-// laying cant. They differ by the wheel's own profile slope at the contact, and
-// substituting one for the other rotates every tangential force by that
-// difference.
+// common normal characterises the two profile surfaces geometrically. The
+// selected GZ18 formulation resolves the closing speed, the normal-force vector
+// and the tangential force in a frame built from the rail's own surface slope
+// plus its laying cant. Substituting the common normal for that rail-reference
+// angle rotates every force by their difference.
 //
 // The frame is a pure roll about the track's longitudinal axis. Its x axis is
 // therefore exactly the track tangent, which is why the longitudinal creepage's

@@ -55,14 +55,14 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
     for (std::size_t slot = 0; slot < patches.count; ++slot) {
         const ContactPatch& patch = patches.patches[slot];
 
-        // Where on the rail this patch reduces about, in the track frame. The
-        // geometry gave it in the rail's own three coordinates; the rail's
-        // frame places it. Under track irregularity that frame is not the
-        // nominal one, which is why it is an input rather than a constant.
+        // The rail material reference point, in the track frame. The geometry
+        // gave it in the rail's own three coordinates; the rail's frame places
+        // it. This is the point at which the wheel material velocity is formed,
+        // not the point about which the eventual wrench is reduced.
         const Eigen::Vector3d rail_reference(patch.rail_reference_longitudinal_meters,
                                              patch.rail_reference_lateral_meters,
                                              patch.rail_reference_vertical_meters);
-        const Eigen::Vector3d contact_point =
+        const Eigen::Vector3d rail_material_point =
             input.rail_frame.origin_track_meters +
             input.rail_frame.rotation_track_from_profile * rail_reference;
 
@@ -73,9 +73,9 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
         // zero; naming the assumption here is the honest alternative.
         ContactRelativeMotion motion;
         motion.relative_velocity_track_meters_per_second =
-            input.wheel.velocity_track_meters_per_second +
+            input.wheel.origin_velocity_track_meters_per_second +
             input.wheel.angular_velocity_track_radians_per_second.cross(
-                contact_point - input.wheel.origin_track_meters);
+                rail_material_point - input.wheel.origin_track_meters);
         motion.relative_spin_track_radians_per_second =
             input.wheel.angular_velocity_track_radians_per_second;
         motion.arc_rate_meters_per_second = input.wheel.arc_rate_meters_per_second;
@@ -103,8 +103,6 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
         normal_geometry.arc_width_meters = patch.arc_width_meters;
         normal_geometry.longitudinal_length_meters = patch.longitudinal_length_meters;
         normal_geometry.vertical_penetration_meters = patch.vertical_penetration_meters;
-        normal_geometry.rolling_radius_meters = patch.rolling_radius_meters;
-        normal_geometry.common_normal_angle_radians = patch.common_normal_angle_radians;
 
         const double approach_speed = ComputeNormalApproachSpeed(motion, frame);
         const NormalContactResult normal =
@@ -139,13 +137,28 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
         const Eigen::Vector3d force_track =
             frame.rotation_track_from_contact * force_contact;
 
+        // The force acts at the compliant wheel-surface point, not at the rail
+        // material reference point at which the relative velocity was formed.
+        // The profile frame's origin already contains the wheelset-to-profile
+        // lateral datum, so the patch's own authored station is used directly.
+        // Half the equivalent penetration places the force at the middle of
+        // the compliant approach, matching the qualified reference model's
+        // p_GP construction.
+        const Eigen::Vector3d wheel_surface_point_profile(
+            patch.wheel_longitudinal_meters, patch.wheel_station_meters,
+            patch.rolling_radius_meters -
+                0.5 * normal.equivalent_penetration_meters);
+        const Eigen::Vector3d wheel_surface_point =
+            input.wheel.origin_track_meters +
+            input.wheel.rotation_track_from_profile * wheel_surface_point_profile;
+
         WheelRailContactPatchResult& emitted = result.patches[result.count];
         // No moment accompanies the force at the contact point. The direct
         // moment a patch's creep would exert about its own normal is suppressed
         // in this formulation, so passing zero states that rather than omitting
         // it. Every moment the vehicle sees from this contact is the force's
         // moment about wherever it is transported to.
-        emitted.wrench = MakePairedContactWrench(contact_point, force_track,
+        emitted.wrench = MakePairedContactWrench(wheel_surface_point, force_track,
                                                  Eigen::Vector3d::Zero());
         emitted.geometry = patch;
         emitted.normal = normal;

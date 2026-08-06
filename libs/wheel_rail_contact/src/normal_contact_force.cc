@@ -23,14 +23,6 @@ constexpr double kEllipticParameterCeiling = 1.0 - 1.0e-15;
 constexpr double kAgmTolerance = 1.0e-15;
 constexpr int kAgmIterations = 80;
 
-// The floor on the cosine of the contact angle, applied to its magnitude so
-// that an angle past a right angle does not reverse the effective radius's
-// sign. Only the estimated length reads it.
-constexpr double kContactAngleCosineFloor = 1.0e-6;
-
-// The radius below which the wheel is not a wheel.
-constexpr double kRollingRadiusFloor = 1.0e-9;
-
 }  // namespace
 
 double CompleteEllipticIntegralFirstKind(double parameter) {
@@ -126,33 +118,22 @@ NormalContactResult NormalContactLaw::Solve(
     const double width = geometry.arc_width_meters;
     const double area = geometry.cross_section_area_square_meters;
     const double depth = geometry.vertical_penetration_meters;
-    const double rolling_radius = geometry.rolling_radius_meters;
     if (!std::isfinite(width) || !std::isfinite(area) || !std::isfinite(depth) ||
-        !std::isfinite(rolling_radius) || !(depth > 0.0) || !(area > 0.0) ||
-        !(width > 0.0) || !(rolling_radius > kRollingRadiusFloor)) {
+        !(depth > 0.0) || !(area > 0.0) || !(width > 0.0)) {
         return result;
     }
 
     const double lateral_semi_axis = 0.5 * width;
 
-    // The longitudinal extent. The circular estimate is formed first and always:
-    // it is what the patch length would be if the wheel were a cylinder of the
-    // local radius meeting a plane, which is the leading behaviour, and it is
-    // what stands when the geometry could not resolve the true extent.
-    const double angle_cosine =
-        std::max(std::abs(std::cos(geometry.common_normal_angle_radians)),
-                 kContactAngleCosineFloor);
-    const double effective_radius = rolling_radius / angle_cosine;
-    double length = 2.0 * std::sqrt(std::max(0.0, 2.0 * effective_radius * depth));
-    result.used_estimated_length = true;
-    if (std::isfinite(geometry.longitudinal_length_meters) &&
-        geometry.longitudinal_length_meters > 0.0) {
-        length = geometry.longitudinal_length_meters;
-        result.used_estimated_length = false;
-    }
-    if (!(length > 0.0)) {
-        result.used_estimated_length = false;
-        return result;
+    // The selected contact model has exactly one longitudinal-length source:
+    // the three-dimensional interpenetration solve. A positive patch without
+    // that measurement is incomplete input, not an ordinary loss of contact.
+    const double length = geometry.longitudinal_length_meters;
+    if (!std::isfinite(length) || !(length > 0.0)) {
+        throw std::invalid_argument(
+            "NormalContactLaw::Solve: a positive contact patch requires a "
+            "finite positive three-dimensional longitudinal length; continuing "
+            "with a substitute length is not permitted");
     }
     const double longitudinal_semi_axis = 0.5 * length;
 
@@ -163,7 +144,6 @@ NormalContactResult NormalContactLaw::Solve(
     const double equivalent_penetration =
         segment_height * configuration_.penetration_equivalence_factor;
     if (!(equivalent_penetration > 0.0)) {
-        result.used_estimated_length = false;
         return result;
     }
 
@@ -179,7 +159,6 @@ NormalContactResult NormalContactLaw::Solve(
     const double parameter = eccentricity * eccentricity;
     const double integral = CompleteEllipticIntegralFirstKind(parameter);
     if (!(integral > 0.0)) {
-        result.used_estimated_length = false;
         return result;
     }
 
@@ -188,7 +167,6 @@ NormalContactResult NormalContactLaw::Solve(
     const double elastic_force =
         (2.0 / 3.0) * std::numbers::pi * major * minor * peak_pressure;
     if (!(elastic_force > 0.0)) {
-        result.used_estimated_length = false;
         return result;
     }
 

@@ -120,25 +120,6 @@ struct TangentialContactResult {
     // The two in-plane force components, in the contact frame.
     double longitudinal_force_newtons{0.0};
     double lateral_force_newtons{0.0};
-
-    // The sum over cells of each cell's own friction limit times its area. This
-    // is the bound the resultant actually respects; the Coulomb product is a
-    // continuum idealisation the discrete quadrature is allowed to exceed.
-    double friction_bound_newtons{0.0};
-
-    // The three flexibilities the creepages were multiplied by. Carried because
-    // they are the whole of this solver's dependence on the tabulated
-    // elasticity solution, and a consumer checking that dependence needs them.
-    double longitudinal_flexibility{0.0};
-    double lateral_flexibility{0.0};
-    double spin_flexibility{0.0};
-
-    // How many strips the layout ended up with, and how many cells were
-    // marched. A count that moves between steps is the layout changing, which
-    // is expected; a count that moves by an order of magnitude is the fallback
-    // layout firing.
-    std::size_t strip_count{0};
-    std::size_t cell_count{0};
 };
 
 class TangentialContactSolver {
@@ -162,13 +143,6 @@ class TangentialContactSolver {
     // alone — never of the load, the patch's shape or the creepages — so it can
     // be reserved once and never grown.
     void PrepareWorkspace(TangentialContactWorkspace& workspace) const;
-
-    // The shear modulus the flexibilities are formed with, derived from the
-    // material rather than configured separately so that the two cannot drift
-    // apart.
-    [[nodiscard]] double shear_modulus_pascals() const {
-        return shear_modulus_pascals_;
-    }
 
   private:
     void LayStrips(double spin_pole_longitudinal, double spin_pole_lateral,

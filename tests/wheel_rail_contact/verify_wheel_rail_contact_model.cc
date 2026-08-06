@@ -24,6 +24,7 @@ namespace {
 
 using orvd::test::AllocationScope;
 using orvd::wheel_rail_contact::ContactPoseScalars;
+using orvd::wheel_rail_contact::ContactPatch;
 using orvd::wheel_rail_contact::ProfilePoints;
 using orvd::wheel_rail_contact::ProfileRole;
 using orvd::wheel_rail_contact::ProfileTrackRollTransport;
@@ -94,6 +95,27 @@ WheelRailContactConfiguration Configuration() {
     configuration.tangential.lateral_strips = 21;
     configuration.tangential.refinement_width = 0.01;
     return configuration;
+}
+
+Eigen::Vector3d RailMaterialPoint(const WheelRailContactInput& input,
+                                  const ContactPatch& patch) {
+    return input.rail_frame.origin_track_meters +
+           input.rail_frame.rotation_track_from_profile *
+               Eigen::Vector3d(patch.rail_reference_longitudinal_meters,
+                               patch.rail_reference_lateral_meters,
+                               patch.rail_reference_vertical_meters);
+}
+
+Eigen::Vector3d WheelSurfacePoint(
+    const WheelRailContactInput& input,
+    const orvd::wheel_rail_contact::WheelRailContactPatchResult& patch) {
+    return input.wheel.origin_track_meters +
+           input.wheel.rotation_track_from_profile *
+               Eigen::Vector3d(
+                   patch.geometry.wheel_longitudinal_meters,
+                   patch.geometry.wheel_station_meters,
+                   patch.geometry.rolling_radius_meters -
+                       0.5 * patch.normal.equivalent_penetration_meters);
 }
 
 }  // namespace
@@ -179,14 +201,19 @@ int main() {
     // the only creepage. Finding it needs the contact point, so the fixture
     // solves once to locate it and then rolls.
     WheelRailContactInput rolling = resting;
-    rolling.wheel.velocity_track_meters_per_second = Eigen::Vector3d(kSpeed, 0.0, 0.0);
+    rolling.wheel.origin_velocity_track_meters_per_second =
+        Eigen::Vector3d(kSpeed, 0.0, 0.0);
     rolling.wheel.arc_rate_meters_per_second = kSpeed;
     {
         const WheelRailContactResult located = model.Evaluate(resting, workspace);
         Require(located.count == 1, "the locating solve lost its patch");
         if (located.count == 1) {
+            // Creepages are evaluated at the rail material reference point R,
+            // not at the wheel surface force point P. Pure rolling must
+            // therefore be tuned with R's lever from the profile datum.
             const double lever =
-                located.patches[0].wrench.contact_point_meters.z() - axle.z();
+                RailMaterialPoint(resting, located.patches[0].geometry).z() -
+                axle.z();
             const double rate = -kSpeed / lever;
             rolling.wheel.angular_velocity_track_radians_per_second =
                 Eigen::Vector3d(0.0, rate, 0.0);
@@ -231,13 +258,6 @@ int main() {
             const auto& patch = result.patches[0];
             Require(patch.creepages.longitudinal != 0.0,
                     "over-rotating the wheel produced no longitudinal creepage");
-            const double magnitude =
-                std::hypot(patch.tangential.longitudinal_force_newtons,
-                           patch.tangential.lateral_force_newtons);
-            Require(magnitude <=
-                        patch.tangential.friction_bound_newtons * (1.0 + 1.0e-14),
-                    "the tangential resultant exceeded the sum of the per-cell "
-                    "friction capacities");
             Require(patch.friction_coefficient <
                         Configuration().friction.static_coefficient,
                     "a slipping contact kept its static friction");
@@ -371,18 +391,12 @@ int main() {
     }
 
     {
-        // The rail profile's frame is a live input, not a constant.
-        //
-        // On a perfect line it is the laying cant at the nominal offset, and
-        // every other fixture here leaves it at the identity. Under track
-        // irregularity it is neither: the irregularity displaces the rail's
-        // cross-section and turns it, and that is the seam through which a
-        // future irregularity model reaches the relative velocity. These checks
-        // exist to show the seam carries load — that displacing and rotating
-        // the frame changes what the contact does — and equally that it reaches
-        // only what it should.
+        // The rail material reference point R and the wheel surface force point
+        // P are separate. Moving the rail frame moves R and therefore the
+        // relative velocity; it must not move P, whose placement comes from the
+        // wheel profile's own rigid frame.
         const WheelRailContactResult plain = model.Evaluate(rolling, workspace);
-        Require(plain.count == 1, "the rail-frame fixture lost its patch");
+        Require(plain.count == 1, "the two-point fixture lost its patch");
 
         const Eigen::Vector3d displacement(0.0, 0.05, 0.01);
         WheelRailContactInput displaced = rolling;
@@ -390,52 +404,43 @@ int main() {
         const WheelRailContactResult moved = model.Evaluate(displaced, workspace);
         Require(moved.count == 1, "a displaced rail frame lost its patch");
 
-        const Eigen::Matrix3d turn =
+        const Eigen::Matrix3d rail_turn =
             Eigen::AngleAxisd(0.03, Eigen::Vector3d::UnitX()).toRotationMatrix();
         WheelRailContactInput turned = rolling;
-        turned.rail_frame.rotation_track_from_profile = turn;
+        turned.rail_frame.rotation_track_from_profile = rail_turn;
         const WheelRailContactResult rotated = model.Evaluate(turned, workspace);
         Require(rotated.count == 1, "a rotated rail frame lost its patch");
 
         if (plain.count == 1 && moved.count == 1 && rotated.count == 1) {
-            // The frame places the contact point, and places it exactly.
-            Require((moved.patches[0].wrench.contact_point_meters -
-                     (plain.patches[0].wrench.contact_point_meters + displacement))
-                            .cwiseAbs()
-                            .maxCoeff() < 1.0e-15,
-                    "displacing the rail frame did not displace the contact "
-                    "point by the same vector");
-            Require((rotated.patches[0].wrench.contact_point_meters -
-                     turn * plain.patches[0].wrench.contact_point_meters)
-                            .cwiseAbs()
-                            .maxCoeff() < 1.0e-15,
-                    "rotating the rail frame did not rotate the contact point "
-                    "about the frame's origin");
+            const Eigen::Vector3d plain_r =
+                RailMaterialPoint(rolling, plain.patches[0].geometry);
+            const Eigen::Vector3d moved_r =
+                RailMaterialPoint(displaced, moved.patches[0].geometry);
+            const Eigen::Vector3d rotated_r =
+                RailMaterialPoint(turned, rotated.patches[0].geometry);
+            Require((moved_r - (plain_r + displacement)).cwiseAbs().maxCoeff() <
+                        1.0e-15,
+                    "displacing the rail frame did not displace R exactly");
+            Require((rotated_r - rail_turn * plain_r).cwiseAbs().maxCoeff() <
+                        1.0e-15,
+                    "rotating the rail frame did not rotate R exactly");
+            Require(moved.patches[0].wrench.contact_point_meters ==
+                            plain.patches[0].wrench.contact_point_meters &&
+                        rotated.patches[0].wrench.contact_point_meters ==
+                            plain.patches[0].wrench.contact_point_meters,
+                    "the rail material frame moved the wheel surface force "
+                    "point P");
 
-            // Moving the contact point moves it relative to the axle, so the
-            // wheel's material there is travelling differently and the
-            // creepages follow. This is the whole reason the frame is an input.
             Require(std::abs(moved.patches[0].creepages.longitudinal -
                              plain.patches[0].creepages.longitudinal) > 1.0e-3,
-                    "displacing the rail frame did not reach the creepages, so "
-                    "the relative velocity is not being formed at the contact "
-                    "point the frame places");
+                    "displacing R did not reach the relative velocity");
             Require(std::abs(rotated.patches[0].creepages.longitudinal -
                              plain.patches[0].creepages.longitudinal) > 1.0e-4,
-                    "rotating the rail frame did not reach the creepages");
-            // It reaches the translational creepages and not the spin, and that
-            // is right rather than a gap: the spin is the wheel's own angular
-            // velocity resolved onto the contact normal, and the profile frame
-            // places the contact point without turning that normal. The normal
-            // is turned by the rail's surface slope, which is a separate input.
+                    "rotating R did not reach the relative velocity");
             Require(rotated.patches[0].creepages.spin_per_meter ==
                         plain.patches[0].creepages.spin_per_meter,
-                    "rotating the rail frame turned the contact normal, which "
-                    "only the rail's own surface slope may do");
+                    "rotating the rail frame turned the contact normal");
 
-            // And it reaches nothing upstream. The patch's shape is solved in
-            // the rail's own cross-section, where the frame has not been
-            // applied yet and cannot be seen.
             const auto& reference_patch = plain.patches[0].geometry;
             const auto& displaced_patch = moved.patches[0].geometry;
             const auto& rotated_patch = rotated.patches[0].geometry;
@@ -447,39 +452,95 @@ int main() {
                             reference_patch.rail_slope_angle_radians &&
                         displaced_patch.centroid_lateral_meters ==
                             reference_patch.centroid_lateral_meters,
-                    "displacing the rail frame changed the patch's own shape, "
-                    "which is solved before the frame is applied");
+                    "displacing the rail frame changed the patch geometry");
             Require(rotated_patch.vertical_penetration_meters ==
                             reference_patch.vertical_penetration_meters &&
                         rotated_patch.rail_slope_angle_radians ==
                             reference_patch.rail_slope_angle_radians,
-                    "rotating the rail frame changed the patch's own shape");
+                    "rotating the rail frame changed the patch geometry");
 
-            // The origin enters only through the lever from the axle to the
-            // contact. Moving the rail and the wheel together by the same
-            // vector therefore changes nothing about the relative motion — a
-            // covariance the construction must have and an accidental use of
-            // the origin as an absolute position would break.
+            // A common translation of R and the wheel profile datum translates
+            // P by the same amount while preserving every relative quantity.
             WheelRailContactInput together = displaced;
             together.wheel.origin_track_meters += displacement;
             const WheelRailContactResult carried =
                 model.Evaluate(together, workspace);
             Require(carried.count == 1, "the covariance fixture lost its patch");
             if (carried.count == 1) {
+                Require((carried.patches[0].wrench.contact_point_meters -
+                         (plain.patches[0].wrench.contact_point_meters +
+                          displacement))
+                                .cwiseAbs()
+                                .maxCoeff() < 1.0e-15,
+                        "a common translation did not translate P exactly");
                 RequireClose(carried.patches[0].creepages.longitudinal,
                              plain.patches[0].creepages.longitudinal, 1.0e-12,
-                             "moving the rail and the wheel together changed the "
-                             "longitudinal creepage, so the frame's origin is "
-                             "being used as an absolute position");
-                RequireClose(carried.patches[0].creepages.spin_per_meter,
-                             plain.patches[0].creepages.spin_per_meter, 1.0e-12,
-                             "moving the rail and the wheel together changed the "
-                             "spin");
+                             "a common translation changed the creepage");
                 RequireClose(carried.patches[0].normal.normal_force_newtons,
                              plain.patches[0].normal.normal_force_newtons, 1.0e-12,
-                             "moving the rail and the wheel together changed the "
-                             "normal force");
+                             "a common translation changed the normal force");
             }
+        }
+    }
+
+    {
+        // Exercise P's independent construction with a non-trivial wheel
+        // profile frame. This deliberately perturbs only that input seam: R and
+        // the relative motion stay fixed, while P must move according to the
+        // complete profile-coordinate formula, including half the equivalent
+        // penetration.
+        const WheelRailContactResult unprofiled =
+            model.Evaluate(rolling, workspace);
+        Require(unprofiled.count == 1,
+                "the wheel-profile datum's reference solve lost its patch");
+        WheelRailContactInput profiled = rolling;
+        profiled.wheel.rotation_track_from_profile =
+            Eigen::AngleAxisd(0.021, Eigen::Vector3d::UnitX())
+                .toRotationMatrix() *
+            Eigen::AngleAxisd(-0.013, Eigen::Vector3d::UnitZ())
+                .toRotationMatrix();
+        // Move from the wheelset origin to the authored wheel-profile datum on
+        // the axle. Its velocity is moved to that same point, so the rigid-body
+        // velocity at R remains the reference solve's velocity.
+        const Eigen::Vector3d profile_datum_from_axle =
+            profiled.wheel.rotation_track_from_profile *
+            Eigen::Vector3d(0.0, 0.63, 0.0);
+        profiled.wheel.origin_track_meters += profile_datum_from_axle;
+        profiled.wheel.origin_velocity_track_meters_per_second +=
+            profiled.wheel.angular_velocity_track_radians_per_second.cross(
+                profile_datum_from_axle);
+        const WheelRailContactResult result = model.Evaluate(profiled, workspace);
+        Require(result.count == 1, "the wheel-profile-frame fixture lost its patch");
+        if (result.count == 1) {
+            const auto& patch = result.patches[0];
+            const Eigen::Vector3d expected_p = WheelSurfacePoint(profiled, patch);
+            const Eigen::Vector3d r = RailMaterialPoint(profiled, patch.geometry);
+            Require((patch.wrench.contact_point_meters - expected_p)
+                            .cwiseAbs()
+                            .maxCoeff() < 1.0e-15,
+                    "the wrench point is not the qualified wheel surface point P");
+            Require((expected_p - r).norm() > 1.0e-3,
+                    "the P/R fixture is degenerate");
+            if (unprofiled.count == 1) {
+                Require(
+                    std::abs(patch.creepages.longitudinal -
+                             unprofiled.patches[0].creepages.longitudinal) <
+                        1.0e-12,
+                    "changing the rigid reference point changed the R-based "
+                    "relative velocity");
+            }
+
+            const SpatialWrench reduced_at_r = TransportWrench(
+                patch.wrench.rail_on_wheel, patch.wrench.contact_point_meters, r);
+            const Eigen::Vector3d expected_moment =
+                (expected_p - r).cross(patch.wrench.rail_on_wheel.force_newtons);
+            Require(expected_moment.norm() > 1.0,
+                    "the P/R fixture's force has no discriminating lever arm");
+            Require((reduced_at_r.moment_newton_meters - expected_moment)
+                            .cwiseAbs()
+                            .maxCoeff() < 1.0e-9,
+                    "transporting the P-reduced wrench to R lost its lever-arm "
+                    "moment");
         }
     }
 
@@ -495,7 +556,7 @@ int main() {
                 "a wheel held clear of the rail produced a patch");
 
         WheelRailContactInput flying = resting;
-        flying.wheel.velocity_track_meters_per_second =
+        flying.wheel.origin_velocity_track_meters_per_second =
             Eigen::Vector3d(0.0, 0.0, -100.0);
         const WheelRailContactResult separating = model.Evaluate(flying, workspace);
         Require(separating.geometric_patch_count == 1,

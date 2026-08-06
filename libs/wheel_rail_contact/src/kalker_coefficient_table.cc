@@ -58,60 +58,35 @@ constexpr std::array<std::array<double, kNodes>, 3> kLateralSpin{{
      2.18, 2.5, 2.96, 3.7, 5.01, 7.89, 18.0},
 }};
 
-// The unique quadratic through three points, evaluated at one abscissa.
-//
-// Written as an accumulation of Lagrange weights rather than as solved
-// coefficients: the weights are exactly the Kronecker delta at the nodes, so
-// the interpolant reproduces a tabulated Poisson ratio without a special case.
-double QuadraticThroughThree(const std::array<double, 3>& abscissae,
-                             const std::array<double, 3>& values, double at) {
-    double result = 0.0;
+// The Lagrange weights of the unique quadratic through the three Poisson
+// nodes. One material uses the same three weights for all 57 tabulated values,
+// so form them once when the table is collapsed rather than rediscovering them
+// in every column. At a node they are the Kronecker delta, which preserves the
+// tabulated row without a special case.
+std::array<double, 3> PoissonInterpolationWeights(double at) {
+    std::array<double, 3> weights{};
     for (std::size_t i = 0; i < 3; ++i) {
-        double weight = 1.0;
+        weights[i] = 1.0;
         for (std::size_t j = 0; j < 3; ++j) {
             if (j != i) {
-                weight *= (at - abscissae[j]) / (abscissae[i] - abscissae[j]);
+                weights[i] *= (at - kPoissonNodes[j]) /
+                              (kPoissonNodes[i] - kPoissonNodes[j]);
             }
         }
-        result += weight * values[i];
     }
-    return result;
+    return weights;
 }
 
 std::array<double, kNodes> CollapsePoissonAxis(
-    const std::array<std::array<double, kNodes>, 3>& rows, double poisson_ratio) {
+    const std::array<std::array<double, kNodes>, 3>& rows,
+    const std::array<double, 3>& weights) {
     std::array<double, kNodes> collapsed{};
     for (std::size_t column = 0; column < kNodes; ++column) {
-        const std::array<double, 3> values{rows[0][column], rows[1][column],
-                                           rows[2][column]};
-        collapsed[column] =
-            QuadraticThroughThree(kPoissonNodes, values, poisson_ratio);
+        collapsed[column] = weights[0] * rows[0][column] +
+                            weights[1] * rows[1][column] +
+                            weights[2] * rows[2][column];
     }
     return collapsed;
-}
-
-// Piecewise-linear lookup with the ends held flat.
-//
-// The clamping arms are unreachable for anything but the exact endpoints,
-// because the caller gates the ratio to the tabulated interval first. They are
-// here so this function is total on its own terms rather than on its caller's.
-double InterpolateAcrossNodes(const std::array<double, kNodes>& nodes,
-                              const std::array<double, kNodes>& values,
-                              double at) {
-    if (at <= nodes.front()) {
-        return values.front();
-    }
-    if (at >= nodes.back()) {
-        return values.back();
-    }
-    const auto upper = std::upper_bound(nodes.begin(), nodes.end(), at);
-    const std::size_t high = static_cast<std::size_t>(upper - nodes.begin());
-    const std::size_t low = high - 1;
-    if (nodes[high] == nodes[low]) {
-        return values[low];
-    }
-    const double fraction = (at - nodes[low]) / (nodes[high] - nodes[low]);
-    return values[low] + (values[high] - values[low]) * fraction;
 }
 
 // The slender-ellipse expansion, for a contact patch so elongated that the
@@ -165,9 +140,11 @@ KalkerCoefficientTable KalkerCoefficientTable::ForPoissonRatio(
             "extrapolate past them");
     }
     KalkerCoefficientTable table;
-    table.longitudinal_ = CollapsePoissonAxis(kLongitudinal, poisson_ratio);
-    table.lateral_ = CollapsePoissonAxis(kLateral, poisson_ratio);
-    table.lateral_spin_ = CollapsePoissonAxis(kLateralSpin, poisson_ratio);
+    const std::array<double, 3> weights =
+        PoissonInterpolationWeights(poisson_ratio);
+    table.longitudinal_ = CollapsePoissonAxis(kLongitudinal, weights);
+    table.lateral_ = CollapsePoissonAxis(kLateral, weights);
+    table.lateral_spin_ = CollapsePoissonAxis(kLateralSpin, weights);
     table.poisson_ratio_ = poisson_ratio;
     table.outside_rule_ = outside_rule;
     return table;
@@ -176,13 +153,29 @@ KalkerCoefficientTable KalkerCoefficientTable::ForPoissonRatio(
 KalkerCoefficients KalkerCoefficientTable::At(double semi_axis_ratio) const {
     if (semi_axis_ratio >= kSmallestTabulatedRatio &&
         semi_axis_ratio <= kLargestTabulatedRatio) {
+        if (semi_axis_ratio <= kSemiAxisRatioNodes.front()) {
+            return {longitudinal_.front(), lateral_.front(),
+                    lateral_spin_.front()};
+        }
+        if (semi_axis_ratio >= kSemiAxisRatioNodes.back()) {
+            return {longitudinal_.back(), lateral_.back(), lateral_spin_.back()};
+        }
+        const auto upper = std::upper_bound(kSemiAxisRatioNodes.begin(),
+                                            kSemiAxisRatioNodes.end(),
+                                            semi_axis_ratio);
+        const std::size_t high =
+            static_cast<std::size_t>(upper - kSemiAxisRatioNodes.begin());
+        const std::size_t low = high - 1;
+        const double fraction =
+            (semi_axis_ratio - kSemiAxisRatioNodes[low]) /
+            (kSemiAxisRatioNodes[high] - kSemiAxisRatioNodes[low]);
+        const auto interpolate = [low, high, fraction](const auto& values) {
+            return values[low] + (values[high] - values[low]) * fraction;
+        };
         KalkerCoefficients coefficients;
-        coefficients.longitudinal = InterpolateAcrossNodes(
-            kSemiAxisRatioNodes, longitudinal_, semi_axis_ratio);
-        coefficients.lateral =
-            InterpolateAcrossNodes(kSemiAxisRatioNodes, lateral_, semi_axis_ratio);
-        coefficients.lateral_spin = InterpolateAcrossNodes(
-            kSemiAxisRatioNodes, lateral_spin_, semi_axis_ratio);
+        coefficients.longitudinal = interpolate(longitudinal_);
+        coefficients.lateral = interpolate(lateral_);
+        coefficients.lateral_spin = interpolate(lateral_spin_);
         return coefficients;
     }
     if (outside_rule_ == OutsideTableRule::kRefuse) {

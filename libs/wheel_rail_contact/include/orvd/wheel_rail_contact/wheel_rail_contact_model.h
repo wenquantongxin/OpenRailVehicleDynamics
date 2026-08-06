@@ -36,10 +36,11 @@
 //   difference enters the relative velocity. Taking it as an input rather than
 //   reconstructing it from the pose is what keeps this model usable when an
 //   irregularity model arrives.
-// - **The wheel body's motion** — where its origin is, how fast it is moving
-//   and turning. The relative velocity at a contact point is a property of the
-//   rigid body, not of the contact, and it cannot be recovered from the pose
-//   scalars.
+// - **The wheel profile frame's rigid motion** — where the authored profile's
+//   datum on the axle is, how its non-spinning basis is turned, and how that
+//   datum is moving. The relative velocity at a contact point is a property of
+//   the rigid body, not of the contact, and it cannot be recovered from the
+//   pose scalars.
 // - **The advance rate and the wheel's own rotation rate**, which set the speed
 //   the creepages are measured against.
 //
@@ -54,11 +55,17 @@
 //
 // ## What comes out
 //
-// One paired wrench per patch, reduced about the rail material point and
-// written in the track frame, plus the intermediate quantities each stage
-// produced. The pair is emitted from one set of numbers, so the two halves
-// cancel exactly at that point by construction; what the pair buys is that a
-// consumer transporting or rotating the two sides differently is caught.
+// Two points deliberately remain distinct. The rail material reference point
+// is where the wheel's rigid-body velocity is evaluated. The wheel surface
+// point is where the force acts, and is the point the paired wrench is reduced
+// about. They differ through the two profiles' geometric constructions and the
+// contact compliance. Treating them as one loses the force's lever arm when a
+// consumer later reduces it about a body origin.
+//
+// One paired wrench per patch is therefore reduced about the wheel surface
+// point and written in the track frame, plus the intermediate quantities each
+// stage produced. The pair is emitted from one set of numbers, so the two
+// halves cancel exactly at that point by construction.
 
 namespace orvd::wheel_rail_contact {
 
@@ -83,10 +90,20 @@ struct RailProfileFrame {
     Eigen::Matrix3d rotation_track_from_profile{Eigen::Matrix3d::Identity()};
 };
 
-// How the wheel is moving, in the track frame.
-struct WheelBodyMotion {
+// The rigid motion of the wheel profile's datum, in the track frame.
+//
+// The origin is on the axle at authored profile coordinates y=0, z=0. Putting
+// the lateral wheelset-to-profile datum into this origin avoids carrying the
+// same datum a second time through the contact model. The orientation maps the
+// profile coordinates [circumferential x, lateral y, radial-down z] into the
+// track frame and deliberately excludes wheel spin: an axisymmetric profile
+// does not change its geometry when the wheel spins. The angular velocity, in
+// contrast, is the wheel body's actual angular velocity and includes spin.
+struct WheelProfileRigidMotion {
     Eigen::Vector3d origin_track_meters{Eigen::Vector3d::Zero()};
-    Eigen::Vector3d velocity_track_meters_per_second{Eigen::Vector3d::Zero()};
+    Eigen::Matrix3d rotation_track_from_profile{Eigen::Matrix3d::Identity()};
+    Eigen::Vector3d origin_velocity_track_meters_per_second{
+        Eigen::Vector3d::Zero()};
     Eigen::Vector3d angular_velocity_track_radians_per_second{
         Eigen::Vector3d::Zero()};
     // How fast the contact advances along the line.
@@ -98,7 +115,7 @@ struct WheelBodyMotion {
 struct WheelRailContactInput {
     ContactPoseScalars pose;
     RailProfileFrame rail_frame;
-    WheelBodyMotion wheel;
+    WheelProfileRigidMotion wheel;
     // The profile/track roll correction, when the vehicle type applies one.
     //
     // Its three offsets reach exactly two places, and this is the second of
@@ -112,8 +129,9 @@ struct WheelRailContactInput {
 };
 
 struct WheelRailContactPatchResult {
-    // The interaction, both halves, about the contact point and in the track
-    // frame.
+    // The interaction, both halves, about the compliant wheel-surface point P
+    // and in the track frame. This is not the rail material reference point R
+    // at which the relative velocity was evaluated.
     PairedContactWrench wrench;
 
     // What each stage produced, kept because a force that comes out wrong is
@@ -163,23 +181,34 @@ class WheelRailContactModel {
                           const WheelRailContactConfiguration& configuration);
 
     // Evaluates every patch at one pose. Allocates nothing once the workspace
-    // has been through one evaluation at its widest pose, and throws nothing.
+    // has been through one evaluation at its widest pose. Throws
+    // std::runtime_error when the geometry cannot resolve a positive patch's
+    // three-dimensional longitudinal extent, and may propagate a configured
+    // coefficient table's documented refusal outside its supported range.
     [[nodiscard]] WheelRailContactResult Evaluate(
         const WheelRailContactInput& input,
         WheelRailContactWorkspace& workspace) const;
 
     void PrepareWorkspace(WheelRailContactWorkspace& workspace) const;
 
-    [[nodiscard]] const ContactGeometrySolver& geometry() const {
+    [[nodiscard]] const ContactGeometrySolver& geometry() const & {
         return geometry_;
     }
-    [[nodiscard]] const NormalContactLaw& normal_law() const { return normal_law_; }
-    [[nodiscard]] const TangentialContactSolver& tangential_solver() const {
+    [[nodiscard]] const ContactGeometrySolver& geometry() const && = delete;
+    [[nodiscard]] const NormalContactLaw& normal_law() const & {
+        return normal_law_;
+    }
+    [[nodiscard]] const NormalContactLaw& normal_law() const && = delete;
+    [[nodiscard]] const TangentialContactSolver& tangential_solver() const & {
         return tangential_solver_;
     }
-    [[nodiscard]] const KalkerCoefficientTable& creep_coefficients() const {
+    [[nodiscard]] const TangentialContactSolver& tangential_solver() const && =
+        delete;
+    [[nodiscard]] const KalkerCoefficientTable& creep_coefficients() const & {
         return creep_coefficients_;
     }
+    [[nodiscard]] const KalkerCoefficientTable& creep_coefficients() const && =
+        delete;
 
   private:
     ContactGeometrySolver geometry_;

@@ -180,6 +180,8 @@ find_single_executable(configuration_smoke_executable
                        configuration_installation_smoke "${consumer_build}")
 find_single_executable(track_geometry_smoke_executable
                        track_geometry_installation_smoke "${consumer_build}")
+find_single_executable(wheel_rail_contact_smoke_executable
+                       wheel_rail_contact_installation_smoke "${consumer_build}")
 find_single_executable(drake_probe_executable drake_loading_probe
                        "${consumer_build}")
 get_filename_component(smoke_runtime_directory "${smoke_executable}" DIRECTORY)
@@ -192,6 +194,8 @@ run_checked("running the configuration-only installed consumer"
             "${installed_vehicle_definition}" "${installed_startup_state}")
 run_checked("running the track-geometry-only installed consumer"
             "${track_geometry_smoke_executable}")
+run_checked("running the wheel-rail-contact-only installed consumer"
+            "${wheel_rail_contact_smoke_executable}")
 run_checked("running the Drake-marker positive control"
             "${drake_probe_executable}")
 run_checked(

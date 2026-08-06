@@ -100,7 +100,6 @@ ContactGeometryConfiguration DefaultConfiguration() {
     configuration.island_merge_gap_tolerance_meters = 1.0e-6;
     configuration.island_quadrature_stations = 120;
     configuration.rail_cant_radians = 0.024994792;
-    configuration.resolve_longitudinal_length = true;
     return configuration;
 }
 
@@ -318,6 +317,23 @@ int main() {
                         "a cylinder on a plane left its own cross section under "
                         "yaw");
             }
+        }
+
+        {
+            // A gross but still ordinary mechanical overlap can extend beyond
+            // the three-dimensional search's qualified bracket. The
+            // cross-section is unambiguously in contact, so returning no patch
+            // would hide the failure; inventing a circular length would change
+            // the selected model. The solve must instead fail loudly.
+            constexpr double unresolved_penetration_meters = 0.014;
+            RequireRefusal(
+                [&] {
+                    (void)solver.Solve(
+                        StraightDown(0.0, unresolved_penetration_meters), workspace);
+                },
+                "three-dimensional longitudinal extent",
+                "a positive patch whose longitudinal extent could not be "
+                "bracketed");
         }
 
         {

@@ -300,12 +300,13 @@ GZ18 冻结的 `kPsiMode=kIrregY` 定义为 `psi − atan2(dy_ds·s_dot, s_dot)`
 OpenMP 源码用法只在 `contact_batch.cc`，环境读取在 `contact_batch.cc:22` 与 `contact_kernel.cc:23`，
 **构建侧** `rwc_core/CMakeLists.txt:29-33` 无条件 `PUBLIC` 链接 `OpenMP::OpenMP_CXX`。
 
-✅ **`kSqrtReffPen` 的表述必须改。** 它根本不是分支：`normal_force_eec.cc:200-202` 无条件先算
-`L_sqrt = 2·sqrt(2·R_eff·pen)` 并作为 `L_i` 的初值，四个模式全部以它兜底，没有任何一行测试该枚举。
-枚举值本身可以摘掉而不动一行派发，但那个表达式必须活着。另：**公式是 `2·sqrt(2·R_eff·pen)`**，
-若漏掉根号内的 2，结果只有正确值的 `1/sqrt(2)`，即半轴相对正确值短约 29.29%。✅ 而对 GZ18 该回退**不可达**——
-两个人格构造器都由 `l_mode` 派生 `compute_max_3d_length`，实测 257 万个接触斑触发次数为 0。
-它在 WRL 的 SH17 人格中被选用（`sh17_contact_config.gen.h:47`）。
+✅ **`kSqrtReffPen` 的 WRL 事实与 ORVD 裁决必须分开。** 在 WRL 中它不是独立分支：
+`normal_force_eec.cc:200-202` 无条件先算 `L_sqrt = 2·sqrt(2·R_eff·pen)` 并作为 `L_i` 的初值，
+三维互穿长度解不出来时也会实际回退到它。该回退对已冻结 GZ18／IRW 人格不可达——两个人格构造器
+都由 `l_mode` 派生 `compute_max_3d_length`，实测 257 万个接触斑触发次数为 0；它在本批不迁移的 SH17
+人格中被选用（`sh17_contact_config.gen.h:47`）。**CodeX 复核与项目负责人裁决（2026-08-06）**：
+ORVD 只承载三维互穿长度，不迁移这个基线表达式或任何替代长度。三维长度无法解析时必须响亮失败，
+不得把 WRL 的跨人格兜底结构带入 GZ18／IRW 的已选模型。
 
 ✅ **`kComputeAndApply` 不是死分支**：它是结构体默认值，且 SH17 因**未设置该字段**而继承它
 （`sh17_contact_model_config.cc:97-108`）。应称「GZ18/IRW 未选中的非目标人格分支」。

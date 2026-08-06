@@ -108,19 +108,15 @@ struct ContactGeometryConfiguration {
     // frames are built on, and it is a different constant from the cant the
     // pose reduction uses even when the two agree to eight decimals.
     double rail_cant_radians{0.024994792};
-    // Whether to resolve the longitudinal extent of each patch by finding where
-    // the wheel's circle actually leaves the rail, rather than leaving it to a
-    // circular-chord estimate downstream. It is the most expensive thing in
-    // this module by an order of magnitude.
-    bool resolve_longitudinal_length{true};
 };
 
 // One contact patch: everything about its shape that a force law reads.
 struct ContactPatch {
     // The angle of the common normal — the rail's surface normal at the patch
-    // centroid, carried into the wheelset's frame. This is the angle the normal
-    // force is resolved about. The rail's laying cant is NOT added to it: the
-    // cant is already inside the pose's roll.
+    // centroid, carried into the wheelset's frame. It characterises the two
+    // profile surfaces geometrically; the selected GZ18 force and creepage
+    // frame below deliberately does not use it. The rail's laying cant is NOT
+    // added to it: the cant is already inside the pose's roll.
     double common_normal_angle_radians{0.0};
     // The rail's own surface slope angle at the centroid, plus the laying cant.
     // A different angle from the one above, and the one the contact frame and
@@ -156,10 +152,9 @@ struct ContactPatch {
     double cross_section_area_square_meters{0.0};
     double arc_weighted_area_square_meters{0.0};
 
-    // How far the overlap extends along the running direction. Zero when the
-    // resolution could not bracket it, which is a statement that it is unknown
-    // rather than that it is zero — a consumer must fall back rather than use
-    // the zero.
+    // How far the overlap extends along the running direction. Every active
+    // patch carries a finite positive value. A solve that cannot bracket that
+    // extent fails rather than returning a guessed length.
     double longitudinal_length_meters{0.0};
 
     // The two surfaces' curvatures at the contact point. The wheel's is taken
@@ -212,7 +207,6 @@ class ContactGeometryWorkspace {
     // The projected outline, one entry per sampled station.
     std::vector<double> projected_lateral_;
     std::vector<double> projected_vertical_;
-    std::vector<double> projected_longitudinal_;
     std::vector<double> projected_station_;
 
     // The binning, one entry per bin.
@@ -269,33 +263,42 @@ class ContactGeometrySolver {
                           const ContactGeometryConfiguration& configuration);
 
     // Solves one pose. Allocates nothing once the workspace has been through
-    // one solve at its widest pose.
+    // one solve at its widest pose. Throws std::runtime_error when a positive
+    // contact patch's three-dimensional longitudinal extent cannot be
+    // bracketed; no substitute length is admitted.
     [[nodiscard]] ContactPatchSet Solve(const ContactPoseScalars& pose,
                                         ContactGeometryWorkspace& workspace) const;
 
     // Sizes a workspace for this solver without solving.
     void PrepareWorkspace(ContactGeometryWorkspace& workspace) const;
 
-    [[nodiscard]] const ContactGeometryConfiguration& configuration() const {
+    [[nodiscard]] const ContactGeometryConfiguration& configuration() const & {
         return configuration_;
     }
+    [[nodiscard]] const ContactGeometryConfiguration& configuration() const && =
+        delete;
     [[nodiscard]] WheelSide side() const { return side_; }
 
     // The wheel node set the preparation laid, and the outline traced over it.
     // Exposed so that a caller can check the preparation against the same
     // observable the preprocessing layer publishes rather than infer it.
-    [[nodiscard]] std::span<const double> wheel_node_lateral_meters() const {
+    [[nodiscard]] std::span<const double> wheel_node_lateral_meters() const & {
         return wheel_nodes_.lateral_meters;
     }
-    [[nodiscard]] std::span<const double> outline_station_meters() const {
+    [[nodiscard]] std::span<const double> wheel_node_lateral_meters() const && =
+        delete;
+    [[nodiscard]] std::span<const double> outline_station_meters() const & {
         return outline_station_;
     }
-    [[nodiscard]] std::span<const double> outline_height_meters() const {
+    [[nodiscard]] std::span<const double> outline_station_meters() const && = delete;
+    [[nodiscard]] std::span<const double> outline_height_meters() const & {
         return outline_height_;
     }
-    [[nodiscard]] std::span<const double> outline_height_slope() const {
+    [[nodiscard]] std::span<const double> outline_height_meters() const && = delete;
+    [[nodiscard]] std::span<const double> outline_height_slope() const & {
         return outline_slope_;
     }
+    [[nodiscard]] std::span<const double> outline_height_slope() const && = delete;
 
   private:
     // How far along the running direction the overlap actually extends.
@@ -307,9 +310,9 @@ class ContactGeometrySolver {
     // both sides, then measures the chord between those two crossings. The
     // longest such chord over the patch is the answer.
     //
-    // Returns exactly zero when no station could be bracketed. That is a
-    // statement that the length is unknown, not that it is zero, and a consumer
-    // must treat it as a signal to fall back rather than as a measurement.
+    // Returns exactly zero when no station could be bracketed. This is only a
+    // private failure signal: `Solve` turns it into a diagnostic exception and
+    // never publishes a patch carrying the zero.
     [[nodiscard]] double ResolveLongitudinalLength(
         const ContactPoseScalars& pose, double lateral_offset,
         double vertical_offset, std::span<const double> stations) const;

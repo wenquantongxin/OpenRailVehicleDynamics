@@ -75,17 +75,12 @@ struct NormalContactGeometry {
     // two together fix the equivalent penetration; nothing else does.
     double cross_section_area_square_meters{0.0};
     double arc_width_meters{0.0};
-    // How far the overlap reaches along the running direction. Zero or
-    // non-finite means the geometry could not resolve it, and the law falls
-    // back to a circular estimate — reporting that it did.
+    // How far the overlap reaches along the running direction. A positive
+    // contact requires this value to be finite and positive; the selected
+    // model admits no estimated substitute.
     double longitudinal_length_meters{0.0};
-    // The deepest vertical overlap. It gates the whole evaluation and is what
-    // the fallback length is built from.
+    // The deepest vertical overlap. It gates the whole evaluation.
     double vertical_penetration_meters{0.0};
-    // The local rolling radius and the common normal's angle. Both are read
-    // only by the fallback length.
-    double rolling_radius_meters{0.0};
-    double common_normal_angle_radians{0.0};
 };
 
 struct NormalContactResult {
@@ -113,10 +108,6 @@ struct NormalContactResult {
     // The greatest pressure in the patch, at its centre.
     double maximum_pressure_pascals{0.0};
 
-    // Whether the longitudinal extent came from a circular estimate rather than
-    // from the geometry. A run in which this is ever true has a patch length
-    // that was guessed, and that is worth knowing.
-    bool used_estimated_length{false};
     // Whether the patch produced any force at all. False means one of the
     // validity gates rejected it, and every number above is zero.
     bool in_contact{false};
@@ -167,10 +158,12 @@ class NormalContactLaw {
     // `approach_speed_meters_per_second` is positive while the two bodies close
     // on each other along the contact normal, negative while they separate.
     //
-    // Allocates nothing and throws nothing. A patch that fails a validity gate
-    // comes back with `in_contact` false and every number zero, rather than as
-    // an exception: a patch that has stopped touching is an ordinary event on
-    // every step, not an error.
+    // Allocates nothing on the successful path. A patch with no positive depth,
+    // area or width comes back with `in_contact` false and every number zero:
+    // stopping contact is an ordinary event. Throws std::invalid_argument when
+    // those contact measures are positive but the three-dimensional
+    // longitudinal length is not finite and positive; guessing a replacement
+    // length is forbidden.
     [[nodiscard]] NormalContactResult Solve(
         const NormalContactGeometry& geometry,
         double approach_speed_meters_per_second) const;

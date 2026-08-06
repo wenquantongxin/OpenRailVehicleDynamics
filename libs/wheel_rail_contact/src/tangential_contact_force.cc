@@ -209,9 +209,6 @@ TangentialContactResult TangentialContactSolver::Solve(
     const double spin_flexibility =
         std::numbers::pi * semi_longitudinal * std::sqrt(aspect) /
         (4.0 * kalker.lateral_spin * shear_modulus_pascals_);
-    result.longitudinal_flexibility = longitudinal_flexibility;
-    result.lateral_flexibility = lateral_flexibility;
-    result.spin_flexibility = spin_flexibility;
 
     // Where the rigid slip vanishes, in the patch's own normalised coordinates.
     // With no spin there is no such point and both come out non-finite, which
@@ -304,17 +301,14 @@ TangentialContactResult TangentialContactSolver::Solve(
                     stress_longitudinal = trial_longitudinal * scale;
                     stress_lateral = trial_lateral * scale;
                 }
-                result.friction_bound_newtons += limit * cell_area;
             }
 
             result.longitudinal_force_newtons += stress_longitudinal * cell_area;
             result.lateral_force_newtons += stress_lateral * cell_area;
-            ++result.cell_count;
 
             previous_position = current_position;
             current_position -= normalised_step;
         }
-        ++result.strip_count;
     }
     return result;
 }

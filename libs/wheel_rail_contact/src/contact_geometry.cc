@@ -228,7 +228,6 @@ void ContactGeometryWorkspace::EnsureCapacity(std::size_t sample_capacity,
     };
     grow(projected_lateral_, sample_capacity);
     grow(projected_vertical_, sample_capacity);
-    grow(projected_longitudinal_, sample_capacity);
     grow(projected_station_, sample_capacity);
 
     GrowEnvelope(envelope_capacity);
@@ -488,7 +487,6 @@ ContactPatchSet ContactGeometrySolver::Solve(
     const std::size_t samples = configuration_.outline_sample_count;
     double* const projected_lateral = workspace.projected_lateral_.data();
     double* const projected_vertical = workspace.projected_vertical_.data();
-    double* const projected_longitudinal = workspace.projected_longitudinal_.data();
     double* const projected_station = workspace.projected_station_.data();
 
     double lateral_low = std::numeric_limits<double>::max();
@@ -521,7 +519,6 @@ ContactPatchSet ContactGeometrySolver::Solve(
 
         projected_lateral[index] = lateral;
         projected_vertical[index] = vertical;
-        projected_longitudinal[index] = wheel_x;
         projected_station[index] = station;
 
         if (std::isfinite(lateral) && std::isfinite(vertical) &&
@@ -552,7 +549,6 @@ ContactPatchSet ContactGeometrySolver::Solve(
     for (std::size_t index = 0; index < samples; ++index) {
         if (!std::isfinite(projected_lateral[index]) ||
             !std::isfinite(projected_vertical[index]) ||
-            !std::isfinite(projected_longitudinal[index]) ||
             !std::isfinite(projected_station[index])) {
             continue;
         }
@@ -945,12 +941,16 @@ ContactPatchSet ContactGeometrySolver::Solve(
                 InterpolateLinear(envelope_lateral, envelope_station, envelope_size,
                                   quadrature_lateral[index]);
         }
-        const double longitudinal_length =
-            configuration_.resolve_longitudinal_length
-                ? ResolveLongitudinalLength(pose, lateral_offset, vertical_offset,
-                                            std::span<const double>(
-                                                quadrature_station, stations))
-                : 0.0;
+        const double longitudinal_length = ResolveLongitudinalLength(
+            pose, lateral_offset, vertical_offset,
+            std::span<const double>(quadrature_station, stations));
+        if (!std::isfinite(longitudinal_length) ||
+            !(longitudinal_length > 0.0)) {
+            throw std::runtime_error(
+                "ContactGeometrySolver::Solve: could not resolve the "
+                "three-dimensional longitudinal extent of a positive contact "
+                "patch; continuing with a substitute length is not permitted");
+        }
 
         ContactPatch& patch = result.patches[result.count];
         patch.common_normal_angle_radians = normal_angle;
