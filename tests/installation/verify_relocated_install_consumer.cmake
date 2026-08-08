@@ -88,11 +88,27 @@ set(installed_wheel_profile
     "${installed_data_root}/vehicle_library/gz18/wheel_profiles/gz18_reference_wheel_profile.json")
 set(installed_rail_profile
     "${installed_data_root}/track_library/rail_profiles/uic60_rail_profile.json")
+set(installed_track_irregularity
+    "${installed_data_root}/track_library/irregularities/gz18_aar6_reference_irregularity.json")
+set(installed_lateral_irregularity
+    "${installed_data_root}/track_library/irregularities/series/gz18_aar6_reference_lateral.json")
+set(installed_vertical_irregularity
+    "${installed_data_root}/track_library/irregularities/series/gz18_aar6_reference_vertical.json")
 foreach(installed_profile IN ITEMS
         "${installed_wheel_profile}" "${installed_rail_profile}")
     if(NOT EXISTS "${installed_profile}")
         message(FATAL_ERROR
             "the relocated prefix has no installed profile '${installed_profile}'")
+    endif()
+endforeach()
+foreach(installed_irregularity IN ITEMS
+        "${installed_track_irregularity}"
+        "${installed_lateral_irregularity}"
+        "${installed_vertical_irregularity}")
+    if(NOT EXISTS "${installed_irregularity}")
+        message(FATAL_ERROR
+            "the relocated prefix has no installed track-irregularity asset "
+            "'${installed_irregularity}'")
     endif()
 endforeach()
 

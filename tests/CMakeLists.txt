@@ -658,6 +658,18 @@ orvd_configure_first_party_target(verify_profile_interpolants)
 target_link_libraries(verify_profile_interpolants PRIVATE orvd_wheel_rail_contact)
 add_test(NAME verify_profile_interpolants COMMAND verify_profile_interpolants)
 
+# G56's immutable two-channel station field. The channels deliberately use
+# different non-uniform grids and domains, so the test reaches all four typed
+# values without turning the qualified AAR6 input into a numerical gold table.
+add_executable(verify_track_irregularity_field
+    wheel_rail_contact/track_irregularity_field_header_self_containment.cc
+    wheel_rail_contact/verify_track_irregularity_field.cc)
+orvd_configure_first_party_target(verify_track_irregularity_field)
+target_link_libraries(verify_track_irregularity_field
+    PRIVATE orvd_wheel_rail_contact)
+add_test(NAME verify_track_irregularity_field
+         COMMAND verify_track_irregularity_field)
+
 add_executable(verify_wheel_profile_preprocessing
     wheel_rail_contact/profile_points_header_self_containment.cc
     wheel_rail_contact/profile_arc_length_header_self_containment.cc
@@ -751,6 +763,20 @@ target_link_libraries(verify_profile_asset_interoperability
 add_test(NAME verify_profile_asset_interoperability
          COMMAND verify_profile_asset_interoperability
              ${CMAKE_CURRENT_BINARY_DIR}/profile-fixtures)
+
+# G56's strict logical binding: one field manifest resolves two independently
+# gridded series from an explicit data root and returns an object that no longer
+# depends on the files. The real installed AAR6 asset is exercised by the
+# relocated consumer below rather than copied into this rejection table.
+add_executable(verify_track_irregularity_field_loading
+    configuration/load_track_irregularity_field_header_self_containment.cc
+    configuration/verify_track_irregularity_field_loading.cc)
+orvd_configure_first_party_target(verify_track_irregularity_field_loading)
+target_link_libraries(verify_track_irregularity_field_loading
+    PRIVATE orvd_configuration)
+add_test(NAME verify_track_irregularity_field_loading
+         COMMAND verify_track_irregularity_field_loading
+             ${CMAKE_CURRENT_BINARY_DIR}/track-irregularity-fixtures)
 
 # G52c's real asset and personality boundary. The test loads the same JSON a
 # relocated consumer receives, checks the closed logical identities and derived

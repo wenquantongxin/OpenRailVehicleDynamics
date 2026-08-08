@@ -143,6 +143,12 @@ install(DIRECTORY
         FILES_MATCHING PATTERN "*.json")
 
 install(DIRECTORY
+        "${CMAKE_CURRENT_SOURCE_DIR}/track_library/irregularities/"
+        DESTINATION
+        "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/track_library/irregularities"
+        FILES_MATCHING PATTERN "*.json")
+
+install(DIRECTORY
         "${CMAKE_CURRENT_SOURCE_DIR}/vehicle_library/gz18/"
         DESTINATION
         "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/gz18"

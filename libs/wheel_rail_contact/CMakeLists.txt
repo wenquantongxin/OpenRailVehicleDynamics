@@ -21,6 +21,7 @@ add_library(orvd_wheel_rail_contact STATIC
     src/profile_track_roll_transport.cc
     src/rail_gauge_datum.cc
     src/tangential_contact_force.cc
+    src/track_irregularity_field.cc
     src/wheel_profile_preprocessing.cc
     src/wheel_rail_contact_model.cc
     src/wheel_rail_contact_runtime_personality.cc

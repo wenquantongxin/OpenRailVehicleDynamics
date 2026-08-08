@@ -11,6 +11,7 @@
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 #include "orvd/configuration/assembled_gz18_contact_scenario.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
+#include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 
@@ -60,6 +61,25 @@ int main(int argc, char* argv[]) {
         // personality its direct RHS consumes.
         const auto startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
+        const auto irregularity =
+            orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
+                argv[4], "gz18_aar6_reference_irregularity");
+        for (const double station : {50.0, 100.0, 250.0, 300.0}) {
+            if (!std::isfinite(
+                    irregularity.LateralDisplacementMeters(station)) ||
+                !std::isfinite(
+                    irregularity.VerticalDisplacementMeters(station)) ||
+                !std::isfinite(
+                    irregularity.LateralSlopeMetersPerMeter(station)) ||
+                !std::isfinite(
+                    irregularity.VerticalSlopeMetersPerMeter(station))) {
+                std::fprintf(
+                    stderr,
+                    "installed GZ18 track-irregularity asset did not produce "
+                    "finite values and slopes\n");
+                return 1;
+            }
+        }
         const auto scenario =
             orvd::configuration::AssembleGz18ContactScenario(
                 vehicle, startup, std::move(line), argv[4], 20.0, 2.0);

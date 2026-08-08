@@ -10,6 +10,7 @@ add_library(orvd_configuration STATIC
     src/gz18_wheel_rail_contact.cc
     src/load_profile_points.cc
     src/load_resolved_startup_state.cc
+    src/load_track_irregularity_field.cc
     src/load_track_geometry.cc
     src/load_vehicle_definition.cc
     src/resolved_startup_state_invariants.cc
