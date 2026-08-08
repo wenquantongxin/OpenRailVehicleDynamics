@@ -3,11 +3,14 @@
 #include <cmath>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "orvd/integrators/cvode_continuous_state_advancer.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
+
+#include "integrator_limits.h"
 
 namespace orvd::integrators {
 
@@ -59,12 +62,23 @@ class SystemContinuousStateAdvancer::Implementation final {
 
         try {
             bool reached_target = false;
+            std::size_t successful_internal_step_count = 0;
             double expected_step_begin_time_seconds =
                 accepted_context_->time_seconds();
             while (!reached_target) {
+                if (successful_internal_step_count ==
+                    internal::kMaximumInternalStepsPerPublicAdvance) {
+                    throw std::runtime_error(
+                        "system continuous-state advancer: one public "
+                        "advance exceeded " +
+                        std::to_string(
+                            internal::kMaximumInternalStepsPerPublicAdvance) +
+                        " successful internal steps");
+                }
                 const ContinuousStateInternalStep step =
                     backend_->AdvanceOneInternalStepToward(
                         target_time_seconds, candidate_state_);
+                ++successful_internal_step_count;
                 // The last RHS trial need not be at the accepted backend
                 // endpoint. Continuity is checked against the preceding
                 // backend endpoint, then the returned endpoint is installed

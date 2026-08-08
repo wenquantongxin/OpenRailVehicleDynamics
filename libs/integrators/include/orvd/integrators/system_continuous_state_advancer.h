@@ -67,7 +67,8 @@ class SystemContinuousStateAdvancer final {
     ///
     /// A same-time request is a no-op.  Any failure after entering the backend
     /// leaves the accepted context unchanged and blocks another advance until
-    /// `SynchronizeAfterAcceptedContextChange()` succeeds.
+    /// `SynchronizeAfterAcceptedContextChange()` succeeds. One public advance
+    /// may accept at most 1,000,000 internal steps.
     void AdvanceTo(double target_time_seconds);
 
     /// Copies the accepted state, admitted context-local parameters and latest

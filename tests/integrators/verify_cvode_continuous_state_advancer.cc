@@ -283,21 +283,6 @@ void CheckFreeFallAndDenseOutput() {
     Expect(wrong_size[0] == 13.0,
            "current-state refusal preserves caller storage");
 
-    ExpectInvalidArgument(
-        [&] {
-            (void)advancer.AdvanceOneInternalStepToward(
-                kInitialTime - 0.01, output);
-        },
-        "backward advancement is refused before CVODE");
-    ExpectInvalidArgument(
-        [&] {
-            (void)advancer.AdvanceOneInternalStepToward(
-                std::numeric_limits<double>::quiet_NaN(), output);
-        },
-        "a non-finite target is refused before CVODE");
-    Expect(advancer.current_time_seconds() == kInitialTime,
-           "invalid targets preserve the successful endpoint");
-
     AdvanceFully(advancer, kTargetTime);
     Expect(advancer.current_time_seconds() == kTargetTime,
            "CVODE stops at the requested endpoint");
@@ -315,6 +300,43 @@ void CheckFreeFallAndDenseOutput() {
            "the dense-output interval has positive length");
     Expect(interval->end_time_seconds == kTargetTime,
            "the dense-output interval ends at the public endpoint");
+
+    output.setConstant(37.0);
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceOneInternalStepToward(
+                kTargetTime - 0.01, output);
+        },
+        "backward advancement is refused before CVODE");
+    Expect((output.array() == 37.0).all(),
+           "backward-stop refusal preserves endpoint caller storage");
+    output.setConstant(41.0);
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceOneInternalStepToward(
+                std::numeric_limits<double>::quiet_NaN(), output);
+        },
+        "a non-finite target is refused before CVODE");
+    Expect((output.array() == 41.0).all(),
+           "non-finite-stop refusal preserves endpoint caller storage");
+    wrong_size[0] = 43.0;
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceOneInternalStepToward(
+                kTargetTime + 0.01, wrong_size);
+        },
+        "a wrong-sized endpoint output is refused before CVODE");
+    Expect(wrong_size[0] == 43.0,
+           "endpoint-size refusal preserves caller storage");
+    Expect(advancer.current_time_seconds() == kTargetTime,
+           "invalid endpoint requests preserve the successful endpoint");
+    const auto interval_after_refusals = advancer.dense_output_interval();
+    Expect(interval_after_refusals.has_value() &&
+               interval_after_refusals->start_time_seconds ==
+                   interval->start_time_seconds &&
+               interval_after_refusals->end_time_seconds ==
+                   interval->end_time_seconds,
+           "invalid endpoint requests preserve dense output");
 
     const double midpoint =
         0.5 * (interval->start_time_seconds + interval->end_time_seconds);
@@ -345,6 +367,7 @@ void CheckFreeFallAndDenseOutput() {
            "dense-state size refusal preserves caller storage");
 
     const int evaluations_before_same_time = rhs.evaluation_count();
+    output.setConstant(47.0);
     const auto same_time_step = advancer.AdvanceOneInternalStepToward(
         kTargetTime, output);
     Expect(same_time_step.reached_stop &&
@@ -353,6 +376,10 @@ void CheckFreeFallAndDenseOutput() {
            "a same-time backend request reports a reached no-op");
     Expect(rhs.evaluation_count() == evaluations_before_same_time,
            "same-time advancement does not evaluate the RHS");
+    ExpectStateNear(output,
+                    ConstantAccelerationState(
+                        kInitialTime, initial_state, kAcceleration, kTargetTime),
+                    "same-time advancement copies the current endpoint");
     const auto interval_after_same_time = advancer.dense_output_interval();
     Expect(interval_after_same_time.has_value() &&
                interval_after_same_time->start_time_seconds ==

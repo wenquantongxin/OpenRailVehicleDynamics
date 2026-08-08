@@ -145,6 +145,56 @@ int main(int argc, char** argv) {
             "contact changed the GZ18 continuous-state dimension");
 
     auto& runtime_context = scenario->initial_context().context();
+
+    // Exercise the combined accepted-state transaction directly on the real
+    // GZ18 context. Invalid projection hints must be rejected before a valid,
+    // deliberately changed time or state can be partially committed.
+    Eigen::VectorXd transaction_baseline_state(109);
+    assembled.system().CopyContinuousState(runtime_context,
+                                           transaction_baseline_state);
+    const double transaction_baseline_time = runtime_context.time_seconds();
+    const std::vector<double> transaction_baseline_hints(
+        runtime_context.wheel_rail_projection_station_hints_meters().begin(),
+        runtime_context.wheel_rail_projection_station_hints_meters().end());
+    Eigen::VectorXd transaction_candidate_state = transaction_baseline_state;
+    transaction_candidate_state.tail(2) += Eigen::Vector2d(1.0, -1.0);
+    const auto RequireProjectionTransactionRefusal =
+        [&](std::span<const double> invalid_hints, std::string_view message) {
+            bool rejected = false;
+            try {
+                assembled.system()
+                    .SetTimeContinuousStateAndWheelRailProjectionHints(
+                        runtime_context, transaction_baseline_time + 0.125,
+                        transaction_candidate_state, invalid_hints);
+            } catch (const std::invalid_argument&) {
+                rejected = true;
+            }
+            Eigen::VectorXd state_after_refusal(109);
+            assembled.system().CopyContinuousState(runtime_context,
+                                                   state_after_refusal);
+            Require(rejected &&
+                        runtime_context.time_seconds() ==
+                            transaction_baseline_time &&
+                        state_after_refusal == transaction_baseline_state &&
+                        std::equal(
+                            transaction_baseline_hints.begin(),
+                            transaction_baseline_hints.end(),
+                            runtime_context
+                                .wheel_rail_projection_station_hints_meters()
+                                .begin()),
+                    message);
+        };
+    std::vector<double> wrong_count_hints = transaction_baseline_hints;
+    wrong_count_hints.pop_back();
+    RequireProjectionTransactionRefusal(
+        wrong_count_hints,
+        "wrong-sized projection hints partially committed accepted state");
+    std::vector<double> nonfinite_hints = transaction_baseline_hints;
+    nonfinite_hints.front() = std::numeric_limits<double>::quiet_NaN();
+    RequireProjectionTransactionRefusal(
+        nonfinite_hints,
+        "non-finite projection hints partially committed accepted state");
+
     std::unordered_map<std::string, double> resolved_station;
     std::unordered_map<std::string, const ResolvedWheelsetPlacement*>
         resolved_placement;
@@ -581,26 +631,40 @@ int main(int argc, char** argv) {
     }
     const double boundary_reference_station =
         boundary_line.end_track_station_meters() - foremost_offset -
-        1.1 * kProjectionHalfWidthMeters;
+        3.5 * kProjectionHalfWidthMeters;
     auto boundary_scenario = AssembleGz18ContactScenario(
         vehicle, startup, std::move(boundary_line),
         std::filesystem::path(argv[4]), boundary_reference_station,
         kProjectionHalfWidthMeters);
     const auto& boundary_system = boundary_scenario->vehicle_system();
     auto& boundary_context = boundary_scenario->initial_context().context();
-    Eigen::VectorXd boundary_state(109);
-    boundary_system.system().CopyContinuousState(boundary_context,
-                                                 boundary_state);
-    const std::vector<double> boundary_hints(
+    const std::vector<double> initial_boundary_hints(
         boundary_context.wheel_rail_projection_station_hints_meters().begin(),
         boundary_context.wheel_rail_projection_station_hints_meters().end());
     SystemContinuousStateAdvancer boundary_advancer(
         boundary_system.system(), boundary_system.compiled_plan(),
         boundary_context, MakeGz18Tolerances(), NoCallTimeAppliedForces{});
+    boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
+    Require(boundary_context.time_seconds() == kAcceptedHistoryTargetSeconds,
+            "the boundary scenario did not establish an accepted history");
+    Eigen::VectorXd accepted_boundary_state(109);
+    boundary_system.system().CopyContinuousState(boundary_context,
+                                                 accepted_boundary_state);
+    const std::vector<double> accepted_boundary_hints(
+        boundary_context.wheel_rail_projection_station_hints_meters().begin(),
+        boundary_context.wheel_rail_projection_station_hints_meters().end());
+    for (std::size_t ordinal = 0; ordinal < initial_boundary_hints.size();
+         ++ordinal) {
+        Require(accepted_boundary_hints[ordinal] >
+                    initial_boundary_hints[ordinal] +
+                        kProjectionHalfWidthMeters,
+                "the boundary scenario did not move its accepted projection "
+                "history beyond the construction anchors");
+    }
     bool boundary_failure = false;
     std::string boundary_failure_message;
     try {
-        boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
+        boundary_advancer.AdvanceTo(2.0 * kAcceptedHistoryTargetSeconds);
     } catch (const std::exception& error) {
         boundary_failure = true;
         boundary_failure_message = error.what();
@@ -613,10 +677,12 @@ int main(int argc, char** argv) {
     Eigen::VectorXd state_after_failure(109);
     boundary_system.system().CopyContinuousState(boundary_context,
                                                  state_after_failure);
-    Require(boundary_context.time_seconds() == 0.0 &&
-                state_after_failure == boundary_state &&
+    Require(boundary_context.time_seconds() ==
+                    kAcceptedHistoryTargetSeconds &&
+                state_after_failure == accepted_boundary_state &&
                 std::equal(
-                    boundary_hints.begin(), boundary_hints.end(),
+                    accepted_boundary_hints.begin(),
+                    accepted_boundary_hints.end(),
                     boundary_context
                         .wheel_rail_projection_station_hints_meters()
                         .begin()),
@@ -624,15 +690,25 @@ int main(int argc, char** argv) {
             "history");
     bool unsynchronized_advance_was_rejected = false;
     try {
-        boundary_advancer.AdvanceTo(1.0e-7);
+        boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds + 1.0e-7);
     } catch (const std::logic_error&) {
         unsynchronized_advance_was_rejected = true;
     }
     Require(unsynchronized_advance_was_rejected,
             "a failed GZ18 advance did not require explicit synchronization");
     boundary_advancer.SynchronizeAfterAcceptedContextChange();
-    boundary_advancer.AdvanceTo(1.0e-7);
-    Require(boundary_context.time_seconds() == 1.0e-7,
+    boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds + 1.0e-7);
+    Require(boundary_context.time_seconds() ==
+                kAcceptedHistoryTargetSeconds + 1.0e-7 &&
+                std::equal(
+                    accepted_boundary_hints.begin(),
+                    accepted_boundary_hints.end(),
+                    boundary_context
+                        .wheel_rail_projection_station_hints_meters()
+                        .begin(),
+                    [](double accepted, double recovered) {
+                        return recovered >= accepted;
+                    }),
             "the GZ18 advancer did not recover from its accepted state and "
             "station history");
 

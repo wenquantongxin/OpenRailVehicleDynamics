@@ -17,6 +17,8 @@
 #include <sunlinsol/sunlinsol_dense.h>
 #include <sunmatrix/sunmatrix_dense.h>
 
+#include "integrator_limits.h"
+
 namespace orvd::integrators {
 namespace {
 
@@ -26,7 +28,6 @@ static_assert(std::is_same_v<sunindextype, std::int32_t>);
 constexpr int kMaximumBdfOrder = 2;
 constexpr long int kJacobianEvaluationFrequency = 51;
 constexpr long int kLinearSetupFrequency = 20;
-constexpr long int kMaximumInternalStepsPerAdvance = 1'000'000;
 
 [[noreturn]] void ThrowSundialsFailure(const char* operation, int flag) {
     throw std::runtime_error(
@@ -396,7 +397,9 @@ class CvodeContinuousStateAdvancer::Implementation final {
             "CVodeSetJacEvalFrequency");
         RequireCvodeSuccess(
             CVodeSetMaxNumSteps(resources_.memory,
-                               kMaximumInternalStepsPerAdvance),
+                               static_cast<long int>(
+                                   internal::
+                                       kMaximumInternalStepsPerPublicAdvance)),
             "CVodeSetMaxNumSteps");
         RequireCvodeSuccess(
             CVodeSetStabLimDet(resources_.memory, SUNFALSE),
