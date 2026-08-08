@@ -318,15 +318,12 @@ void CheckRealEvaluation(const Gz18WheelRailContact& contact,
             "a prepared real-profile contact evaluation allocated storage");
     Require(right.count == 1 && left.count == 1,
             "the resolved GZ18 start produced other than one patch per wheel");
-    Require(right.three_dimensional_length_resolution_count ==
-                    right.geometric_patch_count &&
-                left.three_dimensional_length_resolution_count ==
-                    left.geometric_patch_count &&
-                right.analytic_longitudinal_length_fallback_count <=
-                    right.three_dimensional_length_resolution_count &&
-                left.analytic_longitudinal_length_fallback_count <=
-                    left.three_dimensional_length_resolution_count,
-            "the real-profile length-resolution accounting is inconsistent");
+    Require(right.geometric_patch_count == 1 &&
+                left.geometric_patch_count == 1 &&
+                right.analytic_longitudinal_length_fallback_count == 0 &&
+                left.analytic_longitudinal_length_fallback_count == 0,
+            "the resolved GZ18 start did not resolve both three-dimensional "
+            "contact lengths");
     if (right.count != 1 || left.count != 1) {
         return;
     }

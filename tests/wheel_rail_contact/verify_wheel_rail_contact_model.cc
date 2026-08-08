@@ -153,8 +153,7 @@ int main() {
         // third axis.
         const WheelRailContactResult result = model.Evaluate(resting, workspace);
         Require(result.count == 1, "a resting wheel produced other than one patch");
-        Require(result.three_dimensional_length_resolution_count ==
-                        result.geometric_patch_count &&
+        Require(result.geometric_patch_count == 1 &&
                     result.analytic_longitudinal_length_fallback_count == 0,
                 "the ordinary contact did not report one successful "
                 "three-dimensional length resolution");
@@ -558,7 +557,6 @@ int main() {
         lifted.pose.vertical_raise_meters = 0.01;
         const WheelRailContactResult clear = model.Evaluate(lifted, workspace);
         Require(clear.count == 0 && clear.geometric_patch_count == 0 &&
-                    clear.three_dimensional_length_resolution_count == 0 &&
                     clear.analytic_longitudinal_length_fallback_count == 0,
                 "a wheel held clear of the rail produced a patch");
 
@@ -571,9 +569,9 @@ int main() {
         Require(separating.count == 0,
                 "a patch whose damping cancelled its elastic force was emitted "
                 "as a force");
-        Require(separating.three_dimensional_length_resolution_count == 1,
-                "a separating geometric patch disappeared from the length "
-                "attempt count before the force gate");
+        Require(separating.analytic_longitudinal_length_fallback_count == 0,
+                "a separating geometric patch unexpectedly lost its resolved "
+                "three-dimensional length before the force gate");
     }
 
     {
@@ -599,10 +597,8 @@ int main() {
         Require(result.geometric_patch_count == 1 && result.count == 1,
                 "the assembled model swallowed a patch whose longitudinal "
                 "resolution was unavailable");
-        Require(result.three_dimensional_length_resolution_count == 1 &&
-                    result.analytic_longitudinal_length_fallback_count == 1,
-                "the assembled model did not report one length attempt and one "
-                "analytic fallback");
+        Require(result.analytic_longitudinal_length_fallback_count == 1,
+                "the assembled model did not report one analytic fallback");
         if (result.count == 1) {
             Require(result.patches[0]
                             .normal.used_analytic_longitudinal_length_fallback &&

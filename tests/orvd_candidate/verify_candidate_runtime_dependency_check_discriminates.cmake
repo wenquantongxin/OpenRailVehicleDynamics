@@ -18,7 +18,15 @@ function(expect_refusal label executable expected_fragment)
         message(SEND_ERROR "${label}: the check accepted what it must refuse")
         return()
     endif()
-    if(NOT "${output}${errors}" MATCHES "${expected_fragment}")
+    # CMake formats long message() diagnostics to the terminal width.  A
+    # refusal reason must not stop matching merely because a path made the
+    # formatter wrap between two words.
+    set(diagnostic "${output}${errors}")
+    string(REPLACE "\n" " " diagnostic "${diagnostic}")
+    string(REPLACE "\r" " " diagnostic "${diagnostic}")
+    string(REPLACE "\t" " " diagnostic "${diagnostic}")
+    string(REGEX REPLACE " +" " " diagnostic "${diagnostic}")
+    if(NOT "${diagnostic}" MATCHES "${expected_fragment}")
         message(SEND_ERROR
             "${label}: the check refused, but for another reason than "
             "'${expected_fragment}':\n${output}${errors}")

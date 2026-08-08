@@ -51,7 +51,6 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
     const ContactPatchSet patches =
         geometry_.Solve(input.pose, workspace.geometry_);
     result.geometric_patch_count = patches.count;
-    result.three_dimensional_length_resolution_count = patches.count;
 
     for (std::size_t slot = 0; slot < patches.count; ++slot) {
         const ContactPatch& patch = patches.patches[slot];

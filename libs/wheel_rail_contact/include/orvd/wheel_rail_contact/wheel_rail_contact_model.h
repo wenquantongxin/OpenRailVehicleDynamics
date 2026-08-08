@@ -157,10 +157,10 @@ struct WheelRailContactResult {
     // carried no load.
     std::size_t geometric_patch_count{0};
     // Per evaluation, not cumulative. The geometry attempts one
-    // three-dimensional longitudinal resolution for every geometric patch;
-    // the second count says how many force-law evaluations retained the
-    // analytic baseline because that measurement was unavailable.
-    std::size_t three_dimensional_length_resolution_count{0};
+    // three-dimensional longitudinal resolution for every geometric patch,
+    // so `geometric_patch_count` is also the attempt count. This count says
+    // how many force-law evaluations retained the analytic baseline because
+    // that measurement was unavailable.
     std::size_t analytic_longitudinal_length_fallback_count{0};
 };
 
