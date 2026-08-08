@@ -20,6 +20,7 @@ namespace {
 
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackStationProjection;
+using orvd::track_geometry::TrackStationProjectionWindowMiss;
 namespace lines = orvd::track_geometry::test_lines;
 
 static_assert(
@@ -152,12 +153,15 @@ void CheckMultipleMinimaAreRefused() {
     const TrackGeometry line = lines::MakeSymmetricGradeArchLine(1.0);
     const Eigen::Vector3d point(0.5 * lines::kArchLengthMeters, 0.0, 2.0);
     bool refused = false;
+    bool misclassified_as_window_miss = false;
     try {
         (void)line.ProjectPointNearSeed(point, 4.5, 4.4);
+    } catch (const TrackStationProjectionWindowMiss&) {
+        misclassified_as_window_miss = true;
     } catch (const std::runtime_error&) {
         refused = true;
     }
-    Expect(refused,
+    Expect(refused && !misclassified_as_window_miss,
            "a window holding multiple minima is refused rather than choosing "
            "a branch for the caller");
 
@@ -189,7 +193,7 @@ void CheckSecondOrderConditionIsEnforced() {
     bool refused = false;
     try {
         (void)line.ProjectPointNearSeed(point, station, 20.0);
-    } catch (const std::runtime_error&) {
+    } catch (const TrackStationProjectionWindowMiss&) {
         refused = true;
     }
     Expect(refused,
@@ -221,7 +225,7 @@ void CheckAStationaryPointOnTheWindowWallIsRefused() {
     bool refused = false;
     try {
         (void)line.ProjectPointNearSeed(point, 12.0, 2.0);
-    } catch (const std::runtime_error&) {
+    } catch (const TrackStationProjectionWindowMiss&) {
         refused = true;
     }
     Expect(refused, "a root sitting on the wall of the window is refused");

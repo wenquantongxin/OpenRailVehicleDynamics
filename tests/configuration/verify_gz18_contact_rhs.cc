@@ -592,17 +592,20 @@ int main(int argc, char** argv) {
             "assembly");
 
     // The real 60 km/h GZ18 advances farther than the deliberately narrow
-    // local window. Reusing G53's static anchors would therefore fail, while
-    // one station update at every accepted CVODE endpoint remains on branch.
+    // local window. Some ordinary CVODE trial steps also reach beyond the
+    // latest accepted 1 cm branch window. Those trial states are recoverable:
+    // CVODE reduces the step, while every successful endpoint advances the
+    // accepted projection history. Static G53 anchors cannot do either job.
     std::vector<double> initial_hints(
         runtime_context.wheel_rail_projection_station_hints_meters().begin(),
         runtime_context.wheel_rail_projection_station_hints_meters().end());
     SystemContinuousStateAdvancer advancer(
         assembled.system(), assembled.compiled_plan(), runtime_context,
         MakeGz18Tolerances(), NoCallTimeAppliedForces{});
-    constexpr double kAcceptedHistoryTargetSeconds = 1.0e-3;
-    advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
-    Require(runtime_context.time_seconds() == kAcceptedHistoryTargetSeconds,
+    constexpr double kRecoverableProjectionTargetSeconds = 3.0e-2;
+    advancer.AdvanceTo(kRecoverableProjectionTargetSeconds);
+    Require(runtime_context.time_seconds() ==
+                kRecoverableProjectionTargetSeconds,
             "the contact-enabled public advance did not reach its target");
     const auto advanced_hints =
         runtime_context.wheel_rail_projection_station_hints_meters();
@@ -645,6 +648,7 @@ int main(int argc, char** argv) {
     SystemContinuousStateAdvancer boundary_advancer(
         boundary_system.system(), boundary_system.compiled_plan(),
         boundary_context, MakeGz18Tolerances(), NoCallTimeAppliedForces{});
+    constexpr double kAcceptedHistoryTargetSeconds = 1.0e-3;
     boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
     Require(boundary_context.time_seconds() == kAcceptedHistoryTargetSeconds,
             "the boundary scenario did not establish an accepted history");

@@ -615,7 +615,7 @@ TrackStationProjection TrackGeometry::ProjectPointNearSeed(
         unique_minimum = refined;
     }
     if (!unique_minimum.found) {
-        throw std::runtime_error(
+        throw TrackStationProjectionWindowMiss(
             "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies "
             "strictly inside the search interval [" +
             Describe(lower) + ", " + Describe(upper) + "] m");

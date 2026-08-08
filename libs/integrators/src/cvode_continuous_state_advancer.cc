@@ -163,15 +163,18 @@ class CvodeContinuousStateAdvancer::Implementation final {
         const int advance_flag = CVode(resources_.memory, stop_time_seconds,
                                        resources_.state, &reached_time,
                                        CV_ONE_STEP);
-        if (rhs_exception_ != nullptr) {
+        if (advance_flag != CV_SUCCESS && advance_flag != CV_TSTOP_RETURN) {
             const std::exception_ptr exception = rhs_exception_;
             MarkBackendFailure();
-            std::rethrow_exception(exception);
-        }
-        if (advance_flag != CV_SUCCESS && advance_flag != CV_TSTOP_RETURN) {
-            MarkBackendFailure();
+            if (exception != nullptr) {
+                std::rethrow_exception(exception);
+            }
             ThrowSundialsFailure("CVode", advance_flag);
         }
+        // A recoverable RHS refusal may have preceded this successful step.
+        // Do not let that rejected trial escape after CVODE has reduced its
+        // step and found an admissible endpoint.
+        rhs_exception_ = nullptr;
         sunrealtype backend_time{};
         sunrealtype last_step{};
         const int time_flag =
@@ -287,10 +290,12 @@ class CvodeContinuousStateAdvancer::Implementation final {
             Eigen::Map<Eigen::VectorXd> output(
                 N_VGetArrayPointer(state_time_derivatives), self.state_size_);
             self.rhs_->CalcTimeDerivatives(time_seconds, input, output);
+            self.rhs_exception_ = nullptr;
             return 0;
         } catch (...) {
             self.rhs_exception_ = std::current_exception();
-            return -1;
+            return self.rhs_->IsRecoverableFailure(self.rhs_exception_) ? 1
+                                                                        : -1;
         }
     }
 

@@ -127,8 +127,9 @@ class TrackGeometry {
     // Throws std::invalid_argument for a non-finite point, a non-finite or
     // out-of-domain seed, a non-positive half width, or a window reaching
     // outside the domain; the window is a declared search domain, not a hint to
-    // be clipped. Throws std::runtime_error unless exactly one admissible
-    // minimum lies strictly inside the window.
+    // be clipped. Throws TrackStationProjectionWindowMiss if no admissible
+    // minimum lies strictly inside the window, and std::runtime_error if more
+    // than one does.
     [[nodiscard]] TrackStationProjection ProjectPointNearSeed(
         const Eigen::Vector3d& point_in_inertial_meters,
         double seed_track_station_meters, double search_half_width_meters) const;

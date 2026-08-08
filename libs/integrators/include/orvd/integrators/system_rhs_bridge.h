@@ -74,6 +74,9 @@ class SystemRhsBridge final : public ContinuousStateRhs {
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
         Eigen::Ref<Eigen::VectorXd> state_time_derivatives) override;
 
+    [[nodiscard]] bool IsRecoverableFailure(
+        const std::exception_ptr& failure) const noexcept override;
+
    private:
     const system_assembly::SystemInstance* system_;
     const system_assembly::CompiledSystemPlan* plan_;

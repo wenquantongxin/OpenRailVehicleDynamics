@@ -4,6 +4,7 @@
 /// The backend-neutral contracts shared by the continuous-state advancer and
 /// its right-hand side.
 
+#include <exception>
 #include <optional>
 
 #include <Eigen/Dense>
@@ -42,6 +43,17 @@ class ContinuousStateRhs {
         double time_seconds,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
         Eigen::Ref<Eigen::VectorXd> state_time_derivatives) = 0;
+
+    /// Classifies an exception from the preceding trial evaluation.
+    ///
+    /// Returning true permits a numerical backend to retry that trial, for
+    /// example with a smaller step. The default is fatal. Implementations must
+    /// classify by exception type rather than diagnostic text and must not
+    /// mutate accepted physical state.
+    [[nodiscard]] virtual bool IsRecoverableFailure(
+        const std::exception_ptr&) const noexcept {
+        return false;
+    }
 };
 
 /// The closed interval on which the most recent successful backend step can
