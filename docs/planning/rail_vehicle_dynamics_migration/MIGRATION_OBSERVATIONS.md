@@ -239,15 +239,20 @@
   `39cf7ba` 抽取公共 PID 核心，`ba3a335` 让 SIMPACK Realtime 适配器消费该核心，`f0f8052`
   又用同一次 10 ms 正向运行驱动真实 Drake 控制系统。R46 覆盖 11 个事件边界、10 个 1 ms
   零阶保持区间和 8 个通道；事件时刻、速度误差、积分态、原始/滤波/施加转矩最大差均为零，
-  控制功重建误差为 `4.547473508864641e-13 J`。它还明确关闭普通电机代理，并以轮对—轴桥等大
-  反向纯力偶施加转矩。历史 1 kHz 路线与 P179 的 H3＋100 Hz 优选 PID＋普通电机代理不是同一
+  控制功重建误差为 `4.547473508864641e-13 J`。它还明确关闭普通电机代理，并以转向架构架—独立
+  车轮等大反向纯力偶施加转矩。SIMPACK 的 `$F_Motor_*` 与 `$F_Motor_*_Simat` 均从构架上的
+  `$M_Frame_Motor_*` 连到轮体上的 `$M_IRW_Motor_L/R`；车轮转动副虽以轴桥为父体，但那不是电机
+  力元的反力端。历史 1 kHz 路线与 P179 的 H3＋100 Hz 优选 PID＋普通电机代理不是同一
   人格；后者的三平台 30 s 结果是更难的整车系统旁证，但不能替代 1 kHz 同身份长窗门。
 - 锚点：[R007](DISCUSSION_AND_DECISION_LOG.md)；WRL 提交 `39cf7ba`、`ba3a335`、`f0f8052`；
+  `mbs_simpack/irw_4WDB/ref_files/Bogie_IRWs_4WDBv3.spck:2045-2101`；
+  `mbs_simpack/irw_4WDB/ref_files/IRW_4WDBv31.spck:478-528`；
+  `scripts_cpp/drake_sim/src/torque_applier_system.cc:110-128`；
   `scripts_cpp/validation_corpus/r46_cross_platform_motor_pid_1khz.json`；
   `mbs_simpack/irw_4WDB/main_model/Vehicle4WDB_R300mV60kmph.output/align_with_simpack/`
   `r300_git_promotion_manifest/r46_cross_platform_motor_pid_1khz/R46_ACCEPTANCE.json`。
-- 影响：ORVD 将命令定义为轮对相对轴桥转矩，并由执行器施加等大反向力偶；这只是更准确地命名
-  已选产品边界，不能把“去电机代理”当作忽略历史 SIMPACK RT 的授权。若遗漏离散时钟、启动
+- 影响：ORVD 必须把转矩作用对绑定为对应构架与独立车轮，不得从车轮转动副拓扑推导成轴桥反力；
+  同时不能把“去电机代理”当作忽略历史 SIMPACK RT 的授权。若遗漏离散时钟、启动
   控制、符号、限幅、滤波或旧适配器中的实际轮端语义，就不能重现已验证行为。
 - 下一核验：迁移时先重放 R46 的控制状态、转矩、零阶保持和控制功合同；整车、事件和执行器接线
   完成后，再用相同模型、输入、1 kHz 时钟与控制人格运行 SIMPACK Realtime—ORVD 长窗对照。
