@@ -140,7 +140,18 @@ class WheelRailContactForcePlan {
     void CalcAppliedForces(
         const multibody_model::MultibodyEvaluationContext& context,
         WheelRailContactForceWorkspace& workspace,
+        std::span<const double> projection_station_hints_meters,
         std::span<multibody_model::AppliedBodyWrench> body_wrenches) const;
+
+    // Re-evaluates only the unique carrier projections at one accepted
+    // endpoint. The current hints select the local branches; the output is
+    // written only after every carrier succeeds. No wheel contact kernel is
+    // evaluated on this path.
+    void CalcProjectionStationHints(
+        const multibody_model::MultibodyEvaluationContext& context,
+        WheelRailContactForceWorkspace& workspace,
+        std::span<const double> current_hints_meters,
+        std::span<double> updated_hints_meters) const;
 
     // G53's admitted topology has one GZ18 wheelset body serving as both the
     // shared projection carrier and the body receiving its left/right contact
@@ -162,6 +173,14 @@ class WheelRailContactForcePlan {
         wheel_rail_contact::WheelSide side{
             wheel_rail_contact::WheelSide::kRight};
     };
+
+    void EvaluateCarrierProjections(
+        const multibody_model::MultibodyEvaluationContext& context,
+        WheelRailContactForceWorkspace& workspace,
+        std::span<const double> projection_station_hints_meters) const;
+    void CompleteCarrierKinematics(
+        const multibody_model::MultibodyEvaluationContext& context,
+        WheelRailContactForceWorkspace& workspace) const;
 
     const multibody_model::MultibodyModel* model_;
     track_geometry::TrackGeometry line_;

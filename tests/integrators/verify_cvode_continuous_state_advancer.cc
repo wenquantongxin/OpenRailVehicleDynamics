@@ -61,6 +61,45 @@ ContinuousStateErrorTolerances MakeTolerances(int size) {
         1.0e-11, Eigen::VectorXd::Constant(size, 1.0e-13));
 }
 
+void AdvanceFully(CvodeContinuousStateAdvancer& advancer,
+                  double stop_time_seconds) {
+    Eigen::VectorXd endpoint(advancer.continuous_state_size());
+    double expected_step_begin = advancer.current_time_seconds();
+    while (expected_step_begin < stop_time_seconds) {
+        const auto step = advancer.AdvanceOneInternalStepToward(
+            stop_time_seconds, endpoint);
+        Expect(step.start_time_seconds == expected_step_begin,
+               "successive CVODE internal endpoints are contiguous");
+        Expect(step.end_time_seconds > step.start_time_seconds,
+               "a CVODE internal step advances time");
+        Expect(advancer.current_time_seconds() == step.end_time_seconds,
+               "the backend current time equals the returned endpoint");
+        Eigen::VectorXd copied(endpoint.size());
+        advancer.CopyCurrentState(copied);
+        Expect((copied.array() == endpoint.array()).all(),
+               "the returned endpoint equals the backend current state");
+        const auto interval = advancer.dense_output_interval();
+        Expect(interval.has_value() &&
+                   interval->end_time_seconds == step.end_time_seconds,
+               "dense output ends at the returned internal endpoint");
+        if (interval.has_value()) {
+            const double time_tolerance =
+                64.0 * std::numeric_limits<double>::epsilon() *
+                std::max(1.0, std::abs(step.start_time_seconds));
+            ExpectNear(interval->start_time_seconds, step.start_time_seconds,
+                       time_tolerance,
+                       "adjacent CVODE dense intervals meet at the accepted "
+                       "endpoint");
+        }
+        expected_step_begin = step.end_time_seconds;
+        if (step.reached_stop) {
+            Expect(step.end_time_seconds == stop_time_seconds,
+                   "the final internal step ends at the requested stop");
+            return;
+        }
+    }
+}
+
 class ConstantAccelerationRhs final : public ContinuousStateRhs {
    public:
     explicit ConstantAccelerationRhs(double acceleration)
@@ -245,15 +284,21 @@ void CheckFreeFallAndDenseOutput() {
            "current-state refusal preserves caller storage");
 
     ExpectInvalidArgument(
-        [&] { advancer.AdvanceTo(kInitialTime - 0.01); },
+        [&] {
+            (void)advancer.AdvanceOneInternalStepToward(
+                kInitialTime - 0.01, output);
+        },
         "backward advancement is refused before CVODE");
     ExpectInvalidArgument(
-        [&] { advancer.AdvanceTo(std::numeric_limits<double>::quiet_NaN()); },
+        [&] {
+            (void)advancer.AdvanceOneInternalStepToward(
+                std::numeric_limits<double>::quiet_NaN(), output);
+        },
         "a non-finite target is refused before CVODE");
     Expect(advancer.current_time_seconds() == kInitialTime,
            "invalid targets preserve the successful endpoint");
 
-    advancer.AdvanceTo(kTargetTime);
+    AdvanceFully(advancer, kTargetTime);
     Expect(advancer.current_time_seconds() == kTargetTime,
            "CVODE stops at the requested endpoint");
     advancer.CopyCurrentState(output);
@@ -300,7 +345,12 @@ void CheckFreeFallAndDenseOutput() {
            "dense-state size refusal preserves caller storage");
 
     const int evaluations_before_same_time = rhs.evaluation_count();
-    advancer.AdvanceTo(kTargetTime);
+    const auto same_time_step = advancer.AdvanceOneInternalStepToward(
+        kTargetTime, output);
+    Expect(same_time_step.reached_stop &&
+               same_time_step.start_time_seconds == kTargetTime &&
+               same_time_step.end_time_seconds == kTargetTime,
+           "a same-time backend request reports a reached no-op");
     Expect(rhs.evaluation_count() == evaluations_before_same_time,
            "same-time advancement does not evaluate the RHS");
     const auto interval_after_same_time = advancer.dense_output_interval();
@@ -332,7 +382,7 @@ void CheckFreeFallAndDenseOutput() {
     Expect(advancer.current_time_seconds() == kTargetTime &&
                advancer.dense_output_interval().has_value(),
            "reinitialization refusal preserves endpoint and dense output");
-    advancer.AdvanceTo(kTargetTime + 0.01);
+    AdvanceFully(advancer, kTargetTime + 0.01);
     advancer.CopyCurrentState(output);
     ExpectStateNear(
         output,
@@ -349,7 +399,7 @@ void CheckLinearOscillator() {
     LinearOscillatorRhs rhs(kAngularFrequency);
     CvodeContinuousStateAdvancer advancer(
         rhs, kInitialTime, initial_state, MakeTolerances(2));
-    advancer.AdvanceTo(kTargetTime);
+    AdvanceFully(advancer, kTargetTime);
     Eigen::VectorXd output(2);
     advancer.CopyCurrentState(output);
     ExpectStateNear(output,
@@ -367,7 +417,7 @@ void CheckBackendTimePropagation() {
     initial[0] = kInitialValue;
     CvodeContinuousStateAdvancer advancer(
         rhs, kInitialTime, initial, MakeTolerances(1));
-    advancer.AdvanceTo(kTargetTime);
+    AdvanceFully(advancer, kTargetTime);
     Eigen::VectorXd output(1);
     advancer.CopyCurrentState(output);
     const double expected =
@@ -383,7 +433,7 @@ void CheckRhsFailureAndRecovery() {
     initial[0] = 2.0;
     CvodeContinuousStateAdvancer advancer(
         rhs, 0.0, initial, MakeTolerances(1));
-    advancer.AdvanceTo(0.1);
+    AdvanceFully(advancer, 0.1);
 
     Eigen::VectorXd endpoint(1);
     advancer.CopyCurrentState(endpoint);
@@ -394,7 +444,7 @@ void CheckRhsFailureAndRecovery() {
     rhs.set_throw_on_evaluation(true);
     bool original_exception_propagated = false;
     try {
-        advancer.AdvanceTo(0.2);
+        AdvanceFully(advancer, 0.2);
     } catch (const DeliberateRhsFailure&) {
         original_exception_propagated = true;
     }
@@ -415,7 +465,7 @@ void CheckRhsFailureAndRecovery() {
 
     const int evaluations_after_failure = rhs.evaluation_count();
     ExpectLogicError(
-        [&] { advancer.AdvanceTo(0.2); },
+        [&] { AdvanceFully(advancer, 0.2); },
         "advancement remains poisoned until reinitialization");
     Expect(rhs.evaluation_count() == evaluations_after_failure,
            "a poisoned advance does not call the RHS again");
@@ -430,7 +480,7 @@ void CheckRhsFailureAndRecovery() {
     advancer.CopyCurrentState(endpoint);
     Expect(endpoint[0] == committed[0],
            "successful reinitialization immediately publishes the committed state");
-    advancer.AdvanceTo(0.25);
+    AdvanceFully(advancer, 0.25);
     advancer.CopyCurrentState(endpoint);
     ExpectNear(endpoint[0], 4.1, 1.0e-8,
                "a reinitialized backend advances from the committed state");

@@ -46,6 +46,7 @@ void CompiledSystemPlan::CalcStateTimeDerivatives(
         const int contact_count = system_->contact_body_wrench_count();
         contact_force_plan_->CalcAppliedForces(
             component.context(), *context.contact_force_workspace_,
+            context.wheel_rail_projection_station_hints_meters_,
             std::span(context.body_wrenches_)
                 .subspan(static_cast<std::size_t>(vehicle_count),
                          static_cast<std::size_t>(contact_count)));

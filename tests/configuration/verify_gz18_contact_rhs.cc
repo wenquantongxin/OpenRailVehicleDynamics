@@ -1,17 +1,19 @@
-// G53: the installed GZ18 contact personality enters one direct vehicle RHS.
-// No numerical integrator is constructed here; accepted/candidate projection
-// history and internal-step transactions belong to G54.
+// G53/G54: the installed GZ18 contact personality enters the vehicle RHS, and
+// the same real scenario advances its local projection branches at CVODE's
+// accepted internal endpoints.
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -23,6 +25,7 @@
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
+#include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/wheel_rail_contact/contact_wrench.h"
 #include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
@@ -36,6 +39,9 @@ using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
 using orvd::configuration::LoadTrackGeometryFromJsonFile;
 using orvd::configuration::LoadVehicleDefinitionFromJsonFile;
 using orvd::configuration::ResolvedWheelsetPlacement;
+using orvd::integrators::ContinuousStateErrorTolerances;
+using orvd::integrators::NoCallTimeAppliedForces;
+using orvd::integrators::SystemContinuousStateAdvancer;
 using orvd::multibody_model::AppliedBodyWrench;
 
 int failures = 0;
@@ -63,6 +69,13 @@ bool Near(const Eigen::Vector3d& actual, const Eigen::Vector3d& expected,
            relative * std::max(1.0, expected.lpNorm<Eigen::Infinity>());
 }
 
+ContinuousStateErrorTolerances MakeGz18Tolerances() {
+    Eigen::VectorXd absolute = Eigen::VectorXd::Constant(109, 1.0e-7);
+    absolute.head(57).setConstant(1.0e-8);
+    absolute.tail(2).setConstant(1.0);
+    return ContinuousStateErrorTolerances(1.0e-6, std::move(absolute));
+}
+
 std::vector<AppliedBodyWrench> EvaluateContactForces(
     const AssembledGz18ContactScenario& scenario,
     orvd::forces::WheelRailContactForceWorkspace& workspace) {
@@ -73,7 +86,12 @@ std::vector<AppliedBodyWrench> EvaluateContactForces(
     auto view = assembled.system().GetMultibodyComponentView(
         scenario.initial_context().context(),
         assembled.system().multibody_component());
-    plan->CalcAppliedForces(view.context(), workspace, wrenches);
+    plan->CalcAppliedForces(
+        view.context(), workspace,
+        scenario.initial_context()
+            .context()
+            .wheel_rail_projection_station_hints_meters(),
+        wrenches);
     return wrenches;
 }
 
@@ -103,7 +121,7 @@ int main(int argc, char** argv) {
     const auto startup = LoadResolvedStartupStateFromJsonFile(argv[2]);
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
     constexpr double kReferenceStationMeters = 20.0;
-    constexpr double kProjectionHalfWidthMeters = 2.0;
+    constexpr double kProjectionHalfWidthMeters = 0.01;
     std::unique_ptr<AssembledGz18ContactScenario> scenario =
         AssembleGz18ContactScenario(
             vehicle, startup, std::move(line), std::filesystem::path(argv[4]),
@@ -126,6 +144,7 @@ int main(int argc, char** argv) {
     Require(assembled.system().continuous_state_size() == 109,
             "contact changed the GZ18 continuous-state dimension");
 
+    auto& runtime_context = scenario->initial_context().context();
     std::unordered_map<std::string, double> resolved_station;
     std::unordered_map<std::string, const ResolvedWheelsetPlacement*>
         resolved_placement;
@@ -145,13 +164,18 @@ int main(int argc, char** argv) {
                     "a projection anchor differs from its resolved wheelset "
                     "station");
         }
+        Require(runtime_context
+                        .wheel_rail_projection_station_hints_meters()[
+                            static_cast<std::size_t>(carrier)] ==
+                    contact_plan->initial_projection_station_meters(carrier),
+                "a runtime projection history was not seeded from its G53 "
+                "anchor");
         Require(contact_plan->interface_name(2 * carrier) == name + ".right" &&
                     contact_plan->interface_name(2 * carrier + 1) ==
                         name + ".left",
                 "a carrier does not own one right and one left interface");
     }
 
-    auto& runtime_context = scenario->initial_context().context();
     Eigen::VectorXd compiled_derivatives(109);
     assembled.compiled_plan().CalcStateTimeDerivatives(
         runtime_context, compiled_derivatives);
@@ -172,6 +196,7 @@ int main(int argc, char** argv) {
     auto independent_contact_workspace = contact_plan->CreateWorkspace();
     contact_plan->CalcAppliedForces(
         component.context(), *independent_contact_workspace,
+        runtime_context.wheel_rail_projection_station_hints_meters(),
         std::span(all_wrenches).subspan(56, 8));
     Eigen::VectorXd multibody_derivatives(107);
     component.model().CalcStateTimeDerivatives(
@@ -514,6 +539,102 @@ int main(int argc, char** argv) {
     Require(separate_line_was_rejected,
             "a contact-enabled system accepted a second line for start-up "
             "assembly");
+
+    // The real 60 km/h GZ18 advances farther than the deliberately narrow
+    // local window. Reusing G53's static anchors would therefore fail, while
+    // one station update at every accepted CVODE endpoint remains on branch.
+    std::vector<double> initial_hints(
+        runtime_context.wheel_rail_projection_station_hints_meters().begin(),
+        runtime_context.wheel_rail_projection_station_hints_meters().end());
+    SystemContinuousStateAdvancer advancer(
+        assembled.system(), assembled.compiled_plan(), runtime_context,
+        MakeGz18Tolerances(), NoCallTimeAppliedForces{});
+    constexpr double kAcceptedHistoryTargetSeconds = 1.0e-3;
+    advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
+    Require(runtime_context.time_seconds() == kAcceptedHistoryTargetSeconds,
+            "the contact-enabled public advance did not reach its target");
+    const auto advanced_hints =
+        runtime_context.wheel_rail_projection_station_hints_meters();
+    for (std::size_t ordinal = 0; ordinal < initial_hints.size(); ++ordinal) {
+        Require(advanced_hints[ordinal] > initial_hints[ordinal] +
+                    kProjectionHalfWidthMeters,
+                "a GZ18 projection branch did not advance beyond the static "
+                "G53 window");
+    }
+    Eigen::VectorXd advanced_rhs(109);
+    assembled.compiled_plan().CalcStateTimeDerivatives(runtime_context,
+                                                       advanced_rhs);
+    Require(advanced_rhs.allFinite(),
+            "the accepted GZ18 projection history does not feed a finite RHS");
+
+    // Put the same real vehicle just inside the straight line's end. Several
+    // candidate internal steps can update their local hints before the next
+    // declared search window reaches outside the line. The failed public
+    // advance must publish none of those candidate values.
+    auto boundary_line = LoadTrackGeometryFromJsonFile(argv[3]);
+    double foremost_offset = -std::numeric_limits<double>::infinity();
+    for (const ResolvedWheelsetPlacement& placement :
+         scenario->initial_context().wheelset_placements()) {
+        foremost_offset =
+            std::max(foremost_offset,
+                     placement.track_station_meters - kReferenceStationMeters);
+    }
+    const double boundary_reference_station =
+        boundary_line.end_track_station_meters() - foremost_offset -
+        1.1 * kProjectionHalfWidthMeters;
+    auto boundary_scenario = AssembleGz18ContactScenario(
+        vehicle, startup, std::move(boundary_line),
+        std::filesystem::path(argv[4]), boundary_reference_station,
+        kProjectionHalfWidthMeters);
+    const auto& boundary_system = boundary_scenario->vehicle_system();
+    auto& boundary_context = boundary_scenario->initial_context().context();
+    Eigen::VectorXd boundary_state(109);
+    boundary_system.system().CopyContinuousState(boundary_context,
+                                                 boundary_state);
+    const std::vector<double> boundary_hints(
+        boundary_context.wheel_rail_projection_station_hints_meters().begin(),
+        boundary_context.wheel_rail_projection_station_hints_meters().end());
+    SystemContinuousStateAdvancer boundary_advancer(
+        boundary_system.system(), boundary_system.compiled_plan(),
+        boundary_context, MakeGz18Tolerances(), NoCallTimeAppliedForces{});
+    bool boundary_failure = false;
+    std::string boundary_failure_message;
+    try {
+        boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
+    } catch (const std::exception& error) {
+        boundary_failure = true;
+        boundary_failure_message = error.what();
+    }
+    Require(boundary_failure &&
+                boundary_failure_message.find("reaches outside the domain") !=
+                    std::string::npos,
+            "the real GZ18 boundary run did not reach its declared local "
+            "projection limit");
+    Eigen::VectorXd state_after_failure(109);
+    boundary_system.system().CopyContinuousState(boundary_context,
+                                                 state_after_failure);
+    Require(boundary_context.time_seconds() == 0.0 &&
+                state_after_failure == boundary_state &&
+                std::equal(
+                    boundary_hints.begin(), boundary_hints.end(),
+                    boundary_context
+                        .wheel_rail_projection_station_hints_meters()
+                        .begin()),
+            "a failed public GZ18 advance leaked candidate state or station "
+            "history");
+    bool unsynchronized_advance_was_rejected = false;
+    try {
+        boundary_advancer.AdvanceTo(1.0e-7);
+    } catch (const std::logic_error&) {
+        unsynchronized_advance_was_rejected = true;
+    }
+    Require(unsynchronized_advance_was_rejected,
+            "a failed GZ18 advance did not require explicit synchronization");
+    boundary_advancer.SynchronizeAfterAcceptedContextChange();
+    boundary_advancer.AdvanceTo(1.0e-7);
+    Require(boundary_context.time_seconds() == 1.0e-7,
+            "the GZ18 advancer did not recover from its accepted state and "
+            "station history");
 
     if (failures != 0) {
         return 1;

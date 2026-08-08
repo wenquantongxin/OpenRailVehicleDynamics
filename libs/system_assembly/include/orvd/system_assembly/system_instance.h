@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -140,6 +141,16 @@ class SystemRuntimeContext {
 
     [[nodiscard]] double time_seconds() const { return time_seconds_; }
 
+    /// The local projection branch currently held by this context for each
+    /// unique wheel-rail carrier. It is accepted history in a public context
+    /// and candidate history in the integrator's trial context. Empty when this
+    /// system has no contact force plan. The values are numerical history, not
+    /// continuous physical state.
+    [[nodiscard]] std::span<const double>
+    wheel_rail_projection_station_hints_meters() const {
+        return wheel_rail_projection_station_hints_meters_;
+    }
+
    private:
     friend class SystemInstance;
     friend class CompiledSystemPlan;
@@ -169,6 +180,7 @@ class SystemRuntimeContext {
     std::vector<multibody_model::AppliedBodyWrench> body_wrenches_;
     std::unique_ptr<forces::WheelRailContactForceWorkspace>
         contact_force_workspace_;
+    std::vector<double> wheel_rail_projection_station_hints_meters_;
     Eigen::VectorXd series_force_derivatives_;
     /// Scratch for the multibody facade's own [qdot; vdot], which is shorter
     /// than this system's state.  It belongs to the context and not to the
@@ -287,6 +299,20 @@ class SystemInstance {
     void SetTimeAndContinuousState(
         SystemRuntimeContext& context, double time_seconds,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
+
+    /// Replaces time, `[q;v;z]`, and the wheel-rail projection history as one
+    /// accepted transaction. Every check precedes every write.
+    void SetTimeContinuousStateAndWheelRailProjectionHints(
+        SystemRuntimeContext& context, double time_seconds,
+        const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
+        std::span<const double> projection_station_hints_meters) const;
+
+    /// Reprojects every unique contact carrier at the state currently installed
+    /// in `context`, using that context's latest accepted/candidate station as
+    /// the local seed. All hints are replaced only after every carrier succeeds.
+    /// No wheel contact kernel is evaluated.
+    void UpdateWheelRailProjectionStationHints(
+        SystemRuntimeContext& context) const;
 
     /// States the nominal force of one translational element in this context.
     ///

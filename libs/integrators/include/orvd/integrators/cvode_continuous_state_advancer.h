@@ -37,7 +37,9 @@ class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
     [[nodiscard]] double current_time_seconds() const override;
     void CopyCurrentState(
         Eigen::Ref<Eigen::VectorXd> continuous_state) const override;
-    void AdvanceTo(double target_time_seconds) override;
+    [[nodiscard]] ContinuousStateInternalStep AdvanceOneInternalStepToward(
+        double stop_time_seconds,
+        Eigen::Ref<Eigen::VectorXd> endpoint_continuous_state) override;
     void ReinitializeAfterExternalChange(
         double committed_time_seconds,
         const Eigen::Ref<const Eigen::VectorXd>& committed_continuous_state)

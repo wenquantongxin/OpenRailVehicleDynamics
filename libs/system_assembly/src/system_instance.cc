@@ -1,5 +1,6 @@
 #include "orvd/system_assembly/system_instance.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <stdexcept>
@@ -43,11 +44,24 @@ SystemRuntimeContext::SystemRuntimeContext(
       contact_force_workspace_(contact_force_plan != nullptr
                                    ? contact_force_plan->CreateWorkspace()
                                    : nullptr),
+      wheel_rail_projection_station_hints_meters_(
+          contact_force_plan != nullptr
+              ? static_cast<std::size_t>(contact_force_plan->carrier_count())
+              : 0U),
       series_force_derivatives_(
           Eigen::VectorXd::Zero(series_spring_damper_force_state_count)),
       multibody_state_time_derivatives_(
           model.num_generalized_positions() +
-          model.num_generalized_velocities()) {}
+          model.num_generalized_velocities()) {
+    if (contact_force_plan != nullptr) {
+        for (int ordinal = 0; ordinal < contact_force_plan->carrier_count();
+             ++ordinal) {
+            wheel_rail_projection_station_hints_meters_[
+                static_cast<std::size_t>(ordinal)] =
+                contact_force_plan->initial_projection_station_meters(ordinal);
+        }
+    }
+}
 
 SystemRuntimeContext::~SystemRuntimeContext() = default;
 
@@ -223,6 +237,51 @@ void SystemInstance::SetTimeAndContinuousState(
                                  generalized_velocity_count_));
     context.series_spring_damper_forces_ = series_forces;
     context.time_seconds_ = time_seconds;
+}
+
+void SystemInstance::SetTimeContinuousStateAndWheelRailProjectionHints(
+    SystemRuntimeContext& context, double time_seconds,
+    const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
+    std::span<const double> projection_station_hints_meters) const {
+    if (context.issuer_ != identity_) {
+        Reject("the runtime context belongs to a different system");
+    }
+    const std::size_t expected_count =
+        contact_force_plan_ != nullptr
+            ? static_cast<std::size_t>(contact_force_plan_->carrier_count())
+            : 0U;
+    if (projection_station_hints_meters.size() != expected_count) {
+        Reject("the wheel-rail projection history has " +
+               std::to_string(projection_station_hints_meters.size()) +
+               " entries, but this system has " +
+               std::to_string(expected_count) +
+               " contact carriers; nothing was written");
+    }
+    for (double hint : projection_station_hints_meters) {
+        if (!std::isfinite(hint)) {
+            Reject("a wheel-rail projection-station hint is not finite; "
+                   "nothing was written");
+        }
+    }
+
+    SetTimeAndContinuousState(context, time_seconds, continuous_state);
+    std::copy(projection_station_hints_meters.begin(),
+              projection_station_hints_meters.end(),
+              context.wheel_rail_projection_station_hints_meters_.begin());
+}
+
+void SystemInstance::UpdateWheelRailProjectionStationHints(
+    SystemRuntimeContext& context) const {
+    if (context.issuer_ != identity_) {
+        Reject("the runtime context belongs to a different system");
+    }
+    if (contact_force_plan_ == nullptr) {
+        return;
+    }
+    contact_force_plan_->CalcProjectionStationHints(
+        *context.multibody_context_, *context.contact_force_workspace_,
+        context.wheel_rail_projection_station_hints_meters_,
+        context.wheel_rail_projection_station_hints_meters_);
 }
 
 void SystemInstance::SetNominalForce(

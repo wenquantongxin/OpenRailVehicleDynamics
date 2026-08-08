@@ -39,7 +39,11 @@ class CompleteAdvancerContract final : public ContinuousStateAdvancer {
     int continuous_state_size() const override { return 0; }
     double current_time_seconds() const override { return 0.0; }
     void CopyCurrentState(Eigen::Ref<Eigen::VectorXd>) const override {}
-    void AdvanceTo(double) override {}
+    orvd::integrators::ContinuousStateInternalStep
+    AdvanceOneInternalStepToward(
+        double, Eigen::Ref<Eigen::VectorXd>) override {
+        return {};
+    }
     void ReinitializeAfterExternalChange(
         double, const Eigen::Ref<const Eigen::VectorXd>&) override {}
     std::optional<ContinuousStateDenseOutputInterval> dense_output_interval()
@@ -229,7 +233,7 @@ void CheckDedicatedTrialRhs() {
     plan.CalcStateTimeDerivatives(*expected_context, expected);
 
     SystemRuntimeContext* const trial_observer = trial.get();
-    SystemRhsBridge bridge(system, plan, std::move(trial),
+    SystemRhsBridge bridge(system, plan, *trial,
                            NoCallTimeAppliedForces{});
     Expect(bridge.continuous_state_size() == 2,
            "the RHS size comes from the finalized one-DOF system");
@@ -281,7 +285,7 @@ void CheckPlanAndTrialBelongToTheSameSystem() {
     auto first_trial = first.CreateDefaultRuntimeContext(0.0);
     ExpectInvalidArgument(
         [&] {
-            (void)SystemRhsBridge(first, foreign_plan, std::move(first_trial),
+            (void)SystemRhsBridge(first, foreign_plan, *first_trial,
                                   NoCallTimeAppliedForces{});
         },
         "the RHS plan and trial context must belong to the same system");

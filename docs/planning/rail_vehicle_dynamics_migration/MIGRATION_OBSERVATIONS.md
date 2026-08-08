@@ -344,24 +344,27 @@
 
 - 状态：已裁决：所有权和事务由 G54 落地
 - 观察：WRL 的逐次右端状态求值路径把每个唯一接触载体的已接受线路里程提示、提示速度和全体共享
-  的步长提示保存在数值参数或驱动缓存中，并只在接受边界后从最新接触结果推进。它们不属于车辆
+  的步长提示保存在数值参数或驱动缓存中，并只在接受边界后推进。2026-08-02 的 GZ18 P057 与
+  IRW A/B 30 s 正式工件均为 `numeric_parameter`、`stride=1`、`predictor=false`：三量虽仍维护，
+  但 RHS 分支选择只消费 accepted `s`。它们不属于车辆
   物理连续状态，但也不是普通无状态缓存：拒绝的试算不得污染下一接受步，重初始化、复制上下文、
   并行车辆实例和回放都需要明确的种子、提交和清空语义。另一个 `state_eval_s_hint_cache_` 属于普通
   状态求值路径，不能
   与主 `rhs_state_eval` 接受提示混成同一状态机制。Claude 由此直接断言“接触不再是 `(q,v)` 的纯函数”仍过强；
   在唯一根场景中，若提示只改变求根初值而不改变收敛解，物理算子仍应与冷启动同义；多根场景中
   提示本来就负责维持连续物理解，任意冷启动可能合法选到另一根，不能强求全局同根。前者须由
-  冷／热同义夹具证明，后者须由 `s + s_dot·dt` 邻域内的连续分支夹具证明。
+  冷／热同义夹具证明，后者须由最近 accepted `s` 所隔离的局部邻域证明。
 - 锚点：WRL `scripts_cpp/drake_sim/include/drake_sim/wheel_rail_contact_system.h` 的
   `accepted_s_hint_parameter_index_` 与驱动缓存，及
   `scripts_cpp/drake_sim/src/wheel_rail_contact_system.cc` 的 `seed_accepted_hints()`、
   `advance_accepted_hints_from_cache()`；ORVD [ADR-0003](../../adr/0003-abstract-advancer-cvode-first.md)
-  与 `libs/integrators/README.md` 现只覆盖连续状态接受/试算事务。
-- 影响：G54 把提示作为系统运行时上下文拥有的窄数值历史，分 `accepted/candidate` 两份；它不进入
-  `[q;v;z]`，也不是全局缓存。每个 CVODE 内部接受端点重新计算后只推进 candidate，公开推进成功
-  才与时间和物理状态一起提交，失败整体回滚。
-- 下一核验：G54 用单根冷启动同义性、多根连续分支、指定内步失败回滚、重初始化和多实例隔离夹具
-  直接执行该合同；性能测量只作仓外临时观察，不成为正确性门。
+  与 `libs/integrators/README.md` 已覆盖连续状态及局部分支站位的接受／试算事务。
+- 影响：G54 只迁移资格化力计算真实消费的 `s`，由公开接受上下文和专用试算上下文分别持有
+  accepted/candidate 两份；它不进入 `[q;v;z]`，也不是全局缓存。每个 CVODE 内部接受端点只重算
+  四载体投影并推进 candidate，公开推进成功才与时间和物理状态一起提交，失败整体回滚。公开目标
+  整体回滚是 ORVD 的强化事务，不冒充 WRL 原样行为。
+- 下一核验：G54 以真实 GZ18 窄局部窗、线路末端失败恢复和真实 CVODE 单步直接执行该合同；性能
+  测量只作仓外临时观察，不成为正确性门。
 
 ### OBS-022 — 删除黄金哈希不等于删除执行身份与错误检查
 
@@ -676,15 +679,17 @@
 ### OBS-040 — 接触提示与输出站位延续是两套不同历史
 
 - 状态：已确认
-- 观察：WRL 的 CVODE 主路径使用 `CV_ONE_STEP`，每次调用返回一个内部接受端点；接触站位提示
-  因此逐内部接受步更新。ORVD 当前后端使用 `CV_NORMAL`。另有一套只服务横移／摇头观测的
+- 观察：近期 IRW A/B 30 s 的 CVODE 主路径使用 `CV_ONE_STEP`，每次调用返回一个内部接受端点；
+  GZ18 P057 是固定步 Radau3，但同样在每个接受步推进 numeric-parameter 站位提示。G54 只迁移
+  CVODE 的逐内部端点接口。另有一套只服务横移／摇头观测的
   `s_prev/cold_start`，它按输出样本推进，不参与接触和 RHS。
 - 锚点：WRL `irw_cvode_driver.cc`、`rigid_wheelset/src/cvode_driver.cc`、`irw_csv_writer.cc`；
   ORVD `cvode_continuous_state_advancer.cc` 与 ADR-0003；讨论记录 R008。
-- 影响：G54 必须提供逐内部接受端点、accepted/candidate 两份提示历史和端点重新求值；输出站位
+- 影响：G54 提供逐内部接受端点、accepted/candidate 两份站位历史和端点四载体投影重算；输出站位
   延续留在 G55 观察器，按首次／重置冷启动、顺序成功样本温启动，绝不反馈物理轨迹。
-- 下一核验：G54 用会在指定内部步失败的测试后端验证回滚；G55 用倒序、跳时和换轨夹具验证
-  观察器重置。两种历史不共享类型、版本或存储。
+- 下一核验：G54 已用真实 GZ18 在线路末端经历多个 candidate 内部端点后触发局部投影失败，验证
+  公开接受态整体回滚；G55 再验证输出观察器的顺序采样和调用级发布事务。两种历史不共享类型、
+  版本或存储。
 
 ## 迁移前五组只读清单（规划初期快照）
 

@@ -3,8 +3,6 @@
 /// @file
 /// The contiguous ODE-state bridge for the compiled ORVD system.
 
-#include <memory>
-
 #include <Eigen/Dense>
 
 #include "orvd/integrators/continuous_state_advancer.h"
@@ -23,38 +21,39 @@ struct NoCallTimeAppliedForces final {};
 
 /// Evaluates the compiled system in a dedicated trial context.
 ///
-/// The caller creates and configures the trial context, then transfers its sole
-/// ownership here.  An accepted context is intentionally absent from this
-/// type, so an RHS call cannot modify one and cannot require write-then-rollback
-/// semantics.  Context-local parameters are not silently mirrored; explicit
+/// The caller creates, owns and configures the dedicated trial context. An
+/// accepted context is intentionally absent from this type, so an RHS call
+/// cannot modify one and cannot require write-then-rollback semantics.
+/// Context-local parameters are not silently mirrored; explicit
 /// accepted/trial synchronization belongs to the G45 transaction boundary.
 /// Construction also requires `NoCallTimeAppliedForces`, making the current
 /// graph's empty call-time force input an explicit choice rather than implying
 /// an arbitrary external-force source that is not part of this system graph.
-/// `system` and `plan` are borrowed and must outlive the bridge.
+/// `system`, `plan` and `trial_context` are borrowed and must outlive the
+/// bridge.
 class SystemRhsBridge final : public ContinuousStateRhs {
    public:
     SystemRhsBridge(
         const system_assembly::SystemInstance& system,
         const system_assembly::CompiledSystemPlan& plan,
-        std::unique_ptr<system_assembly::SystemRuntimeContext> trial_context,
+        system_assembly::SystemRuntimeContext& trial_context,
         NoCallTimeAppliedForces);
     ~SystemRhsBridge() override;
     SystemRhsBridge(system_assembly::SystemInstance&&,
                     const system_assembly::CompiledSystemPlan&,
-                    std::unique_ptr<system_assembly::SystemRuntimeContext>,
+                    system_assembly::SystemRuntimeContext&,
                     NoCallTimeAppliedForces) = delete;
     SystemRhsBridge(const system_assembly::SystemInstance&&,
                     const system_assembly::CompiledSystemPlan&,
-                    std::unique_ptr<system_assembly::SystemRuntimeContext>,
+                    system_assembly::SystemRuntimeContext&,
                     NoCallTimeAppliedForces) = delete;
     SystemRhsBridge(const system_assembly::SystemInstance&,
                     system_assembly::CompiledSystemPlan&&,
-                    std::unique_ptr<system_assembly::SystemRuntimeContext>,
+                    system_assembly::SystemRuntimeContext&,
                     NoCallTimeAppliedForces) = delete;
     SystemRhsBridge(const system_assembly::SystemInstance&,
                     const system_assembly::CompiledSystemPlan&&,
-                    std::unique_ptr<system_assembly::SystemRuntimeContext>,
+                    system_assembly::SystemRuntimeContext&,
                     NoCallTimeAppliedForces) = delete;
 
     SystemRhsBridge(const SystemRhsBridge&) = delete;
@@ -78,7 +77,7 @@ class SystemRhsBridge final : public ContinuousStateRhs {
    private:
     const system_assembly::SystemInstance* system_;
     const system_assembly::CompiledSystemPlan* plan_;
-    std::unique_ptr<system_assembly::SystemRuntimeContext> trial_context_;
+    system_assembly::SystemRuntimeContext* trial_context_;
     Eigen::VectorXd derivative_buffer_;
 };
 

@@ -120,38 +120,48 @@ class CvodeContinuousStateAdvancer::Implementation final {
         output = public_state_;
     }
 
-    void AdvanceTo(double target_time_seconds) {
-        if (!std::isfinite(target_time_seconds)) {
+    [[nodiscard]] ContinuousStateInternalStep AdvanceOneInternalStepToward(
+        double stop_time_seconds,
+        Eigen::Ref<Eigen::VectorXd> endpoint_continuous_state) {
+        if (!std::isfinite(stop_time_seconds)) {
             throw std::invalid_argument(
-                "CVODE continuous-state advancer: target time must be finite");
+                "CVODE continuous-state advancer: stop time must be finite");
         }
-        if (target_time_seconds < public_time_seconds_) {
+        if (stop_time_seconds < public_time_seconds_) {
             throw std::invalid_argument(
-                "CVODE continuous-state advancer: target time precedes the "
+                "CVODE continuous-state advancer: stop time precedes the "
                 "current successful endpoint");
+        }
+        if (endpoint_continuous_state.size() != state_size_) {
+            throw std::invalid_argument(
+                "CVODE continuous-state advancer: endpoint output has the "
+                "wrong size; nothing was written");
         }
         if (needs_reinitialization_) {
             throw std::logic_error(
                 "CVODE continuous-state advancer: a prior backend failure "
                 "requires reinitialization before advancing");
         }
-        if (target_time_seconds == public_time_seconds_) {
-            return;
+        if (stop_time_seconds == public_time_seconds_) {
+            endpoint_continuous_state = public_state_;
+            return ContinuousStateInternalStep{
+                public_time_seconds_, public_time_seconds_, true};
         }
 
+        const double step_begin_time_seconds = public_time_seconds_;
         dense_interval_.reset();
         rhs_exception_ = nullptr;
         const int stop_flag =
-            CVodeSetStopTime(resources_.memory, target_time_seconds);
+            CVodeSetStopTime(resources_.memory, stop_time_seconds);
         if (stop_flag != CV_SUCCESS) {
             MarkBackendFailure();
             ThrowSundialsFailure("CVodeSetStopTime", stop_flag);
         }
 
         sunrealtype reached_time{};
-        const int advance_flag = CVode(resources_.memory, target_time_seconds,
+        const int advance_flag = CVode(resources_.memory, stop_time_seconds,
                                        resources_.state, &reached_time,
-                                       CV_NORMAL);
+                                       CV_ONE_STEP);
         if (rhs_exception_ != nullptr) {
             const std::exception_ptr exception = rhs_exception_;
             MarkBackendFailure();
@@ -161,13 +171,6 @@ class CvodeContinuousStateAdvancer::Implementation final {
             MarkBackendFailure();
             ThrowSundialsFailure("CVode", advance_flag);
         }
-        if (reached_time != target_time_seconds) {
-            MarkBackendFailure();
-            throw std::runtime_error(
-                "CVODE continuous-state advancer: CVode returned a successful "
-                "endpoint different from the requested stop time");
-        }
-
         sunrealtype backend_time{};
         sunrealtype last_step{};
         const int time_flag =
@@ -182,7 +185,9 @@ class CvodeContinuousStateAdvancer::Implementation final {
             ThrowSundialsFailure("CVodeGetLastStep", step_flag);
         }
         if (!std::isfinite(backend_time) || !std::isfinite(last_step) ||
-            backend_time != target_time_seconds || last_step <= 0.0) {
+            backend_time != reached_time ||
+            !(backend_time > step_begin_time_seconds) ||
+            backend_time > stop_time_seconds || last_step <= 0.0) {
             MarkBackendFailure();
             throw std::runtime_error(
                 "CVODE continuous-state advancer: invalid successful-step "
@@ -191,9 +196,13 @@ class CvodeContinuousStateAdvancer::Implementation final {
 
         public_state_ = Eigen::Map<const Eigen::VectorXd>(
             N_VGetArrayPointer(resources_.state), state_size_);
-        public_time_seconds_ = target_time_seconds;
+        public_time_seconds_ = backend_time;
+        endpoint_continuous_state = public_state_;
         dense_interval_ = ContinuousStateDenseOutputInterval{
             backend_time - last_step, backend_time};
+        return ContinuousStateInternalStep{
+            step_begin_time_seconds, backend_time,
+            backend_time == stop_time_seconds};
     }
 
     void Reinitialize(
@@ -433,8 +442,12 @@ void CvodeContinuousStateAdvancer::CopyCurrentState(
     implementation_->CopyPublicState(continuous_state);
 }
 
-void CvodeContinuousStateAdvancer::AdvanceTo(double target_time_seconds) {
-    implementation_->AdvanceTo(target_time_seconds);
+ContinuousStateInternalStep
+CvodeContinuousStateAdvancer::AdvanceOneInternalStepToward(
+    double stop_time_seconds,
+    Eigen::Ref<Eigen::VectorXd> endpoint_continuous_state) {
+    return implementation_->AdvanceOneInternalStepToward(
+        stop_time_seconds, endpoint_continuous_state);
 }
 
 void CvodeContinuousStateAdvancer::ReinitializeAfterExternalChange(

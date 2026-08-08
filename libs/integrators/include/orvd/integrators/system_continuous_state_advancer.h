@@ -70,12 +70,16 @@ class SystemContinuousStateAdvancer final {
     /// `SynchronizeAfterAcceptedContextChange()` succeeds.
     void AdvanceTo(double target_time_seconds);
 
-    /// Copies the accepted state and admitted context-local parameters into the
-    /// trial/backend configuration, then reinitializes numerical history.
+    /// Copies the accepted state, admitted context-local parameters and latest
+    /// wheel-rail projection branches into the trial/backend configuration,
+    /// then reinitializes numerical history.
     ///
     /// Call this after an external accepted-state or admitted context-local
-    /// physical-parameter change, and after a failed advance.  It is
-    /// deliberately explicit and is not part of the RHS hot path.
+    /// physical-parameter change, and after a failed advance. A caller that
+    /// relocates a vehicle to an unrelated track branch must construct a newly
+    /// resolved start-up context rather than asking this local history to find
+    /// a global root. It is deliberately explicit and is not part of the RHS
+    /// hot path.
     void SynchronizeAfterAcceptedContextChange();
 
    private:

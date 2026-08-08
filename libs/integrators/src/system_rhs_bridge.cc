@@ -1,7 +1,6 @@
 #include "orvd/integrators/system_rhs_bridge.h"
 
 #include <stdexcept>
-#include <utility>
 
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
@@ -12,16 +11,12 @@ namespace orvd::integrators {
 SystemRhsBridge::SystemRhsBridge(
     const system_assembly::SystemInstance& system,
     const system_assembly::CompiledSystemPlan& plan,
-    std::unique_ptr<system_assembly::SystemRuntimeContext> trial_context,
+    system_assembly::SystemRuntimeContext& trial_context,
     NoCallTimeAppliedForces)
     : system_(&system),
       plan_(&plan),
-      trial_context_(std::move(trial_context)),
+      trial_context_(&trial_context),
       derivative_buffer_(system.continuous_state_size()) {
-    if (trial_context_ == nullptr) {
-        throw std::invalid_argument(
-            "system RHS bridge: trial context is null");
-    }
     // Resolving the component once validates that the trial context belongs to
     // this system and that the plan was compiled from the same system.  The
     // returned view is deliberately not retained.

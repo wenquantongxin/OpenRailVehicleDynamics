@@ -235,43 +235,60 @@ WheelRailContactForcePlan::CreateWorkspace() const {
     return workspace;
 }
 
-void WheelRailContactForcePlan::CalcAppliedForces(
+void WheelRailContactForcePlan::EvaluateCarrierProjections(
     const MultibodyEvaluationContext& context,
     WheelRailContactForceWorkspace& workspace,
-    std::span<AppliedBodyWrench> body_wrenches) const {
+    std::span<const double> projection_station_hints_meters) const {
     if (workspace.issuer_ != this) {
         Reject("the workspace belongs to a different contact force plan");
     }
-    if (body_wrenches.size() != interfaces_.size()) {
-        Reject("the output span has " + std::to_string(body_wrenches.size()) +
+    if (projection_station_hints_meters.size() != carriers_.size()) {
+        Reject("the projection-hint span has " +
+               std::to_string(projection_station_hints_meters.size()) +
                " entries, but this plan has " +
-               std::to_string(interfaces_.size()) + " interfaces");
+               std::to_string(carriers_.size()) + " carriers");
+    }
+    for (double hint : projection_station_hints_meters) {
+        if (!std::isfinite(hint)) {
+            Reject("a projection-station hint is not finite");
+        }
     }
 
-    // Four GZ18 carriers, each evaluated once.  The plan keeps this first pass
-    // separate from interface evaluation so left and right cannot silently
-    // project the same wheelset onto different branches.
+    // Four GZ18 carriers, each evaluated once. This projection-only pass is
+    // also the accepted-step history update; velocities, track orientation and
+    // contact quantities are intentionally absent from that path.
     for (std::size_t ordinal = 0; ordinal < carriers_.size(); ++ordinal) {
         const CarrierBinding& binding = carriers_[ordinal];
         WheelRailContactForceWorkspace::CarrierScratch& scratch =
             workspace.carriers_[ordinal];
         const auto body_pose = model_->CalcPoseInWorld(context, binding.body);
+        scratch.body_origin_in_inertial_meters = body_pose.translation();
+        scratch.rotation_inertial_from_body = body_pose.rotation();
+
+        const auto projection = line_.ProjectPointNearSeed(
+            scratch.body_origin_in_inertial_meters,
+            projection_station_hints_meters[ordinal],
+            projection_search_half_width_meters_);
+        scratch.track_station_meters = projection.track_station_meters();
+    }
+}
+
+void WheelRailContactForcePlan::CompleteCarrierKinematics(
+    const MultibodyEvaluationContext& context,
+    WheelRailContactForceWorkspace& workspace) const {
+    for (std::size_t ordinal = 0; ordinal < carriers_.size(); ++ordinal) {
+        const CarrierBinding& binding = carriers_[ordinal];
+        WheelRailContactForceWorkspace::CarrierScratch& scratch =
+            workspace.carriers_[ordinal];
         const auto body_velocity =
             model_->CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
                 context, binding.body);
-        scratch.body_origin_in_inertial_meters = body_pose.translation();
-        scratch.rotation_inertial_from_body = body_pose.rotation();
         scratch.body_origin_velocity_in_inertial_meters_per_second =
             body_velocity
                 .translational_velocity_at_frame_origin_meters_per_second();
         scratch.body_angular_velocity_in_inertial_radians_per_second =
             body_velocity.angular_velocity_radians_per_second();
 
-        const auto projection = line_.ProjectPointNearSeed(
-            scratch.body_origin_in_inertial_meters,
-            binding.initial_projection_station_meters,
-            projection_search_half_width_meters_);
-        scratch.track_station_meters = projection.track_station_meters();
         const auto track = line_.EvaluateTrackFrame(scratch.track_station_meters);
         scratch.track_origin_in_inertial_meters =
             track.pose().origin_in_inertial_meters();
@@ -348,6 +365,39 @@ void WheelRailContactForcePlan::CalcAppliedForces(
                 "' produced non-finite track kinematics");
         }
     }
+}
+
+void WheelRailContactForcePlan::CalcProjectionStationHints(
+    const MultibodyEvaluationContext& context,
+    WheelRailContactForceWorkspace& workspace,
+    std::span<const double> current_hints_meters,
+    std::span<double> updated_hints_meters) const {
+    if (updated_hints_meters.size() != carriers_.size()) {
+        Reject("the updated projection-hint span has " +
+               std::to_string(updated_hints_meters.size()) +
+               " entries, but this plan has " +
+               std::to_string(carriers_.size()) + " carriers");
+    }
+    EvaluateCarrierProjections(context, workspace, current_hints_meters);
+    for (std::size_t ordinal = 0; ordinal < carriers_.size(); ++ordinal) {
+        updated_hints_meters[ordinal] =
+            workspace.carriers_[ordinal].track_station_meters;
+    }
+}
+
+void WheelRailContactForcePlan::CalcAppliedForces(
+    const MultibodyEvaluationContext& context,
+    WheelRailContactForceWorkspace& workspace,
+    std::span<const double> projection_station_hints_meters,
+    std::span<AppliedBodyWrench> body_wrenches) const {
+    if (body_wrenches.size() != interfaces_.size()) {
+        Reject("the output span has " + std::to_string(body_wrenches.size()) +
+               " entries, but this plan has " +
+               std::to_string(interfaces_.size()) + " interfaces");
+    }
+    EvaluateCarrierProjections(context, workspace,
+                               projection_station_hints_meters);
+    CompleteCarrierKinematics(context, workspace);
 
     for (std::size_t ordinal = 0; ordinal < interfaces_.size(); ++ordinal) {
         const InterfaceBinding& interface = interfaces_[ordinal];

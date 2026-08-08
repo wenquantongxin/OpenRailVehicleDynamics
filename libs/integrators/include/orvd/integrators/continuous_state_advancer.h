@@ -51,6 +51,13 @@ struct ContinuousStateDenseOutputInterval final {
     double end_time_seconds{};
 };
 
+/// One successful call to the numerical backend's internal-step surface.
+struct ContinuousStateInternalStep final {
+    double start_time_seconds{};
+    double end_time_seconds{};
+    bool reached_stop{false};
+};
+
 /// The numerical-backend-independent advancement surface.
 ///
 /// G44 supplies the first implementation, CVODE.  No Drake integrator subtype
@@ -70,17 +77,23 @@ class ContinuousStateAdvancer {
     virtual void CopyCurrentState(
         Eigen::Ref<Eigen::VectorXd> continuous_state) const = 0;
 
-    /// Advances to a finite target no earlier than the current time.
-    /// A same-time request is a no-op. Invalid caller input is rejected before
-    /// the backend is entered and leaves the endpoint, dense output, and
-    /// ability to advance unchanged. A failure after entering the backend
-    /// preserves the last public endpoint, invalidates dense output, and
-    /// requires successful reinitialization before another advance.
-    /// @throws std::invalid_argument if the target is non-finite or earlier
-    /// than `current_time_seconds()`.
+    /// Advances by at most one successful internal step toward `stop_time`.
+    ///
+    /// The returned endpoint is also copied into caller-owned, already-sized
+    /// storage. A same-time request is a no-op that reports `reached_stop`.
+    /// Invalid caller input is rejected before the backend is entered and
+    /// leaves the endpoint output, dense output, and ability to advance
+    /// unchanged. A failure after entering the backend preserves the last
+    /// successful endpoint, invalidates dense output, and requires successful
+    /// reinitialization before another step.
+    /// @throws std::invalid_argument if the stop is non-finite or earlier than
+    /// `current_time_seconds()`, or if the endpoint output has the wrong size.
     /// @throws std::logic_error if a prior backend failure requires
     /// reinitialization.
-    virtual void AdvanceTo(double target_time_seconds) = 0;
+    [[nodiscard]] virtual ContinuousStateInternalStep
+    AdvanceOneInternalStepToward(
+        double stop_time_seconds,
+        Eigen::Ref<Eigen::VectorXd> endpoint_continuous_state) = 0;
 
     /// Rebuilds backend history after an external state, parameter or input
     /// change. The complete committed endpoint is explicit so a numerical
