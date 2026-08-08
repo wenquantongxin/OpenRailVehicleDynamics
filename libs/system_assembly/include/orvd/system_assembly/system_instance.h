@@ -104,12 +104,14 @@ class SystemContinuousStateRange {
 
 /// The root runtime context for one `SystemInstance`.
 ///
-/// It owns exactly one accepted time, one multibody evaluation context, and the
-/// force-element state that belongs to no body.  The multibody context in turn
-/// owns the G21 state store; this class does not mirror q or v.  The model-bound
-/// forward-dynamics workspace and the scratch the plan needs to reach that
-/// facade are created beside it once and reused, so that two contexts of one
-/// system can be evaluated without sharing a buffer.
+/// It owns exactly one time value, one multibody evaluation context, and the
+/// force-element state that belongs to no body.  Its owner decides whether a
+/// particular instance is the publicly accepted context or an integrator trial
+/// context.  The multibody context in turn owns the G21 state store; this class
+/// does not mirror q or v.  The model-bound forward-dynamics workspace and the
+/// scratch the plan needs to reach that facade are created beside it once and
+/// reused, so that two contexts of one system can be evaluated without sharing
+/// a buffer.
 class SystemRuntimeContext {
    public:
     ~SystemRuntimeContext();
@@ -253,7 +255,7 @@ class SystemInstance {
 
     [[nodiscard]] int continuous_state_size() const;
 
-    /// Creates the default physical state at an explicit finite accepted time.
+    /// Creates the default physical state at an explicit finite time.
     [[nodiscard]] std::unique_ptr<SystemRuntimeContext>
     CreateDefaultRuntimeContext(double initial_time_seconds) const;
 
@@ -267,12 +269,13 @@ class SystemInstance {
     ///
     /// This is the contiguous-vector bridge used by ODE backends.  The q and v
     /// parts are mapped directly into the authoritative multibody state; no
-    /// mirrored system state is kept.  The accepted time is retained.
+    /// mirrored system state is kept.  The context's current time is retained.
     void SetContinuousState(
         SystemRuntimeContext& context,
         const Eigen::Ref<const Eigen::VectorXd>& continuous_state) const;
 
-    /// Accepts a finite time and complete `[q; v; z]` state as one transaction.
+    /// Replaces the finite time and complete `[q; v; z]` state as one
+    /// transaction.
     ///
     /// Every check precedes every write: the time and complete state are
     /// validated, including the force-state finiteness and the model's own

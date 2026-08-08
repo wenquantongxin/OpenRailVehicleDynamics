@@ -132,8 +132,9 @@ class ResolvedInitialContext {
 // Throws std::invalid_argument when the record violates its own invariants,
 // when an identifier or gravity disagrees with the assembled system, when a
 // name family is not exactly the system's, when a name resolves to nothing,
-// or when a body's station is outside the line; the diagnostic states the
-// offending amount where it applies.
+// when a body's station is outside the line, or when a contact-enabled system
+// is paired with a line other than the one its contact plan owns; the
+// diagnostic states the offending amount where it applies.
 [[nodiscard]] ResolvedInitialContext AssembleResolvedInitialContext(
     const AssembledVehicleSystem& system,
     const ResolvedStartupState& startup_state,

@@ -161,6 +161,13 @@ ResolvedInitialContext AssembleResolvedInitialContext(
                Describe(vehicle_layout_reference_track_station_meters) +
                ", which is not finite");
     }
+    const forces::WheelRailContactForcePlan* contact_plan =
+        system.contact_force_plan();
+    if (contact_plan != nullptr && &line != &contact_plan->track_geometry()) {
+        Reject("a contact-enabled system already owns the line used by its "
+               "wheel-rail force plan; an external line cannot be used to "
+               "place its start-up state");
+    }
 
     // 2. Identity, including the gravity this state was resolved under.
     const VehicleBinding& binding = system.binding();

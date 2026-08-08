@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -330,11 +331,17 @@ int main(int argc, char** argv) {
     // that datum would apply this correction twice and changes the wrench.
     auto yawed_startup = startup;
     constexpr double kYawRadians = 0.04;
+    constexpr double kAccumulatedSpinRadians = 0.31;
     const std::string yawed_wheelset =
         vehicle.mechanical_track_station_layout.wheelset_body_names.front();
-    MutableBodyState(yawed_startup, yawed_wheelset)
-        .rotation_local_track_from_body = Eigen::Quaterniond(
-        Eigen::AngleAxisd(kYawRadians, Eigen::Vector3d::UnitZ()));
+    auto& yawed_body = MutableBodyState(yawed_startup, yawed_wheelset);
+    yawed_body.rotation_local_track_from_body = Eigen::Quaterniond(
+        Eigen::AngleAxisd(kYawRadians, Eigen::Vector3d::UnitZ()) *
+        Eigen::AngleAxisd(kAccumulatedSpinRadians,
+                          Eigen::Vector3d::UnitY()));
+    yawed_body
+        .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
+        Eigen::Vector3d(0.02, 0.0, -0.01);
     auto yawed_line = LoadTrackGeometryFromJsonFile(argv[3]);
     const auto yawed_scenario = AssembleGz18ContactScenario(
         vehicle, yawed_startup, std::move(yawed_line),
@@ -409,6 +416,11 @@ int main(int argc, char** argv) {
     const Eigen::Vector3d wheel_profile_offset =
         rotation_track_from_wheel_profile *
         Eigen::Vector3d(0.0, constants.wheel_lateral_datum_meters, 0.0);
+    Require(std::abs(angles.pitch_radians - kAccumulatedSpinRadians) < 1.0e-14,
+            "the integration fixture lost its non-zero accumulated wheel spin");
+    Require(body_omega_in_track.cross(wheel_profile_offset).norm() > 1.0e-3,
+            "the integration fixture lost its non-collinear profile-datum "
+            "velocity");
     WheelProfileRigidMotion wheel_motion;
     wheel_motion.origin_track_meters =
         body_origin_in_track + wheel_profile_offset;
@@ -484,6 +496,24 @@ int main(int argc, char** argv) {
                      direct_wrench.moment_newton_meters),
             "the force plan's non-zero-yaw wrench does not use the single "
             "profile-coordinate station correction");
+
+    // A contact-enabled system owns one line.  The legacy research overload
+    // remains available for systems without contact, but it must not create a
+    // start-up context against a second line while the contact plan evaluates
+    // another one.
+    bool separate_line_was_rejected = false;
+    try {
+        const auto separate_line = LoadTrackGeometryFromJsonFile(argv[3]);
+        (void)orvd::configuration::AssembleResolvedInitialContext(
+            assembled, startup, separate_line, kReferenceStationMeters);
+    } catch (const std::invalid_argument& error) {
+        separate_line_was_rejected =
+            std::string_view(error.what()).find("already owns the line") !=
+            std::string_view::npos;
+    }
+    Require(separate_line_was_rejected,
+            "a contact-enabled system accepted a second line for start-up "
+            "assembly");
 
     if (failures != 0) {
         return 1;

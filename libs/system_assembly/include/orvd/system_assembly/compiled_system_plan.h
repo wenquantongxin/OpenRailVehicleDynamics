@@ -49,9 +49,12 @@ class CompiledSystemPlan {
         return derivative_component_;
     }
 
-    /// Evaluates the current accepted state without writing q, v, z or any
-    /// context-local physical parameter.  Logical caches, the model-bound call
-    /// workspace and the context's own scratch may be updated and reused.
+    /// Evaluates the state currently installed in `context` without writing q,
+    /// v, z or any context-local physical parameter.  Whether that context is
+    /// an accepted state or an integrator trial state is decided by its owner;
+    /// this operation does not accept a state or commit numerical history.
+    /// Logical caches, the model-bound call workspace and the context's own
+    /// scratch may be updated and reused.
     ///
     /// There is no call-time applied force. A system's forces are its typed
     /// vehicle and contact plans; a caller who wants an arbitrary research or

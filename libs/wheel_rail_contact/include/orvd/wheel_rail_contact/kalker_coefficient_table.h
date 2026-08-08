@@ -8,10 +8,11 @@
 // shape and the material's Poisson ratio.
 //
 // These three numbers are what turns a creepage into a tangential stress at the
-// leading edge of the contact patch. They come from Kalker's tabulation of the
-// exact linear-elastic half-space solution: there is no closed form inside the
-// table's domain, so the values are read off a grid and interpolated, and that
-// grid is reproduced here rather than recomputed.
+// leading edge of the contact patch. They reproduce the finite coefficient grid
+// used by the current WRL path; migration records attribute that grid to
+// Kalker's linear-elastic half-space tabulation. There is no closed form inside
+// the table's domain, so the values are read off the grid and interpolated
+// rather than recomputed.
 //
 // ## Two axes, collapsed to one
 //
@@ -30,12 +31,15 @@
 //
 // Outside a semi-axis ratio of [0.1, 10] the table stops and, under the WRL
 // reproduction rule, a slender-ellipse asymptotic expansion takes over. The
-// expansion is tabulated in Kalker (1990), Appendix E, Table E3; the literal
-// hard switch at these two finite bounds is the current WRL execution rule,
-// not a claim that SIMPACK exposes the same switch. The finite table and the
-// first asymptotic term differ by a few percent in places, and this model does
-// not invent an unqualified smoothing between them. A caller that wants to
-// know it has left the tabulated region can ask for a refusal instead.
+// finite table is historically attributed to Kalker (1990), Appendix E, Table
+// E3. The asymptotic formula is carried from the current WRL implementation;
+// its primary-source attribution has not been independently verified in this
+// repository. The literal hard switch at these two finite bounds is the current
+// WRL execution rule, not a claim that SIMPACK exposes the same switch. The
+// finite table and the first asymptotic term differ by a few percent in places,
+// and this model does not invent an unqualified smoothing between them. A
+// caller that wants to know it has left the tabulated region can ask for a
+// refusal instead.
 //
 // The gate is on the ratio itself, at the literal bounds, not on the first and
 // last grid node. They coincide here; stating which one is authoritative

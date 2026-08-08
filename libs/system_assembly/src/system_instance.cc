@@ -196,7 +196,7 @@ void SystemInstance::SetTimeAndContinuousState(
         Reject("the runtime context belongs to a different system");
     }
     if (!std::isfinite(time_seconds)) {
-        Reject("the accepted time must be finite; nothing was written");
+        Reject("the time must be finite; nothing was written");
     }
     if (continuous_state.size() != continuous_state_size()) {
         Reject("the continuous-state input has " +
