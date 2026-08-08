@@ -54,6 +54,35 @@
 
 namespace orvd::wheel_rail_contact {
 
+// Which longitudinal origin a placed rail cross-section uses.
+//
+// A track-station origin leaves the authored rail profile at the local track
+// frame's own longitudinal origin.  A profile-coordinate origin translates it
+// along its own first axis until the wheel-to-rail longitudinal coordinate is
+// exactly the difference between the effective profile station and the shared
+// carrier station.  The latter is the active GZ18 reference-model semantics.
+// This is fixed with the contact personality; it is not a runtime switch.
+enum class RailProfileOriginMode {
+    kTrackStation,
+    kProfileCoordinate,
+};
+
+// Applies the selected longitudinal-origin convention to an already placed
+// rail profile frame.
+//
+// The wheel argument is the wheel-body origin, not the authored wheel-profile
+// datum.  At non-zero yaw that datum is displaced longitudinally by the axle
+// reach; using it here would apply the same station correction twice.  The
+// track-station mode returns `rail_origin_in_track_meters` unchanged.
+//
+// Throws nothing and allocates nothing.
+[[nodiscard]] Eigen::Vector3d PlaceRailProfileLongitudinalOrigin(
+    RailProfileOriginMode mode,
+    const Eigen::Vector3d& rail_origin_in_track_meters,
+    const Eigen::Matrix3d& rotation_track_from_rail_profile,
+    const Eigen::Vector3d& wheel_body_origin_in_track_meters,
+    double effective_station_offset_meters);
+
 // The fixed geometry one wheel/rail pair carries. Every one of these is either
 // a property of the vehicle or derived from the rail asset; none is state.
 struct WheelRailPoseConstants {

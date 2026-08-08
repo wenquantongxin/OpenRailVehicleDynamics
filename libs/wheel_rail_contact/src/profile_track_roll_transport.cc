@@ -17,6 +17,32 @@ RollYawPitchAngles ResolveRollYawPitch(const Eigen::Matrix3d& rotation) {
     return angles;
 }
 
+RollYawPitchRates ResolveRollYawPitchRates(
+    const Eigen::Vector3d&
+        relative_angular_velocity_in_reference_radians_per_second,
+    double roll_radians, double yaw_radians) {
+    const double sine_roll = std::sin(roll_radians);
+    const double cosine_roll = std::cos(roll_radians);
+    const double transverse =
+        relative_angular_velocity_in_reference_radians_per_second.y() *
+            cosine_roll +
+        relative_angular_velocity_in_reference_radians_per_second.z() *
+            sine_roll;
+
+    RollYawPitchRates rates;
+    rates.yaw_rate_radians_per_second =
+        -relative_angular_velocity_in_reference_radians_per_second.y() *
+            sine_roll +
+        relative_angular_velocity_in_reference_radians_per_second.z() *
+            cosine_roll;
+    rates.pitch_rate_radians_per_second =
+        transverse / std::cos(yaw_radians);
+    rates.roll_rate_radians_per_second =
+        relative_angular_velocity_in_reference_radians_per_second.x() +
+        transverse * std::tan(yaw_radians);
+    return rates;
+}
+
 ProfileTrackRollTransport ComputeProfileTrackRollTransport(
     const Eigen::Vector3d& shared_track_origin_in_inertial_meters,
     const Eigen::Matrix3d& shared_rotation_inertial_from_track,

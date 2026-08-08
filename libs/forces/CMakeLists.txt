@@ -3,7 +3,8 @@
 # wrench, and who integrates that wrench is not its concern.
 
 add_library(orvd_forces STATIC
-    src/vehicle_force_plan.cc)
+    src/vehicle_force_plan.cc
+    src/wheel_rail_contact_force_plan.cc)
 
 orvd_configure_first_party_target(orvd_forces)
 
@@ -13,7 +14,10 @@ target_include_directories(orvd_forces
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_forces
-    PUBLIC orvd_multibody_model)
+    PUBLIC
+        orvd_multibody_model
+        orvd_track_geometry
+        orvd_wheel_rail_contact)
 
 set_target_properties(orvd_forces PROPERTIES
     EXPORT_NAME forces)

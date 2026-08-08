@@ -17,7 +17,9 @@ using orvd::wheel_rail_contact::ProfileTrackRollTransport;
 using orvd::wheel_rail_contact::ProfileTrackRollTransportPolicy;
 using orvd::wheel_rail_contact::ProfileTrackRollTransportStrategy;
 using orvd::wheel_rail_contact::ResolveRollYawPitch;
+using orvd::wheel_rail_contact::ResolveRollYawPitchRates;
 using orvd::wheel_rail_contact::RollYawPitchAngles;
+using orvd::wheel_rail_contact::RollYawPitchRates;
 
 int failures = 0;
 
@@ -61,6 +63,33 @@ int main() {
         Require(std::abs(ResolveRollYawPitch(Eigen::Matrix3d::Identity())
                              .roll_radians) == 0.0,
                 "the identity rotation does not resolve to no roll");
+    }
+
+    {
+        // Independently invert the X-Z-Y rate map at a non-degenerate
+        // attitude.  Zero roll or yaw would hide a swapped yaw/pitch rate and
+        // the sign of the coupling terms that G53 uses to strip accumulated
+        // wheel spin from contact geometry.
+        const double roll = 0.23;
+        const double yaw = -0.19;
+        const double roll_rate = 0.41;
+        const double yaw_rate = -0.37;
+        const double pitch_rate = 17.3;
+        const double temporary = pitch_rate * std::cos(yaw);
+        const Eigen::Vector3d relative_angular_velocity(
+            roll_rate - pitch_rate * std::sin(yaw),
+            temporary * std::cos(roll) - yaw_rate * std::sin(roll),
+            temporary * std::sin(roll) + yaw_rate * std::cos(roll));
+        const RollYawPitchRates resolved = ResolveRollYawPitchRates(
+            relative_angular_velocity, roll, yaw);
+        Require(std::abs(resolved.roll_rate_radians_per_second - roll_rate) <
+                        1.0e-14 &&
+                    std::abs(resolved.yaw_rate_radians_per_second - yaw_rate) <
+                        1.0e-14 &&
+                    std::abs(resolved.pitch_rate_radians_per_second -
+                             pitch_rate) < 1.0e-14,
+                "the X-Z-Y angular-rate resolution does not invert its "
+                "independent construction");
     }
 
     {

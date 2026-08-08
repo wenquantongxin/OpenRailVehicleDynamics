@@ -56,6 +56,25 @@ double ComputePairRoll(double wheelset_roll, double wheelset_yaw,
 
 }  // namespace
 
+Eigen::Vector3d PlaceRailProfileLongitudinalOrigin(
+    RailProfileOriginMode mode,
+    const Eigen::Vector3d& rail_origin_in_track_meters,
+    const Eigen::Matrix3d& rotation_track_from_rail_profile,
+    const Eigen::Vector3d& wheel_body_origin_in_track_meters,
+    double effective_station_offset_meters) {
+    if (mode == RailProfileOriginMode::kTrackStation) {
+        return rail_origin_in_track_meters;
+    }
+    const Eigen::Vector3d origin_from_wheel_in_profile =
+        rotation_track_from_rail_profile.transpose() *
+        (rail_origin_in_track_meters - wheel_body_origin_in_track_meters);
+    return rail_origin_in_track_meters +
+           rotation_track_from_rail_profile *
+               Eigen::Vector3d(effective_station_offset_meters -
+                                   origin_from_wheel_in_profile.x(),
+                               0.0, 0.0);
+}
+
 double SafeAtan2Ratio(double numerator, double denominator) {
     if (std::abs(denominator) < kArcRateFloor) {
         return 0.0;

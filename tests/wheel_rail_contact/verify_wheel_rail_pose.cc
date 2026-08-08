@@ -16,6 +16,8 @@ namespace {
 
 using orvd::wheel_rail_contact::ComputeRailGaugeDatum;
 using orvd::wheel_rail_contact::ContactPoseScalars;
+using orvd::wheel_rail_contact::PlaceRailProfileLongitudinalOrigin;
+using orvd::wheel_rail_contact::RailProfileOriginMode;
 using orvd::wheel_rail_contact::BuildContactPoseScalars;
 using orvd::wheel_rail_contact::ProfilePoints;
 using orvd::wheel_rail_contact::ProfileRole;
@@ -88,6 +90,33 @@ WheelRailPoseInput Running(const WheelsetPlacement& placement) {
 }  // namespace
 
 int main() {
+    {
+        // Profile-coordinate placement is measured from the wheel BODY origin,
+        // not from the authored wheel-profile datum.  At non-zero yaw the two
+        // differ along x, so this fixture would expose the historical double
+        // application of the axle-datum station offset.
+        const Eigen::Vector3d rail_origin(0.42, 0.73, -0.01);
+        const Eigen::Matrix3d rail_rotation =
+            Eigen::AngleAxisd(0.07, Eigen::Vector3d::UnitX())
+                .toRotationMatrix();
+        const Eigen::Vector3d wheel_body_origin(-0.12, 0.03, -0.41);
+        const double effective_station_offset = -0.031;
+        const Eigen::Vector3d placed = PlaceRailProfileLongitudinalOrigin(
+            RailProfileOriginMode::kProfileCoordinate, rail_origin,
+            rail_rotation, wheel_body_origin, effective_station_offset);
+        const double resulting_coordinate =
+            (rail_rotation.transpose() * (placed - wheel_body_origin)).x();
+        Require(std::abs(resulting_coordinate - effective_station_offset) <
+                    1.0e-15,
+                "profile-coordinate rail placement was not measured from the "
+                "wheel body origin");
+        Require(PlaceRailProfileLongitudinalOrigin(
+                    RailProfileOriginMode::kTrackStation, rail_origin,
+                    rail_rotation, wheel_body_origin,
+                    effective_station_offset) == rail_origin,
+                "track-station rail placement changed its origin");
+    }
+
     const double half_width = 0.037;
     const double flank_slope = 1.0;
     const ProfilePoints rail =

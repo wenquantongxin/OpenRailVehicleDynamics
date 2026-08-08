@@ -23,6 +23,7 @@ add_library(orvd_wheel_rail_contact STATIC
     src/tangential_contact_force.cc
     src/wheel_profile_preprocessing.cc
     src/wheel_rail_contact_model.cc
+    src/wheel_rail_contact_runtime_personality.cc
     src/wheel_rail_pose.cc)
 
 orvd_configure_first_party_target(orvd_wheel_rail_contact)

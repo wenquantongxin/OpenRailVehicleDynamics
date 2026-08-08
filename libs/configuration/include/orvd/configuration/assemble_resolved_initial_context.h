@@ -73,6 +73,8 @@ class ResolvedInitialContext {
     friend ResolvedInitialContext AssembleResolvedInitialContext(
         const AssembledVehicleSystem&, const ResolvedStartupState&,
         const track_geometry::TrackGeometry&, double);
+    friend ResolvedInitialContext AssembleResolvedInitialContext(
+        const AssembledVehicleSystem&, const ResolvedStartupState&, double);
 
     ResolvedInitialContext(
         std::unique_ptr<system_assembly::SystemRuntimeContext> context,
@@ -136,6 +138,16 @@ class ResolvedInitialContext {
     const AssembledVehicleSystem& system,
     const ResolvedStartupState& startup_state,
     const track_geometry::TrackGeometry& line,
+    double vehicle_layout_reference_track_station_meters);
+
+// The single-authority form for a contact-enabled system.  The line is owned
+// by that system's wheel--rail force plan, so it cannot disagree with the line
+// used to resolve the initial context.
+//
+// Throws std::invalid_argument if `system` has no contact force plan.
+[[nodiscard]] ResolvedInitialContext AssembleResolvedInitialContext(
+    const AssembledVehicleSystem& system,
+    const ResolvedStartupState& startup_state,
     double vehicle_layout_reference_track_station_meters);
 
 }  // namespace orvd::configuration

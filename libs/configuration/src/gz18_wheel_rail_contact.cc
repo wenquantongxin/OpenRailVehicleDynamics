@@ -20,6 +20,7 @@ using wheel_rail_contact::ProfilePoints;
 using wheel_rail_contact::ProfileRole;
 using wheel_rail_contact::ProfileTrackRollTransportPolicy;
 using wheel_rail_contact::ProfileTrackRollTransportStrategy;
+using wheel_rail_contact::RailProfileOriginMode;
 using wheel_rail_contact::RailGaugeDatum;
 using wheel_rail_contact::TangentialContactConfiguration;
 using wheel_rail_contact::WheelProfilePreprocessingConfiguration;
@@ -159,7 +160,9 @@ Gz18WheelRailContact::Gz18WheelRailContact(
     WheelProfilePreprocessingConfiguration
         wheel_profile_preprocessing_configuration,
     double track_gauge_meters, double gauge_measuring_depth_meters,
-    double pose_rail_cant_radians, RailGaugeDatum right_rail_gauge_datum,
+    double pose_rail_cant_radians,
+    RailProfileOriginMode rail_profile_origin_mode,
+    RailGaugeDatum right_rail_gauge_datum,
     RailGaugeDatum left_rail_gauge_datum,
     WheelRailPoseConstants right_pose_constants,
     WheelRailPoseConstants left_pose_constants,
@@ -175,14 +178,18 @@ Gz18WheelRailContact::Gz18WheelRailContact(
       pose_rail_cant_radians_(pose_rail_cant_radians),
       right_rail_gauge_datum_(right_rail_gauge_datum),
       left_rail_gauge_datum_(left_rail_gauge_datum),
-      right_pose_constants_(right_pose_constants),
-      left_pose_constants_(left_pose_constants),
-      profile_track_roll_transport_strategy_(
-          profile_track_roll_transport_strategy),
-      right_model_(std::move(right_model)),
-      left_model_(std::move(left_model)) {}
+      runtime_personality_(std::make_unique<
+          wheel_rail_contact::WheelRailContactRuntimePersonality>(
+          std::move(right_model), std::move(left_model), right_pose_constants,
+          left_pose_constants, profile_track_roll_transport_strategy,
+          rail_profile_origin_mode)) {}
 
 Gz18WheelRailContact::~Gz18WheelRailContact() = default;
+
+std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
+Gz18WheelRailContact::ReleaseRuntimePersonality() {
+    return std::move(runtime_personality_);
+}
 
 std::unique_ptr<Gz18WheelRailContact> AssembleGz18WheelRailContact(
     const std::filesystem::path& orvd_data_root,
@@ -243,6 +250,7 @@ std::unique_ptr<Gz18WheelRailContact> AssembleGz18WheelRailContact(
     return std::unique_ptr<Gz18WheelRailContact>(new Gz18WheelRailContact(
         startup_binding, contact_configuration, wheel_preparation,
         kTrackGaugeMeters, kGaugeMeasuringDepthMeters, kPoseRailCantRadians,
+        RailProfileOriginMode::kProfileCoordinate,
         right_rail_gauge_datum, left_rail_gauge_datum, right_pose_constants,
         left_pose_constants,
         ProfileTrackRollTransportStrategy{

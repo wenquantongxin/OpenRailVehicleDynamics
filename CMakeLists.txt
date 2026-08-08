@@ -70,8 +70,9 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: multibody_runtime + internal rigid tree
 #   -> multibody_model -> forces -> system_assembly -> integrators.
-# Track geometry and those lower layers feed configuration; equilibrium and
-# tests come last.
+# Track geometry and the wheel-rail contact core also feed the typed force
+# plans; configuration consumes those lower layers and equilibrium/tests come
+# last.
 # These listed directories are the product module roots. Every non-imported
 # target defined in one of them or a descendant is subject to the Drake boundary
 # gate below. A new target inside a listed module needs no registration; a new

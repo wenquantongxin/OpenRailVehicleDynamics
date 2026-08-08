@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 
 #include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 
@@ -13,6 +14,7 @@ namespace {
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
 using orvd::forces::VehicleForcePlan;
+using orvd::forces::WheelRailContactForcePlan;
 using orvd::system_assembly::SystemAssemblyDescription;
 
 static_assert(!std::is_copy_constructible_v<SystemAssemblyDescription>);
@@ -29,6 +31,12 @@ static_assert(!std::is_constructible_v<SystemAssemblyDescription,
                                        MultibodyModel&&, VehicleForcePlan&>);
 static_assert(!std::is_constructible_v<SystemAssemblyDescription,
                                        const MultibodyModel&, VehicleForcePlan&&>);
+static_assert(!std::is_constructible_v<
+              SystemAssemblyDescription, const MultibodyModel&,
+              VehicleForcePlan&&, const WheelRailContactForcePlan&>);
+static_assert(!std::is_constructible_v<
+              SystemAssemblyDescription, const MultibodyModel&,
+              const VehicleForcePlan&, WheelRailContactForcePlan&&>);
 
 int failure_count = 0;
 

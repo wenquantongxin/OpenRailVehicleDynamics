@@ -4,6 +4,7 @@
 #include <string>
 
 #include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 
@@ -12,7 +13,8 @@ namespace orvd::system_assembly {
 CompiledSystemPlan::CompiledSystemPlan(const SystemInstance& system)
     : system_(&system),
       derivative_component_(system.multibody_component()),
-      force_plan_(system.force_plan()) {}
+      force_plan_(system.force_plan()),
+      contact_force_plan_(system.contact_force_plan()) {}
 
 void CompiledSystemPlan::CalcStateTimeDerivatives(
     SystemRuntimeContext& context,
@@ -28,14 +30,25 @@ void CompiledSystemPlan::CalcStateTimeDerivatives(
     const MultibodyComponentView component =
         system_->GetMultibodyComponentView(context, derivative_component_);
 
-    // Every force element once, in the plan's frozen order, into the context's
-    // own buffers. A system with no force plan produces no wrench and its
-    // series block is empty.
+    // Every force source once, into disjoint fixed slices of the context's own
+    // buffer. The vehicle plan also owns the series-state derivative.
     if (force_plan_ != nullptr) {
+        const int vehicle_count = system_->vehicle_body_wrench_count();
         force_plan_->CalcAppliedForces(
             component.context(), context.series_spring_damper_forces_,
-            context.nominal_forces_, context.body_wrenches_,
+            context.nominal_forces_,
+            std::span(context.body_wrenches_).first(
+                static_cast<std::size_t>(vehicle_count)),
             context.series_force_derivatives_);
+    }
+    if (contact_force_plan_ != nullptr) {
+        const int vehicle_count = system_->vehicle_body_wrench_count();
+        const int contact_count = system_->contact_body_wrench_count();
+        contact_force_plan_->CalcAppliedForces(
+            component.context(), *context.contact_force_workspace_,
+            std::span(context.body_wrenches_)
+                .subspan(static_cast<std::size_t>(vehicle_count),
+                         static_cast<std::size_t>(contact_count)));
     }
 
     // The facade writes [qdot; vdot], which is shorter than this system's

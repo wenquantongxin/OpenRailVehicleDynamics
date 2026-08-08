@@ -2,14 +2,13 @@
 #include <cstdio>
 #include <exception>
 #include <stdexcept>
+#include <utility>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-#include "orvd/configuration/assemble_resolved_initial_context.h"
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
-#include "orvd/configuration/assembled_vehicle_system.h"
-#include "orvd/configuration/gz18_wheel_rail_contact.h"
+#include "orvd/configuration/assembled_gz18_contact_scenario.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
@@ -21,7 +20,7 @@ int main(int argc, char* argv[]) {
                 "expected the installed track geometry, vehicle definition and "
                 "resolved start-up state paths plus the installed data root");
         }
-        const auto line =
+        auto line =
             orvd::configuration::LoadTrackGeometryFromJsonFile(argv[1]);
         const auto point = line.CenterlinePositionInInertialMeters(40.0);
         if (std::abs(point.x() - 40.0) > 1.0e-12 || point.y() != 0.0 ||
@@ -55,77 +54,29 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // The installed start-up state, placed on the installed line. This is
-        // the whole chain a consumer of the package walks: three installed
-        // records in, one runtime context out.
+        // The installed start-up, line, contact assets and vehicle are one
+        // transaction. The returned system owns the exact line and contact
+        // personality its direct RHS consumes.
         const auto startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
-        const auto system = orvd::configuration::AssembleVehicleSystem(
-            vehicle,
-            startup.gravitational_acceleration_meters_per_second_squared);
-        const auto resolved =
-            orvd::configuration::AssembleResolvedInitialContext(
-                *system, startup, line, 20.0);
+        const auto scenario =
+            orvd::configuration::AssembleGz18ContactScenario(
+                vehicle, startup, std::move(line), argv[4], 20.0, 2.0);
+        const auto& system = scenario->vehicle_system();
+        const auto& resolved = scenario->initial_context();
+        Eigen::VectorXd derivatives(system.system().continuous_state_size());
+        system.compiled_plan().CalcStateTimeDerivatives(resolved.context(),
+                                                        derivatives);
         if (resolved.wheelset_placements().size() != 4 ||
             resolved.context().generalized_positions().size() != 57 ||
-            resolved.context().series_spring_damper_forces().size() != 2) {
+            resolved.context().series_spring_damper_forces().size() != 2 ||
+            system.contact_force_plan() == nullptr ||
+            system.contact_force_plan()->carrier_count() != 4 ||
+            system.contact_force_plan()->interface_count() != 8 ||
+            derivatives.size() != 109 || !derivatives.allFinite()) {
             std::fprintf(stderr,
-                         "installed start-up state did not assemble into the "
-                         "context it describes\n");
-            return 1;
-        }
-
-        // Resolve the installed logical profile identities under the relocated
-        // data root, then run the complete contact core once. This is the
-        // evidence that the installed JSON assets and the installed typed
-        // personality meet, not merely that two files happened to be copied.
-        const auto contact =
-            orvd::configuration::AssembleGz18WheelRailContact(
-                argv[4], startup.wheel_rail_binding,
-                startup.rail_profile_reference_vertical_offset_meters);
-        using orvd::wheel_rail_contact::WheelSide;
-        const auto& constants = contact->pose_constants(WheelSide::kRight);
-        orvd::wheel_rail_contact::WheelRailPoseInput pose_input;
-        pose_input.placement.vertical_meters =
-            -constants.nominal_rolling_radius_meters;
-        pose_input.arc_rate_meters_per_second =
-            startup.initial_longitudinal_speed_meters_per_second;
-
-        orvd::wheel_rail_contact::WheelRailContactInput contact_input;
-        contact_input.pose = orvd::wheel_rail_contact::BuildContactPoseScalars(
-            constants, pose_input, {});
-        contact_input.rail_frame.origin_track_meters = Eigen::Vector3d(
-            0.0, constants.rail_lateral_datum_meters,
-            constants.rail_vertical_datum_meters);
-        contact_input.rail_frame.rotation_track_from_profile =
-            Eigen::AngleAxisd(constants.rail_roll_radians,
-                              Eigen::Vector3d::UnitX())
-                .toRotationMatrix();
-        contact_input.wheel.origin_track_meters = Eigen::Vector3d(
-            0.0, constants.wheel_lateral_datum_meters,
-            -constants.nominal_rolling_radius_meters);
-        contact_input.wheel.origin_velocity_track_meters_per_second =
-            Eigen::Vector3d(
-                startup.initial_longitudinal_speed_meters_per_second, 0.0,
-                0.0);
-        const double wheel_spin =
-            -startup.initial_longitudinal_speed_meters_per_second /
-            startup.common_startup_effective_rolling_radius_meters;
-        contact_input.wheel.angular_velocity_track_radians_per_second =
-            Eigen::Vector3d(0.0, wheel_spin, 0.0);
-        contact_input.wheel.arc_rate_meters_per_second =
-            startup.initial_longitudinal_speed_meters_per_second;
-        contact_input.wheel.wheel_pitch_rate_radians_per_second = wheel_spin;
-        orvd::wheel_rail_contact::WheelRailContactWorkspace contact_workspace;
-        contact->model(WheelSide::kRight).PrepareWorkspace(contact_workspace);
-        const auto contact_result = contact->model(WheelSide::kRight).Evaluate(
-            contact_input, contact_workspace);
-        if (contact_result.count != 1 ||
-            !contact_result.patches[0].normal.in_contact ||
-            !(contact_result.patches[0].normal.normal_force_newtons > 0.0)) {
-            std::fprintf(stderr,
-                         "installed GZ18 contact assets did not produce the "
-                         "contact they describe\n");
+                         "installed GZ18 contact scenario did not produce its "
+                         "complete finite direct RHS\n");
             return 1;
         }
     } catch (const std::exception& error) {

@@ -5,6 +5,7 @@
 add_library(orvd_configuration STATIC
     src/assemble_resolved_initial_context.cc
     src/assemble_vehicle_multibody_model.cc
+    src/assembled_gz18_contact_scenario.cc
     src/assembled_vehicle_system.cc
     src/gz18_wheel_rail_contact.cc
     src/load_profile_points.cc

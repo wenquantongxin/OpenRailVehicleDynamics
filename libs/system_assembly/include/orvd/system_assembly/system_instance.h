@@ -20,6 +20,8 @@ class MultibodyModel;
 
 namespace orvd::forces {
 class VehicleForcePlan;
+class WheelRailContactForcePlan;
+class WheelRailContactForceWorkspace;
 }
 
 namespace orvd::system_assembly {
@@ -144,7 +146,9 @@ class SystemRuntimeContext {
                          double initial_time_seconds,
                          int series_spring_damper_force_state_count,
                          int nominal_force_component_count,
-                         int body_wrench_count);
+                         int body_wrench_count,
+                         const forces::WheelRailContactForcePlan*
+                             contact_force_plan);
 
     internal::SystemIdentity issuer_;
     double time_seconds_;
@@ -161,6 +165,8 @@ class SystemRuntimeContext {
     /// The wrenches the force plan produces, sized once. It belongs to the
     /// context so that two contexts of one system never write one buffer.
     std::vector<multibody_model::AppliedBodyWrench> body_wrenches_;
+    std::unique_ptr<forces::WheelRailContactForceWorkspace>
+        contact_force_workspace_;
     Eigen::VectorXd series_force_derivatives_;
     /// Scratch for the multibody facade's own [qdot; vdot], which is shorter
     /// than this system's state.  It belongs to the context and not to the
@@ -208,6 +214,18 @@ class SystemInstance {
     /// The vehicle's force elements, or null when the system carries none.
     [[nodiscard]] const forces::VehicleForcePlan* force_plan() const {
         return force_plan_;
+    }
+
+    [[nodiscard]] const forces::WheelRailContactForcePlan* contact_force_plan()
+        const {
+        return contact_force_plan_;
+    }
+
+    [[nodiscard]] int vehicle_body_wrench_count() const {
+        return vehicle_body_wrench_count_;
+    }
+    [[nodiscard]] int contact_body_wrench_count() const {
+        return contact_body_wrench_count_;
     }
 
     [[nodiscard]] MultibodyComponentIndex multibody_component() const;
@@ -305,6 +323,9 @@ class SystemInstance {
     int series_spring_damper_force_state_count_{};
     int nominal_force_component_count_{};
     const forces::VehicleForcePlan* force_plan_{nullptr};
+    const forces::WheelRailContactForcePlan* contact_force_plan_{nullptr};
+    int vehicle_body_wrench_count_{};
+    int contact_body_wrench_count_{};
 };
 
 }  // namespace orvd::system_assembly

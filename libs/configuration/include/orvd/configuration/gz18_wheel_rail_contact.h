@@ -8,8 +8,16 @@
 #include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
 #include "orvd/wheel_rail_contact/rail_gauge_datum.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_model.h"
+#include "orvd/wheel_rail_contact/wheel_rail_contact_runtime_personality.h"
+
+namespace orvd::track_geometry {
+class TrackGeometry;
+}
 
 namespace orvd::configuration {
+
+class AssembledGz18ContactScenario;
+struct VehicleDefinition;
 
 inline constexpr std::string_view kGz18WheelProfileIdentifier =
     "gz18_reference_wheel_profile";
@@ -61,6 +69,10 @@ class Gz18WheelRailContact {
     [[nodiscard]] double pose_rail_cant_radians() const {
         return pose_rail_cant_radians_;
     }
+    [[nodiscard]] wheel_rail_contact::RailProfileOriginMode
+    rail_profile_origin_mode() const {
+        return runtime_personality_->rail_profile_origin_mode();
+    }
 
     [[nodiscard]] const wheel_rail_contact::RailGaugeDatum& rail_gauge_datum(
         wheel_rail_contact::WheelSide side) const {
@@ -70,24 +82,27 @@ class Gz18WheelRailContact {
     }
     [[nodiscard]] const wheel_rail_contact::WheelRailPoseConstants&
     pose_constants(wheel_rail_contact::WheelSide side) const {
-        return side == wheel_rail_contact::WheelSide::kRight
-                   ? right_pose_constants_
-                   : left_pose_constants_;
+        return runtime_personality_->pose_constants(side);
     }
     [[nodiscard]] const wheel_rail_contact::WheelRailContactModel& model(
         wheel_rail_contact::WheelSide side) const {
-        return side == wheel_rail_contact::WheelSide::kRight ? *right_model_
-                                                             : *left_model_;
+        return runtime_personality_->model(side);
     }
     [[nodiscard]]
     const wheel_rail_contact::ProfileTrackRollTransportStrategy&
     profile_track_roll_transport_strategy() const {
-        return profile_track_roll_transport_strategy_;
+        return runtime_personality_->roll_transport_strategy();
     }
 
    private:
+    friend class AssembledGz18ContactScenario;
     friend std::unique_ptr<Gz18WheelRailContact> AssembleGz18WheelRailContact(
         const std::filesystem::path&, const StartupWheelRailBinding&, double);
+    friend std::unique_ptr<AssembledGz18ContactScenario>
+    AssembleGz18ContactScenario(
+        const VehicleDefinition&, const ResolvedStartupState&,
+        track_geometry::TrackGeometry, const std::filesystem::path&, double,
+        double);
 
     Gz18WheelRailContact(
         StartupWheelRailBinding binding,
@@ -96,6 +111,7 @@ class Gz18WheelRailContact {
             wheel_profile_preprocessing_configuration,
         double track_gauge_meters, double gauge_measuring_depth_meters,
         double pose_rail_cant_radians,
+        wheel_rail_contact::RailProfileOriginMode rail_profile_origin_mode,
         wheel_rail_contact::RailGaugeDatum right_rail_gauge_datum,
         wheel_rail_contact::RailGaugeDatum left_rail_gauge_datum,
         wheel_rail_contact::WheelRailPoseConstants right_pose_constants,
@@ -104,6 +120,10 @@ class Gz18WheelRailContact {
             profile_track_roll_transport_strategy,
         std::unique_ptr<wheel_rail_contact::WheelRailContactModel> right_model,
         std::unique_ptr<wheel_rail_contact::WheelRailContactModel> left_model);
+
+    [[nodiscard]] std::unique_ptr<
+        wheel_rail_contact::WheelRailContactRuntimePersonality>
+    ReleaseRuntimePersonality();
 
     StartupWheelRailBinding binding_;
     wheel_rail_contact::WheelRailContactConfiguration contact_configuration_;
@@ -114,12 +134,8 @@ class Gz18WheelRailContact {
     double pose_rail_cant_radians_{0.0};
     wheel_rail_contact::RailGaugeDatum right_rail_gauge_datum_;
     wheel_rail_contact::RailGaugeDatum left_rail_gauge_datum_;
-    wheel_rail_contact::WheelRailPoseConstants right_pose_constants_;
-    wheel_rail_contact::WheelRailPoseConstants left_pose_constants_;
-    wheel_rail_contact::ProfileTrackRollTransportStrategy
-        profile_track_roll_transport_strategy_;
-    std::unique_ptr<wheel_rail_contact::WheelRailContactModel> right_model_;
-    std::unique_ptr<wheel_rail_contact::WheelRailContactModel> left_model_;
+    std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
+        runtime_personality_;
 };
 
 // Loads the two GZ18 JSON profiles from an explicitly supplied ORVD data root,

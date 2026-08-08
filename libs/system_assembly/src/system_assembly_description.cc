@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
 
 namespace orvd::system_assembly {
@@ -31,6 +32,21 @@ SystemAssemblyDescription::SystemAssemblyDescription(
     series_spring_damper_force_state_count_ =
         force_plan.series_spring_damper_force_state_count();
     nominal_force_component_count_ = force_plan.nominal_force_component_count();
+    vehicle_body_wrench_count_ = force_plan.body_wrench_count();
+}
+
+SystemAssemblyDescription::SystemAssemblyDescription(
+    const multibody_model::MultibodyModel& model,
+    const forces::VehicleForcePlan& vehicle_force_plan,
+    const forces::WheelRailContactForcePlan& contact_force_plan)
+    : SystemAssemblyDescription(model, vehicle_force_plan) {
+    if (&contact_force_plan.model() != &model) {
+        throw std::invalid_argument(
+            "SystemAssemblyDescription: the wheel-rail contact force plan "
+            "was compiled against a different multibody model");
+    }
+    contact_force_plan_ = &contact_force_plan;
+    contact_body_wrench_count_ = contact_force_plan.body_wrench_count();
 }
 
 const multibody_model::MultibodyModel&
@@ -52,6 +68,14 @@ int SystemAssemblyDescription::series_spring_damper_force_state_count() const {
 
 int SystemAssemblyDescription::nominal_force_component_count() const {
     return nominal_force_component_count_;
+}
+
+int SystemAssemblyDescription::vehicle_body_wrench_count() const {
+    return vehicle_body_wrench_count_;
+}
+
+int SystemAssemblyDescription::contact_body_wrench_count() const {
+    return contact_body_wrench_count_;
 }
 
 int SystemAssemblyDescription::state_time_derivative_size() const {

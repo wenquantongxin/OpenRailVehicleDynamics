@@ -9,6 +9,7 @@
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 
 namespace orvd::system_assembly {
@@ -29,7 +30,8 @@ SystemRuntimeContext::SystemRuntimeContext(
     internal::SystemIdentity issuer,
     const multibody_model::MultibodyModel& model, double initial_time_seconds,
     int series_spring_damper_force_state_count,
-    int nominal_force_component_count, int body_wrench_count)
+    int nominal_force_component_count, int body_wrench_count,
+    const forces::WheelRailContactForcePlan* contact_force_plan)
     : issuer_(issuer),
       time_seconds_(initial_time_seconds),
       multibody_context_(model.CreateDefaultContext()),
@@ -38,6 +40,9 @@ SystemRuntimeContext::SystemRuntimeContext(
           Eigen::VectorXd::Zero(series_spring_damper_force_state_count)),
       nominal_forces_(Eigen::VectorXd::Zero(nominal_force_component_count)),
       body_wrenches_(static_cast<std::size_t>(body_wrench_count)),
+      contact_force_workspace_(contact_force_plan != nullptr
+                                   ? contact_force_plan->CreateWorkspace()
+                                   : nullptr),
       series_force_derivatives_(
           Eigen::VectorXd::Zero(series_spring_damper_force_state_count)),
       multibody_state_time_derivatives_(
@@ -77,7 +82,10 @@ SystemInstance::SystemInstance(const SystemAssemblyDescription& description)
           description.series_spring_damper_force_state_count()),
       nominal_force_component_count_(
           description.nominal_force_component_count()),
-      force_plan_(description.force_plan()) {}
+      force_plan_(description.force_plan()),
+      contact_force_plan_(description.contact_force_plan()),
+      vehicle_body_wrench_count_(description.vehicle_body_wrench_count()),
+      contact_body_wrench_count_(description.contact_body_wrench_count()) {}
 
 MultibodyComponentIndex SystemInstance::multibody_component() const {
     return MultibodyComponentIndex(identity_, 0);
@@ -150,7 +158,8 @@ SystemInstance::CreateDefaultRuntimeContext(double initial_time_seconds) const {
     return std::unique_ptr<SystemRuntimeContext>(new SystemRuntimeContext(
         identity_, *multibody_model_, initial_time_seconds,
         series_spring_damper_force_state_count_, nominal_force_component_count_,
-        force_plan_ != nullptr ? force_plan_->body_wrench_count() : 0));
+        vehicle_body_wrench_count_ + contact_body_wrench_count_,
+        contact_force_plan_));
 }
 
 void SystemInstance::CopyContinuousState(

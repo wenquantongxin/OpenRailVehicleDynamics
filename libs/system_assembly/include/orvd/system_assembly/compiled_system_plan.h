@@ -4,9 +4,10 @@
 /// The compiled evaluation order of the first executable system.
 ///
 /// The admitted graph currently contains one multibody component, a frozen
-/// typed vehicle-force plan when present, and no event-producing component.
-/// Its static order evaluates every vehicle force once, assembles the resulting
-/// body wrenches, and evaluates [qdot; vdot; zdot] once.  The
+/// typed vehicle-force plan, an optional frozen typed wheel--rail force plan,
+/// and no event-producing component. Its static order evaluates every admitted
+/// force once, assembles the resulting body wrenches, and evaluates
+/// [qdot; vdot; zdot] once.  The
 /// component's existing versioned caches and its preallocated forward-dynamics
 /// workspace remain the only cache/workspace mechanisms; this plan does not
 /// build a second dependency graph.
@@ -25,6 +26,7 @@
 
 namespace orvd::forces {
 class VehicleForcePlan;
+class WheelRailContactForcePlan;
 }
 
 namespace orvd::system_assembly {
@@ -51,12 +53,9 @@ class CompiledSystemPlan {
     /// context-local physical parameter.  Logical caches, the model-bound call
     /// workspace and the context's own scratch may be updated and reused.
     ///
-    /// There is no call-time applied force. A system's forces are the vehicle's
-    /// own force elements; a caller who wants to apply an arbitrary wrench for
-    /// research or for a unit test calls the multibody facade directly, which
-    /// keeps that entry point and is one layer below this one. Carrying an
-    /// always-empty span through this level would only make the system look as
-    /// though it had a second force source that nothing supplies.
+    /// There is no call-time applied force. A system's forces are its typed
+    /// vehicle and contact plans; a caller who wants an arbitrary research or
+    /// test wrench calls the multibody facade directly one layer below.
     ///
     /// The caller owns the already-sized output, which is [qdot; vdot; zdot].
     /// Validation and failure atomicity are the multibody facade's existing
@@ -69,6 +68,7 @@ class CompiledSystemPlan {
     const SystemInstance* system_;
     MultibodyComponentIndex derivative_component_;
     const forces::VehicleForcePlan* force_plan_;
+    const forces::WheelRailContactForcePlan* contact_force_plan_;
 };
 
 }  // namespace orvd::system_assembly

@@ -84,6 +84,23 @@ struct RollYawPitchAngles {
 [[nodiscard]] RollYawPitchAngles ResolveRollYawPitch(
     const Eigen::Matrix3d& rotation);
 
+// Rates of the same X-Z-Y angles, from the moving body's angular velocity
+// relative to the reference frame and expressed in that reference frame.
+//
+// The mapping is singular at a quarter turn of yaw for the same geometric
+// reason as the angle resolution.  This function reports the direct formula;
+// the vehicle/track layer that knows its operating geometry decides whether a
+// non-finite result is admissible.
+struct RollYawPitchRates {
+    double roll_rate_radians_per_second{0.0};
+    double yaw_rate_radians_per_second{0.0};
+    double pitch_rate_radians_per_second{0.0};
+};
+
+[[nodiscard]] RollYawPitchRates ResolveRollYawPitchRates(
+    const Eigen::Vector3d& relative_angular_velocity_in_reference_radians_per_second,
+    double roll_radians, double yaw_radians);
+
 // Whether a vehicle type carries the correction at all.
 //
 // Two reference vehicles were qualified with two different answers, and

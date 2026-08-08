@@ -60,11 +60,13 @@ VehicleBinding CaptureBinding(const VehicleDefinition& vehicle) {
 AssembledVehicleSystem::AssembledVehicleSystem(
     std::unique_ptr<multibody_model::MultibodyModel> model,
     std::unique_ptr<forces::VehicleForcePlan> force_plan,
+    std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan,
     std::unique_ptr<system_assembly::SystemInstance> system,
     std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
     VehicleBinding binding)
     : model_(std::move(model)),
       force_plan_(std::move(force_plan)),
+      contact_force_plan_(std::move(contact_force_plan)),
       system_(std::move(system)),
       compiled_plan_(std::move(compiled_plan)),
       binding_(std::move(binding)) {}
@@ -97,7 +99,43 @@ std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
         std::make_unique<system_assembly::CompiledSystemPlan>(*system);
 
     return std::unique_ptr<AssembledVehicleSystem>(new AssembledVehicleSystem(
-        std::move(model), std::move(force_plan), std::move(system),
+        std::move(model), std::move(force_plan), nullptr, std::move(system),
+        std::move(compiled_plan), std::move(binding)));
+}
+
+std::unique_ptr<AssembledVehicleSystem>
+AssembledVehicleSystem::AssembleWithWheelRailContact(
+    const VehicleDefinition& vehicle,
+    double gravitational_acceleration_magnitude_meters_per_second_squared,
+    track_geometry::TrackGeometry line,
+    std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
+        personality,
+    std::vector<forces::WheelRailContactCarrierDefinition> carriers,
+    std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
+    double projection_search_half_width_meters) {
+    internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
+        vehicle, "vehicle definition");
+    VehicleBinding binding = CaptureBinding(vehicle);
+
+    auto model = AssembleVehicleMultibodyModel(
+        vehicle,
+        gravitational_acceleration_magnitude_meters_per_second_squared);
+    auto force_plan = BuildVehicleForcePlan(vehicle, *model);
+    auto contact_force_plan =
+        std::make_unique<forces::WheelRailContactForcePlan>(
+            *model, std::move(line), std::move(personality),
+            std::move(carriers), std::move(interfaces),
+            projection_search_half_width_meters);
+    const system_assembly::SystemAssemblyDescription description(
+        *model, *force_plan, *contact_force_plan);
+    auto system =
+        std::make_unique<system_assembly::SystemInstance>(description);
+    auto compiled_plan =
+        std::make_unique<system_assembly::CompiledSystemPlan>(*system);
+
+    return std::unique_ptr<AssembledVehicleSystem>(new AssembledVehicleSystem(
+        std::move(model), std::move(force_plan),
+        std::move(contact_force_plan), std::move(system),
         std::move(compiled_plan), std::move(binding)));
 }
 

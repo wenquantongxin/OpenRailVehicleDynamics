@@ -769,6 +769,27 @@ add_test(NAME verify_gz18_wheel_rail_contact_binding
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_CURRENT_BINARY_DIR}/gz18-contact-fixtures)
 
+# G53's first complete GZ18 direct RHS.  The one-shot factory owns the line and
+# the contact personality, four wheelsets share four projections across eight
+# interfaces, and the two typed force plans feed exactly one forward-dynamics
+# call.  It deliberately does not construct or advance CVODE; trial/accepted
+# projection history begins in G54.
+add_executable(verify_gz18_contact_rhs
+    configuration/assembled_gz18_contact_scenario_header_self_containment.cc
+    forces/wheel_rail_contact_force_plan_header_self_containment.cc
+    wheel_rail_contact/wheel_rail_contact_runtime_personality_header_self_containment.cc
+    configuration/verify_gz18_contact_rhs.cc)
+orvd_configure_first_party_target(verify_gz18_contact_rhs)
+target_include_directories(verify_gz18_contact_rhs
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_gz18_contact_rhs PRIVATE orvd_configuration)
+add_test(NAME verify_gz18_contact_rhs
+         COMMAND verify_gz18_contact_rhs
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_SOURCE_DIR})
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc

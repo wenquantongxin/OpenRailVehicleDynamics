@@ -11,6 +11,7 @@
 
 #include <Eigen/Geometry>
 
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "resolved_startup_state_invariants.h"
 
 namespace orvd::configuration {
@@ -515,6 +516,21 @@ ResolvedInitialContext AssembleResolvedInitialContext(
         startup_state.rail_profile_reference_vertical_offset_meters,
         startup_state.wheel_rail_binding,
         startup_state.load_condition_identifier);
+}
+
+ResolvedInitialContext AssembleResolvedInitialContext(
+    const AssembledVehicleSystem& system,
+    const ResolvedStartupState& startup_state,
+    double vehicle_layout_reference_track_station_meters) {
+    const forces::WheelRailContactForcePlan* contact_plan =
+        system.contact_force_plan();
+    if (contact_plan == nullptr) {
+        Reject("the assembled system has no wheel-rail contact plan and thus "
+               "owns no line to place this start-up state on");
+    }
+    return AssembleResolvedInitialContext(
+        system, startup_state, contact_plan->track_geometry(),
+        vehicle_layout_reference_track_station_meters);
 }
 
 }  // namespace orvd::configuration

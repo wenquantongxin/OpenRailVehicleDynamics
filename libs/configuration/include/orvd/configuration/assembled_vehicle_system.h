@@ -1,16 +1,21 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
 
 namespace orvd::configuration {
+
+class AssembledGz18ContactScenario;
+struct ResolvedStartupState;
 
 // What one assembled vehicle system remembers about the description it was
 // built from.
@@ -43,11 +48,11 @@ struct VehicleBinding {
 
 // One vehicle, assembled once, with everything downstream needs to reach it.
 //
-// The model, the force plan, the system instance and the compiled plan borrow
-// one another and none of them may be moved, so holding them separately would
-// make every caller responsible for a construction order and a destruction
-// order it did not choose. This owns all four in that order and releases them
-// in reverse.
+// The model, its typed force plans, the system instance and the compiled plan
+// borrow one another and none of them may be moved, so holding them separately
+// would make every caller responsible for a construction order and a
+// destruction order it did not choose. This owns them in dependency order and
+// releases them in reverse.
 //
 // It must outlive every runtime context created from it, every resolved
 // start-up result that holds such a context, and every integrator advancing
@@ -67,6 +72,10 @@ class AssembledVehicleSystem {
     [[nodiscard]] const forces::VehicleForcePlan& force_plan() const {
         return *force_plan_;
     }
+    [[nodiscard]] const forces::WheelRailContactForcePlan*
+    contact_force_plan() const {
+        return contact_force_plan_.get();
+    }
     [[nodiscard]] const system_assembly::SystemInstance& system() const {
         return *system_;
     }
@@ -79,18 +88,37 @@ class AssembledVehicleSystem {
    private:
     friend std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
         const VehicleDefinition&, double);
+    friend class AssembledGz18ContactScenario;
+    friend std::unique_ptr<AssembledGz18ContactScenario>
+    AssembleGz18ContactScenario(
+        const VehicleDefinition&, const ResolvedStartupState&,
+        track_geometry::TrackGeometry, const std::filesystem::path&, double,
+        double);
 
     AssembledVehicleSystem(
         std::unique_ptr<multibody_model::MultibodyModel> model,
         std::unique_ptr<forces::VehicleForcePlan> force_plan,
+        std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan,
         std::unique_ptr<system_assembly::SystemInstance> system,
         std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
         VehicleBinding binding);
+
+    static std::unique_ptr<AssembledVehicleSystem> AssembleWithWheelRailContact(
+        const VehicleDefinition& vehicle,
+        double gravitational_acceleration_magnitude_meters_per_second_squared,
+        track_geometry::TrackGeometry line,
+        std::unique_ptr<
+            wheel_rail_contact::WheelRailContactRuntimePersonality>
+            personality,
+        std::vector<forces::WheelRailContactCarrierDefinition> carriers,
+        std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
+        double projection_search_half_width_meters);
 
     // Declaration order is construction order; destruction runs in reverse, so
     // each object outlives the ones that borrow it.
     std::unique_ptr<multibody_model::MultibodyModel> model_;
     std::unique_ptr<forces::VehicleForcePlan> force_plan_;
+    std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan_;
     std::unique_ptr<system_assembly::SystemInstance> system_;
     std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan_;
     VehicleBinding binding_;

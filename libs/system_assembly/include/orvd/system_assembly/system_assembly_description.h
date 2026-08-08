@@ -15,13 +15,14 @@
 /// bag and no runtime value here.  A second family with real state adds a
 /// second named count when a real consumer for it exists.
 ///
-/// The description carries no call-time applied force.  The system's forces are
-/// the vehicle's own force elements, evaluated from the frozen plan; a caller
-/// who wants to apply an arbitrary wrench for research or for a unit test uses
-/// the multibody facade's entry point directly, one layer below this one.
+/// The description carries no call-time applied force.  The system's admitted
+/// force sources are its typed vehicle plan and, when present, its typed
+/// wheel--rail contact plan. A caller who wants to apply an arbitrary wrench
+/// for research or for a unit test uses the multibody facade one layer below.
 
 namespace orvd::forces {
 class VehicleForcePlan;
+class WheelRailContactForcePlan;
 }
 
 namespace orvd::multibody_model {
@@ -53,6 +54,13 @@ class SystemAssemblyDescription {
     /// different model.
     SystemAssemblyDescription(const multibody_model::MultibodyModel& model,
                               const forces::VehicleForcePlan& force_plan);
+    /// The same vehicle plus one frozen wheel--rail contact force plan.
+    /// Both plans must have been compiled against `model` and must outlive
+    /// every object derived from this description.
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel& model,
+        const forces::VehicleForcePlan& vehicle_force_plan,
+        const forces::WheelRailContactForcePlan& contact_force_plan);
     SystemAssemblyDescription(multibody_model::MultibodyModel&&,
                               const forces::VehicleForcePlan&) = delete;
     SystemAssemblyDescription(const multibody_model::MultibodyModel&&,
@@ -61,6 +69,30 @@ class SystemAssemblyDescription {
                               forces::VehicleForcePlan&&) = delete;
     SystemAssemblyDescription(const multibody_model::MultibodyModel&,
                               const forces::VehicleForcePlan&&) = delete;
+    SystemAssemblyDescription(
+        multibody_model::MultibodyModel&&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        forces::VehicleForcePlan&&,
+        const forces::WheelRailContactForcePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&&,
+        const forces::WheelRailContactForcePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&,
+        forces::WheelRailContactForcePlan&&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&&) = delete;
     SystemAssemblyDescription(multibody_model::MultibodyModel&&) = delete;
     SystemAssemblyDescription(const multibody_model::MultibodyModel&&) =
         delete;
@@ -79,6 +111,12 @@ class SystemAssemblyDescription {
         return force_plan_;
     }
 
+    /// The wheel--rail contact force source, or null when none was assembled.
+    [[nodiscard]] const forces::WheelRailContactForcePlan* contact_force_plan()
+        const {
+        return contact_force_plan_;
+    }
+
     /// Sizes of the distinct continuous-state blocks, in state order.
     [[nodiscard]] int generalized_position_count() const;
     [[nodiscard]] int generalized_velocity_count() const;
@@ -88,16 +126,22 @@ class SystemAssemblyDescription {
     /// start-up state fills them in a context.
     [[nodiscard]] int nominal_force_component_count() const;
 
+    [[nodiscard]] int vehicle_body_wrench_count() const;
+    [[nodiscard]] int contact_body_wrench_count() const;
+
     /// Size of the output [qdot; vdot; zdot].
     [[nodiscard]] int state_time_derivative_size() const;
 
    private:
     const multibody_model::MultibodyModel* multibody_model_;
     const forces::VehicleForcePlan* force_plan_{nullptr};
+    const forces::WheelRailContactForcePlan* contact_force_plan_{nullptr};
     int generalized_position_count_{};
     int generalized_velocity_count_{};
     int series_spring_damper_force_state_count_{};
     int nominal_force_component_count_{};
+    int vehicle_body_wrench_count_{};
+    int contact_body_wrench_count_{};
 };
 
 }  // namespace orvd::system_assembly
