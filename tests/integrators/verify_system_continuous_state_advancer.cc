@@ -1,7 +1,9 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 
@@ -265,6 +267,79 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
            "the other context retains its original damping parameter");
 }
 
+void CheckDenseStateSamplingTransaction() {
+    DampedRotorFixture fixture;
+    const SystemAssemblyDescription description(fixture.model);
+    const SystemInstance system(description);
+    const CompiledSystemPlan plan(system);
+
+    constexpr double kInitialTime = 0.3;
+    auto accepted = system.CreateDefaultRuntimeContext(kInitialTime);
+    Eigen::Vector2d initial;
+    initial << 0.2, 1.4;
+    system.SetContinuousState(*accepted, initial);
+    SystemContinuousStateAdvancer advancer(
+        system, plan, *accepted, MakeTolerances(2),
+        NoCallTimeAppliedForces{});
+
+    const std::array same_time{kInitialTime};
+    const Eigen::MatrixXd same_time_samples =
+        advancer.AdvanceToWithDenseStateSamples(kInitialTime, same_time);
+    Expect(same_time_samples.rows() == 2 && same_time_samples.cols() == 1 &&
+               same_time_samples.col(0) == initial,
+           "a one-column same-time sample copies the accepted state exactly");
+
+    const std::array<double, 2> wrong_first{kInitialTime + 0.01, 0.55};
+    const std::array<double, 4> repeated{kInitialTime, 0.4, 0.4, 0.55};
+    const std::array<double, 2> wrong_last{kInitialTime, 0.54};
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceToWithDenseStateSamples(
+                0.55, std::span<const double>{});
+        },
+        "a dense request requires at least one sample time");
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceToWithDenseStateSamples(0.55, wrong_first);
+        },
+        "the first dense sample must identify the accepted time");
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceToWithDenseStateSamples(0.55, repeated);
+        },
+        "dense sample times must be strictly increasing");
+    ExpectInvalidArgument(
+        [&] {
+            (void)advancer.AdvanceToWithDenseStateSamples(0.55, wrong_last);
+        },
+        "the last dense sample must identify the target time");
+
+    const std::array<double, 5> times{kInitialTime, 0.35, 0.4, 0.475,
+                                      0.55};
+    const Eigen::MatrixXd samples =
+        advancer.AdvanceToWithDenseStateSamples(times.back(), times);
+    Eigen::VectorXd final_state(2);
+    system.CopyContinuousState(*accepted, final_state);
+    Expect(samples.rows() == 2 && samples.cols() == 5 && samples.allFinite(),
+           "one real public advance returns the complete finite dense batch");
+    Expect(samples.col(0) == initial && samples.col(4) == final_state &&
+               accepted->time_seconds() == times.back(),
+           "the dense batch and accepted endpoint share exact boundary states");
+
+    constexpr double kInertia =
+        DampedRotorFixture::kMass * DampedRotorFixture::kUnitIzz;
+    const double rate = DampedRotorFixture::kInitialDamping / kInertia;
+    for (Eigen::Index column = 0; column < samples.cols(); ++column) {
+        const double dt = times[static_cast<std::size_t>(column)] - kInitialTime;
+        const double expected_velocity = initial[1] * std::exp(-rate * dt);
+        const double expected_position =
+            initial[0] + initial[1] * (1.0 - std::exp(-rate * dt)) / rate;
+        Expect(Near(samples(0, column), expected_position) &&
+                   Near(samples(1, column), expected_velocity),
+               "each dense column follows the damped-rotor analytic state");
+    }
+}
+
 void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     constexpr double kSliderMass = 2.0;
     constexpr double kSeriesStiffness = 8.0;
@@ -453,6 +528,7 @@ void CheckForeignAcceptedContextIsRejected() {
 int main() {
     CheckAtomicAcceptedTimeAndState();
     CheckRealCvodeCommitAndDampingSynchronization();
+    CheckDenseStateSamplingTransaction();
     CheckRealForcePlanCvodeAndNominalForceSynchronization();
     CheckRealRhsFailureRequiresSynchronization();
     CheckForeignAcceptedContextIsRejected();

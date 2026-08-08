@@ -790,6 +790,23 @@ add_test(NAME verify_gz18_contact_rhs
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
 
+# G55's first complete passive longitudinal slice. One public CVODE advance
+# returns the P035-aligned 101-state batch; a private observation context then
+# replays those states through the same real eight-interface contact plan.
+add_executable(verify_gz18_passive_short_window
+    configuration/verify_gz18_passive_short_window.cc)
+orvd_configure_first_party_target(verify_gz18_passive_short_window)
+target_include_directories(verify_gz18_passive_short_window
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_gz18_passive_short_window
+    PRIVATE orvd_configuration orvd_integrators)
+add_test(NAME verify_gz18_passive_short_window
+         COMMAND verify_gz18_passive_short_window
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_SOURCE_DIR})
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc

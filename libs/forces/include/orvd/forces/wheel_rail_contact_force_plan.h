@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <span>
 #include <string>
@@ -32,6 +33,18 @@ struct WheelRailContactInterfaceDefinition {
     std::string wheel_body_name;
     wheel_rail_contact::WheelSide side{
         wheel_rail_contact::WheelSide::kRight};
+};
+
+// Migration-time observations emitted from the same real contact evaluation
+// that produced an interface wrench. They are not a second force law. Q and N
+// are meaningful for zero or more patches; the scalar Tx/Ty pair is currently
+// qualified only when one patch supplies its unique contact frame.
+struct WheelRailContactInterfaceObservation {
+    std::size_t contact_patch_count{0};
+    double vertical_support_force_on_wheel_newtons{0.0};
+    double normal_force_newtons{0.0};
+    double longitudinal_force_on_wheel_newtons{0.0};
+    double lateral_force_on_wheel_newtons{0.0};
 };
 
 class WheelRailContactForcePlan;
@@ -88,6 +101,8 @@ class WheelRailContactForceWorkspace {
     wheel_rail_contact::WheelRailContactWorkspace contact_workspace_;
     std::vector<CarrierScratch> carriers_;
     std::vector<multibody_model::AppliedBodyWrench> pending_wrenches_;
+    std::vector<WheelRailContactInterfaceObservation>
+        pending_interface_observations_;
 };
 
 class WheelRailContactForcePlan {
@@ -143,6 +158,20 @@ class WheelRailContactForcePlan {
         std::span<const double> projection_station_hints_meters,
         std::span<multibody_model::AppliedBodyWrench> body_wrenches) const;
 
+    // Evaluates the same force path while also publishing its per-interface
+    // migration observations. Zero- and one-patch interfaces are admitted;
+    // more than one patch is refused because summing Tx/Ty scalars expressed
+    // in distinct contact frames would have no defined meaning. The ordinary
+    // force-only path continues to admit and combine multiple patches. Every
+    // output span is replaced only after all interfaces succeed.
+    void CalcAppliedForcesAndObservations(
+        const multibody_model::MultibodyEvaluationContext& context,
+        WheelRailContactForceWorkspace& workspace,
+        std::span<const double> projection_station_hints_meters,
+        std::span<multibody_model::AppliedBodyWrench> body_wrenches,
+        std::span<WheelRailContactInterfaceObservation>
+            interface_observations) const;
+
     // Re-evaluates only the unique carrier projections at one accepted
     // endpoint. The current hints select the local branches; the output is
     // written only after every carrier succeeds. No wheel contact kernel is
@@ -181,6 +210,13 @@ class WheelRailContactForcePlan {
     void CompleteCarrierKinematics(
         const multibody_model::MultibodyEvaluationContext& context,
         WheelRailContactForceWorkspace& workspace) const;
+    void CalcAppliedForcesImpl(
+        const multibody_model::MultibodyEvaluationContext& context,
+        WheelRailContactForceWorkspace& workspace,
+        std::span<const double> projection_station_hints_meters,
+        std::span<multibody_model::AppliedBodyWrench> body_wrenches,
+        std::span<WheelRailContactInterfaceObservation> interface_observations,
+        bool publish_observations) const;
 
     const multibody_model::MultibodyModel* model_;
     track_geometry::TrackGeometry line_;

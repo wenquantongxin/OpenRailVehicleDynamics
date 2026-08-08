@@ -84,7 +84,8 @@ WheelRailContactForceWorkspace::WheelRailContactForceWorkspace(
     std::size_t interface_count)
     : issuer_(issuer),
       carriers_(carrier_count),
-      pending_wrenches_(interface_count) {}
+      pending_wrenches_(interface_count),
+      pending_interface_observations_(interface_count) {}
 
 WheelRailContactForceWorkspace::~WheelRailContactForceWorkspace() = default;
 
@@ -390,8 +391,39 @@ void WheelRailContactForcePlan::CalcAppliedForces(
     WheelRailContactForceWorkspace& workspace,
     std::span<const double> projection_station_hints_meters,
     std::span<AppliedBodyWrench> body_wrenches) const {
+    CalcAppliedForcesImpl(context, workspace,
+                          projection_station_hints_meters, body_wrenches, {},
+                          false);
+}
+
+void WheelRailContactForcePlan::CalcAppliedForcesAndObservations(
+    const MultibodyEvaluationContext& context,
+    WheelRailContactForceWorkspace& workspace,
+    std::span<const double> projection_station_hints_meters,
+    std::span<AppliedBodyWrench> body_wrenches,
+    std::span<WheelRailContactInterfaceObservation>
+        interface_observations) const {
+    CalcAppliedForcesImpl(context, workspace,
+                          projection_station_hints_meters, body_wrenches,
+                          interface_observations, true);
+}
+
+void WheelRailContactForcePlan::CalcAppliedForcesImpl(
+    const MultibodyEvaluationContext& context,
+    WheelRailContactForceWorkspace& workspace,
+    std::span<const double> projection_station_hints_meters,
+    std::span<AppliedBodyWrench> body_wrenches,
+    std::span<WheelRailContactInterfaceObservation> interface_observations,
+    bool publish_observations) const {
     if (body_wrenches.size() != interfaces_.size()) {
         Reject("the output span has " + std::to_string(body_wrenches.size()) +
+               " entries, but this plan has " +
+               std::to_string(interfaces_.size()) + " interfaces");
+    }
+    if (publish_observations &&
+        interface_observations.size() != interfaces_.size()) {
+        Reject("the interface-observation span has " +
+               std::to_string(interface_observations.size()) +
                " entries, but this plan has " +
                std::to_string(interfaces_.size()) + " interfaces");
     }
@@ -527,8 +559,19 @@ void WheelRailContactForcePlan::CalcAppliedForces(
                 "wheel-rail contact force plan: interface '" +
                 interface.name + "' returned too many contact patches");
         }
+        if (publish_observations && result.count > 1) {
+            throw std::runtime_error(
+                "wheel-rail contact force plan: interface '" +
+                interface.name +
+                "' returned multiple patches; the migration observation "
+                "requires a unique contact frame for Tx/Ty");
+        }
 
         SpatialWrench accumulated_in_track;
+        WheelRailContactInterfaceObservation observation;
+        if (publish_observations) {
+            observation.contact_patch_count = result.count;
+        }
         for (std::size_t patch = 0; patch < result.count; ++patch) {
             const auto& wheel_wrench =
                 result.patches[patch].wrench.rail_on_wheel;
@@ -546,6 +589,18 @@ void WheelRailContactForcePlan::CalcAppliedForces(
                 at_body_origin.force_newtons;
             accumulated_in_track.moment_newton_meters +=
                 at_body_origin.moment_newton_meters;
+            if (publish_observations) {
+                observation.vertical_support_force_on_wheel_newtons -=
+                    wheel_wrench.force_newtons.z();
+                observation.normal_force_newtons +=
+                    result.patches[patch].normal.normal_force_newtons;
+                observation.longitudinal_force_on_wheel_newtons +=
+                    result.patches[patch]
+                        .tangential.longitudinal_force_newtons;
+                observation.lateral_force_on_wheel_newtons +=
+                    result.patches[patch]
+                        .tangential.lateral_force_newtons;
+            }
         }
         const SpatialWrench accumulated_in_inertial =
             wheel_rail_contact::RotateWrench(
@@ -560,10 +615,18 @@ void WheelRailContactForcePlan::CalcAppliedForces(
             model_->world_frame(),
             accumulated_in_inertial.moment_newton_meters,
             accumulated_in_inertial.force_newtons};
+        if (publish_observations) {
+            workspace.pending_interface_observations_[ordinal] = observation;
+        }
     }
 
     std::copy(workspace.pending_wrenches_.begin(),
               workspace.pending_wrenches_.end(), body_wrenches.begin());
+    if (publish_observations) {
+        std::copy(workspace.pending_interface_observations_.begin(),
+                  workspace.pending_interface_observations_.end(),
+                  interface_observations.begin());
+    }
 }
 
 }  // namespace orvd::forces

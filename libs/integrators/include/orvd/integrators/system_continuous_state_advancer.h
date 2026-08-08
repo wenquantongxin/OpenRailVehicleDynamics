@@ -4,6 +4,9 @@
 /// Accepted/trial transaction boundary for continuous system advancement.
 
 #include <memory>
+#include <span>
+
+#include <Eigen/Dense>
 
 #include "orvd/integrators/continuous_state_advancer.h"
 #include "orvd/integrators/system_rhs_bridge.h"
@@ -70,6 +73,24 @@ class SystemContinuousStateAdvancer final {
     /// `SynchronizeAfterAcceptedContextChange()` succeeds. One public advance
     /// may accept at most 1,000,000 internal steps.
     void AdvanceTo(double target_time_seconds);
+
+    /// Advances once while returning selected states from the successful
+    /// internal-step dense intervals.
+    ///
+    /// `sample_times_seconds` must be non-empty, finite and strictly
+    /// increasing. Its first entry must equal the accepted time and its last
+    /// entry must equal `target_time_seconds`. The first and last columns equal
+    /// the entry and accepted endpoint states, respectively. Intermediate
+    /// sample times do not become CVODE stops.
+    ///
+    /// The returned matrix and the accepted endpoint are one transaction. Any
+    /// failure after entering the backend returns no matrix, leaves the
+    /// accepted context unchanged, and requires explicit synchronization. A
+    /// same-time request is admitted only as one sample and does not enter the
+    /// backend.
+    [[nodiscard]] Eigen::MatrixXd AdvanceToWithDenseStateSamples(
+        double target_time_seconds,
+        std::span<const double> sample_times_seconds);
 
     /// Copies the accepted state, admitted context-local parameters and latest
     /// wheel-rail projection branches into the trial/backend configuration,

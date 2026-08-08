@@ -3,6 +3,7 @@
 // accepted internal endpoints.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -664,7 +665,14 @@ int main(int argc, char** argv) {
     bool boundary_failure = false;
     std::string boundary_failure_message;
     try {
-        boundary_advancer.AdvanceTo(2.0 * kAcceptedHistoryTargetSeconds);
+        const std::array<double, 5> boundary_sample_times{
+            kAcceptedHistoryTargetSeconds,
+            1.25 * kAcceptedHistoryTargetSeconds,
+            1.5 * kAcceptedHistoryTargetSeconds,
+            1.75 * kAcceptedHistoryTargetSeconds,
+            2.0 * kAcceptedHistoryTargetSeconds};
+        (void)boundary_advancer.AdvanceToWithDenseStateSamples(
+            boundary_sample_times.back(), boundary_sample_times);
     } catch (const std::exception& error) {
         boundary_failure = true;
         boundary_failure_message = error.what();

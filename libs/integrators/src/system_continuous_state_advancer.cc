@@ -1,7 +1,10 @@
 #include "orvd/integrators/system_continuous_state_advancer.h"
 
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -13,6 +16,14 @@
 #include "integrator_limits.h"
 
 namespace orvd::integrators {
+namespace {
+
+bool SameDoubleBits(double left, double right) {
+    return std::bit_cast<std::uint64_t>(left) ==
+           std::bit_cast<std::uint64_t>(right);
+}
+
+}  // namespace
 
 class SystemContinuousStateAdvancer::Implementation final {
    public:
@@ -41,6 +52,20 @@ class SystemContinuousStateAdvancer::Implementation final {
     }
 
     void AdvanceTo(double target_time_seconds) {
+        AdvanceToImpl(target_time_seconds, {}, nullptr);
+    }
+
+    Eigen::MatrixXd AdvanceToWithDenseStateSamples(
+        double target_time_seconds,
+        std::span<const double> sample_times_seconds) {
+        Eigen::MatrixXd samples;
+        AdvanceToImpl(target_time_seconds, sample_times_seconds, &samples);
+        return samples;
+    }
+
+    void AdvanceToImpl(double target_time_seconds,
+                       std::span<const double> sample_times_seconds,
+                       Eigen::MatrixXd* samples) {
         if (!std::isfinite(target_time_seconds)) {
             throw std::invalid_argument(
                 "system continuous-state advancer: target time must be "
@@ -51,13 +76,67 @@ class SystemContinuousStateAdvancer::Implementation final {
                 "system continuous-state advancer: target time precedes the "
                 "accepted time");
         }
+        if (samples != nullptr) {
+            if (sample_times_seconds.empty()) {
+                throw std::invalid_argument(
+                    "system continuous-state advancer: dense sample times "
+                    "must be non-empty");
+            }
+            for (std::size_t index = 0; index < sample_times_seconds.size();
+                 ++index) {
+                if (!std::isfinite(sample_times_seconds[index])) {
+                    throw std::invalid_argument(
+                        "system continuous-state advancer: a dense sample "
+                        "time is not finite");
+                }
+                if (index != 0 &&
+                    !(sample_times_seconds[index] >
+                      sample_times_seconds[index - 1])) {
+                    throw std::invalid_argument(
+                        "system continuous-state advancer: dense sample "
+                        "times must be strictly increasing");
+                }
+            }
+            if (!SameDoubleBits(sample_times_seconds.front(),
+                                accepted_context_->time_seconds())) {
+                throw std::invalid_argument(
+                    "system continuous-state advancer: the first dense "
+                    "sample time must equal the accepted time");
+            }
+            if (!SameDoubleBits(sample_times_seconds.back(),
+                                target_time_seconds)) {
+                throw std::invalid_argument(
+                    "system continuous-state advancer: the last dense "
+                    "sample time must equal the target time");
+            }
+            if (target_time_seconds == accepted_context_->time_seconds() &&
+                sample_times_seconds.size() != 1) {
+                throw std::invalid_argument(
+                    "system continuous-state advancer: a same-time dense "
+                    "request must contain exactly one sample");
+            }
+        }
         if (requires_synchronization_) {
             throw std::logic_error(
                 "system continuous-state advancer: synchronize from the "
                 "accepted context before advancing");
         }
         if (target_time_seconds == accepted_context_->time_seconds()) {
+            if (samples != nullptr) {
+                samples->resize(system_->continuous_state_size(), 1);
+                system_->CopyContinuousState(*accepted_context_,
+                                             samples->col(0));
+            }
             return;
+        }
+
+        std::size_t next_sample = 0;
+        if (samples != nullptr) {
+            samples->resize(
+                system_->continuous_state_size(),
+                static_cast<Eigen::Index>(sample_times_seconds.size()));
+            system_->CopyContinuousState(*accepted_context_, samples->col(0));
+            next_sample = 1;
         }
 
         try {
@@ -90,6 +169,37 @@ class SystemContinuousStateAdvancer::Implementation final {
                         "system continuous-state advancer: the backend "
                         "returned a non-contiguous internal endpoint");
                 }
+                if (samples != nullptr) {
+                    const auto interval = backend_->dense_output_interval();
+                    if (!interval.has_value() ||
+                        !(interval->end_time_seconds >
+                          interval->start_time_seconds) ||
+                        interval->end_time_seconds != step.end_time_seconds) {
+                        throw std::runtime_error(
+                            "system continuous-state advancer: the backend "
+                            "did not expose a dense-output interval ending "
+                            "at the successful internal endpoint");
+                    }
+                    // The last sample is copied from the accepted endpoint
+                    // below. Every earlier requested time is read from the one
+                    // successful interval that contains it.
+                    while (next_sample + 1 < sample_times_seconds.size() &&
+                           sample_times_seconds[next_sample] <=
+                               step.end_time_seconds) {
+                        if (sample_times_seconds[next_sample] <
+                            interval->start_time_seconds) {
+                            throw std::runtime_error(
+                                "system continuous-state advancer: a dense "
+                                "sample was not covered by the backend's "
+                                "successful dense-output intervals");
+                        }
+                        backend_->CopyDenseState(
+                            sample_times_seconds[next_sample],
+                            samples->col(
+                                static_cast<Eigen::Index>(next_sample)));
+                        ++next_sample;
+                    }
+                }
                 system_->SetTimeAndContinuousState(
                     *candidate_context_, step.end_time_seconds,
                     candidate_state_);
@@ -97,6 +207,15 @@ class SystemContinuousStateAdvancer::Implementation final {
                     *candidate_context_);
                 expected_step_begin_time_seconds = step.end_time_seconds;
                 reached_target = step.reached_stop;
+            }
+            if (samples != nullptr &&
+                next_sample + 1 != sample_times_seconds.size()) {
+                throw std::runtime_error(
+                    "system continuous-state advancer: not every dense sample "
+                    "time was covered before the target endpoint");
+            }
+            if (samples != nullptr) {
+                samples->col(samples->cols() - 1) = candidate_state_;
             }
             system_->SetTimeContinuousStateAndWheelRailProjectionHints(
                 *accepted_context_, target_time_seconds, candidate_state_,
@@ -147,6 +266,14 @@ SystemContinuousStateAdvancer::~SystemContinuousStateAdvancer() = default;
 
 void SystemContinuousStateAdvancer::AdvanceTo(double target_time_seconds) {
     implementation_->AdvanceTo(target_time_seconds);
+}
+
+Eigen::MatrixXd
+SystemContinuousStateAdvancer::AdvanceToWithDenseStateSamples(
+    double target_time_seconds,
+    std::span<const double> sample_times_seconds) {
+    return implementation_->AdvanceToWithDenseStateSamples(
+        target_time_seconds, sample_times_seconds);
 }
 
 void SystemContinuousStateAdvancer::SynchronizeAfterAcceptedContextChange() {
