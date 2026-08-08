@@ -28,12 +28,14 @@
 //
 // ## The domain edge is a real discontinuity
 //
-// Outside a semi-axis ratio of [0.1, 10] the table stops and an asymptotic
-// slender-ellipse expansion takes over. The two do not agree at the join — the
-// jump is a few percent in places. That is a property of the underlying
-// tabulation, not an artefact of this implementation, and it is not smoothed
-// over. A caller that wants to know it has left the tabulated region can ask
-// for a refusal instead.
+// Outside a semi-axis ratio of [0.1, 10] the table stops and, under the WRL
+// reproduction rule, a slender-ellipse asymptotic expansion takes over. The
+// expansion is tabulated in Kalker (1990), Appendix E, Table E3; the literal
+// hard switch at these two finite bounds is the current WRL execution rule,
+// not a claim that SIMPACK exposes the same switch. The finite table and the
+// first asymptotic term differ by a few percent in places, and this model does
+// not invent an unqualified smoothing between them. A caller that wants to
+// know it has left the tabulated region can ask for a refusal instead.
 //
 // The gate is on the ratio itself, at the literal bounds, not on the first and
 // last grid node. They coincide here; stating which one is authoritative

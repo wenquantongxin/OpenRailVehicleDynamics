@@ -218,6 +218,7 @@ void RequireUsable(double value, const char* what) {
 }  // namespace
 
 void ContactGeometryWorkspace::EnsureCapacity(std::size_t sample_capacity,
+                                              std::size_t bin_capacity,
                                               std::size_t envelope_capacity,
                                               std::size_t union_capacity,
                                               std::size_t quadrature_capacity) {
@@ -230,37 +231,27 @@ void ContactGeometryWorkspace::EnsureCapacity(std::size_t sample_capacity,
     grow(projected_vertical_, sample_capacity);
     grow(projected_station_, sample_capacity);
 
-    GrowEnvelope(envelope_capacity);
-    GrowUnion(union_capacity);
+    grow(bin_highest_, bin_capacity);
+    if (bin_argument_.size() < bin_capacity) {
+        bin_argument_.resize(bin_capacity);
+    }
+
+    grow(envelope_lateral_, envelope_capacity);
+    grow(envelope_vertical_, envelope_capacity);
+    grow(envelope_station_, envelope_capacity);
+    grow(envelope_vertical_slopes_, envelope_capacity);
+    grow(envelope_spacing_scratch_, envelope_capacity);
+    grow(envelope_secant_scratch_, envelope_capacity);
+
+    grow(merged_lateral_, union_capacity);
+    grow(union_lateral_, union_capacity);
+    grow(union_gap_, union_capacity);
 
     grow(quadrature_lateral_, quadrature_capacity);
     grow(quadrature_rail_, quadrature_capacity);
     grow(quadrature_overlap_, quadrature_capacity);
     grow(quadrature_wheel_slope_, quadrature_capacity);
     grow(quadrature_station_, quadrature_capacity);
-}
-
-void ContactGeometryWorkspace::GrowEnvelope(std::size_t bin_count) {
-    if (bin_highest_.size() >= bin_count) {
-        return;
-    }
-    bin_highest_.resize(bin_count);
-    bin_argument_.resize(bin_count);
-    envelope_lateral_.resize(bin_count);
-    envelope_vertical_.resize(bin_count);
-    envelope_station_.resize(bin_count);
-    envelope_vertical_slopes_.resize(bin_count);
-    envelope_spacing_scratch_.resize(bin_count);
-    envelope_secant_scratch_.resize(bin_count);
-}
-
-void ContactGeometryWorkspace::GrowUnion(std::size_t union_capacity) {
-    if (merged_lateral_.size() >= union_capacity) {
-        return;
-    }
-    merged_lateral_.resize(union_capacity);
-    union_lateral_.resize(union_capacity);
-    union_gap_.resize(union_capacity);
 }
 
 ContactGeometrySolver::ContactGeometrySolver(
@@ -332,18 +323,37 @@ ContactGeometrySolver::ContactGeometrySolver(
         outline_slope_[index] = wheel_spline_.EvaluateFirstDerivative(station);
     }
 
-    envelope_capacity_ =
-        static_cast<std::size_t>(
-            std::ceil((last - first) / configuration_.envelope_bin_width_meters)) +
-        1;
+    // Every projected lateral coordinate is a dot product between a unit
+    // direction and a point on the wheel outline. For two outline samples, the
+    // circumferential (x,z) separation is at most the sum of their absolute
+    // local radii, and the lateral separation is at most the authored span.
+    // This bounds every yaw and roll without turning a vehicle pose into a
+    // qualification limit. The extra two bins are a 40 micrometre rounding
+    // allowance at the GZ18 resolution, not another physical range.
+    double maximum_absolute_radius = 0.0;
+    for (const double height : outline_height_) {
+        maximum_absolute_radius =
+            std::max(maximum_absolute_radius, std::abs(
+                                                    configuration_
+                                                        .nominal_rolling_radius_meters +
+                                                    height));
+    }
+    const double projected_span_bound =
+        std::hypot(2.0 * maximum_absolute_radius, last - first);
+    bin_capacity_ =
+        static_cast<std::size_t>(std::ceil(
+            projected_span_bound / configuration_.envelope_bin_width_meters)) +
+        3;
+    envelope_capacity_ = samples;
     union_capacity_ = envelope_capacity_ + rail_side_.size();
     quadrature_capacity_ = configuration_.island_quadrature_stations;
 }
 
 void ContactGeometrySolver::PrepareWorkspace(
     ContactGeometryWorkspace& workspace) const {
-    workspace.EnsureCapacity(configuration_.outline_sample_count, envelope_capacity_,
-                             union_capacity_, quadrature_capacity_);
+    workspace.EnsureCapacity(configuration_.outline_sample_count, bin_capacity_,
+                             envelope_capacity_, union_capacity_,
+                             quadrature_capacity_);
 }
 
 double ContactGeometrySolver::ResolveLongitudinalLength(
@@ -498,9 +508,9 @@ ContactPatchSet ContactGeometrySolver::Solve(
 
         // For each station across the profile, the circumferential angle at
         // which the wheel surface is furthest forward along the yawed running
-        // direction. That is where the rail sees it. The clamp is reached only
-        // at yaws no wheelset runs at, and without it the cosine below would be
-        // the square root of a negative number.
+        // direction. That is where the rail sees it. The clamp keeps roundoff
+        // or a large finite pose from making the cosine below the square root
+        // of a negative number; it does not define a vehicle yaw limit.
         const double sine_tau =
             Clamp(-yaw_tangent * outline_slope_[index], -1.0, 1.0);
         const double cosine_tau = std::sqrt(std::max(0.0, 1.0 - sine_tau * sine_tau));
@@ -538,7 +548,12 @@ ContactPatchSet ContactGeometrySolver::Solve(
     const std::size_t bin_count =
         static_cast<std::size_t>(std::ceil((lateral_high - lateral_low) / bin_width)) +
         1;
-    workspace.GrowEnvelope(bin_count);
+    if (bin_count > bin_capacity_) {
+        throw std::logic_error(
+            "ContactGeometrySolver::Solve: the projected outline exceeded its "
+            "all-attitude geometric bin bound; the bound or the projection "
+            "implementation is inconsistent");
+    }
     double* const bin_highest = workspace.bin_highest_.data();
     int* const bin_argument = workspace.bin_argument_.data();
     for (std::size_t bin = 0; bin < bin_count; ++bin) {
@@ -615,7 +630,10 @@ ContactPatchSet ContactGeometrySolver::Solve(
 
     // --- the shared grid ---
 
-    workspace.GrowUnion(envelope_size + rail_lateral.size());
+    // Each outline sample enters exactly one bin, so `envelope_size` cannot
+    // exceed the sample count. Merging that envelope with the rail nodes can
+    // therefore not exceed the union capacity prepared from their two counts.
+    // This is a construction proof, not a branch repeated on the hot path.
     double* const merged = workspace.merged_lateral_.data();
     std::size_t merged_size = 0;
     {
@@ -944,13 +962,6 @@ ContactPatchSet ContactGeometrySolver::Solve(
         const double longitudinal_length = ResolveLongitudinalLength(
             pose, lateral_offset, vertical_offset,
             std::span<const double>(quadrature_station, stations));
-        if (!std::isfinite(longitudinal_length) ||
-            !(longitudinal_length > 0.0)) {
-            throw std::runtime_error(
-                "ContactGeometrySolver::Solve: could not resolve the "
-                "three-dimensional longitudinal extent of a positive contact "
-                "patch; continuing with a substitute length is not permitted");
-        }
 
         ContactPatch& patch = result.patches[result.count];
         patch.common_normal_angle_radians = normal_angle;

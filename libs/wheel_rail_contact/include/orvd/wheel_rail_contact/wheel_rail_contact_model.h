@@ -156,6 +156,12 @@ struct WheelRailContactResult {
     // that differs from `count` means a patch was in contact geometrically but
     // carried no load.
     std::size_t geometric_patch_count{0};
+    // Per evaluation, not cumulative. The geometry attempts one
+    // three-dimensional longitudinal resolution for every geometric patch;
+    // the second count says how many force-law evaluations retained the
+    // analytic baseline because that measurement was unavailable.
+    std::size_t three_dimensional_length_resolution_count{0};
+    std::size_t analytic_longitudinal_length_fallback_count{0};
 };
 
 // The buffers one evaluation needs. One per context; never shared between
@@ -180,11 +186,12 @@ class WheelRailContactModel {
                           const WheelProfilePreprocessingConfiguration& preparation,
                           const WheelRailContactConfiguration& configuration);
 
-    // Evaluates every patch at one pose. Allocates nothing once the workspace
-    // has been through one evaluation at its widest pose. Throws
-    // std::runtime_error when the geometry cannot resolve a positive patch's
-    // three-dimensional longitudinal extent, and may propagate a configured
-    // coefficient table's documented refusal outside its supported range.
+    // Evaluates every patch at one pose. PrepareWorkspace sizes the complete
+    // hot-path workspace; subsequent evaluations allocate nothing. An
+    // unavailable three-dimensional longitudinal extent uses and reports the
+    // analytic baseline. The call may still propagate a configured coefficient
+    // table's documented refusal outside its supported range or an internal
+    // workspace-bound violation.
     [[nodiscard]] WheelRailContactResult Evaluate(
         const WheelRailContactInput& input,
         WheelRailContactWorkspace& workspace) const;

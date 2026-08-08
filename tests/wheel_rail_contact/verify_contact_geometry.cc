@@ -320,20 +320,26 @@ int main() {
         }
 
         {
-            // A gross but still ordinary mechanical overlap can extend beyond
-            // the three-dimensional search's qualified bracket. The
-            // cross-section is unambiguously in contact, so returning no patch
-            // would hide the failure; inventing a circular length would change
-            // the selected model. The solve must instead fail loudly.
+            // A deterministic deep overlap extends beyond the
+            // three-dimensional search bracket. It is a branch fixture, not a
+            // qualified vehicle state: the geometry must preserve the positive
+            // patch and publish an unavailable length for the force law to
+            // handle in the same evaluation.
             constexpr double unresolved_penetration_meters = 0.014;
-            RequireRefusal(
-                [&] {
-                    (void)solver.Solve(
-                        StraightDown(0.0, unresolved_penetration_meters), workspace);
-                },
-                "three-dimensional longitudinal extent",
-                "a positive patch whose longitudinal extent could not be "
-                "bracketed");
+            const ContactPatchSet unresolved = solver.Solve(
+                StraightDown(0.0, unresolved_penetration_meters), workspace);
+            Require(unresolved.count == 1,
+                    "an unresolved longitudinal length swallowed its positive "
+                    "geometry patch");
+            if (unresolved.count == 1) {
+                Require(unresolved.patches[0].longitudinal_length_meters == 0.0,
+                        "the geometry layer substituted a longitudinal length");
+                Require(unresolved.patches[0].vertical_penetration_meters > 0.0 &&
+                            unresolved.patches[0]
+                                    .cross_section_area_square_meters > 0.0,
+                        "the unresolved fixture did not preserve its measured "
+                        "cross-section");
+            }
         }
 
         {
@@ -350,6 +356,34 @@ int main() {
                     "the contact geometry solve allocated after its workspace "
                     "was warm");
         }
+    }
+
+    {
+        // PrepareWorkspace must cover a later pose whose projection is wider
+        // than the authored lateral span. A modest 0.2 profile slope and
+        // -0.1-radian roll make the old unrotated-span capacity allocate eight
+        // envelope buffers. These values are a mechanical-scale pressure point,
+        // not a vehicle pose limit.
+        const ProfilePoints sloped_wheel =
+            Sample(ProfileRole::kWheel, "sloped_capacity_wheel", 0.05, 1001,
+                   [](double at) { return 0.2 * at; });
+        const ProfilePoints flat_rail =
+            Sample(ProfileRole::kRail, "flat_capacity_rail", 0.06, 1201,
+                   [](double) { return 0.0; });
+        const ContactGeometrySolver solver(sloped_wheel, flat_rail,
+                                           WheelSide::kRight, no_preparation,
+                                           DefaultConfiguration());
+        ContactGeometryWorkspace workspace;
+        solver.PrepareWorkspace(workspace);
+        ContactPoseScalars pose = StraightDown(0.0, -0.01);
+        pose.roll_radians = -0.1;
+        const AllocationScope scope;
+        const ContactPatchSet clear = solver.Solve(pose, workspace);
+        Require(clear.count == 0,
+                "the workspace-capacity fixture unexpectedly made contact");
+        Require(scope.allocations() == 0,
+                "a prepared geometry workspace allocated at a wider projected "
+                "pose");
     }
 
     {

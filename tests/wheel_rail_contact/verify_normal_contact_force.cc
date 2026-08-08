@@ -107,6 +107,8 @@ NormalContactGeometry Patch(double width, double length, double area) {
     geometry.longitudinal_length_meters = length;
     geometry.cross_section_area_square_meters = area;
     geometry.vertical_penetration_meters = 1.5 * area / width;
+    geometry.rolling_radius_meters = 0.42;
+    geometry.common_normal_angle_radians = 0.2;
     return geometry;
 }
 
@@ -303,14 +305,39 @@ int main() {
                      "the two parts of a saturated force do not sum to the total");
     }
 
-    RequireRefusal(
-        [&] {
-            NormalContactGeometry geometry = Patch(0.012, 0.0135, 8.0e-7);
-            geometry.longitudinal_length_meters = 0.0;
-            (void)law.Solve(geometry, 0.0);
-        },
-        "three-dimensional longitudinal length",
-        "a positive patch without a resolved longitudinal length");
+    {
+        // The analytic baseline is the qualified WRL expression: vertical
+        // penetration and the local rolling radius divided by the common
+        // normal's cosine. A nonzero angle makes omitting that projection
+        // visible. The three-dimensional measurement, when present, wins
+        // exactly and clears the flag.
+        NormalContactGeometry geometry = Patch(0.012, 0.0135, 8.0e-7);
+        const NormalContactResult resolved = law.Solve(geometry, 0.0);
+        Require(resolved.in_contact &&
+                    !resolved.used_analytic_longitudinal_length_fallback,
+                "a resolved three-dimensional length was reported as a fallback");
+        Require(resolved.longitudinal_semi_axis_meters ==
+                    0.5 * geometry.longitudinal_length_meters,
+                "the explicit three-dimensional length did not override the "
+                "analytic baseline exactly");
+
+        geometry.longitudinal_length_meters = 0.0;
+        const NormalContactResult fallback = law.Solve(geometry, 0.0);
+        const double effective_radius =
+            geometry.rolling_radius_meters /
+            std::abs(std::cos(geometry.common_normal_angle_radians));
+        const double expected_semi_axis =
+            std::sqrt(2.0 * effective_radius *
+                      geometry.vertical_penetration_meters);
+        Require(fallback.in_contact &&
+                    fallback.used_analytic_longitudinal_length_fallback,
+                "an unavailable three-dimensional length did not report its "
+                "analytic fallback");
+        RequireClose(fallback.longitudinal_semi_axis_meters, expected_semi_axis,
+                     1.0e-14,
+                     "the fallback semi-axis is not the qualified analytic "
+                     "baseline");
+    }
 
     {
         // The gates. A patch that has stopped touching comes back empty, not as
@@ -321,7 +348,8 @@ int main() {
             Require(!result.in_contact && result.normal_force_newtons == 0.0 &&
                         result.longitudinal_semi_axis_meters == 0.0 &&
                         result.lateral_semi_axis_meters == 0.0 &&
-                        result.equivalent_penetration_meters == 0.0,
+                        result.equivalent_penetration_meters == 0.0 &&
+                        !result.used_analytic_longitudinal_length_fallback,
                     what);
         };
         NormalContactGeometry lifted = Patch(0.012, 0.0135, 8.0e-7);
@@ -336,6 +364,9 @@ int main() {
         NormalContactGeometry broken = Patch(0.012, 0.0135, 8.0e-7);
         broken.cross_section_area_square_meters = std::nan("");
         rejected(broken, "a patch with a non-finite area produced a force");
+        NormalContactGeometry radiusless = Patch(0.012, 0.0135, 8.0e-7);
+        radiusless.rolling_radius_meters = 0.0;
+        rejected(radiusless, "a patch with no local rolling radius produced a force");
     }
 
     {

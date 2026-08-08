@@ -75,12 +75,18 @@ struct NormalContactGeometry {
     // two together fix the equivalent penetration; nothing else does.
     double cross_section_area_square_meters{0.0};
     double arc_width_meters{0.0};
-    // How far the overlap reaches along the running direction. A positive
-    // contact requires this value to be finite and positive; the selected
-    // model admits no estimated substitute.
+    // How far the overlap reaches along the running direction. Zero or a
+    // non-finite value means the three-dimensional resolver could not measure
+    // it; the law then keeps the analytic baseline described below.
     double longitudinal_length_meters{0.0};
-    // The deepest vertical overlap. It gates the whole evaluation.
+    // The deepest vertical overlap. It gates the whole evaluation and is the
+    // penetration in the analytic longitudinal baseline.
     double vertical_penetration_meters{0.0};
+    // The local rolling radius and common-normal angle. The GZ18 reference
+    // semantics use R_eff = R / |cos(delta)| in the analytic baseline. A
+    // successfully resolved three-dimensional length overrides that baseline.
+    double rolling_radius_meters{0.0};
+    double common_normal_angle_radians{0.0};
 };
 
 struct NormalContactResult {
@@ -107,6 +113,12 @@ struct NormalContactResult {
     double equivalent_penetration_meters{0.0};
     // The greatest pressure in the patch, at its centre.
     double maximum_pressure_pascals{0.0};
+
+    // True exactly when the force law used
+    // 2*sqrt(2*(R/|cos(delta)|)*penetration) because the three-dimensional
+    // longitudinal extent was unavailable. It is a per-patch observation, not
+    // a cumulative run statistic.
+    bool used_analytic_longitudinal_length_fallback{false};
 
     // Whether the patch produced any force at all. False means one of the
     // validity gates rejected it, and every number above is zero.
@@ -158,12 +170,12 @@ class NormalContactLaw {
     // `approach_speed_meters_per_second` is positive while the two bodies close
     // on each other along the contact normal, negative while they separate.
     //
-    // Allocates nothing on the successful path. A patch with no positive depth,
-    // area or width comes back with `in_contact` false and every number zero:
-    // stopping contact is an ordinary event. Throws std::invalid_argument when
-    // those contact measures are positive but the three-dimensional
-    // longitudinal length is not finite and positive; guessing a replacement
-    // length is forbidden.
+    // Allocates nothing. A patch with no positive depth, area, width or local
+    // rolling radius comes back with `in_contact` false and every number zero:
+    // stopping contact is an ordinary event. If the three-dimensional
+    // longitudinal length is unavailable, the law retains its analytic
+    // baseline and marks the result rather than performing another geometry
+    // evaluation.
     [[nodiscard]] NormalContactResult Solve(
         const NormalContactGeometry& geometry,
         double approach_speed_meters_per_second) const;

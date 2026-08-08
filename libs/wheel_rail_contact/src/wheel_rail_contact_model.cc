@@ -51,6 +51,7 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
     const ContactPatchSet patches =
         geometry_.Solve(input.pose, workspace.geometry_);
     result.geometric_patch_count = patches.count;
+    result.three_dimensional_length_resolution_count = patches.count;
 
     for (std::size_t slot = 0; slot < patches.count; ++slot) {
         const ContactPatch& patch = patches.patches[slot];
@@ -103,10 +104,16 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
         normal_geometry.arc_width_meters = patch.arc_width_meters;
         normal_geometry.longitudinal_length_meters = patch.longitudinal_length_meters;
         normal_geometry.vertical_penetration_meters = patch.vertical_penetration_meters;
+        normal_geometry.rolling_radius_meters = patch.rolling_radius_meters;
+        normal_geometry.common_normal_angle_radians =
+            patch.common_normal_angle_radians;
 
         const double approach_speed = ComputeNormalApproachSpeed(motion, frame);
         const NormalContactResult normal =
             normal_law_.Solve(normal_geometry, approach_speed);
+        if (normal.used_analytic_longitudinal_length_fallback) {
+            ++result.analytic_longitudinal_length_fallback_count;
+        }
         if (!normal.in_contact || !(normal.normal_force_newtons > 0.0)) {
             // Geometrically touching but carrying nothing — a patch separating
             // fast enough that the damping has cancelled its elastic force.

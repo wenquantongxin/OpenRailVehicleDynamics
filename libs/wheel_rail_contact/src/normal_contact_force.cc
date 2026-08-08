@@ -23,6 +23,13 @@ constexpr double kEllipticParameterCeiling = 1.0 - 1.0e-15;
 constexpr double kAgmTolerance = 1.0e-15;
 constexpr int kAgmIterations = 80;
 
+// The GZ18 reference law forms its analytic longitudinal baseline with the
+// rolling radius projected through the common-normal angle. The floor is the
+// same one used by the qualified WRL path and prevents a right-angle contact
+// from turning a finite radius into an infinity.
+constexpr double kContactAngleCosineFloor = 1.0e-6;
+constexpr double kRollingRadiusFloor = 1.0e-9;
+
 }  // namespace
 
 double CompleteEllipticIntegralFirstKind(double parameter) {
@@ -118,22 +125,35 @@ NormalContactResult NormalContactLaw::Solve(
     const double width = geometry.arc_width_meters;
     const double area = geometry.cross_section_area_square_meters;
     const double depth = geometry.vertical_penetration_meters;
+    const double rolling_radius = geometry.rolling_radius_meters;
     if (!std::isfinite(width) || !std::isfinite(area) || !std::isfinite(depth) ||
-        !(depth > 0.0) || !(area > 0.0) || !(width > 0.0)) {
+        !std::isfinite(rolling_radius) || !(depth > 0.0) || !(area > 0.0) ||
+        !(width > 0.0) || !(rolling_radius > kRollingRadiusFloor)) {
         return result;
     }
 
     const double lateral_semi_axis = 0.5 * width;
 
-    // The selected contact model has exactly one longitudinal-length source:
-    // the three-dimensional interpenetration solve. A positive patch without
-    // that measurement is incomplete input, not an ordinary loss of contact.
-    const double length = geometry.longitudinal_length_meters;
-    if (!std::isfinite(length) || !(length > 0.0)) {
-        throw std::invalid_argument(
-            "NormalContactLaw::Solve: a positive contact patch requires a "
-            "finite positive three-dimensional longitudinal length; continuing "
-            "with a substitute length is not permitted");
+    // The qualified WRL law forms the analytic circular baseline first on
+    // every patch. A successfully resolved three-dimensional extent overrides
+    // it; when that measurement is unavailable the baseline remains and the
+    // result says so. This is force-law arithmetic, not a second geometry
+    // evaluation or a diagnostic reconstruction.
+    const double angle_cosine =
+        std::max(std::abs(std::cos(geometry.common_normal_angle_radians)),
+                 kContactAngleCosineFloor);
+    const double effective_radius = rolling_radius / angle_cosine;
+    double length =
+        2.0 * std::sqrt(std::max(0.0, 2.0 * effective_radius * depth));
+    result.used_analytic_longitudinal_length_fallback = true;
+    if (std::isfinite(geometry.longitudinal_length_meters) &&
+        geometry.longitudinal_length_meters > 0.0) {
+        length = geometry.longitudinal_length_meters;
+        result.used_analytic_longitudinal_length_fallback = false;
+    }
+    if (!(length > 0.0)) {
+        result.used_analytic_longitudinal_length_fallback = false;
+        return result;
     }
     const double longitudinal_semi_axis = 0.5 * length;
 

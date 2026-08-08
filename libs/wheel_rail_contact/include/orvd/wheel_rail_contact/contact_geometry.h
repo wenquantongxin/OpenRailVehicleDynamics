@@ -152,9 +152,11 @@ struct ContactPatch {
     double cross_section_area_square_meters{0.0};
     double arc_weighted_area_square_meters{0.0};
 
-    // How far the overlap extends along the running direction. Every active
-    // patch carries a finite positive value. A solve that cannot bracket that
-    // extent fails rather than returning a guessed length.
+    // How far the overlap extends along the running direction. Zero means the
+    // three-dimensional resolution was attempted but could not bracket the
+    // extent. It is an unavailable measurement, not a zero-length patch; the
+    // normal law then uses its analytic longitudinal baseline and reports that
+    // it did so.
     double longitudinal_length_meters{0.0};
 
     // The two surfaces' curvatures at the contact point. The wheel's is taken
@@ -199,10 +201,9 @@ class ContactGeometryWorkspace {
   private:
     friend class ContactGeometrySolver;
 
-    void EnsureCapacity(std::size_t sample_capacity, std::size_t envelope_capacity,
-                        std::size_t union_capacity, std::size_t quadrature_capacity);
-    void GrowEnvelope(std::size_t bin_count);
-    void GrowUnion(std::size_t union_capacity);
+    void EnsureCapacity(std::size_t sample_capacity, std::size_t bin_capacity,
+                        std::size_t envelope_capacity, std::size_t union_capacity,
+                        std::size_t quadrature_capacity);
 
     // The projected outline, one entry per sampled station.
     std::vector<double> projected_lateral_;
@@ -262,10 +263,12 @@ class ContactGeometrySolver {
                           const WheelProfilePreprocessingConfiguration& preparation,
                           const ContactGeometryConfiguration& configuration);
 
-    // Solves one pose. Allocates nothing once the workspace has been through
-    // one solve at its widest pose. Throws std::runtime_error when a positive
-    // contact patch's three-dimensional longitudinal extent cannot be
-    // bracketed; no substitute length is admitted.
+    // Solves one finite pose. Once PrepareWorkspace has sized the workspace,
+    // no pose allocates. A failure to resolve a positive patch's
+    // three-dimensional longitudinal extent is published as an unavailable
+    // measurement; the normal law owns the analytic baseline used in that
+    // case. Throws std::logic_error only if an implementation change violates
+    // the solver's proven workspace bounds.
     [[nodiscard]] ContactPatchSet Solve(const ContactPoseScalars& pose,
                                         ContactGeometryWorkspace& workspace) const;
 
@@ -310,9 +313,9 @@ class ContactGeometrySolver {
     // both sides, then measures the chord between those two crossings. The
     // longest such chord over the patch is the answer.
     //
-    // Returns exactly zero when no station could be bracketed. This is only a
-    // private failure signal: `Solve` turns it into a diagnostic exception and
-    // never publishes a patch carrying the zero.
+    // Returns exactly zero when no station could be bracketed. `Solve`
+    // publishes that unavailable measurement so the normal law can apply and
+    // report the analytic baseline without a second geometry evaluation.
     [[nodiscard]] double ResolveLongitudinalLength(
         const ContactPoseScalars& pose, double lateral_offset,
         double vertical_offset, std::span<const double> stations) const;
@@ -343,6 +346,7 @@ class ContactGeometrySolver {
     std::vector<double> outline_height_;
     std::vector<double> outline_slope_;
 
+    std::size_t bin_capacity_{0};
     std::size_t envelope_capacity_{0};
     std::size_t union_capacity_{0};
     std::size_t quadrature_capacity_{0};

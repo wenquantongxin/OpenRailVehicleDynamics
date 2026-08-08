@@ -89,8 +89,11 @@ std::array<double, kNodes> CollapsePoissonAxis(
     return collapsed;
 }
 
-// The slender-ellipse expansion, for a contact patch so elongated that the
-// tabulation has nothing to say about it.
+// The slender-ellipse expansion in Kalker (1990), Appendix E, Table E3, for a
+// contact patch so elongated that the finite table has nothing to say about
+// it. That source gives the limiting formula; the literal switch at 0.1 and 10
+// below reproduces the current WRL rule and is not presented as a qualified
+// statement about SIMPACK's internal switch.
 //
 // Two regimes, and they are not each other's mirror image. When the patch is
 // slender across the rolling direction the longitudinal and lateral

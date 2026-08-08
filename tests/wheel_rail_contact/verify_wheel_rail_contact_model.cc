@@ -153,6 +153,11 @@ int main() {
         // third axis.
         const WheelRailContactResult result = model.Evaluate(resting, workspace);
         Require(result.count == 1, "a resting wheel produced other than one patch");
+        Require(result.three_dimensional_length_resolution_count ==
+                        result.geometric_patch_count &&
+                    result.analytic_longitudinal_length_fallback_count == 0,
+                "the ordinary contact did not report one successful "
+                "three-dimensional length resolution");
         if (result.count == 1) {
             const auto& patch = result.patches[0];
             Require(patch.geometry.vertical_penetration_meters > 3.0e-5 &&
@@ -552,7 +557,9 @@ int main() {
         WheelRailContactInput lifted = resting;
         lifted.pose.vertical_raise_meters = 0.01;
         const WheelRailContactResult clear = model.Evaluate(lifted, workspace);
-        Require(clear.count == 0 && clear.geometric_patch_count == 0,
+        Require(clear.count == 0 && clear.geometric_patch_count == 0 &&
+                    clear.three_dimensional_length_resolution_count == 0 &&
+                    clear.analytic_longitudinal_length_fallback_count == 0,
                 "a wheel held clear of the rail produced a patch");
 
         WheelRailContactInput flying = resting;
@@ -564,6 +571,44 @@ int main() {
         Require(separating.count == 0,
                 "a patch whose damping cancelled its elastic force was emitted "
                 "as a force");
+        Require(separating.three_dimensional_length_resolution_count == 1,
+                "a separating geometric patch disappeared from the length "
+                "attempt count before the force gate");
+    }
+
+    {
+        // A deterministic deep overlap makes the three-dimensional search miss
+        // its bracket. The assembled path must keep the patch, use the analytic
+        // baseline once, and expose both facts from this same evaluation. This
+        // is a branch fixture, not a qualified vehicle operating point.
+        const ProfilePoints flat_wheel =
+            Sample(ProfileRole::kWheel, "fallback_flat_wheel", 0.05, 1001,
+                   [](double) { return 0.0; });
+        const ProfilePoints flat_rail =
+            Sample(ProfileRole::kRail, "fallback_flat_rail", 0.06, 1201,
+                   [](double) { return 0.0; });
+        const WheelRailContactModel fallback_model(
+            flat_wheel, flat_rail, WheelSide::kRight, no_preparation,
+            Configuration());
+        WheelRailContactWorkspace fallback_workspace;
+        WheelRailContactInput unresolved;
+        unresolved.pose.vertical_raise_meters = -0.014;
+        unresolved.wheel.origin_track_meters = axle;
+        const WheelRailContactResult result =
+            fallback_model.Evaluate(unresolved, fallback_workspace);
+        Require(result.geometric_patch_count == 1 && result.count == 1,
+                "the assembled model swallowed a patch whose longitudinal "
+                "resolution was unavailable");
+        Require(result.three_dimensional_length_resolution_count == 1 &&
+                    result.analytic_longitudinal_length_fallback_count == 1,
+                "the assembled model did not report one length attempt and one "
+                "analytic fallback");
+        if (result.count == 1) {
+            Require(result.patches[0]
+                            .normal.used_analytic_longitudinal_length_fallback &&
+                        result.patches[0].normal.normal_force_newtons > 0.0,
+                    "the fallback patch did not carry a visible positive force");
+        }
     }
 
     {
