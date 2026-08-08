@@ -5,8 +5,8 @@
     "mechanical_definition_identifier": "gz18_reference_mechanics"
   },
   "wheel_rail_binding": {
-    "wheel_profile_identifier": "LM.prw",
-    "rail_profile_identifier": "UIC60.prr",
+    "wheel_profile_identifier": "gz18_reference_wheel_profile",
+    "rail_profile_identifier": "uic60_rail_profile",
     "wheel_rail_contact_strategy_identifier": "gz18_reference_wheel_rail_contact"
   },
   "load_condition_identifier": "gz18_reference_load_condition",

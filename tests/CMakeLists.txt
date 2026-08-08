@@ -752,6 +752,23 @@ add_test(NAME verify_profile_asset_interoperability
          COMMAND verify_profile_asset_interoperability
              ${CMAKE_CURRENT_BINARY_DIR}/profile-fixtures)
 
+# G52c's real asset and personality boundary. The test loads the same JSON a
+# relocated consumer receives, checks the closed logical identities and derived
+# gauge geometry, then evaluates both sides after preparing their workspaces.
+add_executable(verify_gz18_wheel_rail_contact_binding
+    configuration/gz18_wheel_rail_contact_header_self_containment.cc
+    configuration/verify_gz18_wheel_rail_contact_binding.cc)
+orvd_configure_first_party_target(verify_gz18_wheel_rail_contact_binding)
+target_include_directories(verify_gz18_wheel_rail_contact_binding
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_gz18_wheel_rail_contact_binding
+    PRIVATE orvd_configuration)
+add_test(NAME verify_gz18_wheel_rail_contact_binding
+         COMMAND verify_gz18_wheel_rail_contact_binding
+             ${CMAKE_SOURCE_DIR}
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_CURRENT_BINARY_DIR}/gz18-contact-fixtures)
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc

@@ -12,10 +12,14 @@ G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原�
 Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构建并运行同一
 CVODE 消费者。底座的 46 个 Goal 已全部完成；车辆动力学迁移路书已经启用，G47 轨道几何、
 G48 严格 JSON 线路配置、G49 GZ18 车型装配、G50 复合连续状态与 GZ18 车辆力元、G51 已解析启动
-状态与初始上下文装配均已签收。当前进入 G52 轮轨型面与串行接触核心，按 G52a／G52b／G52c 三个
-强制审查子步推进。G52a 已落下型面值对象、第一方 JSON 型面记录及其严格加载、与 SIMPACK
+状态与初始上下文装配均已签收。G52 轮轨型面与串行接触核心按 G52a／G52b／G52c 三个强制审查子步推进；
+G52a 与 G52b 已完成阶段审查，G52c 产品落地与两轮自检已经完成，正在等待阶段审查。G52 总 Goal 尚未
+签收，当前暂停于 G53 前。
+G52a 已落下型面值对象、JSON 型面模式及其严格加载、与 SIMPACK
 `.prw/.prr` 的语义读写与双向转换、自然三次与单调保形两种插值原语、弧长求积与站点求根，
-以及两套车轮型面预处理及其构造期互斥、型面/轨道侧滚横垂输运的数学与其类型化启用策略。
+以及两套车轮型面预处理及其构造期互斥、型面/轨道侧滚横垂输运的数学与其类型化启用策略。G52b 已接通
+共同法向接触几何、三维互穿与解析长度基线、EEC 法向力、蠕滑率、Kalker 系数、FASTSIM 切向力和
+同点约化的轮侧／轨侧成对扳手；G52c 已接通随包 GZ18 JSON 型面、类型化人格与安装数据根绑定。
 
 底座的实施记录是
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)；
@@ -30,6 +34,7 @@ G48 严格 JSON 线路配置、G49 GZ18 车型装配、G50 复合连续状态与
 | [ADR-0002](docs/adr/0002-single-authoritative-context.md) | 单一权威 Context：状态只有一个所有者，树与子系统均为零复制视图 |
 | [ADR-0003](docs/adr/0003-abstract-advancer-cvode-first.md) | 抽象推进器接口，首版唯一后端为 CVODE |
 | [ADR-0004](docs/adr/0004-focused-dynamics-qualification.md) | 多模型本地性质门，单个高耦合在线漂移门 |
+| [ADR-0005](docs/adr/0005-bind-wheel-rail-low-level-strategies-by-vehicle.md) | 按车型绑定两处轮轨低层策略，禁止运行期混搭 |
 
 ## 数值验收口径
 
@@ -63,7 +68,7 @@ OpenRailVehicleDynamics/
 │   └── package_distribution/   开发者侧离线源码包组装工具
 ├── libs/
 │   ├── track_geometry/    线路惯性系、轨道几何、轨型系与站位投影
-│   ├── wheel_rail_contact/ 型面点列、插值原语、车轮型面预处理与侧滚横垂输运
+│   ├── wheel_rail_contact/ 型面、接触几何、法向／切向力学、成对扳手与每上下文工作区
 │   ├── configuration/     严格 JSON 的一次性类型化加载边界、车辆装配与初始上下文装配
 │   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
 │   ├── multibody_model/   模型中立的程序化多体建模门面
@@ -72,10 +77,12 @@ OpenRailVehicleDynamics/
 │   ├── forces/           力元
 │   └── equilibrium/      静平衡
 ├── track_library/
-│   └── geometries/       可安装的线路几何 JSON 记录
+│   ├── geometries/       可安装的线路几何 JSON 记录
+│   └── rail_profiles/    可安装的轨型 JSON 记录
 ├── vehicle_library/
 │   └── gz18/             可安装的 GZ18 车型 JSON 记录
-│       └── startup_states/  可安装的已解析启动状态 JSON 记录
+│       ├── startup_states/  可安装的已解析启动状态 JSON 记录
+│       └── wheel_profiles/  可安装的 GZ18 轮型 JSON 记录
 └── tests/
     ├── comparison/       必需观测与容差判定
     ├── configuration/    线路、车型与启动状态 JSON 的严格加载边界及初始上下文装配
@@ -94,7 +101,7 @@ OpenRailVehicleDynamics/
     ├── toolchain/        工具链自检（Eigen + C++23）
     ├── track_geometry/   轨道几何与站位投影
     ├── vehicle_library/  GZ18 车型记录与多体装配
-    ├── wheel_rail_contact/ 插值原语、型面预处理与侧滚横垂输运
+    ├── wheel_rail_contact/ 型面、接触核心、GZ18 人格与安装绑定
     └── unit/             单元测试
 ```
 
@@ -103,8 +110,8 @@ OpenRailVehicleDynamics/
 `ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、`ORVD::multibody_runtime`、
 `ORVD::multibody_model`、`ORVD::forces`、`ORVD::system_assembly` 与 `ORVD::integrators`；
 vendored Drake 类型和接入头不安装。`tools/profile_conversion/` 是开发期工具，不导出、不安装。
-安装包还带上可安装的线路几何、GZ18 车型与已解析启动状态 JSON 记录；当前所有加载器都只接受调用方
-给出的确切路径，按安装数据根解析资产的能力是 G52 的产物，尚未落地。
+安装包还带上线路几何、轨型、GZ18 车型、轮型与已解析启动状态 JSON 记录。G52c 已提供从逻辑标识到
+显式安装数据根下 JSON 资产的解析；它不搜索环境变量、当前目录或源码树。
 尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
@@ -147,7 +154,8 @@ cmake --install build
 GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道几何、配置、车辆拓扑、力元、启动状态、
 轮轨接触、数值历史与端到端被动纵切逐 Goal 推进。已落位的是：随包线路几何与 GZ18 车型记录、
 十七体多体装配、复合连续状态与车辆力元、以及 60 km/h 已解析移动启动状态及其初始上下文装配。
-当前在做轮轨型面与串行接触核心。
+轮轨型面基础设施与串行接触核心已经通过 G52a／G52b 阶段审查；G52c 已接入随包 JSON 型面、GZ18
+类型化接触人格和安装数据根，并完成两轮自检。当前等待阶段审查，G52 尚未签收，也不进入 G53 的系统接线。
 
 轮轨型面资产的边界：ORVD 随包发布本项目自有、自包含的 JSON 型面记录，它是运行时型面的唯一真源；
 第一方设施同时提供与 SIMPACK `.prw/.prr` 的语义读写与双向转换（`tools/profile_conversion/`），
@@ -155,7 +163,9 @@ GZ18 是当前车辆迁移路书的首个真实车型消费者。迁移按轨道
 缩放与裁剪声明一律响亮拒绝，而不是默默忽略；直接 `.prw/.prr` 读写时，文件声明的有效遍历方向
 被记录并同义写回。经过产品 JSON 后不保留 SIMPACK 专有元数据，再导出时按 ORVD 的规范型面角色
 生成遍历声明；输出点行统一升序，方向若不另行承载就会在往返中被静默抹平。供应商型面文件不进入
-本仓库、不随安装包发布，也不作为运行时权威；随包 JSON 型面资产本身由 G52c 落地。项目不依赖 CONTACT。
+本仓库、不随安装包发布，也不作为运行时权威；随包 JSON 型面资产已经由 G52c 落地。运行时以无扩展名的
+逻辑标识经安装数据根解析 JSON；本地 `.prw/.prr` 只参加一次性语义互操作核对，不成为产品身份、数值金标
+或第二份运行时输入。项目不依赖 CONTACT。
 
 ## 许可证
 

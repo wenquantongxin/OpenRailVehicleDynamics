@@ -82,6 +82,19 @@ endif()
 # real rather than this script only asserting the file arrived.
 set(installed_startup_state
     "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/gz18/startup_states/moving_startup_60kmh.json")
+set(installed_data_root
+    "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics")
+set(installed_wheel_profile
+    "${installed_data_root}/vehicle_library/gz18/wheel_profiles/gz18_reference_wheel_profile.json")
+set(installed_rail_profile
+    "${installed_data_root}/track_library/rail_profiles/uic60_rail_profile.json")
+foreach(installed_profile IN ITEMS
+        "${installed_wheel_profile}" "${installed_rail_profile}")
+    if(NOT EXISTS "${installed_profile}")
+        message(FATAL_ERROR
+            "the relocated prefix has no installed profile '${installed_profile}'")
+    endif()
+endforeach()
 
 file(GLOB_RECURSE package_configs LIST_DIRECTORIES FALSE
      "${relocated_prefix}/*OpenRailVehicleDynamicsConfig.cmake")
@@ -191,7 +204,8 @@ get_filename_component(drake_probe_runtime_directory
 run_checked("running the relocated independent consumer" "${smoke_executable}")
 run_checked("running the configuration-only installed consumer"
             "${configuration_smoke_executable}" "${installed_track_geometry}"
-            "${installed_vehicle_definition}" "${installed_startup_state}")
+            "${installed_vehicle_definition}" "${installed_startup_state}"
+            "${installed_data_root}")
 run_checked("running the track-geometry-only installed consumer"
             "${track_geometry_smoke_executable}")
 run_checked("running the wheel-rail-contact-only installed consumer"

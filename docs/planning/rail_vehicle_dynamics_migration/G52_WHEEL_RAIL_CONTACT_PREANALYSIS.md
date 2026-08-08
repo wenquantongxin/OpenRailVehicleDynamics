@@ -2,8 +2,8 @@
 
 ## 文档职责
 
-本文件是 G52「落地轮轨型面与串行接触核心」开工前的只读侦查结论：接口边界、活动迁移清单、
-以及路书条目中经源码核实需要修订的部分。它**不是**实施路书，**不**授权代码改动，**不**自行修订路书；
+本文件起源于 G52「落地轮轨型面与串行接触核心」开工前的只读侦查，现继续承载接口边界、活动迁移清单
+和阶段审查后的证据订正。它**不是**实施路书，**不**授权代码改动，**不**自行修订路书；
 结论转入 [DISCUSSION_AND_DECISION_LOG.md](DISCUSSION_AND_DECISION_LOG.md) 裁决后才进
 [MIGRATION_ROADMAP.md](MIGRATION_ROADMAP.md)。零散只读观察归
 [MIGRATION_OBSERVATIONS.md](MIGRATION_OBSERVATIONS.md)，参考模型与本仓模型的差异归
@@ -21,7 +21,8 @@ WRL 路径相对 `wheel-rail-lab/` 仓根书写，本文件不含机器绝对路
 本文件中以「**项目负责人抉择／偏好（CodeX 记录，2026-08-05）**」开头的段落，是项目负责人本轮明确给出的
 取舍，不是 Claude 或 CodeX 从源码反推的结论；以「**CodeX 复核（2026-08-05）**」开头的段落，是 CodeX 在
 Claude 实施前按代码、现有运行工件与现行路书做出的扫尾校准。正式实施前，二者均须同步写入
-`MIGRATION_ROADMAP.md` 的 G52 条目；本文件本身仍不构成开工授权。
+`MIGRATION_ROADMAP.md` 的 G52 条目；本文件本身仍不构成开工授权。**CodeX 收口判断（2026-08-08）**
+标记的是 G52b 后续修复与 G52c 开工侦查形成的最终合同校准；实施状态只以路书为准。
 
 ---
 
@@ -72,7 +73,8 @@ FASTSIM 网格 `kKalker1982`、`shape_correction=kNone`、`creepage.transport_mo
 
 **数值**（gen.h 行号）：`nominal_radius_m=0.42`(83)、`lateral_wheel_distance_m=0.7465`(84)、
 `vref_min=0.01`(88)、`eps_contact=0.0`(89)、`rail_cant_rad=0.024994792`(104)、`gap_merge_tol=1e-06`(105)、
-`dy_bin=2e-05`(106)、`s_samples=1000`(107)、`n_int_centroid=120`(108)、`n_int_delta=80`(109)、
+`dy_bin=2e-05`(106)、`s_samples=1000`(107)、`n_int_centroid=120`(108)、历史配置
+`n_int_delta=80`(109)、
 `softmax_temperature=1e-05`(110)、`wheel_profile_rediscretization_m=0.0`(111)、
 `wheel_profile_arc_rescan_second_spline_m=0.0005`(112)、两个 spline mode(113-114)、
 `eec_k_pen=1.8181818181818181`(120-121)、`fastsim_mx=fastsim_my=21`(131-132)、
@@ -87,13 +89,19 @@ FASTSIM 网格 `kKalker1982`、`shape_correction=kNone`、`creepage.transport_mo
 `0.01`，所以 GZ18 的 0.01 与 IRW 的结构体默认 0.0 今天等价纯属巧合。G52 应把它作为**显式、必填、严格为正**的
 配置项承载 GZ18 的 0.01，并**不迁移**那个非正哨兵回退。它是数值参数，不是第三条策略轴。
 
+**CodeX 收口判断（2026-08-08）**：`n_int_delta` 虽存在于生成配置，却不属于已晋级共同法向人格。
+WRL 在 `kCommonNormal` 下仍运行旧的加权接触角积分，随后无条件用共同法向结果覆盖它；该细分数因而没有
+到达接触几何输出。ORVD 已直接实现共同法向并以解析／几何性质门覆盖，不迁移这段无消费者计算，也不把
+`n_int_delta` 纳入 G52c 来源清单分母。`softmax_temperature` 同样只服务于本 Goal 明确不迁移的软极值
+形心分支，不属于 GZ18 接触人格，也不进入 G52c 的 all-and-only 分母。
+
 ---
 
 ## 二、参数分五类
 
 一、**共性物理参数**（`E`、`nu`、`polach_*`、`mu`）；二、**车型策略位**（第一节的策略位）；
-三、**显式离散参数**（`s_samples`、`n_int_*`、`dy_bin`、`gap_merge_tol`、`mx/my`、`eps_contact`、
-`softmax_temperature`、`kalker1982_tolerance`、两个型面预处理步长）；四、**算法内部常量**
+三、**显式离散参数**（`s_samples`、`n_int_centroid`、`dy_bin`、`gap_merge_tol`、`mx/my`、`eps_contact`、
+`kalker1982_tolerance`、两个型面预处理步长）；四、**算法内部常量**
 （`kMaxPatches=4`、`kMaxCandidatePatches=16`、`kMaxSegments=64`、弧长重扫 64 步二分、Gauss-16 阶数、
 `SolveCircleSegmentHeight` 的 `tol=1e-14`／`max_iter=80`——✅ 后两者是默认实参，唯一调用点从不覆盖）；
 五、**资产派生常量**。
@@ -379,29 +387,38 @@ QCH FileId 38410／38415 没有公开三维纵向长度解析失败时应回退�
 
 ### G52c — 自有型面资产、GZ18 人格与安装绑定
 
+**CodeX 阶段记录（2026-08-08）**：本节合同已完成实施与两轮自检，当前等待阶段审查；它尚不构成
+G52 完成判定，也不授权 G53。完成状态仍以路书为准。
+
 - 允许修改：`track_library/rail_profiles/`、`vehicle_library/gz18/wheel_profiles/`、
   `vehicle_library/gz18/startup_states/` 的逻辑标识、`libs/configuration/`、安装规则、
   `tests/{configuration,installation,wheel_rail_contact}/`、`tests/CMakeLists.txt`、根 `README.md`、路书与窄 ADR。
 - 交付：本项目维护并随包发布的 GZ18 轮型／轨型 JSON；格式无关的逻辑标识；轨距、测量深度及
   `pose_y0_r` 派生；GZ18 类型化接触人格；安装数据根解析；G51 启动绑定 all-and-only；迁移安装消费者。
-- 夹具：从**安装后**数据根加载 JSON，组装 GZ18 人格并跑一次完整核心求值；本地 `.prw/.prr` 只作为仓外
-  一次性科研对拍输入，用后删除，不成为完成门或产品资产。
+- 夹具：从**安装后**数据根按逻辑标识加载 JSON，组装 GZ18 人格并跑一次完整核心求值；本地 `.prw/.prr`
+  只作为仓外一次性语义互操作核对的输入，不成为产品资产、运行时输入或第二份权威；本地科研源文件可以
+  保留，临时探针与输出用后删除。
 - 完成门：两个逻辑标识 all-and-only 解析到随包 JSON；轨距／测量深度与轨型独立派生左右 `pose_y0_r`，不得
   使用线路参考半距代替；GZ18 类型化人格逐项消费活动参数；迁移安装消费者从非默认数据根完成加载和求值；
   真实 GZ18 资产和人格须验证 G52b 后续修复已经建立的三类工作区定容、促进路径不扩容及三维长度同次
   回退报告；Kalker 表外保持近期 WRL 的渐近硬切换，不引入姿态许可域或未经对拍的连续化。
-- 来源核对直接使用 P035 冻结状态与 SIMPACK 原生接触元组，不在 G52c 重新求静平衡。右轮样本 0 的原生锚为：
-  轨侧横坐标 `-11.9663971 mm`、`a=6.63123235 mm`、`b=3.60067701 mm`、`a/b=1.84166253`、
-  最大侵入 `52.1458678 µm`、法向力 `68162.21094 N`、世界竖向轮载 `68295.99219 N`；WRL 冻结量只作
-  与该原生锚并列的迁移复现结果。P035 只资格化 GZ18、直线、零不平顺、60 km/h、Type-78 移动偏移启动
-  附近，不外推到轮缘、高攻角、表外 `a/b` 或完整动态范围。轮载必须按完整接触合力投影
-  `Q=e_z·(N·n+Tx·t_x+Ty·t_y)`，不得用 `N·cos(delta)` 代替。
-- Kalker 渐近式补引 Kalker 1990 Appendix E/Table E3（表中注明渐近值源自 Kalker 1972a）。理论公式有
-  出处；未资格化的是 SIMPACK 是否也恰在 `a/b=0.1/10` 切到首项渐近式。现阶段为端到端复现保留 WRL
-  `kAsymptotic` 与硬切换；两端有限表与渐近式存在约 0.08%–5.64% 的分量跳跃，未经另立模型实验不得平滑。
+- 来源核对直接读取 P035 冻结状态与 SIMPACK 原生样本 0 接触元组，不在 G52c 重新求静平衡。临时程序
+  验证八轮 all-and-only、左右镜像和单斑，再把 ORVD、近期 WRL 与 SIMPACK 三列并排；数值元组、外部绝对
+  路径、输出与 SHA 用后删除，不抄入代码、测试、资产或仓内数值金标。P035 只资格化 GZ18、直线、零不平顺、
+  60 km/h、Type-78 移动偏移启动附近，不外推到轮缘、高攻角、表外 `a/b` 或完整动态范围。
+- **CodeX 收口判断（2026-08-08）**：SIMPACK Type-80 原生 `Tx/Ty` 是轨侧端点分量；与 ORVD 的
+  `rail_on_wheel` 结果比较前须取负。ORVD 轨型系 `+z_T` 向下且轮侧力
+  `F_w=Tx·t_x+Ty·t_y-N·n`；P035 平直轨道上 `T` 与惯性系同向，所以正的世界竖向支承幅值为
+  `Q=-e_{z_T}^T·F_w=N·n_{z_T}-Tx·(t_x)_{z_T}-Ty·(t_y)_{z_T}`，不得以 `N·cos(delta)` 代替。SIMPACK 独立通道是
+  binary32 写出，重建投影只按物理容差比较，不要求逐位相同。
+- Kalker 表外现阶段为端到端复现保留近期 WRL `kAsymptotic` 与 `a/b=0.1/10` 硬切换；两端有限表与
+  渐近式存在约 0.08%–5.64% 的分量跳跃。**CodeX 收口判断（2026-08-08）**：当前实现与观察表沿用
+  Kalker 1990 Appendix E／Table E3 的文献归属，但本轮没有独立持书逐式复核；SIMPACK 精确切换语义也
+  未资格化。不得冒称 QCH／SIMPACK 合同，未经另立模型实验不得平滑，也不得以此建立车辆姿态许可域。
 - 两轮自检：第一轮三套全新构建及 GZ18 绑定门；第二轮使用非默认 `CMAKE_INSTALL_DATADIR` 做迁移安装消费，
   再做一次仓外 `.prw/.prr` → JSON → 核心的科研对拍，删除探针和外部工件后才提交并暂停。
-- 文档：再次更新根 `README.md` 至 G52 完成状态，并同步路书、窄 ADR 与安装目录说明。
+- 文档：原子提交时更新根 `README.md` 至 G52c 实施与两轮自检状态，并同步路书、窄 ADR 与安装目录
+  说明；阶段审查通过后才再更新为 G52 完成。
 
 G52c 才允许写入真实型面 JSON 目录；G52a/G52b 不得抢跑资产绑定。若实施发现必须越出上述允许面，Claude
 须在该子步内停下上呈，不得以“总 Goal 已授权”为由跨层修改。
