@@ -3,6 +3,7 @@
 #include <exception>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -78,6 +79,35 @@ int main(int argc, char* argv[]) {
                          "installed GZ18 contact scenario did not produce its "
                          "complete finite direct RHS\n");
             return 1;
+        }
+
+        // A finite RHS alone would also admit an installed profile asset that
+        // had drifted into eight zero-contact interfaces. Consume the same
+        // installed scenario through the observation surface and require the
+        // stated moving start-up to retain its eight physical contacts.
+        auto contact_workspace =
+            system.contact_force_plan()->CreateWorkspace();
+        std::vector<orvd::multibody_model::AppliedBodyWrench> contact_wrenches(
+            8);
+        std::vector<orvd::forces::WheelRailContactInterfaceObservation>
+            contact_observations(8);
+        const auto component = system.system().GetMultibodyComponentView(
+            resolved.context(), system.system().multibody_component());
+        system.contact_force_plan()->CalcAppliedForcesAndObservations(
+            component.context(), *contact_workspace,
+            resolved.context()
+                .wheel_rail_projection_station_hints_meters(),
+            contact_wrenches, contact_observations);
+        for (const auto& observation : contact_observations) {
+            if (observation.contact_patch_count != 1 ||
+                !(observation.normal_force_newtons > 0.0) ||
+                !std::isfinite(observation.normal_force_newtons)) {
+                std::fprintf(
+                    stderr,
+                    "installed GZ18 contact assets did not produce their "
+                    "stated single-patch positive contact\n");
+                return 1;
+            }
         }
     } catch (const std::exception& error) {
         std::fprintf(stderr, "installed configuration smoke failed: %s\n",
