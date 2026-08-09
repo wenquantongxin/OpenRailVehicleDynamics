@@ -5,8 +5,9 @@
 #include <cstdlib>
 #include <new>
 
-// Counts every heap allocation the program makes, so a test can assert that a
-// stretch of work made none.
+// Counts calls routed through this test binary's ordinary global C++
+// operator new/new[]. It does not intercept direct malloc/calloc/realloc,
+// aligned allocation overloads, or an OpenMP runtime's private allocator.
 //
 // The contact evaluation runs inside an integrator's right-hand side, thousands
 // of times per simulated second. An allocation there is not a correctness
@@ -17,9 +18,9 @@
 // This replaces the global allocation functions, which a program may do exactly
 // once. Include this header in exactly one translation unit per test binary.
 //
-// What it counts is allocations, not bytes, and it counts them wherever they
-// happen — including inside the standard library. That is the point: a
-// `std::vector` grown inside a solver is exactly what this is looking for.
+// What it counts is calls, not bytes, and ordinary standard-library allocation
+// reaches these replacements. That is the point: a `std::vector` grown inside
+// a solver is exactly what this is looking for.
 
 namespace orvd::test {
 

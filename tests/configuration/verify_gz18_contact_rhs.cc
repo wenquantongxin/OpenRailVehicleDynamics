@@ -330,8 +330,9 @@ int main(int argc, char** argv) {
             "the compiled direct RHS differs from its independently rebuilt "
             "typed-force order");
 
-    // One binary and one real GZ18 state exercise the standard OpenMP process
-    // setting at 1/2/4/8 workers. Each wheel owns a fixed output slot and no
+    // One binary and one real GZ18 state request 1/2/4/8 workers through the
+    // standard OpenMP process setting. The runtime may apply a tighter resource
+    // limit. Each wheel owns a fixed output slot and no
     // cross-wheel floating-point reduction exists, so anything short of
     // bitwise equality would expose shared scratch or nondeterministic publish
     // order rather than an acceptable parallel rounding difference.
@@ -372,22 +373,23 @@ int main(int argc, char** argv) {
                         SameWrenchComponents(
                             candidate_wrenches[ordinal],
                             reference_parallel_wrenches[ordinal]),
-                    "changing the OpenMP worker count changed an interface "
+                    "changing the requested OpenMP worker count changed an interface "
                     "wrench");
             Require(SameObservation(
                         candidate_observations[ordinal],
                         reference_parallel_observations[ordinal]),
-                    "changing the OpenMP worker count changed an interface "
+                    "changing the requested OpenMP worker count changed an interface "
                     "observation");
         }
         Require(candidate_rhs == reference_parallel_rhs,
-                "changing the OpenMP worker count changed the 109-state RHS");
+                "changing the requested OpenMP worker count changed the "
+                "109-state RHS");
     }
 
-    // The eight-worker path has now started its OpenMP team and warmed every
-    // interface workspace. Repeated first-party C++ RHS calls must reuse all
-    // storage; the allocation probe intentionally does not claim to intercept
-    // an OpenMP runtime's private malloc implementation.
+    // The eight-worker request has now entered its OpenMP path and warmed every
+    // interface workspace. Repeated calls must not reach the ordinary global
+    // C++ allocation replacements; the probe intentionally does not claim to
+    // intercept direct malloc or an OpenMP runtime's private allocator.
     std::size_t rhs_allocations = 0;
     {
         orvd::test::AllocationScope allocation_scope;
@@ -398,7 +400,8 @@ int main(int argc, char** argv) {
         rhs_allocations = allocation_scope.allocations();
     }
     Require(rhs_allocations == 0,
-            "a warmed contact-enabled direct RHS allocated heap storage");
+            "a warmed contact-enabled direct RHS called first-party ordinary "
+            "C++ operator new/new[]");
     omp_set_num_threads(original_openmp_max_threads);
     omp_set_dynamic(original_openmp_dynamic);
 
