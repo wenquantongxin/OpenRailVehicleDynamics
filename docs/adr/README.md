@@ -13,6 +13,7 @@
 | [0003](0003-abstract-advancer-cvode-first.md) | 抽象推进器接口 + 首版只实现 CVODE 后端 | Accepted |
 | [0004](0004-focused-dynamics-qualification.md) | 多模型本地性质门 + 单个高耦合在线漂移门 | Accepted |
 | [0005](0005-bind-wheel-rail-low-level-strategies-by-vehicle.md) | 按车型绑定两处轮轨低层策略，禁止运行期混搭 | Accepted |
+| [0006](0006-deterministic-wheel-contact-openmp-batch.md) | 八接口轮轨接触采用每接口独占工作区的确定性 OpenMP 批求值 | Accepted |
 
 早期调研背景见 [../design/DESIGN_BASIS.md](../design/DESIGN_BASIS.md)；它不是现行证据，
 其中承重事实使用前必须按当前源码重新验证。

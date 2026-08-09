@@ -4,6 +4,11 @@ project(orvd_installation_consumer LANGUAGES CXX)
 
 find_package(OpenRailVehicleDynamics CONFIG REQUIRED)
 
+if(NOT TARGET OpenMP::OpenMP_CXX)
+    message(FATAL_ERROR
+        "the installed ORVD package did not restore its OpenMP dependency")
+endif()
+
 if(TARGET nlohmann_json::nlohmann_json)
     message(FATAL_ERROR
         "the installed ORVD package unexpectedly imports nlohmann/json")

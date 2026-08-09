@@ -52,6 +52,11 @@ include(OrvdProductBoundaryGate)
 find_package(Eigen3 3.4 CONFIG REQUIRED)
 find_package(SUNDIALS 7.7.0 EXACT CONFIG REQUIRED
     COMPONENTS cvode nvecserial sunmatrixdense sunlinsoldense core)
+# G59 admits deterministic parallel evaluation of the eight independent GZ18
+# wheel-rail interfaces. OpenMP is a required product dependency: silently
+# compiling a different serial product would make the numerical execution
+# identity depend on an accidental configure-time discovery.
+find_package(OpenMP REQUIRED COMPONENTS CXX)
 
 # fmt is required by the vendored Drake source: its public headers include
 # fmt/format.h and specialise fmt::formatter. G46 pins 9.1.0 to the version

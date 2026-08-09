@@ -21,6 +21,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <omp.h>
 
 #include "atomic_qualification_directory.h"
 #include "qualification_sample_clock.h"
@@ -57,6 +58,7 @@ constexpr double kGeneralizedVelocityAbsoluteTolerance = 1.0e-9;
 constexpr double kSeriesForceAbsoluteToleranceNewtons = 1.0e-2;
 constexpr std::size_t kCarrierCount = 4;
 constexpr std::size_t kInterfaceCount = 8;
+constexpr int kMaximumContactWorkerCount = 8;
 constexpr std::size_t kRepresentativeBodyCount = 3;
 constexpr std::array<std::string_view, kRepresentativeBodyCount>
     kRepresentativeBodyNames{
@@ -522,13 +524,16 @@ void WriteMetadata(
     double maximum_carrier_observation_projection_half_width_meters,
     double maximum_representative_body_observation_projection_half_width_meters,
     const EndpointDiagnostics& diagnostics) {
+    const int requested_contact_worker_count =
+        std::min({kMaximumContactWorkerCount,
+                  static_cast<int>(kInterfaceCount), omp_get_max_threads()});
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
     }
     output << std::setprecision(17)
            << "{\n"
-           << "  \"internal_format_revision\": 2,\n"
+           << "  \"internal_format_revision\": 3,\n"
            << "  \"completed\": true,\n"
            << "  \"vehicle_name\": "
            << JsonString(startup.vehicle_binding.vehicle_name) << ",\n"
@@ -577,6 +582,15 @@ void WriteMetadata(
            << kGeneralizedVelocityAbsoluteTolerance << ",\n"
            << "    \"series_force_absolute_tolerance_newtons\": "
            << kSeriesForceAbsoluteToleranceNewtons << ",\n"
+           << "    \"openmp_dynamic_teams_enabled\": "
+           << (omp_get_dynamic() != 0 ? "true" : "false") << ",\n"
+           << "    \"openmp_runtime_maximum_threads\": "
+           << omp_get_max_threads() << ",\n"
+           << "    \"contact_batch_worker_cap\": "
+           << kMaximumContactWorkerCount << ",\n"
+           << "    \"contact_batch_requested_worker_count\": "
+           << requested_contact_worker_count
+           << ",\n"
            << "    \"rhs_contact_projection_half_width_meters\": "
            << kRhsContactProjectionHalfWidthMeters << ",\n"
            << "    \"observation_projection_rule\": "

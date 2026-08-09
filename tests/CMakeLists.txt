@@ -808,13 +808,14 @@ orvd_configure_first_party_target(verify_gz18_contact_rhs)
 target_include_directories(verify_gz18_contact_rhs
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(verify_gz18_contact_rhs
-    PRIVATE orvd_configuration orvd_integrators)
+    PRIVATE orvd_configuration orvd_integrators OpenMP::OpenMP_CXX)
 add_test(NAME verify_gz18_contact_rhs
          COMMAND verify_gz18_contact_rhs
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
+set_tests_properties(verify_gz18_contact_rhs PROPERTIES PROCESSORS 8)
 
 # G55's first complete passive longitudinal slice. One public CVODE advance
 # returns the P035-aligned 101-state batch; a private observation context then

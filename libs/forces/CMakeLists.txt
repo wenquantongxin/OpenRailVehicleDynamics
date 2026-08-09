@@ -17,7 +17,9 @@ target_link_libraries(orvd_forces
     PUBLIC
         orvd_multibody_model
         orvd_track_geometry
-        orvd_wheel_rail_contact)
+        orvd_wheel_rail_contact
+    PRIVATE
+        OpenMP::OpenMP_CXX)
 
 set_target_properties(orvd_forces PROPERTIES
     EXPORT_NAME forces)

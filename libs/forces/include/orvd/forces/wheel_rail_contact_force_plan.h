@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <exception>
 #include <memory>
 #include <span>
 #include <string>
@@ -51,9 +52,10 @@ struct WheelRailContactInterfaceObservation {
 
 class WheelRailContactForcePlan;
 
-// Mutable scratch for one runtime context.  A serial evaluation reuses one
-// heavy contact-core workspace across every interface.  The small carrier and
-// pending-wrench arrays are sized once with the frozen plan.
+// Mutable scratch for one runtime context. Each frozen interface owns one
+// heavy contact-core workspace so the independent wheel evaluations can run
+// concurrently without thread-indexed storage or shared mutable caches. The
+// carrier, result and failure arrays are sized once with the frozen plan.
 class WheelRailContactForceWorkspace {
    public:
     ~WheelRailContactForceWorkspace();
@@ -100,11 +102,13 @@ class WheelRailContactForceWorkspace {
         std::size_t interface_count);
 
     const WheelRailContactForcePlan* issuer_;
-    wheel_rail_contact::WheelRailContactWorkspace contact_workspace_;
+    std::vector<wheel_rail_contact::WheelRailContactWorkspace>
+        contact_workspaces_;
     std::vector<CarrierScratch> carriers_;
     std::vector<multibody_model::AppliedBodyWrench> pending_wrenches_;
     std::vector<WheelRailContactInterfaceObservation>
         pending_interface_observations_;
+    std::vector<std::exception_ptr> pending_failures_;
 };
 
 class WheelRailContactForcePlan {

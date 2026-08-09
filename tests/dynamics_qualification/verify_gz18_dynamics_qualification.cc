@@ -241,7 +241,7 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 metadata.find(
                     "\"vehicle_layout_reference_track_station_meters\": "
                     "0") != std::string::npos &&
-                metadata.find("\"internal_format_revision\": 2") !=
+                metadata.find("\"internal_format_revision\": 3") !=
                     std::string::npos &&
                 metadata.find(std::filesystem::canonical(argv[1]).string()) !=
                     std::string::npos &&
@@ -254,6 +254,13 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
             "the successful artifact lacks its physical input identity");
     Require(metadata.find("\"relative_tolerance\": 1e-08") !=
                 std::string::npos &&
+                metadata.find("\"openmp_dynamic_teams_enabled\": ") !=
+                    std::string::npos &&
+                metadata.find("\"contact_batch_worker_cap\": 8") !=
+                    std::string::npos &&
+                metadata.find(
+                    "\"contact_batch_requested_worker_count\": ") !=
+                    std::string::npos &&
                 metadata.find(
                     "\"rhs_contact_projection_half_width_meters\": 0.01") !=
                     std::string::npos &&

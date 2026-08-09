@@ -15,6 +15,10 @@ Eigen 3.4.0、fmt 9.1.0、nlohmann/json 3.12.0 与 SUNDIALS 7.7.0 的具名源�
 ORVD 仍通过产品根中
 唯一的 `find_package()` 路径消费安装前缀。
 
+G59 起，构建工具链还必须提供标准 OpenMP C++ 编译与运行时支持；它与 C/C++ 运行时一样由
+编译器工具链提供，不作为第五份源码归档捆绑。ORVD 通过 CMake `FindOpenMP` 建立并在安装包中
+恢复该依赖，不手写编译器旗标或运行库路径。
+
 Windows 上可使用 Visual Studio 生成器：
 
 ```powershell
@@ -27,10 +31,11 @@ Visual Studio 2019 的 FileTracker 仍受嵌套工程路径长度约束，即使
 失败。源码包、构建树与安装树的实体目录可以统一放在项目辅助目录中；若该根路径较长，构建
 期间给该根建立一个短目录联接并从短路径配置，完成后删除联接即可，实体文件不必搬散。
 
-SUNDIALS 配置只启用 CVODE 软件包，关闭全部当前不消费的并行后端和第三方线性代数依赖。
+SUNDIALS 配置只启用 CVODE 软件包，关闭其全部当前不消费的并行后端和第三方线性代数依赖。
 SUNDIALS 7.7.0 上游仍无条件构建一组基础矩阵、线性/非线性求解模块；本项目不维护私有补丁
 裁剪这些上游强制模块。ORVD 只链接 `cvode`、`nvecserial`、`sunmatrixdense`、
 `sunlinsoldense` 与 `core` 目标。
+ORVD 自身的 OpenMP 消费者是八接口轮轨接触批，与 SUNDIALS 的向量后端无关。
 
 `nlohmann/json` 只参与配置静态库的编译；其类型不会进入 ORVD 公共头或安装导出依赖。已安装
 消费者无需再次查找该包。

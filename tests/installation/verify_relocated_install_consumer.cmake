@@ -130,6 +130,13 @@ if(isolated_fmt_dependency_position EQUAL -1)
         "the installed package does not isolate fmt lookup from PATH-provided "
         "toolchains")
 endif()
+string(FIND "${installed_package_config_text}"
+       "find_dependency(OpenMP COMPONENTS CXX)"
+       openmp_dependency_position)
+if(openmp_dependency_position EQUAL -1)
+    message(FATAL_ERROR
+        "the installed package does not restore its OpenMP dependency")
+endif()
 
 # Relocation is a property of installed CMake metadata, not of debug strings in
 # compiled archives.  Inspect only the files a future find_package() reads.

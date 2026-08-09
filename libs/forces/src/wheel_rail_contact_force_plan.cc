@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <exception>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -11,6 +12,7 @@
 #include <utility>
 
 #include <Eigen/Geometry>
+#include <omp.h>
 
 #include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
@@ -42,6 +44,8 @@ using wheel_rail_contact::WheelRailContactResult;
 using wheel_rail_contact::WheelRailPoseInput;
 using wheel_rail_contact::WheelSide;
 using wheel_rail_contact::WheelsetPlacement;
+
+constexpr int kMaximumContactWorkerCount = 8;
 
 [[noreturn]] void Reject(const std::string& detail) {
     throw std::invalid_argument("wheel-rail contact force plan: " + detail);
@@ -90,9 +94,11 @@ WheelRailContactForceWorkspace::WheelRailContactForceWorkspace(
     const WheelRailContactForcePlan* issuer, std::size_t carrier_count,
     std::size_t interface_count)
     : issuer_(issuer),
+      contact_workspaces_(interface_count),
       carriers_(carrier_count),
       pending_wrenches_(interface_count),
-      pending_interface_observations_(interface_count) {}
+      pending_interface_observations_(interface_count),
+      pending_failures_(interface_count) {}
 
 WheelRailContactForceWorkspace::~WheelRailContactForceWorkspace() = default;
 
@@ -229,10 +235,10 @@ WheelRailContactForcePlan::CreateWorkspace() const {
     auto workspace = std::unique_ptr<WheelRailContactForceWorkspace>(
         new WheelRailContactForceWorkspace(this, carriers_.size(),
                                            interfaces_.size()));
-    personality_->model(WheelSide::kRight)
-        .PrepareWorkspace(workspace->contact_workspace_);
-    personality_->model(WheelSide::kLeft)
-        .PrepareWorkspace(workspace->contact_workspace_);
+    for (std::size_t ordinal = 0; ordinal < interfaces_.size(); ++ordinal) {
+        personality_->model(interfaces_[ordinal].side)
+            .PrepareWorkspace(workspace->contact_workspaces_[ordinal]);
+    }
     return workspace;
 }
 
@@ -431,7 +437,7 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                                projection_station_hints_meters);
     CompleteCarrierKinematics(context, workspace);
 
-    for (std::size_t ordinal = 0; ordinal < interfaces_.size(); ++ordinal) {
+    const auto evaluate_interface = [&](std::size_t ordinal) {
         const InterfaceBinding& interface = interfaces_[ordinal];
         const auto& carrier = workspace.carriers_[interface.carrier_ordinal];
         const auto& constants = personality_->pose_constants(interface.side);
@@ -609,7 +615,7 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         input.roll_transport = roll_transport;
         const WheelRailContactResult result =
             personality_->model(interface.side)
-                .Evaluate(input, workspace.contact_workspace_);
+                .Evaluate(input, workspace.contact_workspaces_[ordinal]);
         if (result.count > result.patches.size()) {
             throw std::runtime_error(
                 "wheel-rail contact force plan: interface '" +
@@ -673,6 +679,44 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             accumulated_in_inertial.force_newtons};
         if (publish_observations) {
             workspace.pending_interface_observations_[ordinal] = observation;
+        }
+    };
+
+    const int worker_count = std::min(
+        {kMaximumContactWorkerCount,
+         static_cast<int>(interfaces_.size()), omp_get_max_threads()});
+    if (worker_count <= 1) {
+        // Preserve the true serial path for one-thread qualification runs and
+        // avoid paying for an OpenMP team when there is no parallel work.
+        for (std::size_t ordinal = 0; ordinal < interfaces_.size(); ++ordinal) {
+            evaluate_interface(ordinal);
+        }
+    } else {
+        std::fill(workspace.pending_failures_.begin(),
+                  workspace.pending_failures_.end(), nullptr);
+#pragma omp parallel for schedule(static) num_threads(worker_count)
+        for (std::ptrdiff_t signed_ordinal = 0;
+             signed_ordinal <
+             static_cast<std::ptrdiff_t>(interfaces_.size());
+             ++signed_ordinal) {
+            const std::size_t ordinal =
+                static_cast<std::size_t>(signed_ordinal);
+            try {
+                evaluate_interface(ordinal);
+            } catch (...) {
+                // C++ exceptions cannot cross an OpenMP structured block.
+                // Each worker writes only its fixed interface slot; after the
+                // implicit barrier the caller rethrows the lowest wheel ordinal
+                // and publishes no partial batch.
+                workspace.pending_failures_[ordinal] =
+                    std::current_exception();
+            }
+        }
+        for (const std::exception_ptr& failure :
+             workspace.pending_failures_) {
+            if (failure != nullptr) {
+                std::rethrow_exception(failure);
+            }
         }
     }
 

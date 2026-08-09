@@ -19,6 +19,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <omp.h>
 
 #include "orvd/configuration/assembled_gz18_contact_scenario.h"
 #include "orvd/configuration/gz18_wheel_rail_contact.h"
@@ -104,6 +105,19 @@ bool SameWrenchComponents(const AppliedBodyWrench& actual,
            actual.force_newtons == expected.force_newtons &&
            actual.torque_about_point_newton_metres ==
                expected.torque_about_point_newton_metres;
+}
+
+bool SameObservation(
+    const orvd::forces::WheelRailContactInterfaceObservation& actual,
+    const orvd::forces::WheelRailContactInterfaceObservation& expected) {
+    return actual.contact_patch_count == expected.contact_patch_count &&
+           actual.vertical_support_force_on_wheel_newtons ==
+               expected.vertical_support_force_on_wheel_newtons &&
+           actual.normal_force_newtons == expected.normal_force_newtons &&
+           actual.longitudinal_force_on_wheel_newtons ==
+               expected.longitudinal_force_on_wheel_newtons &&
+           actual.lateral_force_on_wheel_newtons ==
+               expected.lateral_force_on_wheel_newtons;
 }
 
 std::vector<AppliedBodyWrench> EvaluateContactForces(
@@ -316,8 +330,64 @@ int main(int argc, char** argv) {
             "the compiled direct RHS differs from its independently rebuilt "
             "typed-force order");
 
-    // The hot path has already warmed every cache and workspace above.
-    // Repeated direct RHS calls must reuse all storage.
+    // One binary and one real GZ18 state exercise the standard OpenMP process
+    // setting at 1/2/4/8 workers. Each wheel owns a fixed output slot and no
+    // cross-wheel floating-point reduction exists, so anything short of
+    // bitwise equality would expose shared scratch or nondeterministic publish
+    // order rather than an acceptable parallel rounding difference.
+    const int original_openmp_dynamic = omp_get_dynamic();
+    const int original_openmp_max_threads = omp_get_max_threads();
+    omp_set_dynamic(0);
+    std::array<AppliedBodyWrench, 8> reference_parallel_wrenches;
+    std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
+        reference_parallel_observations;
+    Eigen::VectorXd reference_parallel_rhs(109);
+    bool have_parallel_reference = false;
+    for (const int requested_threads : {1, 2, 4, 8}) {
+        omp_set_num_threads(requested_threads);
+        std::array<AppliedBodyWrench, 8> candidate_wrenches;
+        std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
+            candidate_observations;
+        contact_plan->CalcAppliedForcesAndObservations(
+            component.context(), *independent_contact_workspace,
+            runtime_context.wheel_rail_projection_station_hints_meters(),
+            candidate_wrenches, candidate_observations);
+        Eigen::VectorXd candidate_rhs(109);
+        assembled.compiled_plan().CalcStateTimeDerivatives(runtime_context,
+                                                            candidate_rhs);
+        if (!have_parallel_reference) {
+            reference_parallel_wrenches = candidate_wrenches;
+            reference_parallel_observations = candidate_observations;
+            reference_parallel_rhs = candidate_rhs;
+            have_parallel_reference = true;
+            continue;
+        }
+        for (std::size_t ordinal = 0; ordinal < candidate_wrenches.size();
+             ++ordinal) {
+            Require(candidate_wrenches[ordinal].body ==
+                            reference_parallel_wrenches[ordinal].body &&
+                        candidate_wrenches[ordinal].expressed_in_frame ==
+                            reference_parallel_wrenches[ordinal]
+                                .expressed_in_frame &&
+                        SameWrenchComponents(
+                            candidate_wrenches[ordinal],
+                            reference_parallel_wrenches[ordinal]),
+                    "changing the OpenMP worker count changed an interface "
+                    "wrench");
+            Require(SameObservation(
+                        candidate_observations[ordinal],
+                        reference_parallel_observations[ordinal]),
+                    "changing the OpenMP worker count changed an interface "
+                    "observation");
+        }
+        Require(candidate_rhs == reference_parallel_rhs,
+                "changing the OpenMP worker count changed the 109-state RHS");
+    }
+
+    // The eight-worker path has now started its OpenMP team and warmed every
+    // interface workspace. Repeated first-party C++ RHS calls must reuse all
+    // storage; the allocation probe intentionally does not claim to intercept
+    // an OpenMP runtime's private malloc implementation.
     std::size_t rhs_allocations = 0;
     {
         orvd::test::AllocationScope allocation_scope;
@@ -329,6 +399,8 @@ int main(int argc, char** argv) {
     }
     Require(rhs_allocations == 0,
             "a warmed contact-enabled direct RHS allocated heap storage");
+    omp_set_num_threads(original_openmp_max_threads);
+    omp_set_dynamic(original_openmp_dynamic);
 
     const auto baseline_contact = EvaluateContactForces(
         *scenario, *independent_contact_workspace);

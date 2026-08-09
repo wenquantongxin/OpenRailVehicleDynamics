@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdlib>
 #include <new>
@@ -22,16 +23,17 @@
 
 namespace orvd::test {
 
-inline std::size_t allocation_count = 0;
+inline std::atomic_size_t allocation_count{0};
 
 // A scope that remembers the count on entry so a test can ask what happened
 // inside it. Nested scopes are independent.
 class AllocationScope {
   public:
-    AllocationScope() : entry_count_(allocation_count) {}
+    AllocationScope()
+        : entry_count_(allocation_count.load(std::memory_order_relaxed)) {}
 
     [[nodiscard]] std::size_t allocations() const {
-        return allocation_count - entry_count_;
+        return allocation_count.load(std::memory_order_relaxed) - entry_count_;
     }
 
   private:
@@ -41,7 +43,7 @@ class AllocationScope {
 }  // namespace orvd::test
 
 void* operator new(std::size_t size) {
-    ++orvd::test::allocation_count;
+    orvd::test::allocation_count.fetch_add(1, std::memory_order_relaxed);
     // Zero-sized allocations must still return distinct pointers, and malloc is
     // permitted to return null for them.
     void* memory = std::malloc(size == 0 ? 1 : size);

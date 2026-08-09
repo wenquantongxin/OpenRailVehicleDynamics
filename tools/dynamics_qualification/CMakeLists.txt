@@ -13,7 +13,8 @@ target_include_directories(orvd_dynamics_qualification_support
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(orvd_dynamics_qualification_support
-    PUBLIC orvd_configuration orvd_integrators)
+    PUBLIC orvd_configuration orvd_integrators
+    PRIVATE OpenMP::OpenMP_CXX)
 
 add_executable(orvd_gz18_dynamics_qualification
     run_gz18_qualification.cc)
