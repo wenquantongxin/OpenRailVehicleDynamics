@@ -114,3 +114,45 @@ historical source revision in the command line and figure legend.
 `gz18_qualification_analysis_common.py` is private tool code. It shares only
 artifact parsing, fixed naming, execution identity, and numerical statistics;
 the G60 and G61 reference schemas and acceptance windows remain separate.
+
+## G62 curve-station comparison
+
+`analyze_gz18_g62.py` qualifies the R300 geometry and two distinct station
+observers before any curve-response claim is made. The SIMPACK primary observer
+is the mean of the left/right rail-profile reference marker stations; the WRL
+control observer is the projected wheelset rigid-body origin. They are never
+cross-compared under one label. The tool reports native-time station error and
+native first-sample arrival time on a station grid, without shifting either
+trajectory. It also validates that the packaged P040 Track-T AAR5 JSON arrays
+round-trip every binary64 station and value.
+
+## G63 curve-response comparison
+
+`extract_gz18_g63_p047.py` reads one explicitly named P047 binary64 SBR and
+publishes a compact, analysis-only archive. It requires the qualified source
+digest, 5,162 channels, the exact 32,001-sample clock, and all 64 selected
+channel identities. SIMPACK Type-80 `Tx/Ty` are rail-end quantities and are
+negated exactly once into the canonical wheel-end convention; `Q` remains
+distinct from local normal force `N`.
+
+`analyze_gz18_g63.py` accepts only explicit ORVD, P047, P040, current-WRL and
+historical-WRL inputs. P040 is a binary32 cross-check: down-converted P047
+`Q/N/Tx/Ty` and patch counts must reproduce it exactly; it is not used to fill
+missing P047 channels. The current WRL run is the recent control, while P055 is
+named as a historical control and is compared only on its native 32,000-sample
+intersection.
+
+The macro comparison reconstructs the same excited Track-T coordinates used by
+the reference: SIMPACK consumes its joint and moving-track channels, while ORVD
+evaluates the qualified AAR5 spline independently at the left/right rail-profile
+reference stations. Each source is then interpolated independently to the
+`100--250 m / 0.01 m` common station grid. Native time is compared by integer
+sample index. No time or station shift, filtering, fitting, scaling, demeaning,
+or result-dependent sign selection is permitted.
+
+The main figures contain only ORVD and SIMPACK in each subplot. Current and
+historical WRL remain explicit numerical controls; they are not drawn against a
+different station observer merely to create a third line. Full trajectories,
+statistics, source paths and performance logs stay under the untracked `tmp/`
+tree. Only signed-off summary figures and concise tables may be copied into the
+developer documentation; they are not product inputs or test baselines.
