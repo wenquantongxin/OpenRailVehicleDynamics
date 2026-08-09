@@ -100,6 +100,7 @@ endforeach()
 # exported, and no product target links it, so it is deliberately absent from
 # the list above and from the boundary gate that list drives.
 add_subdirectory(tools/profile_conversion)
+add_subdirectory(tools/dynamics_qualification)
 
 # --- Installable package ---
 # Eight first-party targets form the documented surface. The rigid-tree archive

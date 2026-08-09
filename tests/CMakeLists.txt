@@ -833,6 +833,24 @@ add_test(NAME verify_gz18_passive_short_window
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
 
+# G58's non-installed qualification leaf. A 1 ms real GZ18 run exercises one
+# dense advance, sequential physical observations, the formal s_ref=0 boundary
+# summary and directory-level publication. The 10/20 s science windows remain
+# explicit local qualifications and never enter the default CTest suite.
+add_executable(verify_gz18_dynamics_qualification
+    dynamics_qualification/verify_gz18_dynamics_qualification.cc)
+orvd_configure_first_party_target(verify_gz18_dynamics_qualification)
+target_link_libraries(verify_gz18_dynamics_qualification
+    PRIVATE orvd_dynamics_qualification_support)
+add_test(NAME verify_gz18_dynamics_qualification
+         COMMAND verify_gz18_dynamics_qualification
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_SOURCE_DIR}
+             gz18_aar6_reference_irregularity
+             ${CMAKE_CURRENT_BINARY_DIR}/g58-dynamics-qualification-fixtures)
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc
