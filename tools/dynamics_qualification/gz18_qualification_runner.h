@@ -24,6 +24,7 @@ struct Gz18QualificationRunSummary final {
     std::size_t sample_count{};
     double advance_wall_seconds{};
     double observation_wall_seconds{};
+    double endpoint_diagnostics_wall_seconds{};
     double data_and_metadata_write_wall_seconds{};
     bool used_before_track_definition_interval{false};
     bool used_after_track_definition_interval{false};

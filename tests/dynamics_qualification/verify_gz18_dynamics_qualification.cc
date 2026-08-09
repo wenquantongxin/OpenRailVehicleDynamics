@@ -155,17 +155,19 @@ void CheckAtomicDirectory(const std::filesystem::path& root) {
 
 void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     Gz18QualificationRunConfiguration configuration;
-    configuration.vehicle_definition_path = argv[1];
-    configuration.resolved_startup_state_path = argv[2];
-    configuration.track_geometry_path = argv[3];
-    configuration.orvd_data_root = argv[4];
+    configuration.vehicle_definition_path =
+        std::filesystem::relative(argv[1]);
+    configuration.resolved_startup_state_path =
+        std::filesystem::relative(argv[2]);
+    configuration.track_geometry_path = std::filesystem::relative(argv[3]);
+    configuration.orvd_data_root = std::filesystem::relative(argv[4]);
     configuration.track_irregularity_identifier = argv[5];
     configuration.output_directory = root / "real-gz18";
-    configuration.duration_nanoseconds = 1'000'000;
-    configuration.sample_period_nanoseconds = 500'000;
+    configuration.duration_nanoseconds = 2'000'000;
+    configuration.sample_period_nanoseconds = 2'000'000;
 
     const auto summary = RunGz18Qualification(configuration);
-    Require(summary.sample_count == 3 &&
+    Require(summary.sample_count == 2 &&
                 summary.used_before_track_definition_interval &&
                 !summary.used_after_track_definition_interval,
             "the short real run has the wrong sample or boundary summary");
@@ -188,8 +190,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     while (std::getline(input, line)) {
         rows.push_back(SplitTabs(line));
     }
-    Require(rows.size() == 3, "the real artifact does not contain three rows");
-    if (rows.size() != 3) {
+    Require(rows.size() == 2, "the real artifact does not contain two rows");
+    if (rows.size() != 2) {
         return;
     }
     for (const auto& row : rows) {
@@ -216,15 +218,12 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
         Require(std::abs(ParseDouble(rows.front()[column]) -
                          expected_initial[carrier]) <= 1.0e-12,
                 "the formal s_ref=0 wheelset station was shifted");
-        Require(ParseDouble(rows[0][column]) < ParseDouble(rows[1][column]) &&
-                    ParseDouble(rows[1][column]) <
-                        ParseDouble(rows[2][column]),
+        Require(ParseDouble(rows[0][column]) < ParseDouble(rows[1][column]),
                 "a wheelset station is not strictly forward across samples");
     }
     const std::size_t time_column = FindColumn(header, "time_seconds");
     Require(ParseDouble(rows[0][time_column]) == 0.0 &&
-                ParseDouble(rows[1][time_column]) == 0.0005 &&
-                ParseDouble(rows[2][time_column]) == 0.001,
+                ParseDouble(rows[1][time_column]) == 0.002,
             "the artifact does not use the integer-index sample times");
 
     const std::string metadata =
@@ -242,11 +241,29 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 metadata.find(
                     "\"vehicle_layout_reference_track_station_meters\": "
                     "0") != std::string::npos &&
-                metadata.find("\"track_geometry\": ") !=
+                metadata.find("\"internal_format_revision\": 2") !=
                     std::string::npos &&
-                metadata.find("straight_level_2000m.json") !=
+                metadata.find(std::filesystem::canonical(argv[1]).string()) !=
+                    std::string::npos &&
+                metadata.find(std::filesystem::canonical(argv[2]).string()) !=
+                    std::string::npos &&
+                metadata.find(std::filesystem::canonical(argv[3]).string()) !=
+                    std::string::npos &&
+                metadata.find(std::filesystem::canonical(argv[4]).string()) !=
                     std::string::npos,
             "the successful artifact lacks its physical input identity");
+    Require(metadata.find("\"relative_tolerance\": 1e-08") !=
+                std::string::npos &&
+                metadata.find(
+                    "\"rhs_contact_projection_half_width_meters\": 0.01") !=
+                    std::string::npos &&
+                metadata.find(
+                    "\"maximum_carrier_observation_projection_half_width_meters\": ") !=
+                    std::string::npos &&
+                metadata.find(
+                    "\"endpoint_assembly_and_state_slice_diagnostics\": {") !=
+                    std::string::npos,
+            "the successful artifact lacks its numerical execution contract");
 
     Require(Throws([&] { (void)RunGz18Qualification(configuration); }),
             "the runner overwrote an existing successful artifact");

@@ -55,9 +55,10 @@ int main(int argc, char** argv) {
             orvd::dynamics_qualification::RunGz18Qualification(config);
         std::printf(
             "published %zu samples; advance %.6f s, observations %.6f s, "
-            "data+metadata write %.6f s\n",
+            "endpoint diagnostics %.6f s, data+metadata write %.6f s\n",
             summary.sample_count, summary.advance_wall_seconds,
             summary.observation_wall_seconds,
+            summary.endpoint_diagnostics_wall_seconds,
             summary.data_and_metadata_write_wall_seconds);
         return 0;
     } catch (const std::exception& error) {

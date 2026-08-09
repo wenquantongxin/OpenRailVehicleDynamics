@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -46,8 +47,14 @@ using multibody_model::AppliedBodyWrench;
 using track_geometry::TrackStationRegion;
 
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
-constexpr double kContactProjectionHalfWidthMeters = 0.01;
-constexpr double kBodyObservationProjectionHalfWidthMeters = 0.02;
+constexpr double kRhsContactProjectionHalfWidthMeters = 0.01;
+constexpr double kCarrierObservationProjectionBaseHalfWidthMeters = 0.01;
+constexpr double kRepresentativeBodyObservationProjectionBaseHalfWidthMeters =
+    0.02;
+constexpr double kRelativeTolerance = 1.0e-8;
+constexpr double kGeneralizedPositionAbsoluteTolerance = 1.0e-10;
+constexpr double kGeneralizedVelocityAbsoluteTolerance = 1.0e-9;
+constexpr double kSeriesForceAbsoluteToleranceNewtons = 1.0e-2;
 constexpr std::size_t kCarrierCount = 4;
 constexpr std::size_t kInterfaceCount = 8;
 constexpr std::size_t kRepresentativeBodyCount = 3;
@@ -90,8 +97,17 @@ struct BoundaryUse final {
 struct EndpointDiagnostics final {
     double generalized_force_residual_inf_norm{};
     double virtual_power_residual_watts{};
-    double position_derivative_residual_inf_norm{};
-    double maxwell_derivative_residual_inf_norm{};
+    double position_derivative_slice_consistency_inf_norm{};
+    double series_force_derivative_slice_consistency_inf_norm{};
+};
+
+struct ProjectionHistory final {
+    double station_seed_meters{};
+    double base_half_width_meters{};
+    double maximum_half_width_meters{};
+    Eigen::Vector3d previous_body_origin_in_inertial_meters{
+        Eigen::Vector3d::Zero()};
+    bool has_previous_body_origin{false};
 };
 
 [[nodiscard]] double ElapsedSeconds(Clock::time_point begin,
@@ -101,6 +117,32 @@ struct EndpointDiagnostics final {
 
 [[noreturn]] void Reject(std::string detail) {
     throw std::runtime_error("GZ18 dynamics qualification: " + detail);
+}
+
+[[nodiscard]] std::filesystem::path CanonicalExistingInput(
+    const std::filesystem::path& input, std::string_view name) {
+    std::error_code error;
+    const std::filesystem::path resolved =
+        std::filesystem::canonical(input, error);
+    if (error) {
+        Reject("could not resolve " + std::string(name) + " '" +
+               input.string() + "': " + error.message());
+    }
+    return resolved;
+}
+
+[[nodiscard]] Gz18QualificationRunConfiguration ResolveInputPaths(
+    const Gz18QualificationRunConfiguration& input) {
+    Gz18QualificationRunConfiguration resolved = input;
+    resolved.vehicle_definition_path = CanonicalExistingInput(
+        input.vehicle_definition_path, "vehicle definition");
+    resolved.resolved_startup_state_path = CanonicalExistingInput(
+        input.resolved_startup_state_path, "resolved start-up state");
+    resolved.track_geometry_path =
+        CanonicalExistingInput(input.track_geometry_path, "track geometry");
+    resolved.orvd_data_root =
+        CanonicalExistingInput(input.orvd_data_root, "ORVD data root");
+    return resolved;
 }
 
 void RequireFinite(double value, std::string_view name) {
@@ -165,13 +207,16 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 MakeGz18Tolerances(const configuration::AssembledVehicleSystem& assembled) {
     const auto& system = assembled.system();
     Eigen::VectorXd absolute =
-        Eigen::VectorXd::Constant(system.continuous_state_size(), 1.0e-9);
+        Eigen::VectorXd::Constant(system.continuous_state_size(),
+                                  kGeneralizedVelocityAbsoluteTolerance);
     const auto q = system.generalized_positions_state_range();
     const auto z = system.series_spring_damper_force_state_range();
-    absolute.segment(q.start(), q.size()).setConstant(1.0e-10);
-    absolute.segment(z.start(), z.size()).setConstant(1.0e-2);
-    return integrators::ContinuousStateErrorTolerances(1.0e-8,
-                                                       std::move(absolute));
+    absolute.segment(q.start(), q.size())
+        .setConstant(kGeneralizedPositionAbsoluteTolerance);
+    absolute.segment(z.start(), z.size())
+        .setConstant(kSeriesForceAbsoluteToleranceNewtons);
+    return integrators::ContinuousStateErrorTolerances(
+        kRelativeTolerance, std::move(absolute));
 }
 
 [[nodiscard]] double InitialBodyTrackStation(
@@ -226,15 +271,40 @@ MakeGz18Tolerances(const configuration::AssembledVehicleSystem& assembled) {
     return power;
 }
 
+[[nodiscard]] double ProjectBodyOriginForObservation(
+    const configuration::AssembledVehicleSystem& assembled,
+    const Eigen::Vector3d& body_origin_in_inertial_meters,
+    ProjectionHistory* history) {
+    double half_width_meters = history->base_half_width_meters;
+    if (history->has_previous_body_origin) {
+        half_width_meters +=
+            (body_origin_in_inertial_meters -
+             history->previous_body_origin_in_inertial_meters)
+                .norm();
+    }
+    RequireFinite(half_width_meters, "observation projection half width");
+    const auto projection = assembled.contact_force_plan()
+                                ->track_geometry()
+                                .ProjectPointNearSeed(
+                                    body_origin_in_inertial_meters,
+                                    history->station_seed_meters,
+                                    half_width_meters);
+    history->station_seed_meters = projection.track_station_meters();
+    history->previous_body_origin_in_inertial_meters =
+        body_origin_in_inertial_meters;
+    history->has_previous_body_origin = true;
+    history->maximum_half_width_meters =
+        std::max(history->maximum_half_width_meters, half_width_meters);
+    return history->station_seed_meters;
+}
+
 [[nodiscard]] CarrierObservation ObserveCarrier(
     const configuration::AssembledVehicleSystem& assembled,
     const multibody_model::MultibodyEvaluationContext& context,
-    int carrier_index, double track_station_meters) {
+    multibody_model::RigidBodyHandle body, double track_station_meters) {
     const auto* contact_plan = assembled.contact_force_plan();
     const auto track =
         contact_plan->track_geometry().EvaluateTrackFrame(track_station_meters);
-    const auto body = assembled.model().GetRigidBodyByName(
-        contact_plan->carrier_name(carrier_index));
     const auto body_pose = assembled.model().CalcPoseInWorld(context, body);
     const Eigen::Matrix3d rotation_track_from_inertial =
         track.pose().rotation_inertial_from_track().transpose();
@@ -254,15 +324,13 @@ MakeGz18Tolerances(const configuration::AssembledVehicleSystem& assembled) {
 [[nodiscard]] RepresentativeBodyObservation ObserveRepresentativeBody(
     const configuration::AssembledVehicleSystem& assembled,
     const multibody_model::MultibodyEvaluationContext& context,
-    multibody_model::RigidBodyHandle body, double* projection_seed_meters) {
+    multibody_model::RigidBodyHandle body, ProjectionHistory* history) {
     const auto* contact_plan = assembled.contact_force_plan();
     const auto body_pose = assembled.model().CalcPoseInWorld(context, body);
-    const auto projection = contact_plan->track_geometry().ProjectPointNearSeed(
-        body_pose.translation(), *projection_seed_meters,
-        kBodyObservationProjectionHalfWidthMeters);
-    *projection_seed_meters = projection.track_station_meters();
+    const double track_station_meters = ProjectBodyOriginForObservation(
+        assembled, body_pose.translation(), history);
     const auto track = contact_plan->track_geometry().EvaluateTrackFrame(
-        *projection_seed_meters);
+        track_station_meters);
     const Eigen::Matrix3d rotation_track_from_inertial =
         track.pose().rotation_inertial_from_track().transpose();
     const Eigen::Vector3d origin_in_track =
@@ -272,7 +340,7 @@ MakeGz18Tolerances(const configuration::AssembledVehicleSystem& assembled) {
     const auto angles = wheel_rail_contact::ResolveRollYawPitch(
         rotation_track_from_inertial * body_pose.rotation());
     RepresentativeBodyObservation observation{
-        *projection_seed_meters, origin_in_track.y(), angles.yaw_radians};
+        track_station_meters, origin_in_track.y(), angles.yaw_radians};
     RequireFinite(observation.track_station_meters,
                   "representative-body station");
     RequireFinite(observation.lateral_meters,
@@ -356,19 +424,19 @@ void RecordBoundaryUse(
     result.virtual_power_residual_watts =
         projected_generalized_force.dot(context.generalized_velocities()) -
         spatial_power;
-    result.position_derivative_residual_inf_norm =
+    result.position_derivative_slice_consistency_inf_norm =
         (rhs.head(nq) - mapped_qdot).lpNorm<Eigen::Infinity>();
-    result.maxwell_derivative_residual_inf_norm =
+    result.series_force_derivative_slice_consistency_inf_norm =
         (rhs.tail(series_derivatives.size()) - series_derivatives)
             .lpNorm<Eigen::Infinity>();
     RequireFinite(result.generalized_force_residual_inf_norm,
                   "endpoint generalized-force residual");
     RequireFinite(result.virtual_power_residual_watts,
                   "endpoint virtual-power residual");
-    RequireFinite(result.position_derivative_residual_inf_norm,
-                  "endpoint position-derivative residual");
-    RequireFinite(result.maxwell_derivative_residual_inf_norm,
-                  "endpoint Maxwell-derivative residual");
+    RequireFinite(result.position_derivative_slice_consistency_inf_norm,
+                  "endpoint position-derivative slice consistency");
+    RequireFinite(result.series_force_derivative_slice_consistency_inf_norm,
+                  "endpoint series-force derivative slice consistency");
     return result;
 }
 
@@ -451,6 +519,8 @@ void WriteMetadata(
     const QualificationSampleClock& clock, const BoundaryUse& before,
     const BoundaryUse& after,
     const std::array<std::size_t, kInterfaceCount>& longest_zero_contact_runs,
+    double maximum_carrier_observation_projection_half_width_meters,
+    double maximum_representative_body_observation_projection_half_width_meters,
     const EndpointDiagnostics& diagnostics) {
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
@@ -458,7 +528,7 @@ void WriteMetadata(
     }
     output << std::setprecision(17)
            << "{\n"
-           << "  \"internal_format_revision\": 1,\n"
+           << "  \"internal_format_revision\": 2,\n"
            << "  \"completed\": true,\n"
            << "  \"vehicle_name\": "
            << JsonString(startup.vehicle_binding.vehicle_name) << ",\n"
@@ -498,6 +568,34 @@ void WriteMetadata(
            << "    \"orvd_data_root\": "
            << JsonString(configuration.orvd_data_root.string()) << "\n"
            << "  },\n"
+           << "  \"numerical_execution_contract\": {\n"
+           << "    \"relative_tolerance\": " << kRelativeTolerance
+           << ",\n"
+           << "    \"generalized_position_absolute_tolerance\": "
+           << kGeneralizedPositionAbsoluteTolerance << ",\n"
+           << "    \"generalized_velocity_absolute_tolerance\": "
+           << kGeneralizedVelocityAbsoluteTolerance << ",\n"
+           << "    \"series_force_absolute_tolerance_newtons\": "
+           << kSeriesForceAbsoluteToleranceNewtons << ",\n"
+           << "    \"rhs_contact_projection_half_width_meters\": "
+           << kRhsContactProjectionHalfWidthMeters << ",\n"
+           << "    \"observation_projection_rule\": "
+           << JsonString(
+                  "base half width plus previous-to-current body-origin "
+                  "chord")
+           << ",\n"
+           << "    \"carrier_observation_projection_base_half_width_meters\": "
+           << kCarrierObservationProjectionBaseHalfWidthMeters << ",\n"
+           << "    \"representative_body_observation_projection_base_half_width_meters\": "
+           << kRepresentativeBodyObservationProjectionBaseHalfWidthMeters
+           << ",\n"
+           << "    \"maximum_carrier_observation_projection_half_width_meters\": "
+           << maximum_carrier_observation_projection_half_width_meters
+           << ",\n"
+           << "    \"maximum_representative_body_observation_projection_half_width_meters\": "
+           << maximum_representative_body_observation_projection_half_width_meters
+           << "\n"
+           << "  },\n"
            << "  \"sample_period_nanoseconds\": "
            << clock.sample_period_nanoseconds() << ",\n"
            << "  \"terminal_time_nanoseconds\": "
@@ -523,15 +621,17 @@ void WriteMetadata(
                << longest_zero_contact_runs[index];
     }
     output << "],\n"
-           << "  \"endpoint_diagnostics\": {\n"
+           << "  \"endpoint_assembly_and_state_slice_diagnostics\": {\n"
            << "    \"generalized_force_residual_inf_norm\": "
            << diagnostics.generalized_force_residual_inf_norm << ",\n"
            << "    \"virtual_power_residual_watts\": "
            << diagnostics.virtual_power_residual_watts << ",\n"
-           << "    \"position_derivative_residual_inf_norm\": "
-           << diagnostics.position_derivative_residual_inf_norm << ",\n"
-           << "    \"maxwell_derivative_residual_inf_norm\": "
-           << diagnostics.maxwell_derivative_residual_inf_norm << "\n"
+           << "    \"position_derivative_slice_consistency_inf_norm\": "
+           << diagnostics.position_derivative_slice_consistency_inf_norm
+           << ",\n"
+           << "    \"series_force_derivative_slice_consistency_inf_norm\": "
+           << diagnostics.series_force_derivative_slice_consistency_inf_norm
+           << "\n"
            << "  }\n"
            << "}\n";
     CloseChecked(&output, path);
@@ -551,6 +651,8 @@ void WritePerformance(const std::filesystem::path& path,
            << summary.advance_wall_seconds << ",\n"
            << "  \"observation_wall_seconds\": "
            << summary.observation_wall_seconds << ",\n"
+           << "  \"endpoint_diagnostics_wall_seconds\": "
+           << summary.endpoint_diagnostics_wall_seconds << ",\n"
            << "  \"data_and_metadata_write_wall_seconds\": "
            << summary.data_and_metadata_write_wall_seconds << ",\n"
            << "  \"dense_state_bytes\": " << dense_state_bytes << ",\n"
@@ -597,27 +699,29 @@ Gz18QualificationRunSummary RunGz18Qualification(
             run_configuration.sample_period_nanoseconds));
     const std::vector<double> sample_times =
         sample_clock.MakeSampleTimesSeconds();
+    const Gz18QualificationRunConfiguration resolved_run_configuration =
+        ResolveInputPaths(run_configuration);
     AtomicQualificationDirectory output_directory(
-        run_configuration.output_directory);
+        resolved_run_configuration.output_directory);
 
     const auto vehicle = configuration::LoadVehicleDefinitionFromJsonFile(
-        run_configuration.vehicle_definition_path);
+        resolved_run_configuration.vehicle_definition_path);
     const auto startup =
         configuration::LoadResolvedStartupStateFromJsonFile(
-            run_configuration.resolved_startup_state_path);
+            resolved_run_configuration.resolved_startup_state_path);
     auto line = configuration::LoadTrackGeometryFromJsonFile(
-        run_configuration.track_geometry_path);
+        resolved_run_configuration.track_geometry_path);
     auto irregularity =
         std::make_unique<wheel_rail_contact::TrackIrregularityField>(
             configuration::LoadTrackIrregularityFieldFromDataRoot(
-                run_configuration.orvd_data_root,
-                run_configuration.track_irregularity_identifier));
+                resolved_run_configuration.orvd_data_root,
+                resolved_run_configuration.track_irregularity_identifier));
     std::unique_ptr<AssembledGz18ContactScenario> scenario =
         configuration::AssembleGz18ContactScenario(
             vehicle, startup, std::move(line),
-            run_configuration.orvd_data_root,
+            resolved_run_configuration.orvd_data_root,
             kVehicleReferenceTrackStationMeters,
-            kContactProjectionHalfWidthMeters, std::move(irregularity));
+            kRhsContactProjectionHalfWidthMeters, std::move(irregularity));
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
     if (accepted.time_seconds() != 0.0 || sample_times.front() != 0.0) {
@@ -664,16 +768,42 @@ Gz18QualificationRunSummary RunGz18Qualification(
                "eight interfaces");
     }
 
+    const std::array<multibody_model::RigidBodyHandle, kCarrierCount>
+        carrier_bodies{
+            assembled.model().GetRigidBodyByName(
+                assembled.contact_force_plan()->carrier_name(0)),
+            assembled.model().GetRigidBodyByName(
+                assembled.contact_force_plan()->carrier_name(1)),
+            assembled.model().GetRigidBodyByName(
+                assembled.contact_force_plan()->carrier_name(2)),
+            assembled.model().GetRigidBodyByName(
+                assembled.contact_force_plan()->carrier_name(3))};
+    std::array<ProjectionHistory, kCarrierCount> carrier_projection_histories{};
+    for (std::size_t index = 0; index < carrier_projection_histories.size();
+         ++index) {
+        carrier_projection_histories[index].station_seed_meters =
+            assembled.contact_force_plan()->initial_projection_station_meters(
+                static_cast<int>(index));
+        carrier_projection_histories[index].base_half_width_meters =
+            kCarrierObservationProjectionBaseHalfWidthMeters;
+    }
+
     const std::array<multibody_model::RigidBodyHandle,
                      kRepresentativeBodyCount>
         representative_bodies{
             assembled.model().GetRigidBodyByName(kRepresentativeBodyNames[0]),
             assembled.model().GetRigidBodyByName(kRepresentativeBodyNames[1]),
             assembled.model().GetRigidBodyByName(kRepresentativeBodyNames[2])};
-    std::array<double, kRepresentativeBodyCount> body_projection_seeds{};
-    for (std::size_t index = 0; index < body_projection_seeds.size(); ++index) {
-        body_projection_seeds[index] = InitialBodyTrackStation(
-            vehicle, startup, kRepresentativeBodyNames[index]);
+    std::array<ProjectionHistory, kRepresentativeBodyCount>
+        representative_body_projection_histories{};
+    for (std::size_t index = 0;
+         index < representative_body_projection_histories.size(); ++index) {
+        representative_body_projection_histories[index].station_seed_meters =
+            InitialBodyTrackStation(vehicle, startup,
+                                    kRepresentativeBodyNames[index]);
+        representative_body_projection_histories[index]
+            .base_half_width_meters =
+            kRepresentativeBodyObservationProjectionBaseHalfWidthMeters;
     }
 
     std::vector<QualificationObservation> observations;
@@ -687,10 +817,33 @@ Gz18QualificationRunSummary RunGz18Qualification(
         assembled.system().SetTimeAndContinuousState(
             *observation_context, sample_times[sample],
             dense_states.col(static_cast<Eigen::Index>(sample)));
-        assembled.system().UpdateWheelRailProjectionStationHints(
-            *observation_context);
+        auto projection_component =
+            assembled.system().GetMultibodyComponentView(
+            *observation_context, assembled.system().multibody_component());
+
+        std::array<ProjectionHistory, kCarrierCount>
+            pending_carrier_projection_histories =
+                carrier_projection_histories;
+        std::array<double, kCarrierCount> station_hints{};
+        for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
+            const Eigen::Vector3d body_origin_in_inertial_meters =
+                assembled.model()
+                    .CalcPoseInWorld(projection_component.context(),
+                                     carrier_bodies[carrier])
+                    .translation();
+            station_hints[carrier] = ProjectBodyOriginForObservation(
+                assembled, body_origin_in_inertial_meters,
+                &pending_carrier_projection_histories[carrier]);
+        }
+        assembled.system().SetTimeContinuousStateAndWheelRailProjectionHints(
+            *observation_context, sample_times[sample],
+            dense_states.col(static_cast<Eigen::Index>(sample)),
+            station_hints);
+        carrier_projection_histories =
+            pending_carrier_projection_histories;
         auto component = assembled.system().GetMultibodyComponentView(
             *observation_context, assembled.system().multibody_component());
+
         assembled.force_plan().CalcAppliedForces(
             component.context(),
             observation_context->series_spring_damper_forces(),
@@ -698,29 +851,30 @@ Gz18QualificationRunSummary RunGz18Qualification(
             series_derivatives);
         assembled.contact_force_plan()->CalcAppliedForcesAndObservations(
             component.context(), *contact_workspace,
-            observation_context
-                ->wheel_rail_projection_station_hints_meters(),
+            station_hints,
             contact_wrenches, interface_observations);
 
         QualificationObservation observation;
         observation.sample_index = static_cast<std::uint64_t>(sample);
         observation.time_seconds = sample_times[sample];
-        const auto& station_hints =
-            observation_context
-                ->wheel_rail_projection_station_hints_meters();
         for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
             observation.carriers[carrier] = ObserveCarrier(
-                assembled, component.context(), static_cast<int>(carrier),
+                assembled, component.context(), carrier_bodies[carrier],
                 station_hints[carrier]);
         }
         observation.interfaces = interface_observations;
+        std::array<ProjectionHistory, kRepresentativeBodyCount>
+            pending_representative_body_projection_histories =
+                representative_body_projection_histories;
         for (std::size_t body = 0; body < kRepresentativeBodyCount; ++body) {
             observation.representative_bodies[body] =
                 ObserveRepresentativeBody(
                     assembled, component.context(),
                     representative_bodies[body],
-                    &body_projection_seeds[body]);
+                    &pending_representative_body_projection_histories[body]);
         }
+        representative_body_projection_histories =
+            pending_representative_body_projection_histories;
         for (const AppliedBodyWrench& wrench : vehicle_wrenches) {
             observation.vehicle_suspension_spatial_power_watts +=
                 WrenchPower(assembled.model(), component.context(), wrench);
@@ -758,7 +912,9 @@ Gz18QualificationRunSummary RunGz18Qualification(
                           &after_definition_interval);
         observations.push_back(observation);
     }
+    const Clock::time_point observation_end = Clock::now();
 
+    const Clock::time_point endpoint_diagnostics_begin = Clock::now();
     std::vector<AppliedBodyWrench> all_wrenches;
     all_wrenches.reserve(vehicle_wrenches.size() + contact_wrenches.size());
     all_wrenches.insert(all_wrenches.end(), vehicle_wrenches.begin(),
@@ -767,7 +923,21 @@ Gz18QualificationRunSummary RunGz18Qualification(
                         contact_wrenches.end());
     const EndpointDiagnostics endpoint_diagnostics = CalcEndpointDiagnostics(
         assembled, *observation_context, all_wrenches, series_derivatives);
-    const Clock::time_point observation_end = Clock::now();
+    const Clock::time_point endpoint_diagnostics_end = Clock::now();
+
+    double maximum_carrier_projection_half_width_meters = 0.0;
+    for (const ProjectionHistory& history : carrier_projection_histories) {
+        maximum_carrier_projection_half_width_meters =
+            std::max(maximum_carrier_projection_half_width_meters,
+                     history.maximum_half_width_meters);
+    }
+    double maximum_representative_body_projection_half_width_meters = 0.0;
+    for (const ProjectionHistory& history :
+         representative_body_projection_histories) {
+        maximum_representative_body_projection_half_width_meters = std::max(
+            maximum_representative_body_projection_half_width_meters,
+            history.maximum_half_width_meters);
+    }
 
     Gz18QualificationRunSummary summary;
     summary.sample_count = sample_clock.sample_count();
@@ -775,6 +945,8 @@ Gz18QualificationRunSummary RunGz18Qualification(
         ElapsedSeconds(advance_begin, advance_end);
     summary.observation_wall_seconds =
         ElapsedSeconds(observation_begin, observation_end);
+    summary.endpoint_diagnostics_wall_seconds = ElapsedSeconds(
+        endpoint_diagnostics_begin, endpoint_diagnostics_end);
     summary.used_before_track_definition_interval =
         before_definition_interval.observed;
     summary.used_after_track_definition_interval =
@@ -796,9 +968,12 @@ Gz18QualificationRunSummary RunGz18Qualification(
     CloseChecked(&observation_output, observation_path);
 
     WriteMetadata(output_directory.working_path() / "metadata.json",
-                  run_configuration, startup, assembled, sample_clock,
+                  resolved_run_configuration, startup, assembled, sample_clock,
                   before_definition_interval, after_definition_interval,
-                  longest_zero_contact_runs, endpoint_diagnostics);
+                  longest_zero_contact_runs,
+                  maximum_carrier_projection_half_width_meters,
+                  maximum_representative_body_projection_half_width_meters,
+                  endpoint_diagnostics);
     const Clock::time_point write_end = Clock::now();
     summary.data_and_metadata_write_wall_seconds =
         ElapsedSeconds(write_begin, write_end);

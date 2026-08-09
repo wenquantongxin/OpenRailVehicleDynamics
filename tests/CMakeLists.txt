@@ -833,10 +833,12 @@ add_test(NAME verify_gz18_passive_short_window
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
 
-# G58's non-installed qualification leaf. A 1 ms real GZ18 run exercises one
-# dense advance, sequential physical observations, the formal s_ref=0 boundary
-# summary and directory-level publication. The 10/20 s science windows remain
-# explicit local qualifications and never enter the default CTest suite.
+# G58's non-installed qualification leaf. A 2 ms real GZ18 run with only its
+# two endpoints exercises one dense advance, observation projection across a
+# sample displacement larger than the RHS's one-centimetre local window, the
+# formal s_ref=0 boundary summary and directory-level publication. The 10/20 s
+# science windows remain explicit local qualifications and never enter the
+# default CTest suite.
 add_executable(verify_gz18_dynamics_qualification
     dynamics_qualification/verify_gz18_dynamics_qualification.cc)
 orvd_configure_first_party_target(verify_gz18_dynamics_qualification)
