@@ -3,7 +3,8 @@
 This directory contains migration-only executables and analysis scripts. They
 are neither installed nor a public simulation/output API. Long-run trajectories,
 reference arrays, figures, performance logs, and comparison statistics stay
-outside the repository.
+outside version control. They may be retained under the repository's untracked
+`tmp/` tree.
 
 ## GZ18 long-window runner
 
@@ -13,10 +14,12 @@ identities select dense-output observations; they do not become integrator stop
 times. The destination must not already exist, and a successful run publishes
 one complete directory atomically.
 
-The G60 science run uses:
+The G60 and G61 science runs use the same physical and numerical identity; only
+the terminal duration changes:
 
 ```text
-duration_nanoseconds = 10000000000
+G60 duration_nanoseconds = 10000000000
+G61 duration_nanoseconds = 20000000000
 sample_period_nanoseconds = 500000
 track_irregularity_identifier = gz18_aar6_reference_irregularity
 vehicle_layout_reference_track_station_meters = 0
@@ -86,3 +89,28 @@ The two measured values must be positive in a real record. The analysis output
 directory must not exist. Use `--include-historical-wrl` only with an explicit
 `--historical-wrl-source-revision`; that line is a named historical control,
 not a current WRL run.
+
+## G61 comparison
+
+`analyze_gz18_g61.py` accepts only the independent P057 20 s paired arrays and
+native SIMPACK contact core. It rejects P039/P038 response inputs rather than
+trying to infer which Goal a file belongs to. The native core cross-checks that
+Q, N, and patch count are unchanged and that SIMPACK Type-80 Tx/Ty were
+converted from the rail end to the wheel end exactly once.
+
+For each wheelset, the primary comparison independently interpolates ORVD and
+SIMPACK by their own strictly increasing station onto the common 0.01 m grid.
+It reports pre-activation, 50--100 m fade-in, 100--250 m full excitation,
+250--300 m fade-out, post-300 m recovery, and the aggregate 50--300 m window.
+The common support must reach at least 324 m. Same-time curves remain a phase
+and propagation diagnostic; they do not replace the same-station gate.
+
+The P057 macro arrays use their declared common W frame, so lateral displacement
+and yaw are negated once to enter the ORVD standard track T frame. Q/N/Tx/Ty
+are already canonical wheel-side scalars and are not transformed again. The
+optional `drake_*` columns are historical WRL results and require the exact
+historical source revision in the command line and figure legend.
+
+`gz18_qualification_analysis_common.py` is private tool code. It shares only
+artifact parsing, fixed naming, execution identity, and numerical statistics;
+the G60 and G61 reference schemas and acceptance windows remain separate.
