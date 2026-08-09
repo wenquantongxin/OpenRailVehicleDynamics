@@ -26,11 +26,14 @@ foreach(required_path IN ITEMS
 endforeach()
 
 file(READ "${_orvd_manifest}" _orvd_dependency_manifest)
-string(JSON _orvd_manifest_schema GET "${_orvd_dependency_manifest}"
-       schema_version)
-if(NOT _orvd_manifest_schema EQUAL 1)
+string(JSON _orvd_manifest_member_count LENGTH
+       "${_orvd_dependency_manifest}")
+string(JSON _orvd_manifest_member MEMBER
+       "${_orvd_dependency_manifest}" 0)
+if(NOT _orvd_manifest_member_count EQUAL 1 OR
+   NOT _orvd_manifest_member STREQUAL "dependencies")
     message(FATAL_ERROR
-        "unsupported dependency manifest schema ${_orvd_manifest_schema}")
+        "the dependency manifest must contain only the 'dependencies' field")
 endif()
 
 string(JSON _orvd_dependency_count LENGTH "${_orvd_dependency_manifest}"
@@ -42,7 +45,31 @@ if(NOT _orvd_dependency_count EQUAL 4)
 endif()
 
 math(EXPR _orvd_last_dependency "${_orvd_dependency_count} - 1")
+set(_orvd_dependency_record_fields
+    archive
+    key
+    license_paths
+    name
+    source_directory
+    source_url
+    version)
 foreach(index RANGE 0 ${_orvd_last_dependency})
+    string(JSON _orvd_dependency_record_member_count LENGTH
+           "${_orvd_dependency_manifest}" dependencies ${index})
+    if(NOT _orvd_dependency_record_member_count EQUAL 7)
+        message(FATAL_ERROR
+            "dependency record ${index} must contain exactly the current seven fields")
+    endif()
+    foreach(member_index RANGE 0 6)
+        string(JSON member_name MEMBER "${_orvd_dependency_manifest}"
+               dependencies ${index} ${member_index})
+        list(FIND _orvd_dependency_record_fields "${member_name}"
+             member_position)
+        if(member_position EQUAL -1)
+            message(FATAL_ERROR
+                "dependency record ${index} contains unknown field '${member_name}'")
+        endif()
+    endforeach()
     string(JSON key GET "${_orvd_dependency_manifest}" dependencies ${index}
            key)
     string(JSON archive GET "${_orvd_dependency_manifest}" dependencies

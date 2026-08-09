@@ -14,7 +14,6 @@ namespace {
 using orvd::configuration::LoadTrackIrregularityFieldFromDataRoot;
 
 constexpr std::string_view kManifest = R"json({
-  "schema_version": 1,
   "track_irregularity_identifier": "synthetic_nonuniform",
   "coordinate_frame": "track_lateral_right_vertical_down",
   "lateral_series_identifier": "synthetic_lateral",
@@ -22,14 +21,12 @@ constexpr std::string_view kManifest = R"json({
 })json";
 
 constexpr std::string_view kLateralSeries = R"json({
-  "schema_version": 1,
   "series_identifier": "synthetic_lateral",
   "track_station_meters": [0.0, 0.7, 2.0],
   "displacement_meters": [1.0, 2.4, 5.0]
 })json";
 
 constexpr std::string_view kVerticalSeries = R"json({
-  "schema_version": 1,
   "series_identifier": "synthetic_vertical",
   "track_station_meters": [-1.0, 0.5, 1.75, 3.0],
   "displacement_meters": [7.0, 2.5, -1.25, -5.0]
@@ -139,11 +136,14 @@ void CheckStrictRejections(const std::filesystem::path& data_root) {
         [](const AssetPaths& paths) {
             Write(paths.manifest,
                   ReplaceOnce(std::string(kManifest),
-                              "\"schema_version\": 1,",
-                              "\"schema_version\": 1, "
-                              "\"schema_version\": 1,"));
+                              "\"track_irregularity_identifier\": "
+                              "\"synthetic_nonuniform\",",
+                              "\"track_irregularity_identifier\": "
+                              "\"synthetic_nonuniform\", "
+                              "\"track_irregularity_identifier\": "
+                              "\"synthetic_nonuniform\","));
         },
-        "duplicate JSON object key at $.schema_version");
+        "duplicate JSON object key at $.track_irregularity_identifier");
     ExpectInvalid(
         data_root,
         [](const AssetPaths& paths) {
@@ -172,15 +172,6 @@ void CheckStrictRejections(const std::filesystem::path& data_root) {
                               "8"));
         },
         "$.coordinate_frame");
-    ExpectInvalid(
-        data_root,
-        [](const AssetPaths& paths) {
-            Write(paths.manifest,
-                  ReplaceOnce(std::string(kManifest),
-                              "\"schema_version\": 1",
-                              "\"schema_version\": 2"));
-        },
-        "$.schema_version");
     ExpectInvalid(
         data_root,
         [](const AssetPaths& paths) {

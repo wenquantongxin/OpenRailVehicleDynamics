@@ -128,7 +128,8 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
                                 lines::Constant(200.0, superelevation)},
                                {}),
             TrackScalarProfile(0.0, {lines::Constant(300.0, 0.02)}, {}),
-            lines::kRailReferenceLateralSpanMeters, lines::kNodeSpacingMeters);
+            lines::kSuperelevationReferenceBaselengthMeters,
+            lines::kNodeSpacingMeters);
     };
     const TrackGeometry right =
         build(curvature, lines::kCanonicalSuperelevationMeters);
@@ -428,7 +429,8 @@ void CheckQuadratureConvergence() {
         return TrackGeometry(std::move(curvature_profile),
                              std::move(superelevation_profile),
                              std::move(grade_profile),
-                             lines::kRailReferenceLateralSpanMeters, spacing);
+                             lines::kSuperelevationReferenceBaselengthMeters,
+                             spacing);
     };
     const TrackGeometry coarse = build(lines::kNodeSpacingMeters);
     const TrackGeometry fine = build(lines::kNodeSpacingMeters / 4.0);
@@ -469,7 +471,7 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         TrackScalarProfile(0.0, {lines::Constant(100.0, 1.0 / 300.0)}, {}),
         TrackScalarProfile(0.0, {lines::Constant(100.0, 0.06)}, {}),
         TrackScalarProfile(0.0, {lines::Constant(100.0, 0.015)}, {}),
-        lines::kRailReferenceLateralSpanMeters, 0.5);
+        lines::kSuperelevationReferenceBaselengthMeters, 0.5);
     const auto check_continuation = [&](double boundary, double outside,
                                         TrackStationRegion expected_region,
                                         const char* side) {
@@ -556,25 +558,26 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         TrackScalarProfile grade_profile(0.0, {lines::Constant(100.0, 0.0)}, {});
         const TrackGeometry impossible(
             std::move(curvature_profile), std::move(superelevation_profile),
-            std::move(grade_profile), lines::kRailReferenceLateralSpanMeters,
+            std::move(grade_profile),
+            lines::kSuperelevationReferenceBaselengthMeters,
             lines::kNodeSpacingMeters);
         (void)impossible;
     } catch (const std::invalid_argument&) {
         refused_superelevation = true;
     }
     Expect(refused_superelevation,
-           "a superelevation that reaches past the rail reference lateral span "
+           "a superelevation that reaches past the reference baselength "
            "is refused at construction rather than clamped into a plausible "
            "line");
 
     const auto build_constant_superelevation = [](double superelevation,
-                                                  double span) {
+                                                  double baselength) {
         return TrackGeometry(
             TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}),
             TrackScalarProfile(
                 0.0, {lines::Constant(10.0, superelevation)}, {}),
-            TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}), span,
-            1.0);
+            TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}),
+            baselength, 1.0);
     };
     bool refused_equal_superelevation = false;
     try {
@@ -583,9 +586,10 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         refused_equal_superelevation = true;
     }
     Expect(refused_equal_superelevation,
-           "a superelevation equal to the reference span is refused because "
+           "a superelevation equal to the reference baselength is refused "
+           "because "
            "the first-order roll kinematics are singular there");
-    const auto build_seam_superelevation = [](double span) {
+    const auto build_seam_superelevation = [](double baselength) {
         TrackSeamTransition seam;
         seam.preceding_segment_index = 0;
         seam.window_length_meters = 1.0;
@@ -596,8 +600,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
                 {lines::Blend(1.0, 0.0, 0.9),
                  lines::Blend(1.0, 0.9, 0.0)},
                 {seam}),
-            TrackScalarProfile(0.0, {lines::Constant(2.0, 0.0)}, {}), span,
-            2.0);
+            TrackScalarProfile(0.0, {lines::Constant(2.0, 0.0)}, {}),
+            baselength, 2.0);
     };
     bool refused_internal_overshoot = false;
     try {
@@ -616,7 +620,7 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
     }
     Expect(accepted_bounded_seam,
            "the same quintic seam is accepted when its true interior maximum "
-           "lies below the reference span");
+           "lies below the reference baselength");
 
     bool refused_domain_mismatch = false;
     try {
@@ -627,7 +631,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         TrackScalarProfile grade_profile(0.0, {lines::Constant(100.0, 0.0)}, {});
         const TrackGeometry mismatched(
             std::move(curvature_profile), std::move(superelevation_profile),
-            std::move(grade_profile), lines::kRailReferenceLateralSpanMeters,
+            std::move(grade_profile),
+            lines::kSuperelevationReferenceBaselengthMeters,
             lines::kNodeSpacingMeters);
         (void)mismatched;
     } catch (const std::invalid_argument&) {
@@ -657,7 +662,7 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         const TrackGeometry line(level_profile(first_partition),
                                  level_profile(second_partition),
                                  level_profile(first_partition),
-                                 lines::kRailReferenceLateralSpanMeters,
+                                 lines::kSuperelevationReferenceBaselengthMeters,
                                  lines::kNodeSpacingMeters);
         const double end = line.end_track_station_meters();
         (void)line.EvaluateTrackFrame(end);
@@ -675,7 +680,7 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
             level_profile({6000.0, 6000.0}),
             level_profile({6000.0, 6000.0}),
             level_profile({6000.0, 6000.0}),
-            lines::kRailReferenceLateralSpanMeters, 0.01);
+            lines::kSuperelevationReferenceBaselengthMeters, 0.01);
         (void)line;
     } catch (const std::invalid_argument&) {
         refused_excessive_total = true;
@@ -687,7 +692,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
     try {
         const TrackGeometry line(
             level_profile({100.0}), level_profile({100.0}),
-            level_profile({100.0}), lines::kRailReferenceLateralSpanMeters,
+            level_profile({100.0}),
+            lines::kSuperelevationReferenceBaselengthMeters,
             0.01);
         (void)line;
     } catch (const std::invalid_argument&) {

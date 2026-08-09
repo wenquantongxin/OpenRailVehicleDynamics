@@ -268,7 +268,7 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
     const Json root = ParseStrictJson(document);
     RequireExactKeys(
         root, "$",
-        {"schema_version", "vehicle_binding", "wheel_rail_binding",
+        {"vehicle_binding", "wheel_rail_binding",
          "load_condition_identifier",
          "gravitational_acceleration_meters_per_second_squared",
          "running_direction", "initial_longitudinal_speed_meters_per_second",
@@ -279,11 +279,6 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
          "revolute_joint_startup_states",
          "series_spring_viscous_damper_force_states",
          "translational_spring_damper_nominal_forces"});
-
-    if (!root.at("schema_version").is_number_integer() ||
-        root.at("schema_version") != 2) {
-        ThrowExpected("$.schema_version", "the integer 2");
-    }
 
     ResolvedStartupState state;
     state.vehicle_binding =

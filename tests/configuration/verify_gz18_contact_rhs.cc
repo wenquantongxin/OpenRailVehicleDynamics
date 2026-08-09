@@ -860,7 +860,7 @@ int main(int argc, char** argv) {
             "the warmed non-zero-irregularity contact path allocated heap "
             "storage");
 
-    // A contact-enabled system owns one line.  The legacy research overload
+    // A contact-enabled system owns one line.  The lower-level research overload
     // remains available for systems without contact, but it must not create a
     // start-up context against a second line while the contact plan evaluates
     // another one.

@@ -102,8 +102,6 @@ def load_orvd_artifact(
 
     metadata = load_json_object(directory / "metadata.json", "ORVD metadata")
     performance = load_json_object(directory / "performance.json", "ORVD performance")
-    require(metadata.get("internal_format_revision") == 3,
-            "ORVD metadata is not internal format revision 3")
     require(metadata.get("completed") is True, "ORVD metadata is not complete")
     expected_identity = {
         "vehicle_name": "GZ18",
@@ -221,7 +219,7 @@ def load_execution_identity(
 ) -> dict[str, Any]:
     value = load_json_object(path, "execution identity")
     required = {
-        "schema_version", "orvd_revision", "build_type", "compiler",
+        "orvd_revision", "build_type", "compiler",
         "hardware", "requested_cpu_affinity", "applied_cpu_affinity",
         "openmp_environment", "runner_arguments",
         "qualification_artifact_directory", "process_wall_seconds",
@@ -229,7 +227,6 @@ def load_execution_identity(
     }
     missing = sorted(required - set(value))
     require(not missing, f"execution identity is missing fields: {missing}")
-    require(value["schema_version"] == 1, "execution identity schema is not 1")
     require(value["build_type"] == "Release",
             f"{goal_name} was not run with a Release build")
     require(isinstance(value["openmp_environment"], dict),

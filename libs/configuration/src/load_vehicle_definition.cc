@@ -336,7 +336,7 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         ReadWholeFile(configuration_path, "vehicle definition");
     const Json root = ParseStrictJson(document);
     RequireExactKeys(root, "$",
-                     {"schema_version", "vehicle_name",
+                     {"vehicle_name",
                       "mechanical_definition_identifier",
                       "mechanical_track_station_layout", "rigid_bodies",
                       "fixed_frames", "revolute_joints", "weld_joints",
@@ -344,11 +344,6 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                       "roll_spring_damper_couples",
                       "series_spring_viscous_dampers",
                       "saturated_piecewise_linear_dampers"});
-
-    if (!root.at("schema_version").is_number_integer() ||
-        root.at("schema_version") != 1) {
-        ThrowExpected("$.schema_version", "the integer 1");
-    }
 
     VehicleDefinition vehicle;
     vehicle.vehicle_name =

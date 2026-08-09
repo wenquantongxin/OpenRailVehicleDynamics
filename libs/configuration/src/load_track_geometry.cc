@@ -120,23 +120,19 @@ track_geometry::TrackGeometry LoadTrackGeometryFromJsonFile(
     const Json root = ParseStrictJson(document);
     RequireExactKeys(
         root, "$",
-        {"schema_version", "start_track_station_meters",
+        {"start_track_station_meters",
          "station_node_spacing_meters",
-         "rail_reference_lateral_span_meters", "curvature_profile",
+         "superelevation_reference_baselength_meters", "curvature_profile",
          "superelevation_profile", "centerline_upward_grade_profile"});
-
-    if (!root.at("schema_version").is_number_integer() ||
-        root.at("schema_version") != 1) {
-        ThrowExpected("$.schema_version", "the integer 1");
-    }
     const double start_track_station_meters = RequireFiniteNumber(
         root.at("start_track_station_meters"), "$.start_track_station_meters");
     const double station_node_spacing_meters = RequireFiniteNumber(
         root.at("station_node_spacing_meters"),
         "$.station_node_spacing_meters");
-    const double rail_reference_lateral_span_meters = RequireFiniteNumber(
-        root.at("rail_reference_lateral_span_meters"),
-        "$.rail_reference_lateral_span_meters");
+    const double superelevation_reference_baselength_meters =
+        RequireFiniteNumber(
+            root.at("superelevation_reference_baselength_meters"),
+            "$.superelevation_reference_baselength_meters");
 
     TrackScalarProfile curvature = ParseProfile(
         root.at("curvature_profile"), "$.curvature_profile",
@@ -157,7 +153,8 @@ track_geometry::TrackGeometry LoadTrackGeometryFromJsonFile(
 
     return track_geometry::TrackGeometry(
         std::move(curvature), std::move(superelevation), std::move(grade),
-        rail_reference_lateral_span_meters, station_node_spacing_meters);
+        superelevation_reference_baselength_meters,
+        station_node_spacing_meters);
 }
 
 }  // namespace orvd::configuration

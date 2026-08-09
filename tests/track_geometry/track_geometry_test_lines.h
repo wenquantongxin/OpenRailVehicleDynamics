@@ -19,7 +19,7 @@ namespace orvd::track_geometry::test_lines {
 inline constexpr double kCanonicalRadiusMeters = 300.0;
 inline constexpr double kCanonicalSuperelevationMeters = 0.12;
 inline constexpr double kCanonicalGrade = 0.02;
-inline constexpr double kRailReferenceLateralSpanMeters = 1.5;
+inline constexpr double kSuperelevationReferenceBaselengthMeters = 1.5;
 inline constexpr double kNodeSpacingMeters = 0.5;
 
 inline constexpr double kCanonicalStraightLengthMeters = 50.0;
@@ -82,7 +82,8 @@ inline TrackGeometry MakeCanonicalLine() {
     return TrackGeometry(std::move(curvature_profile),
                          std::move(superelevation_profile),
                          std::move(grade_profile),
-                         kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+                         kSuperelevationReferenceBaselengthMeters,
+                         kNodeSpacingMeters);
 }
 
 // Everything constant and everything large: the grade is exaggerated so that a
@@ -98,7 +99,8 @@ inline TrackGeometry MakeSteepConstantLine(double grade,
     return TrackGeometry(std::move(curvature_profile),
                          std::move(superelevation_profile),
                          std::move(grade_profile),
-                         kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+                         kSuperelevationReferenceBaselengthMeters,
+                         kNodeSpacingMeters);
 }
 
 // A level straight stretch of stated length and node spacing. Used to put a
@@ -111,7 +113,7 @@ inline TrackGeometry MakeLevelStraightLine(double length_meters,
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
-        kRailReferenceLateralSpanMeters, node_spacing_meters);
+        kSuperelevationReferenceBaselengthMeters, node_spacing_meters);
 }
 
 // A level circular line for projection checks in which grade and
@@ -125,7 +127,7 @@ inline TrackGeometry MakeLevelCircularLine(double radius_meters,
                            {Constant(length_meters, curvature)}, {}),
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
-        kRailReferenceLateralSpanMeters, node_spacing_meters);
+        kSuperelevationReferenceBaselengthMeters, node_spacing_meters);
 }
 
 // A straight stretch meeting a circular one with a declared seam window across
@@ -149,7 +151,8 @@ inline TrackGeometry MakeSeamLine() {
     return TrackGeometry(std::move(curvature_profile),
                          std::move(superelevation_profile),
                          std::move(grade_profile),
-                         kRailReferenceLateralSpanMeters, kNodeSpacingMeters);
+                         kSuperelevationReferenceBaselengthMeters,
+                         kNodeSpacingMeters);
 }
 
 // A line that is straight in plan and rises then falls, producing two local
@@ -164,7 +167,7 @@ inline TrackGeometry MakeSymmetricGradeArchLine(double node_spacing_meters) {
         TrackScalarProfile(0.0,
                            {Blend(kArchLengthMeters, kArchGrade, -kArchGrade)},
                            {}),
-        kRailReferenceLateralSpanMeters, node_spacing_meters);
+        kSuperelevationReferenceBaselengthMeters, node_spacing_meters);
 }
 
 }  // namespace orvd::track_geometry::test_lines

@@ -560,7 +560,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         advance_wall = float(performance["advance_wall_seconds"])
         process_wall = float(execution["process_wall_seconds"])
         summary = {
-            "schema_version": 1,
             "scope": "G60 GZ18 straight AAR6 10 s activation qualification",
             "scientific_interpretation_requires_curve_review": True,
             "sources": {

@@ -54,15 +54,16 @@ void RequireFinitePositive(double value, const char* what) {
 TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
                              TrackScalarProfile superelevation_meters,
                              TrackScalarProfile centerline_upward_grade,
-                             double rail_reference_lateral_span_meters,
+                             double superelevation_reference_baselength_meters,
                              double station_node_spacing_meters)
     : curvature_(std::move(curvature_radians_per_meter)),
       superelevation_(std::move(superelevation_meters)),
       grade_(std::move(centerline_upward_grade)),
-      rail_reference_lateral_span_meters_(rail_reference_lateral_span_meters),
+      superelevation_reference_baselength_meters_(
+          superelevation_reference_baselength_meters),
       station_node_spacing_meters_(station_node_spacing_meters) {
-    RequireFinitePositive(rail_reference_lateral_span_meters,
-                          "the rail reference lateral span");
+    RequireFinitePositive(superelevation_reference_baselength_meters,
+                          "the superelevation reference baselength");
     RequireFinitePositive(station_node_spacing_meters,
                           "the station node spacing");
 
@@ -184,13 +185,13 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
     const TrackScalarProfile::ProfileExtremum superelevation_extremum =
         superelevation_.MaximumAbsoluteValue();
     if (std::abs(superelevation_extremum.value) >=
-        rail_reference_lateral_span_meters_) {
+        superelevation_reference_baselength_meters_) {
         throw std::invalid_argument(
             "TrackGeometry: the superelevation " +
             Describe(superelevation_extremum.value) + " m at station " +
             Describe(superelevation_extremum.track_station_meters) +
-            " m reaches or exceeds the rail reference lateral span " +
-            Describe(rail_reference_lateral_span_meters_) +
+            " m reaches or exceeds the superelevation reference baselength " +
+            Describe(superelevation_reference_baselength_meters_) +
             " m; the roll-to-superelevation derivative is singular there, so "
             "finite first-order track-frame kinematics cannot be formed");
     }
@@ -403,7 +404,7 @@ double TrackGeometry::TrackRollRadians(double track_station_meters) const {
         track_station_meters, start_track_station_meters(),
         end_track_station_meters());
     return std::asin(superelevation_.Value(definition_station) /
-                     rail_reference_lateral_span_meters_);
+                     superelevation_reference_baselength_meters_);
 }
 
 Eigen::Vector3d TrackGeometry::CenterlinePositionInInertialMeters(
@@ -469,10 +470,11 @@ TrackFrameKinematics TrackGeometry::EvaluateTrackFrame(
         is_within_definition
             ? superelevation_.FirstDerivativePerMeter(definition_station)
             : 0.0;
-    const double sine_roll = superelevation / rail_reference_lateral_span_meters_;
+    const double sine_roll =
+        superelevation / superelevation_reference_baselength_meters_;
     const double roll = std::asin(sine_roll);
     const double roll_rate =
-        (superelevation_rate / rail_reference_lateral_span_meters_) /
+        (superelevation_rate / superelevation_reference_baselength_meters_) /
         std::sqrt(1.0 - sine_roll * sine_roll);
     const double cosine_roll = std::cos(roll);
     const double sine_roll_value = std::sin(roll);

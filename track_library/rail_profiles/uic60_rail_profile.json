@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "profile_identifier": "uic60_rail_profile",
   "profile_role": "rail",
   "coordinate_frame": "lateral_right_vertical_down",

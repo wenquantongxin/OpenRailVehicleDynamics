@@ -56,11 +56,11 @@ The analysis:
 - reports contact topology without turning transient patch changes into a
   pass/fail rule.
 
-The required execution-identity JSON has schema revision 1 and these fields:
+The required execution-identity JSON has one current field set. It carries no
+numeric format revision and is not dispatched through historical formats:
 
 ```json
 {
-  "schema_version": 1,
   "orvd_revision": "full Git object name",
   "build_type": "Release",
   "compiler": "compiler identity",

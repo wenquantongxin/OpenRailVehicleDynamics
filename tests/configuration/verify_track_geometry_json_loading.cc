@@ -14,10 +14,9 @@ namespace {
 using orvd::configuration::LoadTrackGeometryFromJsonFile;
 
 constexpr std::string_view kNondegenerateRecord = R"json({
-  "schema_version": 1,
   "start_track_station_meters": 7.0,
   "station_node_spacing_meters": 0.7,
-  "rail_reference_lateral_span_meters": 1.6,
+  "superelevation_reference_baselength_meters": 1.6,
   "curvature_profile": {
     "segments": [
       {
@@ -126,8 +125,8 @@ void CheckRealAsset(const std::filesystem::path& asset_path) {
             "real asset start station changed");
     Require(geometry.end_track_station_meters() == 2000.0,
             "real asset end station changed");
-    Require(geometry.rail_reference_lateral_span_meters() == 1.5,
-            "real asset reference span changed");
+    Require(geometry.superelevation_reference_baselength_meters() == 1.5,
+            "real asset superelevation reference baselength changed");
     constexpr double kStation = 123.5;
     const auto point =
         geometry.CenterlinePositionInInertialMeters(kStation);
@@ -149,8 +148,8 @@ void CheckNondegenerateRecordAndLifetime(
     Require(geometry.start_track_station_meters() == 7.0 &&
                 geometry.end_track_station_meters() == 47.0,
             "record domain was not mapped");
-    Require(geometry.rail_reference_lateral_span_meters() == 1.6,
-            "record reference span was not mapped");
+    Require(geometry.superelevation_reference_baselength_meters() == 1.6,
+            "record superelevation reference baselength was not mapped");
     // A Hermite blend has the same value after swapping its ends at the exact
     // midpoint. Non-midpoint probes make the three field mappings directional.
     Require(Near(geometry.CurvatureRadiansPerMeter(22.0), 0.0015625),
@@ -170,7 +169,8 @@ void CheckNondegenerateRecordAndLifetime(
 void CheckStrictRejections(const std::filesystem::path& path) {
     const std::string valid(kNondegenerateRecord);
     const std::string invalid_syntax = ReplaceOnce(
-        valid, "\"schema_version\": 1,", "\"schema_version\": 1,,");
+        valid, "\"start_track_station_meters\": 7.0,",
+        "\"start_track_station_meters\": 7.0,,");
     const std::size_t invalid_byte = invalid_syntax.find(",,") + 2;
     ExpectInvalid(path, invalid_syntax,
                   {"invalid JSON syntax at byte " +
@@ -182,9 +182,10 @@ void CheckStrictRejections(const std::filesystem::path& path) {
         std::vector<std::string> fragments;
     };
     const std::vector<RejectionCase> cases{
-        {ReplaceOnce(valid, "\"schema_version\": 1,",
-                     "\"schema_version\": 1, \"schema_version\": 1,"),
-         {"duplicate JSON object key at $.schema_version"}},
+        {ReplaceOnce(valid, "\"start_track_station_meters\": 7.0,",
+                     "\"start_track_station_meters\": 7.0, "
+                     "\"start_track_station_meters\": 7.0,"),
+         {"duplicate JSON object key at $.start_track_station_meters"}},
         {ReplaceOnce(valid,
                      "\"curvature_radians_per_meter\": 0.0\n      }",
                      "\"curvature_radians_per_meter\": 0.0, "
@@ -204,21 +205,19 @@ void CheckStrictRejections(const std::filesystem::path& path) {
                      "\"station_node_spacing_meters\": \"fine\""),
          {"$.station_node_spacing_meters"}},
         {ReplaceOnce(valid,
-                     "\"rail_reference_lateral_span_meters\": 1.6",
-                     "\"rail_reference_lateral_span_meters\": 1e400"),
-         {"$.rail_reference_lateral_span_meters", "not representable"}},
+                     "\"superelevation_reference_baselength_meters\": 1.6",
+                     "\"superelevation_reference_baselength_meters\": 1e400"),
+         {"$.superelevation_reference_baselength_meters",
+          "not representable"}},
         {ReplaceOnce(valid, "\"start_track_station_meters\": 7.0",
                      "\"start_track_station_meters\": 1e-400"),
          {"$.start_track_station_meters", "underflows binary64"}},
         {ReplaceOnce(valid, "\"start_track_station_meters\": 7.0",
                      "\"start_track_station_meters\": 9007199254740993"),
          {"$.start_track_station_meters", "exactly representable"}},
-        {ReplaceOnce(valid, "\"schema_version\": 1",
-                     "\"schema_version\": 2"),
-         {"$.schema_version"}},
         {ReplaceOnce(valid,
-                     "\"rail_reference_lateral_span_meters\": 1.6",
-                     "\"rail_reference_lateral_span_meters\": 0.0"),
+                     "\"superelevation_reference_baselength_meters\": 1.6",
+                     "\"superelevation_reference_baselength_meters\": 0.0"),
          {"TrackGeometry:"}},
     };
     for (const auto& rejection : cases) {

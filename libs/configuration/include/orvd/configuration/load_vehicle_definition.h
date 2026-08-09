@@ -10,10 +10,9 @@ namespace orvd::configuration {
 // the caller and returns the vehicle description it states.
 //
 // The parser refuses duplicate, unknown and missing keys, wrong types,
-// unsupported schema versions, embedded NUL bytes and numbers the document
-// states but binary64 cannot hold. It performs no path search, environment
-// substitution, default insertion or retained DOM storage: the returned
-// description owns everything it carries.
+// embedded NUL bytes and numbers the document states but binary64 cannot hold.
+// It performs no path search, environment substitution, default insertion or
+// retained DOM storage: the returned description owns everything it carries.
 //
 // The returned value is intentionally mutable. Strictness applies to this one
 // JSON-to-record conversion; a C++ caller may subsequently make explicit edits

@@ -124,7 +124,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         arguments.runner_arguments[OUTPUT_DIRECTORY_ARGUMENT_INDEX]
     ).resolve()
     identity = {
-        "schema_version": 1,
         "orvd_revision": arguments.orvd_revision,
         "build_type": arguments.build_type,
         "compiler": arguments.compiler_identity,

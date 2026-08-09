@@ -3,7 +3,8 @@
 // The numerical contact laws are tested in wheel_rail_contact. This test checks
 // what only configuration can get wrong: logical identities resolving to the
 // installed assets, the vehicle's complete typed personality, the gauge datum
-// derived from the rail rather than the track reference span, and a real
+// derived from the rail rather than the superelevation reference baselength,
+// and a real
 // profile evaluation that stays allocation-free after preparation.
 
 #include <cmath>
@@ -225,7 +226,8 @@ void CheckPersonality(const Gz18WheelRailContact& contact,
                 right_datum.roll_radians == -left_datum.roll_radians,
             "the two rail gauge datums lost their signed side identity");
     Require(std::abs(right_datum.lateral_datum_meters - 0.75) > 1.0e-3,
-            "the gauge datum was replaced by half the track reference span");
+            "the gauge datum was replaced by half the superelevation reference "
+            "baselength");
     const auto rail = orvd::configuration::LoadProfilePointsFromJsonFile(
         data_root / "track_library/rail_profiles/uic60_rail_profile.json");
     const auto expected_right_datum =

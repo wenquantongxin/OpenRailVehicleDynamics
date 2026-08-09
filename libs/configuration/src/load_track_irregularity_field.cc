@@ -38,13 +38,6 @@ std::string RequireCallerIdentifier(std::string_view identifier) {
                              "track irregularity identifier");
 }
 
-void RequireSchemaVersionOne(const Json& root) {
-    if (!root.at("schema_version").is_number_integer() ||
-        root.at("schema_version") != 1) {
-        ThrowExpected("$.schema_version", "the integer 1");
-    }
-}
-
 std::vector<double> RequireFiniteColumn(const Json& root,
                                         std::string_view key) {
     const std::string key_string(key);
@@ -67,9 +60,8 @@ SeriesRecord LoadSeries(const std::filesystem::path& series_directory,
     const Json root =
         ParseStrictJson(ReadWholeFile(path, "track irregularity series"));
     RequireExactKeys(root, "$",
-                     {"schema_version", "series_identifier",
-                      "track_station_meters", "displacement_meters"});
-    RequireSchemaVersionOne(root);
+                     {"series_identifier", "track_station_meters",
+                      "displacement_meters"});
 
     const std::string identifier = RequireIdentifier(
         root.at("series_identifier"), "$.series_identifier",
@@ -130,10 +122,9 @@ LoadTrackIrregularityFieldFromDataRoot(
     const Json root = ParseStrictJson(
         ReadWholeFile(manifest_path, "track irregularity field manifest"));
     RequireExactKeys(root, "$",
-                     {"schema_version", "track_irregularity_identifier",
+                     {"track_irregularity_identifier",
                       "coordinate_frame", "lateral_series_identifier",
                       "vertical_series_identifier"});
-    RequireSchemaVersionOne(root);
 
     const std::string manifest_identifier = RequireIdentifier(
         root.at("track_irregularity_identifier"),

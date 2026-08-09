@@ -22,6 +22,16 @@
 // There is deliberately no schema engine, no field table and no reflection. Each
 // record spells out its own keys at the point where it reads them, so a reader
 // of that record's loader sees the whole contract in one place.
+//
+// First-party product JSON deliberately carries no numeric schema or format
+// revision. The dedicated loader, its all-and-only key set, the field types and
+// the domain invariants are the one current format. When that format changes,
+// update the loader, assets, writers, callers, tests and documentation together;
+// do not add a version dispatch, legacy reader, alias, default or migration
+// branch. A stale document must fail on its unknown old keys or missing current
+// keys, while Git history carries provenance. A genuinely different document
+// kind needs its own domain name, value type and loader rather than another
+// integer in this format.
 
 namespace orvd::configuration::strict_json {
 

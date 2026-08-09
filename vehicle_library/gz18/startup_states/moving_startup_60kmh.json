@@ -1,5 +1,4 @@
 {
-  "schema_version": 2,
   "vehicle_binding": {
     "vehicle_name": "GZ18",
     "mechanical_definition_identifier": "gz18_reference_mechanics"

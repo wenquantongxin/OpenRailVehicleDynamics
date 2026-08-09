@@ -37,17 +37,31 @@ def load_manifest(template_directory: Path) -> dict:
     manifest_path = template_directory / "dependency_sources.json"
     with manifest_path.open(encoding="utf-8") as stream:
         manifest = json.load(stream)
-    if manifest.get("schema_version") != 1:
+    if not isinstance(manifest, dict) or set(manifest) != {"dependencies"}:
         raise ValueError(
-            f"unsupported dependency manifest schema in {manifest_path}"
+            f"{manifest_path} must contain only the 'dependencies' field"
         )
-    records = manifest.get("dependencies")
+    records = manifest["dependencies"]
     expected_keys = {"eigen", "fmt", "nlohmann_json", "sundials"}
+    expected_record_fields = {
+        "key", "name", "version", "archive", "source_directory",
+        "source_url", "license_paths",
+    }
     if (
         not isinstance(records, list)
         or len(records) != len(expected_keys)
-        or {item.get("key") for item in records} != expected_keys
     ):
+        raise ValueError(
+            f"{manifest_path} must contain exactly eigen, fmt, nlohmann_json "
+            "and sundials"
+        )
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or set(record) != expected_record_fields:
+            raise ValueError(
+                f"{manifest_path} dependency {index} must contain exactly "
+                f"{sorted(expected_record_fields)}"
+            )
+    if {item["key"] for item in records} != expected_keys:
         raise ValueError(
             f"{manifest_path} must contain exactly eigen, fmt, nlohmann_json "
             "and sundials"

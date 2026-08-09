@@ -8,9 +8,9 @@ namespace orvd::configuration {
 
 // Loads one human-authored strict JSON document from the exact path supplied by
 // the caller and immediately constructs an immutable TrackGeometry. The parser
-// rejects duplicate, unknown and missing keys, wrong types, unsupported schema
-// versions, non-finite or underflowing floating-point tokens, and integer tokens
-// that cannot be converted to binary64 without loss. Ordinary decimal
+// rejects duplicate, unknown and missing keys, wrong types, non-finite or
+// underflowing floating-point tokens, and integer tokens that cannot be
+// converted to binary64 without loss. Ordinary decimal
 // floating-point tokens use binary64 rounding. The loader performs no path
 // search, environment substitution or default insertion, and retains no JSON
 // DOM after constructing the returned geometry.

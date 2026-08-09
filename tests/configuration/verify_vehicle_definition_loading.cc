@@ -17,7 +17,6 @@ using orvd::configuration::LoadVehicleDefinitionFromJsonFile;
 // through a revolute joint. Nothing here is degenerate: every value a mutation
 // below changes is one this record actually distinguishes.
 constexpr std::string_view kRecord = R"json({
-  "schema_version": 1,
   "vehicle_name": "assembly_fixture",
   "mechanical_definition_identifier": "assembly_fixture_reference_mechanics",
   "mechanical_track_station_layout": {
@@ -305,8 +304,6 @@ void CheckRejections(const std::filesystem::path& path) {
         {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0",
                      "\"mass_kilograms\": \"heavy\""),
          {"$.rigid_bodies[0].mass_kilograms", "finite JSON number"}},
-        {ReplaceOnce(valid, "\"schema_version\": 1,", "\"schema_version\": 2,"),
-         {"$.schema_version", "the integer 1"}},
         {ReplaceOnce(valid, "\"vehicle_name\": \"assembly_fixture\"",
                      "\"vehicle_name\": \"\""),
          {"$.vehicle_name", "non-empty string"}},

@@ -16,7 +16,8 @@
 有符号超高不是惯性系竖向高差，而是
 `(p_right − p_left) · z_T0`：沿无侧滚系竖轴度量的两轨高差。只有纵坡为零时二者相等；一般情形
 惯性系竖向高差还要除以 `sqrt(1 + grade²)`。这一定义使侧滚角保持为
-`asin(superelevation / reference_span)`。
+`asin(superelevation / superelevation_reference_baselength)`；该参考基长不是名义轨距，
+也不是轮轨型面定位所用的参考点间距。
 
 多体底座保持坐标中立。本模块不给任何模型设置重力；`GravitationalAccelerationInInertial`
 只声明线路层所说的「下」是哪个方向，装配器必须显式安装它。

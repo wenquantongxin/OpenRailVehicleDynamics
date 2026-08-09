@@ -1,5 +1,4 @@
 {
-  "schema_version": 1,
   "vehicle_name": "GZ18",
   "mechanical_definition_identifier": "gz18_reference_mechanics",
   "mechanical_track_station_layout": {

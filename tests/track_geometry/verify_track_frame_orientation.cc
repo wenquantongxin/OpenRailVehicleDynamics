@@ -101,8 +101,9 @@ void CheckClosedFormRotation() {
     // station exactly and does not have to be read out of the library.
     const double heading =
         kStationMeters / lines::kCanonicalRadiusMeters;
-    const double roll = std::asin(kSteepSuperelevationMeters /
-                                  lines::kRailReferenceLateralSpanMeters);
+    const double roll =
+        std::asin(kSteepSuperelevationMeters /
+                  lines::kSuperelevationReferenceBaselengthMeters);
     const Eigen::Matrix3d expected =
         ExpectedRollFreeRotation(heading, kSteepGrade) * RollAboutFirstAxis(roll);
     const Eigen::Matrix3d measured = line.EvaluateTrackFrame(kStationMeters)
@@ -121,12 +122,12 @@ void CheckClosedFormRotation() {
            "triad is right-handed rather than mirrored");
 }
 
-void CheckSuperelevationSignByRailHeights() {
-    // The rails sit half a reference span either side of the centerline along
-    // the track frame's transverse axis. The superelevation is their height
-    // difference measured along the roll-free frame's vertical axis; that is
-    // the inertial vertical only when the grade is zero, and the factor between
-    // the two is the tangent norm.
+void CheckSuperelevationSignByReferencePointHeights() {
+    // Two abstract reference points sit half a superelevation reference
+    // baselength either side of the centerline along the track frame's
+    // transverse axis. Their height difference, measured along the roll-free
+    // frame's vertical axis, is the declared superelevation. These points do
+    // not assert the physical rail gauge or rail-profile reference locations.
     for (const double superelevation : {kSteepSuperelevationMeters,
                                         -kSteepSuperelevationMeters}) {
         const TrackGeometry line =
@@ -134,24 +135,27 @@ void CheckSuperelevationSignByRailHeights() {
         const auto kinematics = line.EvaluateTrackFrame(kStationMeters);
         const Eigen::Matrix3d& rotation =
             kinematics.pose().rotation_inertial_from_track();
-        const double half_span = 0.5 * lines::kRailReferenceLateralSpanMeters;
-        const Eigen::Vector3d right_rail = half_span * rotation.col(1);
-        const Eigen::Vector3d left_rail = -half_span * rotation.col(1);
+        const double half_baselength =
+            0.5 * lines::kSuperelevationReferenceBaselengthMeters;
+        const Eigen::Vector3d right_reference =
+            half_baselength * rotation.col(1);
+        const Eigen::Vector3d left_reference =
+            -half_baselength * rotation.col(1);
 
         const double heading = kStationMeters / lines::kCanonicalRadiusMeters;
         const Eigen::Vector3d roll_free_vertical =
             ExpectedRollFreeRotation(heading, kSteepGrade).col(2);
-        const double in_track_plane =
-            (right_rail - left_rail).dot(roll_free_vertical);
-        Expect(NearExact(in_track_plane, superelevation, 16.0),
-               "the rail height difference along the roll-free vertical is the "
-               "signed superelevation at superelevation " +
+        const double reference_height_difference =
+            (right_reference - left_reference).dot(roll_free_vertical);
+        Expect(NearExact(reference_height_difference, superelevation, 16.0),
+               "the reference-point height difference along the roll-free "
+               "vertical is the signed superelevation at superelevation " +
                    std::to_string(superelevation));
 
         const double tangent_norm =
             std::sqrt(1.0 + kSteepGrade * kSteepGrade);
         const double along_inertial_vertical =
-            right_rail.z() - left_rail.z();
+            right_reference.z() - left_reference.z();
         Expect(NearExact(along_inertial_vertical,
                          superelevation / tangent_norm, 16.0),
                "the same difference measured along the inertial vertical is "
@@ -231,7 +235,7 @@ void CheckRotationRateIsNotMerelyTheHeadingRate() {
 
 int main() {
     CheckClosedFormRotation();
-    CheckSuperelevationSignByRailHeights();
+    CheckSuperelevationSignByReferencePointHeights();
     CheckRotationRateIdentity();
     CheckRotationRateIsNotMerelyTheHeadingRate();
     if (failure_count != 0) {

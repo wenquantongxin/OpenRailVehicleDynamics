@@ -53,14 +53,8 @@ wheel_rail_contact::ProfilePoints LoadProfilePointsFromJsonFile(
     const std::string document = ReadWholeFile(configuration_path, "profile");
     const Json root = ParseStrictJson(document);
     RequireExactKeys(root, "$",
-                     {"schema_version", "profile_identifier", "profile_role",
-                      "coordinate_frame", "length_unit", "lateral_meters",
-                      "vertical_meters"});
-
-    if (!root.at("schema_version").is_number_integer() ||
-        root.at("schema_version") != 1) {
-        ThrowExpected("$.schema_version", "the integer 1");
-    }
+                     {"profile_identifier", "profile_role", "coordinate_frame",
+                      "length_unit", "lateral_meters", "vertical_meters"});
 
     // The frame and the unit are stated so that a reader of the file knows what
     // its numbers mean, and are checked rather than merely recorded so that a

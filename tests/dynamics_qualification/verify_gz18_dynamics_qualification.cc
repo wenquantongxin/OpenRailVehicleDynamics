@@ -241,8 +241,6 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 metadata.find(
                     "\"vehicle_layout_reference_track_station_meters\": "
                     "0") != std::string::npos &&
-                metadata.find("\"internal_format_revision\": 3") !=
-                    std::string::npos &&
                 metadata.find(std::filesystem::canonical(argv[1]).string()) !=
                     std::string::npos &&
                 metadata.find(std::filesystem::canonical(argv[2]).string()) !=

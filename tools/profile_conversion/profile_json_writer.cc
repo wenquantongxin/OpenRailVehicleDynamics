@@ -44,7 +44,6 @@ void WriteProfilePointsJson(const std::filesystem::path& json_path,
     }
 
     output << "{\n";
-    output << "  \"schema_version\": 1,\n";
     output << "  \"profile_identifier\": \"" << profile.identifier() << "\",\n";
     output << "  \"profile_role\": \""
            << (profile.role() == wheel_rail_contact::ProfileRole::kWheel ? "wheel"

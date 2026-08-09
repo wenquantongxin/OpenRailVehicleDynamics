@@ -17,7 +17,6 @@ using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
 using orvd::configuration::StartupRunningDirection;
 
 constexpr std::string_view kRecord = R"json({
-  "schema_version": 2,
   "vehicle_binding": {
     "vehicle_name": "startup_fixture",
     "mechanical_definition_identifier": "fixture_mechanics"
@@ -215,13 +214,14 @@ int main(int argc, char** argv) {
     }
 
     ExpectRefusal(path,
-                  ReplaceOnce(valid, "\"schema_version\": 2",
-                              "\"schema_version\": 1"),
-                  "integer 2", "schema version one was accepted");
-    ExpectRefusal(path,
-                  ReplaceOnce(valid, "\"schema_version\": 2",
-                              "\"schema_version\": 2, \"schema_version\": 2"),
-                  "duplicate JSON object key at $.schema_version",
+                  ReplaceOnce(valid,
+                              "  \"load_condition_identifier\": "
+                              "\"fixture_load\",",
+                              "  \"load_condition_identifier\": "
+                              "\"fixture_load\",\n"
+                              "  \"load_condition_identifier\": "
+                              "\"fixture_load\","),
+                  "duplicate JSON object key at $.load_condition_identifier",
                   "a duplicate JSON key was accepted");
     ExpectRefusal(
         path,

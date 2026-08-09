@@ -533,7 +533,6 @@ void WriteMetadata(
     }
     output << std::setprecision(17)
            << "{\n"
-           << "  \"internal_format_revision\": 3,\n"
            << "  \"completed\": true,\n"
            << "  \"vehicle_name\": "
            << JsonString(startup.vehicle_binding.vehicle_name) << ",\n"

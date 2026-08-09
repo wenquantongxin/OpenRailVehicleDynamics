@@ -56,23 +56,23 @@ enum class TrackStationRegion {
 
 class TrackGeometry {
    public:
-    // The three profiles must share one station domain. The rail reference
-    // lateral span is the rail-to-rail distance across which superelevation is
-    // measured along the roll-free frame's vertical axis. The track roll angle
-    // is asin(superelevation / span), and every admissible superelevation
-    // satisfies |superelevation| < span. The strict inequality keeps the
-    // first-order roll kinematics finite.
+    // The three profiles must share one station domain. The superelevation
+    // reference baselength is the transverse baseline b used to convert the
+    // declared level difference u into track roll asin(u / b). It is not the
+    // nominal track gauge or a wheel/rail profile-placement distance. Every
+    // admissible superelevation satisfies |u| < b; the strict inequality keeps
+    // the first-order roll kinematics finite.
     //
     // Throws std::invalid_argument when the profiles disagree on their domain,
-    // when the span or node spacing is not finite and positive, when the
+    // when the baselength or node spacing is not finite and positive, when the
     // requested node table exceeds the construction resource bound, or when
-    // any superelevation in the profile reaches the span in magnitude. The
-    // superelevation bound is refused at construction rather than clamped:
+    // any superelevation in the profile reaches the baselength in magnitude.
+    // The superelevation bound is refused at construction rather than clamped:
     // clamping would turn a modelling mistake into a plausible line.
     TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
                   TrackScalarProfile superelevation_meters,
                   TrackScalarProfile centerline_upward_grade,
-                  double rail_reference_lateral_span_meters,
+                  double superelevation_reference_baselength_meters,
                   double station_node_spacing_meters);
 
     [[nodiscard]] double start_track_station_meters() const {
@@ -81,8 +81,8 @@ class TrackGeometry {
     [[nodiscard]] double end_track_station_meters() const {
         return curvature_.end_track_station_meters();
     }
-    [[nodiscard]] double rail_reference_lateral_span_meters() const {
-        return rail_reference_lateral_span_meters_;
+    [[nodiscard]] double superelevation_reference_baselength_meters() const {
+        return superelevation_reference_baselength_meters_;
     }
 
     // Every finite station is meaningful. Inside the base track's definition
@@ -209,7 +209,7 @@ class TrackGeometry {
     TrackScalarProfile curvature_;
     TrackScalarProfile superelevation_;
     TrackScalarProfile grade_;
-    double rail_reference_lateral_span_meters_{0.0};
+    double superelevation_reference_baselength_meters_{0.0};
     double station_node_spacing_meters_{0.0};
     std::vector<StationNode> nodes_;
 };

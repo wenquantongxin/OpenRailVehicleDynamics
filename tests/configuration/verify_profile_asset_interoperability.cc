@@ -419,9 +419,6 @@ int main(int argc, char** argv) {
     };
 
     expect_json_refusal(
-        ReplaceOnce(record, "\"schema_version\": 1", "\"schema_version\": 2"),
-        "integer 1", "an unsupported schema version");
-    expect_json_refusal(
         ReplaceOnce(record, "\"profile_role\": \"wheel\"",
                     "\"profile_role\": \"axle\""),
         "'wheel' or 'rail'", "a role that names no surface");
@@ -434,8 +431,10 @@ int main(int argc, char** argv) {
                     "\"coordinate_frame\": \"lateral_right_vertical_up\""),
         "lateral_right_vertical_down", "a record stating another frame");
     expect_json_refusal(
-        ReplaceOnce(record, "\"schema_version\": 1,",
-                    "\"schema_version\": 1, \"schema_version\": 1,"),
+        ReplaceOnce(record,
+                    "\"profile_identifier\": \"synthetic_wheel\",",
+                    "\"profile_identifier\": \"synthetic_wheel\", "
+                    "\"profile_identifier\": \"synthetic_wheel\","),
         "duplicate JSON object key", "a duplicate key");
     expect_json_refusal(
         ReplaceOnce(record, "\"length_unit\": \"meter\",",
