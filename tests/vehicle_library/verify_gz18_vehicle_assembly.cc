@@ -316,6 +316,7 @@ void CheckAssemblyIsAllAndOnly(const VehicleDefinition& vehicle,
            "frame was added");
     Expect(model.num_joints() ==
                static_cast<int>(vehicle.revolute_joints.size() +
+                                vehicle.ball_rpy_joints.size() +
                                 vehicle.weld_joints.size()),
            "free bodies produced no named joints, so the count is the record's "
            "joints and nothing else");

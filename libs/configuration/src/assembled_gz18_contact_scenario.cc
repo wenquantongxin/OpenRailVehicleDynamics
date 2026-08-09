@@ -35,8 +35,9 @@ FrozenContactTopology BuildContactTopology(
         Reject("the vehicle layout reference track station is not finite");
     }
     const auto& layout = vehicle.mechanical_track_station_layout;
-    if (layout.wheelset_body_names.size() != 4) {
-        Reject("the GZ18 mechanical layout must name four wheelset bodies");
+    if (layout.wheel_contact_carrier_body_names.size() != 4) {
+        Reject("the GZ18 mechanical layout must name four wheel-rail contact "
+               "carrier bodies");
     }
 
     std::unordered_map<std::string, double> mechanical_offset;
@@ -55,9 +56,11 @@ FrozenContactTopology BuildContactTopology(
     }
 
     FrozenContactTopology topology;
-    topology.carriers.reserve(layout.wheelset_body_names.size());
-    topology.interfaces.reserve(2 * layout.wheelset_body_names.size());
-    for (const std::string& wheelset : layout.wheelset_body_names) {
+    topology.carriers.reserve(layout.wheel_contact_carrier_body_names.size());
+    topology.interfaces.reserve(
+        2 * layout.wheel_contact_carrier_body_names.size());
+    for (const std::string& wheelset :
+         layout.wheel_contact_carrier_body_names) {
         const auto mechanical = mechanical_offset.find(wheelset);
         const auto resolved = resolved_offset.find(wheelset);
         if (mechanical == mechanical_offset.end() ||

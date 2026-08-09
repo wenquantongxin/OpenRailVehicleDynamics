@@ -12,7 +12,7 @@
       { "body_name": "rear_leading_wheelset", "station_offset_meters": -6.6 },
       { "body_name": "rear_trailing_wheelset", "station_offset_meters": -9.1 }
     ],
-    "wheelset_body_names": [
+    "wheel_contact_carrier_body_names": [
       "front_leading_wheelset",
       "front_trailing_wheelset",
       "rear_leading_wheelset",
@@ -647,6 +647,7 @@
       "damping_newton_metre_seconds_per_radian": 0.0
     }
   ],
+  "ball_rpy_joints": [],
   "weld_joints": [
     {
       "name": "front_carbody_interface_body_weld",
@@ -880,5 +881,6 @@
         {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
       ]
     }
-  ]
+  ],
+  "half_angle_midpoint_roll_pitch_yaw_bushings": []
 }

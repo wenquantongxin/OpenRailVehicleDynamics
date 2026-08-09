@@ -567,7 +567,8 @@ int main(int argc, char** argv) {
     constexpr double kYawRadians = 0.04;
     constexpr double kAccumulatedSpinRadians = 0.31;
     const std::string yawed_wheelset =
-        vehicle.mechanical_track_station_layout.wheelset_body_names.front();
+        vehicle.mechanical_track_station_layout
+            .wheel_contact_carrier_body_names.front();
     auto& yawed_body = MutableBodyState(yawed_startup, yawed_wheelset);
     yawed_body.rotation_local_track_from_body = Eigen::Quaterniond(
         Eigen::AngleAxisd(kYawRadians, Eigen::Vector3d::UnitZ()) *

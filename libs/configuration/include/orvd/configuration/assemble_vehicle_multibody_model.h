@@ -10,11 +10,12 @@ namespace orvd::configuration {
 
 // Builds the multibody model one vehicle description states, and nothing else.
 //
-// Every topology entity of the current description becomes exactly one modelling
-// call: a rigid body, a fixed frame, a revolute or weld joint, or a free-body
-// declaration. Nothing is inferred or added. The function consumes the record's
-// call-time value and retains no reference to it. New record fields require an
-// explicit consumer and a direct test; the compiler cannot prove that by itself.
+// Every topology entity of the current description becomes exactly one
+// modelling call: a rigid body, a fixed frame, a revolute, Ball-RPY or weld
+// joint, or a free-body declaration. Nothing is inferred or added. The
+// function consumes the record's call-time value and retains no reference to
+// it. New record fields require an explicit consumer and a direct test; the
+// compiler cannot prove that by itself.
 //
 // The inertia the description states is about each body's centre of mass, and
 // the multibody layer wants a unit inertia about the body origin. The parallel
@@ -66,7 +67,8 @@ AssembleVehicleMultibodyModel(
 // series element requires both strictly positive, since with either at zero it
 // has no time constant and is an algebraic element of a different family.  A
 // clipped damper curve must start at the origin, ascend strictly in velocity
-// and state finite non-negative force. The world frame cannot be a
+// and state finite non-negative force. A half-angle bushing requires four
+// finite non-negative three-axis constant vectors. The world frame cannot be a
 // force-element end.
 [[nodiscard]] std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     const VehicleDefinition& vehicle,

@@ -82,6 +82,12 @@ if(NOT EXISTS "${installed_vehicle_definition}")
     message(FATAL_ERROR
         "the relocated prefix has no installed vehicle definition record")
 endif()
+set(installed_irw_vehicle_definition
+    "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/irw/vehicle_definition.json")
+if(NOT EXISTS "${installed_irw_vehicle_definition}")
+    message(FATAL_ERROR
+        "the relocated prefix has no installed IRW vehicle definition record")
+endif()
 
 # The start-up state sits in a subdirectory of the vehicle library, so it is
 # carried by the same recursive install rule. The consumer below loads it for
@@ -245,7 +251,7 @@ run_checked("running the relocated independent consumer" "${smoke_executable}")
 run_checked("running the configuration-only installed consumer"
             "${configuration_smoke_executable}" "${installed_track_geometry}"
             "${installed_vehicle_definition}" "${installed_startup_state}"
-            "${installed_data_root}")
+            "${installed_data_root}" "${installed_irw_vehicle_definition}")
 run_checked("running the track-geometry-only installed consumer"
             "${track_geometry_smoke_executable}")
 run_checked("running the wheel-rail-contact-only installed consumer"

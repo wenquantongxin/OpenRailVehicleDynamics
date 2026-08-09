@@ -548,7 +548,7 @@ int main(int argc, char** argv) {
             double foremost_wheelset_station =
                 research_line.start_track_station_meters();
             for (const std::string& wheelset_name :
-                 system->binding().wheelset_body_names) {
+                 system->binding().wheel_contact_carrier_body_names) {
                 foremost_wheelset_station = std::max(
                     foremost_wheelset_station,
                     kLayoutReferenceStation +

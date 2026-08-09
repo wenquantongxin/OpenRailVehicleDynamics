@@ -894,6 +894,15 @@ add_test(NAME verify_gz18_vehicle_assembly
          COMMAND verify_gz18_vehicle_assembly
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json)
 
+add_executable(verify_irw_vehicle_assembly
+    vehicle_library/verify_irw_vehicle_assembly.cc)
+orvd_configure_first_party_target(verify_irw_vehicle_assembly)
+target_link_libraries(verify_irw_vehicle_assembly
+    PRIVATE orvd_configuration orvd_system_assembly)
+add_test(NAME verify_irw_vehicle_assembly
+         COMMAND verify_irw_vehicle_assembly
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json)
+
 add_executable(verify_vehicle_force_elements
     forces/vehicle_force_elements_header_self_containment.cc
     forces/vehicle_force_plan_header_self_containment.cc

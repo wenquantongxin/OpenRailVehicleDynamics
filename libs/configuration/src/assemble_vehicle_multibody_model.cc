@@ -172,11 +172,31 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
             ParseAxis(element.axis, what), std::move(curve)});
     }
 
+    std::vector<forces::HalfAngleMidpointRollPitchYawBushing> bushings;
+    bushings.reserve(
+        vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size());
+    for (const auto& element :
+         vehicle.half_angle_midpoint_roll_pitch_yaw_bushings) {
+        const std::string what =
+            "half-angle midpoint roll-pitch-yaw bushing '" + element.name +
+            "'";
+        bushings.push_back(forces::HalfAngleMidpointRollPitchYawBushing{
+            element.name,
+            resolve(element.frame_a_name, what + " frame A"),
+            resolve(element.frame_c_name, what + " frame C"),
+            element.rotational_stiffness_newton_meters_per_radian,
+            element.rotational_damping_newton_meter_seconds_per_radian,
+            element.translational_stiffness_newtons_per_meter,
+            element.translational_damping_newton_seconds_per_meter});
+    }
+
     forces::VehicleForceElementCollection elements;
     elements.translational_spring_dampers = std::move(translational);
     elements.roll_spring_damper_couples = std::move(roll);
     elements.series_spring_viscous_dampers = std::move(series);
     elements.saturated_piecewise_linear_dampers = std::move(clipped);
+    elements.half_angle_midpoint_roll_pitch_yaw_bushings =
+        std::move(bushings);
     return std::make_unique<forces::VehicleForcePlan>(model,
                                                       std::move(elements));
 }
@@ -240,6 +260,17 @@ std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
                          "revolute joint '" + joint.name + "' child"),
             joint.axis_in_parent_frame,
             joint.damping_newton_metre_seconds_per_radian);
+    }
+
+    for (const VehicleBallRpyJointDefinition& joint :
+         vehicle.ball_rpy_joints) {
+        model->AddBallRpyJoint(
+            joint.name,
+            ResolveFrame(frames, joint.parent_frame_name,
+                         "Ball-RPY joint '" + joint.name + "' parent"),
+            ResolveFrame(frames, joint.child_frame_name,
+                         "Ball-RPY joint '" + joint.name + "' child"),
+            joint.default_roll_pitch_yaw_angles_radians);
     }
 
     // Last, so that a description whose joints are wrong fails on the joint

@@ -155,9 +155,9 @@ install(DIRECTORY
         FILES_MATCHING PATTERN "*.json")
 
 install(DIRECTORY
-        "${CMAKE_CURRENT_SOURCE_DIR}/vehicle_library/gz18/"
+        "${CMAKE_CURRENT_SOURCE_DIR}/vehicle_library/"
         DESTINATION
-        "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/gz18"
+        "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library"
         FILES_MATCHING PATTERN "*.json")
 
 set(ORVD_INSTALL_CMAKEDIR

@@ -93,6 +93,19 @@ struct VehicleRevoluteJointDefinition {
     double damping_newton_metre_seconds_per_radian{0.0};
 };
 
+// A three-coordinate rotational relation. The generalized positions are
+// space-fixed XYZ roll-pitch-yaw angles, while the generalized velocities are
+// the physical angular velocity of the child in the parent, expressed in the
+// parent frame. This is the same typed distinction made by the public
+// multibody boundary; the record does not flatten the two into one vector.
+struct VehicleBallRpyJointDefinition {
+    std::string name;
+    std::string parent_frame_name;
+    std::string child_frame_name;
+    Eigen::Vector3d default_roll_pitch_yaw_angles_radians{
+        Eigen::Vector3d::Zero()};
+};
+
 struct VehicleWeldJointDefinition {
     std::string name;
     std::string parent_frame_name;
@@ -152,6 +165,24 @@ struct VehicleSaturatedPiecewiseLinearDamperDefinition {
     std::vector<VehicleSaturatedPiecewiseLinearDamperPointDefinition> curve;
 };
 
+// The frozen IRW six-component bushing. A and C are deliberately not called
+// reference and opposite ends: both receive a wrench at their common
+// instantaneous midpoint, and neither carries the support-moment convention of
+// the translational families.
+struct VehicleHalfAngleMidpointRollPitchYawBushingDefinition {
+    std::string name;
+    std::string frame_a_name;
+    std::string frame_c_name;
+    Eigen::Vector3d rotational_stiffness_newton_meters_per_radian{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d rotational_damping_newton_meter_seconds_per_radian{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d translational_stiffness_newtons_per_meter{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d translational_damping_newton_seconds_per_meter{
+        Eigen::Vector3d::Zero()};
+};
+
 // Where one free body sits along the track, measured from the layout reference
 // body. This is mechanical: the same numbers hold wherever on a line the
 // vehicle is placed. They live here rather than in a start-up state, which
@@ -162,16 +193,20 @@ struct VehicleFreeBodyStationOffsetDefinition {
 };
 
 // Which body the longitudinal layout is measured from, where each free body
-// sits relative to it, and which of those bodies are wheelsets.
+// sits relative to it, and which free bodies carry wheel-rail interfaces.
 //
 // A start-up assembly needs every free body's station to place it on the line,
-// and later contact consumers need to identify the wheelset subset. Both read
-// this record; neither recomputes the mechanical layout.
+// and later contact consumers need to identify the carrier subset. GZ18's four
+// carriers happen to be rigid wheelsets; IRW's four carriers are axle bridges
+// with separately jointed wheel bodies. Calling both subsets "wheelsets" would
+// make the IRW record lie about its topology, so this field names only the
+// shared mechanical role. The eight IRW wheel bodies remain explicit children
+// of eight named revolute joints and are not inferred here.
 struct VehicleMechanicalTrackStationLayoutDefinition {
     std::string reference_body_name;
     std::vector<VehicleFreeBodyStationOffsetDefinition>
         free_body_station_offsets;
-    std::vector<std::string> wheelset_body_names;
+    std::vector<std::string> wheel_contact_carrier_body_names;
 };
 
 struct VehicleDefinition {
@@ -189,6 +224,7 @@ struct VehicleDefinition {
     std::vector<VehicleRigidBodyDefinition> rigid_bodies;
     std::vector<VehicleFixedFrameDefinition> fixed_frames;
     std::vector<VehicleRevoluteJointDefinition> revolute_joints;
+    std::vector<VehicleBallRpyJointDefinition> ball_rpy_joints;
     std::vector<VehicleWeldJointDefinition> weld_joints;
     std::vector<VehicleTranslationalSpringDamperDefinition>
         translational_spring_dampers;
@@ -198,6 +234,8 @@ struct VehicleDefinition {
         series_spring_viscous_dampers;
     std::vector<VehicleSaturatedPiecewiseLinearDamperDefinition>
         saturated_piecewise_linear_dampers;
+    std::vector<VehicleHalfAngleMidpointRollPitchYawBushingDefinition>
+        half_angle_midpoint_roll_pitch_yaw_bushings;
 };
 
 }  // namespace orvd::configuration

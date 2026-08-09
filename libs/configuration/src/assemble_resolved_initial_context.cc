@@ -204,7 +204,7 @@ ResolvedInitialContext AssembleResolvedInitialContext(
          startup_state.target_wheel_support_forces) {
         stated.push_back(forces.wheelset_body_name);
     }
-    RequireSameNames(stated, binding.wheelset_body_names,
+    RequireSameNames(stated, binding.wheel_contact_carrier_body_names,
                      "target wheel support force");
 
     stated.clear();
@@ -212,7 +212,7 @@ ResolvedInitialContext AssembleResolvedInitialContext(
          startup_state.wheelset_startup_kinematics) {
         stated.push_back(wheelset.wheelset_body_name);
     }
-    RequireSameNames(stated, binding.wheelset_body_names,
+    RequireSameNames(stated, binding.wheel_contact_carrier_body_names,
                      "wheelset start-up kinematics");
 
     std::vector<std::string> free_body_names;
@@ -228,7 +228,7 @@ ResolvedInitialContext AssembleResolvedInitialContext(
          startup_state.revolute_joint_startup_states) {
         stated.push_back(joint.joint_name);
     }
-    RequireSameNames(stated, binding.generalized_coordinate_joint_names,
+    RequireSameNames(stated, binding.revolute_joint_names,
                      "joint start-up state");
 
     stated.clear();

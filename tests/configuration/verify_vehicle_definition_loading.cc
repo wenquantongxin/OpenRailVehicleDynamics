@@ -26,7 +26,7 @@ constexpr std::string_view kRecord = R"json({
       {"station_offset_meters": 8.75,
        "body_name": "front_bogie_leading_wheelset"}
     ],
-    "wheelset_body_names": ["front_bogie_leading_wheelset"]
+    "wheel_contact_carrier_body_names": ["front_bogie_leading_wheelset"]
   },
   "rigid_bodies": [
     {
@@ -68,6 +68,16 @@ constexpr std::string_view kRecord = R"json({
         {"x": 1050.0, "y": 1640.0, "z": 1070.0},
       "inertia_products_about_center_of_mass_kilogram_square_meters":
         {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "name": "longibar",
+      "moves_freely_in_world": false,
+      "mass_kilograms": 24.0,
+      "center_of_mass_in_body_frame_meters": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "inertia_moments_about_center_of_mass_kilogram_square_meters":
+        {"x": 1.4, "y": 0.02, "z": 1.4},
+      "inertia_products_about_center_of_mass_kilogram_square_meters":
+        {"x": 0.0, "y": 0.0, "z": 0.0}
     }
   ],
   "fixed_frames": [
@@ -82,6 +92,25 @@ constexpr std::string_view kRecord = R"json({
       "body_name": "front_bogie_leading_wheelset",
       "position_in_body_frame_meters": {"x": 0.0, "y": -1.0, "z": 0.0},
       "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "longibar_parent_frame",
+      "body_name": "front_bogie_leading_left_axlebox_carrier",
+      "position_in_body_frame_meters": {"x": 0.1, "y": -0.2, "z": 0.3},
+      "rotation_in_body_frame": {
+        "form": "matrix_rows",
+        "rows": [
+          {"x": 0.0, "y": -1.0, "z": 0.0},
+          {"x": 1.0, "y": 0.0, "z": 0.0},
+          {"x": 0.0, "y": 0.0, "z": 1.0}
+        ]
+      }
+    },
+    {
+      "name": "longibar_child_frame",
+      "body_name": "longibar",
+      "position_in_body_frame_meters": {"x": 0.0, "y": -0.4, "z": 0.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
     }
   ],
   "revolute_joints": [
@@ -91,6 +120,15 @@ constexpr std::string_view kRecord = R"json({
       "child_frame_name": "front_bogie_leading_left_axlebox_carrier",
       "axis_in_parent_frame": {"x": 0.0, "y": 1.0, "z": 0.0},
       "damping_newton_metre_seconds_per_radian": 0.0
+    }
+  ],
+  "ball_rpy_joints": [
+    {
+      "name": "longibar_ball",
+      "parent_frame_name": "longibar_parent_frame",
+      "child_frame_name": "longibar_child_frame",
+      "default_roll_pitch_yaw_angles_radians":
+        {"x": 0.1, "y": -0.2, "z": 0.3}
     }
   ],
   "weld_joints": [
@@ -139,6 +177,21 @@ constexpr std::string_view kRecord = R"json({
         {"relative_velocity_meters_per_second": 0.02, "force_newtons": 12000.0},
         {"relative_velocity_meters_per_second": 0.04, "force_newtons": 12000.0}
       ]
+    }
+  ],
+  "half_angle_midpoint_roll_pitch_yaw_bushings": [
+    {
+      "name": "longibar_bushing",
+      "frame_a_name": "longibar_child_frame",
+      "frame_c_name": "carbody",
+      "rotational_stiffness_newton_meters_per_radian":
+        {"x": 1.0, "y": 2.0, "z": 3.0},
+      "rotational_damping_newton_meter_seconds_per_radian":
+        {"x": 4.0, "y": 5.0, "z": 6.0},
+      "translational_stiffness_newtons_per_meter":
+        {"x": 7.0, "y": 8.0, "z": 9.0},
+      "translational_damping_newton_seconds_per_meter":
+        {"x": 10.0, "y": 11.0, "z": 12.0}
     }
   ]
 })json";
@@ -194,14 +247,17 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
             "test configuration was not deleted after loading");
 
     Require(vehicle.vehicle_name == "assembly_fixture", "vehicle name");
-    Require(vehicle.rigid_bodies.size() == 4 &&
-                vehicle.fixed_frames.size() == 2 &&
+    Require(vehicle.rigid_bodies.size() == 5 &&
+                vehicle.fixed_frames.size() == 4 &&
                 vehicle.revolute_joints.size() == 1 &&
+                vehicle.ball_rpy_joints.size() == 1 &&
                 vehicle.weld_joints.size() == 1 &&
                 vehicle.translational_spring_dampers.size() == 1 &&
                 vehicle.roll_spring_damper_couples.size() == 1 &&
                 vehicle.series_spring_viscous_dampers.size() == 1 &&
-                vehicle.saturated_piecewise_linear_dampers.size() == 1,
+                vehicle.saturated_piecewise_linear_dampers.size() == 1 &&
+                vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size() ==
+                    1,
             "record does not carry the entities it declares");
 
     // Each constitutive family maps its own fields, in its own order. The three
@@ -260,6 +316,11 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
             "frame rotation was not mapped");
     Require(vehicle.fixed_frames[1].position_in_body_frame_meters.y() == -1.0,
             "a lateral offset lost its sign");
+    Eigen::Matrix3d expected_rotation;
+    expected_rotation << 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
+    Require(vehicle.fixed_frames[2].rotation_in_body_frame ==
+                expected_rotation,
+            "matrix-row frame rotation was transposed or reordered");
 
     const auto& revolute = vehicle.revolute_joints.front();
     Require(revolute.parent_frame_name ==
@@ -271,11 +332,26 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
             "revolute axis was not mapped");
     Require(revolute.damping_newton_metre_seconds_per_radian == 0.0,
             "revolute damping was not mapped");
+    const auto& ball = vehicle.ball_rpy_joints.front();
+    Require(ball.parent_frame_name == "longibar_parent_frame" &&
+                ball.child_frame_name == "longibar_child_frame" &&
+                ball.default_roll_pitch_yaw_angles_radians ==
+                    Eigen::Vector3d(0.1, -0.2, 0.3),
+            "Ball-RPY endpoints or default angles were not mapped");
     Require(vehicle.weld_joints.front().parent_frame_name ==
                     "front_carbody_interface_mount" &&
                 vehicle.weld_joints.front().child_frame_name ==
                     "front_carbody_interface_body",
             "weld endpoints were not mapped, or were exchanged");
+    const auto& bushing =
+        vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.front();
+    Require(bushing.frame_a_name == "longibar_child_frame" &&
+                bushing.frame_c_name == "carbody" &&
+                bushing.rotational_stiffness_newton_meters_per_radian ==
+                    Eigen::Vector3d(1.0, 2.0, 3.0) &&
+                bushing.translational_damping_newton_seconds_per_meter ==
+                    Eigen::Vector3d(10.0, 11.0, 12.0),
+            "half-angle bushing endpoints or constants were not mapped");
 }
 
 void CheckRejections(const std::filesystem::path& path) {
@@ -340,6 +416,11 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"front_carbody_interface_body\"",
                      "\"child_frame_name\": \"no_such_body\""),
          {"$.weld_joints[0].child_frame_name", "no_such_body"}},
+        {ReplaceOnce(valid,
+                     "\"child_frame_name\": \"longibar_child_frame\"",
+                     "\"child_frame_name\": \"no_such_ball_frame\""),
+         {"$.ball_rpy_joints[0].child_frame_name",
+          "no_such_ball_frame"}},
         {ReplaceOnce(valid, "\"body_name\": \"carbody\",",
                      "\"body_name\": \"no_such_body\","),
          {"$.fixed_frames[0].body_name", "no_such_body"}},
@@ -361,6 +442,17 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"force_newtons\": 12000.0, \"slope\": 1.0}\n      ]"),
          {"$.saturated_piecewise_linear_dampers[0].curve[2].slope",
           "unknown key"}},
+        {ReplaceOnce(valid, "\"frame_c_name\": \"carbody\"",
+                     "\"frame_c_name\": \"no_such_bushing_frame\""),
+         {"$.half_angle_midpoint_roll_pitch_yaw_bushings[0].frame_c_name",
+          "no_such_bushing_frame"}},
+        {ReplaceOnce(valid,
+                     "{\"x\": 1.0, \"y\": 0.0, \"z\": 0.0},\n"
+                     "          {\"x\": 0.0, \"y\": 0.0, \"z\": 1.0}",
+                     "{\"x\": 0.0, \"y\": -1.0, \"z\": 0.0},\n"
+                     "          {\"x\": 0.0, \"y\": 0.0, \"z\": 1.0}"),
+         {"$.fixed_frames[2].rotation_in_body_frame",
+          "right-handed orthonormal rotation matrix"}},
         // The rotation form is a closed vocabulary, not a free string.
         {ReplaceOnce(valid,
                      "\"rotation_in_body_frame\": {\"form\": "

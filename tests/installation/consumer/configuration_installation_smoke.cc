@@ -12,6 +12,7 @@
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 #include "orvd/configuration/assembled_gz18_contact_scenario.h"
+#include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/load_track_geometry.h"
@@ -19,10 +20,11 @@
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 5) {
+        if (argc != 6) {
             throw std::invalid_argument(
-                "expected the installed track geometry, vehicle definition and "
-                "resolved start-up state paths plus the installed data root");
+                "expected the installed track geometry, GZ18 vehicle "
+                "definition, resolved start-up state, data root and IRW "
+                "vehicle definition paths");
         }
         auto line =
             orvd::configuration::LoadTrackGeometryFromJsonFile(argv[1]);
@@ -70,6 +72,33 @@ int main(int argc, char* argv[]) {
             std::fprintf(stderr,
                          "installed vehicle record did not assemble and "
                          "compile into the vehicle it describes\n");
+            return 1;
+        }
+
+        // G66 installs the passive IRW mechanical record without an H3 start,
+        // contact personality or controller. Loading it from the relocated
+        // prefix and compiling the complete system proves that the new typed
+        // Ball-RPY and half-angle bushing families cross the installed package
+        // boundary rather than only working in the source tree.
+        const auto irw_vehicle =
+            orvd::configuration::LoadVehicleDefinitionFromJsonFile(argv[5]);
+        const auto irw_system =
+            orvd::configuration::AssembleVehicleSystem(irw_vehicle, 9.81);
+        if (irw_system->model().num_rigid_bodies() != 25 ||
+            irw_system->model().num_generalized_positions() != 81 ||
+            irw_system->model().num_generalized_velocities() != 74 ||
+            irw_system->force_plan().translational_spring_damper_count() !=
+                36 ||
+            irw_system->force_plan().roll_spring_damper_couple_count() != 2 ||
+            irw_system->force_plan()
+                    .half_angle_midpoint_roll_pitch_yaw_bushing_count() != 8 ||
+            irw_system->force_plan()
+                    .series_spring_viscous_damper_count() != 2 ||
+            irw_system->force_plan().body_wrench_count() != 96 ||
+            irw_system->system().continuous_state_size() != 157) {
+            std::fprintf(stderr,
+                         "installed passive IRW record did not assemble its "
+                         "complete typed mechanical system\n");
             return 1;
         }
 

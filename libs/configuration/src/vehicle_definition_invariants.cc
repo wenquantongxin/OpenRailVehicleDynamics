@@ -74,20 +74,23 @@ void RequireVehicleMechanicalTrackStationLayoutInvariants(
             " m rather than zero; the other offsets are measured from it");
     }
 
-    std::unordered_set<std::string> wheelset_names;
-    for (const std::string& name : layout.wheelset_body_names) {
+    std::unordered_set<std::string> carrier_names;
+    for (const std::string& name :
+         layout.wheel_contact_carrier_body_names) {
         if (name.empty()) {
             throw std::invalid_argument(
-                path + ".wheelset_body_names contains an empty name");
+                path +
+                ".wheel_contact_carrier_body_names contains an empty name");
         }
         if (!offset_of_body.contains(name)) {
             throw std::invalid_argument(
-                path + ".wheelset_body_names names '" + name +
+                path + ".wheel_contact_carrier_body_names names '" + name +
                 "', which is not one of the free bodies this layout places");
         }
-        if (!wheelset_names.insert(name).second) {
+        if (!carrier_names.insert(name).second) {
             throw std::invalid_argument(path +
-                                        ".wheelset_body_names repeats '" +
+                                        ".wheel_contact_carrier_body_names "
+                                        "repeats '" +
                                         name + "'");
         }
     }

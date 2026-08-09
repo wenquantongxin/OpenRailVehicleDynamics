@@ -1,5 +1,6 @@
 #include "orvd/configuration/load_vehicle_definition.h"
 
+#include <cmath>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -33,10 +34,9 @@ Eigen::Vector3d RequireVector(const Json& value, const std::string& path) {
     return RequireFiniteVector3(value, path);
 }
 
-// The rotation is a tagged form rather than nine bare numbers. Every named frame
-// of the first vehicle is aligned with its body, so writing out nine constants
-// would be six hundred lines of noise in which a transposed pair would be
-// invisible. A second form is added when a record needs one, not before.
+// The common aligned form remains compact. The matrix form carries the source
+// marker orientation row by row, making the direction (body <- frame) explicit
+// without converting a qualified source matrix through Euler angles.
 Eigen::Matrix3d RequireRotation(const Json& value, const std::string& path) {
     RequireObject(value, path);
     if (!value.contains("form")) {
@@ -47,7 +47,30 @@ Eigen::Matrix3d RequireRotation(const Json& value, const std::string& path) {
         RequireExactKeys(value, path, {"form"});
         return Eigen::Matrix3d::Identity();
     }
-    ThrowExpected(path + ".form", "'aligned_with_body'");
+    if (form == "matrix_rows") {
+        RequireExactKeys(value, path, {"form", "rows"});
+        const std::string rows_path = path + ".rows";
+        const Json& rows = value.at("rows");
+        RequireArray(rows, rows_path);
+        if (rows.size() != 3) {
+            ThrowExpected(rows_path, "exactly three finite row vectors");
+        }
+        Eigen::Matrix3d rotation;
+        for (std::size_t row = 0; row < 3; ++row) {
+            rotation.row(static_cast<Eigen::Index>(row)) =
+                RequireVector(rows[row], ElementPath(rows_path, row));
+        }
+        constexpr double kRotationTolerance = 1.0e-12;
+        const Eigen::Matrix3d gram = rotation.transpose() * rotation;
+        if ((gram - Eigen::Matrix3d::Identity()).cwiseAbs().maxCoeff() >
+                kRotationTolerance ||
+            std::abs(rotation.determinant() - 1.0) > kRotationTolerance) {
+            ThrowExpected(path,
+                          "a finite right-handed orthonormal rotation matrix");
+        }
+        return rotation;
+    }
+    ThrowExpected(path + ".form", "'aligned_with_body' or 'matrix_rows'");
 }
 
 VehicleRigidBodyDefinition ParseRigidBody(const Json& value,
@@ -120,6 +143,23 @@ VehicleRevoluteJointDefinition ParseRevoluteJoint(const Json& value,
     joint.damping_newton_metre_seconds_per_radian = RequireFiniteNumber(
         value.at("damping_newton_metre_seconds_per_radian"),
         path + ".damping_newton_metre_seconds_per_radian");
+    return joint;
+}
+
+VehicleBallRpyJointDefinition ParseBallRpyJoint(const Json& value,
+                                                const std::string& path) {
+    RequireExactKeys(value, path,
+                     {"name", "parent_frame_name", "child_frame_name",
+                      "default_roll_pitch_yaw_angles_radians"});
+    VehicleBallRpyJointDefinition joint;
+    joint.name = RequireString(value.at("name"), path + ".name");
+    joint.parent_frame_name =
+        RequireString(value.at("parent_frame_name"), path + ".parent_frame_name");
+    joint.child_frame_name =
+        RequireString(value.at("child_frame_name"), path + ".child_frame_name");
+    joint.default_roll_pitch_yaw_angles_radians = RequireVector(
+        value.at("default_roll_pitch_yaw_angles_radians"),
+        path + ".default_roll_pitch_yaw_angles_radians");
     return joint;
 }
 
@@ -253,6 +293,37 @@ ParseSaturatedPiecewiseLinearDamper(const Json& value,
     return element;
 }
 
+VehicleHalfAngleMidpointRollPitchYawBushingDefinition
+ParseHalfAngleMidpointRollPitchYawBushing(const Json& value,
+                                          const std::string& path) {
+    RequireExactKeys(
+        value, path,
+        {"name", "frame_a_name", "frame_c_name",
+         "rotational_stiffness_newton_meters_per_radian",
+         "rotational_damping_newton_meter_seconds_per_radian",
+         "translational_stiffness_newtons_per_meter",
+         "translational_damping_newton_seconds_per_meter"});
+    VehicleHalfAngleMidpointRollPitchYawBushingDefinition element;
+    element.name = RequireString(value.at("name"), path + ".name");
+    element.frame_a_name =
+        RequireString(value.at("frame_a_name"), path + ".frame_a_name");
+    element.frame_c_name =
+        RequireString(value.at("frame_c_name"), path + ".frame_c_name");
+    element.rotational_stiffness_newton_meters_per_radian = RequireVector(
+        value.at("rotational_stiffness_newton_meters_per_radian"),
+        path + ".rotational_stiffness_newton_meters_per_radian");
+    element.rotational_damping_newton_meter_seconds_per_radian = RequireVector(
+        value.at("rotational_damping_newton_meter_seconds_per_radian"),
+        path + ".rotational_damping_newton_meter_seconds_per_radian");
+    element.translational_stiffness_newtons_per_meter = RequireVector(
+        value.at("translational_stiffness_newtons_per_meter"),
+        path + ".translational_stiffness_newtons_per_meter");
+    element.translational_damping_newton_seconds_per_meter = RequireVector(
+        value.at("translational_damping_newton_seconds_per_meter"),
+        path + ".translational_damping_newton_seconds_per_meter");
+    return element;
+}
+
 template <typename Element, typename Parse>
 std::vector<Element> ParseArray(const Json& root, const std::string& key,
                                 Parse parse) {
@@ -295,7 +366,7 @@ VehicleMechanicalTrackStationLayoutDefinition ParseMechanicalTrackStationLayout(
     const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
                      {"reference_body_name", "free_body_station_offsets",
-                      "wheelset_body_names"});
+                      "wheel_contact_carrier_body_names"});
     VehicleMechanicalTrackStationLayoutDefinition layout;
     layout.reference_body_name = RequireString(
         value.at("reference_body_name"), path + ".reference_body_name");
@@ -313,17 +384,18 @@ VehicleMechanicalTrackStationLayoutDefinition ParseMechanicalTrackStationLayout(
             offsets[index], ElementPath(offsets_path, index)));
     }
 
-    const std::string wheelsets_path = path + ".wheelset_body_names";
-    const Json& wheelsets = value.at("wheelset_body_names");
-    RequireArray(wheelsets, wheelsets_path);
-    layout.wheelset_body_names.reserve(wheelsets.size());
-    for (std::size_t index = 0; index < wheelsets.size(); ++index) {
-        const std::string element_path = ElementPath(wheelsets_path, index);
-        std::string name = RequireString(wheelsets[index], element_path);
+    const std::string carriers_path =
+        path + ".wheel_contact_carrier_body_names";
+    const Json& carriers = value.at("wheel_contact_carrier_body_names");
+    RequireArray(carriers, carriers_path);
+    layout.wheel_contact_carrier_body_names.reserve(carriers.size());
+    for (std::size_t index = 0; index < carriers.size(); ++index) {
+        const std::string element_path = ElementPath(carriers_path, index);
+        std::string name = RequireString(carriers[index], element_path);
         if (name.empty()) {
             ThrowExpected(element_path, "a non-empty rigid-body name");
         }
-        layout.wheelset_body_names.push_back(std::move(name));
+        layout.wheel_contact_carrier_body_names.push_back(std::move(name));
     }
     return layout;
 }
@@ -339,11 +411,13 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                      {"vehicle_name",
                       "mechanical_definition_identifier",
                       "mechanical_track_station_layout", "rigid_bodies",
-                      "fixed_frames", "revolute_joints", "weld_joints",
+                      "fixed_frames", "revolute_joints", "ball_rpy_joints",
+                      "weld_joints",
                       "translational_spring_dampers",
                       "roll_spring_damper_couples",
                       "series_spring_viscous_dampers",
-                      "saturated_piecewise_linear_dampers"});
+                      "saturated_piecewise_linear_dampers",
+                      "half_angle_midpoint_roll_pitch_yaw_bushings"});
 
     VehicleDefinition vehicle;
     vehicle.vehicle_name =
@@ -365,6 +439,8 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         root, "fixed_frames", ParseFixedFrame);
     vehicle.revolute_joints = ParseArray<VehicleRevoluteJointDefinition>(
         root, "revolute_joints", ParseRevoluteJoint);
+    vehicle.ball_rpy_joints = ParseArray<VehicleBallRpyJointDefinition>(
+        root, "ball_rpy_joints", ParseBallRpyJoint);
     vehicle.weld_joints =
         ParseArray<VehicleWeldJointDefinition>(root, "weld_joints",
                                                ParseWeldJoint);
@@ -383,6 +459,10 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         ParseArray<VehicleSaturatedPiecewiseLinearDamperDefinition>(
             root, "saturated_piecewise_linear_dampers",
             ParseSaturatedPiecewiseLinearDamper);
+    vehicle.half_angle_midpoint_roll_pitch_yaw_bushings =
+        ParseArray<VehicleHalfAngleMidpointRollPitchYawBushingDefinition>(
+            root, "half_angle_midpoint_roll_pitch_yaw_bushings",
+            ParseHalfAngleMidpointRollPitchYawBushing);
 
     // Bodies and frames share one namespace, so one set answers both "is this a
     // body?" and "is this a frame a joint may attach to?".
@@ -406,6 +486,16 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         const VehicleRevoluteJointDefinition& joint =
             vehicle.revolute_joints[index];
         const std::string path = ElementPath("$.revolute_joints", index);
+        RequireDeclared(frame_names, joint.parent_frame_name,
+                        path + ".parent_frame_name");
+        RequireDeclared(frame_names, joint.child_frame_name,
+                        path + ".child_frame_name");
+    }
+    for (std::size_t index = 0; index < vehicle.ball_rpy_joints.size();
+         ++index) {
+        const VehicleBallRpyJointDefinition& joint =
+            vehicle.ball_rpy_joints[index];
+        const std::string path = ElementPath("$.ball_rpy_joints", index);
         RequireDeclared(frame_names, joint.parent_frame_name,
                         path + ".parent_frame_name");
         RequireDeclared(frame_names, joint.child_frame_name,
@@ -481,6 +571,20 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         require_force_ends("saturated_piecewise_linear_dampers", index,
                            element.reference_frame_name,
                            element.opposite_frame_name);
+    }
+    for (std::size_t index = 0;
+         index < vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size();
+         ++index) {
+        const auto& element =
+            vehicle.half_angle_midpoint_roll_pitch_yaw_bushings[index];
+        require_force_name("half_angle_midpoint_roll_pitch_yaw_bushings",
+                           index, element.name);
+        const std::string path = ElementPath(
+            "$.half_angle_midpoint_roll_pitch_yaw_bushings", index);
+        RequireDeclared(frame_names, element.frame_a_name,
+                        path + ".frame_a_name");
+        RequireDeclared(frame_names, element.frame_c_name,
+                        path + ".frame_c_name");
     }
     return vehicle;
 }

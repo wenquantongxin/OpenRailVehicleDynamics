@@ -26,17 +26,25 @@ VehicleBinding CaptureBinding(const VehicleDefinition& vehicle) {
             VehicleFreeBodyStationOffset{offset.body_name,
                                          offset.station_offset_meters});
     }
-    binding.wheelset_body_names =
-        vehicle.mechanical_track_station_layout.wheelset_body_names;
+    binding.wheel_contact_carrier_body_names =
+        vehicle.mechanical_track_station_layout
+            .wheel_contact_carrier_body_names;
 
-    // Only revolute joints carry a generalized coordinate; a weld's position
-    // and velocity ranges are empty, so a start-up state that listed one would
-    // be stating a coordinate nobody owns.
-    binding.generalized_coordinate_joint_names.reserve(
+    // Revolute and Ball-RPY joints keep separate typed name families because
+    // their coordinate blocks have different shapes. A weld's position and
+    // velocity ranges are empty, so a start-up state that listed one would be
+    // stating a coordinate nobody owns.
+    binding.revolute_joint_names.reserve(
         vehicle.revolute_joints.size());
     for (const VehicleRevoluteJointDefinition& joint :
          vehicle.revolute_joints) {
-        binding.generalized_coordinate_joint_names.push_back(joint.name);
+        binding.revolute_joint_names.push_back(joint.name);
+    }
+
+    binding.ball_rpy_joint_names.reserve(vehicle.ball_rpy_joints.size());
+    for (const VehicleBallRpyJointDefinition& joint :
+         vehicle.ball_rpy_joints) {
+        binding.ball_rpy_joint_names.push_back(joint.name);
     }
 
     binding.translational_spring_damper_names.reserve(

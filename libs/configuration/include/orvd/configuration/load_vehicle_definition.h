@@ -24,12 +24,13 @@ namespace orvd::configuration {
 // that is not positive, and a freely moving body's singular centre-of-mass
 // inertia. A six-degree-of-freedom body needs nonsingular rotational inertia;
 // constrained bodies remain subject to the multibody layer's full topology-
-// aware mass-property checks.
+// aware mass-property checks. A fixed-frame matrix form is checked here for a
+// finite right-handed orthonormal `body <- frame` rotation because that
+// direction and shape are part of the JSON contract.
 //
 // Everything else the multibody layer already decides is left to it: repeated
 // topology names, a body with no path to the world, a relation that would close
-// a loop, an unusable joint axis, a negative damping, or a rotation that is not
-// a rotation.
+// a loop, an unusable joint axis, or a negative damping.
 // Checking those twice would give two diagnostics for one mistake and let the
 // two drift apart.
 //
