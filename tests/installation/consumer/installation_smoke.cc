@@ -61,6 +61,43 @@ int RunInstalledLineSmoke() {
     return 0;
 }
 
+// The installed multibody facade must carry the public Ball-RPY symbol and its
+// link-only rigid-tree implementation. This is a real kinematics and dynamics
+// use, not a header or archive-presence check.
+int RunInstalledBallRpySmoke() {
+    RigidBodyInertiaParameters inertia;
+    inertia.mass_kilograms = 23.958904;
+    inertia.unit_inertia_moments = Eigen::Vector3d(0.058, 0.001, 0.058);
+
+    MultibodyModel model;
+    const auto bar = model.AddRigidBody("longitudinal_bar", inertia);
+    const Eigen::Vector3d default_angles(0.012, -0.009,
+                                         -4.57347190844519);
+    const auto ball = model.AddBallRpyJoint(
+        "axle_bridge_ball", model.world_frame(), model.body_frame(bar),
+        default_angles);
+    model.SetGravityVector(Eigen::Vector3d::Zero());
+    model.Finalize();
+
+    const auto q_range = model.GetJointPositionRange(ball);
+    const auto v_range = model.GetJointVelocityRange(ball);
+    auto context = model.CreateDefaultContext();
+    const auto pose = model.CalcPoseInWorld(*context, bar);
+    Eigen::MatrixXd mass_matrix(3, 3);
+    model.CalcGeneralizedMassMatrix(*context, mass_matrix);
+    if (q_range.size() != 3 || v_range.size() != 3 ||
+        !(context->generalized_positions().segment<3>(q_range.start()) ==
+          default_angles) ||
+        !pose.rotation().allFinite() || !mass_matrix.allFinite() ||
+        mass_matrix.determinant() <= 0.0) {
+        std::fprintf(stderr,
+                     "installed ORVD Ball-RPY smoke did not preserve its "
+                     "3q/3v state and finite dynamics\n");
+        return 1;
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -127,6 +164,9 @@ int main() {
             return 1;
         }
         if (RunInstalledLineSmoke() != 0) {
+            return 1;
+        }
+        if (RunInstalledBallRpySmoke() != 0) {
             return 1;
         }
     } catch (const std::exception& error) {

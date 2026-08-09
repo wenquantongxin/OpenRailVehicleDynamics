@@ -9,11 +9,11 @@
 /// writing against the arrangement rather than against the model.
 ///
 /// What the model accepts is the set of things something actually builds today:
-/// rigid bodies, fixed frames on them, revolute, prismatic and weld joints, and
-/// a declaration that a body is free in the world. The rigid tree can express
-/// more — planar, screw, universal, ball, curvilinear, roll-pitch-yaw floating —
-/// and none of those has a consumer. An entry point for one would be an untested
-/// path with an interface nobody had yet had a reason to shape.
+/// rigid bodies, fixed frames on them, revolute, prismatic, Ball-RPY and weld
+/// joints, and a declaration that a body is free in the world. The rigid tree
+/// can express more — planar, screw, universal, curvilinear, roll-pitch-yaw
+/// floating — and none of those has a consumer. An entry point for one would be
+/// an untested path with an interface nobody had yet had a reason to shape.
 ///
 /// Failures happen where they can first be seen. A duplicate name, a handle from
 /// another model, a joint from a body to itself, a second relation between two
@@ -131,6 +131,35 @@ class MultibodyModel {
                                   FrameHandle child,
                                   const Eigen::Vector3d& axis_in_parent,
                                   double damping_newton_seconds_per_metre);
+
+    /// Adds a three-degree-of-freedom rotational joint between frames F and M.
+    ///
+    /// `parent` defines F and `child` defines M. The three generalized
+    /// positions are `[roll, pitch, yaw]` in radians and state
+    ///
+    ///     R_FM = Rz(yaw) * Ry(pitch) * Rx(roll).
+    ///
+    /// The three generalized velocities are not those angle derivatives: they
+    /// are the physical angular velocity of M in F, expressed in F. Therefore
+    /// `qdot = N(q) * v`. The default angles are stored exactly as supplied;
+    /// this boundary neither normalizes them nor chooses another equivalent
+    /// Euler-angle branch.
+    ///
+    /// The frozen joint has zero internal damping. A rotational restraint is a
+    /// separate force element rather than a second joint-parameter authority.
+    /// Mapping `v` to `qdot` requires the RPY rate map and is refused when
+    /// `abs(cos(pitch)) < 1e-3`; pose evaluation and the inverse `qdot` to `v`
+    /// map do not silently change coordinates near that singular branch.
+    ///
+    /// The current rigid tree can only finalize this joint when its declared
+    /// parent lies on the side closer to the world; a relation requiring the
+    /// Ball-RPY joint to be traversed in reverse is rejected during Finalize().
+    ///
+    /// @throws std::invalid_argument under the same topology and naming rules
+    /// as the one-axis joints, or if a default angle is not finite.
+    JointHandle AddBallRpyJoint(
+        std::string_view name, FrameHandle parent, FrameHandle child,
+        const Eigen::Vector3d& default_roll_pitch_yaw_angles_radians);
 
     /// Adds a weld: the two frames hold still with respect to each other.
     JointHandle AddWeldJoint(std::string_view name, FrameHandle parent,

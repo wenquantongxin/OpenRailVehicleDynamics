@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "drake/multibody/tree/articulated_body_inertia_cache.h"
+#include "drake/multibody/tree/ball_rpy_joint.h"
 #include "drake/multibody/tree/fixed_offset_frame.h"
 #include "drake/multibody/tree/multibody_tree-inl.h"
 #include "drake/multibody/tree/prismatic_joint.h"
@@ -218,7 +219,7 @@ class MultibodyModel::Implementation {
         return {parent_body, child_body};
     }
 
-    enum class JointKind { kRevolute, kPrismatic, kWeld };
+    enum class JointKind { kRevolute, kPrismatic, kBallRpy, kWeld };
 
     void RecordJoint(const std::string& name, int parent_body, int child_body,
                      drake::multibody::JointIndex tree_joint, JointKind kind) {
@@ -452,6 +453,35 @@ JointHandle MultibodyModel::AddPrismaticJoint(
 
     model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
                       Implementation::JointKind::kPrismatic);
+    return model.MakeHandle<JointHandle>(
+        static_cast<int>(model.joint_names_.size()) - 1);
+}
+
+JointHandle MultibodyModel::AddBallRpyJoint(
+    std::string_view name, FrameHandle parent, FrameHandle child,
+    const Eigen::Vector3d& default_roll_pitch_yaw_angles_radians) {
+    Implementation& model = *implementation_;
+    model.ThrowIfNotBuildable("add a Ball-RPY joint");
+    const std::string joint_name(name);
+    const auto [parent_body, child_body] =
+        model.PrepareRelation(parent, child, joint_name);
+    if (!default_roll_pitch_yaw_angles_radians.allFinite()) {
+        Reject("Ball-RPY joint '" + joint_name +
+               "' default roll, pitch and yaw angles must all be finite");
+    }
+
+    const int parent_frame = HandleOrdinal(parent);
+    const int child_frame = HandleOrdinal(child);
+    auto owned_joint = std::make_unique<drake::multibody::BallRpyJoint<double>>(
+        joint_name, model.tree_.get_frame(model.tree_frame_[parent_frame]),
+        model.tree_.get_frame(model.tree_frame_[child_frame]), 0.0);
+    owned_joint->set_default_angles(default_roll_pitch_yaw_angles_radians);
+    const auto& joint =
+        model.tree_.AddJoint<drake::multibody::BallRpyJoint>(
+            std::move(owned_joint));
+
+    model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
+                      Implementation::JointKind::kBallRpy);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }

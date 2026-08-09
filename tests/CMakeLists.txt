@@ -392,6 +392,18 @@ target_link_libraries(verify_multibody_model_building
 add_test(NAME verify_multibody_model_building
          COMMAND verify_multibody_model_building)
 
+# The model-neutral Ball-RPY entry point in the same topology that first
+# consumes it: a free axle bridge with a massive longitudinal bar outboard.
+# Expectations reconstruct Rz*Ry*Rx, qdot=N(q)v and virtual power without
+# exposing or calling a vendored joint type.
+add_executable(verify_multibody_model_ball_rpy_joint
+    multibody_model/verify_multibody_model_ball_rpy_joint.cc)
+orvd_configure_first_party_target(verify_multibody_model_ball_rpy_joint)
+target_link_libraries(verify_multibody_model_ball_rpy_joint
+    PRIVATE orvd_multibody_model)
+add_test(NAME verify_multibody_model_ball_rpy_joint
+         COMMAND verify_multibody_model_ball_rpy_joint)
+
 # Finalization and what a finalized model answers. Same linkage and the same
 # reason: everything it asks for is asked through the public headers, so the
 # coordinate ranges it checks are ones a consumer can actually obtain.
