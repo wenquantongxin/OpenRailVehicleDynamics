@@ -8,13 +8,17 @@ or Git: its root CMake superbuild consumes only the four copied local archives.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
+
+sys.dont_write_bytecode = True
+
+from dependency_sources import DependencySource, load_dependency_sources
 
 
 SCRIPT_PATH = Path(__file__).resolve()
@@ -30,57 +34,24 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--fmt-archive", type=Path, required=True)
     parser.add_argument("--nlohmann-json-archive", type=Path, required=True)
     parser.add_argument("--sundials-archive", type=Path, required=True)
+    parser.add_argument("--cmake-executable", default="cmake")
     return parser.parse_args()
 
 
-def load_manifest(template_directory: Path) -> dict:
-    manifest_path = template_directory / "dependency_sources.json"
-    with manifest_path.open(encoding="utf-8") as stream:
-        manifest = json.load(stream)
-    if not isinstance(manifest, dict) or set(manifest) != {"dependencies"}:
-        raise ValueError(
-            f"{manifest_path} must contain only the 'dependencies' field"
-        )
-    records = manifest["dependencies"]
-    expected_keys = {"eigen", "fmt", "nlohmann_json", "sundials"}
-    expected_record_fields = {
-        "key", "name", "version", "archive", "source_directory",
-        "source_url", "license_paths",
-    }
-    if (
-        not isinstance(records, list)
-        or len(records) != len(expected_keys)
-    ):
-        raise ValueError(
-            f"{manifest_path} must contain exactly eigen, fmt, nlohmann_json "
-            "and sundials"
-        )
-    for index, record in enumerate(records):
-        if not isinstance(record, dict) or set(record) != expected_record_fields:
-            raise ValueError(
-                f"{manifest_path} dependency {index} must contain exactly "
-                f"{sorted(expected_record_fields)}"
-            )
-    if {item["key"] for item in records} != expected_keys:
-        raise ValueError(
-            f"{manifest_path} must contain exactly eigen, fmt, nlohmann_json "
-            "and sundials"
-        )
-    return manifest
-
-
-def require_archive(path: Path, record: dict) -> None:
+def require_archive(path: Path, record: DependencySource) -> None:
     if not path.is_file():
         raise FileNotFoundError(
-            f"{record['name']} archive does not exist: {path}"
+            f"{record.name} archive does not exist: {path}"
         )
 
 
-def copy_license_materials(archive: Path, record: dict, destination: Path) -> None:
+def copy_license_materials(
+    archive: Path, record: DependencySource, destination: Path
+) -> None:
     destination.mkdir(parents=True)
     with tarfile.open(archive, mode="r:*") as source:
-        for relative_path in record["license_paths"]:
-            member_name = f"{record['source_directory']}/{relative_path}"
+        for relative_path in record.license_paths:
+            member_name = f"{record.source_directory}/{relative_path}"
             try:
                 member = source.getmember(member_name)
             except KeyError as error:
@@ -167,7 +138,10 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
     source_root = arguments.source_root.resolve()
     output_directory = arguments.output_directory.resolve()
     template_directory = source_root / "distribution" / "dependencies"
-    manifest = load_manifest(template_directory)
+    dependency_sources = load_dependency_sources(
+        template_directory / "dependency_sources.cmake",
+        cmake_executable=arguments.cmake_executable,
+    )
     archives = {
         "eigen": arguments.eigen_archive.resolve(),
         "fmt": arguments.fmt_archive.resolve(),
@@ -184,7 +158,7 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
             f"refusing to replace existing bundle output: {output_directory}"
         )
 
-    records = {record["key"]: record for record in manifest["dependencies"]}
+    records = dependency_sources.records_by_key()
     for key, archive in archives.items():
         require_archive(archive, records[key])
 
@@ -198,8 +172,12 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
     try:
         shutil.copy2(template_directory / "CMakeLists.txt", staging / "CMakeLists.txt")
         shutil.copy2(
-            template_directory / "dependency_sources.json",
-            staging / "dependency_sources.json",
+            template_directory / "OrvdDependencySources.cmake",
+            staging / "OrvdDependencySources.cmake",
+        )
+        shutil.copy2(
+            template_directory / "dependency_sources.cmake",
+            staging / "dependency_sources.cmake",
         )
         shutil.copy2(template_directory / "README.md", staging / "README.md")
 
@@ -207,11 +185,11 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
         archive_directory.mkdir()
         license_root = staging / "dependency-licenses"
         for key, record in records.items():
-            shutil.copy2(archives[key], archive_directory / record["archive"])
+            shutil.copy2(archives[key], archive_directory / record.archive)
             copy_license_materials(
                 archives[key],
                 record,
-                license_root / f"{key}-{record['version']}",
+                license_root / f"{key}-{record.version}",
             )
 
         copy_tracked_source(

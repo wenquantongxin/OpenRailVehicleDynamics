@@ -13,10 +13,14 @@ set(_orvd_bundle_root "${CMAKE_CURRENT_LIST_DIR}")
 set(_orvd_archives "${_orvd_bundle_root}/dependencies")
 set(_orvd_licenses "${_orvd_bundle_root}/dependency-licenses")
 set(_orvd_product_source "${_orvd_bundle_root}/OpenRailVehicleDynamics")
-set(_orvd_manifest "${_orvd_bundle_root}/dependency_sources.json")
+set(_orvd_dependency_source_module
+    "${_orvd_bundle_root}/OrvdDependencySources.cmake")
+set(_orvd_dependency_source_manifest
+    "${_orvd_bundle_root}/dependency_sources.cmake")
 
 foreach(required_path IN ITEMS
-        "${_orvd_manifest}"
+        "${_orvd_dependency_source_module}"
+        "${_orvd_dependency_source_manifest}"
         "${_orvd_product_source}/CMakeLists.txt"
         "${_orvd_licenses}")
     if(NOT EXISTS "${required_path}")
@@ -25,68 +29,19 @@ foreach(required_path IN ITEMS
     endif()
 endforeach()
 
-file(READ "${_orvd_manifest}" _orvd_dependency_manifest)
-string(JSON _orvd_manifest_member_count LENGTH
-       "${_orvd_dependency_manifest}")
-string(JSON _orvd_manifest_member MEMBER
-       "${_orvd_dependency_manifest}" 0)
-if(NOT _orvd_manifest_member_count EQUAL 1 OR
-   NOT _orvd_manifest_member STREQUAL "dependencies")
-    message(FATAL_ERROR
-        "the dependency manifest must contain only the 'dependencies' field")
-endif()
+include("${_orvd_dependency_source_module}")
+orvd_begin_dependency_sources()
+include("${_orvd_dependency_source_manifest}")
+orvd_finalize_dependency_sources()
 
-string(JSON _orvd_dependency_count LENGTH "${_orvd_dependency_manifest}"
-       dependencies)
-if(NOT _orvd_dependency_count EQUAL 4)
-    message(FATAL_ERROR
-        "the bundle must declare exactly Eigen, fmt, nlohmann/json and SUNDIALS; found "
-        "${_orvd_dependency_count} records")
-endif()
-
-math(EXPR _orvd_last_dependency "${_orvd_dependency_count} - 1")
-set(_orvd_dependency_record_fields
-    archive
-    key
-    license_paths
-    name
-    source_directory
-    source_url
-    version)
-foreach(index RANGE 0 ${_orvd_last_dependency})
-    string(JSON _orvd_dependency_record_member_count LENGTH
-           "${_orvd_dependency_manifest}" dependencies ${index})
-    if(NOT _orvd_dependency_record_member_count EQUAL 7)
-        message(FATAL_ERROR
-            "dependency record ${index} must contain exactly the current seven fields")
-    endif()
-    foreach(member_index RANGE 0 6)
-        string(JSON member_name MEMBER "${_orvd_dependency_manifest}"
-               dependencies ${index} ${member_index})
-        list(FIND _orvd_dependency_record_fields "${member_name}"
-             member_position)
-        if(member_position EQUAL -1)
-            message(FATAL_ERROR
-                "dependency record ${index} contains unknown field '${member_name}'")
-        endif()
-    endforeach()
-    string(JSON key GET "${_orvd_dependency_manifest}" dependencies ${index}
-           key)
-    string(JSON archive GET "${_orvd_dependency_manifest}" dependencies
-           ${index} archive)
+foreach(key IN LISTS ORVD_DEPENDENCY_KEYS)
     string(TOUPPER "${key}" upper_key)
+    set(archive "${ORVD_${upper_key}_ARCHIVE}")
     set("ORVD_${upper_key}_ARCHIVE" "${_orvd_archives}/${archive}")
     if(NOT EXISTS "${_orvd_archives}/${archive}")
         message(FATAL_ERROR
             "the offline source bundle is missing dependency archive "
             "'${_orvd_archives}/${archive}'")
-    endif()
-endforeach()
-
-foreach(required_key IN ITEMS EIGEN FMT NLOHMANN_JSON SUNDIALS)
-    if(NOT DEFINED "ORVD_${required_key}_ARCHIVE")
-        message(FATAL_ERROR
-            "the dependency manifest has no '${required_key}' record")
     endif()
 endforeach()
 
@@ -202,7 +157,7 @@ add_custom_command(
             "${_orvd_licenses}" "${_orvd_license_destination}"
     COMMAND "${CMAKE_COMMAND}" -E touch
             "${CMAKE_BINARY_DIR}/dependency-licenses.stamp"
-    DEPENDS "${_orvd_manifest}"
+    DEPENDS "${_orvd_dependency_source_manifest}"
     COMMENT "Installing bundled dependency licence materials"
     VERBATIM)
 add_custom_target(orvd_dependency_licenses ALL

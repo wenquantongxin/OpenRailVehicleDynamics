@@ -592,7 +592,7 @@
   锚点和合并语义。ORVD 当前尚未准入该依赖，离线清单仍只有 Eigen、fmt 和 SUNDIALS。
 - 锚点：[R007 与 DEC-010](DISCUSSION_AND_DECISION_LOG.md)；WRL
   `scripts_cpp/CMakeLists.txt:149`、`README.md:93`、`scripts_cpp/tools/freeze_gz18_assets.py:42`；
-  ORVD `distribution/dependencies/dependency_sources.json`。
+  ORVD `distribution/dependencies/dependency_sources.cmake`。
 - 影响：车型规范、已解析启动状态、场景和控制器参数均可采用一个严格加载入口：拒绝重复/未知
   字段，要求专用加载入口的全且仅字段集合、严格 JSON 类型、有限物理数值和带单位字段名，
   解析后立即转换为类型化领域对象。公共 API 不暴露 JSON DOM，RHS 热路径不读文件；对象是否可变

@@ -186,7 +186,8 @@ G47–G55 第一册明确不含 IRW、轨道不平顺、曲线长窗、控制器
     原子准入（源码归档、许可证、NOTICE、安装后消费者一并到位）、不暴露 JSON 类型的第一方加载
     入口，以及 `track_library/geometries/straight_level_2000m.json`。加载器解析一次并直接返回 G47
     的类型化不可变 `TrackGeometry`，不建立公开 C++ 中间记录或通用模式框架。
-  - **允许修改**：`distribution/dependencies/`（含依赖清单与其数量断言）；`tools/package_distribution/`；
+  - **允许修改**：`distribution/dependencies/`（含严格依赖声明、共享校验器与依赖全集断言）；
+    `tools/package_distribution/`；
     根 `CMakeLists.txt`、根 `NOTICE`；新建并安装导出 `libs/configuration/`；新建 `tests/configuration/`；
     `tests/CMakeLists.txt`、`tests/installation/`、`tests/README.md`、根 `README.md`；根
     `track_library/geometries/` 的首个真实资产及其安装资源规则；本路书的状态与实测收口。
@@ -209,7 +210,7 @@ G47–G55 第一册明确不含 IRW、轨道不平顺、曲线长窗、控制器
        记录必须通过。
     2. 依赖准入完整：离线源码包含 `nlohmann/json` 归档与其许可证；安装后的独立消费者能仅凭
        `find_package` 构建并加载安装树中的线路记录；安装接口不要求消费者查找 JSON 库，运行期
-       依赖闭包检查与产品源码边界检查继续通过。依赖清单不保存归档哈希；下载时的单次核对只在
+       依赖闭包检查与产品源码边界检查继续通过。依赖声明不保存归档哈希；下载时的单次核对只在
        仓外发生。
     3. 热路径隔离：已安装公共头不暴露 JSON 类型；加载完成并删除输入文件后，返回的几何对象仍可
        独立求值。轨道几何目标不链接配置解析实现，右端热路径不接触 JSON DOM 或文件系统。

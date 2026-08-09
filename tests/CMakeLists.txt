@@ -3,6 +3,11 @@
 # synthetic source trees, so this check needs neither Drake nor a Drake clone.
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 find_package(Git REQUIRED)
+add_test(NAME verify_dependency_source_declaration
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_SOURCE_DIR}/tools/package_distribution/verify_dependency_sources.py
+                 --cmake ${CMAKE_COMMAND}
+                 --source-root ${CMAKE_SOURCE_DIR})
 add_test(NAME verify_source_closure_analyzer
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_source_closure_analyzer.py)
