@@ -633,6 +633,8 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         WheelRailContactInterfaceObservation observation;
         if (publish_observations) {
             observation.contact_patch_count = result.count;
+            observation.rail_profile_reference_marker_track_station_meters =
+                effective_station;
         }
         for (std::size_t patch = 0; patch < result.count; ++patch) {
             const auto& wheel_wrench =

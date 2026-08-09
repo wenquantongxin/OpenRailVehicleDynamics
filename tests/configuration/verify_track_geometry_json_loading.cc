@@ -84,6 +84,26 @@ bool Near(double measured, double expected, double tolerance = 1.0e-12) {
     return std::abs(measured - expected) <= tolerance;
 }
 
+double RawR300TransitionFraction(double track_station_meters) {
+    const auto hermite = [](double fraction) {
+        return 3.0 * fraction * fraction -
+               2.0 * fraction * fraction * fraction;
+    };
+    if (track_station_meters < 50.0) {
+        return 0.0;
+    }
+    if (track_station_meters < 100.0) {
+        return hermite((track_station_meters - 50.0) / 50.0);
+    }
+    if (track_station_meters < 600.0) {
+        return 1.0;
+    }
+    if (track_station_meters < 650.0) {
+        return 1.0 - hermite((track_station_meters - 600.0) / 50.0);
+    }
+    return 0.0;
+}
+
 void Write(const std::filesystem::path& path, std::string_view contents) {
     std::ofstream output(path, std::ios::binary);
     if (!output || !(output << contents)) {
@@ -136,6 +156,67 @@ void CheckRealAsset(const std::filesystem::path& asset_path) {
                 geometry.SuperelevationMeters(kStation) == 0.0 &&
                 geometry.CenterlineUpwardGrade(kStation) == 0.0,
             "real asset contains an unexpected active profile");
+}
+
+void CheckGz18R300Asset(const std::filesystem::path& asset_path) {
+    const auto geometry = LoadTrackGeometryFromJsonFile(asset_path);
+    Require(geometry.start_track_station_meters() == 0.0 &&
+                geometry.end_track_station_meters() == 1150.0,
+            "R300 asset has the wrong station interval");
+    Require(geometry.superelevation_reference_baselength_meters() == 1.5,
+            "R300 asset has the wrong superelevation reference baselength");
+    Require(geometry.first_curved_track_station_meters() == 48.5 &&
+                geometry.first_superelevated_track_station_meters() == 48.5 &&
+                !geometry.first_graded_track_station_meters().has_value(),
+            "R300 asset does not begin its first three-metre C2 seam at the "
+            "declared station");
+
+    constexpr double kCircularCurvature = 1.0 / 300.0;
+    Require(geometry.CurvatureRadiansPerMeter(25.0) == 0.0 &&
+                geometry.SuperelevationMeters(25.0) == 0.0,
+            "R300 asset is not straight before the transition");
+    Require(Near(geometry.CurvatureRadiansPerMeter(75.0),
+                 0.5 * kCircularCurvature) &&
+                Near(geometry.SuperelevationMeters(75.0), 0.06),
+            "R300 entry transition does not follow its Hermite definition");
+    Require(geometry.CurvatureRadiansPerMeter(150.0) ==
+                    kCircularCurvature &&
+                geometry.SuperelevationMeters(150.0) == 0.12 &&
+                Near(geometry.TrackRollRadians(150.0),
+                     std::asin(0.12 / 1.5)),
+            "R300 circular segment does not carry the qualified curvature and "
+            "centerline-based superelevation");
+    Require(Near(geometry.CurvatureRadiansPerMeter(625.0),
+                 0.5 * kCircularCurvature) &&
+                Near(geometry.SuperelevationMeters(625.0), 0.06),
+            "R300 exit transition does not follow its Hermite definition");
+    Require(geometry.CurvatureRadiansPerMeter(900.0) == 0.0 &&
+                geometry.SuperelevationMeters(900.0) == 0.0,
+            "R300 asset is not straight after the transition");
+
+    // Each segment boundary carries the declared three-metre quintic overlay.
+    // A point inside every window must therefore differ from the raw
+    // constant/Hermite segment value. This checks all four declarations rather
+    // than inferring them from the first support station.
+    for (const double station : {49.0, 99.0, 599.0, 649.0}) {
+        const double raw_fraction = RawR300TransitionFraction(station);
+        Require(std::abs(geometry.CurvatureRadiansPerMeter(station) -
+                         raw_fraction * kCircularCurvature) > 1.0e-10 &&
+                    std::abs(geometry.SuperelevationMeters(station) -
+                             raw_fraction * 0.12) > 1.0e-9,
+                "R300 asset lost one of its four three-metre C2 seams");
+    }
+
+    for (const double station : {25.0, 75.0, 150.0, 625.0, 900.0}) {
+        const auto point =
+            geometry.CenterlinePositionInInertialMeters(station);
+        Require(point.allFinite() && point.z() == 0.0,
+                "R300 centerline is not finite and level");
+        const auto projection = geometry.ProjectPointNearSeed(
+            point, station + 0.2, 1.0);
+        Require(Near(projection.track_station_meters(), station, 2.0e-12),
+                "R300 centerline point did not project to its own station");
+    }
 }
 
 void CheckNondegenerateRecordAndLifetime(
@@ -235,17 +316,19 @@ void CheckStrictRejections(const std::filesystem::path& path) {
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 3) {
+        if (argc != 4) {
             throw std::invalid_argument(
-                "expected the real asset path and a scratch directory");
+                "expected the straight asset, R300 asset, and a scratch "
+                "directory");
         }
-        const std::filesystem::path scratch = argv[2];
+        const std::filesystem::path scratch = argv[3];
         std::filesystem::remove_all(scratch);
         std::filesystem::create_directories(scratch);
         const std::filesystem::path temporary_configuration =
             scratch / "track_geometry.json";
 
         CheckRealAsset(argv[1]);
+        CheckGz18R300Asset(argv[2]);
         CheckNondegenerateRecordAndLifetime(temporary_configuration);
         CheckStrictRejections(temporary_configuration);
         std::filesystem::remove_all(scratch);

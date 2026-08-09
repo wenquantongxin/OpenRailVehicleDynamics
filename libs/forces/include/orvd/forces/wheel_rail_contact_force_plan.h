@@ -44,6 +44,11 @@ struct WheelRailContactInterfaceDefinition {
 // qualified only when one patch supplies its unique contact frame.
 struct WheelRailContactInterfaceObservation {
     std::size_t contact_patch_count{0};
+    // The ideal Track Line station at which this side's rail profile frame was
+    // placed.  This is the side-specific quantity averaged by SIMPACK Result
+    // Element 82 channel 3; it is distinct from the wheelset-body origin
+    // projection used to continue the local track branch.
+    double rail_profile_reference_marker_track_station_meters{0.0};
     double vertical_support_force_on_wheel_newtons{0.0};
     double normal_force_newtons{0.0};
     double longitudinal_force_on_wheel_newtons{0.0};

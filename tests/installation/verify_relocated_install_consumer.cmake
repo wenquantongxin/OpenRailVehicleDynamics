@@ -65,9 +65,15 @@ set(installed_track_geometry_directory
     "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/track_library/geometries")
 set(installed_track_geometry
     "${installed_track_geometry_directory}/straight_level_2000m.json")
+set(installed_r300_track_geometry
+    "${installed_track_geometry_directory}/r300_centerline_superelevation_1150m.json")
 if(NOT EXISTS "${installed_track_geometry}")
     message(FATAL_ERROR
         "the relocated prefix has no installed track geometry record")
+endif()
+if(NOT EXISTS "${installed_r300_track_geometry}")
+    message(FATAL_ERROR
+        "the relocated prefix has no installed R300 track geometry record")
 endif()
 
 set(installed_vehicle_definition
@@ -94,6 +100,12 @@ set(installed_lateral_irregularity
     "${installed_data_root}/track_library/irregularities/series/gz18_aar6_reference_lateral.json")
 set(installed_vertical_irregularity
     "${installed_data_root}/track_library/irregularities/series/gz18_aar6_reference_vertical.json")
+set(installed_r300_aar5_irregularity
+    "${installed_data_root}/track_library/irregularities/gz18_r300_aar5_reference_irregularity.json")
+set(installed_r300_aar5_lateral_irregularity
+    "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_lateral.json")
+set(installed_r300_aar5_vertical_irregularity
+    "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_vertical.json")
 foreach(installed_profile IN ITEMS
         "${installed_wheel_profile}" "${installed_rail_profile}")
     if(NOT EXISTS "${installed_profile}")
@@ -104,7 +116,10 @@ endforeach()
 foreach(installed_irregularity IN ITEMS
         "${installed_track_irregularity}"
         "${installed_lateral_irregularity}"
-        "${installed_vertical_irregularity}")
+        "${installed_vertical_irregularity}"
+        "${installed_r300_aar5_irregularity}"
+        "${installed_r300_aar5_lateral_irregularity}"
+        "${installed_r300_aar5_vertical_irregularity}")
     if(NOT EXISTS "${installed_irregularity}")
         message(FATAL_ERROR
             "the relocated prefix has no installed track-irregularity asset "

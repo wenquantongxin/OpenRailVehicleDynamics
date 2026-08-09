@@ -111,6 +111,8 @@ bool SameObservation(
     const orvd::forces::WheelRailContactInterfaceObservation& actual,
     const orvd::forces::WheelRailContactInterfaceObservation& expected) {
     return actual.contact_patch_count == expected.contact_patch_count &&
+           actual.rail_profile_reference_marker_track_station_meters ==
+               expected.rail_profile_reference_marker_track_station_meters &&
            actual.vertical_support_force_on_wheel_newtons ==
                expected.vertical_support_force_on_wheel_newtons &&
            actual.normal_force_newtons == expected.normal_force_newtons &&
@@ -137,6 +139,27 @@ std::vector<AppliedBodyWrench> EvaluateContactForces(
             .wheel_rail_projection_station_hints_meters(),
         wrenches);
     return wrenches;
+}
+
+std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
+EvaluateContactObservations(
+    const AssembledGz18ContactScenario& scenario,
+    orvd::forces::WheelRailContactForceWorkspace& workspace) {
+    const auto& assembled = scenario.vehicle_system();
+    const auto* plan = assembled.contact_force_plan();
+    std::array<AppliedBodyWrench, 8> wrenches;
+    std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
+        observations;
+    auto view = assembled.system().GetMultibodyComponentView(
+        scenario.initial_context().context(),
+        assembled.system().multibody_component());
+    plan->CalcAppliedForcesAndObservations(
+        view.context(), workspace,
+        scenario.initial_context()
+            .context()
+            .wheel_rail_projection_station_hints_meters(),
+        wrenches, observations);
+    return observations;
 }
 
 orvd::configuration::FreeBodyStartupState& MutableBodyState(
@@ -582,6 +605,8 @@ int main(int argc, char** argv) {
     auto yawed_workspace = yawed_plan->CreateWorkspace();
     const auto yawed_wrenches =
         EvaluateContactForces(*yawed_scenario, *yawed_workspace);
+    const auto yawed_observations =
+        EvaluateContactObservations(*yawed_scenario, *yawed_workspace);
     auto yawed_zero_field_workspace =
         yawed_zero_field_scenario->vehicle_system()
             .contact_force_plan()
@@ -816,6 +841,11 @@ int main(int argc, char** argv) {
             "sampling stations");
     for (const auto& [interface, direct] :
          {std::pair{0, &direct_right}, std::pair{1, &direct_left}}) {
+        Require(yawed_observations[interface]
+                        .rail_profile_reference_marker_track_station_meters ==
+                    direct->effective_station_meters,
+                "the published rail-profile reference-marker station does "
+                "not equal the station consumed by the real interface");
         Require(Near(yawed_wrenches[interface].force_newtons,
                      direct->wrench_in_inertial.force_newtons) &&
                     Near(yawed_wrenches[interface]

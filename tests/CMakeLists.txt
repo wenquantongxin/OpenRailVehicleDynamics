@@ -644,6 +644,7 @@ target_link_libraries(verify_track_geometry_json_loading
 add_test(NAME verify_track_geometry_json_loading
          COMMAND verify_track_geometry_json_loading
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
              ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
 
 # G52a's profile layer: the two interpolants a surface is read through, the two
@@ -776,6 +777,7 @@ target_link_libraries(verify_track_irregularity_field_loading
     PRIVATE orvd_configuration)
 add_test(NAME verify_track_irregularity_field_loading
          COMMAND verify_track_irregularity_field_loading
+             ${CMAKE_SOURCE_DIR}
              ${CMAKE_CURRENT_BINARY_DIR}/track-irregularity-fixtures)
 
 # G52c's real asset and personality boundary. The test loads the same JSON a

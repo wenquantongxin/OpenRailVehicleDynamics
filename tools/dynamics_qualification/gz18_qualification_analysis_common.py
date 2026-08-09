@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Private mechanical helpers for the GZ18 qualification analyses.
 
-The G60 and G61 entry points deliberately keep separate frozen-reference
+The G60, G61, and G62 entry points deliberately keep separate frozen-reference
 contracts.  This module only shares parsing, naming, statistics, and execution
 identity mechanics; it does not choose a reference corpus or acceptance window.
 """
@@ -90,6 +90,9 @@ def load_orvd_artifact(
     goal_name: str,
     sample_count: int,
     terminal_time_nanoseconds: int,
+    track_irregularity_identifier: str = "gz18_aar6_reference_irregularity",
+    track_geometry_filename: str = "straight_level_2000m.json",
+    base_track_definition_interval_meters: tuple[int, int] = (0, 2000),
 ) -> dict[str, Any]:
     """Load one complete ORVD artifact with a goal-specific clock contract."""
 
@@ -110,7 +113,7 @@ def load_orvd_artifact(
         "wheel_profile_identifier": "gz18_reference_wheel_profile",
         "rail_profile_identifier": "uic60_rail_profile",
         "contact_strategy_identifier": "gz18_reference_wheel_rail_contact",
-        "track_irregularity_identifier": "gz18_aar6_reference_irregularity",
+        "track_irregularity_identifier": track_irregularity_identifier,
         "sample_period_nanoseconds": 500_000,
         "terminal_time_nanoseconds": terminal_time_nanoseconds,
         "sample_count": sample_count,
@@ -122,15 +125,16 @@ def load_orvd_artifact(
     require(metadata.get("initial_longitudinal_speed_meters_per_second") ==
             16.666666666666668,
             "ORVD metadata has the wrong initial longitudinal speed")
-    require(metadata.get("base_track_definition_interval_meters") == [0, 2000],
+    require(metadata.get("base_track_definition_interval_meters") ==
+            list(base_track_definition_interval_meters),
             "ORVD metadata has the wrong base-track definition interval")
     input_paths = metadata.get("input_paths")
     require(isinstance(input_paths, dict),
             "ORVD metadata input_paths is not an object")
     track_path = input_paths.get("track_geometry")
     require(isinstance(track_path, str) and
-            Path(track_path).name == "straight_level_2000m.json",
-            f"ORVD metadata does not identify the {goal_name} straight track asset")
+            Path(track_path).name == track_geometry_filename,
+            f"ORVD metadata does not identify the {goal_name} track asset")
 
     complete_text = (directory / "COMPLETE").read_text(encoding="utf-8")
     require(complete_text == f"{sample_count} samples\n",

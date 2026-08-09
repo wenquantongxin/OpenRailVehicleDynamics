@@ -456,7 +456,9 @@ void WriteObservationHeader(
     for (int interface = 0; interface < contact_plan->interface_count();
          ++interface) {
         const std::string name(contact_plan->interface_name(interface));
-        *output << '\t' << name << ".contact_patch_count"
+        *output << '\t' << name
+                << ".rail_profile_reference_marker_track_station_meters"
+                << '\t' << name << ".contact_patch_count"
                 << '\t' << name
                 << ".vertical_support_force_on_wheel_newtons"
                 << '\t' << name << ".normal_force_newtons"
@@ -482,7 +484,10 @@ void WriteObservation(std::ofstream* output,
     }
     for (const WheelRailContactInterfaceObservation& interface :
          observation.interfaces) {
-        *output << '\t' << interface.contact_patch_count << '\t'
+        *output << '\t'
+                << interface
+                       .rail_profile_reference_marker_track_station_meters
+                << '\t' << interface.contact_patch_count << '\t'
                 << interface.vertical_support_force_on_wheel_newtons << '\t'
                 << interface.normal_force_newtons << '\t'
                 << interface.longitudinal_force_on_wheel_newtons << '\t'
@@ -903,6 +908,9 @@ Gz18QualificationRunSummary RunGz18Qualification(
         for (std::size_t interface = 0; interface < kInterfaceCount;
              ++interface) {
             const auto& value = observation.interfaces[interface];
+            RequireFinite(
+                value.rail_profile_reference_marker_track_station_meters,
+                "rail-profile reference track station");
             RequireFinite(value.vertical_support_force_on_wheel_newtons,
                           "wheel vertical support force");
             RequireFinite(value.normal_force_newtons,

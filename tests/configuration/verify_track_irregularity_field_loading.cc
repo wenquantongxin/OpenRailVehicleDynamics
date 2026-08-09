@@ -250,14 +250,46 @@ void CheckMissingSeriesFailsLoudly(const std::filesystem::path& data_root) {
     throw std::runtime_error("a missing referenced series was accepted");
 }
 
+void CheckGz18R300Aar5Asset(const std::filesystem::path& source_data_root) {
+    const auto field = LoadTrackIrregularityFieldFromDataRoot(
+        source_data_root, "gz18_r300_aar5_reference_irregularity");
+    Require(field.LateralDisplacementMeters(59.0) == 0.0 &&
+                field.VerticalDisplacementMeters(59.0) == 0.0 &&
+                field.LateralDisplacementMeters(1001.0) == 0.0 &&
+                field.VerticalDisplacementMeters(1001.0) == 0.0,
+            "GZ18 R300 AAR5 asset remains active outside [60, 1000] m");
+    Require(field.LateralDisplacementMeters(60.0) == 0.0 &&
+                field.VerticalDisplacementMeters(60.0) == 0.0 &&
+                field.LateralDisplacementMeters(1000.0) == 0.0 &&
+                field.VerticalDisplacementMeters(1000.0) == 0.0,
+            "GZ18 R300 AAR5 asset endpoints are not zero");
+    Require(field.LateralDisplacementMeters(100.0) ==
+                    -0.0010418007586758813 &&
+                field.VerticalDisplacementMeters(100.0) ==
+                    -0.0017274249872550945 &&
+                field.LateralDisplacementMeters(960.0) ==
+                    0.0032490507631524118 &&
+                field.VerticalDisplacementMeters(960.0) ==
+                    0.005387298316295291,
+            "GZ18 R300 AAR5 exact fade boundaries drifted");
+    Require(std::isfinite(field.LateralSlopeMetersPerMeter(100.0)) &&
+                std::isfinite(field.VerticalSlopeMetersPerMeter(100.0)) &&
+                std::isfinite(field.LateralSlopeMetersPerMeter(960.0)) &&
+                std::isfinite(field.VerticalSlopeMetersPerMeter(960.0)),
+            "GZ18 R300 AAR5 fade-boundary slopes are not finite");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 2) {
-            throw std::invalid_argument("expected one scratch data-root path");
+        if (argc != 3) {
+            throw std::invalid_argument(
+                "expected the source and scratch data-root paths");
         }
-        const std::filesystem::path data_root = argv[1];
+        const std::filesystem::path source_data_root = argv[1];
+        const std::filesystem::path data_root = argv[2];
+        CheckGz18R300Aar5Asset(source_data_root);
         CheckIndependentNonuniformSeriesAndLifetime(data_root);
         CheckStrictRejections(data_root);
         CheckMissingSeriesFailsLoudly(data_root);

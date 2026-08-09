@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <exception>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -33,6 +34,21 @@ int main(int argc, char* argv[]) {
                          "straight-line point\n");
             return 1;
         }
+        auto r300_line =
+            orvd::configuration::LoadTrackGeometryFromJsonFile(
+                std::filesystem::path(argv[4]) / "track_library" /
+                "geometries" /
+                "r300_centerline_superelevation_1150m.json");
+        if (r300_line.start_track_station_meters() != 0.0 ||
+            r300_line.end_track_station_meters() != 1150.0 ||
+            r300_line.CurvatureRadiansPerMeter(150.0) != 1.0 / 300.0 ||
+            r300_line.SuperelevationMeters(150.0) != 0.12 ||
+            r300_line.superelevation_reference_baselength_meters() != 1.5) {
+            std::fprintf(stderr,
+                         "installed R300 line does not carry its qualified "
+                         "geometry\n");
+            return 1;
+        }
         // The installed vehicle record, read from where the install put it and
         // assembled with only the installed public headers and export set.
         const auto vehicle =
@@ -62,18 +78,18 @@ int main(int argc, char* argv[]) {
         // personality its direct RHS consumes.
         const auto startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
-        auto irregularity =
+        const auto aar6_irregularity =
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
                 argv[4], "gz18_aar6_reference_irregularity");
         for (const double station : {50.0, 100.0, 250.0, 300.0}) {
             if (!std::isfinite(
-                    irregularity.LateralDisplacementMeters(station)) ||
+                    aar6_irregularity.LateralDisplacementMeters(station)) ||
                 !std::isfinite(
-                    irregularity.VerticalDisplacementMeters(station)) ||
+                    aar6_irregularity.VerticalDisplacementMeters(station)) ||
                 !std::isfinite(
-                    irregularity.LateralSlopeMetersPerMeter(station)) ||
+                    aar6_irregularity.LateralSlopeMetersPerMeter(station)) ||
                 !std::isfinite(
-                    irregularity.VerticalSlopeMetersPerMeter(station))) {
+                    aar6_irregularity.VerticalSlopeMetersPerMeter(station))) {
                 std::fprintf(
                     stderr,
                     "installed GZ18 track-irregularity asset did not produce "
@@ -81,12 +97,31 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         }
+        auto aar5_irregularity =
+            orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
+                argv[4], "gz18_r300_aar5_reference_irregularity");
+        for (const double station : {60.0, 100.0, 960.0, 1000.0}) {
+            if (!std::isfinite(
+                    aar5_irregularity.LateralDisplacementMeters(station)) ||
+                !std::isfinite(
+                    aar5_irregularity.VerticalDisplacementMeters(station)) ||
+                !std::isfinite(
+                    aar5_irregularity.LateralSlopeMetersPerMeter(station)) ||
+                !std::isfinite(
+                    aar5_irregularity.VerticalSlopeMetersPerMeter(station))) {
+                std::fprintf(
+                    stderr,
+                    "installed GZ18 R300 AAR5 asset did not produce finite "
+                    "values and slopes\n");
+                return 1;
+            }
+        }
         const auto scenario =
             orvd::configuration::AssembleGz18ContactScenario(
-                vehicle, startup, std::move(line), argv[4], 0.0, 2.0,
+                vehicle, startup, std::move(r300_line), argv[4], 0.0, 2.0,
                 std::make_unique<
                     orvd::wheel_rail_contact::TrackIrregularityField>(
-                    std::move(irregularity)));
+                    std::move(aar5_irregularity)));
         const auto& system = scenario->vehicle_system();
         const auto& resolved = scenario->initial_context();
         Eigen::VectorXd derivatives(system.system().continuous_state_size());

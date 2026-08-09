@@ -213,6 +213,9 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     const std::array<std::size_t, 4> station_columns{
         front_leading, front_trailing, rear_leading, rear_trailing};
     const std::array<double, 4> expected_initial{9.1, 6.6, -6.6, -9.1};
+    const std::array<std::string_view, 4> carrier_names{
+        "front_leading_wheelset", "front_trailing_wheelset",
+        "rear_leading_wheelset", "rear_trailing_wheelset"};
     for (std::size_t carrier = 0; carrier < station_columns.size(); ++carrier) {
         const std::size_t column = station_columns[carrier];
         Require(std::abs(ParseDouble(rows.front()[column]) -
@@ -220,6 +223,21 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 "the formal s_ref=0 wheelset station was shifted");
         Require(ParseDouble(rows[0][column]) < ParseDouble(rows[1][column]),
                 "a wheelset station is not strictly forward across samples");
+        const std::size_t right_reference_station = FindColumn(
+            header, std::string(carrier_names[carrier]) +
+                        ".right.rail_profile_reference_marker_track_station_"
+                        "meters");
+        const std::size_t left_reference_station = FindColumn(
+            header, std::string(carrier_names[carrier]) +
+                        ".left.rail_profile_reference_marker_track_station_"
+                        "meters");
+        const double reference_marker_mean =
+            0.5 * (ParseDouble(rows.front()[right_reference_station]) +
+                   ParseDouble(rows.front()[left_reference_station]));
+        Require(std::abs(reference_marker_mean - expected_initial[carrier]) <=
+                    1.0e-12,
+                "the initial mean rail-profile reference-marker station does "
+                "not reproduce the formal s_ref=0 placement");
     }
     const std::size_t time_column = FindColumn(header, "time_seconds");
     Require(ParseDouble(rows[0][time_column]) == 0.0 &&
