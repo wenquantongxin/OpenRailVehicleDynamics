@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -18,21 +19,20 @@ namespace {
 
 using orvd::forces::ForceElementAxis;
 using orvd::forces::ForceElementEnd;
+using orvd::forces::HalfAngleMidpointRollPitchYawBushing;
 using orvd::forces::RollSpringDamperCouple;
 using orvd::forces::SaturatedPiecewiseLinearDamper;
 using orvd::forces::SaturatedPiecewiseLinearDamperPoint;
 using orvd::forces::SeriesSpringViscousDamper;
 using orvd::forces::TranslationalSpringDamper;
+using orvd::forces::VehicleForceElementCollection;
 using orvd::forces::VehicleForcePlan;
 using orvd::multibody_model::AppliedBodyWrench;
 using orvd::multibody_model::MultibodyModel;
 
 static_assert(!std::is_constructible_v<
               VehicleForcePlan, MultibodyModel&&,
-              std::vector<TranslationalSpringDamper>,
-              std::vector<RollSpringDamperCouple>,
-              std::vector<SeriesSpringViscousDamper>,
-              std::vector<SaturatedPiecewiseLinearDamper>>);
+              VehicleForceElementCollection>);
 
 constexpr double kMachine = std::numeric_limits<double>::epsilon();
 
@@ -210,6 +210,42 @@ std::vector<AppliedBodyWrench> Evaluate(
     return wrenches;
 }
 
+VehicleForceElementCollection WithTranslationalElements(
+    std::vector<TranslationalSpringDamper> elements) {
+    VehicleForceElementCollection collection;
+    collection.translational_spring_dampers = std::move(elements);
+    return collection;
+}
+
+VehicleForceElementCollection WithRollElements(
+    std::vector<RollSpringDamperCouple> elements) {
+    VehicleForceElementCollection collection;
+    collection.roll_spring_damper_couples = std::move(elements);
+    return collection;
+}
+
+VehicleForceElementCollection WithSeriesElements(
+    std::vector<SeriesSpringViscousDamper> elements) {
+    VehicleForceElementCollection collection;
+    collection.series_spring_viscous_dampers = std::move(elements);
+    return collection;
+}
+
+VehicleForceElementCollection WithClippedElements(
+    std::vector<SaturatedPiecewiseLinearDamper> elements) {
+    VehicleForceElementCollection collection;
+    collection.saturated_piecewise_linear_dampers = std::move(elements);
+    return collection;
+}
+
+VehicleForceElementCollection WithBushingElements(
+    std::vector<HalfAngleMidpointRollPitchYawBushing> elements) {
+    VehicleForceElementCollection collection;
+    collection.half_angle_midpoint_roll_pitch_yaw_bushings =
+        std::move(elements);
+    return collection;
+}
+
 // ---------------------------------------------------------------------------
 // Gate 3 — the full wrench, and the endpoint power identity
 // ---------------------------------------------------------------------------
@@ -220,9 +256,9 @@ void CheckFullWrenchAndPower() {
     const Eigen::Vector3d damping(410.0, 230.0, 370.0);
     VehicleForcePlan plan(
         *fixture.model,
-        {TranslationalSpringDamper{"test_translation", fixture.reference_end,
-                                   fixture.opposite_end, stiffness, damping}},
-        {}, {}, {});
+        WithTranslationalElements({TranslationalSpringDamper{
+            "test_translation", fixture.reference_end, fixture.opposite_end,
+            stiffness, damping}}));
     Eigen::VectorXd no_state(0);
     Eigen::VectorXd nominal(3);
     nominal << 1300.0, -900.0, 2100.0;
@@ -346,9 +382,9 @@ void CheckTranslationalEnergyIdentity() {
     const Eigen::Vector3d damping(410.0, 230.0, 370.0);
     VehicleForcePlan plan(
         *fixture.model,
-        {TranslationalSpringDamper{"test_translation", fixture.reference_end,
-                                   fixture.opposite_end, stiffness, damping}},
-        {}, {}, {});
+        WithTranslationalElements({TranslationalSpringDamper{
+            "test_translation", fixture.reference_end, fixture.opposite_end,
+            stiffness, damping}}));
     Eigen::VectorXd no_state(0);
     Eigen::VectorXd nominal(3);
     nominal << 1300.0, -900.0, 2100.0;
@@ -385,12 +421,10 @@ void CheckSeriesEnergyIdentity() {
     constexpr double kStiffness = 4.0e5;
     constexpr double kDamping = 9.0e3;
     VehicleForcePlan plan(
-        *fixture.model, {}, {},
-        {SeriesSpringViscousDamper{"test_series", fixture.reference_end,
-                                   fixture.opposite_end,
-                                   ForceElementAxis::kLateral, kStiffness,
-                                   kDamping}},
-        {});
+        *fixture.model,
+        WithSeriesElements({SeriesSpringViscousDamper{
+            "test_series", fixture.reference_end, fixture.opposite_end,
+            ForceElementAxis::kLateral, kStiffness, kDamping}}));
     Eigen::VectorXd series(1);
     series << 3700.0;
     Eigen::VectorXd nominal(0);
@@ -465,7 +499,9 @@ void CheckClippedDamperLawAndDissipation() {
            "the law is continuous: no sampled step jumps by more than the "
            "steepest segment's slope allows");
 
-    VehicleForcePlan plan(*fixture.model, {}, {}, {}, {damper});
+    VehicleForcePlan plan(
+        *fixture.model,
+        WithClippedElements({damper}));
     Eigen::VectorXd none(0);
     Eigen::VectorXd derivatives(0);
     const auto wrenches = Evaluate(fixture, plan, none, none, derivatives);
@@ -482,10 +518,10 @@ void CheckRollCoupleAndItsFiniteAttitudeResidual() {
     constexpr double kStiffness = 1.5e6;
     constexpr double kDamping = 2.5e2;
     VehicleForcePlan plan(
-        *fixture.model, {},
-        {RollSpringDamperCouple{"test_roll", fixture.reference_end,
-                                fixture.opposite_end, kStiffness, kDamping}},
-        {}, {});
+        *fixture.model,
+        WithRollElements({RollSpringDamperCouple{
+            "test_roll", fixture.reference_end, fixture.opposite_end,
+            kStiffness, kDamping}}));
     Eigen::VectorXd none(0);
     Eigen::VectorXd derivatives(0);
     const auto wrenches = Evaluate(fixture, plan, none, none, derivatives);
@@ -563,12 +599,10 @@ void CheckSeriesAnalyticDerivative() {
     constexpr double kDamping = 500.0;
     const TwoBodyFixture fixture;
     VehicleForcePlan plan(
-        *fixture.model, {}, {},
-        {SeriesSpringViscousDamper{"test_series", fixture.reference_end,
-                                   fixture.opposite_end,
-                                   ForceElementAxis::kLateral, kStiffness,
-                                   kDamping}},
-        {});
+        *fixture.model,
+        WithSeriesElements({SeriesSpringViscousDamper{
+            "test_series", fixture.reference_end, fixture.opposite_end,
+            ForceElementAxis::kLateral, kStiffness, kDamping}}));
     Eigen::VectorXd series(1);
     series << 640.0;
     Eigen::VectorXd nominal(0);
@@ -615,44 +649,39 @@ void CheckPlanRefusals() {
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
-                {TranslationalSpringDamper{"same_end", fixture.reference_end,
-                                           fixture.reference_end,
-                                           Eigen::Vector3d::Ones(),
-                                           Eigen::Vector3d::Zero()}},
-                {}, {}, {});
+                WithTranslationalElements({TranslationalSpringDamper{
+                    "same_end", fixture.reference_end, fixture.reference_end,
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}}));
         },
         "an element naming one frame as both ends is refused");
     refuses(
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
-                {TranslationalSpringDamper{
+                WithTranslationalElements({TranslationalSpringDamper{
                     "same_body", fixture.reference_end, fixture.same_body_end,
-                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}},
-                {}, {}, {});
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}}));
         },
         "two distinct frames on the same body are refused as force ends");
     refuses(
         [&] {
             VehicleForcePlan plan(
-                *fixture.model, {}, {},
-                {SeriesSpringViscousDamper{"zero_series", fixture.reference_end,
-                                           fixture.opposite_end,
-                                           ForceElementAxis::kLateral, 0.0,
-                                           1000.0}},
-                {});
+                *fixture.model,
+                WithSeriesElements({SeriesSpringViscousDamper{
+                    "zero_series", fixture.reference_end,
+                    fixture.opposite_end, ForceElementAxis::kLateral, 0.0,
+                    1000.0}}));
         },
         "a series element with zero stiffness is refused: it has no time "
         "constant and belongs to another family");
     refusal_mentions(
         [&] {
             VehicleForcePlan plan(
-                *fixture.model, {}, {},
-                {SeriesSpringViscousDamper{
+                *fixture.model,
+                WithSeriesElements({SeriesSpringViscousDamper{
                     "overflowing_series", fixture.reference_end,
                     fixture.opposite_end, ForceElementAxis::kLateral, 1.0e9,
-                    1.0e-300}},
-                {});
+                    1.0e-300}}));
         },
         "overflowing_series",
         "a series element whose stiffness-to-damping ratio overflows is "
@@ -660,14 +689,13 @@ void CheckPlanRefusals() {
     refuses(
         [&] {
             VehicleForcePlan plan(
-                *fixture.model, {}, {}, {},
-                {SaturatedPiecewiseLinearDamper{
+                *fixture.model,
+                WithClippedElements({SaturatedPiecewiseLinearDamper{
                     "unordered_curve", fixture.reference_end,
-                    fixture.opposite_end,
-                    ForceElementAxis::kLateral,
+                    fixture.opposite_end, ForceElementAxis::kLateral,
                     {SaturatedPiecewiseLinearDamperPoint{0.0, 0.0},
                      SaturatedPiecewiseLinearDamperPoint{0.02, 12000.0},
-                     SaturatedPiecewiseLinearDamperPoint{0.01, 9000.0}}}});
+                     SaturatedPiecewiseLinearDamperPoint{0.01, 9000.0}}}}));
         },
         "a curve whose velocities do not ascend is refused");
     refuses(
@@ -683,73 +711,83 @@ void CheckPlanRefusals() {
     refuses(
         [&] {
             VehicleForcePlan plan(
-                *fixture.model, {}, {}, {},
-                {SaturatedPiecewiseLinearDamper{
+                *fixture.model,
+                WithClippedElements({SaturatedPiecewiseLinearDamper{
                     "missing_origin", fixture.reference_end,
-                    fixture.opposite_end,
-                    ForceElementAxis::kLateral,
+                    fixture.opposite_end, ForceElementAxis::kLateral,
                     {SaturatedPiecewiseLinearDamperPoint{0.01, 500.0},
-                     SaturatedPiecewiseLinearDamperPoint{0.02, 12000.0}}}});
+                     SaturatedPiecewiseLinearDamperPoint{0.02, 12000.0}}}}));
         },
         "a curve that does not start at the origin is refused");
     refuses(
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
-                {TranslationalSpringDamper{
+                WithTranslationalElements({TranslationalSpringDamper{
                     "", fixture.reference_end, fixture.opposite_end,
-                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}},
-                {}, {}, {});
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}}));
         },
         "an empty force-element name is refused");
     refuses(
         [&] {
+            VehicleForceElementCollection elements;
+            elements.translational_spring_dampers = {
+                TranslationalSpringDamper{
+                    "duplicate", fixture.reference_end, fixture.opposite_end,
+                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}};
+            elements.series_spring_viscous_dampers = {
+                SeriesSpringViscousDamper{
+                    "duplicate", fixture.reference_end, fixture.opposite_end,
+                    ForceElementAxis::kLateral, 1000.0, 100.0}};
             VehicleForcePlan plan(
-                *fixture.model,
-                {TranslationalSpringDamper{
-                    "duplicate", fixture.reference_end, fixture.opposite_end,
-                    Eigen::Vector3d::Ones(), Eigen::Vector3d::Zero()}},
-                {},
-                {SeriesSpringViscousDamper{
-                    "duplicate", fixture.reference_end, fixture.opposite_end,
-                    ForceElementAxis::kLateral, 1000.0, 100.0}},
-                {});
+                *fixture.model, std::move(elements));
         },
         "force-element names are unique across constitutive families");
     refusal_mentions(
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
-                {TranslationalSpringDamper{
+                WithTranslationalElements({TranslationalSpringDamper{
                     "active_spring", fixture.reference_end,
                     fixture.opposite_end, Eigen::Vector3d(-1.0, 2.0, 3.0),
-                    Eigen::Vector3d::Zero()}},
-                {}, {}, {});
+                    Eigen::Vector3d::Zero()}}));
         },
         "active_spring",
         "a negative translational stiffness is refused with the element name");
     refuses(
         [&] {
             VehicleForcePlan plan(
-                *fixture.model, {},
-                {RollSpringDamperCouple{
+                *fixture.model,
+                WithRollElements({RollSpringDamperCouple{
                     "active_roll", fixture.reference_end,
-                    fixture.opposite_end, 1000.0, -1.0}},
-                {}, {});
+                    fixture.opposite_end, 1000.0, -1.0}}));
         },
         "a negative roll damping coefficient is refused");
     refuses(
         [&] {
             VehicleForcePlan plan(
-                *fixture.model, {}, {}, {},
-                {SaturatedPiecewiseLinearDamper{
+                *fixture.model,
+                WithClippedElements({SaturatedPiecewiseLinearDamper{
                     "active_curve", fixture.reference_end,
                     fixture.opposite_end, ForceElementAxis::kLateral,
                     {SaturatedPiecewiseLinearDamperPoint{0.0, 0.0},
-                     SaturatedPiecewiseLinearDamperPoint{0.02, -10.0}}}});
+                     SaturatedPiecewiseLinearDamperPoint{0.02, -10.0}}}}));
         },
         "a negative force on the non-negative half of a damper curve is "
         "refused");
+    refusal_mentions(
+        [&] {
+            VehicleForcePlan plan(
+                *fixture.model,
+                WithBushingElements({HalfAngleMidpointRollPitchYawBushing{
+                    "active_bushing", fixture.reference_end,
+                    fixture.opposite_end, Eigen::Vector3d::Zero(),
+                    Eigen::Vector3d(100.0, -1.0, 100.0),
+                    Eigen::Vector3d::Constant(1.0e8),
+                    Eigen::Vector3d::Constant(100.0)}}));
+        },
+        "active_bushing",
+        "a negative bushing coefficient is refused with the element name");
 }
 
 }  // namespace

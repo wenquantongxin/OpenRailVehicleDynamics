@@ -2,6 +2,8 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
@@ -50,6 +52,7 @@ struct RelativeMotion {
     // is a statement about where the two application points are.
     Eigen::Vector3d displacement_in_world_meters;
     Eigen::Matrix3d rotation_of_reference_in_world;
+    Eigen::Vector3d reference_origin_in_world_meters;
 };
 
 RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
@@ -69,6 +72,7 @@ RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
     motion.opposite_point =
         model.CalcFrameOriginAsBodyFixedPoint(context, opposite.frame);
     motion.rotation_of_reference_in_world = reference_pose.rotation();
+    motion.reference_origin_in_world_meters = reference_pose.translation();
     motion.displacement_in_world_meters =
         opposite_pose.translation() - reference_pose.translation();
     motion.displacement_in_reference_frame_meters =
@@ -81,6 +85,100 @@ RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
     motion.angular_velocity_in_reference_frame_radians_per_second =
         relative_velocity.angular_velocity_radians_per_second();
     return motion;
+}
+
+// Returns the canonical quaternion used by the frozen WRL path. Eigen already
+// constructs a unit quaternion from the model's rotation matrix; selecting the
+// non-negative scalar representative removes the q/-q ambiguity before taking
+// a half angle.
+Eigen::Quaterniond CanonicalQuaternion(const Eigen::Matrix3d& rotation) {
+    Eigen::Quaterniond quaternion(rotation);
+    quaternion.normalize();
+    if (quaternion.w() < 0.0) {
+        quaternion.coeffs() *= -1.0;
+    }
+    return quaternion;
+}
+
+Eigen::Matrix3d CalcHalfAngleRotation(const Eigen::Matrix3d& rotation_a_c) {
+    const Eigen::Quaterniond quaternion_a_c =
+        CanonicalQuaternion(rotation_a_c);
+    const double scalar =
+        std::sqrt(0.5 * (quaternion_a_c.w() + 1.0));
+    const double vector_scale = 1.0 / (2.0 * scalar);
+    const Eigen::Quaterniond quaternion_a_b(
+        scalar, quaternion_a_c.x() * vector_scale,
+        quaternion_a_c.y() * vector_scale,
+        quaternion_a_c.z() * vector_scale);
+    return quaternion_a_b.toRotationMatrix();
+}
+
+struct SpaceXyzRollPitchYawKinematics {
+    Eigen::Vector3d angles_radians;
+    Eigen::Matrix3d rates_from_parent_angular_velocity;
+};
+
+// The same canonical space-XYZ extraction and parent-expressed angular-rate
+// map used by the frozen WRL bushing. Keeping this small implementation here
+// avoids exposing or linking a second Drake mathematical API through the
+// first-party force module.
+SpaceXyzRollPitchYawKinematics CalcSpaceXyzRollPitchYawKinematics(
+    const Eigen::Matrix3d& rotation_a_c) {
+    const Eigen::Quaterniond quaternion = CanonicalQuaternion(rotation_a_c);
+    const double r22 = rotation_a_c(2, 2);
+    const double r21 = rotation_a_c(2, 1);
+    const double r10 = rotation_a_c(1, 0);
+    const double r00 = rotation_a_c(0, 0);
+    const double positive_cosine =
+        std::sqrt((r22 * r22 + r21 * r21 + r10 * r10 + r00 * r00) /
+                  2.0);
+    const double pitch = std::atan2(-rotation_a_c(2, 0), positive_cosine);
+
+    const double y_a = quaternion.x() + quaternion.z();
+    const double x_a = quaternion.w() - quaternion.y();
+    const double y_b = quaternion.z() - quaternion.x();
+    const double x_b = quaternion.w() + quaternion.y();
+    const double epsilon = std::numeric_limits<double>::epsilon();
+    const double z_a = std::abs(y_a) <= epsilon && std::abs(x_a) <= epsilon
+                           ? 0.0
+                           : std::atan2(y_a, x_a);
+    const double z_b = std::abs(y_b) <= epsilon && std::abs(x_b) <= epsilon
+                           ? 0.0
+                           : std::atan2(y_b, x_b);
+    double roll = z_a - z_b;
+    double yaw = z_a + z_b;
+    if (roll > std::numbers::pi) {
+        roll -= 2.0 * std::numbers::pi;
+    } else if (roll < -std::numbers::pi) {
+        roll += 2.0 * std::numbers::pi;
+    }
+    if (yaw > std::numbers::pi) {
+        yaw -= 2.0 * std::numbers::pi;
+    } else if (yaw < -std::numbers::pi) {
+        yaw += 2.0 * std::numbers::pi;
+    }
+
+    const double cosine_pitch = std::cos(pitch);
+    constexpr double kGimbalLockToleranceCosPitch = 0.008;
+    if (std::abs(cosine_pitch) < kGimbalLockToleranceCosPitch) {
+        throw std::runtime_error(
+            "half-angle midpoint roll-pitch-yaw bushing: pitch is within "
+            "the frozen 0.008 cosine threshold of the space-XYZ "
+            "roll-pitch-yaw singularity");
+    }
+    const double sine_pitch = std::sin(pitch);
+    const double sine_yaw = std::sin(yaw);
+    const double cosine_yaw = std::cos(yaw);
+    const double inverse_cosine_pitch = 1.0 / cosine_pitch;
+
+    SpaceXyzRollPitchYawKinematics result;
+    result.angles_radians = Eigen::Vector3d(roll, pitch, yaw);
+    result.rates_from_parent_angular_velocity <<
+        cosine_yaw * inverse_cosine_pitch,
+        sine_yaw * inverse_cosine_pitch, 0.0, -sine_yaw, cosine_yaw, 0.0,
+        cosine_yaw * inverse_cosine_pitch * sine_pitch,
+        sine_yaw * inverse_cosine_pitch * sine_pitch, 1.0;
+    return result;
 }
 
 // The one place the full wrench of a two-point element is written.
@@ -127,6 +225,38 @@ void EmitCoupleWrenchPair(const MultibodyModel& model,
     destination[1] = AppliedBodyWrench{
         opposite.body, opposite.position_in_body_frame_meters, world,
         -moment_on_reference_in_world, Eigen::Vector3d::Zero()};
+}
+
+// The WRL half-angle bushing applies both resultants at one instantaneous
+// world-space midpoint. That midpoint is converted separately into a point on
+// each body; it is not either frame origin and carries no translational-family
+// support moment.
+void EmitMidpointBushingWrenchPair(
+    const MultibodyModel& model, const MultibodyEvaluationContext& context,
+    const RelativeMotion& motion,
+    const Eigen::Vector3d& force_on_c_in_world,
+    const Eigen::Vector3d& torque_on_c_in_world,
+    std::span<AppliedBodyWrench> destination) {
+    const Eigen::Vector3d midpoint_in_world =
+        motion.reference_origin_in_world_meters +
+        0.5 * motion.displacement_in_world_meters;
+    const auto pose_world_body_a =
+        model.CalcPoseInWorld(context, motion.reference_point.body);
+    const auto pose_world_body_c =
+        model.CalcPoseInWorld(context, motion.opposite_point.body);
+    const Eigen::Vector3d midpoint_in_body_a =
+        pose_world_body_a.rotation().transpose() *
+        (midpoint_in_world - pose_world_body_a.translation());
+    const Eigen::Vector3d midpoint_in_body_c =
+        pose_world_body_c.rotation().transpose() *
+        (midpoint_in_world - pose_world_body_c.translation());
+    const FrameHandle world = model.world_frame();
+    destination[0] = AppliedBodyWrench{
+        motion.reference_point.body, midpoint_in_body_a, world,
+        -torque_on_c_in_world, -force_on_c_in_world};
+    destination[1] = AppliedBodyWrench{
+        motion.opposite_point.body, midpoint_in_body_c, world,
+        torque_on_c_in_world, force_on_c_in_world};
 }
 
 void RequireDistinctLiveEnds(const MultibodyModel& model,
@@ -242,25 +372,17 @@ double EvaluateValidatedSaturatedDamperCurve(
 }  // namespace
 
 VehicleForcePlan::VehicleForcePlan(
-    const MultibodyModel& model,
-    std::vector<TranslationalSpringDamper> translational_spring_dampers,
-    std::vector<RollSpringDamperCouple> roll_spring_damper_couples,
-    std::vector<SeriesSpringViscousDamper> series_spring_viscous_dampers,
-    std::vector<SaturatedPiecewiseLinearDamper>
-        saturated_piecewise_linear_dampers)
-    : model_(&model),
-      translational_(std::move(translational_spring_dampers)),
-      roll_(std::move(roll_spring_damper_couples)),
-      series_(std::move(series_spring_viscous_dampers)),
-      clipped_(std::move(saturated_piecewise_linear_dampers)) {
+    const MultibodyModel& model, VehicleForceElementCollection elements)
+    : model_(&model), elements_(std::move(elements)) {
     if (!model.is_finalized()) {
         throw std::logic_error(
             "VehicleForcePlan requires a finalized multibody model");
     }
     const auto validation_context = model.CreateDefaultContext();
     std::unordered_set<std::string> names;
-    for (std::size_t index = 0; index < translational_.size(); ++index) {
-        const auto& element = translational_[index];
+    for (std::size_t index = 0;
+         index < elements_.translational_spring_dampers.size(); ++index) {
+        const auto& element = elements_.translational_spring_dampers[index];
         const std::string what = ElementDescription(
             "translational spring-damper", index, element.name);
         RequireUniqueName(element.name, what, &names);
@@ -271,8 +393,9 @@ VehicleForcePlan::VehicleForcePlan(
         RequirePassive(element.damping_newton_seconds_per_meter,
                        what + " damping");
     }
-    for (std::size_t index = 0; index < roll_.size(); ++index) {
-        const auto& element = roll_[index];
+    for (std::size_t index = 0;
+         index < elements_.roll_spring_damper_couples.size(); ++index) {
+        const auto& element = elements_.roll_spring_damper_couples[index];
         const std::string what = ElementDescription(
             "roll spring-damper couple", index, element.name);
         RequireUniqueName(element.name, what, &names);
@@ -286,8 +409,9 @@ VehicleForcePlan::VehicleForcePlan(
                    " needs finite non-negative stiffness and damping");
         }
     }
-    for (std::size_t index = 0; index < series_.size(); ++index) {
-        const auto& element = series_[index];
+    for (std::size_t index = 0;
+         index < elements_.series_spring_viscous_dampers.size(); ++index) {
+        const auto& element = elements_.series_spring_viscous_dampers[index];
         const std::string what = ElementDescription(
             "series spring-viscous damper", index, element.name);
         RequireUniqueName(element.name, what, &names);
@@ -313,8 +437,11 @@ VehicleForcePlan::VehicleForcePlan(
                    "binary64 range");
         }
     }
-    for (std::size_t index = 0; index < clipped_.size(); ++index) {
-        const auto& element = clipped_[index];
+    for (std::size_t index = 0;
+         index < elements_.saturated_piecewise_linear_dampers.size();
+         ++index) {
+        const auto& element =
+            elements_.saturated_piecewise_linear_dampers[index];
         const std::string what = ElementDescription(
             "saturated piecewise linear damper", index, element.name);
         RequireUniqueName(element.name, what, &names);
@@ -323,12 +450,36 @@ VehicleForcePlan::VehicleForcePlan(
         (void)AxisIndex(element.axis);
         ValidateSaturatedDamperCurve(element, what);
     }
+    for (std::size_t index = 0;
+         index < elements_.half_angle_midpoint_roll_pitch_yaw_bushings.size();
+         ++index) {
+        const auto& element =
+            elements_.half_angle_midpoint_roll_pitch_yaw_bushings[index];
+        const std::string what = ElementDescription(
+            "half-angle midpoint roll-pitch-yaw bushing", index,
+            element.name);
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context,
+                                element.frame_a_end, element.frame_c_end,
+                                what);
+        RequirePassive(
+            element.rotational_stiffness_newton_meters_per_radian,
+            what + " rotational stiffness");
+        RequirePassive(
+            element.rotational_damping_newton_meter_seconds_per_radian,
+            what + " rotational damping");
+        RequirePassive(element.translational_stiffness_newtons_per_meter,
+                       what + " translational stiffness");
+        RequirePassive(element.translational_damping_newton_seconds_per_meter,
+                       what + " translational damping");
+    }
 }
 
 int VehicleForcePlan::FindTranslationalSpringDamperOrdinal(
     std::string_view name) const {
-    for (std::size_t index = 0; index < translational_.size(); ++index) {
-        if (translational_[index].name == name) {
+    for (std::size_t index = 0;
+         index < elements_.translational_spring_dampers.size(); ++index) {
+        if (elements_.translational_spring_dampers[index].name == name) {
             return static_cast<int>(index);
         }
     }
@@ -338,8 +489,9 @@ int VehicleForcePlan::FindTranslationalSpringDamperOrdinal(
 
 int VehicleForcePlan::FindSeriesSpringViscousDamperOrdinal(
     std::string_view name) const {
-    for (std::size_t index = 0; index < series_.size(); ++index) {
-        if (series_[index].name == name) {
+    for (std::size_t index = 0;
+         index < elements_.series_spring_viscous_dampers.size(); ++index) {
+        if (elements_.series_spring_viscous_dampers[index].name == name) {
             return static_cast<int>(index);
         }
     }
@@ -384,8 +536,9 @@ void VehicleForcePlan::CalcAppliedForces(
     }
 
     std::size_t slot = 0;
-    for (std::size_t index = 0; index < translational_.size(); ++index) {
-        const auto& element = translational_[index];
+    for (std::size_t index = 0;
+         index < elements_.translational_spring_dampers.size(); ++index) {
+        const auto& element = elements_.translational_spring_dampers[index];
         const RelativeMotion motion = CalcRelativeMotion(
             *model_, context, element.reference_end, element.opposite_end);
         // The opposite end moving away from the reference end in the reference
@@ -405,7 +558,7 @@ void VehicleForcePlan::CalcAppliedForces(
         slot += 2;
     }
 
-    for (const auto& element : roll_) {
+    for (const auto& element : elements_.roll_spring_damper_couples) {
         const RelativeMotion motion = CalcRelativeMotion(
             *model_, context, element.reference_end, element.opposite_end);
         // The linear roll coordinate is the (2,1) entry of the relative
@@ -429,8 +582,9 @@ void VehicleForcePlan::CalcAppliedForces(
         slot += 2;
     }
 
-    for (std::size_t index = 0; index < series_.size(); ++index) {
-        const auto& element = series_[index];
+    for (std::size_t index = 0;
+         index < elements_.series_spring_viscous_dampers.size(); ++index) {
+        const auto& element = elements_.series_spring_viscous_dampers[index];
         const RelativeMotion motion = CalcRelativeMotion(
             *model_, context, element.reference_end, element.opposite_end);
         const int axis = AxisIndex(element.axis);
@@ -453,7 +607,8 @@ void VehicleForcePlan::CalcAppliedForces(
         slot += 2;
     }
 
-    for (const auto& element : clipped_) {
+    for (const auto& element :
+         elements_.saturated_piecewise_linear_dampers) {
         const RelativeMotion motion = CalcRelativeMotion(
             *model_, context, element.reference_end, element.opposite_end);
         const int axis = AxisIndex(element.axis);
@@ -464,6 +619,52 @@ void VehicleForcePlan::CalcAppliedForces(
             *model_, motion.reference_point, motion.opposite_point,
             motion.rotation_of_reference_in_world * force_in_reference,
             motion.displacement_in_world_meters, body_wrenches.subspan(slot, 2));
+        slot += 2;
+    }
+
+    for (const auto& element :
+         elements_.half_angle_midpoint_roll_pitch_yaw_bushings) {
+        const RelativeMotion motion = CalcRelativeMotion(
+            *model_, context, element.frame_a_end, element.frame_c_end);
+        const Eigen::Matrix3d rotation_a_b =
+            CalcHalfAngleRotation(motion.rotation_of_opposite_in_reference);
+        const Eigen::Matrix3d rotation_b_a = rotation_a_b.transpose();
+        const Eigen::Vector3d displacement_in_b =
+            rotation_b_a * motion.displacement_in_reference_frame_meters;
+        const Eigen::Vector3d displacement_rate_in_b =
+            rotation_b_a *
+            (motion.velocity_in_reference_frame_meters_per_second -
+             0.5 *
+                 motion.angular_velocity_in_reference_frame_radians_per_second
+                     .cross(motion.displacement_in_reference_frame_meters));
+        const Eigen::Vector3d force_on_c_in_b =
+            -(element.translational_stiffness_newtons_per_meter.cwiseProduct(
+                  displacement_in_b) +
+              element.translational_damping_newton_seconds_per_meter
+                  .cwiseProduct(displacement_rate_in_b));
+        const Eigen::Vector3d force_on_c_in_world =
+            motion.rotation_of_reference_in_world * rotation_a_b *
+            force_on_c_in_b;
+
+        const SpaceXyzRollPitchYawKinematics rpy =
+            CalcSpaceXyzRollPitchYawKinematics(
+                motion.rotation_of_opposite_in_reference);
+        const Eigen::Vector3d rpy_rates =
+            rpy.rates_from_parent_angular_velocity *
+            motion.angular_velocity_in_reference_frame_radians_per_second;
+        const Eigen::Vector3d generalized_torque_on_c =
+            -(element.rotational_stiffness_newton_meters_per_radian
+                  .cwiseProduct(rpy.angles_radians) +
+              element.rotational_damping_newton_meter_seconds_per_radian
+                  .cwiseProduct(rpy_rates));
+        const Eigen::Vector3d torque_on_c_in_a =
+            rpy.rates_from_parent_angular_velocity.transpose() *
+            generalized_torque_on_c;
+        const Eigen::Vector3d torque_on_c_in_world =
+            motion.rotation_of_reference_in_world * torque_on_c_in_a;
+        EmitMidpointBushingWrenchPair(
+            *model_, context, motion, force_on_c_in_world,
+            torque_on_c_in_world, body_wrenches.subspan(slot, 2));
         slot += 2;
     }
 }

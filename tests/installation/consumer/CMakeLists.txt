@@ -53,6 +53,14 @@ target_compile_features(wheel_rail_contact_installation_smoke PRIVATE cxx_std_23
 target_link_libraries(wheel_rail_contact_installation_smoke
     PRIVATE ORVD::wheel_rail_contact)
 
+# Keep the vehicle force library isolated from the combined system consumer.
+# This consumer constructs and evaluates a public force element, so it proves
+# that the installed header, archive and multibody dependency closure are
+# sufficient rather than merely proving that the exported target exists.
+add_executable(forces_installation_smoke forces_installation_smoke.cc)
+target_compile_features(forces_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(forces_installation_smoke PRIVATE ORVD::forces)
+
 # This pair is a positive control for the installed-artifact dependency gate.
 # The executable calls an exported function, so linkers cannot discard the
 # Drake-identified shared library as unused.

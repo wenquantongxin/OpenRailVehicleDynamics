@@ -172,9 +172,13 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
             ParseAxis(element.axis, what), std::move(curve)});
     }
 
-    return std::make_unique<forces::VehicleForcePlan>(
-        model, std::move(translational), std::move(roll), std::move(series),
-        std::move(clipped));
+    forces::VehicleForceElementCollection elements;
+    elements.translational_spring_dampers = std::move(translational);
+    elements.roll_spring_damper_couples = std::move(roll);
+    elements.series_spring_viscous_dampers = std::move(series);
+    elements.saturated_piecewise_linear_dampers = std::move(clipped);
+    return std::make_unique<forces::VehicleForcePlan>(model,
+                                                      std::move(elements));
 }
 
 std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(

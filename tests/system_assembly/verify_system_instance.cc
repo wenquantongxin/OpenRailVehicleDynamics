@@ -3,6 +3,7 @@
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 #include <Eigen/Dense>
 
@@ -238,28 +239,35 @@ void CheckContextLocalDampingAndIsolation() {
 
 // A fixture whose system carries a force state block, so that the transaction
 // has more than one block to be atomic over.
+orvd::forces::VehicleForceElementCollection MakeSeriesFixtureForceElements(
+    const Fixture& mechanism) {
+    orvd::forces::VehicleForceElementCollection elements;
+    elements.translational_spring_dampers = {
+        orvd::forces::TranslationalSpringDamper{
+            "test_translation",
+            orvd::forces::ForceElementEnd{
+                mechanism.model.GetFrameByName("rotor")},
+            orvd::forces::ForceElementEnd{
+                mechanism.model.GetFrameByName("slider")},
+            Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()}};
+    elements.series_spring_viscous_dampers = {
+        orvd::forces::SeriesSpringViscousDamper{
+            "test_series",
+            orvd::forces::ForceElementEnd{
+                mechanism.model.GetFrameByName("rotor")},
+            orvd::forces::ForceElementEnd{
+                mechanism.model.GetFrameByName("slider")},
+            orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}};
+    return elements;
+}
+
 struct SeriesFixture {
     Fixture mechanism;
     orvd::forces::VehicleForcePlan plan;
 
     SeriesFixture()
         : plan(mechanism.model,
-               {orvd::forces::TranslationalSpringDamper{
-                   "test_translation",
-                   orvd::forces::ForceElementEnd{
-                       mechanism.model.GetFrameByName("rotor")},
-                   orvd::forces::ForceElementEnd{
-                       mechanism.model.GetFrameByName("slider")},
-                   Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()}},
-               {},
-               {orvd::forces::SeriesSpringViscousDamper{
-                   "test_series",
-                   orvd::forces::ForceElementEnd{
-                       mechanism.model.GetFrameByName("rotor")},
-                   orvd::forces::ForceElementEnd{
-                       mechanism.model.GetFrameByName("slider")},
-                   orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}},
-               {}) {}
+               MakeSeriesFixtureForceElements(mechanism)) {}
 };
 
 void CheckOneTransactionOverEveryBlock() {
@@ -334,26 +342,27 @@ void CheckNamedForceSlotsAndContextParameterCopy() {
     const Fixture fixture;
     const auto rotor = fixture.model.GetFrameByName("rotor");
     const auto slider = fixture.model.GetFrameByName("slider");
-    const orvd::forces::VehicleForcePlan plan(
-        fixture.model,
-        {orvd::forces::TranslationalSpringDamper{
-             "first_translation", orvd::forces::ForceElementEnd{rotor},
-             orvd::forces::ForceElementEnd{slider}, Eigen::Vector3d::Zero(),
-             Eigen::Vector3d::Zero()},
-         orvd::forces::TranslationalSpringDamper{
-             "named_translation", orvd::forces::ForceElementEnd{rotor},
-             orvd::forces::ForceElementEnd{slider}, Eigen::Vector3d::Zero(),
-             Eigen::Vector3d::Zero()}},
-        {},
-        {orvd::forces::SeriesSpringViscousDamper{
-             "first_series", orvd::forces::ForceElementEnd{rotor},
-             orvd::forces::ForceElementEnd{slider},
-             orvd::forces::ForceElementAxis::kLateral, 3.0e5, 8.0e3},
-         orvd::forces::SeriesSpringViscousDamper{
-             "named_series", orvd::forces::ForceElementEnd{rotor},
-             orvd::forces::ForceElementEnd{slider},
-             orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}},
-        {});
+    orvd::forces::VehicleForceElementCollection elements;
+    elements.translational_spring_dampers = {
+        orvd::forces::TranslationalSpringDamper{
+            "first_translation", orvd::forces::ForceElementEnd{rotor},
+            orvd::forces::ForceElementEnd{slider}, Eigen::Vector3d::Zero(),
+            Eigen::Vector3d::Zero()},
+        orvd::forces::TranslationalSpringDamper{
+            "named_translation", orvd::forces::ForceElementEnd{rotor},
+            orvd::forces::ForceElementEnd{slider}, Eigen::Vector3d::Zero(),
+            Eigen::Vector3d::Zero()}};
+    elements.series_spring_viscous_dampers = {
+        orvd::forces::SeriesSpringViscousDamper{
+            "first_series", orvd::forces::ForceElementEnd{rotor},
+            orvd::forces::ForceElementEnd{slider},
+            orvd::forces::ForceElementAxis::kLateral, 3.0e5, 8.0e3},
+        orvd::forces::SeriesSpringViscousDamper{
+            "named_series", orvd::forces::ForceElementEnd{rotor},
+            orvd::forces::ForceElementEnd{slider},
+            orvd::forces::ForceElementAxis::kLateral, 4.0e5, 9.0e3}};
+    const orvd::forces::VehicleForcePlan plan(fixture.model,
+                                               std::move(elements));
     const SystemAssemblyDescription description(fixture.model, plan);
     const SystemInstance system(description);
     const auto nominal_slot =

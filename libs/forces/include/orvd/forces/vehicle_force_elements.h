@@ -10,24 +10,13 @@
 // The force elements a rail vehicle's suspension is made of, named by what they
 // are constitutively rather than by the vendor or the vehicle they came from.
 //
-// Every element connects two named frames. One of them is the reference end:
-// the relative displacement and velocity the constitutive law reads are
-// expressed in that frame, and so is the force the law produces. Which end is
-// the reference end is part of the element, not a convention a reader has to
-// remember — swapping the two ends leaves the force balance intact but changes
-// which body carries the support moment, and no balance identity can see that.
-//
-// The wrench a translational element produces is a pair, and the pair is not
-// simply equal and opposite forces at the two ends. The constitutive force is
-// not in general parallel to the line joining them, so two forces alone would
-// leave a residual couple and quietly create angular momentum. The reference
-// end therefore also carries
-//
-//     support moment = (opposite point - reference point) x reference force
-//
-// which is exactly what cancels that residual. This is a property of the
-// element, not a diagnostic that can be switched off, and it is emitted in one
-// place so that there is one implementation to check.
+// Every element connects two named frames, but the constitutive frame and the
+// wrench application points belong to the element family. The translational,
+// series and clipped families below use a reference end and its balancing
+// support moment. The half-angle bushing instead uses named A/C ends and applies
+// both wrenches at one instantaneous common midpoint. Keeping those contracts
+// on their own types prevents a shared endpoint vocabulary from silently
+// turning into one shared — and wrong — force law.
 
 namespace orvd::forces {
 
@@ -119,6 +108,45 @@ struct SaturatedPiecewiseLinearDamper {
     // Strictly ascending in velocity, with finite non-negative force and the
     // first point at zero velocity and zero force.
     std::vector<SaturatedPiecewiseLinearDamperPoint> curve;
+};
+
+// A six-component linear bushing with the execution semantics frozen by the
+// IRW reference path.
+//
+// Translation is stated in the half-angle frame between A and C. Rotation is
+// represented by space-fixed XYZ roll-pitch-yaw coordinates of C in A; their
+// rates are generalized speeds, not the components of angular velocity. The
+// resulting force and physical torque are applied as equal-and-opposite
+// wrenches at the instantaneous world-space midpoint between the two frame
+// origins. In particular, this family does not carry the reference-end support
+// moment used by the translational families above.
+struct HalfAngleMidpointRollPitchYawBushing {
+    std::string name;
+    ForceElementEnd frame_a_end;
+    ForceElementEnd frame_c_end;
+    Eigen::Vector3d rotational_stiffness_newton_meters_per_radian{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d rotational_damping_newton_meter_seconds_per_radian{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d translational_stiffness_newtons_per_meter{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d translational_damping_newton_seconds_per_meter{
+        Eigen::Vector3d::Zero()};
+};
+
+// The complete typed force-element input to one immutable vehicle force plan.
+// A named aggregate keeps family identity at call sites and lets the collection
+// grow without another position-dependent constructor argument. It is an
+// ownership envelope, not a common constitutive base class: each vector keeps
+// its own force law and output contract.
+struct VehicleForceElementCollection {
+    std::vector<TranslationalSpringDamper> translational_spring_dampers;
+    std::vector<RollSpringDamperCouple> roll_spring_damper_couples;
+    std::vector<SeriesSpringViscousDamper> series_spring_viscous_dampers;
+    std::vector<SaturatedPiecewiseLinearDamper>
+        saturated_piecewise_linear_dampers;
+    std::vector<HalfAngleMidpointRollPitchYawBushing>
+        half_angle_midpoint_roll_pitch_yaw_bushings;
 };
 
 }  // namespace orvd::forces

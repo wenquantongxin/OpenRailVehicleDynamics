@@ -6,6 +6,7 @@
 #include <span>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 
 #include <Eigen/Dense>
 
@@ -363,21 +364,22 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     model.SetGravityVector(Eigen::Vector3d::Zero());
     model.Finalize();
 
-    orvd::forces::VehicleForcePlan force_plan(
-        model,
-        {orvd::forces::TranslationalSpringDamper{
+    orvd::forces::VehicleForceElementCollection force_elements;
+    force_elements.translational_spring_dampers = {
+        orvd::forces::TranslationalSpringDamper{
             "nominal_driver",
             orvd::forces::ForceElementEnd{model.body_frame(anchor)},
             orvd::forces::ForceElementEnd{model.body_frame(slider)},
-            Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()}},
-        {},
-        {orvd::forces::SeriesSpringViscousDamper{
+            Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()}};
+    force_elements.series_spring_viscous_dampers = {
+        orvd::forces::SeriesSpringViscousDamper{
             "series_decay",
             orvd::forces::ForceElementEnd{model.body_frame(anchor)},
             orvd::forces::ForceElementEnd{model.body_frame(series_anchor)},
-            orvd::forces::ForceElementAxis::kLongitudinal,
-            kSeriesStiffness, kSeriesDamping}},
-        {});
+            orvd::forces::ForceElementAxis::kLongitudinal, kSeriesStiffness,
+            kSeriesDamping}};
+    orvd::forces::VehicleForcePlan force_plan(model,
+                                               std::move(force_elements));
     const SystemAssemblyDescription description(model, force_plan);
     const SystemInstance system(description);
     const CompiledSystemPlan plan(system);

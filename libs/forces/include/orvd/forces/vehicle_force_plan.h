@@ -48,27 +48,20 @@ class VehicleForcePlan {
     // family — or if stiffness divided by damping is not finite. A clipped
     // damper curve must start at the origin, ascend strictly in velocity and
     // state finite non-negative force.
+    // A half-angle bushing needs four finite non-negative three-axis stiffness
+    // and damping vectors. Its space-XYZ rate map refuses the same pitch
+    // singular neighbourhood as the frozen WRL implementation.
     // Throws std::invalid_argument if an endpoint is the world frame.
     // Throws std::logic_error if the model is not finalized.
     VehicleForcePlan(
         const multibody_model::MultibodyModel& model,
-        std::vector<TranslationalSpringDamper> translational_spring_dampers,
-        std::vector<RollSpringDamperCouple> roll_spring_damper_couples,
-        std::vector<SeriesSpringViscousDamper> series_spring_viscous_dampers,
-        std::vector<SaturatedPiecewiseLinearDamper>
-            saturated_piecewise_linear_dampers);
+        VehicleForceElementCollection elements);
     VehicleForcePlan(
         multibody_model::MultibodyModel&&,
-        std::vector<TranslationalSpringDamper>,
-        std::vector<RollSpringDamperCouple>,
-        std::vector<SeriesSpringViscousDamper>,
-        std::vector<SaturatedPiecewiseLinearDamper>) = delete;
+        VehicleForceElementCollection) = delete;
     VehicleForcePlan(
         const multibody_model::MultibodyModel&&,
-        std::vector<TranslationalSpringDamper>,
-        std::vector<RollSpringDamperCouple>,
-        std::vector<SeriesSpringViscousDamper>,
-        std::vector<SaturatedPiecewiseLinearDamper>) = delete;
+        VehicleForceElementCollection) = delete;
 
     VehicleForcePlan(const VehicleForcePlan&) = delete;
     VehicleForcePlan& operator=(const VehicleForcePlan&) = delete;
@@ -80,23 +73,28 @@ class VehicleForcePlan {
     }
 
     [[nodiscard]] int translational_spring_damper_count() const {
-        return static_cast<int>(translational_.size());
+        return static_cast<int>(elements_.translational_spring_dampers.size());
     }
     [[nodiscard]] int roll_spring_damper_couple_count() const {
-        return static_cast<int>(roll_.size());
+        return static_cast<int>(elements_.roll_spring_damper_couples.size());
     }
     [[nodiscard]] int series_spring_viscous_damper_count() const {
-        return static_cast<int>(series_.size());
+        return static_cast<int>(elements_.series_spring_viscous_dampers.size());
     }
     [[nodiscard]] int saturated_piecewise_linear_damper_count() const {
-        return static_cast<int>(clipped_.size());
+        return static_cast<int>(
+            elements_.saturated_piecewise_linear_dampers.size());
+    }
+    [[nodiscard]] int half_angle_midpoint_roll_pitch_yaw_bushing_count() const {
+        return static_cast<int>(
+            elements_.half_angle_midpoint_roll_pitch_yaw_bushings.size());
     }
 
     /// One force component of continuous state per series element, and none for
     /// any other family. The number of state components is therefore a property
     /// of which constitutive families the vehicle has, not of its data.
     [[nodiscard]] int series_spring_damper_force_state_count() const {
-        return static_cast<int>(series_.size());
+        return series_spring_viscous_damper_count();
     }
 
     /// A nominal force slot per translational element, three components each.
@@ -109,7 +107,8 @@ class VehicleForcePlan {
         return 2 * (translational_spring_damper_count() +
                     roll_spring_damper_couple_count() +
                     series_spring_viscous_damper_count() +
-                    saturated_piecewise_linear_damper_count());
+                    saturated_piecewise_linear_damper_count() +
+                    half_angle_midpoint_roll_pitch_yaw_bushing_count());
     }
 
     /// Evaluates every element once against `context`.
@@ -124,6 +123,8 @@ class VehicleForcePlan {
     ///
     /// Throws std::invalid_argument if the context is foreign or any span is
     /// the wrong length; nothing is written in that case.
+    /// Throws std::runtime_error if a half-angle bushing reaches the frozen
+    /// WRL space-XYZ pitch singular neighbourhood.
     void CalcAppliedForces(
         const multibody_model::MultibodyEvaluationContext& context,
         const Eigen::Ref<const Eigen::VectorXd>& series_forces,
@@ -152,10 +153,7 @@ class VehicleForcePlan {
         std::string_view name) const;
 
     const multibody_model::MultibodyModel* model_;
-    std::vector<TranslationalSpringDamper> translational_;
-    std::vector<RollSpringDamperCouple> roll_;
-    std::vector<SeriesSpringViscousDamper> series_;
-    std::vector<SaturatedPiecewiseLinearDamper> clipped_;
+    VehicleForceElementCollection elements_;
 };
 
 }  // namespace orvd::forces
