@@ -125,7 +125,9 @@ AssembleGz18ContactScenario(
     track_geometry::TrackGeometry line,
     const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    double projection_search_half_width_meters) {
+    double projection_search_half_width_meters,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
+        track_irregularity) {
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
         vehicle, "vehicle definition");
     internal::RequireResolvedStartupStateInvariants(startup_state,
@@ -143,6 +145,7 @@ AssembleGz18ContactScenario(
             startup_state
                 .gravitational_acceleration_meters_per_second_squared,
             std::move(line), gz18_contact->ReleaseRuntimePersonality(),
+            std::move(track_irregularity),
             std::move(topology.carriers), std::move(topology.interfaces),
             projection_search_half_width_meters);
     ResolvedInitialContext initial_context = AssembleResolvedInitialContext(

@@ -28,6 +28,7 @@ using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackSeamTransition;
+using orvd::track_geometry::TrackStationRegion;
 namespace lines = orvd::track_geometry::test_lines;
 
 int failure_count = 0;
@@ -460,18 +461,80 @@ void CheckQuadratureConvergence() {
            "loss of significance that a finer grid would multiply");
 }
 
-void CheckDomainAndSuperelevationRefusals() {
-    const TrackGeometry line = lines::MakeCanonicalLine();
-    bool refused_outside = false;
-    try {
-        (void)line.CurvatureRadiansPerMeter(
-            line.end_track_station_meters() + 1.0);
-    } catch (const std::invalid_argument&) {
-        refused_outside = true;
-    }
-    Expect(refused_outside,
-           "a station beyond the end of the line is refused rather than "
-           "extrapolated or clamped");
+void CheckDefinitionBoundsAndSuperelevationRefusals() {
+    // Keep all three definition-boundary quantities non-zero so this fixture
+    // distinguishes holding the boundary pose from continuing curvature or
+    // either profile rate beyond the finite asset.
+    const TrackGeometry line(
+        TrackScalarProfile(0.0, {lines::Constant(100.0, 1.0 / 300.0)}, {}),
+        TrackScalarProfile(0.0, {lines::Constant(100.0, 0.06)}, {}),
+        TrackScalarProfile(0.0, {lines::Constant(100.0, 0.015)}, {}),
+        lines::kRailReferenceLateralSpanMeters, 0.5);
+    const auto check_continuation = [&](double boundary, double outside,
+                                        TrackStationRegion expected_region,
+                                        const char* side) {
+        const auto boundary_frame = line.EvaluateTrackFrame(boundary);
+        const auto outside_frame = line.EvaluateTrackFrame(outside);
+        const double delta = outside - boundary;
+        const Eigen::Vector3d expected_position =
+            boundary_frame.pose().origin_in_inertial_meters() +
+            delta * boundary_frame
+                        .centerline_derivative_in_inertial_meters_per_meter();
+        const double position_scale = std::max(1.0, expected_position.norm());
+        Expect((outside_frame.pose().origin_in_inertial_meters() -
+                expected_position)
+                       .norm() <=
+                   64.0 * kMachine * position_scale,
+               std::string("the ") + side +
+                   " continuation follows the boundary's three-dimensional "
+                   "tangent");
+        Expect((outside_frame.pose().rotation_inertial_from_track() -
+                boundary_frame.pose().rotation_inertial_from_track())
+                       .norm() <=
+                   32.0 * kMachine,
+               std::string("the ") + side +
+                   " continuation holds the boundary track orientation");
+        Expect((outside_frame
+                    .centerline_derivative_in_inertial_meters_per_meter() -
+                boundary_frame
+                    .centerline_derivative_in_inertial_meters_per_meter())
+                       .norm() <=
+                   16.0 * kMachine,
+               std::string("the ") + side +
+                   " continuation keeps one constant tangent");
+        Expect(outside_frame
+                       .track_frame_rotation_rate_in_inertial_radians_per_meter()
+                       .isZero(0.0),
+               std::string("the ") + side +
+                   " continuation has no curvature, grade-rate or "
+                   "superelevation-rate rotation");
+        Expect(line.CurvatureRadiansPerMeter(outside) == 0.0,
+               std::string("the ") + side +
+                   " continuation has exactly zero curvature");
+        Expect(line.CenterlineUpwardGrade(outside) ==
+                       line.CenterlineUpwardGrade(boundary) &&
+                   line.SuperelevationMeters(outside) ==
+                       line.SuperelevationMeters(boundary),
+               std::string("the ") + side +
+                   " continuation holds the boundary grade and "
+                   "superelevation");
+        Expect(line.ClassifyTrackStation(outside) == expected_region,
+               std::string("the ") + side +
+                   " continuation remains distinguishable from the base-track "
+                   "definition interval");
+    };
+    check_continuation(line.start_track_station_meters(),
+                       line.start_track_station_meters() - 12.5,
+                       TrackStationRegion::kBeforeDefinedInterval, "left");
+    check_continuation(line.end_track_station_meters(),
+                       line.end_track_station_meters() + 18.0,
+                       TrackStationRegion::kAfterDefinedInterval, "right");
+    Expect(line.ClassifyTrackStation(line.start_track_station_meters()) ==
+                   TrackStationRegion::kWithinDefinedInterval &&
+               line.ClassifyTrackStation(line.end_track_station_meters()) ==
+                   TrackStationRegion::kWithinDefinedInterval,
+           "the two definition-boundary stations belong to the base-track "
+           "definition interval");
 
     bool refused_non_finite = false;
     try {
@@ -845,7 +908,7 @@ int main() {
     CheckSeamQuinticEntersTheCenterline();
     CheckSeamMatchesSixNonzeroBoundaryData();
     CheckQuadratureConvergence();
-    CheckDomainAndSuperelevationRefusals();
+    CheckDefinitionBoundsAndSuperelevationRefusals();
     CheckSupportStarts();
     CheckProfileInputRefusals();
     CheckGravityDirection();

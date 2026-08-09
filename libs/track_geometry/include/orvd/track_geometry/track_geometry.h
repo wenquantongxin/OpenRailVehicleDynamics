@@ -44,6 +44,16 @@
 
 namespace orvd::track_geometry {
 
+// Where a station lies relative to the finite definition interval declared by
+// the base-track asset. The interval remains observable even though
+// TrackGeometry continues the centerline as a straight tangent beyond either
+// definition boundary.
+enum class TrackStationRegion {
+    kBeforeDefinedInterval,
+    kWithinDefinedInterval,
+    kAfterDefinedInterval,
+};
+
 class TrackGeometry {
    public:
     // The three profiles must share one station domain. The rail reference
@@ -75,8 +85,14 @@ class TrackGeometry {
         return rail_reference_lateral_span_meters_;
     }
 
-    // Every station argument below is refused when it is not finite or lies
-    // outside the domain.
+    // Every finite station is meaningful. Inside the base track's definition
+    // interval these accessors evaluate the three profiles. Outside it, the
+    // centerline follows the nearest definition boundary's three-dimensional
+    // tangent, curvature and all station rates are zero, and the boundary
+    // heading, grade and superelevation are held. Non-finite stations are
+    // refused.
+    [[nodiscard]] TrackStationRegion ClassifyTrackStation(
+        double track_station_meters) const;
     [[nodiscard]] double CurvatureRadiansPerMeter(
         double track_station_meters) const;
     [[nodiscard]] double SuperelevationMeters(double track_station_meters) const;
@@ -124,12 +140,14 @@ class TrackGeometry {
     // Multiple stationary points hidden inside one node interval remain outside
     // the completeness contract.
     //
-    // Throws std::invalid_argument for a non-finite point, a non-finite or
-    // out-of-domain seed, a non-positive half width, or a window reaching
-    // outside the domain; the window is a declared search domain, not a hint to
-    // be clipped. Throws TrackStationProjectionWindowMiss if no admissible
-    // minimum lies strictly inside the window, and std::runtime_error if more
-    // than one does.
+    // The finite search window may lie inside the definition interval, outside
+    // it on either straight continuation, or cross either definition boundary.
+    // It is never clipped to the finite asset interval. Throws
+    // std::invalid_argument for a
+    // non-finite point or seed, a non-positive half width, or non-finite window
+    // bounds. Throws TrackStationProjectionWindowMiss if no admissible minimum
+    // lies strictly inside the window, and std::runtime_error if more than one
+    // does.
     [[nodiscard]] TrackStationProjection ProjectPointNearSeed(
         const Eigen::Vector3d& point_in_inertial_meters,
         double seed_track_station_meters, double search_half_width_meters) const;
@@ -153,8 +171,8 @@ class TrackGeometry {
         bool found{false};
     };
 
-    void ThrowIfOutsideDomain(double track_station_meters,
-                              const char* argument_name) const;
+    void RequireFiniteTrackStation(double track_station_meters,
+                                   const char* argument_name) const;
     [[nodiscard]] std::size_t NodeIndexAtOrBefore(
         double track_station_meters) const;
     // The exact heading at a station: the curvature profile integrates in

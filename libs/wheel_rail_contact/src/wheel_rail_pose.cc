@@ -112,11 +112,11 @@ ContactPoseScalars BuildContactPoseScalars(
         roll, placement.yaw_radians, constants.rail_roll_radians,
         irregularity.lateral_rate_meters_per_second,
         irregularity.vertical_rate_meters_per_second,
-        input.arc_rate_meters_per_second);
+        input.track_station_rate_meters_per_second);
     const double pair_yaw =
         placement.yaw_radians -
         SafeAtan2Ratio(irregularity.lateral_rate_meters_per_second,
-                       input.arc_rate_meters_per_second);
+                       input.track_station_rate_meters_per_second);
 
     // The rolling radius is a lever laid along the wheelset's own vertical, and
     // the plane these scalars live in is pitched away from that vertical by the
@@ -126,7 +126,7 @@ ContactPoseScalars BuildContactPoseScalars(
     if (constants.apply_pitch_correction) {
         const double pitch_excursion =
             -SafeAtan2Ratio(irregularity.vertical_rate_meters_per_second,
-                            input.arc_rate_meters_per_second);
+                            input.track_station_rate_meters_per_second);
         rolling_radius *= std::cos(pitch_excursion);
     }
 

@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <exception>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -61,7 +62,7 @@ int main(int argc, char* argv[]) {
         // personality its direct RHS consumes.
         const auto startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
-        const auto irregularity =
+        auto irregularity =
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
                 argv[4], "gz18_aar6_reference_irregularity");
         for (const double station : {50.0, 100.0, 250.0, 300.0}) {
@@ -82,7 +83,10 @@ int main(int argc, char* argv[]) {
         }
         const auto scenario =
             orvd::configuration::AssembleGz18ContactScenario(
-                vehicle, startup, std::move(line), argv[4], 20.0, 2.0);
+                vehicle, startup, std::move(line), argv[4], 0.0, 2.0,
+                std::make_unique<
+                    orvd::wheel_rail_contact::TrackIrregularityField>(
+                    std::move(irregularity)));
         const auto& system = scenario->vehicle_system();
         const auto& resolved = scenario->initial_context();
         Eigen::VectorXd derivatives(system.system().continuous_state_size());

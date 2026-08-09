@@ -21,10 +21,9 @@ class TrackGeometry;
 
 /// A valid local projection window does not contain an admissible minimum.
 ///
-/// This is distinct from an ambiguous window, invalid geometry input or a
-/// window outside the line domain. An ODE trial state may temporarily produce
-/// this condition even though a smaller trial step remains on the same local
-/// branch.
+/// This is distinct from an ambiguous window or invalid search input. An ODE
+/// trial state may temporarily produce this condition even though a smaller
+/// trial step remains on the same local branch.
 class TrackStationProjectionWindowMiss final : public std::runtime_error {
    public:
     using std::runtime_error::runtime_error;

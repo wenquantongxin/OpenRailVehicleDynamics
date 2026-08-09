@@ -14,6 +14,10 @@ namespace orvd::track_geometry {
 class TrackGeometry;
 }
 
+namespace orvd::wheel_rail_contact {
+class TrackIrregularityField;
+}
+
 namespace orvd::configuration {
 
 class AssembledGz18ContactScenario;
@@ -102,7 +106,8 @@ class Gz18WheelRailContact {
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double);
+        double,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     Gz18WheelRailContact(
         StartupWheelRailBinding binding,

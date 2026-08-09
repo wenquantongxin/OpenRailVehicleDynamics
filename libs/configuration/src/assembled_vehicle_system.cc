@@ -110,6 +110,8 @@ AssembledVehicleSystem::AssembleWithWheelRailContact(
     track_geometry::TrackGeometry line,
     std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
         personality,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
+        track_irregularity,
     std::vector<forces::WheelRailContactCarrierDefinition> carriers,
     std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
     double projection_search_half_width_meters) {
@@ -124,6 +126,7 @@ AssembledVehicleSystem::AssembleWithWheelRailContact(
     auto contact_force_plan =
         std::make_unique<forces::WheelRailContactForcePlan>(
             *model, std::move(line), std::move(personality),
+            std::move(track_irregularity),
             std::move(carriers), std::move(interfaces),
             projection_search_half_width_meters);
     const system_assembly::SystemAssemblyDescription description(

@@ -40,7 +40,7 @@ class AllocationScope {
 
 }  // namespace orvd::test
 
-inline void* operator new(std::size_t size) {
+void* operator new(std::size_t size) {
     ++orvd::test::allocation_count;
     // Zero-sized allocations must still return distinct pointers, and malloc is
     // permitted to return null for them.
@@ -51,13 +51,13 @@ inline void* operator new(std::size_t size) {
     return memory;
 }
 
-inline void* operator new[](std::size_t size) { return operator new(size); }
+void* operator new[](std::size_t size) { return operator new(size); }
 
-inline void operator delete(void* memory) noexcept { std::free(memory); }
-inline void operator delete[](void* memory) noexcept { std::free(memory); }
-inline void operator delete(void* memory, std::size_t) noexcept {
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete[](void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept {
     std::free(memory);
 }
-inline void operator delete[](void* memory, std::size_t) noexcept {
+void operator delete[](void* memory, std::size_t) noexcept {
     std::free(memory);
 }

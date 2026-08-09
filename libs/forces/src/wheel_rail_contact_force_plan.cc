@@ -33,7 +33,9 @@ using wheel_rail_contact::ResolveRollYawPitchRates;
 using wheel_rail_contact::RollYawPitchAngles;
 using wheel_rail_contact::RollYawPitchRates;
 using wheel_rail_contact::SpatialWrench;
+using wheel_rail_contact::SafeAtan2Ratio;
 using wheel_rail_contact::TrackIrregularity;
+using wheel_rail_contact::TrackIrregularityField;
 using wheel_rail_contact::WheelProfileRigidMotion;
 using wheel_rail_contact::WheelRailContactInput;
 using wheel_rail_contact::WheelRailContactResult;
@@ -47,6 +49,11 @@ using wheel_rail_contact::WheelsetPlacement;
 
 Eigen::Matrix3d RotationAboutX(double radians) {
     return Eigen::AngleAxisd(radians, Eigen::Vector3d::UnitX())
+        .toRotationMatrix();
+}
+
+Eigen::Matrix3d RotationAboutY(double radians) {
+    return Eigen::AngleAxisd(radians, Eigen::Vector3d::UnitY())
         .toRotationMatrix();
 }
 
@@ -93,12 +100,14 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
     const MultibodyModel& model, track_geometry::TrackGeometry line,
     std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
         personality,
+    std::unique_ptr<TrackIrregularityField> track_irregularity,
     std::vector<WheelRailContactCarrierDefinition> carriers,
     std::vector<WheelRailContactInterfaceDefinition> interfaces,
     double projection_search_half_width_meters)
     : model_(&model),
       line_(std::move(line)),
       personality_(std::move(personality)),
+      track_irregularity_(std::move(track_irregularity)),
       projection_search_half_width_meters_(
           projection_search_half_width_meters) {
     if (!model.is_finalized()) {
@@ -135,15 +144,6 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
         if (!std::isfinite(carrier.initial_projection_station_meters)) {
             Reject("carrier '" + carrier.carrier_name +
                    "' has a non-finite initial projection station");
-        }
-        const double lower = carrier.initial_projection_station_meters -
-                             projection_search_half_width_meters_;
-        const double upper = carrier.initial_projection_station_meters +
-                             projection_search_half_width_meters_;
-        if (lower < line_.start_track_station_meters() ||
-            upper > line_.end_track_station_meters()) {
-            Reject("carrier '" + carrier.carrier_name +
-                   "' has an initial projection window outside the line");
         }
         carriers_.push_back(CarrierBinding{
             std::move(carrier.carrier_name),
@@ -435,12 +435,33 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         const InterfaceBinding& interface = interfaces_[ordinal];
         const auto& carrier = workspace.carriers_[interface.carrier_ordinal];
         const auto& constants = personality_->pose_constants(interface.side);
+
+        // The active GZ18/WRL personality selects the wheel cross-section in
+        // two stages. The shared carrier station supplies the alignment slope
+        // that corrects yaw; that corrected yaw then selects the side-specific
+        // effective profile station. The field remains expressed in its
+        // original Track-T station and is never shifted with the vehicle.
+        double lateral_slope_at_shared = 0.0;
+        if (track_irregularity_ != nullptr &&
+            line_.ClassifyTrackStation(carrier.track_station_meters) ==
+                track_geometry::TrackStationRegion::kWithinDefinedInterval) {
+            lateral_slope_at_shared =
+                track_irregularity_->LateralSlopeMetersPerMeter(
+                    carrier.track_station_meters);
+        }
+        const double lateral_rate_at_shared =
+            lateral_slope_at_shared *
+            carrier.station_rate_meters_per_second;
+        const double effective_yaw =
+            carrier.yaw_radians -
+            SafeAtan2Ratio(lateral_rate_at_shared,
+                           carrier.station_rate_meters_per_second);
         const double sigma = constants.wheel_lateral_datum_meters;
         const double longitudinal_offset =
-            -std::sin(carrier.yaw_radians) * sigma;
+            -std::sin(effective_yaw) * sigma;
         const double lateral_at_profile =
             carrier.body_origin_in_track_meters.y() +
-            std::cos(carrier.yaw_radians) * sigma;
+            std::cos(effective_yaw) * sigma;
         const double effective_denominator =
             1.0 - carrier.curvature_radians_per_meter * lateral_at_profile;
         if (!std::isfinite(effective_denominator) ||
@@ -457,6 +478,32 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         const Eigen::Matrix3d rotation_track_from_inertial =
             carrier.rotation_inertial_from_track.transpose();
 
+        TrackIrregularity irregularity;
+        double lateral_slope_at_profile = 0.0;
+        double vertical_slope_at_profile = 0.0;
+        if (track_irregularity_ != nullptr &&
+            line_.ClassifyTrackStation(effective_station) ==
+                track_geometry::TrackStationRegion::kWithinDefinedInterval) {
+            irregularity.lateral_meters =
+                track_irregularity_->LateralDisplacementMeters(
+                    effective_station);
+            irregularity.vertical_meters =
+                track_irregularity_->VerticalDisplacementMeters(
+                    effective_station);
+            lateral_slope_at_profile =
+                track_irregularity_->LateralSlopeMetersPerMeter(
+                    effective_station);
+            vertical_slope_at_profile =
+                track_irregularity_->VerticalSlopeMetersPerMeter(
+                    effective_station);
+            irregularity.lateral_rate_meters_per_second =
+                lateral_slope_at_profile *
+                carrier.station_rate_meters_per_second;
+            irregularity.vertical_rate_meters_per_second =
+                vertical_slope_at_profile *
+                carrier.station_rate_meters_per_second;
+        }
+
         const ProfileTrackRollTransport roll_transport =
             personality_->roll_transport_strategy().Compute(
                 carrier.track_origin_in_inertial_meters,
@@ -470,9 +517,13 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             carrier.body_origin_in_track_meters.y(),
             carrier.body_origin_in_track_meters.z(), carrier.roll_radians,
             carrier.yaw_radians};
-        pose_input.arc_rate_meters_per_second =
-            carrier.path_rate_meters_per_second;
-        pose_input.irregularity = TrackIrregularity{};
+        // The field is parameterised by planar track station. Its spatial
+        // slopes and the denominator used to recover their angles therefore
+        // use ds/dt, not the three-dimensional path speed. The latter remains
+        // the wheel-motion reference speed below.
+        pose_input.track_station_rate_meters_per_second =
+            carrier.station_rate_meters_per_second;
+        pose_input.irregularity = irregularity;
 
         const Eigen::Matrix3d rotation_track_from_profile =
             RotationAboutX(carrier.roll_radians) *
@@ -505,8 +556,11 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             carrier.wheel_pitch_rate_radians_per_second;
 
         const Eigen::Vector3d rail_offset_at_profile_station(
-            0.0, constants.rail_lateral_datum_meters,
-            constants.rail_vertical_datum_meters);
+            0.0,
+            constants.rail_lateral_datum_meters +
+                irregularity.lateral_meters,
+            constants.rail_vertical_datum_meters +
+                irregularity.vertical_meters);
         const Eigen::Vector3d rail_origin_in_inertial =
             profile_track.pose().origin_in_inertial_meters() +
             profile_track.pose().rotation_inertial_from_track() *
@@ -519,6 +573,8 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         rail_frame.rotation_track_from_profile =
             rotation_track_from_inertial *
             profile_track.pose().rotation_inertial_from_track() *
+            RotationAboutZ(std::atan2(lateral_slope_at_profile, 1.0)) *
+            RotationAboutY(-std::atan2(vertical_slope_at_profile, 1.0)) *
             RotationAboutX(constants.rail_roll_radians);
 
         if (personality_->rail_profile_origin_mode() ==

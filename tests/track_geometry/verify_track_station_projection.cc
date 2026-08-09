@@ -241,6 +241,41 @@ void CheckAStationaryPointOnTheWindowWallIsRefused() {
            "succeeds");
 }
 
+void CheckStraightContinuationsAndBoundaryCrossings() {
+    const TrackGeometry line = lines::MakeLevelStraightLine(20.0, 1.0);
+    struct Probe {
+        double station;
+        double seed;
+        double half_width;
+        const char* description;
+    };
+    const Probe probes[] = {
+        {-4.0, -3.5, 1.0, "the left straight continuation"},
+        {27.0, 26.5, 1.0, "the right straight continuation"},
+        {0.4, -0.5, 2.0,
+         "a window crossing the left definition boundary"},
+        {19.6, 20.5, 2.0,
+         "a window crossing the right definition boundary"},
+    };
+    for (const Probe& probe : probes) {
+        const Eigen::Vector3d point =
+            PointBesideStation(line, probe.station, 0.7);
+        bool accepted = true;
+        double projected_station = 0.0;
+        try {
+            projected_station =
+                line.ProjectPointNearSeed(point, probe.seed, probe.half_width)
+                    .track_station_meters();
+        } catch (const std::exception&) {
+            accepted = false;
+        }
+        Expect(accepted &&
+                   std::abs(projected_station - probe.station) <= 1.0e-12,
+               std::string(probe.description) +
+                   " is searched without clipping to the definition interval");
+    }
+}
+
 void CheckArgumentRefusals() {
     const TrackGeometry line = lines::MakeCanonicalLine();
     const Eigen::Vector3d good = PointBesideStation(line, 200.0, 0.5);
@@ -263,19 +298,14 @@ void CheckArgumentRefusals() {
            }),
            "a non-finite point is refused");
     Expect(refuses_invalid_argument([&] {
-               (void)line.ProjectPointNearSeed(good, 5.0, 20.0);
-           }),
-           "a search interval that reaches past the start of the line is "
-           "refused rather than clipped to the domain");
-    Expect(refuses_invalid_argument([&] {
                (void)line.ProjectPointNearSeed(good, 200.0, 0.0);
            }),
            "a non-positive search half width is refused");
     Expect(refuses_invalid_argument([&] {
                (void)line.ProjectPointNearSeed(
-                   good, line.end_track_station_meters() + 1.0, 1.0);
+                   good, std::numeric_limits<double>::quiet_NaN(), 1.0);
            }),
-           "a seed outside the domain is refused");
+           "a non-finite seed is refused");
 }
 
 }  // namespace
@@ -288,6 +318,7 @@ int main() {
     CheckMultipleMinimaAreRefused();
     CheckSecondOrderConditionIsEnforced();
     CheckAStationaryPointOnTheWindowWallIsRefused();
+    CheckStraightContinuationsAndBoundaryCrossings();
     CheckArgumentRefusals();
     if (failure_count != 0) {
         std::printf("%d track station projection checks failed\n",

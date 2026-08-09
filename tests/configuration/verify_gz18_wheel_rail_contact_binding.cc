@@ -123,7 +123,7 @@ WheelRailContactInput MakeInput(const Gz18WheelRailContact& contact,
         .roll_radians = 0.0,
         .yaw_radians = 0.0,
     };
-    pose_input.arc_rate_meters_per_second =
+    pose_input.track_station_rate_meters_per_second =
         startup.initial_longitudinal_speed_meters_per_second;
 
     WheelRailContactInput input;

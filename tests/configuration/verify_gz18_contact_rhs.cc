@@ -44,6 +44,11 @@ using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
 using orvd::multibody_model::AppliedBodyWrench;
+using orvd::track_geometry::TrackGeometry;
+using orvd::track_geometry::TrackScalarProfile;
+using orvd::track_geometry::TrackScalarSegment;
+using orvd::track_geometry::TrackScalarSegmentShape;
+using orvd::track_geometry::TrackStationRegion;
 
 int failures = 0;
 
@@ -75,6 +80,30 @@ ContinuousStateErrorTolerances MakeGz18Tolerances() {
     absolute.head(57).setConstant(1.0e-8);
     absolute.tail(2).setConstant(1.0);
     return ContinuousStateErrorTolerances(1.0e-6, std::move(absolute));
+}
+
+TrackScalarProfile ConstantProfile(double length_meters, double value) {
+    return TrackScalarProfile(
+        0.0,
+        {TrackScalarSegment{length_meters, TrackScalarSegmentShape::kConstant,
+                            value, value}},
+        {});
+}
+
+TrackGeometry MakeConstantGradeLine(double grade) {
+    constexpr double kLengthMeters = 2000.0;
+    return TrackGeometry(ConstantProfile(kLengthMeters, 0.0),
+                         ConstantProfile(kLengthMeters, 0.0),
+                         ConstantProfile(kLengthMeters, grade), 1.5, 0.5);
+}
+
+bool SameWrenchComponents(const AppliedBodyWrench& actual,
+                          const AppliedBodyWrench& expected) {
+    return actual.point_position_in_body_frame_meters ==
+               expected.point_position_in_body_frame_meters &&
+           actual.force_newtons == expected.force_newtons &&
+           actual.torque_about_point_newton_metres ==
+               expected.torque_about_point_newton_metres;
 }
 
 std::vector<AppliedBodyWrench> EvaluateContactForces(
@@ -121,7 +150,7 @@ int main(int argc, char** argv) {
     const auto vehicle = LoadVehicleDefinitionFromJsonFile(argv[1]);
     const auto startup = LoadResolvedStartupStateFromJsonFile(argv[2]);
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
-    constexpr double kReferenceStationMeters = 20.0;
+    constexpr double kReferenceStationMeters = 0.0;
     constexpr double kProjectionHalfWidthMeters = 0.01;
     std::unique_ptr<AssembledGz18ContactScenario> scenario =
         AssembleGz18ContactScenario(
@@ -204,6 +233,33 @@ int main(int argc, char** argv) {
         resolved_station.emplace(placement.wheelset_body_name,
                                  placement.track_station_meters);
         resolved_placement.emplace(placement.wheelset_body_name, &placement);
+    }
+    struct ExpectedWheelsetStation {
+        std::string_view body_name;
+        double station_meters;
+        TrackStationRegion region;
+    };
+    constexpr std::array<ExpectedWheelsetStation, 4> kExpectedWheelsetStations{
+        ExpectedWheelsetStation{"front_leading_wheelset", 9.1,
+                                TrackStationRegion::kWithinDefinedInterval},
+        ExpectedWheelsetStation{"front_trailing_wheelset", 6.6,
+                                TrackStationRegion::kWithinDefinedInterval},
+        ExpectedWheelsetStation{"rear_leading_wheelset", -6.6,
+                                TrackStationRegion::kBeforeDefinedInterval},
+        ExpectedWheelsetStation{"rear_trailing_wheelset", -9.1,
+                                TrackStationRegion::kBeforeDefinedInterval},
+    };
+    for (const ExpectedWheelsetStation& expected :
+         kExpectedWheelsetStations) {
+        const std::string name(expected.body_name);
+        Require(resolved_station.contains(name) &&
+                    resolved_station.at(name) == expected.station_meters,
+                "the formal zero-reference GZ18 scene lost an authoritative "
+                "wheelset station");
+        Require(contact_plan->track_geometry().ClassifyTrackStation(
+                    expected.station_meters) == expected.region,
+                "a formal GZ18 wheelset is in the wrong base-track definition "
+                "region");
     }
     for (int carrier = 0; carrier < contact_plan->carrier_count(); ++carrier) {
         const std::string name(contact_plan->carrier_name(carrier));
@@ -401,10 +457,14 @@ int main(int argc, char** argv) {
     }
     assembled.system().SetContinuousState(runtime_context, original_state);
 
-    // A non-zero-yaw integration fixture checks the profile-coordinate origin
-    // at its real force-plan call site.  The authored wheel datum is displaced
-    // longitudinally by -sin(yaw)*sigma; measuring the rail coordinate from
-    // that datum would apply this correction twice and changes the wrench.
+    // A non-zero-yaw, non-zero-grade, curved-irregularity fixture checks both
+    // stages of the frozen WRL/GZ18 station selection at the real force-plan
+    // call site. The shared carrier station first supplies the lateral slope
+    // that corrects yaw; the corrected yaw then chooses the side-specific
+    // profile station. Both series have visibly different slopes at the shared,
+    // right and left stations, so sampling a fixed station cannot masquerade as
+    // the two-stage contract. The grade also separates planar ds/dt from the
+    // three-dimensional path speed.
     auto yawed_startup = startup;
     constexpr double kYawRadians = 0.04;
     constexpr double kAccumulatedSpinRadians = 0.31;
@@ -418,9 +478,28 @@ int main(int argc, char** argv) {
     yawed_body
         .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
         Eigen::Vector3d(0.02, 0.0, -0.01);
-    auto yawed_line = LoadTrackGeometryFromJsonFile(argv[3]);
+    constexpr std::array<double, 9> fixture_stations{
+        -20.0, 0.0, 8.8, 9.0, 9.1, 9.2, 9.4, 20.0, 40.0};
+    constexpr std::array<double, 9> fixture_lateral{
+        -8.0e-6, 6.0e-6, -4.0e-6, 3.0e-6, 9.0e-6,
+        -5.0e-6, 2.0e-6, -3.0e-6, 5.0e-6};
+    constexpr std::array<double, 9> fixture_vertical{
+        7.0e-6, -5.0e-6, 5.0e-6, -7.0e-6, 1.0e-6,
+        8.0e-6, -4.0e-6, 4.0e-6, -6.0e-6};
+    const orvd::wheel_rail_contact::TrackIrregularityField fixture_oracle(
+        fixture_stations, fixture_lateral, fixture_stations,
+        fixture_vertical);
+    auto fixture_irregularity = std::make_unique<
+        orvd::wheel_rail_contact::TrackIrregularityField>(
+        fixture_stations, fixture_lateral, fixture_stations,
+        fixture_vertical);
+    constexpr double kFixtureGrade = 0.02;
     const auto yawed_scenario = AssembleGz18ContactScenario(
-        vehicle, yawed_startup, std::move(yawed_line),
+        vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
+        std::filesystem::path(argv[4]), kReferenceStationMeters,
+        kProjectionHalfWidthMeters, std::move(fixture_irregularity));
+    const auto yawed_zero_field_scenario = AssembleGz18ContactScenario(
+        vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
         std::filesystem::path(argv[4]), kReferenceStationMeters,
         kProjectionHalfWidthMeters);
     const auto* yawed_plan =
@@ -428,6 +507,12 @@ int main(int argc, char** argv) {
     auto yawed_workspace = yawed_plan->CreateWorkspace();
     const auto yawed_wrenches =
         EvaluateContactForces(*yawed_scenario, *yawed_workspace);
+    auto yawed_zero_field_workspace =
+        yawed_zero_field_scenario->vehicle_system()
+            .contact_force_plan()
+            ->CreateWorkspace();
+    const auto yawed_zero_field_wrenches = EvaluateContactForces(
+        *yawed_zero_field_scenario, *yawed_zero_field_workspace);
 
     const auto independent_personality =
         orvd::configuration::AssembleGz18WheelRailContact(
@@ -438,7 +523,9 @@ int main(int argc, char** argv) {
     using orvd::wheel_rail_contact::RailProfileFrame;
     using orvd::wheel_rail_contact::ResolveRollYawPitch;
     using orvd::wheel_rail_contact::ResolveRollYawPitchRates;
+    using orvd::wheel_rail_contact::SafeAtan2Ratio;
     using orvd::wheel_rail_contact::SpatialWrench;
+    using orvd::wheel_rail_contact::TrackIrregularity;
     using orvd::wheel_rail_contact::WheelProfileRigidMotion;
     using orvd::wheel_rail_contact::WheelRailContactInput;
     using orvd::wheel_rail_contact::WheelRailPoseInput;
@@ -476,102 +563,227 @@ int main(int argc, char** argv) {
         rotation_track_from_inertial * body_pose.rotation());
     const auto rates = ResolveRollYawPitchRates(
         body_omega_in_track, angles.roll_radians, angles.yaw_radians);
-    const auto& constants =
-        independent_personality->pose_constants(WheelSide::kRight);
-    const double effective_offset =
-        -std::sin(angles.yaw_radians) *
-        constants.wheel_lateral_datum_meters;
-    const double effective_station = shared_station + effective_offset;
-    const auto profile_track =
-        yawed_plan->track_geometry().EvaluateTrackFrame(effective_station);
+    const Eigen::Vector3d centerline_derivative_in_track =
+        rotation_track_from_inertial *
+        shared_track.centerline_derivative_in_inertial_meters_per_meter();
+    const Eigen::Vector3d track_rotation_rate_in_track =
+        rotation_track_from_inertial *
+        shared_track.track_frame_rotation_rate_in_inertial_radians_per_meter();
+    const double station_rate =
+        body_velocity_in_track.x() /
+        (centerline_derivative_in_track.x() +
+         track_rotation_rate_in_track.cross(body_origin_in_track).x());
+    const double path_rate =
+        shared_track.centerline_derivative_in_inertial_meters_per_meter().norm() *
+        station_rate;
+    Require(std::abs(path_rate - station_rate) > 1.0e-3,
+            "the graded fixture did not separate path speed from planar "
+            "station rate");
+    const double shared_lateral_slope =
+        fixture_oracle.LateralSlopeMetersPerMeter(shared_station);
+    const double effective_yaw =
+        angles.yaw_radians -
+        SafeAtan2Ratio(shared_lateral_slope * station_rate, station_rate);
     const Eigen::Matrix3d rotation_track_from_wheel_profile =
         Eigen::AngleAxisd(angles.roll_radians, Eigen::Vector3d::UnitX())
             .toRotationMatrix() *
         Eigen::AngleAxisd(angles.yaw_radians, Eigen::Vector3d::UnitZ())
             .toRotationMatrix();
-    const Eigen::Vector3d wheel_profile_offset =
-        rotation_track_from_wheel_profile *
-        Eigen::Vector3d(0.0, constants.wheel_lateral_datum_meters, 0.0);
     Require(std::abs(angles.pitch_radians - kAccumulatedSpinRadians) < 1.0e-14,
             "the integration fixture lost its non-zero accumulated wheel spin");
-    Require(body_omega_in_track.cross(wheel_profile_offset).norm() > 1.0e-3,
-            "the integration fixture lost its non-collinear profile-datum "
-            "velocity");
-    WheelProfileRigidMotion wheel_motion;
-    wheel_motion.origin_track_meters =
-        body_origin_in_track + wheel_profile_offset;
-    wheel_motion.rotation_track_from_profile =
-        rotation_track_from_wheel_profile;
-    wheel_motion.origin_velocity_track_meters_per_second =
-        body_velocity_in_track + body_omega_in_track.cross(wheel_profile_offset);
-    wheel_motion.angular_velocity_track_radians_per_second =
-        body_omega_in_track;
-    wheel_motion.arc_rate_meters_per_second = body_velocity_in_track.x();
-    wheel_motion.wheel_pitch_rate_radians_per_second =
-        rates.pitch_rate_radians_per_second;
+    struct DirectInterfaceResult {
+        SpatialWrench wrench_in_inertial;
+        double effective_station_meters{0.0};
+        double lateral_slope_meters_per_meter{0.0};
+        double vertical_slope_meters_per_meter{0.0};
+    };
+    const auto RebuildInterface = [&](WheelSide side) {
+        const auto& constants = independent_personality->pose_constants(side);
+        const double effective_offset =
+            -std::sin(effective_yaw) *
+            constants.wheel_lateral_datum_meters;
+        const double effective_lateral =
+            body_origin_in_track.y() +
+            std::cos(effective_yaw) *
+                constants.wheel_lateral_datum_meters;
+        const double effective_station =
+            shared_station +
+            effective_offset /
+                (1.0 - yawed_plan->track_geometry().CurvatureRadiansPerMeter(
+                           shared_station) *
+                           effective_lateral);
+        const auto profile_track =
+            yawed_plan->track_geometry().EvaluateTrackFrame(effective_station);
+        const double irregularity_lateral =
+            fixture_oracle.LateralDisplacementMeters(effective_station);
+        const double irregularity_vertical =
+            fixture_oracle.VerticalDisplacementMeters(effective_station);
+        const double lateral_slope =
+            fixture_oracle.LateralSlopeMetersPerMeter(effective_station);
+        const double vertical_slope =
+            fixture_oracle.VerticalSlopeMetersPerMeter(effective_station);
 
-    RailProfileFrame rail_frame;
-    const Eigen::Vector3d rail_origin_in_inertial =
-        profile_track.pose().origin_in_inertial_meters() +
-        profile_track.pose().rotation_inertial_from_track() *
-            Eigen::Vector3d(0.0, constants.rail_lateral_datum_meters,
-                            constants.rail_vertical_datum_meters);
-    rail_frame.origin_track_meters =
-        rotation_track_from_inertial *
-        (rail_origin_in_inertial -
-         shared_track.pose().origin_in_inertial_meters());
-    rail_frame.rotation_track_from_profile =
-        rotation_track_from_inertial *
-        profile_track.pose().rotation_inertial_from_track() *
-        Eigen::AngleAxisd(constants.rail_roll_radians,
-                          Eigen::Vector3d::UnitX())
-            .toRotationMatrix();
-    rail_frame.origin_track_meters = PlaceRailProfileLongitudinalOrigin(
-        independent_personality->rail_profile_origin_mode(),
-        rail_frame.origin_track_meters,
-        rail_frame.rotation_track_from_profile, body_origin_in_track,
-        effective_offset);
-    const double actual_profile_coordinate =
-        (rail_frame.rotation_track_from_profile.transpose() *
-         (rail_frame.origin_track_meters - body_origin_in_track))
-            .x();
-    Require(std::abs(actual_profile_coordinate - effective_offset) < 1.0e-14,
-            "the non-zero-yaw rail origin does not satisfy the profile "
-            "coordinate invariant");
+        const Eigen::Vector3d wheel_profile_offset =
+            rotation_track_from_wheel_profile *
+            Eigen::Vector3d(0.0, constants.wheel_lateral_datum_meters, 0.0);
+        Require(body_omega_in_track.cross(wheel_profile_offset).norm() >
+                    1.0e-3,
+                "the integration fixture lost its non-collinear "
+                "profile-datum velocity");
+        WheelProfileRigidMotion wheel_motion;
+        wheel_motion.origin_track_meters =
+            body_origin_in_track + wheel_profile_offset;
+        wheel_motion.rotation_track_from_profile =
+            rotation_track_from_wheel_profile;
+        wheel_motion.origin_velocity_track_meters_per_second =
+            body_velocity_in_track +
+            body_omega_in_track.cross(wheel_profile_offset);
+        wheel_motion.angular_velocity_track_radians_per_second =
+            body_omega_in_track;
+        wheel_motion.arc_rate_meters_per_second = path_rate;
+        wheel_motion.wheel_pitch_rate_radians_per_second =
+            rates.pitch_rate_radians_per_second;
 
-    WheelRailPoseInput pose_input;
-    pose_input.placement = {body_origin_in_track.y(), body_origin_in_track.z(),
-                            angles.roll_radians, angles.yaw_radians};
-    pose_input.arc_rate_meters_per_second = body_velocity_in_track.x();
-    WheelRailContactInput contact_input;
-    contact_input.pose =
-        BuildContactPoseScalars(constants, pose_input, {});
-    contact_input.rail_frame = rail_frame;
-    contact_input.wheel = wheel_motion;
-    orvd::wheel_rail_contact::WheelRailContactWorkspace contact_workspace;
-    independent_personality->model(WheelSide::kRight)
-        .PrepareWorkspace(contact_workspace);
-    const auto contact_result =
-        independent_personality->model(WheelSide::kRight)
-            .Evaluate(contact_input, contact_workspace);
-    SpatialWrench direct_wrench;
-    for (std::size_t patch = 0; patch < contact_result.count; ++patch) {
-        const auto at_body = orvd::wheel_rail_contact::TransportWrench(
-            contact_result.patches[patch].wrench.rail_on_wheel,
-            contact_result.patches[patch].wrench.contact_point_meters,
-            body_origin_in_track);
-        direct_wrench.force_newtons += at_body.force_newtons;
-        direct_wrench.moment_newton_meters += at_body.moment_newton_meters;
+        RailProfileFrame rail_frame;
+        const Eigen::Vector3d rail_origin_in_inertial =
+            profile_track.pose().origin_in_inertial_meters() +
+            profile_track.pose().rotation_inertial_from_track() *
+                Eigen::Vector3d(
+                    0.0,
+                    constants.rail_lateral_datum_meters +
+                        irregularity_lateral,
+                    constants.rail_vertical_datum_meters +
+                        irregularity_vertical);
+        rail_frame.origin_track_meters =
+            rotation_track_from_inertial *
+            (rail_origin_in_inertial -
+             shared_track.pose().origin_in_inertial_meters());
+        rail_frame.rotation_track_from_profile =
+            rotation_track_from_inertial *
+            profile_track.pose().rotation_inertial_from_track() *
+            Eigen::AngleAxisd(std::atan2(lateral_slope, 1.0),
+                              Eigen::Vector3d::UnitZ())
+                .toRotationMatrix() *
+            Eigen::AngleAxisd(-std::atan2(vertical_slope, 1.0),
+                              Eigen::Vector3d::UnitY())
+                .toRotationMatrix() *
+            Eigen::AngleAxisd(constants.rail_roll_radians,
+                              Eigen::Vector3d::UnitX())
+                .toRotationMatrix();
+        rail_frame.origin_track_meters = PlaceRailProfileLongitudinalOrigin(
+            independent_personality->rail_profile_origin_mode(),
+            rail_frame.origin_track_meters,
+            rail_frame.rotation_track_from_profile, body_origin_in_track,
+            effective_offset);
+        const double actual_profile_coordinate =
+            (rail_frame.rotation_track_from_profile.transpose() *
+             (rail_frame.origin_track_meters - body_origin_in_track))
+                .x();
+        Require(std::abs(actual_profile_coordinate - effective_offset) <
+                    1.0e-14,
+                "the non-zero-yaw rail origin does not satisfy the profile "
+                "coordinate invariant");
+
+        WheelRailPoseInput pose_input;
+        pose_input.placement = {
+            body_origin_in_track.y(), body_origin_in_track.z(),
+            angles.roll_radians, angles.yaw_radians};
+        pose_input.track_station_rate_meters_per_second = station_rate;
+        pose_input.irregularity = TrackIrregularity{
+            irregularity_lateral, irregularity_vertical,
+            lateral_slope * station_rate, vertical_slope * station_rate};
+        WheelRailContactInput contact_input;
+        contact_input.pose =
+            BuildContactPoseScalars(constants, pose_input, {});
+        contact_input.rail_frame = rail_frame;
+        contact_input.wheel = wheel_motion;
+        orvd::wheel_rail_contact::WheelRailContactWorkspace contact_workspace;
+        independent_personality->model(side).PrepareWorkspace(contact_workspace);
+        const auto contact_result =
+            independent_personality->model(side).Evaluate(contact_input,
+                                                           contact_workspace);
+        SpatialWrench direct_wrench;
+        for (std::size_t patch = 0; patch < contact_result.count; ++patch) {
+            const auto at_body = orvd::wheel_rail_contact::TransportWrench(
+                contact_result.patches[patch].wrench.rail_on_wheel,
+                contact_result.patches[patch].wrench.contact_point_meters,
+                body_origin_in_track);
+            direct_wrench.force_newtons += at_body.force_newtons;
+            direct_wrench.moment_newton_meters += at_body.moment_newton_meters;
+        }
+        direct_wrench = orvd::wheel_rail_contact::RotateWrench(
+            direct_wrench,
+            shared_track.pose().rotation_inertial_from_track());
+        return DirectInterfaceResult{direct_wrench, effective_station,
+                                     lateral_slope, vertical_slope};
+    };
+    const DirectInterfaceResult direct_right =
+        RebuildInterface(WheelSide::kRight);
+    const DirectInterfaceResult direct_left =
+        RebuildInterface(WheelSide::kLeft);
+    Require(std::abs(direct_right.effective_station_meters - shared_station) >
+                    1.0e-3 &&
+                std::abs(direct_left.effective_station_meters - shared_station) >
+                    1.0e-3 &&
+                std::abs(direct_right.effective_station_meters -
+                         direct_left.effective_station_meters) > 4.0e-2,
+            "the fixture did not separate the shared, right and left "
+            "sampling stations");
+    Require(std::abs(shared_lateral_slope -
+                     direct_right.lateral_slope_meters_per_meter) > 1.0e-8 &&
+                std::abs(shared_lateral_slope -
+                         direct_left.lateral_slope_meters_per_meter) > 1.0e-8 &&
+                std::abs(direct_right.lateral_slope_meters_per_meter -
+                         direct_left.lateral_slope_meters_per_meter) > 1.0e-8 &&
+                std::abs(direct_right.vertical_slope_meters_per_meter -
+                         direct_left.vertical_slope_meters_per_meter) > 1.0e-8,
+            "the nonlinear field did not distinguish the three slope "
+            "sampling stations");
+    for (const auto& [interface, direct] :
+         {std::pair{0, &direct_right}, std::pair{1, &direct_left}}) {
+        Require(Near(yawed_wrenches[interface].force_newtons,
+                     direct->wrench_in_inertial.force_newtons) &&
+                    Near(yawed_wrenches[interface]
+                             .torque_about_point_newton_metres,
+                         direct->wrench_in_inertial.moment_newton_meters),
+                "the force plan's non-zero-yaw irregularity wrench does not "
+                "use the two-stage profile-station and rigid-profile "
+                "contract");
     }
-    direct_wrench = orvd::wheel_rail_contact::RotateWrench(
-        direct_wrench,
-        shared_track.pose().rotation_inertial_from_track());
-    Require(Near(yawed_wrenches.front().force_newtons,
-                 direct_wrench.force_newtons) &&
-                Near(yawed_wrenches.front().torque_about_point_newton_metres,
-                     direct_wrench.moment_newton_meters),
-            "the force plan's non-zero-yaw wrench does not use the single "
-            "profile-coordinate station correction");
+    for (int interface = 4; interface < 8; ++interface) {
+        Require(SameWrenchComponents(
+                    yawed_wrenches[interface],
+                    yawed_zero_field_wrenches[interface]),
+                "an interface on the left straight continuation consumed "
+                "irregularity outside the base-track definition interval");
+    }
+    Require(std::abs(fixture_oracle.LateralDisplacementMeters(-6.6)) +
+                        std::abs(fixture_oracle.VerticalDisplacementMeters(
+                            -9.1)) >
+                    1.0e-6,
+            "the rear-interface suppression fixture has no non-zero raw "
+            "field outside the base-track definition interval");
+    std::array<AppliedBodyWrench, 8> irregularity_hot_wrenches;
+    std::size_t irregularity_allocations = 0;
+    {
+        orvd::test::AllocationScope allocation_scope;
+        yawed_plan->CalcAppliedForces(
+            yawed_component.context(), *yawed_workspace,
+            yawed_scenario->initial_context()
+                .context()
+                .wheel_rail_projection_station_hints_meters(),
+            irregularity_hot_wrenches);
+        yawed_plan->CalcAppliedForces(
+            yawed_component.context(), *yawed_workspace,
+            yawed_scenario->initial_context()
+                .context()
+                .wheel_rail_projection_station_hints_meters(),
+            irregularity_hot_wrenches);
+        irregularity_allocations = allocation_scope.allocations();
+    }
+    Require(irregularity_allocations == 0,
+            "the warmed non-zero-irregularity contact path allocated heap "
+            "storage");
 
     // A contact-enabled system owns one line.  The legacy research overload
     // remains available for systems without contact, but it must not create a
@@ -621,11 +833,14 @@ int main(int argc, char** argv) {
     Require(advanced_rhs.allFinite(),
             "the accepted GZ18 projection history does not feed a finite RHS");
 
-    // Put the same real vehicle just inside the straight line's end. Several
-    // candidate internal steps can update their local hints before the next
-    // declared search window reaches outside the line. The failed public
-    // advance must publish none of those candidate values.
+    // Put the same real vehicle just inside the base track's right definition
+    // boundary.
+    // The accepted vehicle then crosses onto TrackGeometry's native straight
+    // continuation. The finite JSON interval stays observable, but is not a
+    // wall in the vehicle dynamics.
     auto boundary_line = LoadTrackGeometryFromJsonFile(argv[3]);
+    const double boundary_end_station =
+        boundary_line.end_track_station_meters();
     double foremost_offset = -std::numeric_limits<double>::infinity();
     for (const ResolvedWheelsetPlacement& placement :
          scenario->initial_context().wheelset_placements()) {
@@ -652,9 +867,6 @@ int main(int argc, char** argv) {
     boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
     Require(boundary_context.time_seconds() == kAcceptedHistoryTargetSeconds,
             "the boundary scenario did not establish an accepted history");
-    Eigen::VectorXd accepted_boundary_state(109);
-    boundary_system.system().CopyContinuousState(boundary_context,
-                                                 accepted_boundary_state);
     const std::vector<double> accepted_boundary_hints(
         boundary_context.wheel_rail_projection_station_hints_meters().begin(),
         boundary_context.wheel_rail_projection_station_hints_meters().end());
@@ -666,63 +878,31 @@ int main(int argc, char** argv) {
                 "the boundary scenario did not move its accepted projection "
                 "history beyond the construction anchors");
     }
-    bool boundary_failure = false;
-    std::string boundary_failure_message;
-    try {
-        const std::array<double, 5> boundary_sample_times{
-            kAcceptedHistoryTargetSeconds,
-            1.25 * kAcceptedHistoryTargetSeconds,
-            1.5 * kAcceptedHistoryTargetSeconds,
-            1.75 * kAcceptedHistoryTargetSeconds,
-            2.0 * kAcceptedHistoryTargetSeconds};
-        (void)boundary_advancer.AdvanceToWithDenseStateSamples(
+    const std::array<double, 5> boundary_sample_times{
+        kAcceptedHistoryTargetSeconds, 1.5e-3, 2.0e-3, 2.5e-3, 3.0e-3};
+    const Eigen::MatrixXd boundary_samples =
+        boundary_advancer.AdvanceToWithDenseStateSamples(
             boundary_sample_times.back(), boundary_sample_times);
-    } catch (const std::exception& error) {
-        boundary_failure = true;
-        boundary_failure_message = error.what();
-    }
-    Require(boundary_failure &&
-                boundary_failure_message.find("reaches outside the domain") !=
-                    std::string::npos,
-            "the real GZ18 boundary run did not reach its declared local "
-            "projection limit");
-    Eigen::VectorXd state_after_failure(109);
-    boundary_system.system().CopyContinuousState(boundary_context,
-                                                 state_after_failure);
-    Require(boundary_context.time_seconds() ==
-                    kAcceptedHistoryTargetSeconds &&
-                state_after_failure == accepted_boundary_state &&
-                std::equal(
-                    accepted_boundary_hints.begin(),
-                    accepted_boundary_hints.end(),
-                    boundary_context
-                        .wheel_rail_projection_station_hints_meters()
-                        .begin()),
-            "a failed public GZ18 advance leaked candidate state or station "
-            "history");
-    bool unsynchronized_advance_was_rejected = false;
-    try {
-        boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds + 1.0e-7);
-    } catch (const std::logic_error&) {
-        unsynchronized_advance_was_rejected = true;
-    }
-    Require(unsynchronized_advance_was_rejected,
-            "a failed GZ18 advance did not require explicit synchronization");
-    boundary_advancer.SynchronizeAfterAcceptedContextChange();
-    boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds + 1.0e-7);
-    Require(boundary_context.time_seconds() ==
-                kAcceptedHistoryTargetSeconds + 1.0e-7 &&
-                std::equal(
-                    accepted_boundary_hints.begin(),
-                    accepted_boundary_hints.end(),
-                    boundary_context
-                        .wheel_rail_projection_station_hints_meters()
-                        .begin(),
-                    [](double accepted, double recovered) {
-                        return recovered >= accepted;
-                    }),
-            "the GZ18 advancer did not recover from its accepted state and "
-            "station history");
+    Require(boundary_context.time_seconds() == boundary_sample_times.back() &&
+                boundary_samples.rows() == 109 &&
+                boundary_samples.cols() ==
+                    static_cast<Eigen::Index>(boundary_sample_times.size()) &&
+                boundary_samples.allFinite(),
+            "the GZ18 right-boundary crossing did not produce one finite "
+            "accepted state batch");
+    const auto continued_hints =
+        boundary_context.wheel_rail_projection_station_hints_meters();
+    Require(std::any_of(continued_hints.begin(), continued_hints.end(),
+                        [&](double station) {
+                            return station > boundary_end_station;
+                        }),
+            "no GZ18 carrier crossed onto the right straight continuation");
+    Eigen::VectorXd continued_rhs(109);
+    boundary_system.compiled_plan().CalcStateTimeDerivatives(boundary_context,
+                                                             continued_rhs);
+    Require(continued_rhs.allFinite(),
+            "the right straight continuation did not feed a finite vehicle "
+            "RHS");
 
     if (failures != 0) {
         return 1;

@@ -39,7 +39,7 @@ using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackScalarSegmentShape;
 
-constexpr double kLayoutReferenceStation = 20.0;
+constexpr double kLayoutReferenceStation = 0.0;
 int failures = 0;
 
 void Require(bool condition, std::string_view what) {
@@ -648,14 +648,12 @@ int main(int argc, char** argv) {
             ResolvedStartupState edited = startup;
             MutableBodyState(edited, "carbody")
                 .resolved_track_station_offset_from_mechanical_layout_meters =
-                line.end_track_station_meters();
-            RequireRefusal(
-                [&] {
-                    (void)AssembleResolvedInitialContext(
-                        *system, edited, line, kLayoutReferenceStation);
-                },
-                "outside this line's domain",
-                "a non-wheel free body outside the line");
+                line.end_track_station_meters() + 10.0;
+            const ResolvedInitialContext continued =
+                AssembleResolvedInitialContext(*system, edited, line,
+                                               kLayoutReferenceStation);
+            CheckStateMatchesRecord(vehicle, edited, line, *system,
+                                    continued);
         }
     } catch (const std::exception& error) {
         std::fprintf(stderr, "GZ18 start-up assembly failed: %s\n",

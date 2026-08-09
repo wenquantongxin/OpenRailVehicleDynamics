@@ -10,14 +10,16 @@
 #include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/track_geometry/track_geometry.h"
+#include "orvd/wheel_rail_contact/track_irregularity_field.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_runtime_personality.h"
 
 // A frozen, model-bound wheel-rail force source.
 //
-// The plan owns the line and the immutable runtime contact personality.  The
-// only object it borrows is the finalized multibody model it was compiled
-// against.  Construction resolves every name and fixes every interface; a
-// right-hand-side evaluation performs no lookup and changes no plan state.
+// The plan owns the line, an optional immutable track-irregularity field, and
+// the immutable runtime contact personality. The only object it borrows is the
+// finalized multibody model it was compiled against. Construction resolves
+// every name and fixes every interface; a right-hand-side evaluation performs
+// no lookup and changes no plan state.
 
 namespace orvd::forces {
 
@@ -113,6 +115,8 @@ class WheelRailContactForcePlan {
         std::unique_ptr<
             wheel_rail_contact::WheelRailContactRuntimePersonality>
             personality,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
+            track_irregularity,
         std::vector<WheelRailContactCarrierDefinition> carriers,
         std::vector<WheelRailContactInterfaceDefinition> interfaces,
         double projection_search_half_width_meters);
@@ -120,6 +124,7 @@ class WheelRailContactForcePlan {
         multibody_model::MultibodyModel&&, track_geometry::TrackGeometry,
         std::unique_ptr<
             wheel_rail_contact::WheelRailContactRuntimePersonality>,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>,
         std::vector<WheelRailContactCarrierDefinition>,
         std::vector<WheelRailContactInterfaceDefinition>, double) = delete;
     WheelRailContactForcePlan(const WheelRailContactForcePlan&) = delete;
@@ -222,6 +227,8 @@ class WheelRailContactForcePlan {
     track_geometry::TrackGeometry line_;
     std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
         personality_;
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
+        track_irregularity_;
     std::vector<CarrierBinding> carriers_;
     std::vector<InterfaceBinding> interfaces_;
     double projection_search_half_width_meters_{0.0};

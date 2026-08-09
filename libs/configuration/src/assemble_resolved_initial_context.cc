@@ -110,19 +110,10 @@ void RequireExactCover(std::vector<ClaimedRange> claims, int total,
     }
 }
 
-void RequireStationInsideLine(double station, const std::string& body_name,
-                              const track_geometry::TrackGeometry& line) {
+void RequireFiniteStation(double station, const std::string& body_name) {
     if (!std::isfinite(station)) {
         Reject("the station of '" + body_name + "' is " + Describe(station) +
                ", which is not finite");
-    }
-    if (station < line.start_track_station_meters() ||
-        station > line.end_track_station_meters()) {
-        Reject("'" + body_name + "' would start at station " +
-               Describe(station) + " m, outside this line's domain [" +
-               Describe(line.start_track_station_meters()) + ", " +
-               Describe(line.end_track_station_meters()) +
-               "] m; the whole vehicle has to stand on the line it starts on");
     }
 }
 
@@ -270,7 +261,7 @@ ResolvedInitialContext AssembleResolvedInitialContext(
             vehicle_layout_reference_track_station_meters +
             mechanical_offset_of_body.at(body.body_name) +
             body.resolved_track_station_offset_from_mechanical_layout_meters;
-        RequireStationInsideLine(station, body.body_name, line);
+        RequireFiniteStation(station, body.body_name);
         station_of_body.emplace(body.body_name, station);
     }
 

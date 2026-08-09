@@ -8,6 +8,7 @@
 #include "orvd/configuration/resolved_startup_state.h"
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/track_geometry/track_geometry.h"
+#include "orvd/wheel_rail_contact/track_irregularity_field.h"
 
 namespace orvd::configuration {
 
@@ -41,7 +42,8 @@ class AssembledGz18ContactScenario {
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double);
+        double,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     AssembledGz18ContactScenario(
         std::unique_ptr<AssembledVehicleSystem> vehicle_system,
@@ -61,6 +63,9 @@ class AssembledGz18ContactScenario {
 // not a start-up JSON field.  The projection half width is a local branch
 // isolation width, not a physical response limit.  G53 keeps its four initial
 // anchors immutable; accepted/candidate projection history belongs to G54.
+// A non-null irregularity field is moved into the immutable contact force plan;
+// a null field is the explicit zero-irregularity scenario. Neither path reads
+// files during right-hand-side evaluation.
 [[nodiscard]] std::unique_ptr<AssembledGz18ContactScenario>
 AssembleGz18ContactScenario(
     const VehicleDefinition& vehicle,
@@ -68,6 +73,8 @@ AssembleGz18ContactScenario(
     track_geometry::TrackGeometry line,
     const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    double projection_search_half_width_meters);
+    double projection_search_half_width_meters,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
+        track_irregularity = nullptr);
 
 }  // namespace orvd::configuration

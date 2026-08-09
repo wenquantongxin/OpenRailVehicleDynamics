@@ -339,7 +339,7 @@ int main(int argc, char** argv) {
     const auto vehicle = LoadVehicleDefinitionFromJsonFile(argv[1]);
     const auto startup = LoadResolvedStartupStateFromJsonFile(argv[2]);
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
-    constexpr double kReferenceStationMeters = 20.0;
+    constexpr double kReferenceStationMeters = 0.0;
     constexpr double kProjectionHalfWidthMeters = 0.01;
     std::unique_ptr<AssembledGz18ContactScenario> scenario =
         AssembleGz18ContactScenario(

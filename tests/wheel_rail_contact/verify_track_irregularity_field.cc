@@ -45,6 +45,22 @@ int main() {
         lateral_stations, lateral_displacements, vertical_stations,
         vertical_displacements);
 
+    Require(field.LateralDisplacementMeters(lateral_stations.front()) ==
+                    lateral_displacements.front() &&
+                field.LateralDisplacementMeters(lateral_stations.back()) ==
+                    lateral_displacements.back() &&
+                field.VerticalDisplacementMeters(vertical_stations.front()) ==
+                    vertical_displacements.front() &&
+                field.VerticalDisplacementMeters(vertical_stations.back()) ==
+                    vertical_displacements.back(),
+            "a declared activation boundary lost its stated displacement");
+    RequireNear(field.LateralSlopeMetersPerMeter(lateral_stations.front()),
+                0.002, 2.0e-17,
+                "the lateral start boundary lost its one-sided slope");
+    RequireNear(field.VerticalSlopeMetersPerMeter(vertical_stations.back()),
+                -0.003, 2.0e-17,
+                "the vertical end boundary lost its one-sided slope");
+
     for (const double station : std::array<double, 5>{-0.75, 0.0, 1.0, 2.75,
                                                        3.75}) {
         RequireNear(field.LateralDisplacementMeters(station),
@@ -66,14 +82,12 @@ int main() {
     RequireNear(field.LateralDisplacementMeters(-1.5), -0.004, 2.0e-17,
                 "the lateral channel did not remain live below the vertical "
                 "domain");
-    Require(field.VerticalDisplacementMeters(-1.5) ==
-                    vertical_displacements.front() &&
+    Require(field.VerticalDisplacementMeters(-1.5) == 0.0 &&
                 field.VerticalSlopeMetersPerMeter(-1.5) == 0.0,
-            "the vertical channel was not held flat below its domain");
-    Require(field.LateralDisplacementMeters(6.0) ==
-                    lateral_displacements.back() &&
+            "the vertical excitation did not switch off below its domain");
+    Require(field.LateralDisplacementMeters(6.0) == 0.0 &&
                 field.LateralSlopeMetersPerMeter(6.0) == 0.0,
-            "the lateral channel was not held flat above its domain");
+            "the lateral excitation did not switch off above its domain");
     RequireNear(field.VerticalDisplacementMeters(6.0), -0.008, 2.0e-17,
                 "the vertical channel did not remain live above the lateral "
                 "domain");

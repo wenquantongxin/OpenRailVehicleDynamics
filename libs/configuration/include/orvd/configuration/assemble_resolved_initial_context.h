@@ -95,10 +95,10 @@ class ResolvedInitialContext {
 //
 // The station of the vehicle's layout reference body is this run's argument,
 // not a field of the record: the same resolved identity can be assembled at any
-// in-domain placement, and a record carrying an absolute mileage would disagree
-// with the next scene that used it. Every other body's station is that argument plus its
-// mechanical offset, from the vehicle definition, plus whatever the resolution
-// moved.
+// finite placement, and a record carrying an absolute mileage would disagree
+// with the next scene that used it. Every other body's station is that argument
+// plus its mechanical offset, from the vehicle definition, plus whatever the
+// resolution moved.
 //
 // Everything is checked before anything is written, and the context is not the
 // caller's until all of it succeeded. A failure part-way therefore leaves no
@@ -117,12 +117,14 @@ class ResolvedInitialContext {
 // under another is not the system this state describes, and no tolerance makes
 // that less true.
 //
-// Every free body must lie inside the line's station domain. The bundled GZ18
-// demonstration is qualified on straight, level, zero-superelevation track;
-// this general research entry point deliberately also accepts a body or a
-// wheelset on curved, graded or superelevated track. Such a modified start is
-// assembled by the stated formulas but is not claimed to reproduce the source
-// tool's complete type-7 railway-joint transport kinematics.
+// Every free body must have one finite station. It may lie inside the finite
+// definition interval declared by the base-track asset or on TrackGeometry's native straight
+// continuation beyond either boundary. The bundled GZ18 demonstration is
+// qualified on straight, level, zero-superelevation track; this general
+// research entry point deliberately also accepts a body or a wheelset on
+// curved, graded or superelevated track. Such a modified start is assembled by
+// the stated formulas but is not claimed to reproduce the source tool's
+// complete type-7 railway-joint transport kinematics.
 //
 // Call this before constructing a `SystemContinuousStateAdvancer` on the
 // returned context. An advancer copies the state and the context-local
@@ -132,8 +134,8 @@ class ResolvedInitialContext {
 // Throws std::invalid_argument when the record violates its own invariants,
 // when an identifier or gravity disagrees with the assembled system, when a
 // name family is not exactly the system's, when a name resolves to nothing,
-// when a body's station is outside the line, or when a contact-enabled system
-// is paired with a line other than the one its contact plan owns; the
+// when a body's station is not finite, or when a contact-enabled system is
+// paired with a line other than the one its contact plan owns; the
 // diagnostic states the offending amount where it applies.
 [[nodiscard]] ResolvedInitialContext AssembleResolvedInitialContext(
     const AssembledVehicleSystem& system,

@@ -125,11 +125,12 @@ void CheckIndependentNonuniformSeriesAndLifetime(
     Require(std::abs(field.VerticalSlopeMetersPerMeter(kStation) + 3.0) < 1.0e-14,
             "vertical slopes did not use the independent vertical grid");
 
-    Require(field.LateralDisplacementMeters(-4.0) == 1.0 &&
+    Require(field.LateralDisplacementMeters(-4.0) == 0.0 &&
                 field.LateralSlopeMetersPerMeter(-4.0) == 0.0 &&
-                field.VerticalDisplacementMeters(9.0) == -5.0 &&
+                field.VerticalDisplacementMeters(9.0) == 0.0 &&
                 field.VerticalSlopeMetersPerMeter(9.0) == 0.0,
-            "domain extension differs from the spline contract");
+            "an excitation remains active outside its declared station "
+            "interval");
 }
 
 void CheckStrictRejections(const std::filesystem::path& data_root) {

@@ -12,10 +12,12 @@
 // constructor arguments rather than inferred from their numerical content.
 //
 // Displacements are expressed in the track frame, whose lateral axis points to
-// the right and whose vertical axis points downward.  The independent variable
-// is the same planar-projected track station used by TrackGeometry.  Outside a
-// series' own knot range its displacement is held at the nearest endpoint and
-// its slope is zero, exactly as specified by NaturalCubicSpline.
+// the right and whose vertical axis points downward. The independent variable
+// is the same planar-projected track station used by TrackGeometry. Each
+// series' first and last knots are its explicit activation boundaries; strictly
+// outside them both displacement and slope are zero. NaturalCubicSpline keeps
+// its general endpoint-hold contract, while this wrapper supplies the
+// excitation-specific zero-outside semantics.
 
 namespace orvd::wheel_rail_contact {
 
@@ -45,6 +47,10 @@ class TrackIrregularityField {
    private:
     NaturalCubicSpline lateral_displacement_;
     NaturalCubicSpline vertical_displacement_;
+    double lateral_start_track_station_meters_{0.0};
+    double lateral_end_track_station_meters_{0.0};
+    double vertical_start_track_station_meters_{0.0};
+    double vertical_end_track_station_meters_{0.0};
 };
 
 }  // namespace orvd::wheel_rail_contact

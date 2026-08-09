@@ -83,7 +83,7 @@ ProfilePoints MakeSymmetricRailProfile(std::string identifier, double half_width
 WheelRailPoseInput Running(const WheelsetPlacement& placement) {
     WheelRailPoseInput input;
     input.placement = placement;
-    input.arc_rate_meters_per_second = 16.666666666666668;
+    input.track_station_rate_meters_per_second = 16.666666666666668;
     return input;
 }
 
@@ -378,7 +378,8 @@ int main() {
         const ContactPoseScalars slanted =
             BuildContactPoseScalars(constants, sloped, no_transport);
         const double expected_correction =
-            SafeAtan2Ratio(0.05, sloped.arc_rate_meters_per_second);
+            SafeAtan2Ratio(0.05,
+                           sloped.track_station_rate_meters_per_second);
         Require(expected_correction > 1.0e-4,
                 "the alignment-slope fixture is too small to discriminate");
         Require(std::abs(slanted.yaw_radians -
@@ -410,7 +411,7 @@ int main() {
         // The lever shortens, so the wheel datum sits closer to the wheelset
         // centre, which on a z-down axis means it is higher — a larger raise.
         const double grade = graded.irregularity.vertical_rate_meters_per_second /
-                             graded.arc_rate_meters_per_second;
+                             graded.track_station_rate_meters_per_second;
         const double shortening =
             constants.nominal_rolling_radius_meters *
             (1.0 - std::cos(std::atan(grade)));
@@ -431,7 +432,7 @@ int main() {
         // rates and its arc rate with consistent signs; holding the rates at
         // zero is not enough.
         WheelRailPoseInput standing = Running(general);
-        standing.arc_rate_meters_per_second = 0.0;
+        standing.track_station_rate_meters_per_second = 0.0;
         standing.irregularity.lateral_rate_meters_per_second = 0.05;
         const ContactPoseScalars still =
             BuildContactPoseScalars(constants, standing, no_transport);
@@ -440,7 +441,8 @@ int main() {
                 "from a ratio with no denominator");
 
         WheelRailPoseInput reversing = Running(general);
-        reversing.arc_rate_meters_per_second = -16.666666666666668;
+        reversing.track_station_rate_meters_per_second =
+            -16.666666666666668;
         const ContactPoseScalars backwards =
             BuildContactPoseScalars(constants, reversing, no_transport);
         Require(std::abs(backwards.yaw_radians -

@@ -28,7 +28,7 @@
 // a property of the run, not of the resolved state, so a body's longitudinal
 // place is written as an offset from the vehicle's mechanical layout, and the
 // layout itself belongs to the vehicle definition. The same resolved identity
-// can then be assembled at any in-domain station; only the bundled straight,
+// can then be assembled at any finite station; only the bundled straight,
 // level demonstration carries reference-tool qualification.
 //
 // The state is expressed in the local track frame at each body's own station,
@@ -196,10 +196,10 @@ struct ResolvedStartupState {
     double common_startup_effective_rolling_radius_meters{0.0};
     // Where the vehicle sits on the line is deliberately absent. A resolved
     // start-up state is an identity, not a placement: the same one can be
-    // assembled at every in-domain station of a line, so the station of the
-    // layout reference body is a run's argument to the assembly, not a field
-    // here. Storing it would make this record disagree with the next scene that
-    // used it.
+    // assembled at every finite station of a line or its native straight
+    // continuation, so the station of the layout reference body is a run's
+    // argument to the assembly, not a field here. Storing it would make this
+    // record disagree with the next scene that used it.
     //
     // The signed vertical shift applied to the rail profile reference frame,
     // along +z_T, before contact geometry is evaluated. Positive lowers the

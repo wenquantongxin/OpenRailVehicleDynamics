@@ -11,6 +11,7 @@
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
+#include "orvd/wheel_rail_contact/track_irregularity_field.h"
 
 namespace orvd::configuration {
 
@@ -93,7 +94,8 @@ class AssembledVehicleSystem {
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double);
+        double,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     AssembledVehicleSystem(
         std::unique_ptr<multibody_model::MultibodyModel> model,
@@ -110,6 +112,8 @@ class AssembledVehicleSystem {
         std::unique_ptr<
             wheel_rail_contact::WheelRailContactRuntimePersonality>
             personality,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
+            track_irregularity,
         std::vector<forces::WheelRailContactCarrierDefinition> carriers,
         std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
         double projection_search_half_width_meters);

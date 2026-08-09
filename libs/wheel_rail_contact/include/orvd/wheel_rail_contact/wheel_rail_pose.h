@@ -32,9 +32,9 @@
 // model carries the difference as four numbers per wheel station: a lateral and
 // a vertical displacement of the rail, and their two longitudinal slopes. All
 // four are inputs to this construction, and they are what `TrackIrregularity`
-// below is. This project has no field to sample them from yet, so its callers
-// pass zeros — but they pass them, and the construction they flow through is
-// the general one, not a smooth-track shortcut.
+// below is. `WheelRailContactForcePlan` now samples an immutable station field
+// and passes these quantities through the general construction; an explicitly
+// absent field supplies four zeros without changing the path.
 //
 // With all four zero the pair yaw becomes the wheelset yaw, the pair roll
 // becomes the wheelset roll minus the rail's laying cant, and the nominal
@@ -44,13 +44,12 @@
 // the last place. Do not write a test that demands they agree bit-for-bit; do
 // not replace the general path with the limit.
 //
-// What this module does NOT carry, and what a future irregularity wiring must
-// add alongside it: the rail profile's own rigid transform (its origin and
-// orientation at the sampled station, which the irregularity displaces and
-// rotates), the effective station the sample is taken at, and the relative
-// velocity of the wheel material point against the rail's. Those belong to the
-// contact model's inputs, and the model must keep taking them rather than
-// re-deriving them from the four scalars here.
+// What this scalar reduction does NOT carry is the rail profile's own rigid
+// transform, the effective station the sample is taken at, or material-point
+// relative velocity. The force plan forms the first two alongside this input;
+// the active GZ18 rigid-profile personality keeps rail material velocity zero
+// and supplies the wheel's genuine rigid-point velocity directly to the contact
+// model rather than re-deriving it from these four scalars.
 
 namespace orvd::wheel_rail_contact {
 
@@ -118,10 +117,10 @@ struct WheelsetPlacement {
 // and how fast that departure is changing as the wheel runs along.
 //
 // The two rates are per unit time, not per unit length: each is the spatial
-// slope multiplied by the arc rate. They are stored that way because that is
-// how they are consumed — as the numerator of a ratio whose denominator is the
-// arc rate — and forming the ratio from two rates keeps the sign of travel in
-// one place instead of two.
+// slope multiplied by the planar track-station rate. They are stored that way
+// because that is how they are consumed — as the numerator of a ratio whose
+// denominator is the same station rate — and forming the ratio from two rates
+// keeps the sign of travel in one place instead of two.
 struct TrackIrregularity {
     double lateral_meters{0.0};
     double vertical_meters{0.0};
@@ -132,9 +131,10 @@ struct TrackIrregularity {
 // Everything the reduction reads that changes from step to step.
 struct WheelRailPoseInput {
     WheelsetPlacement placement;
-    // The rate the carrier advances along the line. Its sign is the direction
-    // of travel and it is load-bearing: see the note on reversal below.
-    double arc_rate_meters_per_second{0.0};
+    // The planar track-station rate ds/dt. Its sign is the direction of travel
+    // and it is load-bearing: see the note on reversal below. This is distinct
+    // from the three-dimensional path speed consumed by the creepage law.
+    double track_station_rate_meters_per_second{0.0};
     TrackIrregularity irregularity;
 };
 
