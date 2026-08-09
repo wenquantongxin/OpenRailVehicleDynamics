@@ -4,40 +4,64 @@
 
 ## 当前能力边界
 
-vendored Drake common support、刚性 topology、double 位姿数学与完整 double-only 刚性树
-均已有内部构建目标。第一方运行时拥有单一多体状态、类型化参数、版本缓存与具名工作区；
-G29–G39 已接通模型中立建模、运动学、质量矩阵、逆动力学、具名外力和 O(n) 前向动力学，
-G40–G45 已接通静态系统组装、上下文局部阻尼、连续状态原子事务、RHS 桥、真实 CVODE 后端
-以及接受/试算提交边界。G46 已落下可安装包、离线依赖源码包和独立消费者资格，并在
-Ubuntu 24.04 的 GCC 13、Clang 18 以及 Windows 10 的 MSVC 19.29 上实际构建并运行同一
-CVODE 消费者。底座的 46 个 Goal 已全部完成。
+ORVD 是面向轨道车辆的 C++23 双精度刚性多体动力学库。现已具备多体模型装配、运动学、质量矩阵、
+逆动力学与前向动力学、外力投影、复合连续状态，以及基于 CVODE 的时域积分；同时提供严格 JSON
+配置、可安装的 CMake 包和独立安装消费者验证。产品运行时不依赖 Drake。
 
-车辆侧源码已经具备线路几何、严格 JSON 配置、GZ18 十七体装配、车辆力元与复合连续状态、
-60 km/h 已解析移动启动，以及接入直接 RHS 的轮轨接触力计划；单接口接触数学保持串行，八个
-独立接口已按固定轮序确定性并行。轮轨型面基础设施包含 JSON 型面模式、与 SIMPACK
-`.prw/.prr` 的语义读写与双向转换、自然三次与单调保形两种插值原语、弧长求积与站点求根，
-以及两套车轮型面预处理及其构造期互斥、型面／轨道侧滚横垂输运的数学与类型化策略。接触核已经接通
-共同法向接触几何、三维互穿与解析长度基线、EEC 法向力、蠕滑率、Kalker 系数、FASTSIM 切向力和
-同点约化的轮侧／轨侧成对扳手，并带有随包 GZ18 JSON 型面、类型化人格与安装数据根绑定。
+轨道车辆功能包括轨道几何与站位投影、轮轨型面处理、轮轨接触几何、EEC 法向接触、
+Kalker/FASTSIM 切向接触、悬挂与车辆力元、轨道不平顺，以及八个轮轨接口的确定性 OpenMP 并行计算。
+GZ18 的 17 刚体模型、60 km/h 初始状态和轮轨接触已经接入车辆动力学方程。
 
-这还不是完整车辆仿真闭环：轮轨力已进入直接 RHS，四个轮对载体的投影站位也已随 CVODE
-内部成功端点在 accepted/candidate 事务中演化；无轨道不平顺直线 `10 ms` 被动纵切已经闭合，冻结
-横／垂不平顺也已按 WRL 两阶段站位语义进入轨型位姿与接触角。仓库还具备默认不安装的内部长窗
-资格运行器，以整数采样时钟完成一次 CVODE 密集推进、顺序物理观测和新目录原子发布；该内部工件
-格式不是公开输出合同。不平顺时域 `10 s/20 s` 资格、IRW 与控制器仍未形成相应资格。具体实施
-进度、当前 Goal 和完成门只在
-[轨道车辆动力学迁移与重构路书](docs/planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)
-维护；README 只陈述稳定能力边界，不充当第二份进度表。
-
-底座的实施记录见
+当前资格范围覆盖 GZ18 在直线、水平、零超高且无轨道不平顺条件下的 10 ms 时域响应，并已与
+SIMPACK 和 WRL 作同工况端到端核对；冻结 AAR6 轨道不平顺输入也已接通。AAR6 10 s/20 s、曲线
+工况、IRW 与控制系统尚未完成资格验证。实施顺序与完成条件见
+[轨道车辆动力学迁移与重构路书](docs/planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)，
+底层多体运行时的演进记录见
 [Drake 多体运行时脱耦路书](docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)。
+
+## 目录结构
+
+```text
+OpenRailVehicleDynamics/
+├── CMakeLists.txt        顶层构建与安装入口
+├── CMakePresets.json     开发、发布与 Drake 参考构建预设
+├── cmake/                CMake 辅助模块
+├── distribution/         离线依赖源码包与超级构建模板
+├── docs/
+│   ├── planning/         实施路书、决策账本与观察记录
+│   ├── adr/              架构决策记录
+│   └── engineering/      第一方工程约束
+├── external/
+│   └── drake_mbtree/     vendored 刚性多体树源码、替代实现与许可证
+├── libs/
+│   ├── track_geometry/    轨道几何、轨道坐标系与站位投影
+│   ├── wheel_rail_contact/ 型面、接触几何、法向／切向接触与工作区
+│   ├── configuration/     严格 JSON 加载、车辆与初始状态装配
+│   ├── multibody_runtime/ 多体状态、缓存与求值运行时
+│   ├── multibody_model/   模型中立的多体建模接口
+│   ├── forces/            车辆力元与轮轨接触力计划
+│   ├── system_assembly/   系统装配与计算计划
+│   └── integrators/       连续状态推进接口与 CVODE 后端
+├── tools/
+│   ├── dynamics_qualification/ 长窗动力学资格运行器（不安装）
+│   ├── profile_conversion/     JSON 与 SIMPACK 型面格式转换工具（不安装）
+│   └── drake_source_boundary/  Drake 源码边界检查工具
+├── track_library/         轨道几何、轨型与轨道不平顺 JSON 资产
+├── vehicle_library/gz18/  GZ18 车型、初始状态与轮型 JSON 资产
+└── tests/                 单元、系统、安装与跨实现验证
+```
+
+公共头位于 `libs/<module>/include/orvd/<module>/`，实现位于相邻的 `src/`。安装包导出
+`ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、
+`ORVD::multibody_runtime`、`ORVD::multibody_model`、`ORVD::forces`、
+`ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和开发期工具不安装。
 
 ## 迁移主线
 
 | 分册 | Goal | 目标边界 |
 |---|---:|---|
 | GZ18 首次短窗 | G47–G55 | 无轨道不平顺直线上的 `10 ms` 被动 CVODE 首次端到端闭环 |
-| GZ18 不平顺长窗 | G56–G63 | 直线 AAR6 `10 s/20 s`，再分别关闭 R300 站位传播和 AAR5 `16 s` 响应 |
+| GZ18 不平顺长窗 | G56–G63 | 直线 AAR6 `10 s/20 s`、精度—性能联合基线，再分别关闭 R300 站位传播和 AAR5 `16 s` 响应 |
 | IRW 被动 | G64–G72 | Ball-RPY、完整衬套、IRW 车型／启动／接触，以及无轨道不平顺 R300 与冻结 AAR5 两层 `30 s` |
 | IRW 1 kHz 控制与交付 | G73–G81 | 八路构架—独立车轮纯力偶、简单 PID、同人格长窗、公开场景／输出和安装应用 |
 
@@ -61,77 +85,17 @@ CTest，跨 WRL／SIMPACK 的轨迹和统计留在仓外；仓内保留解析关
 - 近零量使用按单位声明的绝对限。
 - 旋转使用 `1e-8 rad` 的 SO(3) 测地角。
 - 代数恒等式、有限差分与迭代求解分别使用与其误差来源相符的判据，不套用一个万能阈值。
+- 车辆长窗与 SIMPACK 的比较同时检查时序和里程序列。每个工况使用一张由子图组成的主响应图，
+  展示 4 个轮对的质心轨道横向位移与摇头角；每个子图只叠加 ORVD、SIMPACK 两条曲线，需要历史
+  WRL 控制列时最多三条。
+- 均方根、最大值和分段统计用于量化与定位，不单独决定工况成败；还须检查相位、局部峰值、激活区段、
+  接触力和动力学残差，避免低均方根掩盖局部错误，也避免仅凭一个汇总数否决可解释差异。
+- `5/10/30 s` 级运行同时报告实际墙钟、动力学推进实时因子、端到端实时因子及分段耗时；不从起步
+  无轨道不平顺的快速区段线性外推进入不平顺后的全程性能。实时或快于实时是明确的优化目标，但不以
+  牺牲已资格响应为代价。
 - 不保存数值金标、输出快照或文件哈希；不要求逐位一致。
 - 参考端与候选端始终位于不同进程：`libdrake.so` 导出的符号与 vendored 副本同处
   `namespace drake`，同进程链接会构成 ODR 违规，其最可能的症状是一次看起来通过的比较。
-
-## 目录结构
-
-```text
-OpenRailVehicleDynamics/
-├── CMakeLists.txt        顶层构建（内部刚性树产品目标；启用测试时另建模型中立自检）
-├── CMakePresets.json     构建预设：dev / release / drake-reference
-├── cmake/                CMake 辅助模块
-├── distribution/         离线依赖源码包的锁表与超级构建模板
-├── docs/
-│   ├── planning/         唯一实施路书
-│   ├── engineering/      第一方工程约束
-│   ├── adr/              架构决策记录
-│   ├── design/           历史调研输入（非现行依据）
-│   └── review/           历史审查往来（非现行依据）
-├── external/
-│   └── drake_mbtree/     vendored topology/tree 源码、第一方替代实现、处置与许可证
-├── tools/
-│   ├── drake_source_boundary/  源码闭包、编译前沿、来源与禁入边界工具（开发期）
-│   ├── product_boundary_gate/  链接边界闸门的判别力自检（开发期）
-│   └── package_distribution/   开发者侧离线源码包组装工具
-├── libs/
-│   ├── track_geometry/    线路惯性系、轨道几何、轨型系与站位投影
-│   ├── wheel_rail_contact/ 型面、接触几何、法向／切向力学、成对扳手与每上下文工作区
-│   ├── configuration/     严格 JSON 的一次性类型化加载边界、车辆装配与初始上下文装配
-│   ├── multibody_runtime/ 多体状态、缓存与刚性树求值运行时
-│   ├── multibody_model/   模型中立的程序化多体建模门面
-│   ├── system_assembly/  模型中立系统组装层
-│   ├── integrators/      抽象推进器与 CVODE 后端
-│   ├── forces/           力元
-│   └── equilibrium/      静平衡
-├── track_library/
-│   ├── geometries/       可安装的线路几何 JSON 记录
-│   └── rail_profiles/    可安装的轨型 JSON 记录
-├── vehicle_library/
-│   └── gz18/             可安装的 GZ18 车型 JSON 记录
-│       ├── startup_states/  可安装的已解析启动状态 JSON 记录
-│       └── wheel_profiles/  可安装的 GZ18 轮型 JSON 记录
-└── tests/
-    ├── comparison/       必需观测与容差判定
-    ├── configuration/    线路、车型与启动状态 JSON 的严格加载边界及初始上下文装配
-    ├── contract/         模型中立场景与观测语义
-    ├── drake_reference/  Drake 参考发射器、跨进程比较与缓存语义探针（默认不构建）
-    ├── forces/           力元与复合连续状态
-    ├── header_diagnostics/ vendored 刚性树接入头的自包含（这些头不安装）
-    ├── installation/     迁移后安装前缀的消费者资格
-    ├── integrators/      推进器后端与接受事务
-    ├── math/             double 位姿组合的代数与输出重叠契约
-    ├── multibody_model/  程序化建模门面的加入与拒绝语义
-    ├── multibody_runtime/ 多体状态、类型化缓存、刚性树全对象链接与最小模型契约
-    ├── orvd_candidate/   第一方候选实现的跨进程发射器
-    ├── system_assembly/  系统实例与编译计划
-    ├── topology/         vendored topology 的索引与顺序结构契约
-    ├── toolchain/        工具链自检（Eigen + C++23）
-    ├── track_geometry/   轨道几何与站位投影
-    ├── vehicle_library/  GZ18 车型记录与多体装配
-    ├── wheel_rail_contact/ 型面、接触核心、GZ18 人格与安装绑定
-    └── unit/             单元测试
-```
-
-已建模块的 `include/orvd/<module>/` 是公共编译接口头，`src/` 是实现；例如
-`#include "orvd/multibody_runtime/multibody_state_instance.h"`。安装包导出
-`ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、`ORVD::multibody_runtime`、
-`ORVD::multibody_model`、`ORVD::forces`、`ORVD::system_assembly` 与 `ORVD::integrators`；
-vendored Drake 类型和接入头不安装。`tools/profile_conversion/` 是开发期工具，不导出、不安装。
-安装包还带上线路几何、轨型、GZ18 车型、轮型与已解析启动状态 JSON 记录。安装绑定层提供从逻辑标识到
-显式安装数据根下 JSON 资产的解析；它不搜索环境变量、当前目录或源码树。
-尚未开工的模块仍只保留职责骨架。
 
 ## 外置第三方
 
@@ -202,7 +166,7 @@ IRW 是阶段一的第二个真实车型，而不是 GZ18 的参数变体。规�
 严格 IRW 车型、H3 已解析启动、IRW 自有型面与人格消费。来源侧的 25 个非世界刚体、`nq=81`、
 `nv=74` 等数字只用于该资格资产的 all-and-only 核对，不构成通用 ABI。
 
-IRW 被动主线沿用 C++＋CVODE 的逐次 RHS 接触求值，不迁移旧接触采样保持。A 层为平顺 R300
+IRW 被动主线沿用 C++＋CVODE 的逐次 RHS 接触求值，不迁移旧接触采样保持。A 层为无轨道不平顺的 R300
 `30 s`，B 层为同一冻结 AAR5 `30 s`；两层都按每轴 `100–450 m` 的 `0.01 m` 公共站位格裁决。
 WRL 在约 `3.659 s` 观测到连续 13 个 `100 µs` 样本仅 7 轮接触；后续 ORVD 拓扑观察结果将与它
 并列报告，出现或不出现都不预设成逐样本金标。该边界不否决限定范围的宏观响应资格，也禁止声称
