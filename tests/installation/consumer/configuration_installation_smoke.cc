@@ -16,6 +16,7 @@
 #include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
+#include "orvd/configuration/load_wheel_drive_torque_command_conditioner.h"
 
 int main(int argc, char* argv[]) {
     try {
@@ -81,6 +82,33 @@ int main(int argc, char* argv[]) {
             orvd::configuration::LoadVehicleDefinitionFromJsonFile(argv[5]);
         const auto irw_startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[6]);
+        const auto irw_torque_conditioner = orvd::configuration::
+            LoadWheelDriveTorqueCommandConditionerFromJsonFile(
+                std::filesystem::path(argv[4]) / "vehicle_library" / "irw" /
+                "drive_torque_conditioners" /
+                "irw_reference_wheel_drive_torque_conditioner.json");
+        const std::array<double, 8> conditioner_requests{
+            -194.0, -194.0, -194.0, -194.0,
+            -194.0, -194.0, -194.0, -194.0};
+        const std::array<double, 8> conditioner_speeds{
+            -39.4, -39.4, -39.4, -39.4, -39.4, -39.4, -39.4, -39.4};
+        const std::array<double, 8> conditioner_memory{};
+        const auto conditioned = irw_torque_conditioner.Step(
+            conditioner_requests, conditioner_speeds, conditioner_memory);
+        if (irw_torque_conditioner.config().identifier !=
+                "irw_reference_wheel_drive_torque_conditioner" ||
+            irw_torque_conditioner.config().sample_period_seconds != 0.01 ||
+            !(conditioned.wheel_dynamic_torque_limits_newton_metres[0] >
+              std::abs(conditioner_requests[0])) ||
+            std::abs(conditioned.actual_wheel_torques_newton_metres[0] -
+                     conditioner_requests[0]) > 1.0e-12 ||
+            !(conditioned.next_drive_side_torque_memory_newton_metres[0] >
+              0.0)) {
+            std::fprintf(stderr,
+                         "installed IRW torque conditioner did not load and "
+                         "evaluate its real active table\n");
+            return 1;
+        }
         auto irw_line =
             orvd::configuration::LoadTrackGeometryFromJsonFile(
                 std::filesystem::path(argv[4]) / "track_library" /

@@ -986,6 +986,25 @@ target_link_libraries(verify_independent_wheel_active_torque_plan
 add_test(NAME verify_independent_wheel_active_torque_plan
          COMMAND verify_independent_wheel_active_torque_plan)
 
+# G74's pure eight-channel command conditioner and its strict first-party
+# asset. One analytic batch distinguishes both source direction tables,
+# interpolation, deadband, low/high-speed handling, magnitude limiting and
+# signed cross-zero slew memory without introducing an event scheduler.
+add_executable(verify_wheel_drive_torque_command_conditioner
+    actuation/wheel_drive_torque_command_conditioner_header_self_containment.cc
+    configuration/load_wheel_drive_torque_command_conditioner_header_self_containment.cc
+    actuation/verify_wheel_drive_torque_command_conditioner.cc)
+orvd_configure_first_party_target(
+    verify_wheel_drive_torque_command_conditioner)
+target_include_directories(verify_wheel_drive_torque_command_conditioner
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_wheel_drive_torque_command_conditioner
+    PRIVATE orvd_configuration)
+add_test(NAME verify_wheel_drive_torque_command_conditioner
+         COMMAND verify_wheel_drive_torque_command_conditioner
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json
+             ${CMAKE_CURRENT_BINARY_DIR}/wheel-drive-torque-conditioner-fixture.json)
+
 add_executable(verify_gz18_startup_assembly
     configuration/resolved_startup_state_header_self_containment.cc
     configuration/load_resolved_startup_state_header_self_containment.cc

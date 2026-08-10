@@ -14,6 +14,7 @@ add_library(orvd_configuration STATIC
     src/load_track_irregularity_field.cc
     src/load_track_geometry.cc
     src/load_vehicle_definition.cc
+    src/load_wheel_drive_torque_command_conditioner.cc
     src/resolved_startup_state_invariants.cc
     src/strict_json.cc
     src/vehicle_definition_invariants.cc
@@ -28,7 +29,7 @@ target_include_directories(orvd_configuration
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_configuration
-    PUBLIC orvd_forces orvd_multibody_model orvd_system_assembly
+    PUBLIC orvd_actuation orvd_forces orvd_multibody_model orvd_system_assembly
            orvd_track_geometry orvd_wheel_rail_contact
     PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 

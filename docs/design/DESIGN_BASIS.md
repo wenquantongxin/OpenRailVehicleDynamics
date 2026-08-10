@@ -182,7 +182,11 @@ int CvodeRhsFn(sunrealtype t, N_Vector y, N_Vector ydot, void* user_data) {
 | 其他 | CacheEntry 4、NumericParameter 3 |
 
 最重的两个：`wheel_rail_contact_system`（6 离散 + 2 抽象 + 4 缓存 + 3 参数 + 周期更新）与 `motor_pid_control_system`（7 离散 + 1 连续 + 周期更新）。**Continuous 状态只有 3 处**，故展平进 CVODE `N_Vector` 的工作量很小。
-**GZ18 范围提示**：此表是跨车型模板层的**超集**设计目标；其中 `motor_pid_control_system`、`motor_bridge_proxy`、`torque_applier_system` 属 IRW 线（GZ18 无作动器），GZ18 首版只需实现 GZ18 实际使用的子集，接口按超集设计、实现按需。
+**控制与作动边界**：上表中的 `motor_pid_control_system`、`motor_bridge_proxy`、
+`torque_applier_system` 是 WRL 历史系统名，不是 ORVD 要照搬的超集接口。现行 IRW 主线已按职责拆分：
+G73 的具名构架—轮体纯力偶属于 `libs/forces`；G74 的无内部可变状态转矩指令调理属于
+`libs/actuation`；G75 的控制算法属于 `libs/control`；G76 才组合周期事件和原子状态提交。GZ18
+没有主动作动器。没有真实消费者的端口、事件或兼容入口不预建。
 
 ### 3.6 力元现状好于预期 `[实测-W]`
 

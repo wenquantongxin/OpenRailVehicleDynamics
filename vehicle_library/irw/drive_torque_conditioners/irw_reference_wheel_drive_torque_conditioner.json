@@ -1,0 +1,121 @@
+{
+  "wheel_drive_torque_command_conditioner_identifier": "irw_reference_wheel_drive_torque_conditioner",
+  "sample_period_seconds": 0.01,
+  "drive_ratio": 2.789473684210526,
+  "drive_efficiency": 1.0,
+  "request_deadband_newton_metres": 0.5,
+  "wheel_angular_speed_direction_threshold_radians_per_second": 0.1,
+  "forward_wheel_angular_speed_sign": -1.0,
+  "drive_speed_nodes_revolutions_per_minute": [
+    500.0,
+    1000.0,
+    1500.0,
+    2000.0,
+    2500.0,
+    3000.0,
+    3500.0,
+    4000.0,
+    4500.0,
+    5000.0
+  ],
+  "traction": {
+    "dynamic_limit_drive_side_newton_metres": [
+      1500.0,
+      1500.0,
+      1500.0,
+      1500.0,
+      1250.0,
+      1050.0,
+      900.0,
+      800.0,
+      650.0,
+      null
+    ],
+    "magnitude_increase_rate_drive_side_newton_metres_per_second": [
+      60423.82058405302,
+      60423.82058405302,
+      60423.82058405302,
+      48203.50225740572,
+      41523.800952761965,
+      38510.02761892099,
+      35628.746256517945,
+      34770.264491913185,
+      34858.7506500452,
+      32638.773294118677
+    ],
+    "magnitude_decrease_rate_drive_side_newton_metres_per_second": [
+      60423.82058405302,
+      60423.82058405302,
+      60423.82058405302,
+      48203.50225740572,
+      41523.800952761965,
+      38510.02761892099,
+      35628.746256517945,
+      34770.264491913185,
+      34858.7506500452,
+      35530.2496594057
+    ],
+    "dynamic_advisory": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "regeneration": {
+    "dynamic_limit_drive_side_newton_metres": [
+      1500.0,
+      1500.0,
+      1500.0,
+      1500.0,
+      1250.0,
+      1050.0,
+      900.0,
+      800.0,
+      700.0,
+      100.0
+    ],
+    "magnitude_increase_rate_drive_side_newton_metres_per_second": [
+      60658.917116180106,
+      60658.917116180106,
+      60658.917116180106,
+      48150.51855426354,
+      42290.16749188912,
+      38530.773939239174,
+      36369.55620309785,
+      33916.70231693675,
+      33826.08964662458,
+      35461.28912748618
+    ],
+    "magnitude_decrease_rate_drive_side_newton_metres_per_second": [
+      60658.917116180106,
+      60658.917116180106,
+      60658.917116180106,
+      48150.51855426354,
+      42290.16749188912,
+      38530.773939239174,
+      36369.55620309785,
+      33916.70231693675,
+      33826.08964662458,
+      33699.96812719021
+    ],
+    "dynamic_advisory": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  }
+}

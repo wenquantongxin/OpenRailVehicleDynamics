@@ -13,7 +13,7 @@ Kalker/FASTSIM 切向接触、悬挂与车辆力元、轨道不平顺，以及�
 
 端到端资格已覆盖 GZ18 直线 AAR6 `20 s`、R300+AAR5 `16 s`，以及 IRW R300 无轨道不平顺／
 冻结 AAR5 两层 `30 s` 被动工况。四轴横移与摇头均已和 SIMPACK、近期 WRL 作原生时序及同里程
-核对；轮轨力的已知差异继续作为诊断边界。IRW 100 Hz 全状态控制与转矩指令调理尚未接入。
+核对；轮轨力的已知差异继续作为诊断边界。IRW 100 Hz 全状态控制与转矩指令调理尚未接入车辆周期事件闭环。
 实施顺序与完成条件见
 [轨道车辆动力学迁移与重构路书](docs/planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)，
 底层多体运行时的演进记录见
@@ -39,6 +39,7 @@ OpenRailVehicleDynamics/
 │   ├── configuration/     严格 JSON 加载、车辆与初始状态装配
 │   ├── multibody_runtime/ 多体状态、缓存与求值运行时
 │   ├── multibody_model/   模型中立的多体建模接口
+│   ├── actuation/         状态显式的转矩指令调理算法
 │   ├── forces/            车辆力元与轮轨接触力计划
 │   ├── system_assembly/   系统装配与计算计划
 │   └── integrators/       连续状态推进接口与 CVODE 后端
@@ -54,7 +55,7 @@ OpenRailVehicleDynamics/
 ```
 
 公共头位于 `libs/<module>/include/orvd/<module>/`，实现位于相邻的 `src/`。安装包导出
-`ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、
+`ORVD::actuation`、`ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、
 `ORVD::multibody_runtime`、`ORVD::multibody_model`、`ORVD::forces`、
 `ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和开发期工具不安装。
 

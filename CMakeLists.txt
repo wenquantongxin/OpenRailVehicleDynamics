@@ -75,6 +75,8 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: multibody_runtime + internal rigid tree
 #   -> multibody_model -> forces -> system_assembly -> integrators.
+# Actuation owns state-explicit command laws and is independent of the vehicle
+# topology; configuration is its first typed asset consumer.
 # Track geometry and the wheel-rail contact core also feed the typed force
 # plans; configuration consumes those lower layers and equilibrium/tests come
 # last.
@@ -86,6 +88,7 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # are supposed to link Drake.
 set(ORVD_PRODUCT_MODULE_DIRECTORIES
     external/drake_mbtree
+    libs/actuation
     libs/track_geometry
     libs/wheel_rail_contact
     libs/multibody_runtime
@@ -108,10 +111,11 @@ add_subdirectory(tools/profile_conversion)
 add_subdirectory(tools/dynamics_qualification)
 
 # --- Installable package ---
-# Eight first-party targets form the documented surface. The rigid-tree archive
+# Nine first-party targets form the documented surface. The rigid-tree archive
 # is exported only because a static modelling archive must retain its private
 # implementation link edge; no vendored or adapter header is installed.
 set(ORVD_INSTALL_TARGETS
+    orvd_actuation
     orvd_track_geometry
     orvd_wheel_rail_contact
     orvd_configuration
@@ -128,7 +132,7 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 foreach(orvd_public_module
-        track_geometry wheel_rail_contact configuration multibody_runtime
+        actuation track_geometry wheel_rail_contact configuration multibody_runtime
         multibody_model forces system_assembly integrators)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
