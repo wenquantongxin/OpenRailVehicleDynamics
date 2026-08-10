@@ -68,6 +68,12 @@
 - MD-014：冻结 WRL A 层使用 SPGMR，ORVD 主线仍使用稠密数值 Jacobian 与稠密线性求解。两者的
   墙钟、内部计数和末位轨迹不能冒充同一后端结果；主线只增加轻量只读统计，不把影子分支的
   专项试验或性能重构迁入 G70/G71。
+- MD-015：SIMAT 的 100 Hz 控制机械观测比冻结 WRL／SIMPACK Realtime 晚一通信拍。ORVD 主线按
+  负责人裁决复现冻结 WRL 的当前接受态输入，并保留 P179 启动双更新；SIMAT 观察龄只作时相差异，
+  不进入产品运行时选项。
+- MD-016：QCH 已确认 SIMPACK Type-110／Type-93 主动力矩在 From 构架标记系表达、原始正号作用
+  于 From；冻结 WRL 则以轴桥／轮体共同转动轴的 `+Y` 为轴、轮侧为正号。G73 按 WRL 复现并
+  保持构架反力端，不增加表达基选择人格。
 
 ## 已筛查条目
 
@@ -694,6 +700,112 @@ Jacobian 和稠密线性求解，线性建立频率 20、Jacobian 频率 51。G7
 - WRL 冻结 A 层运行脚本与运行元数据：CVODE／SPGMR 配置和原生统计。
 - ORVD `cvode_continuous_state_advancer.cc`：BDF2、稠密矩阵／线性求解器和只读统计查询。
 - ORVD `continuous_state_advancer.h`、`system_continuous_state_advancer.h`：后端中立统计值与系统层转发。
+
+### MD-015 — IRW 100 Hz 控制事件的机械观察龄与启动更新时相
+
+- 车型：IRW
+- 层级：离散控制事件、机械观测与驱动转矩指令调理
+- 状态：**已确认时相差异并已裁决 ORVD 主线语义**
+
+#### 疑点
+
+P179 三个平台都标称 100 Hz、10 ms 零阶保持和同一全状态导向—轮速 PI—转矩约束链，但控制事件
+`t_k` 消费的机械状态龄并不相同。若把 SIMAT 通信标签直接等同于冻结 WRL 控制事件，会把协同通信
+次序造成的一拍观察龄误写成控制算法自身延迟；若只看车辆宏观量，又会漏掉早期转矩的明确时相差异。
+
+#### 两端实际消费者
+
+P179 冻结 WRL C++ 与 SIMPACK Realtime 在控制边界 `t_k` 读取当前接受机械状态：八轮相对转速、
+四轴横移、摇头和站位。全状态控制器先生成轮侧请求，历史 `bridge_proxy` 再消费本事件请求、当前
+八轮转速和上一接受事件的八路内部记忆，形成作用于 `[t_k,t_{k+1})` 的八路保持转矩。ORVD 迁移后
+把这一调理职责命名为 `WheelDriveTorqueCommandConditioner`。
+
+SIMPACK–SIMAT 的通信路径不同：事件 `k=0` 消费 H3 初态；`k>=1` 的八轮相对转速、四轴横移和
+摇头消费上一通信事件的机械输入。站位／参考日程、控制器与调理器记忆、转矩提交时刻并未一起延迟。
+P156 受控反事实只给 WRL 研究副本增加这一观察龄后，`k=1` 的八路调理后转矩由最大差
+`75.691371 N·m` 变为逐位相同，11 个事件的转矩 RMS 从 `26.686492` 降至
+`20.178508 N·m`。这证明差异承重，但不证明应改变冻结 WRL 产品语义。
+
+P179 还具有独立的启动双更新合同：同一 H3 输入先执行一次只更新控制器／调理器记忆、零作用时长
+的初始化更新，再执行一次 `t=0` 周期更新，其输出作用于 `[0,0.01 s)`。P160 将该合同加入 WRL
+研究副本后，首个 10 ms 转矩区间闭合，0–0.1 s 转矩 RMS 降低 `87.5453%`。启动双更新与
+`k>=1` 的机械观察龄不是同一个问题，不得因拒绝 SIMAT 一拍观察龄而一并删除。
+
+#### 动力学影响与当前裁决
+
+项目负责人裁决（CodeX 记录，2026-08-10）：ORVD 的 C++ 主线以已验证、已冻结的 P179 WRL C++
+实现为参考。每个 100 Hz 周期事件消费当前接受机械状态，不建立 SIMAT 上一通信拍缓存，也不增加
+时相选择分支；SIMAT 的一拍观察龄只作为协同通信差异登记。ORVD 保留 P179 已资格化的启动双更新、
+10 ms 零阶保持和转矩指令调理语义。控制器状态、调理器记忆和八路保持转矩在同一事件事务中提交。
+
+资格比较须分别记录机械观测时相、启动调度以及请求／调理后／实际保持转矩。禁止把 SIMAT、Realtime
+与 WRL 三列笼统称为完全相同的事件人格，也不得通过移时或结果拟合掩盖差异。当前不增加非主线公式、
+额外状态求值或运行期日志。
+
+#### 源码与证据锚点
+
+- WRL `ae5d77c`；`scripts_cpp/irw/src/irw_full_state_pi_controller.cc`、
+  `scripts_cpp/irw/src/irw_cvode_driver.cc` 与 `scripts_cpp/drake_sim/src/motor_bridge_proxy.cc`：
+  当前接受态控制、调理器更新和保持转矩提交。
+- P179 `P179_PROTOCOL.md`、`H3_AND_CONTROL_IDENTITY_MANIFEST.json`：100 Hz、启动双更新、普通
+  `bridge_proxy` 与三平台移交身份。
+- P156 外置 `p156_drake_100hz_observation_age_counterfactual/RESEARCH_NOTE.md`：SIMAT 上一通信拍
+  机械观察龄的字段边界与早期转矩证据。
+- P160 外置 `p160_drake_100hz_startup_double_update_counterfactual/RESEARCH_NOTE.md`：同一 H3
+  输入启动双更新的独立证据。
+- ORVD DEC-039 与路书 G73–G78：现行迁移处置。
+
+### MD-016 — IRW 主动转矩的 SIMPACK 标记表达基与冻结 WRL 轴桥轴
+
+- 车型：IRW
+- 层级：主动转矩作用对、转矩轴与表达坐标系
+- 状态：**已确认差异；ORVD 首版处置已裁决**
+
+#### 疑点
+
+SIMPACK 两套已冻结主动力矩定义都把 From 标记放在转向架构架、To 标记放在独立车轮，并选择
+转矩 `Y` 分量。QCH 明确 component 力元按 From Marker 坐标系公式化，实际力和矩也在 From
+Marker 坐标系表达；正矩施于 From，反矩施于 To。冻结 WRL 则用车轮转动副父体轴桥的局部 `+Y`
+经世界姿态旋转后作为转矩轴，并把正标量施于车轮。车轮局部 `+Y` 与轴桥局部 `+Y` 由转动副拓扑
+保持共轴；真正可因 Ball-RPY 相对共同转动轴偏转的是构架 From 标记 `+Y`。
+
+#### 两端实际消费者
+
+SIMPACK Realtime 使用 Type-110 `$F_Motor_{A..D}`：From 为 `$M_Frame_Motor_*`，To 为相应
+`$M_IRW_Motor_{L/R}`，`force.par(7)=2` 选择转矩轴。SIMAT 使用 Type-93
+`$F_Motor_*_Simat`，From／To 相同，只有 `force.par(5)` 的转矩 `Y` 输入承重。现有源文件能够
+确认作用对和分量编号；QCH `Formulations` 与 `Outputs` 两页又把 component 力元和 applied
+force／torque 的表达基明确为 From Marker。模型的 `glob.compat.afcf=0`，未启用旧式全局参考系
+兼容改写。因此 SIMPACK 原生标量正号是沿构架 From 标记 `+Y` 施于构架、反向施于轮体。
+
+冻结 WRL `TorqueApplierSystem` 另行绑定车轮转动副、车轮体和构架体。它从转动副父体轴桥的世界
+姿态取得局部 `+Y`，向车轮施加 `+tau` 纯转矩、向构架施加 `-tau` 纯转矩。轴桥只提供轴方向，
+不承受反力。该系统还含一个宽幅末端钳位；P179 的活动约束由上游 `bridge_proxy` 承重，ORVD 将其
+统一迁入 G74 的 `WheelDriveTorqueCommandConditioner`，G73 不保留第二份幅值权威。
+
+#### 动力学影响与当前裁决
+
+当构架 From 标记 `+Y` 与轴桥／轮体共同转动轴在动态姿态下不同，同一标量转矩会产生不同世界系
+力偶方向和虚功；即使两轴暂时共轴，SIMPACK From 正号与 WRL 轮侧正号仍相反。差异可进入轮速、
+构架响应与轮轨力。项目负责人已裁决：ORVD 首轮必须先闭合近期冻结 WRL 的计算路径。因此 G73
+明确冻结“轴桥 `+Y` 提供轴、轮体受正转矩、对应构架受反转矩”，并用构架轴与共同转动轴可分辨的
+姿态夹具及同状态 WRL 对拍验证；不为 SIMPACK 的另一表达合同增加运行时策略或第二套产品公式。
+
+若 ORVD 与冻结 WRL 不闭合，按迁移错误立即修复。与 SIMPACK 原生输出核对时，必须先把 From 侧
+原始标量转换为规范轮侧标量 `tau_wheel = -tau_from_raw`，再分别观察构架轴与轴桥轴的方向差；
+不得以直接同号比较制造假差异，也不得因宏观量接近而宣布两套轴合同等价。P179 同人格车辆长窗后
+再决定是否需要把 SIMPACK From 基公式晋级为产品主线。
+
+#### 源码锚点
+
+- WRL `scripts_cpp/drake_sim/src/torque_applier_system.cc`：轴桥父体 `+Y`、轮体正转矩与构架反转矩。
+- SIMPACK `mbs_simpack/irw_4WDB/ref_files/Bogie_IRWs_4WDBv3.spck:1969-2101`：
+  Type-110／Type-93 的 From／To、轴号与转矩 `Y` 输入。
+- SIMPACK `mbs_simpack/irw_4WDB/ref_files/IRW_4WDBv31.spck:478-528`：独立车轮标记与轴桥—车轮
+  转动副拓扑。
+- 本地 QCH `Force Elements / Formulations`、`Outputs`、Type-93 与 Type-110 参数页：component
+  力元的 From Marker 表达基、正反作用方向与 `Y` 分量身份。
+- ORVD DEC-040 与路书 G73：现行迁移处置。
 
 ## 新条目模板
 

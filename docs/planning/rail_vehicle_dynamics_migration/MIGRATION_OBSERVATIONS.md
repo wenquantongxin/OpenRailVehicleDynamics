@@ -195,8 +195,9 @@
 
 - 状态：UNKNOWN
 - 观察：项目负责人希望移除 WRL 的误差归因观察器，首批只输出四轴横移与摇头、八轮三向轮轨
-  力、接触斑数量和 IRW 电机输入转矩。各量的参考坐标系、正方向、采样时刻和斑聚合规则尚未
-  形成产品合同。
+  力、接触斑数量和 IRW 实际保持转矩。100 Hz 控制资格还需可选地分栏请求转矩、调理后转矩、
+  限制值与限制状态，但它们不自动成为首批公共输出。各量的参考坐标系、正方向、采样时刻和斑聚合
+  规则尚未形成产品合同。
 - 锚点：[R002 宏观方向](DISCUSSION_AND_DECISION_LOG.md)、清单 A、清单 C。
 - 影响：过早复制现有 CSV/NPZ 写出器会把调试字段和车型专用语义带入产品；过度删减又可能使
   用户无法构建自己的观察器。
@@ -219,9 +220,9 @@
   发布；不复制 WRL 的线程号工作区或自定义环境变量。接触提示与预分配已分别由 G53/G52 收口；
   后续性能技巧仍须按其真实消费者单独核验，不从本条自动获得准入。
 
-### OBS-013 — IRW 的 40/50/60 m 是不同领域边界的混合呈现
+### OBS-013 — IRW 的 40/50/60 m 属于不同领域边界
 
-- 状态：已确认
+- 状态：已确认；现行主线由 DEC-039 收口
 - 观察：初步只读核对已发现多套站位语义并存：AAR5 规格使用 `start_m=60`、`fade_len_m=40`；
   R300 轨道构造使用 50 m 初始直线和 50 m 缓和段；IRW 控制器又使用 50 m 的速度参考斜坡和
   曲线引导起点。另一份冻结 AAR5 身份还含 `txt_station_offset_m=100`、`start_m=160`、
@@ -231,36 +232,47 @@
   `scripts_cpp/drake_sim/src/track_scenario_crv300m.cc:509`、
   `model_data/controllers/irw_full_state_pi_r300_v60_bridge_proxy.json:18`、
   `model_data/track_irregularity/specs/Vehicle4WDB_frozen_txt_type108_station_aligned_30s_validated.json:4`。
-- 影响：直接合并为一个“站位”会把线路几何、激励淡入和控制策略错误耦合；照搬现状则继续保留
-  隐式魔数。
-- 下一核验：完成全部消费者表，分别建立线路几何分段、不平顺有效域/淡入、控制器启用和输入
-  数据原点的具名合同；替代方案形成前不进入迁移路书。
+- 影响：直接合并为一个“站位”会把线路几何、激励淡入和控制策略错误耦合；反过来仅因数值相近
+  就删除它们，也会改变已冻结的物理输入和 P179 控制人格。现行处置是按领域拆开承载：线路分段
+  已进入线路资产，不平顺激活／淡入已进入冻结序列身份，P179 的 50 m 参考斜坡与引导起点由
+  G75 控制器资产以不同具名字段保存。
+- 下一核验：G75 逐字段复现控制日程且不得读取线路或不平顺资产中的同值字段；G79 组合场景只引用
+  三类领域对象，不再制造共享站位开关。
 
-### OBS-014 — 1 kHz 简化 PID 已具控制器级资格，长窗车辆级仍待迁移后复现
+### OBS-014 — P179 100 Hz 全状态控制成为主线，1 kHz 简化控制降为历史旁证
 
-- 状态：已确认：控制器级；1 kHz 同身份长窗车辆级 UNKNOWN
-- 观察：项目负责人已选择以历史 1 kHz 简单 PID 代替 IRW 较重的电机代理模型。提交
-  `39cf7ba` 抽取公共 PID 核心，`ba3a335` 让 SIMPACK Realtime 适配器消费该核心，`f0f8052`
-  又用同一次 10 ms 正向运行驱动真实 Drake 控制系统。R46 覆盖 11 个事件边界、10 个 1 ms
-  零阶保持区间和 8 个通道；事件时刻、速度误差、积分态、原始/滤波/施加转矩最大差均为零，
-  控制功重建误差为 `4.547473508864641e-13 J`。它还明确关闭普通电机代理，并以转向架构架—独立
-  车轮等大反向纯力偶施加转矩。SIMPACK 的 `$F_Motor_*` 与 `$F_Motor_*_Simat` 均从构架上的
-  `$M_Frame_Motor_*` 连到轮体上的 `$M_IRW_Motor_L/R`；车轮转动副虽以轴桥为父体，但那不是电机
-  力元的反力端。历史 1 kHz 路线与 P179 的 H3＋100 Hz 优选 PID＋普通电机代理不是同一
-  人格；后者的三平台 30 s 结果是更难的整车系统旁证，但不能替代 1 kHz 同身份长窗门。
-- 锚点：[R007](DISCUSSION_AND_DECISION_LOG.md)；WRL 提交 `39cf7ba`、`ba3a335`、`f0f8052`；
+- 状态：已确认并由 DEC-039 裁决
+- 观察：R46 的历史 1 kHz 简化控制仍提供有效的控制器级证据。提交 `39cf7ba` 抽取公共 PI 核心，
+  `ba3a335` 让 SIMPACK Realtime 适配器消费该核心，`f0f8052` 又以同一次 10 ms 正向运行驱动
+  Drake 控制系统；11 个事件边界、10 个 1 ms 保持区间和 8 通道的事件时刻、误差、状态、转矩
+  及控制功闭合。SIMPACK 的 `$F_Motor_*` 与 `$F_Motor_*_Simat` 均从构架上的
+  `$M_Frame_Motor_*` 连到轮体上的 `$M_IRW_Motor_L/R`，因此轴桥不是主动转矩反力端。
+
+  现行车辆主线改用 P179 的 H3＋R300＋冻结 AAR5＋100 Hz 全状态导向控制。其控制链为全状态导向
+  外环、曲线轮速参考混合、逐轮滤波 PI、普通 `bridge_proxy` 和构架—轮体纯力偶；P179 已具
+  SIMPACK Realtime、冻结 WRL 和 SIMAT 的 30 s 工件。`bridge_proxy` 在 3001 个周期事件中实际
+  改变部分请求，不能静默删除；ORVD 按功能将其迁为 `WheelDriveTorqueCommandConditioner`，
+  不把名称或休眠字段带入产品。ORVD 复现冻结 WRL 的当前接受态输入和启动双更新；SIMAT 上一通信拍
+  机械观察龄按 MD-015 单列。
+
+  冻结 WRL 的主动转矩还区分三种刚体身份：车轮转动副父体轴桥的姿态提供局部 `+Y` 转矩轴，
+  独立车轮承受正转矩，对应转向架构架承受反转矩。轴桥是轴方向提供者而不是反力端。SIMPACK
+  Type-110／Type-93 同样把 From 标记放在构架、To 标记放在轮体并选择 `Y` 分量；QCH 明确该分量
+  在 From 构架标记系表达，原始正号施于 From，反向施于 To。这与冻结 WRL 的轴桥 `+Y`、轮侧
+  正号合同是已确认差异，由 MD-016 单列，不在 G73 建双人格。
+- 锚点：[R028](DISCUSSION_AND_DECISION_LOG.md)；WRL `ae5d77c`、说明提交 `5df8c19`；P179
+  `P179_PROTOCOL.md` 与 `H3_AND_CONTROL_IDENTITY_MANIFEST.json`；历史提交
+  `39cf7ba`、`ba3a335`、`f0f8052`；
   `mbs_simpack/irw_4WDB/ref_files/Bogie_IRWs_4WDBv3.spck:2045-2101`；
   `mbs_simpack/irw_4WDB/ref_files/IRW_4WDBv31.spck:478-528`；
   `scripts_cpp/drake_sim/src/torque_applier_system.cc:110-128`；
-  `scripts_cpp/validation_corpus/r46_cross_platform_motor_pid_1khz.json`；
-  `mbs_simpack/irw_4WDB/main_model/Vehicle4WDB_R300mV60kmph.output/align_with_simpack/`
-  `r300_git_promotion_manifest/r46_cross_platform_motor_pid_1khz/R46_ACCEPTANCE.json`。
-- 影响：ORVD 必须把转矩作用对绑定为对应构架与独立车轮，不得从车轮转动副拓扑推导成轴桥反力；
-  同时不能把“去电机代理”当作忽略历史 SIMPACK RT 的授权。若遗漏离散时钟、启动
-  控制、符号、限幅、滤波或旧适配器中的实际轮端语义，就不能重现已验证行为。
-- 下一核验：迁移时先重放 R46 的控制状态、转矩、零阶保持和控制功合同；整车、事件和执行器接线
-  完成后，再用相同模型、输入、1 kHz 时钟与控制人格运行 SIMPACK Realtime—ORVD 长窗对照。
-  P179 的 100 Hz 结果继续分栏，不冒充该门。
+  `scripts_cpp/validation_corpus/r46_cross_platform_motor_pid_1khz.json`。
+- 影响：G73 必须分别绑定轴桥轴提供者、独立车轮受力体和构架反力体，保持转矩由上下文本地持有且
+  不在施力层重复限幅；G74／G75 必须分开调理器和控制器资产；G76 必须把
+  控制器状态、调理器记忆与保持转矩原子提交。删除调理器、改成 1 kHz、改读 SIMAT 上一拍或省略
+  启动双更新都会同时改变控制与车辆人格。
+- 下一核验：G74／G75 先对 P179 冻结 C++ 递推逐事件重放；G76 完成真实 0.5 s 同人格短窗；G77
+  再直接对 P179 SIMPACK Realtime／冻结 WRL 30 s 主列，不另造 1 kHz 长窗参考。
 
 ### OBS-015 — 车型库与未来编组需要分开建模
 
@@ -531,20 +543,20 @@
 
 ### OBS-032 — 车型、控制器、应用和科研实验应形成单向依赖层级
 
-- 状态：已裁决：G47–G55 所需目录；后续消费者目录待真实需求
-- 观察：ORVD 当前只有 `libs/`、`tests/` 和开发工具，没有车型库、控制器、产品应用或科研实验。
-  车型是对通用多体、力元、轮轨和轨道能力的高层聚合；控制策略不等于主动转矩施加器；产品命令
+- 状态：已裁决；车型库已落地，控制与调理目录由 G74／G75 创建
+- 观察：车型是对通用多体、力元、轮轨和轨道能力的高层聚合；控制策略不等于转矩指令调理器或
+  主动转矩施加器；产品命令
   行入口和科研工作流也不应成为底层库的依赖。现有顶层构建还要求每个产品目录显式进入零 Drake
   边界与安装清单。
 - 锚点：[PREF-011、PREF-020、PREF-021](DISCUSSION_AND_DECISION_LOG.md)；ORVD 根
   `CMakeLists.txt` 的 `ORVD_PRODUCT_MODULE_DIRECTORIES` 与 `ORVD_INSTALL_TARGETS`；第一方工程约束。
-- 影响：本批次采用通用 `libs/track_geometry`、`libs/wheel_rail_contact`、`libs/forces`，高层
-  `vehicle_library/<vehicle>`，以及保存线路几何与型面的 `track_library/`。真正组合车型、速度、
-  控制器、不平顺和积分器的 `scenarios/` 留给未来真实消费者。后续控制器使用独立
-  `controllers/<algorithm>`；可安装入口放 `apps`，默认不构建、不安装的科研工作流放 `experiments`。
-  `apps/experiments` 只向下依赖公共产品 API。
-- 下一核验：G47–G55 只在首个真实消费者出现时创建相应目录；控制器、`apps` 和 `experiments`
-  继续等待后续消费者，不提前建立插件框架或通用控制器基类。
+- 影响：通用控制算法进入 `libs/control/`，状态化驱动能力约束进入 `libs/actuation/`，车辆纯力偶
+  仍在 `libs/forces/`；控制器参数进入根级 `controller_library/`，车型调理参数进入
+  `vehicle_library/<vehicle>/drive_torque_conditioners/`。真正组合车型、速度、控制器、不平顺和
+  积分器的场景留给 G79。可安装入口放 `apps`，默认不构建、不安装的科研工作流放 `experiments`；
+  二者都只向下依赖公共产品 API。
+- 下一核验：G74／G75 由首个真实消费者创建控制与调理目录，但不提前建立插件框架或通用控制器基类；
+  `apps` 与 `experiments` 继续等待对应 Goal。
 
 ### OBS-033 — 两条轮型预处理分支不存在已证实的全局胜者
 
