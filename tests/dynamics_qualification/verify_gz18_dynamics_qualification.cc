@@ -168,15 +168,24 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
 
     const auto summary = RunGz18Qualification(configuration);
     Require(summary.sample_count == 2 &&
+                summary.integration_statistics
+                        .successful_internal_step_count > 0 &&
+                summary.integration_statistics
+                            .right_hand_side_evaluation_count +
+                        summary.integration_statistics
+                            .linear_solver_right_hand_side_evaluation_count >
+                    0 &&
                 summary.used_before_track_definition_interval &&
                 !summary.used_after_track_definition_interval,
-            "the short real run has the wrong sample or boundary summary");
+            "the short real run has the wrong sample, numerical-work or boundary summary");
     Require(std::filesystem::is_regular_file(
                 configuration.output_directory / "COMPLETE") &&
                 std::filesystem::is_regular_file(
                     configuration.output_directory / "metadata.json") &&
                 std::filesystem::is_regular_file(
                     configuration.output_directory / "observations.tsv") &&
+                std::filesystem::is_regular_file(
+                    configuration.output_directory / "contact_patches.tsv") &&
                 std::filesystem::is_regular_file(
                     configuration.output_directory / "performance.json") &&
                 !std::filesystem::exists(root / "real-gz18.partial"),
@@ -244,6 +253,107 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 ParseDouble(rows[1][time_column]) == 0.002,
             "the artifact does not use the integer-index sample times");
 
+    const std::array<std::string, 8> interface_names{
+        "front_leading_wheelset.right", "front_leading_wheelset.left",
+        "front_trailing_wheelset.right", "front_trailing_wheelset.left",
+        "rear_leading_wheelset.right", "rear_leading_wheelset.left",
+        "rear_trailing_wheelset.right", "rear_trailing_wheelset.left"};
+    std::ifstream patch_input(configuration.output_directory /
+                              "contact_patches.tsv");
+    std::getline(patch_input, line);
+    const std::vector<std::string> patch_header = SplitTabs(line);
+    const std::size_t patch_sample_column =
+        FindColumn(patch_header, "sample_index");
+    const std::size_t patch_time_column =
+        FindColumn(patch_header, "time_seconds");
+    const std::size_t patch_interface_column =
+        FindColumn(patch_header, "interface_name");
+    const std::size_t patch_ordinal_column =
+        FindColumn(patch_header, "patch_ordinal");
+    const std::size_t patch_normal_column =
+        FindColumn(patch_header, "normal_force_newtons");
+    const std::size_t patch_longitudinal_column = FindColumn(
+        patch_header,
+        "longitudinal_force_on_wheel_in_contact_frame_newtons");
+    const std::size_t patch_lateral_column = FindColumn(
+        patch_header,
+        "lateral_force_on_wheel_in_contact_frame_newtons");
+    const std::size_t patch_force_z_column = FindColumn(
+        patch_header,
+        "force_on_wheel_in_carrier_track_frame_z_newtons");
+    std::array<std::array<bool, 8>, 2> seen_patch{};
+    std::size_t patch_row_count = 0;
+    while (std::getline(patch_input, line)) {
+        const std::vector<std::string> patch_row = SplitTabs(line);
+        Require(patch_row.size() == patch_header.size(),
+                "a per-patch row has the wrong fixed width");
+        if (patch_row.size() != patch_header.size()) {
+            continue;
+        }
+        const double sample_value = ParseDouble(patch_row[patch_sample_column]);
+        const double ordinal_value =
+            ParseDouble(patch_row[patch_ordinal_column]);
+        Require((sample_value == 0.0 || sample_value == 1.0) &&
+                    ordinal_value == 0.0,
+                "the single-patch real run has an invalid sample or patch ordinal");
+        const std::size_t sample = static_cast<std::size_t>(sample_value);
+        const auto interface = std::find(
+            interface_names.begin(), interface_names.end(),
+            patch_row[patch_interface_column]);
+        Require(interface != interface_names.end(),
+                "the per-patch table contains an unknown interface name");
+        if (interface == interface_names.end()) {
+            continue;
+        }
+        const std::size_t interface_ordinal = static_cast<std::size_t>(
+            interface - interface_names.begin());
+        Require(!seen_patch[sample][interface_ordinal],
+                "the per-patch table duplicates a single-patch interface row");
+        seen_patch[sample][interface_ordinal] = true;
+
+        for (std::size_t column = 0; column < patch_row.size(); ++column) {
+            if (column != patch_interface_column) {
+                (void)ParseDouble(patch_row[column]);
+            }
+        }
+        Require(ParseDouble(patch_row[patch_time_column]) ==
+                    ParseDouble(rows[sample][time_column]),
+                "a per-patch row is detached from its integer sample time");
+
+        const std::string& prefix = interface_names[interface_ordinal];
+        const std::size_t count_column =
+            FindColumn(header, prefix + ".contact_patch_count");
+        const std::size_t primary_ordinal_column =
+            FindColumn(header, prefix + ".primary_patch_ordinal");
+        const std::size_t primary_normal_column = FindColumn(
+            header, prefix + ".primary_patch_normal_force_newtons");
+        const std::size_t primary_longitudinal_column = FindColumn(
+            header, prefix + ".longitudinal_force_on_wheel_newtons");
+        const std::size_t primary_lateral_column = FindColumn(
+            header, prefix + ".lateral_force_on_wheel_newtons");
+        const std::size_t support_column = FindColumn(
+            header, prefix + ".vertical_support_force_on_wheel_newtons");
+        Require(ParseDouble(rows[sample][count_column]) == 1.0 &&
+                    ParseDouble(rows[sample][primary_ordinal_column]) == 0.0 &&
+                    ParseDouble(rows[sample][primary_normal_column]) ==
+                        ParseDouble(patch_row[patch_normal_column]) &&
+                    ParseDouble(rows[sample][primary_longitudinal_column]) ==
+                        ParseDouble(patch_row[patch_longitudinal_column]) &&
+                    ParseDouble(rows[sample][primary_lateral_column]) ==
+                        ParseDouble(patch_row[patch_lateral_column]) &&
+                    ParseDouble(rows[sample][support_column]) ==
+                        -ParseDouble(patch_row[patch_force_z_column]),
+                "the wide-table primary patch and long-form patch row disagree");
+        ++patch_row_count;
+    }
+    Require(patch_row_count == 16,
+            "the two-sample real run does not contain sixteen patch rows");
+    for (const auto& sample : seen_patch) {
+        Require(std::all_of(sample.begin(), sample.end(),
+                            [](bool present) { return present; }),
+                "the per-patch table omits a real wheel interface");
+    }
+
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
     Require(metadata.find("\"before_definition_interval\": {") !=
@@ -285,8 +395,24 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                     std::string::npos &&
                 metadata.find(
                     "\"endpoint_assembly_and_state_slice_diagnostics\": {") !=
+                    std::string::npos &&
+                metadata.find("\"contact_observation_contract\": {") !=
+                    std::string::npos &&
+                metadata.find("\"primary_patch_rule\": \"maximum normal "
+                              "force; summary convenience only\"") !=
                     std::string::npos,
             "the successful artifact lacks its numerical execution contract");
+
+    const std::string performance =
+        ReadWholeFile(configuration.output_directory / "performance.json");
+    Require(performance.find("\"integration_statistics\": {") !=
+                    std::string::npos &&
+                performance.find("\"successful_internal_step_count\": ") !=
+                    std::string::npos &&
+                performance.find(
+                    "\"linear_solver_right_hand_side_evaluation_count\": ") !=
+                    std::string::npos,
+            "the successful artifact lacks its lightweight integration statistics");
 
     Require(Throws([&] { (void)RunGz18Qualification(configuration); }),
             "the runner overwrote an existing successful artifact");

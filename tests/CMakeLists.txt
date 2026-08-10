@@ -910,6 +910,21 @@ add_test(NAME verify_gz18_dynamics_qualification
              gz18_aar6_reference_irregularity
              ${CMAKE_CURRENT_BINARY_DIR}/g58-dynamics-qualification-fixtures)
 
+add_executable(verify_irw_dynamics_qualification
+    dynamics_qualification/verify_irw_dynamics_qualification.cc)
+orvd_configure_first_party_target(verify_irw_dynamics_qualification)
+target_link_libraries(verify_irw_dynamics_qualification
+    PRIVATE orvd_dynamics_qualification_support)
+add_test(NAME verify_irw_dynamics_qualification
+         COMMAND verify_irw_dynamics_qualification
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
+             ${CMAKE_SOURCE_DIR}
+             ${CMAKE_CURRENT_BINARY_DIR}/g70-irw-dynamics-qualification-fixtures)
+set_tests_properties(verify_irw_dynamics_qualification PROPERTIES
+    PROCESSORS 8)
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc

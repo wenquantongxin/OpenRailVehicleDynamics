@@ -92,6 +92,12 @@ class SystemContinuousStateAdvancer final {
         double target_time_seconds,
         std::span<const double> sample_times_seconds);
 
+    /// Returns cumulative backend work without entering the RHS hot path.
+    /// The counters restart after a successful explicit synchronization,
+    /// because synchronization reinitializes the numerical backend.
+    [[nodiscard]] ContinuousStateIntegrationStatistics
+    integration_statistics() const;
+
     /// Copies the accepted state, admitted context-local parameters and latest
     /// wheel-rail projection branches into the trial/backend configuration,
     /// then reinitializes numerical history.

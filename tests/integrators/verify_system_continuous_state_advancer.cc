@@ -200,6 +200,9 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
     SystemContinuousStateAdvancer advancer(
         system, plan, *accepted, MakeTolerances(2),
         NoCallTimeAppliedForces{});
+    Expect(advancer.integration_statistics().successful_internal_step_count ==
+               0,
+           "a new system advancer reports no successful internal work");
     advancer.AdvanceTo(kInitialTime);
     Eigen::VectorXd observed(2);
     system.CopyContinuousState(*accepted, observed);
@@ -319,6 +322,10 @@ void CheckDenseStateSamplingTransaction() {
                                       0.55};
     const Eigen::MatrixXd samples =
         advancer.AdvanceToWithDenseStateSamples(times.back(), times);
+    const auto integration_statistics = advancer.integration_statistics();
+    Expect(integration_statistics.successful_internal_step_count > 0 &&
+               integration_statistics.right_hand_side_evaluation_count > 0,
+           "the system advancer exposes its backend work after one public advance");
     Eigen::VectorXd final_state(2);
     system.CopyContinuousState(*accepted, final_state);
     Expect(samples.rows() == 2 && samples.cols() == 5 && samples.allFinite(),

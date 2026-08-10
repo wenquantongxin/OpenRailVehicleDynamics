@@ -110,16 +110,34 @@ bool SameWrenchComponents(const AppliedBodyWrench& actual,
 bool SameObservation(
     const orvd::forces::WheelRailContactInterfaceObservation& actual,
     const orvd::forces::WheelRailContactInterfaceObservation& expected) {
-    return actual.contact_patch_count == expected.contact_patch_count &&
-           actual.rail_profile_reference_marker_track_station_meters ==
-               expected.rail_profile_reference_marker_track_station_meters &&
-           actual.vertical_support_force_on_wheel_newtons ==
-               expected.vertical_support_force_on_wheel_newtons &&
-           actual.normal_force_newtons == expected.normal_force_newtons &&
-           actual.longitudinal_force_on_wheel_newtons ==
-               expected.longitudinal_force_on_wheel_newtons &&
-           actual.lateral_force_on_wheel_newtons ==
-               expected.lateral_force_on_wheel_newtons;
+    if (actual.contact_patch_count != expected.contact_patch_count ||
+        actual.rail_profile_reference_marker_track_station_meters !=
+            expected.rail_profile_reference_marker_track_station_meters ||
+        actual.vertical_support_force_on_wheel_newtons !=
+            expected.vertical_support_force_on_wheel_newtons ||
+        actual.normal_force_newtons != expected.normal_force_newtons ||
+        actual.total_force_on_wheel_in_carrier_track_frame_newtons !=
+            expected.total_force_on_wheel_in_carrier_track_frame_newtons) {
+        return false;
+    }
+    for (std::size_t patch = 0; patch < actual.patches.size(); ++patch) {
+        const auto& left = actual.patches[patch];
+        const auto& right = expected.patches[patch];
+        if (left.contact_point_in_carrier_track_frame_meters !=
+                right.contact_point_in_carrier_track_frame_meters ||
+            left.force_on_wheel_in_carrier_track_frame_newtons !=
+                right.force_on_wheel_in_carrier_track_frame_newtons ||
+            left.normal_force_newtons != right.normal_force_newtons ||
+            left.longitudinal_force_on_wheel_in_contact_frame_newtons !=
+                right.longitudinal_force_on_wheel_in_contact_frame_newtons ||
+            left.lateral_force_on_wheel_in_contact_frame_newtons !=
+                right.lateral_force_on_wheel_in_contact_frame_newtons ||
+            left.contact_frame_angle_radians !=
+                right.contact_frame_angle_radians) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::vector<AppliedBodyWrench> EvaluateContactForces(

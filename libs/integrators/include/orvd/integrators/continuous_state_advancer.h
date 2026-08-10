@@ -4,6 +4,7 @@
 /// The backend-neutral contracts shared by the continuous-state advancer and
 /// its right-hand side.
 
+#include <cstdint>
 #include <exception>
 #include <optional>
 
@@ -70,6 +71,26 @@ struct ContinuousStateInternalStep final {
     bool reached_stop{false};
 };
 
+/// Cumulative numerical work since construction or the most recent successful
+/// backend reinitialization.
+///
+/// These counters are read only when requested. They do not install a callback,
+/// sample internal steps or time the right-hand side. Error-test failures and
+/// nonlinear convergence failures remain separate because neither is a generic
+/// "rejected step" count. The two RHS counters are also separate: a numerical
+/// Jacobian may evaluate the RHS through the linear-solver interface without
+/// incrementing the ordinary RHS counter.
+struct ContinuousStateIntegrationStatistics final {
+    std::uint64_t successful_internal_step_count{};
+    std::uint64_t right_hand_side_evaluation_count{};
+    std::uint64_t linear_solver_right_hand_side_evaluation_count{};
+    std::uint64_t error_test_failure_count{};
+    std::uint64_t nonlinear_solver_iteration_count{};
+    std::uint64_t nonlinear_solver_convergence_failure_count{};
+    std::uint64_t linear_solver_setup_count{};
+    std::uint64_t jacobian_evaluation_count{};
+};
+
 /// The numerical-backend-independent advancement surface.
 ///
 /// G44 supplies the first implementation, CVODE.  No Drake integrator subtype
@@ -82,6 +103,12 @@ class ContinuousStateAdvancer {
     [[nodiscard]] virtual int continuous_state_size() const = 0;
 
     [[nodiscard]] virtual double current_time_seconds() const = 0;
+
+    /// Returns a backend-neutral snapshot of cumulative numerical work.
+    /// Querying statistics does not alter advancement or dense-output state.
+    /// @throws std::runtime_error if the backend cannot supply a valid snapshot.
+    [[nodiscard]] virtual ContinuousStateIntegrationStatistics
+    integration_statistics() const = 0;
 
     /// Copies the current successful backend endpoint into pre-sized storage.
     /// A size error must be reported before the output is changed.

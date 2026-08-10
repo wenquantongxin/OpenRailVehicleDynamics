@@ -63,6 +63,10 @@ class SystemContinuousStateAdvancer::Implementation final {
         return samples;
     }
 
+    [[nodiscard]] ContinuousStateIntegrationStatistics Statistics() const {
+        return backend_->integration_statistics();
+    }
+
     void AdvanceToImpl(double target_time_seconds,
                        std::span<const double> sample_times_seconds,
                        Eigen::MatrixXd* samples) {
@@ -274,6 +278,11 @@ SystemContinuousStateAdvancer::AdvanceToWithDenseStateSamples(
     std::span<const double> sample_times_seconds) {
     return implementation_->AdvanceToWithDenseStateSamples(
         target_time_seconds, sample_times_seconds);
+}
+
+ContinuousStateIntegrationStatistics
+SystemContinuousStateAdvancer::integration_statistics() const {
+    return implementation_->Statistics();
 }
 
 void SystemContinuousStateAdvancer::SynchronizeAfterAcceptedContextChange() {

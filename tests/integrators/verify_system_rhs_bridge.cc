@@ -18,6 +18,7 @@ namespace {
 using orvd::integrators::ContinuousStateAdvancer;
 using orvd::integrators::ContinuousStateDenseOutputInterval;
 using orvd::integrators::ContinuousStateErrorTolerances;
+using orvd::integrators::ContinuousStateIntegrationStatistics;
 using orvd::integrators::ContinuousStateRhs;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemRhsBridge;
@@ -38,6 +39,10 @@ class CompleteAdvancerContract final : public ContinuousStateAdvancer {
    public:
     int continuous_state_size() const override { return 0; }
     double current_time_seconds() const override { return 0.0; }
+    ContinuousStateIntegrationStatistics integration_statistics()
+        const override {
+        return {};
+    }
     void CopyCurrentState(Eigen::Ref<Eigen::VectorXd>) const override {}
     orvd::integrators::ContinuousStateInternalStep
     AdvanceOneInternalStepToward(

@@ -751,20 +751,16 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                 "wheel-rail contact force plan: interface '" +
                 interface.name + "' returned too many contact patches");
         }
-        if (publish_observations && result.count > 1) {
-            throw std::runtime_error(
-                "wheel-rail contact force plan: interface '" +
-                interface.name +
-                "' returned multiple patches; the migration observation "
-                "requires a unique contact frame for Tx/Ty");
-        }
-
         SpatialWrench accumulated_in_track;
-        WheelRailContactInterfaceObservation observation;
+        WheelRailContactInterfaceObservation* observation = nullptr;
         if (publish_observations) {
-            observation.contact_patch_count = result.count;
-            observation.rail_profile_reference_marker_track_station_meters =
+            auto& pending =
+                workspace.pending_interface_observations_[ordinal];
+            pending = {};
+            pending.contact_patch_count = result.count;
+            pending.rail_profile_reference_marker_track_station_meters =
                 effective_station;
+            observation = &pending;
         }
         for (std::size_t patch = 0; patch < result.count; ++patch) {
             const auto& wheel_wrench =
@@ -784,17 +780,37 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             accumulated_in_track.moment_newton_meters +=
                 at_body_origin.moment_newton_meters;
             if (publish_observations) {
-                observation.vertical_support_force_on_wheel_newtons -=
-                    wheel_wrench.force_newtons.z();
-                observation.normal_force_newtons +=
+                observation
+                    ->total_force_on_wheel_in_carrier_track_frame_newtons +=
+                    wheel_wrench.force_newtons;
+                observation->normal_force_newtons +=
                     result.patches[patch].normal.normal_force_newtons;
-                observation.longitudinal_force_on_wheel_newtons +=
+                WheelRailContactPatchObservation& patch_observation =
+                    observation->patches[patch];
+                patch_observation
+                    .contact_point_in_carrier_track_frame_meters =
+                    contact_point;
+                patch_observation
+                    .force_on_wheel_in_carrier_track_frame_newtons =
+                    wheel_wrench.force_newtons;
+                patch_observation.normal_force_newtons =
+                    result.patches[patch].normal.normal_force_newtons;
+                patch_observation
+                    .longitudinal_force_on_wheel_in_contact_frame_newtons =
                     result.patches[patch]
                         .tangential.longitudinal_force_newtons;
-                observation.lateral_force_on_wheel_newtons +=
+                patch_observation
+                    .lateral_force_on_wheel_in_contact_frame_newtons =
                     result.patches[patch]
                         .tangential.lateral_force_newtons;
+                patch_observation.contact_frame_angle_radians =
+                    result.patches[patch].contact_frame_angle_radians;
             }
+        }
+        if (publish_observations) {
+            observation->vertical_support_force_on_wheel_newtons =
+                -observation
+                     ->total_force_on_wheel_in_carrier_track_frame_newtons.z();
         }
         const SpatialWrench accumulated_in_inertial =
             wheel_rail_contact::RotateWrench(
@@ -809,9 +825,6 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             world_frame,
             accumulated_in_inertial.moment_newton_meters,
             accumulated_in_inertial.force_newtons};
-        if (publish_observations) {
-            workspace.pending_interface_observations_[ordinal] = observation;
-        }
     };
 
     const int worker_count = std::min(

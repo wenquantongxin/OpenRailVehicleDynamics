@@ -207,9 +207,15 @@ void CheckPhysicalObservationBatch(
                         interface.vertical_support_force_on_wheel_newtons >
                             0.0 &&
                         interface.normal_force_newtons > 0.0 &&
+                        interface
+                            .total_force_on_wheel_in_carrier_track_frame_newtons
+                            .allFinite() &&
                         std::isfinite(
-                            interface.longitudinal_force_on_wheel_newtons) &&
-                        std::isfinite(interface.lateral_force_on_wheel_newtons),
+                            interface.patches[0]
+                                .longitudinal_force_on_wheel_in_contact_frame_newtons) &&
+                        std::isfinite(
+                            interface.patches[0]
+                                .lateral_force_on_wheel_in_contact_frame_newtons),
                     "an interface lost its finite positive single-patch contact");
         }
     }

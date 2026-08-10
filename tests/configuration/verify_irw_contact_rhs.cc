@@ -83,17 +83,34 @@ bool SameWrench(const AppliedBodyWrench& actual,
 
 bool SameObservation(const WheelRailContactInterfaceObservation& actual,
                      const WheelRailContactInterfaceObservation& expected) {
-    return actual.contact_patch_count == expected.contact_patch_count &&
-           actual.rail_profile_reference_marker_track_station_meters ==
-               expected
-                   .rail_profile_reference_marker_track_station_meters &&
-           actual.vertical_support_force_on_wheel_newtons ==
-               expected.vertical_support_force_on_wheel_newtons &&
-           actual.normal_force_newtons == expected.normal_force_newtons &&
-           actual.longitudinal_force_on_wheel_newtons ==
-               expected.longitudinal_force_on_wheel_newtons &&
-           actual.lateral_force_on_wheel_newtons ==
-               expected.lateral_force_on_wheel_newtons;
+    if (actual.contact_patch_count != expected.contact_patch_count ||
+        actual.rail_profile_reference_marker_track_station_meters !=
+            expected.rail_profile_reference_marker_track_station_meters ||
+        actual.vertical_support_force_on_wheel_newtons !=
+            expected.vertical_support_force_on_wheel_newtons ||
+        actual.normal_force_newtons != expected.normal_force_newtons ||
+        actual.total_force_on_wheel_in_carrier_track_frame_newtons !=
+            expected.total_force_on_wheel_in_carrier_track_frame_newtons) {
+        return false;
+    }
+    for (std::size_t patch = 0; patch < actual.patches.size(); ++patch) {
+        const auto& left = actual.patches[patch];
+        const auto& right = expected.patches[patch];
+        if (left.contact_point_in_carrier_track_frame_meters !=
+                right.contact_point_in_carrier_track_frame_meters ||
+            left.force_on_wheel_in_carrier_track_frame_newtons !=
+                right.force_on_wheel_in_carrier_track_frame_newtons ||
+            left.normal_force_newtons != right.normal_force_newtons ||
+            left.longitudinal_force_on_wheel_in_contact_frame_newtons !=
+                right.longitudinal_force_on_wheel_in_contact_frame_newtons ||
+            left.lateral_force_on_wheel_in_contact_frame_newtons !=
+                right.lateral_force_on_wheel_in_contact_frame_newtons ||
+            left.contact_frame_angle_radians !=
+                right.contact_frame_angle_radians) {
+            return false;
+        }
+    }
+    return true;
 }
 
 struct ContactBatch {
@@ -244,6 +261,16 @@ int main(int argc, char** argv) {
                 std::string(kInterfaceNames[ordinal]));
             const auto& wrench = baseline.wrenches[ordinal];
             const auto& observation = baseline.observations[ordinal];
+            Eigen::Vector3d patch_force_sum = Eigen::Vector3d::Zero();
+            double patch_normal_force_sum = 0.0;
+            for (std::size_t patch = 0;
+                 patch < observation.contact_patch_count; ++patch) {
+                patch_force_sum +=
+                    observation.patches[patch]
+                        .force_on_wheel_in_carrier_track_frame_newtons;
+                patch_normal_force_sum +=
+                    observation.patches[patch].normal_force_newtons;
+            }
             Require(wrench.body == expected_body &&
                         wrench.body != assembled.model().GetRigidBodyByName(
                                            std::string(kCarrierNames[ordinal / 2])) &&
@@ -252,16 +279,33 @@ int main(int argc, char** argv) {
                         wrench.point_position_in_body_frame_meters.isZero(),
                     "a contact wrench is not reduced onto its independent "
                     "wheel-body origin in the world frame");
+            Require(
+                patch_force_sum ==
+                        observation
+                            .total_force_on_wheel_in_carrier_track_frame_newtons &&
+                    patch_normal_force_sum ==
+                        observation.normal_force_newtons &&
+                    observation.vertical_support_force_on_wheel_newtons ==
+                        -observation
+                             .total_force_on_wheel_in_carrier_track_frame_newtons
+                             .z(),
+                "an interface observation does not reconcile its patch and "
+                "carrier-Track-T totals");
             Require(wrench.force_newtons.allFinite() &&
                         wrench.torque_about_point_newton_metres.allFinite() &&
                         observation.contact_patch_count == 1 &&
                         observation.normal_force_newtons > 0.0 &&
                         observation.vertical_support_force_on_wheel_newtons >
                             0.0 &&
+                        observation
+                            .total_force_on_wheel_in_carrier_track_frame_newtons
+                            .allFinite() &&
                         std::isfinite(
-                            observation.longitudinal_force_on_wheel_newtons) &&
+                            observation.patches[0]
+                                .longitudinal_force_on_wheel_in_contact_frame_newtons) &&
                         std::isfinite(
-                            observation.lateral_force_on_wheel_newtons),
+                            observation.patches[0]
+                                .lateral_force_on_wheel_in_contact_frame_newtons),
                     "a real H3 wheel interface lost finite positive contact");
         }
 

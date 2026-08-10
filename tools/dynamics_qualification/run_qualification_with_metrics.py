@@ -16,8 +16,10 @@ import time
 from typing import Iterable
 
 
-RUNNER_ARGUMENT_COUNT = 8
-OUTPUT_DIRECTORY_ARGUMENT_INDEX = 5
+RUNNER_LAYOUTS = {
+    "gz18": (8, 5),
+    "irw": (7, 4),
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -76,15 +78,20 @@ def parse_arguments(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument("--build-type", choices=("Release",), required=True)
     parser.add_argument("--compiler-identity", required=True)
     parser.add_argument("--cpu-affinity", required=True)
+    parser.add_argument(
+        "--vehicle-recipe", choices=tuple(RUNNER_LAYOUTS), default="gz18"
+    )
     parser.add_argument("runner_arguments", nargs=argparse.REMAINDER)
     arguments = parser.parse_args(list(argv))
     if arguments.runner_arguments[:1] == ["--"]:
         arguments.runner_arguments = arguments.runner_arguments[1:]
     if not arguments.runner_arguments:
         parser.error("runner arguments are empty")
-    if len(arguments.runner_arguments) != RUNNER_ARGUMENT_COUNT:
+    argument_count, _ = RUNNER_LAYOUTS[arguments.vehicle_recipe]
+    if len(arguments.runner_arguments) != argument_count:
         parser.error(
-            "the GZ18 qualification runner requires exactly eight arguments"
+            f"the {arguments.vehicle_recipe.upper()} qualification runner "
+            f"requires exactly {argument_count} arguments"
         )
     return arguments
 
@@ -120,11 +127,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     after_usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     child_user_seconds = after_usage.ru_utime - before_usage.ru_utime
     child_system_seconds = after_usage.ru_stime - before_usage.ru_stime
+    _, output_directory_argument_index = RUNNER_LAYOUTS[
+        arguments.vehicle_recipe
+    ]
     artifact_directory = Path(
-        arguments.runner_arguments[OUTPUT_DIRECTORY_ARGUMENT_INDEX]
+        arguments.runner_arguments[output_directory_argument_index]
     ).resolve()
     identity = {
         "orvd_revision": arguments.orvd_revision,
+        "vehicle_recipe": arguments.vehicle_recipe,
         "build_type": arguments.build_type,
         "compiler": arguments.compiler_identity,
         "hardware": processor_identity(),

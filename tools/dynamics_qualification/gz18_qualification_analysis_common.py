@@ -35,7 +35,7 @@ AXLES = (
 SIDES = ("left", "right")
 CONTACT_QUANTITIES = {
     "Q": "vertical_support_force_on_wheel_newtons",
-    "N": "normal_force_newtons",
+    "N": "primary_patch_normal_force_newtons",
     "Tx": "longitudinal_force_on_wheel_newtons",
     "Ty": "lateral_force_on_wheel_newtons",
 }

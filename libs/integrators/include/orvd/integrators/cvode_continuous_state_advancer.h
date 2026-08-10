@@ -35,6 +35,8 @@ class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
 
     [[nodiscard]] int continuous_state_size() const override;
     [[nodiscard]] double current_time_seconds() const override;
+    [[nodiscard]] ContinuousStateIntegrationStatistics
+    integration_statistics() const override;
     void CopyCurrentState(
         Eigen::Ref<Eigen::VectorXd> continuous_state) const override;
     [[nodiscard]] ContinuousStateInternalStep AdvanceOneInternalStepToward(

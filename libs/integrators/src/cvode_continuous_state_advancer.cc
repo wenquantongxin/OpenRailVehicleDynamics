@@ -41,6 +41,15 @@ void RequireCvodeSuccess(int flag, const char* operation) {
     }
 }
 
+std::uint64_t RequireNonnegativeCount(long int value, const char* name) {
+    if (value < 0) {
+        throw std::runtime_error(
+            std::string("CVODE continuous-state advancer: ") + name +
+            " returned a negative counter");
+    }
+    return static_cast<std::uint64_t>(value);
+}
+
 struct CvodeResources final {
     SUNContext context{nullptr};
     void* memory{nullptr};
@@ -110,6 +119,61 @@ class CvodeContinuousStateAdvancer::Implementation final {
     [[nodiscard]] int state_size() const { return state_size_; }
     [[nodiscard]] double public_time_seconds() const {
         return public_time_seconds_;
+    }
+
+    [[nodiscard]] ContinuousStateIntegrationStatistics Statistics() const {
+        long int steps{};
+        long int rhs_evaluations{};
+        long int linear_rhs_evaluations{};
+        long int error_test_failures{};
+        long int nonlinear_iterations{};
+        long int nonlinear_convergence_failures{};
+        long int linear_solver_setups{};
+        long int jacobian_evaluations{};
+        RequireCvodeSuccess(CVodeGetNumSteps(resources_.memory, &steps),
+                            "CVodeGetNumSteps");
+        RequireCvodeSuccess(
+            CVodeGetNumRhsEvals(resources_.memory, &rhs_evaluations),
+            "CVodeGetNumRhsEvals");
+        RequireCvodeSuccess(
+            CVodeGetNumLinRhsEvals(resources_.memory,
+                                  &linear_rhs_evaluations),
+            "CVodeGetNumLinRhsEvals");
+        RequireCvodeSuccess(
+            CVodeGetNumErrTestFails(resources_.memory, &error_test_failures),
+            "CVodeGetNumErrTestFails");
+        RequireCvodeSuccess(
+            CVodeGetNumNonlinSolvIters(resources_.memory,
+                                      &nonlinear_iterations),
+            "CVodeGetNumNonlinSolvIters");
+        RequireCvodeSuccess(
+            CVodeGetNumNonlinSolvConvFails(
+                resources_.memory, &nonlinear_convergence_failures),
+            "CVodeGetNumNonlinSolvConvFails");
+        RequireCvodeSuccess(
+            CVodeGetNumLinSolvSetups(resources_.memory,
+                                    &linear_solver_setups),
+            "CVodeGetNumLinSolvSetups");
+        RequireCvodeSuccess(
+            CVodeGetNumJacEvals(resources_.memory, &jacobian_evaluations),
+            "CVodeGetNumJacEvals");
+        return ContinuousStateIntegrationStatistics{
+            RequireNonnegativeCount(steps, "CVodeGetNumSteps"),
+            RequireNonnegativeCount(rhs_evaluations,
+                                    "CVodeGetNumRhsEvals"),
+            RequireNonnegativeCount(linear_rhs_evaluations,
+                                    "CVodeGetNumLinRhsEvals"),
+            RequireNonnegativeCount(error_test_failures,
+                                    "CVodeGetNumErrTestFails"),
+            RequireNonnegativeCount(nonlinear_iterations,
+                                    "CVodeGetNumNonlinSolvIters"),
+            RequireNonnegativeCount(
+                nonlinear_convergence_failures,
+                "CVodeGetNumNonlinSolvConvFails"),
+            RequireNonnegativeCount(linear_solver_setups,
+                                    "CVodeGetNumLinSolvSetups"),
+            RequireNonnegativeCount(jacobian_evaluations,
+                                    "CVodeGetNumJacEvals")};
     }
 
     void CopyPublicState(Eigen::Ref<Eigen::VectorXd> output) const {
@@ -443,6 +507,11 @@ int CvodeContinuousStateAdvancer::continuous_state_size() const {
 
 double CvodeContinuousStateAdvancer::current_time_seconds() const {
     return implementation_->public_time_seconds();
+}
+
+ContinuousStateIntegrationStatistics
+CvodeContinuousStateAdvancer::integration_statistics() const {
+    return implementation_->Statistics();
 }
 
 void CvodeContinuousStateAdvancer::CopyCurrentState(

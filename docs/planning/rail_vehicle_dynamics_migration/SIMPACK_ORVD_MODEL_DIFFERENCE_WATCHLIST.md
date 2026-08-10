@@ -62,6 +62,12 @@
 - MD-012：IRW 末期冻结 WRL 的八个纵向拉杆构架侧衬套采用半角系与共同中点，SIMPACK QCH
   Type-43 则采用 From 基本构、真实 From/To 端点及仅 From 侧平动力支承矩。当前迁移先复现冻结
   WRL；完成 IRW 全流程 ORVD—WRL 端到端闭合后，再重开与 SIMPACK 的原子语义对拍。
+- MD-013：冻结 WRL、ORVD 与现有 SIMPACK 工件的接触斑容量和观察输出形状不同。G71 将消费的
+  冻结 WRL A/B 参考工件已见至多双斑；ORVD 不按对方槽数截断，比较时区分统一 Track-T 总力、
+  逐斑局部力和 WRL 最大法向力主斑列。
+- MD-014：冻结 WRL A 层使用 SPGMR，ORVD 主线仍使用稠密数值 Jacobian 与稠密线性求解。两者的
+  墙钟、内部计数和末位轨迹不能冒充同一后端结果；主线只增加轻量只读统计，不把影子分支的
+  专项试验或性能重构迁入 G70/G71。
 
 ## 已筛查条目
 
@@ -605,6 +611,89 @@ RPY 坐标率及其共轭广义力矩到物理力矩的映射。该配置没有 
 - WRL `scripts_cpp/irw/src/irw_simulation_runner.cc:1012-1017`：末期冻结正式构图入口。
 - WRL 外置研究 `p46_longibar_fixed_from_marker_endpoint_contract`、
   `p124_type86_numerical_requalification_type43_early_window/type43`：同状态闭合、短窗影响及明确未晋级记录。
+
+### MD-013 — 多接触斑容量与资格观察语义不同
+
+- 车型：共性，G71 首次成为 IRW 的真实消费者
+- 层级：轮轨接触拓扑与观察输出
+- 状态：**已裁决当前资格语义；超过共同工件容量的范围尚未资格化**
+
+#### 疑点
+
+冻结 WRL、ORVD 和现有 SIMPACK SBR 对“发现多少候选斑、进入动力学多少斑、对外写出多少斑”使用
+不同的固定容量与输出形状。若只看一个宽表中的 `Tx/Ty`，很容易把最大法向力主斑、全部斑合力或
+不同接触系下局部切向力误称为同一个量。
+
+#### 两端实际消费者
+
+冻结 WRL 接触核最多保留 16 个候选斑，正式力／结果面最多输出 4 斑；冻结 A/B 运行选择
+`all_patches`，故全部正式斑进入车辆动力学，常规车辆 CSV 的局部 `N/Tx/Ty` 则只写最大法向力
+主斑。ORVD 几何和正式结果面均定容为 16 斑，
+每个返回斑逐一计算法向力、蠕滑力和空间扳手，车辆 RHS 把全部斑运输到轮体原点后确定性累加。
+现有 SIMPACK A 层 SBR 提供每接口 5 个斑槽；这只是本次对拍工件的通道形状，不据此推断厂商求解器
+的普遍硬上限，也不反向限制 ORVD。
+
+冻结 IRW A/B 30 s 工件的峰值斑数为 2，处于三方共同可表达范围。约 `3.659 s` 连续 13 个
+`100 µs` 样本只有 7 轮接触是零斑事件；它与峰值双斑是两个不同拓扑观察，不预设发生在同一时刻。
+
+#### 动力学影响与当前裁决
+
+项目负责人裁决（CodeX 记录，2026-08-10）：ORVD 不再因资格观察遇到第二个斑而拒绝。每接口始终
+发布真实斑数、总 `Q`、总 `N` 和统一载体投影 Track-T 表达的轮侧合力；每斑另存局部
+`N/Tx/Ty`、相对载体投影 Track-T 原点的轮面接触点、Track-T 力和接触系角。不同接触系中的局部
+`Tx/Ty` 禁止直接相加。宽表中的便利 `N/Tx/Ty` 明确选择
+最大法向力主斑，与 WRL 历史导出规则同名对照；逐斑长表才是完整观察面。若 ORVD 将来返回超过
+SIMPACK 5 槽或冻结 WRL 4 槽的结果，须报告“参考工件无法逐斑表示”，不得截断斑、修改 RHS 或把
+容量差异直接判成物理错误。
+
+SIMPACK SBR 的只读提取、逐斑端点和符号核对只进入项目 `tmp/`，不入 Git、不成为产品输入或金标。
+G70/G71 的宏观位移、摇头和总轮轨力资格不依赖跨时刻持久的斑 ordinal；逐斑匹配必须另有明确的
+接触点／侧别依据。
+
+#### 源码锚点
+
+- WRL `scripts_cpp/rwc_core/include/rwc_core/types.h`、
+  `scripts_cpp/rwc_core/src/contact_kernel.cc`：16 个候选槽与 4 个正式输出槽。
+- WRL `scripts_cpp/drake_sim/src/wheel_rail_contact_system.cc`、
+  `scripts_cpp/irw/src/irw_csv_writer.cc`：A/B 的全部正式斑进入动力学，常规 CSV 选择最大法向力主斑。
+- ORVD `libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_geometry.h`、
+  `libs/wheel_rail_contact/include/orvd/wheel_rail_contact/wheel_rail_contact_model.h`、
+  `libs/forces/include/orvd/forces/wheel_rail_contact_force_plan.h` 与
+  `libs/forces/src/wheel_rail_contact_force_plan.cc`：16 斑正式结果、逐斑求力、RHS 聚合及总量／逐斑观察。
+- WRL 冻结 A/B 运行元数据：`peak_patch_count=2`；
+  `irw_layered_passive_30s_alignment.json`：7 轮短暂边界。
+
+### MD-014 — IRW 长窗的线性求解后端不同
+
+- 车型：IRW
+- 层级：积分器数值执行身份与性能
+- 状态：**已确认执行差异；当前主线不统一后端**
+
+#### 疑点
+
+相同的 CVODE BDF 与误差容差并不意味着相同的线性求解路径。若忽略线性后端差异，ORVD 与冻结
+WRL 的墙钟、Jacobian/RHS 计数或末位轨迹差异会被错误归因给车辆模型或轮轨算法。
+
+#### 两端实际消费者
+
+冻结 WRL A 层使用 CVODE BDF 最大二阶、`rhs_state_eval` 与 SPGMR：Krylov 维数 20、线性容差
+因子 `0.05`、零重启、线性建立频率 20。ORVD 当前同样固定 BDF 最大二阶，但使用稠密数值
+Jacobian 和稠密线性求解，线性建立频率 20、Jacobian 频率 51。G70/G71 按路书采用冻结 A 层的
+`rtol=1e-7` 与 q/v/z 绝对容差 `1e-9/1e-8/1e-6`，但不在主线顺手迁入 SPGMR。
+
+#### 动力学影响与当前裁决
+
+两种后端可能产生不同的 RHS／线性 RHS 次数、误差测试与非线性收敛历史、墙钟和末位轨迹；因此
+性能比较必须留下执行身份，不能把速度比解释为某一个接触优化的净加速，也不要求不同后端逐位轨迹
+相同。项目负责人正在影子分支专项研究速度—精度平衡；主线只增加按需读取的累计统计快照，分别记录
+成功内步、普通与线性求解器 RHS、误差测试失败、非线性迭代／收敛失败、线性建立和 Jacobian 次数。
+该接口没有逐步回调、热路径计时、额外状态求值或车辆专用日志。
+
+#### 源码锚点
+
+- WRL 冻结 A 层运行脚本与运行元数据：CVODE／SPGMR 配置和原生统计。
+- ORVD `cvode_continuous_state_advancer.cc`：BDF2、稠密矩阵／线性求解器和只读统计查询。
+- ORVD `continuous_state_advancer.h`、`system_continuous_state_advancer.h`：后端中立统计值与系统层转发。
 
 ## 新条目模板
 

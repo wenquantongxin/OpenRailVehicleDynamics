@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <stdexcept>
@@ -190,6 +191,29 @@ class ToggleFailureRhs final : public ContinuousStateRhs {
     int evaluation_count_{0};
 };
 
+bool SameStatistics(
+    const orvd::integrators::ContinuousStateIntegrationStatistics& left,
+    const orvd::integrators::ContinuousStateIntegrationStatistics& right) {
+    return left.successful_internal_step_count ==
+               right.successful_internal_step_count &&
+           left.right_hand_side_evaluation_count ==
+               right.right_hand_side_evaluation_count &&
+           left.linear_solver_right_hand_side_evaluation_count ==
+               right.linear_solver_right_hand_side_evaluation_count &&
+           left.error_test_failure_count == right.error_test_failure_count &&
+           left.nonlinear_solver_iteration_count ==
+               right.nonlinear_solver_iteration_count &&
+           left.nonlinear_solver_convergence_failure_count ==
+               right.nonlinear_solver_convergence_failure_count &&
+           left.linear_solver_setup_count == right.linear_solver_setup_count &&
+           left.jacobian_evaluation_count == right.jacobian_evaluation_count;
+}
+
+bool StatisticsAreZero(
+    const orvd::integrators::ContinuousStateIntegrationStatistics& value) {
+    return SameStatistics(value, {});
+}
+
 Eigen::Vector2d ConstantAccelerationState(double initial_time,
                                           const Eigen::Vector2d& initial,
                                           double acceleration,
@@ -268,6 +292,8 @@ void CheckFreeFallAndDenseOutput() {
     ConstantAccelerationRhs rhs(kAcceleration);
     CvodeContinuousStateAdvancer advancer(
         rhs, kInitialTime, initial_state, MakeTolerances(2));
+    Expect(StatisticsAreZero(advancer.integration_statistics()),
+           "a newly initialized backend reports zero numerical work");
 
     Eigen::VectorXd output = Eigen::VectorXd::Constant(2, -77.0);
     advancer.CopyCurrentState(output);
@@ -284,6 +310,13 @@ void CheckFreeFallAndDenseOutput() {
            "current-state refusal preserves caller storage");
 
     AdvanceFully(advancer, kTargetTime);
+    const auto advanced_statistics = advancer.integration_statistics();
+    Expect(advanced_statistics.successful_internal_step_count > 0 &&
+               advanced_statistics.right_hand_side_evaluation_count +
+                       advanced_statistics
+                           .linear_solver_right_hand_side_evaluation_count ==
+                   static_cast<std::uint64_t>(rhs.evaluation_count()),
+           "the read-only statistics separate ordinary and linear-solver RHS work");
     Expect(advancer.current_time_seconds() == kTargetTime,
            "CVODE stops at the requested endpoint");
     advancer.CopyCurrentState(output);
@@ -367,6 +400,7 @@ void CheckFreeFallAndDenseOutput() {
            "dense-state size refusal preserves caller storage");
 
     const int evaluations_before_same_time = rhs.evaluation_count();
+    const auto statistics_before_same_time = advancer.integration_statistics();
     output.setConstant(47.0);
     const auto same_time_step = advancer.AdvanceOneInternalStepToward(
         kTargetTime, output);
@@ -376,6 +410,9 @@ void CheckFreeFallAndDenseOutput() {
            "a same-time backend request reports a reached no-op");
     Expect(rhs.evaluation_count() == evaluations_before_same_time,
            "same-time advancement does not evaluate the RHS");
+    Expect(SameStatistics(statistics_before_same_time,
+                          advancer.integration_statistics()),
+           "same-time advancement does not change numerical-work counters");
     ExpectStateNear(output,
                     ConstantAccelerationState(
                         kInitialTime, initial_state, kAcceleration, kTargetTime),
@@ -469,6 +506,7 @@ void CheckRhsFailureAndRecovery() {
            "the control advance establishes dense output");
 
     rhs.set_throw_on_evaluation(true);
+    const auto statistics_before_failure = advancer.integration_statistics();
     bool original_exception_propagated = false;
     try {
         AdvanceFully(advancer, 0.2);
@@ -483,6 +521,16 @@ void CheckRhsFailureAndRecovery() {
            "an RHS failure preserves the last public endpoint");
     Expect(!advancer.dense_output_interval().has_value(),
            "an RHS failure invalidates old dense output");
+    const auto statistics_after_failure = advancer.integration_statistics();
+    Expect(statistics_after_failure.successful_internal_step_count ==
+                   statistics_before_failure.successful_internal_step_count &&
+               statistics_after_failure.right_hand_side_evaluation_count +
+                       statistics_after_failure
+                           .linear_solver_right_hand_side_evaluation_count >
+                   statistics_before_failure.right_hand_side_evaluation_count +
+                       statistics_before_failure
+                           .linear_solver_right_hand_side_evaluation_count,
+           "failed RHS work is visible without being counted as a successful internal step");
     Eigen::VectorXd unavailable_dense = Eigen::VectorXd::Constant(1, 71.0);
     ExpectLogicError(
         [&] { advancer.CopyDenseState(0.1, unavailable_dense); },
@@ -496,6 +544,9 @@ void CheckRhsFailureAndRecovery() {
         "advancement remains poisoned until reinitialization");
     Expect(rhs.evaluation_count() == evaluations_after_failure,
            "a poisoned advance does not call the RHS again");
+    Expect(SameStatistics(statistics_after_failure,
+                          advancer.integration_statistics()),
+           "a poisoned advance does not change numerical-work counters");
 
     rhs.set_throw_on_evaluation(false);
     Eigen::VectorXd committed(1);
@@ -507,6 +558,8 @@ void CheckRhsFailureAndRecovery() {
     advancer.CopyCurrentState(endpoint);
     Expect(endpoint[0] == committed[0],
            "successful reinitialization immediately publishes the committed state");
+    Expect(StatisticsAreZero(advancer.integration_statistics()),
+           "successful reinitialization restarts numerical-work counters");
     AdvanceFully(advancer, 0.25);
     advancer.CopyCurrentState(endpoint);
     ExpectNear(endpoint[0], 4.1, 1.0e-8,

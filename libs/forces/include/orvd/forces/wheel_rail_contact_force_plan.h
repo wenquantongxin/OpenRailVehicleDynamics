@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <exception>
 #include <memory>
@@ -59,10 +60,30 @@ struct WheelRailContactInterfaceDefinition {
         independent_wheel_revolute_joint;
 };
 
+// One patch from the same real contact evaluation that produced an interface
+// wrench. The carrier track frame is Track-T evaluated at the interface's
+// projection carrier station; its origin, rather than the effective rail-profile
+// station, is also the point-coordinate origin below. The contact point is the
+// compliant wheel-surface point P. Local Tx/Ty remain attached to their own
+// contact frame; the angle is the pure roll from that frame into the carrier
+// Track-T axes. The patch ordinal is its position in this fixed array for one
+// evaluation, not a persistent identity over time.
+struct WheelRailContactPatchObservation {
+    Eigen::Vector3d contact_point_in_carrier_track_frame_meters{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d force_on_wheel_in_carrier_track_frame_newtons{
+        Eigen::Vector3d::Zero()};
+    double normal_force_newtons{0.0};
+    double longitudinal_force_on_wheel_in_contact_frame_newtons{0.0};
+    double lateral_force_on_wheel_in_contact_frame_newtons{0.0};
+    double contact_frame_angle_radians{0.0};
+};
+
 // Migration-time observations emitted from the same real contact evaluation
 // that produced an interface wrench. They are not a second force law. Q and N
-// are meaningful for zero or more patches; the scalar Tx/Ty pair is currently
-// qualified only when one patch supplies its unique contact frame.
+// are totals over zero or more patches. Forces can be summed only after they
+// are expressed in the common Track-T frame; each patch therefore retains its
+// own contact-frame Tx/Ty separately.
 struct WheelRailContactInterfaceObservation {
     std::size_t contact_patch_count{0};
     // The ideal Track Line station at which this side's rail profile frame was
@@ -72,8 +93,11 @@ struct WheelRailContactInterfaceObservation {
     double rail_profile_reference_marker_track_station_meters{0.0};
     double vertical_support_force_on_wheel_newtons{0.0};
     double normal_force_newtons{0.0};
-    double longitudinal_force_on_wheel_newtons{0.0};
-    double lateral_force_on_wheel_newtons{0.0};
+    Eigen::Vector3d total_force_on_wheel_in_carrier_track_frame_newtons{
+        Eigen::Vector3d::Zero()};
+    std::array<WheelRailContactPatchObservation,
+               wheel_rail_contact::kMaxContactPatches>
+        patches{};
 };
 
 class WheelRailContactForcePlan;
@@ -205,11 +229,10 @@ class WheelRailContactForcePlan {
         std::span<multibody_model::AppliedBodyWrench> body_wrenches) const;
 
     // Evaluates the same force path while also publishing its per-interface
-    // migration observations. Zero- and one-patch interfaces are admitted;
-    // more than one patch is refused because summing Tx/Ty scalars expressed
-    // in distinct contact frames would have no defined meaning. The ordinary
-    // force-only path continues to admit and combine multiple patches. Every
-    // output span is replaced only after all interfaces succeed.
+    // migration observations. Zero, one and multiple patches are admitted.
+    // Totals use the common Track-T frame; local Tx/Ty remain in the valid
+    // prefix of each interface's fixed patch array. Every output span is
+    // replaced only after all interfaces succeed.
     void CalcAppliedForcesAndObservations(
         const multibody_model::MultibodyEvaluationContext& context,
         WheelRailContactForceWorkspace& workspace,

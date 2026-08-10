@@ -6,7 +6,24 @@ reference arrays, figures, performance logs, and comparison statistics stay
 outside version control. They may be retained under the repository's untracked
 `tmp/` tree.
 
-## GZ18 long-window runner
+## Private vehicle qualification runners
+
+The support library contains one private execution engine and two closed,
+typed recipes. It is not an arbitrary-vehicle interface: the GZ18 and IRW
+recipes each freeze their scenario factory, representative bodies, state and
+wrench layout, integration tolerances, and track-irregularity presence.
+
+`orvd_irw_dynamics_qualification` is the G70/G71 passive IRW entry point. It
+assembles H3 on R300 with a layout reference station of zero, no motor force
+source, and an explicit null track-irregularity field. Its frozen numerical
+identity is BDF order two, relative tolerance `1e-7`, and q/v/z absolute
+tolerances `1e-9 / 1e-8 / 1e-6`. G70 uses a 100 microsecond integer clock over
+10 ms (101 observations); the 21 native 0.5 ms indices are selected by integer
+ordinal for the first cross-implementation comparison.
+
+`orvd_gz18_dynamics_qualification` retains the existing GZ18 long-window
+recipe. It requires a named track-irregularity asset and keeps the GZ18
+numerical identity independently of the IRW recipe.
 
 `orvd_gz18_dynamics_qualification` assembles one private GZ18 scenario and
 advances it once to the requested terminal time. Integer nanosecond sample
@@ -26,12 +43,33 @@ vehicle_layout_reference_track_station_meters = 0
 ```
 
 `run_qualification_with_metrics.py` is a Linux research wrapper for one such
-process. It pins the requested logical processors and records the outer wall
+process. Select `--vehicle-recipe irw` for the seven-argument IRW executable;
+the default remains the eight-argument GZ18 executable. The wrapper pins the
+requested logical processors and records the outer wall
 time, child CPU time, peak resident memory, executable digest, compiler/build
 identity, inherited OpenMP environment, complete runner arguments, output
 directory, and the CPU affinity actually accepted by the kernel. The analysis
 rejects an execution record belonging to another artifact. This is external
 execution provenance; its digest is not a physical acceptance criterion.
+
+The runner publishes two complementary contact tables. `observations.tsv`
+keeps one fixed-width row per sample. Its Q and N totals are aggregated over
+all returned patches; its historical `longitudinal_force_on_wheel_newtons` and
+`lateral_force_on_wheel_newtons` convenience columns, together with
+`primary_patch_normal_force_newtons`, select the maximum-normal-force patch.
+`contact_patches.tsv` is the complete long-form observation: one row per
+sample, named interface and returned patch, with local N/Tx/Ty, the patch
+contact frame angle, and the compliant wheel-surface point and force expressed
+in the Track-T frame at the interface's projection-carrier station. Patch
+ordinals are local to one evaluation and are not identities across time.
+
+`performance.json` reports the four existing wall-clock sections and a
+read-only snapshot of CVODE's cumulative successful internal steps, ordinary
+and linear-solver RHS evaluations, error-test failures, nonlinear iterations
+and convergence failures, linear setups, and Jacobian evaluations. Reading the
+snapshot installs no callback and performs no state or RHS evaluation. These
+counters describe numerical work; they are not an energy, storage or
+dissipation API.
 
 ## G60 comparison
 
@@ -62,6 +100,7 @@ numeric format revision and is not dispatched through historical formats:
 ```json
 {
   "orvd_revision": "full Git object name",
+  "vehicle_recipe": "gz18",
   "build_type": "Release",
   "compiler": "compiler identity",
   "hardware": "processor identity",
