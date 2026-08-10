@@ -891,7 +891,8 @@ void ReportBoundaryWarning(std::string_view side, const BoundaryUse& use) {
 QualificationRunSummary RunVehicleQualification(
     const QualificationRunConfiguration& run_configuration,
     const VehicleQualificationRecipe& recipe) {
-    if (recipe.requires_track_irregularity &&
+    if (recipe.track_irregularity_requirement ==
+            TrackIrregularityRequirement::kRequired &&
         (!run_configuration.track_irregularity_identifier.has_value() ||
          run_configuration.track_irregularity_identifier->empty())) {
         throw std::invalid_argument(
@@ -899,7 +900,8 @@ QualificationRunSummary RunVehicleQualification(
             " dynamics qualification: track-irregularity identifier is "
             "empty");
     }
-    if (!recipe.requires_track_irregularity &&
+    if (recipe.track_irregularity_requirement ==
+            TrackIrregularityRequirement::kForbidden &&
         run_configuration.track_irregularity_identifier.has_value()) {
         throw std::invalid_argument(
             std::string(recipe.vehicle_label) +

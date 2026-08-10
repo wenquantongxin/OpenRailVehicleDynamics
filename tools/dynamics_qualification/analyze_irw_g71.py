@@ -174,7 +174,11 @@ def expected_union_ticks() -> np.ndarray:
     return result
 
 
-def read_orvd(directory: Path) -> dict[str, Any]:
+def read_orvd(
+    directory: Path,
+    expected_irregularity_identifier: str | None = None,
+    layer_label: str = "A",
+) -> dict[str, Any]:
     require(directory.is_dir(), f"ORVD artifact is absent: {directory}")
     for filename in ("COMPLETE", "metadata.json", "performance.json",
                      "observations.tsv", "contact_patches.tsv"):
@@ -192,7 +196,7 @@ def read_orvd(directory: Path) -> dict[str, Any]:
         "wheel_profile_identifier": "irw_reference_wheel_profile",
         "rail_profile_identifier": "uic60_rail_profile",
         "contact_strategy_identifier": "irw_reference_wheel_rail_contact",
-        "track_irregularity_identifier": None,
+        "track_irregularity_identifier": expected_irregularity_identifier,
         "initial_longitudinal_speed_meters_per_second": 16.666666666666668,
         "vehicle_layout_reference_track_station_meters": 0,
         "sample_period_nanoseconds": BASE_PERIOD_NS,
@@ -202,7 +206,7 @@ def read_orvd(directory: Path) -> dict[str, Any]:
     }
     for key, expected in expected_identity.items():
         require(metadata.get(key) == expected,
-                f"ORVD metadata {key!r} does not identify G71")
+                f"ORVD metadata {key!r} does not identify IRW layer {layer_label}")
     require(metadata.get("local_sample_refinement") == {
         "begin_time_nanoseconds": REFINEMENT_BEGIN_NS,
         "end_time_nanoseconds": REFINEMENT_END_NS,
@@ -350,9 +354,14 @@ def read_orvd(directory: Path) -> dict[str, Any]:
     }
 
 
-def read_simpack(realtime_csv: Path, contact_npz: Path) -> dict[str, Any]:
-    require(sha256_file(realtime_csv) == SIMPACK_CSV_SHA256,
-            "SIMPACK realtime CSV is not the frozen A-layer authority")
+def read_simpack(
+    realtime_csv: Path,
+    contact_npz: Path,
+    expected_realtime_sha256: str = SIMPACK_CSV_SHA256,
+    layer_label: str = "A",
+) -> dict[str, Any]:
+    require(sha256_file(realtime_csv) == expected_realtime_sha256,
+            f"SIMPACK realtime CSV is not the frozen {layer_label}-layer authority")
     usecols = ["time_s", *(f"y_{i}" for i in range(8, 16)),
                *(f"y_{i}" for i in range(24, 28))]
     frame = pd.read_csv(realtime_csv, usecols=usecols,
@@ -430,14 +439,20 @@ def read_simpack(realtime_csv: Path, contact_npz: Path) -> dict[str, Any]:
         "N_total": np.sum(np.where(active, n, 0.0), axis=2),
         **primary,
         "sbr_sha256": source_hash,
-        "realtime_sha256": SIMPACK_CSV_SHA256,
+        "realtime_sha256": expected_realtime_sha256,
     }
 
 
-def read_wrl(csv_path: Path, result_json: Path,
-             run_manifest_path: Path) -> dict[str, Any]:
-    require(sha256_file(csv_path) == WRL_CSV_SHA256,
-            "WRL CSV is not the frozen A-layer authority")
+def read_wrl(
+    csv_path: Path,
+    result_json: Path,
+    run_manifest_path: Path,
+    expected_csv_sha256: str = WRL_CSV_SHA256,
+    expected_manifest_arm: str = "A_passive_smooth",
+    layer_label: str = "A",
+) -> dict[str, Any]:
+    require(sha256_file(csv_path) == expected_csv_sha256,
+            f"WRL CSV is not the frozen {layer_label}-layer authority")
     usecols = ["t"]
     usecols += [f"s_wheelset_{axle}_m" for axle in AXLES]
     usecols += [f"y_wheelset_{axle}_m" for axle in AXLES]
@@ -448,17 +463,17 @@ def read_wrl(csv_path: Path, result_json: Path,
         usecols += [f"{quantity}_maxN_patch_wheel_{wheel}_N" for wheel in WHEELS]
     frame = pd.read_csv(csv_path, usecols=usecols, float_precision="round_trip")
     require(frame.shape[0] == WRL_COUNT,
-            "WRL A-layer CSV does not have 300001 rows")
+            f"WRL {layer_label}-layer CSV does not have 300001 rows")
     time = frame["t"].to_numpy(np.float64)
     require(np.max(np.abs(
         time - np.arange(WRL_COUNT, dtype=np.float64) * 0.0001
     )) <= 4.0e-15,
-            "WRL A-layer CSV is not the native 100 us clock")
+            f"WRL {layer_label}-layer CSV is not the native 100 us clock")
     document = load_json(result_json, "WRL result metadata")
     result = document.get("result")
     identity = document.get("numerical_execution_identity")
     require(isinstance(result, dict) and result.get("completed") is True,
-            "WRL A-layer result did not complete")
+            f"WRL {layer_label}-layer result did not complete")
     require(isinstance(identity, dict) and
             identity.get("integrator_backend") == "cvode" and
             identity.get("integrator_method") == "bdf" and
@@ -468,12 +483,18 @@ def read_wrl(csv_path: Path, result_json: Path,
             identity.get("atol_velocity") == 1.0e-8 and
             identity.get("atol_force_state") == 1.0e-6 and
             identity.get("linear_solver") == "spgmr",
-            "WRL A-layer numerical identity is not the frozen run")
+            f"WRL {layer_label}-layer numerical identity is not the frozen run")
     manifest = load_json(run_manifest_path, "WRL run manifest")
     require(manifest.get("completed") is True and
             manifest.get("duration_s") == 30.0 and
-            manifest.get("arm") == "A_passive_smooth",
-            "WRL run manifest is not the frozen A layer")
+            manifest.get("arm") == expected_manifest_arm,
+            f"WRL run manifest is not the frozen {layer_label} layer")
+    artifacts = manifest.get("artifacts_sha256")
+    require(isinstance(artifacts, dict) and
+            artifacts.get(csv_path.name) == expected_csv_sha256 and
+            artifacts.get(result_json.name) == sha256_file(result_json) and
+            Path(str(result.get("csv_path"))).resolve() == csv_path,
+            f"WRL {layer_label}-layer CSV, result and manifest are not one run")
 
     def wheel_columns(prefix: str) -> np.ndarray:
         return frame[[f"{prefix}{wheel}_N" for wheel in WHEELS]].to_numpy(np.float64)
@@ -504,7 +525,7 @@ def read_wrl(csv_path: Path, result_json: Path,
         "result": result,
         "numerical_identity": identity,
         "run_manifest": manifest,
-        "csv_sha256": WRL_CSV_SHA256,
+        "csv_sha256": expected_csv_sha256,
     }
 
 
@@ -698,7 +719,7 @@ def plot_macro(path: Path, x: np.ndarray,
 def plot_contact(path: Path, x: np.ndarray,
                  values: dict[str, np.ndarray], quantity: str,
                  source_order: tuple[str, ...], x_label: str,
-                 comparison_kind: str) -> None:
+                 comparison_kind: str, layer_label: str = "A") -> None:
     figure, axes = plt.subplots(2, 4, figsize=(16, 7), sharex=True)
     colors = {"simpack": "#202020", "wrl": "#d95f02", "orvd": "#1b9e77"}
     labels = {"simpack": "SIMPACK", "wrl": "WRL", "orvd": "ORVD"}
@@ -719,7 +740,8 @@ def plot_contact(path: Path, x: np.ndarray,
             axis.set_xlabel(x_label)
         axis.grid(True, alpha=0.25)
     axes[0, 0].legend(loc="best", fontsize=8)
-    figure.suptitle(f"IRW layer A, 30 s: {title} ({comparison_kind})")
+    figure.suptitle(
+        f"IRW layer {layer_label}, 30 s: {title} ({comparison_kind})")
     figure.tight_layout()
     figure.savefig(path, dpi=160)
     plt.close(figure)

@@ -85,10 +85,14 @@ int main(int argc, char* argv[]) {
                 std::filesystem::path(argv[4]) / "track_library" /
                 "geometries" /
                 "r300_centerline_superelevation_1150m.json");
+        auto irw_irregularity = std::make_unique<
+            orvd::wheel_rail_contact::TrackIrregularityField>(
+            orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
+                argv[4], "irw_r300_aar5_reference_irregularity"));
         const auto irw_scenario =
             orvd::configuration::AssembleIrwContactScenario(
                 irw_vehicle, irw_startup, std::move(irw_line), argv[4], 0.0,
-                0.01);
+                0.01, std::move(irw_irregularity));
         const auto& irw_system = irw_scenario->vehicle_system();
         const auto& irw_resolved = irw_scenario->initial_context();
         if (irw_system.model().num_rigid_bodies() != 25 ||

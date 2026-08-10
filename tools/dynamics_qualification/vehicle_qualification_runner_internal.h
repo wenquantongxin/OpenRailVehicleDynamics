@@ -19,6 +19,11 @@ inline constexpr std::size_t kRepresentativeBodyCount = 3;
 using ScenarioAssembler =
     decltype(&configuration::AssembleGz18ContactScenario);
 
+enum class TrackIrregularityRequirement {
+    kForbidden,
+    kRequired,
+};
+
 struct QualificationRunConfiguration final {
     std::filesystem::path vehicle_definition_path;
     std::filesystem::path resolved_startup_state_path;
@@ -45,7 +50,7 @@ struct VehicleQualificationRecipe final {
     int expected_generalized_velocity_count{};
     int expected_series_force_state_count{};
     int expected_vehicle_wrench_count{};
-    bool requires_track_irregularity{};
+    TrackIrregularityRequirement track_irregularity_requirement{};
     ScenarioAssembler assemble_scenario{};
 };
 

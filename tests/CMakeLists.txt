@@ -921,7 +921,7 @@ add_test(NAME verify_irw_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
              ${CMAKE_SOURCE_DIR}
-             ${CMAKE_CURRENT_BINARY_DIR}/g70-irw-dynamics-qualification-fixtures)
+             ${CMAKE_CURRENT_BINARY_DIR}/irw-dynamics-qualification-fixtures)
 set_tests_properties(verify_irw_dynamics_qualification PROPERTIES
     PROCESSORS 8)
 

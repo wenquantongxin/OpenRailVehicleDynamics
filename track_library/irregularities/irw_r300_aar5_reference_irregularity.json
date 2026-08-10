@@ -1,0 +1,6 @@
+{
+  "track_irregularity_identifier": "irw_r300_aar5_reference_irregularity",
+  "coordinate_frame": "track_lateral_right_vertical_down",
+  "lateral_series_identifier": "irw_r300_aar5_reference_lateral",
+  "vertical_series_identifier": "irw_r300_aar5_reference_vertical"
+}

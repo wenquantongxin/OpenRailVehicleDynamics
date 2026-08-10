@@ -279,6 +279,37 @@ void CheckGz18R300Aar5Asset(const std::filesystem::path& source_data_root) {
             "GZ18 R300 AAR5 fade-boundary slopes are not finite");
 }
 
+void CheckIrwR300Aar5Asset(const std::filesystem::path& source_data_root) {
+    const auto field = LoadTrackIrregularityFieldFromDataRoot(
+        source_data_root, "irw_r300_aar5_reference_irregularity");
+    Require(field.LateralDisplacementMeters(-1.0) == 0.0 &&
+                field.VerticalDisplacementMeters(-1.0) == 0.0 &&
+                field.LateralDisplacementMeters(1250.0) == 0.0 &&
+                field.VerticalDisplacementMeters(1250.0) == 0.0,
+            "IRW R300 AAR5 asset remains active outside its frozen point-list domain");
+    Require(field.LateralDisplacementMeters(0.0) == 0.0 &&
+                field.VerticalDisplacementMeters(0.0) == 0.0 &&
+                field.LateralDisplacementMeters(1249.83) == 0.0 &&
+                field.VerticalDisplacementMeters(1249.83) == 0.0,
+            "IRW R300 AAR5 point-list endpoints are not zero");
+    Require(field.LateralDisplacementMeters(160.1405) ==
+                    -2.2541299999999999e-09 &&
+                field.VerticalDisplacementMeters(160.1405) ==
+                    -3.7376099999999999e-09 &&
+                field.LateralDisplacementMeters(450.01400000000001) ==
+                    -0.0022578400000000001 &&
+                field.VerticalDisplacementMeters(450.01400000000001) ==
+                    -0.0037437500000000001,
+            "IRW R300 AAR5 frozen point values drifted");
+    Require(std::isfinite(field.LateralSlopeMetersPerMeter(160.1405)) &&
+                std::isfinite(field.VerticalSlopeMetersPerMeter(160.1405)) &&
+                std::isfinite(
+                    field.LateralSlopeMetersPerMeter(450.01400000000001)) &&
+                std::isfinite(
+                    field.VerticalSlopeMetersPerMeter(450.01400000000001)),
+            "IRW R300 AAR5 spline slopes are not finite");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -290,6 +321,7 @@ int main(int argc, char* argv[]) {
         const std::filesystem::path source_data_root = argv[1];
         const std::filesystem::path data_root = argv[2];
         CheckGz18R300Aar5Asset(source_data_root);
+        CheckIrwR300Aar5Asset(source_data_root);
         CheckIndependentNonuniformSeriesAndLifetime(data_root);
         CheckStrictRejections(data_root);
         CheckMissingSeriesFailsLoudly(data_root);

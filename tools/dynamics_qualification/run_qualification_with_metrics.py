@@ -17,8 +17,8 @@ from typing import Iterable
 
 
 RUNNER_LAYOUTS = {
-    "gz18": ((8,), 5),
-    "irw": ((7, 10), 4),
+    "gz18": {8: 5},
+    "irw": {8: 5, 11: 5},
 }
 
 
@@ -87,11 +87,11 @@ def parse_arguments(argv: Iterable[str]) -> argparse.Namespace:
         arguments.runner_arguments = arguments.runner_arguments[1:]
     if not arguments.runner_arguments:
         parser.error("runner arguments are empty")
-    argument_counts, _ = RUNNER_LAYOUTS[arguments.vehicle_recipe]
-    if len(arguments.runner_arguments) not in argument_counts:
+    layouts = RUNNER_LAYOUTS[arguments.vehicle_recipe]
+    if len(arguments.runner_arguments) not in layouts:
         parser.error(
             f"the {arguments.vehicle_recipe.upper()} qualification runner "
-            f"requires {argument_counts} arguments"
+            f"requires one of {tuple(layouts)} argument counts"
         )
     return arguments
 
@@ -127,9 +127,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     after_usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     child_user_seconds = after_usage.ru_utime - before_usage.ru_utime
     child_system_seconds = after_usage.ru_stime - before_usage.ru_stime
-    _, output_directory_argument_index = RUNNER_LAYOUTS[
+    output_directory_argument_index = RUNNER_LAYOUTS[
         arguments.vehicle_recipe
-    ]
+    ][len(arguments.runner_arguments)]
     artifact_directory = Path(
         arguments.runner_arguments[output_directory_argument_index]
     ).resolve()

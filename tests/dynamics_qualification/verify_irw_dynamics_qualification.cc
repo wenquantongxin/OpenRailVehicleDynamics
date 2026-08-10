@@ -1,5 +1,5 @@
-// G70: one real H3/R300 IRW system advances continuously for 10 ms and
-// publishes 101 dense observations without a track-irregularity asset.
+// The closed IRW runner keeps G70/G71 explicitly free of track irregularity
+// and accepts G72's frozen AAR5 asset through the same physical recipe.
 
 #include <array>
 #include <cmath>
@@ -23,7 +23,7 @@ int failures = 0;
 
 void Require(bool condition, std::string_view what) {
     if (!condition) {
-        std::fprintf(stderr, "G70 IRW qualification: %.*s\n",
+        std::fprintf(stderr, "IRW qualification: %.*s\n",
                      static_cast<int>(what.size()), what.data());
         ++failures;
     }
@@ -255,6 +255,26 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the per-patch artifact omits a frozen IRW interface");
     Require(Throws([&] { (void)RunIrwQualification(configuration); }),
             "the IRW runner overwrote an existing successful artifact");
+
+    configuration.output_directory = root / "real-irw-aar5";
+    configuration.duration_nanoseconds = 100'000;
+    configuration.sample_period_nanoseconds = 100'000;
+    configuration.track_irregularity_identifier =
+        "irw_r300_aar5_reference_irregularity";
+    const auto aar5_summary = RunIrwQualification(configuration);
+    Require(aar5_summary.sample_count == 2,
+            "the short AAR5 loading run did not publish its two clock points");
+    const std::string aar5_metadata =
+        ReadWholeFile(configuration.output_directory / "metadata.json");
+    Require(aar5_metadata.find(
+                "\"track_irregularity_identifier\": "
+                "\"irw_r300_aar5_reference_irregularity\"") !=
+                std::string::npos,
+            "the IRW AAR5 identity did not reach the qualification artifact");
+    configuration.output_directory = root / "empty-irregularity";
+    configuration.track_irregularity_identifier = "";
+    Require(Throws([&] { (void)RunIrwQualification(configuration); }),
+            "the required IRW AAR5 recipe accepted an empty identity");
 }
 
 }  // namespace
@@ -267,8 +287,8 @@ int main(int argc, char** argv) {
         return 2;
     }
     const std::filesystem::path root = argv[5];
-    if (root.filename() != "g70-irw-dynamics-qualification-fixtures") {
-        std::fprintf(stderr, "refusing an unexpected G70 fixture directory\n");
+    if (root.filename() != "irw-dynamics-qualification-fixtures") {
+        std::fprintf(stderr, "refusing an unexpected IRW fixture directory\n");
         return 2;
     }
     std::filesystem::remove_all(root);
@@ -277,15 +297,15 @@ int main(int argc, char** argv) {
     try {
         CheckRealIrwRun(argv, root);
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "G70 IRW qualification threw: %s\n", error.what());
+        std::fprintf(stderr, "IRW qualification threw: %s\n", error.what());
         ++failures;
     }
     std::filesystem::remove_all(root);
     if (failures != 0) {
-        std::fprintf(stderr, "%d G70 IRW qualification assertion(s) failed\n",
+        std::fprintf(stderr, "%d IRW qualification assertion(s) failed\n",
                      failures);
         return 1;
     }
-    std::puts("G70 passive IRW 10 ms qualification runner verified");
+    std::puts("IRW no-irregularity and frozen-AAR5 recipes verified");
     return 0;
 }

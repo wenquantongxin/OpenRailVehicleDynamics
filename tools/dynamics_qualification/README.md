@@ -8,18 +8,22 @@ outside version control. They may be retained under the repository's untracked
 
 ## Private vehicle qualification runners
 
-The support library contains one private execution engine and two closed,
-typed recipes. It is not an arbitrary-vehicle interface: the GZ18 and IRW
-recipes each freeze their scenario factory, representative bodies, state and
-wrench layout, integration tolerances, and track-irregularity presence.
+The support library contains one private execution engine and closed typed
+recipes. It is not an arbitrary-vehicle interface: the GZ18 and IRW recipes
+each freeze their scenario factory, representative bodies, state and wrench
+layout, integration tolerances, and whether a track-irregularity identity is
+required or forbidden.
 
-`orvd_irw_dynamics_qualification` is the G70/G71 passive IRW entry point. It
-assembles H3 on R300 with a layout reference station of zero, no motor force
-source, and an explicit null track-irregularity field. Its frozen numerical
-identity is BDF order two, relative tolerance `1e-7`, and q/v/z absolute
-tolerances `1e-9 / 1e-8 / 1e-6`. G70 uses a 100 microsecond integer clock over
-10 ms (101 observations); the 21 native 0.5 ms indices are selected by integer
-ordinal for the first cross-implementation comparison.
+`orvd_irw_dynamics_qualification` is the G70--G72 passive IRW entry point. It
+assembles H3 on R300 with a layout reference station of zero and no motor force
+source. Its single command shape requires `IRREGULARITY_ID_OR_NONE`: G70/G71
+pass `none`, while G72 passes `irw_r300_aar5_reference_irregularity`. The two
+closed IRW recipes make the selected absence or presence mandatory; they do
+not infer a field from files or content. Both freeze BDF order two, relative
+tolerance `1e-7`, and q/v/z absolute tolerances
+`1e-9 / 1e-8 / 1e-6`. G70 uses a 100 microsecond integer clock over 10 ms
+(101 observations); G71/G72 use the same 0.5 ms base clock and local topology
+clock over 30 s.
 
 `orvd_gz18_dynamics_qualification` retains the existing GZ18 long-window
 recipe. It requires a named track-irregularity asset and keeps the GZ18
@@ -43,9 +47,9 @@ vehicle_layout_reference_track_station_meters = 0
 ```
 
 `run_qualification_with_metrics.py` is a Linux research wrapper for one such
-process. Select `--vehicle-recipe irw` for the seven-argument IRW executable;
-G71 adds three local-clock arguments to that same closed IRW entry point. The
-default remains the eight-argument GZ18 executable. The wrapper pins the
+process. Select `--vehicle-recipe irw` for the eight-argument IRW executable;
+G71/G72 add three local-clock arguments to that same closed IRW entry point.
+The default remains the eight-argument GZ18 executable. The wrapper pins the
 requested logical processors and records the outer wall
 time, child CPU time, peak resident memory, executable digest, compiler/build
 identity, inherited OpenMP environment, complete runner arguments, output
@@ -221,3 +225,22 @@ gap. Patch count and the known short seven-wheel interval remain observations,
 not an exact event-time or safety gate. The extractor reads only explicitly
 named local SBR channels into an untracked analysis archive; SBR files and all
 long-window artifacts stay outside Git.
+
+## G72 IRW layer-B comparison
+
+`analyze_irw_g72.py` consumes paired A/B runs from one final Release executable.
+The vehicle, H3 start, R300 line, integration tolerances, OpenMP environment,
+base clock and local topology clock must be identical; only the named P179
+AAR5 field and output directory may differ. The SIMPACK and WRL A/B inputs are
+also bound to their frozen run manifests so that macro and contact channels
+cannot be combined across unrelated runs.
+
+For every axle and every point on the same `100--450 m / 0.01 m` station grid,
+the analysis first forms
+`e0 = ORVD_A - SIMPACK_A` and
+`delta_eir = (ORVD_B - ORVD_A) - (SIMPACK_B - SIMPACK_A)`, then computes
+statistics. It never subtracts two RMS values. Direct B response, AAR5
+increment, native-time contact force and contact topology remain separate
+views. The `0.1 mm / 0.1 mrad` macro alarm applies to both direct B error and
+`delta_eir`; force and patch-count results remain diagnostic rather than a
+safety qualification.

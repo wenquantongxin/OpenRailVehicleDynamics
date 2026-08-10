@@ -16,7 +16,7 @@ constexpr internal::VehicleQualificationRecipe kRecipe{
     50,
     2,
     56,
-    true,
+    internal::TrackIrregularityRequirement::kRequired,
     &configuration::AssembleGz18ContactScenario};
 
 }  // namespace

@@ -120,6 +120,12 @@ set(installed_r300_aar5_lateral_irregularity
     "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_lateral.json")
 set(installed_r300_aar5_vertical_irregularity
     "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_vertical.json")
+set(installed_irw_r300_aar5_irregularity
+    "${installed_data_root}/track_library/irregularities/irw_r300_aar5_reference_irregularity.json")
+set(installed_irw_r300_aar5_lateral_irregularity
+    "${installed_data_root}/track_library/irregularities/series/irw_r300_aar5_reference_lateral.json")
+set(installed_irw_r300_aar5_vertical_irregularity
+    "${installed_data_root}/track_library/irregularities/series/irw_r300_aar5_reference_vertical.json")
 foreach(installed_profile IN ITEMS
         "${installed_wheel_profile}" "${installed_irw_wheel_profile}"
         "${installed_rail_profile}")
@@ -134,7 +140,10 @@ foreach(installed_irregularity IN ITEMS
         "${installed_vertical_irregularity}"
         "${installed_r300_aar5_irregularity}"
         "${installed_r300_aar5_lateral_irregularity}"
-        "${installed_r300_aar5_vertical_irregularity}")
+        "${installed_r300_aar5_vertical_irregularity}"
+        "${installed_irw_r300_aar5_irregularity}"
+        "${installed_irw_r300_aar5_lateral_irregularity}"
+        "${installed_irw_r300_aar5_vertical_irregularity}")
     if(NOT EXISTS "${installed_irregularity}")
         message(FATAL_ERROR
             "the relocated prefix has no installed track-irregularity asset "
