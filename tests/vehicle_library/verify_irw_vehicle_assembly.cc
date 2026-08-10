@@ -125,13 +125,13 @@ void CheckRecordIdentity(const VehicleDefinition& vehicle) {
            "the record declares the frozen seven free bodies");
     Expect(std::set<std::string>(
                vehicle.mechanical_track_station_layout
-                   .wheel_contact_carrier_body_names.begin(),
+                   .wheel_pair_station_reference_body_names.begin(),
                vehicle.mechanical_track_station_layout
-                   .wheel_contact_carrier_body_names.end()) ==
+                   .wheel_pair_station_reference_body_names.end()) ==
                std::set<std::string>{"axlebridge_ff", "axlebridge_fr",
                                      "axlebridge_rf", "axlebridge_rr"},
            "the four axle bridges, not the eight wheel bodies, are the IRW "
-           "wheel-rail contact carriers");
+           "wheel-pair station references");
 
     Expect(NamesOf(vehicle.revolute_joints) == ExpectedWheelJointNames(),
            "the record contains all and only eight independent wheel joints");

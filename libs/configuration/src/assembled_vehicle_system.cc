@@ -26,9 +26,9 @@ VehicleBinding CaptureBinding(const VehicleDefinition& vehicle) {
             VehicleFreeBodyStationOffset{offset.body_name,
                                          offset.station_offset_meters});
     }
-    binding.wheel_contact_carrier_body_names =
+    binding.wheel_pair_station_reference_body_names =
         vehicle.mechanical_track_station_layout
-            .wheel_contact_carrier_body_names;
+            .wheel_pair_station_reference_body_names;
 
     // Revolute and Ball-RPY joints keep separate typed name families because
     // their coordinate blocks have different shapes. A weld's position and

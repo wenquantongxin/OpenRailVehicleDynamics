@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include <Eigen/Core>
 
@@ -14,6 +15,8 @@
 namespace {
 
 using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
+using orvd::configuration::ExplicitRevoluteJointRate;
+using orvd::configuration::RevoluteJointRatePerCommonWheelSpin;
 using orvd::configuration::StartupRunningDirection;
 
 constexpr std::string_view kRecord = R"json({
@@ -30,19 +33,15 @@ constexpr std::string_view kRecord = R"json({
   "gravitational_acceleration_meters_per_second_squared": 9.7,
   "running_direction": "increasing_track_station",
   "initial_longitudinal_speed_meters_per_second": 10.0,
-  "common_startup_effective_rolling_radius_meters": 0.4,
+  "common_wheel_spin_generation": {
+    "effective_rolling_radius_meters": 0.4
+  },
   "rail_profile_reference_vertical_offset_meters": -0.0003,
-  "target_wheel_support_forces": [
+  "wheel_pair_target_support_forces": [
     {
-      "wheelset_body_name": "wheelset",
+      "station_reference_body_name": "wheelset",
       "left_support_force_newtons": 123.0,
       "right_support_force_newtons": 124.0
-    }
-  ],
-  "wheelset_startup_kinematics": [
-    {
-      "wheelset_body_name": "wheelset",
-      "forward_spin_axis_in_body_frame": {"x": 0.36, "y": -0.48, "z": 0.8}
     }
   ],
   "free_body_startup_states": [
@@ -53,8 +52,10 @@ constexpr std::string_view kRecord = R"json({
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.125,
       "lateral_offset_in_local_track_frame_meters": -0.004,
       "vertical_offset_in_local_track_frame_meters": -0.42,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second":
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second":
         {"x": 0.01, "y": -0.02, "z": 0.03},
+      "common_wheel_spin_coefficient_in_body_frame":
+        {"x": 0.36, "y": -0.48, "z": 0.8},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.04,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": -0.05
     }
@@ -63,7 +64,26 @@ constexpr std::string_view kRecord = R"json({
     {
       "joint_name": "pivot",
       "position_radians": 0.007,
-      "rate_per_common_wheel_spin_magnitude": 1.25
+      "rate": {
+        "kind": "per_common_wheel_spin_magnitude",
+        "multiplier": 1.25
+      }
+    },
+    {
+      "joint_name": "wheel",
+      "position_radians": -0.009,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 31.25
+      }
+    }
+  ],
+  "ball_rpy_joint_startup_states": [
+    {
+      "joint_name": "ball",
+      "roll_pitch_yaw_angles_radians": {"x": 0.11, "y": -0.22, "z": 0.33},
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second":
+        {"x": -0.44, "y": 0.55, "z": -0.66}
     }
   ],
   "series_spring_viscous_damper_force_states": [
@@ -148,7 +168,9 @@ int main(int argc, char** argv) {
                     StartupRunningDirection::kIncreasingTrackStation,
                 "the running direction was not mapped");
         Require(state.initial_longitudinal_speed_meters_per_second == 10.0 &&
-                    state.common_startup_effective_rolling_radius_meters == 0.4,
+                    state.common_wheel_spin_generation.has_value() &&
+                    state.common_wheel_spin_generation
+                            ->effective_rolling_radius_meters == 0.4,
                 "the two common start-up authorities were not mapped");
         Require(state.vehicle_binding.vehicle_name == "startup_fixture" &&
                     state.vehicle_binding.mechanical_definition_identifier ==
@@ -167,10 +189,6 @@ int main(int argc, char** argv) {
                     state.rail_profile_reference_vertical_offset_meters ==
                         -0.0003,
                 "gravity or the rail-profile reference offset was not mapped");
-        Require(state.wheelset_startup_kinematics.front()
-                        .forward_spin_axis_in_body_frame ==
-                    Eigen::Vector3d(0.36, -0.48, 0.8),
-                "the signed wheelset spin axis was not mapped");
         const auto& body = state.free_body_startup_states.front();
         Require(body.rotation_local_track_from_body.w() ==
                         0.9689124217106447 &&
@@ -182,29 +200,52 @@ int main(int argc, char** argv) {
                     body.vertical_offset_in_local_track_frame_meters == -0.42,
                 "the body pose and three placement offsets were not mapped");
         Require(body
-                        .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second ==
+                        .explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second ==
                     Eigen::Vector3d(0.01, -0.02, 0.03) &&
+                    body.common_wheel_spin_coefficient_in_body_frame ==
+                        Eigen::Vector3d(0.36, -0.48, 0.8) &&
                     body.body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second ==
                         0.04 &&
                     body.body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second ==
                         -0.05,
                 "the non-shared velocity components were not mapped");
-        Require(state.revolute_joint_startup_states.front().position_radians ==
-                        0.007 &&
-                    state.revolute_joint_startup_states.front()
-                            .rate_per_common_wheel_spin_magnitude == 1.25,
-                "the joint position or rate factor was not mapped");
+        const auto& generated_joint =
+            state.revolute_joint_startup_states.front();
+        const auto& explicit_joint = state.revolute_joint_startup_states.back();
+        Require(generated_joint.position_radians == 0.007 &&
+                    std::holds_alternative<
+                        RevoluteJointRatePerCommonWheelSpin>(
+                        generated_joint.rate) &&
+                    std::get<RevoluteJointRatePerCommonWheelSpin>(
+                        generated_joint.rate)
+                            .multiplier == 1.25 &&
+                    explicit_joint.position_radians == -0.009 &&
+                    std::holds_alternative<ExplicitRevoluteJointRate>(
+                        explicit_joint.rate) &&
+                    std::get<ExplicitRevoluteJointRate>(explicit_joint.rate)
+                            .angular_rate_radians_per_second == 31.25,
+                "the two typed joint-rate definitions were not mapped");
+        const auto& ball = state.ball_rpy_joint_startup_states.front();
+        Require(ball.roll_pitch_yaw_angles_radians ==
+                        Eigen::Vector3d(0.11, -0.22, 0.33) &&
+                    ball.angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second ==
+                        Eigen::Vector3d(-0.44, 0.55, -0.66),
+                "the Ball-RPY position or physical angular velocity was not "
+                "mapped");
         Require(state.series_spring_viscous_damper_force_states.front()
                             .reference_end_axial_force_newtons == -37.5 &&
                     state.translational_spring_damper_nominal_forces.front()
                             .force_on_reference_end_in_reference_frame_newtons ==
                         Eigen::Vector3d(11.0, -22.0, 33.0),
                 "a named force state or nominal force was not mapped");
-        Require(state.target_wheel_support_forces.front()
+        Require(state.wheel_pair_target_support_forces.front()
+                            .station_reference_body_name == "wheelset" &&
+                    state.wheel_pair_target_support_forces.front()
                             .left_support_force_newtons == 123.0 &&
-                    state.target_wheel_support_forces.front()
+                    state.wheel_pair_target_support_forces.front()
                             .right_support_force_newtons == 124.0,
-                "the two target support forces were exchanged");
+                "the wheel-pair station reference or support forces were not "
+                "mapped");
     } catch (const std::exception& error) {
         std::fprintf(stderr,
                      "resolved start-up state loading failed on the valid "
@@ -240,19 +281,24 @@ int main(int argc, char** argv) {
                   "reverse running was accepted");
     ExpectRefusal(path,
                   ReplaceOnce(valid,
-                              "\"common_startup_effective_rolling_radius_meters\": 0.4",
-                              "\"common_startup_effective_rolling_radius_meters\": 0.0"),
+                              "\"effective_rolling_radius_meters\": 0.4",
+                              "\"effective_rolling_radius_meters\": 0.0"),
                   "strictly positive", "a zero effective radius was accepted");
     ExpectRefusal(path,
-                  ReplaceOnce(valid, "\"x\": 0.36, \"y\": -0.48, \"z\": 0.8",
-                              "\"x\": 0.36, \"y\": -0.48, \"z\": 0.7"),
-                  "refused rather than normalised",
-                  "a non-unit wheelset spin axis was accepted");
+                  ReplaceOnce(
+                      valid,
+                      "\"common_wheel_spin_generation\": {\n"
+                      "    \"effective_rolling_radius_meters\": 0.4\n"
+                      "  }",
+                      "\"common_wheel_spin_generation\": null"),
+                  "no common wheel-spin generation",
+                  "a generated body spin without its authority was accepted");
     ExpectRefusal(path,
                   ReplaceOnce(valid,
-                              "\"rate_per_common_wheel_spin_magnitude\": 1.25",
-                              "\"rate_radians_per_second\": 31.25"),
-                  "unknown key", "the removed absolute joint-rate field was accepted");
+                              "\"per_common_wheel_spin_magnitude\"",
+                              "\"wheel_rpm\""),
+                  "expected 'explicit_angular_rate'",
+                  "an unknown revolute-joint rate definition was accepted");
     ExpectRefusal(path,
                   ReplaceOnce(valid, "\"w\": 0.9689124217106447",
                               "\"w\": 0.5"),

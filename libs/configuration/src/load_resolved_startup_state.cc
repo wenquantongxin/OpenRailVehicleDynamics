@@ -87,16 +87,18 @@ StartupWheelRailBinding ParseWheelRailBinding(const Json& value,
     return binding;
 }
 
-WheelsetTargetSupportForces ParseTargetSupportForces(const Json& value,
-                                                     const std::string& path) {
+WheelPairTargetSupportForces ParseTargetSupportForces(
+    const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
-                     {"wheelset_body_name", "left_support_force_newtons",
+                     {"station_reference_body_name",
+                      "left_support_force_newtons",
                       "right_support_force_newtons"});
-    WheelsetTargetSupportForces forces;
-    forces.wheelset_body_name = RequireString(value.at("wheelset_body_name"),
-                                              path + ".wheelset_body_name");
-    if (forces.wheelset_body_name.empty()) {
-        ThrowExpected(path + ".wheelset_body_name",
+    WheelPairTargetSupportForces forces;
+    forces.station_reference_body_name = RequireString(
+        value.at("station_reference_body_name"),
+        path + ".station_reference_body_name");
+    if (forces.station_reference_body_name.empty()) {
+        ThrowExpected(path + ".station_reference_body_name",
                       "a non-empty rigid-body name");
     }
     forces.left_support_force_newtons =
@@ -108,22 +110,15 @@ WheelsetTargetSupportForces ParseTargetSupportForces(const Json& value,
     return forces;
 }
 
-WheelsetStartupKinematics ParseWheelsetStartupKinematics(
+std::optional<CommonWheelSpinGeneration> ParseCommonWheelSpinGeneration(
     const Json& value, const std::string& path) {
-    RequireExactKeys(value, path,
-                     {"wheelset_body_name",
-                      "forward_spin_axis_in_body_frame"});
-    WheelsetStartupKinematics kinematics;
-    kinematics.wheelset_body_name = RequireString(
-        value.at("wheelset_body_name"), path + ".wheelset_body_name");
-    if (kinematics.wheelset_body_name.empty()) {
-        ThrowExpected(path + ".wheelset_body_name",
-                      "a non-empty rigid-body name");
+    if (value.is_null()) {
+        return std::nullopt;
     }
-    kinematics.forward_spin_axis_in_body_frame = RequireFiniteVector3(
-        value.at("forward_spin_axis_in_body_frame"),
-        path + ".forward_spin_axis_in_body_frame");
-    return kinematics;
+    RequireExactKeys(value, path, {"effective_rolling_radius_meters"});
+    return CommonWheelSpinGeneration{RequireFiniteNumber(
+        value.at("effective_rolling_radius_meters"),
+        path + ".effective_rolling_radius_meters")};
 }
 
 FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
@@ -134,8 +129,9 @@ FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
          "resolved_track_station_offset_from_mechanical_layout_meters",
          "lateral_offset_in_local_track_frame_meters",
          "vertical_offset_in_local_track_frame_meters",
-         "additional_body_angular_velocity_in_inertial_expressed_in_body_"
+         "explicit_body_angular_velocity_in_inertial_expressed_in_body_"
          "frame_radians_per_second",
+         "common_wheel_spin_coefficient_in_body_frame",
          "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_"
          "frame_meters_per_second",
          "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_"
@@ -161,14 +157,17 @@ FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
         value.at("vertical_offset_in_local_track_frame_meters"),
         path + ".vertical_offset_in_local_track_frame_meters");
     body
-        .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
+        .explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
         RequireFiniteVector3(
             value.at(
-                "additional_body_angular_velocity_in_inertial_expressed_in_"
+                "explicit_body_angular_velocity_in_inertial_expressed_in_"
                 "body_frame_radians_per_second"),
             path +
-                ".additional_body_angular_velocity_in_inertial_expressed_in_"
+                ".explicit_body_angular_velocity_in_inertial_expressed_in_"
                 "body_frame_radians_per_second");
+    body.common_wheel_spin_coefficient_in_body_frame = RequireFiniteVector3(
+        value.at("common_wheel_spin_coefficient_in_body_frame"),
+        path + ".common_wheel_spin_coefficient_in_body_frame");
     body
         .body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second =
         RequireFiniteNumber(
@@ -190,11 +189,36 @@ FreeBodyStartupState ParseFreeBodyStartupState(const Json& value,
     return body;
 }
 
+RevoluteJointStartupRate ParseRevoluteJointStartupRate(
+    const Json& value, const std::string& path) {
+    RequireObject(value, path);
+    if (!value.contains("kind")) {
+        ThrowExpected(path, "an object containing the required key 'kind'");
+    }
+    const std::string kind = RequireString(value.at("kind"), path + ".kind");
+    if (kind == "explicit_angular_rate") {
+        RequireExactKeys(
+            value, path,
+            {"kind", "angular_rate_radians_per_second"});
+        return ExplicitRevoluteJointRate{RequireFiniteNumber(
+            value.at("angular_rate_radians_per_second"),
+            path + ".angular_rate_radians_per_second")};
+    }
+    if (kind == "per_common_wheel_spin_magnitude") {
+        RequireExactKeys(value, path, {"kind", "multiplier"});
+        return RevoluteJointRatePerCommonWheelSpin{RequireFiniteNumber(
+            value.at("multiplier"), path + ".multiplier")};
+    }
+    throw std::invalid_argument(
+        path + ".kind is '" + kind +
+        "'; expected 'explicit_angular_rate' or "
+        "'per_common_wheel_spin_magnitude'");
+}
+
 RevoluteJointStartupState ParseRevoluteJointStartupState(
     const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
-                     {"joint_name", "position_radians",
-                      "rate_per_common_wheel_spin_magnitude"});
+                     {"joint_name", "position_radians", "rate"});
     RevoluteJointStartupState joint;
     joint.joint_name =
         RequireString(value.at("joint_name"), path + ".joint_name");
@@ -203,9 +227,36 @@ RevoluteJointStartupState ParseRevoluteJointStartupState(
     }
     joint.position_radians = RequireFiniteNumber(value.at("position_radians"),
                                                  path + ".position_radians");
-    joint.rate_per_common_wheel_spin_magnitude = RequireFiniteNumber(
-        value.at("rate_per_common_wheel_spin_magnitude"),
-        path + ".rate_per_common_wheel_spin_magnitude");
+    joint.rate =
+        ParseRevoluteJointStartupRate(value.at("rate"), path + ".rate");
+    return joint;
+}
+
+BallRpyJointStartupState ParseBallRpyJointStartupState(
+    const Json& value, const std::string& path) {
+    RequireExactKeys(
+        value, path,
+        {"joint_name", "roll_pitch_yaw_angles_radians",
+         "angular_velocity_of_child_in_parent_expressed_in_parent_frame_"
+         "radians_per_second"});
+    BallRpyJointStartupState joint;
+    joint.joint_name =
+        RequireString(value.at("joint_name"), path + ".joint_name");
+    if (joint.joint_name.empty()) {
+        ThrowExpected(path + ".joint_name", "a non-empty joint name");
+    }
+    joint.roll_pitch_yaw_angles_radians = RequireFiniteVector3(
+        value.at("roll_pitch_yaw_angles_radians"),
+        path + ".roll_pitch_yaw_angles_radians");
+    joint
+        .angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second =
+        RequireFiniteVector3(
+            value.at(
+                "angular_velocity_of_child_in_parent_expressed_in_parent_"
+                "frame_radians_per_second"),
+            path +
+                ".angular_velocity_of_child_in_parent_expressed_in_parent_"
+                "frame_radians_per_second");
     return joint;
 }
 
@@ -272,11 +323,12 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
          "load_condition_identifier",
          "gravitational_acceleration_meters_per_second_squared",
          "running_direction", "initial_longitudinal_speed_meters_per_second",
-         "common_startup_effective_rolling_radius_meters",
+         "common_wheel_spin_generation",
          "rail_profile_reference_vertical_offset_meters",
-         "target_wheel_support_forces", "wheelset_startup_kinematics",
+         "wheel_pair_target_support_forces",
          "free_body_startup_states",
          "revolute_joint_startup_states",
+         "ball_rpy_joint_startup_states",
          "series_spring_viscous_damper_force_states",
          "translational_spring_damper_nominal_forces"});
 
@@ -299,27 +351,27 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
     state.initial_longitudinal_speed_meters_per_second = RequireFiniteNumber(
         root.at("initial_longitudinal_speed_meters_per_second"),
         "$.initial_longitudinal_speed_meters_per_second");
-    state.common_startup_effective_rolling_radius_meters =
-        RequireFiniteNumber(
-            root.at("common_startup_effective_rolling_radius_meters"),
-            "$.common_startup_effective_rolling_radius_meters");
+    state.common_wheel_spin_generation = ParseCommonWheelSpinGeneration(
+        root.at("common_wheel_spin_generation"),
+        "$.common_wheel_spin_generation");
     state.rail_profile_reference_vertical_offset_meters = RequireFiniteNumber(
         root.at("rail_profile_reference_vertical_offset_meters"),
         "$.rail_profile_reference_vertical_offset_meters");
 
-    state.target_wheel_support_forces =
-        ParseArray<WheelsetTargetSupportForces>(
-            root, "target_wheel_support_forces", ParseTargetSupportForces);
-    state.wheelset_startup_kinematics =
-        ParseArray<WheelsetStartupKinematics>(
-            root, "wheelset_startup_kinematics",
-            ParseWheelsetStartupKinematics);
+    state.wheel_pair_target_support_forces =
+        ParseArray<WheelPairTargetSupportForces>(
+            root, "wheel_pair_target_support_forces",
+            ParseTargetSupportForces);
     state.free_body_startup_states = ParseArray<FreeBodyStartupState>(
         root, "free_body_startup_states", ParseFreeBodyStartupState);
     state.revolute_joint_startup_states =
         ParseArray<RevoluteJointStartupState>(
             root, "revolute_joint_startup_states",
             ParseRevoluteJointStartupState);
+    state.ball_rpy_joint_startup_states =
+        ParseArray<BallRpyJointStartupState>(
+            root, "ball_rpy_joint_startup_states",
+            ParseBallRpyJointStartupState);
     state.series_spring_viscous_damper_force_states =
         ParseArray<SeriesSpringViscousDamperForceState>(
             root, "series_spring_viscous_damper_force_states",

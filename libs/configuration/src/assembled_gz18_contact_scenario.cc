@@ -35,9 +35,9 @@ FrozenContactTopology BuildContactTopology(
         Reject("the vehicle layout reference track station is not finite");
     }
     const auto& layout = vehicle.mechanical_track_station_layout;
-    if (layout.wheel_contact_carrier_body_names.size() != 4) {
-        Reject("the GZ18 mechanical layout must name four wheel-rail contact "
-               "carrier bodies");
+    if (layout.wheel_pair_station_reference_body_names.size() != 4) {
+        Reject("the GZ18 mechanical layout must name four wheel-pair station "
+               "reference bodies");
     }
 
     std::unordered_map<std::string, double> mechanical_offset;
@@ -56,11 +56,12 @@ FrozenContactTopology BuildContactTopology(
     }
 
     FrozenContactTopology topology;
-    topology.carriers.reserve(layout.wheel_contact_carrier_body_names.size());
+    topology.carriers.reserve(
+        layout.wheel_pair_station_reference_body_names.size());
     topology.interfaces.reserve(
-        2 * layout.wheel_contact_carrier_body_names.size());
+        2 * layout.wheel_pair_station_reference_body_names.size());
     for (const std::string& wheelset :
-         layout.wheel_contact_carrier_body_names) {
+         layout.wheel_pair_station_reference_body_names) {
         const auto mechanical = mechanical_offset.find(wheelset);
         const auto resolved = resolved_offset.find(wheelset);
         if (mechanical == mechanical_offset.end() ||
@@ -86,10 +87,10 @@ void RequireAnchorsMatchResolvedPlacements(
     const forces::WheelRailContactForcePlan& contact_plan,
     const ResolvedInitialContext& initial_context) {
     std::unordered_map<std::string, double> resolved_station;
-    resolved_station.reserve(initial_context.wheelset_placements().size());
-    for (const ResolvedWheelsetPlacement& placement :
-         initial_context.wheelset_placements()) {
-        resolved_station.emplace(placement.wheelset_body_name,
+    resolved_station.reserve(initial_context.wheel_pair_placements().size());
+    for (const ResolvedWheelPairPlacement& placement :
+         initial_context.wheel_pair_placements()) {
+        resolved_station.emplace(placement.station_reference_body_name,
                                  placement.track_station_meters);
     }
     if (contact_plan.carrier_count() !=

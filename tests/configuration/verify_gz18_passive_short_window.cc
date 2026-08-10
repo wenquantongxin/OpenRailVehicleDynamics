@@ -183,7 +183,8 @@ void CheckInitialVerticalAcceleration(
 void CheckPhysicalObservationBatch(
     const AssembledGz18ContactScenario& scenario,
     const std::array<ShortWindowObservation, kSampleCount>& observations) {
-    const auto& placements = scenario.initial_context().wheelset_placements();
+    const auto& placements =
+        scenario.initial_context().wheel_pair_placements();
     const auto* contact_plan = scenario.vehicle_system().contact_force_plan();
     Require(placements.size() == kCarrierCount,
             "the resolved start-up did not retain four target wheelsets");
@@ -217,10 +218,10 @@ void CheckPhysicalObservationBatch(
         for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
             const auto& placement = placements[carrier];
             Require(contact_plan->carrier_name(static_cast<int>(carrier)) ==
-                        placement.wheelset_body_name,
+                        placement.station_reference_body_name,
                     "the target support order differs from the contact carriers");
             const std::string expected_prefix =
-                placement.wheelset_body_name + ".";
+                placement.station_reference_body_name + ".";
             Require(contact_plan->interface_name(
                         static_cast<int>(2 * carrier)) ==
                             expected_prefix + "right" &&

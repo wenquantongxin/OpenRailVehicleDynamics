@@ -1,0 +1,537 @@
+{
+  "vehicle_binding": {
+    "vehicle_name": "IRW",
+    "mechanical_definition_identifier": "irw_reference_mechanical_definition"
+  },
+  "wheel_rail_binding": {
+    "wheel_profile_identifier": "irw_reference_wheel_profile",
+    "rail_profile_identifier": "uic60_rail_profile",
+    "wheel_rail_contact_strategy_identifier": "irw_reference_wheel_rail_contact"
+  },
+  "load_condition_identifier": "irw_balanced_nominal_preload",
+  "gravitational_acceleration_meters_per_second_squared": 9.81,
+  "running_direction": "increasing_track_station",
+  "initial_longitudinal_speed_meters_per_second": 16.666666666666668,
+  "common_wheel_spin_generation": null,
+  "rail_profile_reference_vertical_offset_meters": -0.000175492683,
+  "wheel_pair_target_support_forces": [
+    {
+      "station_reference_body_name": "axlebridge_ff",
+      "left_support_force_newtons": 49287.489352631594,
+      "right_support_force_newtons": 49287.48935999266
+    },
+    {
+      "station_reference_body_name": "axlebridge_fr",
+      "left_support_force_newtons": 49287.489354519064,
+      "right_support_force_newtons": 49287.48936219448
+    },
+    {
+      "station_reference_body_name": "axlebridge_rf",
+      "left_support_force_newtons": 49287.48936481213,
+      "right_support_force_newtons": 49287.48937441125
+    },
+    {
+      "station_reference_body_name": "axlebridge_rr",
+      "left_support_force_newtons": 49287.48935887162,
+      "right_support_force_newtons": 49287.48936707778
+    }
+  ],
+  "free_body_startup_states": [
+    {
+      "body_name": "carbody",
+      "rotation_local_track_from_body": {
+        "w": 2.7725909817320031e-15,
+        "x": 1.0,
+        "y": -4.4642810099959631e-17,
+        "z": 1.2249079678651175e-16
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.401727265905704e-06,
+      "lateral_offset_in_local_track_frame_meters": -2.4106587489772582e-14,
+      "vertical_offset_in_local_track_frame_meters": 2.7305756438289262e-05,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    },
+    {
+      "body_name": "frame_front",
+      "rotation_local_track_from_body": {
+        "w": 2.6069701891887353e-15,
+        "x": 1.0,
+        "y": 8.0510243454538564e-16,
+        "z": 1.5734418755362449e-16
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.4017272659053788e-06,
+      "lateral_offset_in_local_track_frame_meters": -4.5387543648077016e-15,
+      "vertical_offset_in_local_track_frame_meters": -0.43007079424355971,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    },
+    {
+      "body_name": "frame_rear",
+      "rotation_local_track_from_body": {
+        "w": 2.6677890544607671e-15,
+        "x": 1.0,
+        "y": 3.9400985811368921e-16,
+        "z": -5.9945256827075481e-16
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.4017272676817356e-06,
+      "lateral_offset_in_local_track_frame_meters": -5.4553247944133553e-15,
+      "vertical_offset_in_local_track_frame_meters": -0.43007079424356404,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    },
+    {
+      "body_name": "axlebridge_ff",
+      "rotation_local_track_from_body": {
+        "w": 1.1848347310506833e-15,
+        "x": 1.0,
+        "y": 1.6975541200002954e-25,
+        "z": 1.4327349422775146e-10
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.3988038994675662e-06,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.43000000000641708,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    },
+    {
+      "body_name": "axlebridge_fr",
+      "rotation_local_track_from_body": {
+        "w": 9.2841239647657958e-16,
+        "x": 1.0,
+        "y": -1.3301678288167153e-25,
+        "z": -1.4327338086661045e-10
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.4046506323431913e-06,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.43000000000641786,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    },
+    {
+      "body_name": "axlebridge_rf",
+      "rotation_local_track_from_body": {
+        "w": 1.4146780526057439e-15,
+        "x": 1.0,
+        "y": 2.0268487372755852e-25,
+        "z": 1.4327279154025632e-10
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.3988038994675662e-06,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.4300000000064233,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    },
+    {
+      "body_name": "axlebridge_rr",
+      "rotation_local_track_from_body": {
+        "w": 1.2464459802245176e-15,
+        "x": 1.0,
+        "y": -1.7858339424928526e-25,
+        "z": -1.4327407451473966e-10
+      },
+      "resolved_track_station_offset_from_mechanical_layout_meters": 8.4046506323431913e-06,
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "vertical_offset_in_local_track_frame_meters": -0.43000000000642036,
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "common_wheel_spin_coefficient_in_body_frame": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
+      "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
+    }
+  ],
+  "revolute_joint_startup_states": [
+    {
+      "joint_name": "rev_wheel_ff_l",
+      "position_radians": 0.31533397347187259,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098808986
+      }
+    },
+    {
+      "joint_name": "rev_wheel_ff_r",
+      "position_radians": -0.06317638965070542,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098809249
+      }
+    },
+    {
+      "joint_name": "rev_wheel_fr_l",
+      "position_radians": -0.025102324383414906,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.78228709880905
+      }
+    },
+    {
+      "joint_name": "rev_wheel_fr_r",
+      "position_radians": -0.33709418242954087,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098809327
+      }
+    },
+    {
+      "joint_name": "rev_wheel_rf_l",
+      "position_radians": -0.002613479380619458,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098809427
+      }
+    },
+    {
+      "joint_name": "rev_wheel_rf_r",
+      "position_radians": 0.0055770558701520806,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098809775
+      }
+    },
+    {
+      "joint_name": "rev_wheel_rr_l",
+      "position_radians": 0.00053419343930150476,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098809213
+      }
+    },
+    {
+      "joint_name": "rev_wheel_rr_r",
+      "position_radians": 0.00021224274270999753,
+      "rate": {
+        "kind": "explicit_angular_rate",
+        "angular_rate_radians_per_second": 38.782287098809505
+      }
+    }
+  ],
+  "ball_rpy_joint_startup_states": [
+    {
+      "joint_name": "ball_longibar_front_A",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533763236595e-05,
+        "y": 6.0560601352627634e-06,
+        "z": 1.7097133997328204
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_front_B",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533764013751e-05,
+        "y": -6.0562826541736069e-06,
+        "z": 1.4318792538569567
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_front_C",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533762792505e-05,
+        "y": -6.0560246124522352e-06,
+        "z": -1.7097133997328178
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_front_D",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533763791706e-05,
+        "y": 6.0559402480685159e-06,
+        "z": -1.431879253856984
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_rear_A",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533763347617e-05,
+        "y": 6.0535734617346496e-06,
+        "z": 1.7097133997326086
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_rear_B",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533763902728e-05,
+        "y": -6.0536320217039411e-06,
+        "z": 1.4318792538571734
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_rear_C",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.382753376301455e-05,
+        "y": -6.0560416847578024e-06,
+        "z": -1.709713399732816
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    },
+    {
+      "joint_name": "ball_longibar_rear_D",
+      "roll_pitch_yaw_angles_radians": {
+        "x": 8.3827533763791706e-05,
+        "y": 6.0559934127151918e-06,
+        "z": -1.4318792538569758
+      },
+      "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      }
+    }
+  ],
+  "series_spring_viscous_damper_force_states": [
+    {
+      "element_name": "sslatdmp_0_mk_front_BF_SLD",
+      "reference_end_axial_force_newtons": 0.0
+    },
+    {
+      "element_name": "sslatdmp_1_mk_rear_BF_SLD",
+      "reference_end_axial_force_newtons": 0.0
+    }
+  ],
+  "translational_spring_damper_nominal_forces": [
+    {
+      "element_name": "front_ps_spring_A1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_B1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_C1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_D1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_A2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_B2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_C2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_spring_D2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "front_ps_dmp_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ps_dmp_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ps_dmp_C",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ps_dmp_D",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ss_airspring_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": -61312.5}
+    },
+    {
+      "element_name": "front_ss_airspring_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": -61312.5}
+    },
+    {
+      "element_name": "front_ss_tractionrod_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ss_antihunting_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ss_tractionrod_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "front_ss_antihunting_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ps_spring_A1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_B1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_C1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_D1",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_A2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_B2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_C2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_spring_D2",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 21578.11967531337}
+    },
+    {
+      "element_name": "rear_ps_dmp_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ps_dmp_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ps_dmp_C",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ps_dmp_D",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ss_airspring_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": -61312.5}
+    },
+    {
+      "element_name": "rear_ss_airspring_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": -61312.5}
+    },
+    {
+      "element_name": "rear_ss_tractionrod_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ss_antihunting_A",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ss_tractionrod_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "element_name": "rear_ss_antihunting_B",
+      "force_on_reference_end_in_reference_frame_newtons": {"x": 0.0, "y": 0.0, "z": 0.0}
+    }
+  ]
+}

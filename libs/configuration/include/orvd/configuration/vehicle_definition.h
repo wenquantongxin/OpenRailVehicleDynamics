@@ -193,20 +193,20 @@ struct VehicleFreeBodyStationOffsetDefinition {
 };
 
 // Which body the longitudinal layout is measured from, where each free body
-// sits relative to it, and which free bodies carry wheel-rail interfaces.
+// sits relative to it, and which free bodies provide the common station of a
+// left/right wheel pair.
 //
 // A start-up assembly needs every free body's station to place it on the line,
-// and later contact consumers need to identify the carrier subset. GZ18's four
-// carriers happen to be rigid wheelsets; IRW's four carriers are axle bridges
-// with separately jointed wheel bodies. Calling both subsets "wheelsets" would
-// make the IRW record lie about its topology, so this field names only the
-// shared mechanical role. The eight IRW wheel bodies remain explicit children
-// of eight named revolute joints and are not inferred here.
+// and later contact consumers need one station seed for each wheel pair. GZ18's
+// four references are rigid wheelsets, so they are also its contact bodies.
+// IRW's four references are axle bridges; its eight separately jointed wheel
+// bodies are the contact bodies and will be bound independently. This field
+// states only the shared station role and must not be read as a wrench target.
 struct VehicleMechanicalTrackStationLayoutDefinition {
     std::string reference_body_name;
     std::vector<VehicleFreeBodyStationOffsetDefinition>
         free_body_station_offsets;
-    std::vector<std::string> wheel_contact_carrier_body_names;
+    std::vector<std::string> wheel_pair_station_reference_body_names;
 };
 
 struct VehicleDefinition {

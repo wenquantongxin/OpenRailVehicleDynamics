@@ -40,7 +40,7 @@ using orvd::configuration::AssembleGz18ContactScenario;
 using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
 using orvd::configuration::LoadTrackGeometryFromJsonFile;
 using orvd::configuration::LoadVehicleDefinitionFromJsonFile;
-using orvd::configuration::ResolvedWheelsetPlacement;
+using orvd::configuration::ResolvedWheelPairPlacement;
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
@@ -263,13 +263,14 @@ int main(int argc, char** argv) {
         "non-finite projection hints partially committed accepted state");
 
     std::unordered_map<std::string, double> resolved_station;
-    std::unordered_map<std::string, const ResolvedWheelsetPlacement*>
+    std::unordered_map<std::string, const ResolvedWheelPairPlacement*>
         resolved_placement;
-    for (const ResolvedWheelsetPlacement& placement :
-         scenario->initial_context().wheelset_placements()) {
-        resolved_station.emplace(placement.wheelset_body_name,
+    for (const ResolvedWheelPairPlacement& placement :
+         scenario->initial_context().wheel_pair_placements()) {
+        resolved_station.emplace(placement.station_reference_body_name,
                                  placement.track_station_meters);
-        resolved_placement.emplace(placement.wheelset_body_name, &placement);
+        resolved_placement.emplace(placement.station_reference_body_name,
+                                   &placement);
     }
     struct ExpectedWheelsetStation {
         std::string_view body_name;
@@ -568,14 +569,14 @@ int main(int argc, char** argv) {
     constexpr double kAccumulatedSpinRadians = 0.31;
     const std::string yawed_wheelset =
         vehicle.mechanical_track_station_layout
-            .wheel_contact_carrier_body_names.front();
+            .wheel_pair_station_reference_body_names.front();
     auto& yawed_body = MutableBodyState(yawed_startup, yawed_wheelset);
     yawed_body.rotation_local_track_from_body = Eigen::Quaterniond(
         Eigen::AngleAxisd(kYawRadians, Eigen::Vector3d::UnitZ()) *
         Eigen::AngleAxisd(kAccumulatedSpinRadians,
                           Eigen::Vector3d::UnitY()));
     yawed_body
-        .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
+        .explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
         Eigen::Vector3d(0.02, 0.0, -0.01);
     constexpr std::array<double, 9> fixture_stations{
         -20.0, 0.0, 8.8, 9.0, 9.1, 9.2, 9.4, 20.0, 40.0};
@@ -948,8 +949,8 @@ int main(int argc, char** argv) {
     const double boundary_end_station =
         boundary_line.end_track_station_meters();
     double foremost_offset = -std::numeric_limits<double>::infinity();
-    for (const ResolvedWheelsetPlacement& placement :
-         scenario->initial_context().wheelset_placements()) {
+    for (const ResolvedWheelPairPlacement& placement :
+         scenario->initial_context().wheel_pair_placements()) {
         foremost_offset =
             std::max(foremost_offset,
                      placement.track_station_meters - kReferenceStationMeters);

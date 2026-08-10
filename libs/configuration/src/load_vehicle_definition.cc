@@ -366,7 +366,7 @@ VehicleMechanicalTrackStationLayoutDefinition ParseMechanicalTrackStationLayout(
     const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
                      {"reference_body_name", "free_body_station_offsets",
-                      "wheel_contact_carrier_body_names"});
+                      "wheel_pair_station_reference_body_names"});
     VehicleMechanicalTrackStationLayoutDefinition layout;
     layout.reference_body_name = RequireString(
         value.at("reference_body_name"), path + ".reference_body_name");
@@ -384,18 +384,23 @@ VehicleMechanicalTrackStationLayoutDefinition ParseMechanicalTrackStationLayout(
             offsets[index], ElementPath(offsets_path, index)));
     }
 
-    const std::string carriers_path =
-        path + ".wheel_contact_carrier_body_names";
-    const Json& carriers = value.at("wheel_contact_carrier_body_names");
-    RequireArray(carriers, carriers_path);
-    layout.wheel_contact_carrier_body_names.reserve(carriers.size());
-    for (std::size_t index = 0; index < carriers.size(); ++index) {
-        const std::string element_path = ElementPath(carriers_path, index);
-        std::string name = RequireString(carriers[index], element_path);
+    const std::string station_references_path =
+        path + ".wheel_pair_station_reference_body_names";
+    const Json& station_references =
+        value.at("wheel_pair_station_reference_body_names");
+    RequireArray(station_references, station_references_path);
+    layout.wheel_pair_station_reference_body_names.reserve(
+        station_references.size());
+    for (std::size_t index = 0; index < station_references.size(); ++index) {
+        const std::string element_path =
+            ElementPath(station_references_path, index);
+        std::string name = RequireString(station_references[index],
+                                         element_path);
         if (name.empty()) {
             ThrowExpected(element_path, "a non-empty rigid-body name");
         }
-        layout.wheel_contact_carrier_body_names.push_back(std::move(name));
+        layout.wheel_pair_station_reference_body_names.push_back(
+            std::move(name));
     }
     return layout;
 }

@@ -11,18 +11,20 @@
 
 namespace orvd::configuration {
 
-// Where one wheelset ended up, and what its two wheels are resolved to carry.
+// Where one left/right wheel pair ended up, and what its two wheels are
+// resolved to carry.
 //
 // The station is derived here rather than stated in the record: it is the
 // vehicle's placement plus that body's mechanical offset plus whatever the
 // resolution moved. A later goal seeding a per-axle observer reads it from
 // here, so the placement is computed once and no second party repeats the sum.
 //
-// The two forces travel beside the station because they belong to the same
-// wheelset. Two four-element vectors could fall out of step; one list of named
-// records cannot.
-struct ResolvedWheelsetPlacement {
-    std::string wheelset_body_name;
+// The station reference is the rigid wheelset body for GZ18 and the axle body
+// for IRW. It does not say which rigid bodies receive the contact wrenches.
+// The two forces travel beside the station so independent arrays cannot fall
+// out of step.
+struct ResolvedWheelPairPlacement {
+    std::string station_reference_body_name;
     double track_station_meters{0.0};
     double left_support_force_newtons{0.0};
     double right_support_force_newtons{0.0};
@@ -52,9 +54,9 @@ class ResolvedInitialContext {
         return *context_;
     }
 
-    [[nodiscard]] const std::vector<ResolvedWheelsetPlacement>&
-    wheelset_placements() const {
-        return wheelset_placements_;
+    [[nodiscard]] const std::vector<ResolvedWheelPairPlacement>&
+    wheel_pair_placements() const {
+        return wheel_pair_placements_;
     }
 
     // Signed, along +z_T, exactly as the record stated it.
@@ -78,13 +80,13 @@ class ResolvedInitialContext {
 
     ResolvedInitialContext(
         std::unique_ptr<system_assembly::SystemRuntimeContext> context,
-        std::vector<ResolvedWheelsetPlacement> wheelset_placements,
+        std::vector<ResolvedWheelPairPlacement> wheel_pair_placements,
         double rail_profile_reference_vertical_offset_meters,
         StartupWheelRailBinding wheel_rail_binding,
         std::string load_condition_identifier);
 
     std::unique_ptr<system_assembly::SystemRuntimeContext> context_;
-    std::vector<ResolvedWheelsetPlacement> wheelset_placements_;
+    std::vector<ResolvedWheelPairPlacement> wheel_pair_placements_;
     double rail_profile_reference_vertical_offset_meters_{0.0};
     StartupWheelRailBinding wheel_rail_binding_;
     std::string load_condition_identifier_;

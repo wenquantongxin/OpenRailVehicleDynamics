@@ -937,6 +937,17 @@ add_test(NAME verify_gz18_startup_assembly
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json)
 
+add_executable(verify_irw_startup_assembly
+    configuration/verify_irw_startup_assembly.cc)
+orvd_configure_first_party_target(verify_irw_startup_assembly)
+target_link_libraries(verify_irw_startup_assembly
+    PRIVATE orvd_configuration)
+add_test(NAME verify_irw_startup_assembly
+         COMMAND verify_irw_startup_assembly
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json)
+
 add_executable(verify_resolved_startup_state_loading
     configuration/verify_resolved_startup_state_loading.cc)
 orvd_configure_first_party_target(verify_resolved_startup_state_loading)

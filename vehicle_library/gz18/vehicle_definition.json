@@ -12,7 +12,7 @@
       { "body_name": "rear_leading_wheelset", "station_offset_meters": -6.6 },
       { "body_name": "rear_trailing_wheelset", "station_offset_meters": -9.1 }
     ],
-    "wheel_contact_carrier_body_names": [
+    "wheel_pair_station_reference_body_names": [
       "front_leading_wheelset",
       "front_trailing_wheelset",
       "rear_leading_wheelset",

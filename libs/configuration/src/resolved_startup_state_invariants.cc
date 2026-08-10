@@ -15,7 +15,6 @@ namespace {
 // refused rather than normalised, because normalising answers a different
 // question from the one the author asked.
 constexpr double kUnitQuaternionNormTolerance = 1.0e-12;
-constexpr double kUnitVectorNormTolerance = 1.0e-12;
 
 std::string Describe(double value) { return std::to_string(value); }
 
@@ -122,27 +121,30 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
                    " is not a supported running-direction value");
     }
 
-    const std::string radius_field =
-        field("common_startup_effective_rolling_radius_meters");
-    RequireFinite(state.common_startup_effective_rolling_radius_meters,
-                  radius_field);
-    if (!(state.common_startup_effective_rolling_radius_meters > 0.0)) {
-        Reject(radius_field + " is " +
-               Describe(state.common_startup_effective_rolling_radius_meters) +
-               " m, but the effective rolling radius must be strictly "
-               "positive");
+    if (state.common_wheel_spin_generation.has_value()) {
+        const std::string radius_field =
+            field("common_wheel_spin_generation."
+                  "effective_rolling_radius_meters");
+        const double radius = state.common_wheel_spin_generation
+                                  ->effective_rolling_radius_meters;
+        RequireFinite(radius, radius_field);
+        if (!(radius > 0.0)) {
+            Reject(radius_field + " is " + Describe(radius) +
+                   " m, but the effective rolling radius must be strictly "
+                   "positive");
+        }
     }
 
     RequireFinite(state.rail_profile_reference_vertical_offset_meters,
                   field("rail_profile_reference_vertical_offset_meters"));
 
     std::vector<std::string> names;
-    names.reserve(state.target_wheel_support_forces.size());
-    for (const WheelsetTargetSupportForces& forces :
-         state.target_wheel_support_forces) {
+    names.reserve(state.wheel_pair_target_support_forces.size());
+    for (const WheelPairTargetSupportForces& forces :
+         state.wheel_pair_target_support_forces) {
         const std::string what =
-            field("target_wheel_support_forces['" + forces.wheelset_body_name +
-                  "']");
+            field("wheel_pair_target_support_forces['" +
+                  forces.station_reference_body_name + "']");
         RequireFinite(forces.left_support_force_newtons, what + ".left");
         RequireFinite(forces.right_support_force_newtons, what + ".right");
         if (!(forces.left_support_force_newtons > 0.0) ||
@@ -153,28 +155,10 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
                    "and a wheel that carries nothing is not a resolved "
                    "start-up state");
         }
-        names.push_back(forces.wheelset_body_name);
+        names.push_back(forces.station_reference_body_name);
     }
-    RequireDistinctNames(names, field("target_wheel_support_forces"));
-
-    names.clear();
-    for (const WheelsetStartupKinematics& wheelset :
-         state.wheelset_startup_kinematics) {
-        const std::string what =
-            field("wheelset_startup_kinematics['" +
-                  wheelset.wheelset_body_name + "']");
-        RequireFiniteVector(wheelset.forward_spin_axis_in_body_frame,
-                            what + ".forward_spin_axis_in_body_frame");
-        const double norm = wheelset.forward_spin_axis_in_body_frame.norm();
-        if (std::abs(norm - 1.0) > kUnitVectorNormTolerance) {
-            Reject(what + ".forward_spin_axis_in_body_frame has norm " +
-                   Describe(norm) +
-                   ", not one; the axis includes direction and is refused "
-                   "rather than normalised");
-        }
-        names.push_back(wheelset.wheelset_body_name);
-    }
-    RequireDistinctNames(names, field("wheelset_startup_kinematics"));
+    RequireDistinctNames(names,
+                         field("wheel_pair_target_support_forces"));
 
     names.clear();
     for (const FreeBodyStartupState& body : state.free_body_startup_states) {
@@ -199,9 +183,19 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
                       what + ".vertical_offset_in_local_track_frame_meters");
         RequireFiniteVector(
             body
-                .additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second,
-            what + ".additional_body_angular_velocity_in_inertial_expressed_in_body_"
+                .explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second,
+            what + ".explicit_body_angular_velocity_in_inertial_expressed_in_body_"
                    "frame_radians_per_second");
+        RequireFiniteVector(body.common_wheel_spin_coefficient_in_body_frame,
+                            what +
+                                ".common_wheel_spin_coefficient_in_body_frame");
+        if (!state.common_wheel_spin_generation.has_value() &&
+            body.common_wheel_spin_coefficient_in_body_frame !=
+                Eigen::Vector3d::Zero()) {
+            Reject(what +
+                   ".common_wheel_spin_coefficient_in_body_frame is nonzero, "
+                   "but this record has no common wheel-spin generation");
+        }
         RequireFinite(
             body
                 .body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second,
@@ -222,11 +216,43 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
         const std::string what =
             field("revolute_joint_startup_states['" + joint.joint_name + "']");
         RequireFinite(joint.position_radians, what + ".position_radians");
-        RequireFinite(joint.rate_per_common_wheel_spin_magnitude,
-                      what + ".rate_per_common_wheel_spin_magnitude");
+        if (const auto* explicit_rate =
+                std::get_if<ExplicitRevoluteJointRate>(&joint.rate)) {
+            RequireFinite(explicit_rate->angular_rate_radians_per_second,
+                          what +
+                              ".rate.angular_rate_radians_per_second");
+        } else {
+            const auto& generated_rate =
+                std::get<RevoluteJointRatePerCommonWheelSpin>(joint.rate);
+            RequireFinite(generated_rate.multiplier,
+                          what + ".rate.multiplier");
+            if (!state.common_wheel_spin_generation.has_value()) {
+                Reject(what +
+                       ".rate uses the common wheel-spin magnitude, but this "
+                       "record has no common wheel-spin generation");
+            }
+        }
         names.push_back(joint.joint_name);
     }
     RequireDistinctNames(names, field("revolute_joint_startup_states"));
+
+    names.clear();
+    for (const BallRpyJointStartupState& joint :
+         state.ball_rpy_joint_startup_states) {
+        const std::string what =
+            field("ball_rpy_joint_startup_states['" + joint.joint_name +
+                  "']");
+        RequireFiniteVector(joint.roll_pitch_yaw_angles_radians,
+                            what + ".roll_pitch_yaw_angles_radians");
+        RequireFiniteVector(
+            joint
+                .angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second,
+            what +
+                ".angular_velocity_of_child_in_parent_expressed_in_parent_"
+                "frame_radians_per_second");
+        names.push_back(joint.joint_name);
+    }
+    RequireDistinctNames(names, field("ball_rpy_joint_startup_states"));
 
     names.clear();
     for (const SeriesSpringViscousDamperForceState& element :

@@ -12,46 +12,30 @@
   "gravitational_acceleration_meters_per_second_squared": 9.81,
   "running_direction": "increasing_track_station",
   "initial_longitudinal_speed_meters_per_second": 16.666666666666668,
-  "common_startup_effective_rolling_radius_meters": 0.42024171238881536,
+  "common_wheel_spin_generation": {
+    "effective_rolling_radius_meters": 0.42024171238881536
+  },
   "rail_profile_reference_vertical_offset_meters": -0.0003055705255365684,
-  "target_wheel_support_forces": [
+  "wheel_pair_target_support_forces": [
     {
-      "wheelset_body_name": "front_leading_wheelset",
+      "station_reference_body_name": "front_leading_wheelset",
       "left_support_force_newtons": 68295.99375,
       "right_support_force_newtons": 68295.99375
     },
     {
-      "wheelset_body_name": "front_trailing_wheelset",
+      "station_reference_body_name": "front_trailing_wheelset",
       "left_support_force_newtons": 68295.99375,
       "right_support_force_newtons": 68295.99375
     },
     {
-      "wheelset_body_name": "rear_leading_wheelset",
+      "station_reference_body_name": "rear_leading_wheelset",
       "left_support_force_newtons": 68295.99375,
       "right_support_force_newtons": 68295.99375
     },
     {
-      "wheelset_body_name": "rear_trailing_wheelset",
+      "station_reference_body_name": "rear_trailing_wheelset",
       "left_support_force_newtons": 68295.99375,
       "right_support_force_newtons": 68295.99375
-    }
-  ],
-  "wheelset_startup_kinematics": [
-    {
-      "wheelset_body_name": "front_leading_wheelset",
-      "forward_spin_axis_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0}
-    },
-    {
-      "wheelset_body_name": "front_trailing_wheelset",
-      "forward_spin_axis_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0}
-    },
-    {
-      "wheelset_body_name": "rear_leading_wheelset",
-      "forward_spin_axis_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0}
-    },
-    {
-      "wheelset_body_name": "rear_trailing_wheelset",
-      "forward_spin_axis_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0}
     }
   ],
   "free_body_startup_states": [
@@ -61,7 +45,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": 0.0,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": 0.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     },
@@ -71,7 +56,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": 0.0,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": 0.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     },
@@ -81,7 +67,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": 0.0,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": 0.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     },
@@ -91,7 +78,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": -0.42,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     },
@@ -101,7 +89,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": -0.42,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     },
@@ -111,7 +100,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": -0.42,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     },
@@ -121,7 +111,8 @@
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
       "lateral_offset_in_local_track_frame_meters": 0.0,
       "vertical_offset_in_local_track_frame_meters": -0.42,
-      "additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {"x": 0.0, "y": 0.0, "z": 0.0},
+      "common_wheel_spin_coefficient_in_body_frame": {"x": 0.0, "y": -1.0, "z": 0.0},
       "body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0,
       "body_origin_vertical_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second": 0.0
     }
@@ -130,44 +121,45 @@
     {
       "joint_name": "front_leading_right_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "front_leading_left_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "front_trailing_right_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "front_trailing_left_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "rear_leading_right_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "rear_leading_left_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "rear_trailing_right_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     },
     {
       "joint_name": "rear_trailing_left_axlebox_carrier_pivot",
       "position_radians": 0.0,
-      "rate_per_common_wheel_spin_magnitude": 1.0
+      "rate": {"kind": "per_common_wheel_spin_magnitude", "multiplier": 1.0}
     }
   ],
+  "ball_rpy_joint_startup_states": [],
   "series_spring_viscous_damper_force_states": [
     {
       "element_name": "front_lateral_damper",

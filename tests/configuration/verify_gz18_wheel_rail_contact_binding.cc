@@ -144,7 +144,8 @@ WheelRailContactInput MakeInput(const Gz18WheelRailContact& contact,
         startup.initial_longitudinal_speed_meters_per_second, 0.0, 0.0);
     const double spin =
         -startup.initial_longitudinal_speed_meters_per_second /
-        startup.common_startup_effective_rolling_radius_meters;
+        startup.common_wheel_spin_generation
+            ->effective_rolling_radius_meters;
     input.wheel.angular_velocity_track_radians_per_second =
         Eigen::Vector3d(0.0, spin, 0.0);
     input.wheel.arc_rate_meters_per_second =
@@ -357,7 +358,7 @@ void CheckRealEvaluation(const Gz18WheelRailContact& contact,
         -right_patch.wrench.rail_on_wheel.force_newtons.z();
     const double left_support =
         -left_patch.wrench.rail_on_wheel.force_newtons.z();
-    const auto& target = startup.target_wheel_support_forces.front();
+    const auto& target = startup.wheel_pair_target_support_forces.front();
     RequireClose(right_support, target.right_support_force_newtons, 0.1,
                  "the resolved right support is not reproduced");
     RequireClose(left_support, target.left_support_force_newtons, 0.1,

@@ -26,7 +26,7 @@ constexpr std::string_view kRecord = R"json({
       {"station_offset_meters": 8.75,
        "body_name": "front_bogie_leading_wheelset"}
     ],
-    "wheel_contact_carrier_body_names": ["front_bogie_leading_wheelset"]
+    "wheel_pair_station_reference_body_names": ["front_bogie_leading_wheelset"]
   },
   "rigid_bodies": [
     {

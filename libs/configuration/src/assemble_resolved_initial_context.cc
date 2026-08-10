@@ -121,12 +121,12 @@ void RequireFiniteStation(double station, const std::string& body_name) {
 
 ResolvedInitialContext::ResolvedInitialContext(
     std::unique_ptr<SystemRuntimeContext> context,
-    std::vector<ResolvedWheelsetPlacement> wheelset_placements,
+    std::vector<ResolvedWheelPairPlacement> wheel_pair_placements,
     double rail_profile_reference_vertical_offset_meters,
     StartupWheelRailBinding wheel_rail_binding,
     std::string load_condition_identifier)
     : context_(std::move(context)),
-      wheelset_placements_(std::move(wheelset_placements)),
+      wheel_pair_placements_(std::move(wheel_pair_placements)),
       rail_profile_reference_vertical_offset_meters_(
           rail_profile_reference_vertical_offset_meters),
       wheel_rail_binding_(std::move(wheel_rail_binding)),
@@ -199,21 +199,13 @@ ResolvedInitialContext AssembleResolvedInitialContext(
 
     // 3. Every name family, all and only.
     std::vector<std::string> stated;
-    stated.reserve(startup_state.target_wheel_support_forces.size());
-    for (const WheelsetTargetSupportForces& forces :
-         startup_state.target_wheel_support_forces) {
-        stated.push_back(forces.wheelset_body_name);
+    stated.reserve(startup_state.wheel_pair_target_support_forces.size());
+    for (const WheelPairTargetSupportForces& forces :
+         startup_state.wheel_pair_target_support_forces) {
+        stated.push_back(forces.station_reference_body_name);
     }
-    RequireSameNames(stated, binding.wheel_contact_carrier_body_names,
-                     "target wheel support force");
-
-    stated.clear();
-    for (const WheelsetStartupKinematics& wheelset :
-         startup_state.wheelset_startup_kinematics) {
-        stated.push_back(wheelset.wheelset_body_name);
-    }
-    RequireSameNames(stated, binding.wheel_contact_carrier_body_names,
-                     "wheelset start-up kinematics");
+    RequireSameNames(stated, binding.wheel_pair_station_reference_body_names,
+                     "wheel-pair target support force");
 
     std::vector<std::string> free_body_names;
     for (const VehicleFreeBodyStationOffset& offset :
@@ -229,7 +221,15 @@ ResolvedInitialContext AssembleResolvedInitialContext(
         stated.push_back(joint.joint_name);
     }
     RequireSameNames(stated, binding.revolute_joint_names,
-                     "joint start-up state");
+                     "revolute-joint start-up state");
+
+    stated.clear();
+    for (const BallRpyJointStartupState& joint :
+         startup_state.ball_rpy_joint_startup_states) {
+        stated.push_back(joint.joint_name);
+    }
+    RequireSameNames(stated, binding.ball_rpy_joint_names,
+                     "Ball-RPY-joint start-up state");
 
     stated.clear();
     for (const SeriesSpringViscousDamperForceState& element :
@@ -265,29 +265,20 @@ ResolvedInitialContext AssembleResolvedInitialContext(
         station_of_body.emplace(body.body_name, station);
     }
 
-    // 5. Expand the two shared GZ18 start-up authorities before touching a
-    // context. The record remains editable C++, so arithmetic overflow is
-    // rejected here even when no JSON loader was involved.
-    const double common_wheel_spin_magnitude =
-        startup_state.initial_longitudinal_speed_meters_per_second /
-        startup_state.common_startup_effective_rolling_radius_meters;
-    if (!std::isfinite(common_wheel_spin_magnitude)) {
-        Reject("initial_longitudinal_speed_meters_per_second divided by "
-               "common_startup_effective_rolling_radius_meters is not "
-               "finite");
-    }
-    std::unordered_map<std::string, Eigen::Vector3d>
-        wheelset_spin_of_body;
-    for (const WheelsetStartupKinematics& wheelset :
-         startup_state.wheelset_startup_kinematics) {
-        const Eigen::Vector3d spin =
-            wheelset.forward_spin_axis_in_body_frame *
-            common_wheel_spin_magnitude;
-        if (!spin.allFinite()) {
-            Reject("the generated spin of wheelset '" +
-                   wheelset.wheelset_body_name + "' is not finite");
+    // 5. Resolve the optional rigid-wheelset authority before touching a
+    // context. IRW has no generated common spin: its axle-body angular
+    // velocity and its two wheel-to-axle relative rates are explicit state.
+    double common_wheel_spin_magnitude = 0.0;
+    if (startup_state.common_wheel_spin_generation.has_value()) {
+        common_wheel_spin_magnitude =
+            startup_state.initial_longitudinal_speed_meters_per_second /
+            startup_state.common_wheel_spin_generation
+                ->effective_rolling_radius_meters;
+        if (!std::isfinite(common_wheel_spin_magnitude)) {
+            Reject("initial_longitudinal_speed_meters_per_second divided by "
+                   "common_wheel_spin_generation."
+                   "effective_rolling_radius_meters is not finite");
         }
-        wheelset_spin_of_body.emplace(wheelset.wheelset_body_name, spin);
     }
 
     // 6. Names to handles, indices and ranges. Nothing below indexes by
@@ -357,6 +348,38 @@ ResolvedInitialContext AssembleResolvedInitialContext(
                                                placed.velocities.size(),
                                                joint.joint_name});
         placed_joints.push_back(placed);
+    }
+
+    struct PlacedBallRpyJoint {
+        const BallRpyJointStartupState* state;
+        multibody_model::GeneralizedPositionRange positions;
+        multibody_model::GeneralizedVelocityRange velocities;
+    };
+    std::vector<PlacedBallRpyJoint> placed_ball_joints;
+    placed_ball_joints.reserve(
+        startup_state.ball_rpy_joint_startup_states.size());
+    for (const BallRpyJointStartupState& joint :
+         startup_state.ball_rpy_joint_startup_states) {
+        const multibody_model::JointHandle handle =
+            model.GetJointByName(joint.joint_name);
+        const PlacedBallRpyJoint placed{
+            &joint, model.GetJointPositionRange(handle),
+            model.GetJointVelocityRange(handle)};
+        if (placed.positions.size() != 3 || placed.velocities.size() != 3) {
+            Reject("'" + joint.joint_name + "' has " +
+                   std::to_string(placed.positions.size()) +
+                   " generalized positions and " +
+                   std::to_string(placed.velocities.size()) +
+                   " generalized velocities, but a Ball-RPY start-up state "
+                   "states three of each");
+        }
+        position_claims.push_back(ClaimedRange{
+            placed.positions.start(), placed.positions.size(),
+            joint.joint_name});
+        velocity_claims.push_back(ClaimedRange{
+            placed.velocities.start(), placed.velocities.size(),
+            joint.joint_name});
+        placed_ball_joints.push_back(placed);
     }
 
     struct PlacedSeriesForce {
@@ -436,14 +459,11 @@ ResolvedInitialContext AssembleResolvedInitialContext(
         // Both stated velocities are inertial velocities; only the basis they
         // are written in differs, so this is a change of basis and nothing
         // else. No transport term of the track frame enters.
-        Eigen::Vector3d angular_velocity_in_body =
+        const Eigen::Vector3d angular_velocity_in_body =
             placed.state
-                ->additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second;
-        const auto wheelset_spin =
-            wheelset_spin_of_body.find(placed.state->body_name);
-        if (wheelset_spin != wheelset_spin_of_body.end()) {
-            angular_velocity_in_body += wheelset_spin->second;
-        }
+                ->explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second +
+            placed.state->common_wheel_spin_coefficient_in_body_frame *
+                common_wheel_spin_magnitude;
         if (!angular_velocity_in_body.allFinite()) {
             Reject("the expanded angular velocity of '" +
                    placed.state->body_name + "' is not finite");
@@ -467,17 +487,33 @@ ResolvedInitialContext AssembleResolvedInitialContext(
             origin_velocity_in_inertial;
     }
     for (const PlacedJoint& placed : placed_joints) {
-        const double rate =
-            placed.state->rate_per_common_wheel_spin_magnitude *
-            common_wheel_spin_magnitude;
+        double rate = 0.0;
+        if (const auto* explicit_rate =
+                std::get_if<ExplicitRevoluteJointRate>(
+                    &placed.state->rate)) {
+            rate = explicit_rate->angular_rate_radians_per_second;
+        } else {
+            rate = std::get<RevoluteJointRatePerCommonWheelSpin>(
+                       placed.state->rate)
+                       .multiplier *
+                   common_wheel_spin_magnitude;
+        }
         if (!std::isfinite(rate)) {
-            Reject("the generated rate of joint '" +
+            Reject("the resolved rate of joint '" +
                    placed.state->joint_name + "' is not finite");
         }
         continuous_state[placed.positions.start()] =
             placed.state->position_radians;
         continuous_state[position_count + placed.velocities.start()] =
             rate;
+    }
+    for (const PlacedBallRpyJoint& placed : placed_ball_joints) {
+        continuous_state.segment<3>(placed.positions.start()) =
+            placed.state->roll_pitch_yaw_angles_radians;
+        continuous_state.segment<3>(position_count +
+                                    placed.velocities.start()) =
+            placed.state
+                ->angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second;
     }
     for (const PlacedSeriesForce& placed : placed_series) {
         continuous_state[placed.range.start()] =
@@ -498,13 +534,13 @@ ResolvedInitialContext AssembleResolvedInitialContext(
 
     // 12. The metadata this assembly derived, beside the context it belongs
     // with.
-    std::vector<ResolvedWheelsetPlacement> placements;
-    placements.reserve(startup_state.target_wheel_support_forces.size());
-    for (const WheelsetTargetSupportForces& forces :
-         startup_state.target_wheel_support_forces) {
-        placements.push_back(ResolvedWheelsetPlacement{
-            forces.wheelset_body_name, station_of_body.at(
-                                           forces.wheelset_body_name),
+    std::vector<ResolvedWheelPairPlacement> placements;
+    placements.reserve(startup_state.wheel_pair_target_support_forces.size());
+    for (const WheelPairTargetSupportForces& forces :
+         startup_state.wheel_pair_target_support_forces) {
+        placements.push_back(ResolvedWheelPairPlacement{
+            forces.station_reference_body_name,
+            station_of_body.at(forces.station_reference_body_name),
             forces.left_support_force_newtons,
             forces.right_support_force_newtons});
     }

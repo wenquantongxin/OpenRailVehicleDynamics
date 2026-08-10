@@ -45,7 +45,7 @@ struct VehicleBinding {
     std::vector<std::string> ball_rpy_joint_names;
     std::vector<std::string> translational_spring_damper_names;
     std::vector<std::string> series_spring_viscous_damper_names;
-    std::vector<std::string> wheel_contact_carrier_body_names;
+    std::vector<std::string> wheel_pair_station_reference_body_names;
 };
 
 // One vehicle, assembled once, with everything downstream needs to reach it.

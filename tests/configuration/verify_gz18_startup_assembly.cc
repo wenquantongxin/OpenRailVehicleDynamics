@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include <Eigen/Core>
@@ -27,12 +28,14 @@ namespace {
 using orvd::configuration::AssembledVehicleSystem;
 using orvd::configuration::AssembleResolvedInitialContext;
 using orvd::configuration::AssembleVehicleSystem;
+using orvd::configuration::ExplicitRevoluteJointRate;
 using orvd::configuration::FreeBodyStartupState;
 using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
 using orvd::configuration::LoadTrackGeometryFromJsonFile;
 using orvd::configuration::LoadVehicleDefinitionFromJsonFile;
 using orvd::configuration::ResolvedInitialContext;
 using orvd::configuration::ResolvedStartupState;
+using orvd::configuration::RevoluteJointRatePerCommonWheelSpin;
 using orvd::configuration::VehicleDefinition;
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
@@ -101,15 +104,51 @@ FreeBodyStartupState& MutableBodyState(ResolvedStartupState& state,
 
 Eigen::Vector3d GeneratedSpinInBody(const ResolvedStartupState& state,
                                     std::string_view body_name) {
-    const double magnitude =
-        state.initial_longitudinal_speed_meters_per_second /
-        state.common_startup_effective_rolling_radius_meters;
-    for (const auto& wheelset : state.wheelset_startup_kinematics) {
-        if (wheelset.wheelset_body_name == body_name) {
-            return magnitude * wheelset.forward_spin_axis_in_body_frame;
+    if (!state.common_wheel_spin_generation.has_value()) {
+        return Eigen::Vector3d::Zero();
+    }
+    const double magnitude = state.initial_longitudinal_speed_meters_per_second /
+                             state.common_wheel_spin_generation
+                                 ->effective_rolling_radius_meters;
+    for (const FreeBodyStartupState& body : state.free_body_startup_states) {
+        if (body.body_name == body_name) {
+            return magnitude *
+                   body.common_wheel_spin_coefficient_in_body_frame;
         }
     }
-    return Eigen::Vector3d::Zero();
+    throw std::logic_error("test fixture has no body state for " +
+                           std::string(body_name));
+}
+
+double ResolvedJointRate(const ResolvedStartupState& state,
+                         const orvd::configuration::RevoluteJointStartupState&
+                             joint) {
+    if (const auto* explicit_rate =
+            std::get_if<ExplicitRevoluteJointRate>(&joint.rate)) {
+        return explicit_rate->angular_rate_radians_per_second;
+    }
+    if (!state.common_wheel_spin_generation.has_value()) {
+        throw std::logic_error(
+            "test fixture uses a generated joint rate without a common "
+            "wheel-spin authority");
+    }
+    const double magnitude = state.initial_longitudinal_speed_meters_per_second /
+                             state.common_wheel_spin_generation
+                                 ->effective_rolling_radius_meters;
+    return std::get<RevoluteJointRatePerCommonWheelSpin>(joint.rate)
+               .multiplier *
+           magnitude;
+}
+
+int CommonSpinBodyCount(const ResolvedStartupState& state) {
+    int count = 0;
+    for (const FreeBodyStartupState& body : state.free_body_startup_states) {
+        if (body.common_wheel_spin_coefficient_in_body_frame !=
+            Eigen::Vector3d::Zero()) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 Eigen::VectorXd CopyState(const AssembledVehicleSystem& system,
@@ -145,7 +184,7 @@ void CheckStateMatchesRecord(const VehicleDefinition& vehicle,
                     0.0, body.lateral_offset_in_local_track_frame_meters,
                     body.vertical_offset_in_local_track_frame_meters);
         const Eigen::Vector3d angular_velocity_in_body =
-            body.additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second +
+            body.explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second +
             GeneratedSpinInBody(startup, body.body_name);
         const Eigen::Vector3d expected_angular_velocity =
             expected_rotation * angular_velocity_in_body;
@@ -181,18 +220,25 @@ void CheckStateMatchesRecord(const VehicleDefinition& vehicle,
                 "lateral and vertical components");
     }
 
-    const double spin_magnitude =
-        startup.initial_longitudinal_speed_meters_per_second /
-        startup.common_startup_effective_rolling_radius_meters;
     for (const auto& joint : startup.revolute_joint_startup_states) {
         const auto handle = model.GetJointByName(joint.joint_name);
         Require(positions[model.GetJointPositionRange(handle).start()] ==
                     joint.position_radians,
                 "a joint position was not mapped by name");
         Require(velocities[model.GetJointVelocityRange(handle).start()] ==
-                    joint.rate_per_common_wheel_spin_magnitude *
-                        spin_magnitude,
-                "a joint rate was not generated from its named factor");
+                    ResolvedJointRate(startup, joint),
+                "a joint rate was not resolved from its named definition");
+    }
+    for (const auto& joint : startup.ball_rpy_joint_startup_states) {
+        const auto handle = model.GetJointByName(joint.joint_name);
+        const auto q = model.GetJointPositionRange(handle);
+        const auto v = model.GetJointVelocityRange(handle);
+        Require(positions.segment<3>(q.start()) ==
+                    joint.roll_pitch_yaw_angles_radians,
+                "a Ball-RPY position was not mapped by name");
+        Require(velocities.segment<3>(v.start()) ==
+                    joint.angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second,
+                "a Ball-RPY physical angular velocity was not mapped by name");
     }
 
     const auto& instance = system.system();
@@ -326,17 +372,19 @@ int main(int argc, char** argv) {
                     "cancel in the inertial frame");
         }
 
-        // Metadata remains paired by wheelset name; the expected values come
-        // from the input record, not a duplicate numerical list in this test.
-        for (const auto& placement : baseline.wheelset_placements()) {
+        // Metadata remains paired by station-reference body name; the
+        // expected values come from the record, not a duplicate numerical
+        // list in this test.
+        for (const auto& placement : baseline.wheel_pair_placements()) {
             const auto expected = std::find_if(
-                startup.target_wheel_support_forces.begin(),
-                startup.target_wheel_support_forces.end(),
+                startup.wheel_pair_target_support_forces.begin(),
+                startup.wheel_pair_target_support_forces.end(),
                 [&](const auto& value) {
-                    return value.wheelset_body_name ==
-                           placement.wheelset_body_name;
+                    return value.station_reference_body_name ==
+                           placement.station_reference_body_name;
                 });
-            Require(expected != startup.target_wheel_support_forces.end() &&
+            Require(expected !=
+                            startup.wheel_pair_target_support_forces.end() &&
                         placement.left_support_force_newtons ==
                             expected->left_support_force_newtons &&
                         placement.right_support_force_newtons ==
@@ -358,37 +406,38 @@ int main(int argc, char** argv) {
                 "resolved identity metadata did not survive assembly");
 
         // Distinct values and reversed declaration order prove that support
-        // loads remain attached to the named wheelset rather than an ordinal.
+        // loads remain attached to the named wheel pair rather than an ordinal.
         {
             ResolvedStartupState edited = startup;
             for (std::size_t i = 0;
-                 i < edited.target_wheel_support_forces.size(); ++i) {
-                edited.target_wheel_support_forces[i]
+                 i < edited.wheel_pair_target_support_forces.size(); ++i) {
+                edited.wheel_pair_target_support_forces[i]
                     .left_support_force_newtons =
                     1000.0 + static_cast<double>(i);
-                edited.target_wheel_support_forces[i]
+                edited.wheel_pair_target_support_forces[i]
                     .right_support_force_newtons =
                     2000.0 + static_cast<double>(i);
                 MutableBodyState(
                     edited,
-                    edited.target_wheel_support_forces[i].wheelset_body_name)
+                    edited.wheel_pair_target_support_forces[i]
+                        .station_reference_body_name)
                     .resolved_track_station_offset_from_mechanical_layout_meters =
                     0.01 * static_cast<double>(i + 1);
             }
-            std::reverse(edited.target_wheel_support_forces.begin(),
-                         edited.target_wheel_support_forces.end());
+            std::reverse(edited.wheel_pair_target_support_forces.begin(),
+                         edited.wheel_pair_target_support_forces.end());
             const ResolvedInitialContext other = AssembleResolvedInitialContext(
                 *system, edited, line, kLayoutReferenceStation);
-            for (const auto& placement : other.wheelset_placements()) {
+            for (const auto& placement : other.wheel_pair_placements()) {
                 const auto expected = std::find_if(
-                    edited.target_wheel_support_forces.begin(),
-                    edited.target_wheel_support_forces.end(),
+                    edited.wheel_pair_target_support_forces.begin(),
+                    edited.wheel_pair_target_support_forces.end(),
                     [&](const auto& value) {
-                        return value.wheelset_body_name ==
-                               placement.wheelset_body_name;
+                        return value.station_reference_body_name ==
+                               placement.station_reference_body_name;
                     });
                 Require(expected !=
-                                edited.target_wheel_support_forces.end() &&
+                                edited.wheel_pair_target_support_forces.end() &&
                             placement.left_support_force_newtons ==
                                 expected->left_support_force_newtons &&
                             placement.right_support_force_newtons ==
@@ -397,10 +446,10 @@ int main(int argc, char** argv) {
                                 kLayoutReferenceStation +
                                     StationOffsetOf(
                                         vehicle,
-                                        placement.wheelset_body_name) +
+                                        placement.station_reference_body_name) +
                                     MutableBodyState(
                                         edited,
-                                        placement.wheelset_body_name)
+                                        placement.station_reference_body_name)
                                         .resolved_track_station_offset_from_mechanical_layout_meters,
                         "target loads were mapped by declaration order");
             }
@@ -421,8 +470,7 @@ int main(int argc, char** argv) {
                     "changing V0 did not reach every GZ18 free body");
             Require(CountBodiesWithChangedAngularVelocity(vehicle, *system,
                                                           baseline, other) ==
-                        static_cast<int>(
-                            startup.wheelset_startup_kinematics.size()),
+                        CommonSpinBodyCount(startup),
                     "changing V0 did not reach exactly the wheelsets' spins");
         }
 
@@ -430,7 +478,12 @@ int main(int argc, char** argv) {
         // consumed input, not a descriptive magic number.
         {
             ResolvedStartupState edited = startup;
-            edited.common_startup_effective_rolling_radius_meters *= 1.37;
+            if (!edited.common_wheel_spin_generation.has_value()) {
+                throw std::logic_error(
+                    "the GZ18 record has no common wheel-spin generation");
+            }
+            edited.common_wheel_spin_generation
+                ->effective_rolling_radius_meters *= 1.37;
             const ResolvedInitialContext other = AssembleResolvedInitialContext(
                 *system, edited, line, kLayoutReferenceStation);
             CheckStateMatchesRecord(vehicle, edited, line, *system, other);
@@ -439,8 +492,7 @@ int main(int argc, char** argv) {
                     "changing effective radius changed a body origin velocity");
             Require(CountBodiesWithChangedAngularVelocity(vehicle, *system,
                                                           baseline, other) ==
-                        static_cast<int>(
-                            startup.wheelset_startup_kinematics.size()),
+                        CommonSpinBodyCount(startup),
                     "changing effective radius did not reach exactly the "
                     "wheelsets' spins");
         }
@@ -452,17 +504,20 @@ int main(int argc, char** argv) {
                 Eigen::Vector3d::UnitX(), -Eigen::Vector3d::UnitX(),
                 Eigen::Vector3d::UnitZ(), -Eigen::Vector3d::UnitY()};
             for (std::size_t i = 0;
-                 i < edited.wheelset_startup_kinematics.size(); ++i) {
-                edited.wheelset_startup_kinematics[i]
-                    .forward_spin_axis_in_body_frame = axes[i];
+                 i < edited.wheel_pair_target_support_forces.size(); ++i) {
+                MutableBodyState(
+                    edited,
+                    edited.wheel_pair_target_support_forces[i]
+                        .station_reference_body_name)
+                    .common_wheel_spin_coefficient_in_body_frame = axes[i];
             }
             for (std::size_t i = 0;
                  i < edited.revolute_joint_startup_states.size(); ++i) {
                 edited.revolute_joint_startup_states[i].position_radians =
                     0.01 * static_cast<double>(i + 1);
-                edited.revolute_joint_startup_states[i]
-                    .rate_per_common_wheel_spin_magnitude =
-                    0.25 + 0.125 * static_cast<double>(i);
+                edited.revolute_joint_startup_states[i].rate =
+                    RevoluteJointRatePerCommonWheelSpin{
+                        0.25 + 0.125 * static_cast<double>(i)};
             }
             for (std::size_t i = 0;
                  i < edited.series_spring_viscous_damper_force_states.size();
@@ -474,8 +529,8 @@ int main(int argc, char** argv) {
             const ResolvedInitialContext first = AssembleResolvedInitialContext(
                 *system, edited, line, kLayoutReferenceStation);
             CheckStateMatchesRecord(vehicle, edited, line, *system, first);
-            std::reverse(edited.wheelset_startup_kinematics.begin(),
-                         edited.wheelset_startup_kinematics.end());
+            std::reverse(edited.free_body_startup_states.begin(),
+                         edited.free_body_startup_states.end());
             std::reverse(edited.revolute_joint_startup_states.begin(),
                          edited.revolute_joint_startup_states.end());
             std::reverse(
@@ -486,7 +541,7 @@ int main(int argc, char** argv) {
                                                kLayoutReferenceStation);
             CheckStateMatchesRecord(vehicle, edited, line, *system, reversed);
             Require(CopyState(*system, first) == CopyState(*system, reversed),
-                    "reordering named wheelset, joint or series records "
+                    "reordering named body, joint or series records "
                     "changed the assembled state");
         }
 
@@ -535,7 +590,7 @@ int main(int argc, char** argv) {
                 Eigen::AngleAxisd(-0.23, Eigen::Vector3d::UnitX());
             carbody.lateral_offset_in_local_track_frame_meters = 0.3;
             carbody.vertical_offset_in_local_track_frame_meters = -0.2;
-            carbody.additional_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
+            carbody.explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second =
                 Eigen::Vector3d(0.1, -0.2, 0.3);
             carbody.body_origin_lateral_velocity_in_inertial_expressed_in_local_track_frame_meters_per_second =
                 0.4;
@@ -548,7 +603,7 @@ int main(int argc, char** argv) {
             double foremost_wheelset_station =
                 research_line.start_track_station_meters();
             for (const std::string& wheelset_name :
-                 system->binding().wheel_contact_carrier_body_names) {
+                 system->binding().wheel_pair_station_reference_body_names) {
                 foremost_wheelset_station = std::max(
                     foremost_wheelset_station,
                     kLayoutReferenceStation +
@@ -600,14 +655,15 @@ int main(int argc, char** argv) {
 
         {
             ResolvedStartupState edited = startup;
-            edited.wheelset_startup_kinematics.pop_back();
+            edited.common_wheel_spin_generation.reset();
             RequireRefusal(
                 [&] {
                     (void)AssembleResolvedInitialContext(
                         *system, edited, line, kLayoutReferenceStation);
                 },
-                "states no wheelset start-up kinematics",
-                "a record omitting one wheelset kinematic mapping");
+                "no common wheel-spin generation",
+                "a record omitting the authority consumed by GZ18 spin "
+                "coefficients");
         }
         {
             ResolvedStartupState edited = startup;

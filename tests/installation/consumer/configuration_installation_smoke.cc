@@ -11,6 +11,7 @@
 #include <Eigen/Geometry>
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
+#include "orvd/configuration/assemble_resolved_initial_context.h"
 #include "orvd/configuration/assembled_gz18_contact_scenario.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
@@ -20,11 +21,11 @@
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 6) {
+        if (argc != 7) {
             throw std::invalid_argument(
                 "expected the installed track geometry, GZ18 vehicle "
                 "definition, resolved start-up state, data root and IRW "
-                "vehicle definition paths");
+                "vehicle definition and resolved start-up state paths");
         }
         auto line =
             orvd::configuration::LoadTrackGeometryFromJsonFile(argv[1]);
@@ -75,11 +76,9 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // G66 installs the passive IRW mechanical record without an H3 start,
-        // contact personality or controller. Loading it from the relocated
-        // prefix and compiling the complete system proves that the new typed
-        // Ball-RPY and half-angle bushing families cross the installed package
-        // boundary rather than only working in the source tree.
+        // The installed passive IRW mechanical record and H3 start-up state
+        // cross the relocated package boundary together. Contact and control
+        // remain outside this G67 consumer.
         const auto irw_vehicle =
             orvd::configuration::LoadVehicleDefinitionFromJsonFile(argv[5]);
         const auto irw_system =
@@ -99,6 +98,25 @@ int main(int argc, char* argv[]) {
             std::fprintf(stderr,
                          "installed passive IRW record did not assemble its "
                          "complete typed mechanical system\n");
+            return 1;
+        }
+        const auto irw_startup =
+            orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[6]);
+        const auto irw_line =
+            orvd::configuration::LoadTrackGeometryFromJsonFile(
+                std::filesystem::path(argv[4]) / "track_library" /
+                "geometries" /
+                "r300_centerline_superelevation_1150m.json");
+        const auto irw_resolved =
+            orvd::configuration::AssembleResolvedInitialContext(
+                *irw_system, irw_startup, irw_line, 0.0);
+        if (irw_resolved.context().generalized_positions().size() != 81 ||
+            irw_resolved.context().generalized_velocities().size() != 74 ||
+            irw_resolved.context().series_spring_damper_forces().size() != 2 ||
+            irw_resolved.wheel_pair_placements().size() != 4) {
+            std::fprintf(stderr,
+                         "installed IRW H3 state did not resolve its complete "
+                         "q/v/z and wheel-pair placement transaction\n");
             return 1;
         }
 
@@ -156,7 +174,7 @@ int main(int argc, char* argv[]) {
         Eigen::VectorXd derivatives(system.system().continuous_state_size());
         system.compiled_plan().CalcStateTimeDerivatives(resolved.context(),
                                                         derivatives);
-        if (resolved.wheelset_placements().size() != 4 ||
+        if (resolved.wheel_pair_placements().size() != 4 ||
             resolved.context().generalized_positions().size() != 57 ||
             resolved.context().series_spring_damper_forces().size() != 2 ||
             system.contact_force_plan() == nullptr ||

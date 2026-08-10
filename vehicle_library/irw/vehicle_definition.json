@@ -33,7 +33,7 @@
         "station_offset_meters": -10.0
       }
     ],
-    "wheel_contact_carrier_body_names": [
+    "wheel_pair_station_reference_body_names": [
       "axlebridge_ff",
       "axlebridge_fr",
       "axlebridge_rf",
