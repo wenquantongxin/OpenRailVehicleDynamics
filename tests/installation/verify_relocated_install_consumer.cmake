@@ -104,6 +104,8 @@ set(installed_data_root
     "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics")
 set(installed_wheel_profile
     "${installed_data_root}/vehicle_library/gz18/wheel_profiles/gz18_reference_wheel_profile.json")
+set(installed_irw_wheel_profile
+    "${installed_data_root}/vehicle_library/irw/wheel_profiles/irw_reference_wheel_profile.json")
 set(installed_rail_profile
     "${installed_data_root}/track_library/rail_profiles/uic60_rail_profile.json")
 set(installed_track_irregularity
@@ -119,7 +121,8 @@ set(installed_r300_aar5_lateral_irregularity
 set(installed_r300_aar5_vertical_irregularity
     "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_vertical.json")
 foreach(installed_profile IN ITEMS
-        "${installed_wheel_profile}" "${installed_rail_profile}")
+        "${installed_wheel_profile}" "${installed_irw_wheel_profile}"
+        "${installed_rail_profile}")
     if(NOT EXISTS "${installed_profile}")
         message(FATAL_ERROR
             "the relocated prefix has no installed profile '${installed_profile}'")

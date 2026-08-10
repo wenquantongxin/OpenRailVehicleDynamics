@@ -814,6 +814,24 @@ add_test(NAME verify_gz18_wheel_rail_contact_binding
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_CURRENT_BINARY_DIR}/gz18-contact-fixtures)
 
+# G68 resolves the IRW logical identities to its S1002 wheel and the shared
+# UIC60 rail, checks the complete vehicle personality, then reaches a real
+# static contact and the applied roll-transport path without inventing G69's
+# independent-wheel body kinematics.
+add_executable(verify_irw_wheel_rail_contact_binding
+    configuration/irw_wheel_rail_contact_header_self_containment.cc
+    configuration/verify_irw_wheel_rail_contact_binding.cc)
+orvd_configure_first_party_target(verify_irw_wheel_rail_contact_binding)
+target_include_directories(verify_irw_wheel_rail_contact_binding
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_irw_wheel_rail_contact_binding
+    PRIVATE orvd_configuration)
+add_test(NAME verify_irw_wheel_rail_contact_binding
+         COMMAND verify_irw_wheel_rail_contact_binding
+             ${CMAKE_SOURCE_DIR}
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_CURRENT_BINARY_DIR}/irw-contact-fixtures)
+
 # G53's complete GZ18 direct RHS and G54's accepted-step projection history.
 # The same installed assets drive both: four wheelsets share four local branch
 # hints across eight interfaces, and CVODE advances those hints at its internal

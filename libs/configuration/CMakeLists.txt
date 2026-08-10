@@ -8,6 +8,7 @@ add_library(orvd_configuration STATIC
     src/assembled_gz18_contact_scenario.cc
     src/assembled_vehicle_system.cc
     src/gz18_wheel_rail_contact.cc
+    src/irw_wheel_rail_contact.cc
     src/load_profile_points.cc
     src/load_resolved_startup_state.cc
     src/load_track_irregularity_field.cc
@@ -16,7 +17,8 @@ add_library(orvd_configuration STATIC
     src/resolved_startup_state_invariants.cc
     src/strict_json.cc
     src/vehicle_definition_invariants.cc
-    src/vehicle_definition_inertia.cc)
+    src/vehicle_definition_inertia.cc
+    src/wheel_rail_contact_personality_assembly.cc)
 
 orvd_configure_first_party_target(orvd_configuration)
 

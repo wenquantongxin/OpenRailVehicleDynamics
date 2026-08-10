@@ -179,7 +179,7 @@ void CheckPersonality(const Gz18WheelRailContact& contact,
     Require(configuration.material.youngs_modulus_pascals == 210.0e9 &&
                 configuration.material.poisson_ratio == 0.28 &&
                 configuration.normal.penetration_equivalence_factor ==
-                    1.8181818181818181 &&
+                    1.0 / 0.55 &&
                 configuration.normal.reference_damping_newton_seconds_per_meter ==
                     100000.0 &&
                 configuration.normal.reference_stiffness_newtons_per_meter ==
