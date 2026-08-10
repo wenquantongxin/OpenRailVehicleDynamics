@@ -15,7 +15,7 @@ Codex 模型  gpt-5.6-sol,model_reasoning_effort=ultra(单次分析普遍 10–2
 交接文件    每步两件:GXX_<step>.stage.txt / GXX_<step>.out.log；结论读完立即删除
 ```
 
-`docs/planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md`(G01–G46)已封存,不再有
+`docs/planning/drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md`(G01–G46)已封存,不再有
 「当前 Goal」;任何时刻只有一个路书文件带该条目。旧 Codex 线程同样封存,不再向其发送载荷。
 
 ## 不变量(任一被破坏即阻塞)

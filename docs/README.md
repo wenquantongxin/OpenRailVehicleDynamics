@@ -4,7 +4,7 @@
 
 | 文档 | 内容 |
 |---|---|
-| [planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](planning/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) | **已完成底座路书**：17 个子目标、46 个原子 Goal、依赖关系与完成门；全部 Goal 已完成，执行边界止于 G46。 |
+| [planning/drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](planning/drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) | **已完成底座路书**：17 个子目标、46 个原子 Goal、依赖关系与完成门；全部 Goal 已完成，执行边界止于 G46。 |
 | [planning/rail_vehicle_dynamics_migration/DISCUSSION_AND_DECISION_LOG.md](planning/rail_vehicle_dynamics_migration/DISCUSSION_AND_DECISION_LOG.md) | **车辆迁移讨论与裁决账本**：逐轮记录分歧、裁决、项目负责人的总规划与待决问题；不定义实施顺序。 |
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md](planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md) | **车辆迁移协作观察簿**：Codex、Claude 等共同维护的源码事实、规划初期五组只读清单快照、假设和开放问题。 |
 | [planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md](planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md) | **参考模型差异观察表**：登记 GZ18／IRW 的 SIMPACK 参考模型与 ORVD 动力学模型之间可能被宏观闭合掩盖的差异及其筛查结论。 |

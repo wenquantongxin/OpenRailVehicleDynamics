@@ -47,6 +47,16 @@ UNION_COUNT = 60_321
 WRL_COUNT = 300_001
 STATION_GRID = np.arange(10_000, 45_001, dtype=np.float64) * 0.01
 MACRO_ALARM_MICRO = 100.0
+PLOT_LABELS = {"orvd": "ORVD", "simpack": "SIMPACK", "wrl": "WRL"}
+PLOT_STYLES = {
+    "orvd": {"color": "#0072B2", "linestyle": "-", "linewidth": 1.1,
+             "zorder": 1},
+    "simpack": {"color": "#D55E00", "linestyle": "--", "linewidth": 1.0,
+                "zorder": 3},
+    "wrl": {"color": "#009E73", "linestyle": "-.", "linewidth": 0.9,
+            "zorder": 2},
+}
+PLOT_SOURCE_ORDER = ("orvd", "simpack", "wrl")
 SIMPACK_CSV_SHA256 = (
     "15b687dcb7a668d3b6f4e3d3155935a5fd3ed11d869701dc434d9de05d659fe4"
 )
@@ -693,26 +703,31 @@ def plot_macro(path: Path, x: np.ndarray,
                values: dict[str, dict[str, np.ndarray]],
                x_label: str, title: str) -> None:
     figure, axes = plt.subplots(2, 4, figsize=(16, 7), sharex=True)
-    colors = {"simpack": "#202020", "wrl": "#d95f02", "orvd": "#1b9e77"}
-    labels = {"simpack": "SIMPACK", "wrl": "WRL", "orvd": "ORVD"}
+    handles = []
     for axle_index, axle in enumerate(AXLES):
         for row, (quantity, scale, unit) in enumerate((
             ("lateral", 1.0e3, "Lateral displacement [mm]"),
             ("yaw", 1.0e3, "Yaw [mrad]"),
         )):
             axis = axes[row, axle_index]
-            for source in ("simpack", "wrl", "orvd"):
-                axis.plot(x, values[source][f"{axle}.{quantity}"] * scale,
-                          label=labels[source], color=colors[source], linewidth=0.8)
+            for source in PLOT_SOURCE_ORDER:
+                line, = axis.plot(
+                    x, values[source][f"{axle}.{quantity}"] * scale,
+                    label=PLOT_LABELS[source], **PLOT_STYLES[source])
+                if axle_index == 0 and row == 0:
+                    handles.append(line)
             axis.set_title(axle.upper())
             axis.set_ylabel(unit)
             axis.grid(True, alpha=0.25)
             if row == 1:
                 axis.set_xlabel(x_label)
-    axes[0, 0].legend(loc="best", fontsize=8)
-    figure.suptitle(title)
-    figure.tight_layout()
-    figure.savefig(path, dpi=160)
+    figure.suptitle(title, y=0.985)
+    figure.legend(handles, [PLOT_LABELS[source] for source in PLOT_SOURCE_ORDER],
+                  loc="upper center", ncol=3, bbox_to_anchor=(0.5, 0.958),
+                  frameon=False)
+    figure.subplots_adjust(left=0.065, right=0.99, bottom=0.08, top=0.88,
+                           hspace=0.32, wspace=0.28)
+    figure.savefig(path, dpi=220)
     plt.close(figure)
 
 
@@ -721,8 +736,7 @@ def plot_contact(path: Path, x: np.ndarray,
                  source_order: tuple[str, ...], x_label: str,
                  comparison_kind: str, layer_label: str = "A") -> None:
     figure, axes = plt.subplots(2, 4, figsize=(16, 7), sharex=True)
-    colors = {"simpack": "#202020", "wrl": "#d95f02", "orvd": "#1b9e77"}
-    labels = {"simpack": "SIMPACK", "wrl": "WRL", "orvd": "ORVD"}
+    handles = []
     title = {
         "Q": "Q (total vertical support on wheel)",
         "N": "N (common single-patch samples)",
@@ -732,44 +746,56 @@ def plot_contact(path: Path, x: np.ndarray,
     for wheel_index, wheel in enumerate(WHEELS):
         axis = axes.flat[wheel_index]
         for source in source_order:
-            axis.plot(x, values[source][:, wheel_index],
-                      label=labels[source], color=colors[source], linewidth=0.65)
+            line, = axis.plot(x, values[source][:, wheel_index],
+                              label=PLOT_LABELS[source],
+                              **PLOT_STYLES[source])
+            if wheel_index == 0:
+                handles.append(line)
         axis.set_title(wheel)
         axis.set_ylabel("Force [N]")
         if wheel_index >= 4:
             axis.set_xlabel(x_label)
         axis.grid(True, alpha=0.25)
-    axes[0, 0].legend(loc="best", fontsize=8)
     figure.suptitle(
-        f"IRW layer {layer_label}, 30 s: {title} ({comparison_kind})")
-    figure.tight_layout()
-    figure.savefig(path, dpi=160)
+        f"IRW layer {layer_label}, 30 s: {title} ({comparison_kind})",
+        y=0.985)
+    figure.legend(handles, [PLOT_LABELS[source] for source in source_order],
+                  loc="upper center", ncol=len(source_order),
+                  bbox_to_anchor=(0.5, 0.958), frameon=False)
+    figure.subplots_adjust(left=0.065, right=0.99, bottom=0.08, top=0.88,
+                           hspace=0.32, wspace=0.28)
+    figure.savefig(path, dpi=220)
     plt.close(figure)
 
 
 def plot_topology(path: Path, begin: float, end: float,
                   sources: dict[str, dict[str, Any]], title: str) -> None:
     figure, axes = plt.subplots(2, 4, figsize=(16, 7), sharex=True)
-    colors = {"simpack": "#202020", "wrl": "#d95f02", "orvd": "#1b9e77"}
-    labels = {"simpack": "SIMPACK", "wrl": "WRL", "orvd": "ORVD"}
+    handles = []
     for wheel_index, wheel in enumerate(WHEELS):
         axis = axes.flat[wheel_index]
-        for source in ("simpack", "wrl", "orvd"):
+        for source in PLOT_SOURCE_ORDER:
             time = sources[source]["time"]
             mask = (time >= begin) & (time <= end)
-            axis.step(time[mask], sources[source]["patch_count"][mask, wheel_index],
-                      where="post", label=labels[source], color=colors[source],
-                      linewidth=0.8)
+            line, = axis.step(
+                time[mask], sources[source]["patch_count"][mask, wheel_index],
+                where="post", label=PLOT_LABELS[source],
+                **PLOT_STYLES[source])
+            if wheel_index == 0:
+                handles.append(line)
         axis.set_title(wheel)
         axis.set_ylabel("Contact patch count")
         if wheel_index >= 4:
             axis.set_xlabel("Time [s]")
         axis.set_ylim(-0.1, 2.4)
         axis.grid(True, alpha=0.25)
-    axes[0, 0].legend(loc="best", fontsize=8)
-    figure.suptitle(title)
-    figure.tight_layout()
-    figure.savefig(path, dpi=160)
+    figure.suptitle(title, y=0.985)
+    figure.legend(handles, [PLOT_LABELS[source] for source in PLOT_SOURCE_ORDER],
+                  loc="upper center", ncol=3, bbox_to_anchor=(0.5, 0.958),
+                  frameon=False)
+    figure.subplots_adjust(left=0.065, right=0.99, bottom=0.08, top=0.88,
+                           hspace=0.32, wspace=0.28)
+    figure.savefig(path, dpi=220)
     plt.close(figure)
 
 
@@ -917,8 +943,8 @@ def main(argv: Iterable[str] | None = None) -> int:
                    same_time_values, "Time [s]",
                    "IRW layer A: native 0.5 ms same-time response")
         for quantity in ("Q", "N", "Tx", "Ty"):
-            source_order = (("simpack", "orvd") if quantity == "Q" else
-                            ("simpack", "wrl", "orvd"))
+            source_order = (("orvd", "simpack") if quantity == "Q" else
+                            PLOT_SOURCE_ORDER)
             plot_contact(
                 output / f"irw_g71_contact_{quantity}_same_time.png",
                 base_time, force_time_values[quantity], quantity, source_order,

@@ -8,6 +8,11 @@ from pathlib import Path
 import sys
 from typing import Any, Iterable
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.lines import Line2D
 import numpy as np
 
 from analyze_irw_g71 import (
@@ -15,12 +20,16 @@ from analyze_irw_g71 import (
     BASE_COUNT,
     BASE_PERIOD_NS,
     MACRO_ALARM_MICRO,
+    PLOT_LABELS,
+    PLOT_SOURCE_ORDER,
+    PLOT_STYLES,
     REFINEMENT_BEGIN_NS,
     REFINEMENT_END_NS,
     REFINEMENT_PERIOD_NS,
     SIMPACK_CSV_SHA256,
     STATION_GRID,
     UNION_COUNT,
+    WHEELS,
     WRL_COUNT,
     WRL_CSV_SHA256,
     AnalysisError,
@@ -201,6 +210,65 @@ def endpoint_diagnostics(metadata: dict[str, Any], layer: str) -> dict[str, floa
         np.isfinite(float(value[key])) for key in required
     ), f"ORVD layer {layer} lacks finite endpoint diagnostics")
     return {key: float(value[key]) for key in required}
+
+
+def plot_readme_force_summary(
+    path: Path,
+    base_time: np.ndarray,
+    time_values: dict[str, dict[str, np.ndarray]],
+    station_values: dict[str, dict[str, np.ndarray]],
+    time_statistics: dict[str, Any],
+) -> None:
+    figure, axes = plt.subplots(3, 2, figsize=(16, 11))
+    wheel_labels = {
+        "ff_l": "FF left", "ff_r": "FF right",
+        "fr_l": "FR left", "fr_r": "FR right",
+        "rf_l": "RF left", "rf_r": "RF right",
+        "rr_l": "RR left", "rr_r": "RR right",
+    }
+    for row, quantity in enumerate(("Q", "Tx", "Ty")):
+        wheel = max(
+            WHEELS,
+            key=lambda name: time_statistics[name][quantity][
+                "orvd_minus_simpack"]["maximum_absolute"],
+        )
+        wheel_index = WHEELS.index(wheel)
+        source_order = (("orvd", "simpack") if quantity == "Q" else
+                        PLOT_SOURCE_ORDER)
+        for column, (x, values, domain) in enumerate((
+            (base_time, time_values, "time sequence"),
+            (STATION_GRID, station_values, "same station"),
+        )):
+            axis = axes[row, column]
+            for source in source_order:
+                axis.plot(x, values[quantity][source][:, wheel_index] / 1000.0,
+                          label=PLOT_LABELS[source],
+                          **PLOT_STYLES[source])
+            axis.set_title(
+                f"{quantity}: {wheel_labels[wheel]} — {domain}")
+            axis.set_ylabel(f"Wheel-side {quantity} [kN]")
+            axis.set_xlabel("Time [s]" if column == 0 else
+                            "Own axle-bridge station [m]")
+            axis.grid(True, alpha=0.25)
+    handles = [
+        Line2D([], [], label=PLOT_LABELS[source], **PLOT_STYLES[source])
+        for source in PLOT_SOURCE_ORDER
+    ]
+    figure.suptitle(
+        "G72 IRW R300+AAR5 — canonical wheel-side force response",
+        y=0.985)
+    figure.text(
+        0.5, 0.952,
+        "Each row shows the wheel with the largest native-time "
+        "ORVD–SIMPACK peak for that component",
+        ha="center", va="top", fontsize=10)
+    figure.legend(handles, [PLOT_LABELS[source] for source in PLOT_SOURCE_ORDER],
+                  loc="upper center", ncol=3, bbox_to_anchor=(0.5, 0.932),
+                  frameon=False)
+    figure.subplots_adjust(left=0.075, right=0.99, bottom=0.065, top=0.88,
+                           hspace=0.36, wspace=0.22)
+    figure.savefig(path, dpi=220)
+    plt.close(figure)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -384,8 +452,8 @@ def main(argv: Iterable[str] | None = None) -> int:
                    macro_time_values, "Time [s]",
                    "IRW layer B AAR5: native 0.5 ms same-time response")
         for quantity in ("Q", "N", "Tx", "Ty"):
-            source_order = (("simpack", "orvd") if quantity == "Q" else
-                            ("simpack", "wrl", "orvd"))
+            source_order = (("orvd", "simpack") if quantity == "Q" else
+                            PLOT_SOURCE_ORDER)
             plot_contact(
                 output / f"irw_g72_contact_{quantity}_same_time.png",
                 base_time, force_time_values[quantity], quantity, source_order,
@@ -395,6 +463,9 @@ def main(argv: Iterable[str] | None = None) -> int:
                 STATION_GRID, force_station_values[quantity], quantity,
                 source_order, "Own axle-bridge station [m]",
                 "same station over 100–450 m", "B")
+        plot_readme_force_summary(
+            output / "irw_g72_wheel_force_response.png", base_time,
+            force_time_values, force_station_values, force_time_stats)
         topology_base = {
             name: {"time": base_time,
                    "patch_count": contact_time_sources[name]["patch_count"]}

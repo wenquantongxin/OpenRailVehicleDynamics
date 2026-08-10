@@ -41,7 +41,7 @@
   G01–G46 已完成。公共能力包括多体运行时、程序化多体模型、最小系统组装和 CVODE 推进；
   vendored Drake 刚性树是内部实现，不是公共 API。
 - 锚点：
-  - [已完成底座路书](../DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)
+  - [已完成底座路书](../drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)
   - [`libs/multibody_runtime/`](../../../libs/multibody_runtime/)
   - [`libs/multibody_model/`](../../../libs/multibody_model/)
   - [`libs/system_assembly/`](../../../libs/system_assembly/)
@@ -441,7 +441,7 @@
   完全独立的物理求解器。ORVD 已有单自由度解析解、质量矩阵极化恢复、虚功、力移位、
   ABA/RNEA 往返等模型中立 C++ 性质门，因此迁移验证是“延续并补充”，不是从零建设。
 - 锚点：[PREF-001](DISCUSSION_AND_DECISION_LOG.md)；
-  [已完成底座路书](../DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) 的 G34–G39；WRL P039
+  [已完成底座路书](../drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md) 的 G34–G39；WRL P039
   逐体账本只作仓外迁移参考。
 - 影响：首版不应为了“保留独立预言机”而引入 `pydrake`。如车辆接线风险需要，可增加短窗逐体
   动态余差测试，但实现应消费第一方 C++ 物理量；仓外 Python 仍可作开发期统计工具。

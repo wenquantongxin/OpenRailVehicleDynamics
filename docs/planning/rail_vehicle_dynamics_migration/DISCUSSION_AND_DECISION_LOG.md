@@ -149,7 +149,7 @@
   最终实施顺序。
 - 裁决：暂不迁移代码；先建立本账本、协作观察清单和未启用的迁移路书骨架。
 - 证据入口：
-  - [已完成底座路书](../DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)
+  - [已完成底座路书](../drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)
   - [第一方工程约束](../../engineering/FIRST_PARTY_ENGINEERING_RULES.md)
 - 待决：首个消费者、迁移边界、状态与事件模型、轮轨接触适配、静平衡和资格矩阵。
 

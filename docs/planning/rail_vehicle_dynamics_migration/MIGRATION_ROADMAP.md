@@ -24,7 +24,7 @@ GZ18 不平顺长窗、IRW 被动迁移，到 IRW 1 kHz 控制与最小产品闭
 底座状态：G01–G46 已完成，提供模型中立多体运行时、程序化建模门面、刚体运动学与微分运动学、
 广义质量矩阵、逆动力学、O(n) 前向动力学、具名体固点扳手、单一权威上下文与版本化类型缓存、
 最小系统组装层、CVODE BDF 连续状态推进与接受事务、可安装跨平台包与离线依赖闭包。该底座的进度
-权威是 [DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](../DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)，
+权威是 [DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md](../drake_multibody_runtime_decoupling/DRAKE_MULTIBODY_RUNTIME_DECOUPLING_ROADMAP.md)，
 它已封存，不再有「当前 Goal」。
 
 迁移来源：`wheel-rail-lab`（下称 WRL）主线，**只读**。ORVD 不写入该仓库。讨论账本与观察簿可以

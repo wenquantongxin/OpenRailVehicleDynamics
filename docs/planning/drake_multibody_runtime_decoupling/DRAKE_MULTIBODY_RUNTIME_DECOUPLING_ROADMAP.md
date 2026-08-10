@@ -3,7 +3,7 @@
 本文件是 ORVD 已完成的 Drake 多体运行时脱耦实施路书。它把底座工作拆成 17 个子目标、
 46 个原子 Goal，执行边界止于 G46；当前作为既有能力与历史完成门的权威记录。后继车辆动力学
 迁移尚未启用，其待启用路书见
-[rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)。
+[rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](../rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md)。
 
 ## 当前状态
 
@@ -302,7 +302,7 @@ Goal GNN — <明确的功能名称>
     调用方向为 tree 接收上下文，依赖方向固定为「运行时状态/版本/通用类型化槽 → 刚性树
     接入层的具体缓存工作区 → 公共门面」，不预造 Diagram、事件、端口或通用依赖图。
   - 实测结论：契约表见
-    [`docs/design/MULTIBODY_RUNTIME_CONTRACT.md`](../design/MULTIBODY_RUNTIME_CONTRACT.md)。
+    [`docs/design/MULTIBODY_RUNTIME_CONTRACT.md`](../../design/MULTIBODY_RUNTIME_CONTRACT.md)。
     落位树里没有任何具体缓存声明，只有 `MultibodyElement::DeclareCacheEntry` 通用转发器，
     因此声明侧取自固定来源的 `multibody_tree_system.cc`，消费侧取自落位源码，两侧对账。
     契约把三件事分开记——Drake 声明的新鲜度先决条件、计算时实际读取的上游、ORVD 采用的
