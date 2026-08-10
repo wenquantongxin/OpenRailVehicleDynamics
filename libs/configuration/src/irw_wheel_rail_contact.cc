@@ -167,6 +167,11 @@ IrwWheelRailContact::profile_track_roll_transport_strategy() const {
     return implementation_->runtime_personality->roll_transport_strategy();
 }
 
+std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>
+IrwWheelRailContact::ReleaseRuntimePersonality() {
+    return std::move(implementation_->runtime_personality);
+}
+
 std::unique_ptr<IrwWheelRailContact> AssembleIrwWheelRailContact(
     const std::filesystem::path& orvd_data_root,
     const StartupWheelRailBinding& startup_binding,

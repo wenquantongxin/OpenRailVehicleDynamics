@@ -20,7 +20,7 @@ class TrackIrregularityField;
 
 namespace orvd::configuration {
 
-class AssembledGz18ContactScenario;
+class AssembledVehicleContactScenario;
 struct VehicleDefinition;
 namespace internal {
 struct BoundWheelRailContact;
@@ -78,10 +78,10 @@ class Gz18WheelRailContact {
     profile_track_roll_transport_strategy() const;
 
    private:
-    friend class AssembledGz18ContactScenario;
+    friend class AssembledVehicleContactScenario;
     friend std::unique_ptr<Gz18WheelRailContact> AssembleGz18WheelRailContact(
         const std::filesystem::path&, const StartupWheelRailBinding&, double);
-    friend std::unique_ptr<AssembledGz18ContactScenario>
+    friend std::unique_ptr<AssembledVehicleContactScenario>
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,

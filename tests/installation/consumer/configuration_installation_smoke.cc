@@ -8,50 +8,13 @@
 #include <vector>
 
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
-#include "orvd/configuration/assemble_resolved_initial_context.h"
-#include "orvd/configuration/assembled_gz18_contact_scenario.h"
-#include "orvd/configuration/assembled_vehicle_system.h"
-#include "orvd/configuration/irw_wheel_rail_contact.h"
+#include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
-#include "orvd/wheel_rail_contact/wheel_rail_pose.h"
-
-namespace {
-
-orvd::wheel_rail_contact::WheelRailContactInput MakeStaticIrwContactInput(
-    const orvd::configuration::IrwWheelRailContact& contact,
-    orvd::wheel_rail_contact::WheelSide side) {
-    const auto& constants = contact.pose_constants(side);
-    orvd::wheel_rail_contact::WheelRailPoseInput pose_input;
-    pose_input.placement = orvd::wheel_rail_contact::WheelsetPlacement{
-        .lateral_meters = 0.0,
-        .vertical_meters = -constants.nominal_rolling_radius_meters,
-        .roll_radians = 0.0,
-        .yaw_radians = 0.0,
-    };
-
-    orvd::wheel_rail_contact::WheelRailContactInput input;
-    input.pose = orvd::wheel_rail_contact::BuildContactPoseScalars(
-        constants, pose_input, {});
-    input.rail_frame.origin_track_meters = Eigen::Vector3d(
-        0.0, constants.rail_lateral_datum_meters,
-        constants.rail_vertical_datum_meters);
-    input.rail_frame.rotation_track_from_profile =
-        Eigen::AngleAxisd(constants.rail_roll_radians,
-                          Eigen::Vector3d::UnitX())
-            .toRotationMatrix();
-    input.wheel.origin_track_meters = Eigen::Vector3d(
-        0.0, constants.wheel_lateral_datum_meters,
-        -constants.nominal_rolling_radius_meters);
-    return input;
-}
-
-}  // namespace
 
 int main(int argc, char* argv[]) {
     try {
@@ -110,67 +73,89 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // The installed passive IRW mechanical record, H3 start-up state and
-        // G68 S1002/UIC60 personality cross the relocated package boundary
-        // together. The independent-wheel body connection remains G69 work.
+        // The installed IRW mechanical record, H3 state, R300 line and
+        // S1002/UIC60 personality cross the relocated package boundary as one
+        // contact-enabled scenario.
         const auto irw_vehicle =
             orvd::configuration::LoadVehicleDefinitionFromJsonFile(argv[5]);
-        const auto irw_system =
-            orvd::configuration::AssembleVehicleSystem(irw_vehicle, 9.81);
-        if (irw_system->model().num_rigid_bodies() != 25 ||
-            irw_system->model().num_generalized_positions() != 81 ||
-            irw_system->model().num_generalized_velocities() != 74 ||
-            irw_system->force_plan().translational_spring_damper_count() !=
-                36 ||
-            irw_system->force_plan().roll_spring_damper_couple_count() != 2 ||
-            irw_system->force_plan()
-                    .half_angle_midpoint_roll_pitch_yaw_bushing_count() != 8 ||
-            irw_system->force_plan()
-                    .series_spring_viscous_damper_count() != 2 ||
-            irw_system->force_plan().body_wrench_count() != 96 ||
-            irw_system->system().continuous_state_size() != 157) {
-            std::fprintf(stderr,
-                         "installed passive IRW record did not assemble its "
-                         "complete typed mechanical system\n");
-            return 1;
-        }
         const auto irw_startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[6]);
-        const auto irw_contact =
-            orvd::configuration::AssembleIrwWheelRailContact(
-                argv[4], irw_startup.wheel_rail_binding,
-                irw_startup.rail_profile_reference_vertical_offset_meters);
-        for (const auto side : {orvd::wheel_rail_contact::WheelSide::kRight,
-                                orvd::wheel_rail_contact::WheelSide::kLeft}) {
-            orvd::wheel_rail_contact::WheelRailContactWorkspace workspace;
-            irw_contact->model(side).PrepareWorkspace(workspace);
-            const auto result = irw_contact->model(side).Evaluate(
-                MakeStaticIrwContactInput(*irw_contact, side), workspace);
-            if (result.count != 1 ||
-                !(result.patches[0].normal.normal_force_newtons > 0.0) ||
-                !std::isfinite(
-                    result.patches[0].normal.normal_force_newtons)) {
-                std::fprintf(stderr,
-                             "installed IRW S1002/UIC60 personality did not "
-                             "produce finite positive contact\n");
-                return 1;
-            }
-        }
-        const auto irw_line =
+        auto irw_line =
             orvd::configuration::LoadTrackGeometryFromJsonFile(
                 std::filesystem::path(argv[4]) / "track_library" /
                 "geometries" /
                 "r300_centerline_superelevation_1150m.json");
-        const auto irw_resolved =
-            orvd::configuration::AssembleResolvedInitialContext(
-                *irw_system, irw_startup, irw_line, 0.0);
-        if (irw_resolved.context().generalized_positions().size() != 81 ||
+        const auto irw_scenario =
+            orvd::configuration::AssembleIrwContactScenario(
+                irw_vehicle, irw_startup, std::move(irw_line), argv[4], 0.0,
+                0.01);
+        const auto& irw_system = irw_scenario->vehicle_system();
+        const auto& irw_resolved = irw_scenario->initial_context();
+        if (irw_system.model().num_rigid_bodies() != 25 ||
+            irw_system.model().num_generalized_positions() != 81 ||
+            irw_system.model().num_generalized_velocities() != 74 ||
+            irw_system.force_plan().translational_spring_damper_count() !=
+                36 ||
+            irw_system.force_plan().roll_spring_damper_couple_count() != 2 ||
+            irw_system.force_plan()
+                    .half_angle_midpoint_roll_pitch_yaw_bushing_count() != 8 ||
+            irw_system.force_plan()
+                    .series_spring_viscous_damper_count() != 2 ||
+            irw_system.force_plan().body_wrench_count() != 96 ||
+            irw_system.system().continuous_state_size() != 157 ||
+            irw_system.contact_force_plan() == nullptr ||
+            irw_system.contact_force_plan()->carrier_count() != 4 ||
+            irw_system.contact_force_plan()->interface_count() != 8 ||
+            irw_resolved.context().generalized_positions().size() != 81 ||
             irw_resolved.context().generalized_velocities().size() != 74 ||
             irw_resolved.context().series_spring_damper_forces().size() != 2 ||
             irw_resolved.wheel_pair_placements().size() != 4) {
             std::fprintf(stderr,
-                         "installed IRW H3 state did not resolve its complete "
-                         "q/v/z and wheel-pair placement transaction\n");
+                         "installed IRW assets did not assemble their complete "
+                         "contact-enabled H3 system\n");
+            return 1;
+        }
+        Eigen::VectorXd irw_derivatives(157);
+        irw_system.compiled_plan().CalcStateTimeDerivatives(
+            irw_resolved.context(), irw_derivatives);
+        auto irw_contact_workspace =
+            irw_system.contact_force_plan()->CreateWorkspace();
+        std::vector<orvd::multibody_model::AppliedBodyWrench>
+            irw_contact_wrenches(8);
+        std::vector<orvd::forces::WheelRailContactInterfaceObservation>
+            irw_contact_observations(8);
+        const auto irw_component =
+            irw_system.system().GetMultibodyComponentView(
+                irw_resolved.context(),
+                irw_system.system().multibody_component());
+        irw_system.contact_force_plan()->CalcAppliedForcesAndObservations(
+            irw_component.context(), *irw_contact_workspace,
+            irw_resolved.context()
+                .wheel_rail_projection_station_hints_meters(),
+            irw_contact_wrenches, irw_contact_observations);
+        const std::vector<std::string> expected_wheels{
+            "wheel_ff_l", "wheel_ff_r", "wheel_fr_l", "wheel_fr_r",
+            "wheel_rf_l", "wheel_rf_r", "wheel_rr_l", "wheel_rr_r"};
+        for (std::size_t ordinal = 0; ordinal < expected_wheels.size();
+             ++ordinal) {
+            if (irw_contact_wrenches[ordinal].body !=
+                    irw_system.model().GetRigidBodyByName(
+                        expected_wheels[ordinal]) ||
+                irw_contact_observations[ordinal].contact_patch_count != 1 ||
+                !(irw_contact_observations[ordinal].normal_force_newtons >
+                  0.0) ||
+                !std::isfinite(
+                    irw_contact_observations[ordinal].normal_force_newtons)) {
+                std::fprintf(stderr,
+                             "installed IRW contact interface did not apply "
+                             "one finite positive contact to its named wheel\n");
+                return 1;
+            }
+        }
+        if (!irw_derivatives.allFinite()) {
+            std::fprintf(stderr,
+                         "installed IRW contact scenario did not produce a "
+                         "finite complete 157-state RHS\n");
             return 1;
         }
 

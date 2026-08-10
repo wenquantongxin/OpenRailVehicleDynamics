@@ -15,7 +15,7 @@
 
 namespace orvd::configuration {
 
-class AssembledGz18ContactScenario;
+class AssembledVehicleContactScenario;
 struct ResolvedStartupState;
 
 // What one assembled vehicle system remembers about the description it was
@@ -90,9 +90,15 @@ class AssembledVehicleSystem {
    private:
     friend std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
         const VehicleDefinition&, double);
-    friend class AssembledGz18ContactScenario;
-    friend std::unique_ptr<AssembledGz18ContactScenario>
+    friend class AssembledVehicleContactScenario;
+    friend std::unique_ptr<AssembledVehicleContactScenario>
     AssembleGz18ContactScenario(
+        const VehicleDefinition&, const ResolvedStartupState&,
+        track_geometry::TrackGeometry, const std::filesystem::path&, double,
+        double,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
+    friend std::unique_ptr<AssembledVehicleContactScenario>
+    AssembleIrwContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
         double,

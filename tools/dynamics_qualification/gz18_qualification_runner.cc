@@ -26,7 +26,7 @@
 #include "atomic_qualification_directory.h"
 #include "qualification_sample_clock.h"
 
-#include "orvd/configuration/assembled_gz18_contact_scenario.h"
+#include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_track_irregularity_field.h"
@@ -42,7 +42,7 @@ namespace orvd::dynamics_qualification {
 namespace {
 
 using Clock = std::chrono::steady_clock;
-using configuration::AssembledGz18ContactScenario;
+using configuration::AssembledVehicleContactScenario;
 using forces::WheelRailContactInterfaceObservation;
 using multibody_model::AppliedBodyWrench;
 using track_geometry::TrackStationRegion;
@@ -734,7 +734,7 @@ Gz18QualificationRunSummary RunGz18Qualification(
             configuration::LoadTrackIrregularityFieldFromDataRoot(
                 resolved_run_configuration.orvd_data_root,
                 resolved_run_configuration.track_irregularity_identifier));
-    std::unique_ptr<AssembledGz18ContactScenario> scenario =
+    std::unique_ptr<AssembledVehicleContactScenario> scenario =
         configuration::AssembleGz18ContactScenario(
             vehicle, startup, std::move(line),
             resolved_run_configuration.orvd_data_root,

@@ -96,6 +96,7 @@ WheelRailContactForceWorkspace::WheelRailContactForceWorkspace(
     : issuer_(issuer),
       contact_workspaces_(interface_count),
       carriers_(carrier_count),
+      interfaces_(interface_count),
       pending_wrenches_(interface_count),
       pending_interface_observations_(interface_count),
       pending_failures_(interface_count) {}
@@ -151,14 +152,28 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
             Reject("carrier '" + carrier.carrier_name +
                    "' has a non-finite initial projection station");
         }
+        const Eigen::Matrix3d& profile_basis =
+            carrier.rotation_body_from_nonspinning_wheel_profile;
+        const double orthonormal_residual =
+            (profile_basis.transpose() * profile_basis -
+             Eigen::Matrix3d::Identity())
+                .lpNorm<Eigen::Infinity>();
+        if (!profile_basis.allFinite() || orthonormal_residual > 1.0e-12 ||
+            std::abs(profile_basis.determinant() - 1.0) > 1.0e-12) {
+            Reject("carrier '" + carrier.carrier_name +
+                   "' has an invalid non-spinning wheel-profile basis");
+        }
         carriers_.push_back(CarrierBinding{
             std::move(carrier.carrier_name),
             model.GetRigidBodyByName(carrier.body_name),
-            carrier.initial_projection_station_meters});
+            carrier.initial_projection_station_meters, profile_basis,
+            (profile_basis.array() == Eigen::Matrix3d::Identity().array())
+                .all()});
     }
 
     std::unordered_set<std::string> interface_names;
     std::unordered_set<std::string> carrier_side_pairs;
+    std::unordered_set<std::string> independent_wheel_joint_names;
     std::vector<bool> carrier_is_used(carriers_.size(), false);
     interfaces_.reserve(interfaces.size());
     for (WheelRailContactInterfaceDefinition& interface : interfaces) {
@@ -189,15 +204,48 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
         carrier_is_used[carrier->second] = true;
         const multibody_model::RigidBodyHandle wheel_body =
             model.GetRigidBodyByName(interface.wheel_body_name);
-        if (wheel_body != carriers_[carrier->second].body) {
-            Reject("interface '" + interface.interface_name +
-                   "' names a wheel body different from its projection "
-                   "carrier; split carrier/wheel kinematics is not part of "
-                   "the GZ18 force-plan contract");
+        std::optional<InterfaceBinding::IndependentWheelBinding>
+            independent_wheel;
+        if (!interface.independent_wheel_revolute_joint.has_value()) {
+            if (wheel_body != carriers_[carrier->second].body) {
+                Reject("interface '" + interface.interface_name +
+                       "' names a wheel body different from its projection "
+                       "carrier but does not name an independent-wheel "
+                       "revolute joint");
+            }
+        } else {
+            if (wheel_body == carriers_[carrier->second].body) {
+                Reject("interface '" + interface.interface_name +
+                       "' names an independent-wheel revolute joint but its "
+                       "wheel body is the projection carrier");
+            }
+            const std::string& joint_name =
+                interface.independent_wheel_revolute_joint->joint_name;
+            if (joint_name.empty()) {
+                Reject("interface '" + interface.interface_name +
+                       "' has an empty independent-wheel revolute joint "
+                       "name");
+            }
+            if (!independent_wheel_joint_names.insert(joint_name).second) {
+                Reject("more than one independent-wheel interface names "
+                       "revolute joint '" + joint_name + "'");
+            }
+            const multibody_model::JointHandle joint =
+                model.GetJointByName(joint_name);
+            const auto position_range = model.GetJointPositionRange(joint);
+            const auto velocity_range = model.GetJointVelocityRange(joint);
+            if (position_range.size() != 1 || velocity_range.size() != 1) {
+                Reject("interface '" + interface.interface_name +
+                       "' names independent-wheel joint '" + joint_name +
+                       "', which does not own exactly one position and one "
+                       "velocity");
+            }
+            independent_wheel.emplace(
+                InterfaceBinding::IndependentWheelBinding{velocity_range});
         }
         interfaces_.push_back(InterfaceBinding{
             std::move(interface.interface_name), carrier->second, wheel_body,
-            interface.side});
+            interface.side, std::move(independent_wheel)});
     }
     for (std::size_t ordinal = 0; ordinal < carriers_.size(); ++ordinal) {
         if (!carrier_is_used[ordinal]) {
@@ -261,9 +309,10 @@ void WheelRailContactForcePlan::EvaluateCarrierProjections(
         }
     }
 
-    // Four GZ18 carriers, each evaluated once. This projection-only pass is
-    // also the accepted-step history update; velocities, track orientation and
-    // contact quantities are intentionally absent from that path.
+    // Each unique station-reference carrier is evaluated once. This
+    // projection-only pass is also the accepted-step history update;
+    // velocities, track orientation and contact quantities are intentionally
+    // absent from that path.
     for (std::size_t ordinal = 0; ordinal < carriers_.size(); ++ordinal) {
         const CarrierBinding& binding = carriers_[ordinal];
         WheelRailContactForceWorkspace::CarrierScratch& scratch =
@@ -314,11 +363,14 @@ void WheelRailContactForcePlan::CompleteCarrierKinematics(
             rotation_track_from_inertial *
             scratch.body_angular_velocity_in_inertial_radians_per_second;
 
-        const Eigen::Matrix3d rotation_track_from_body =
-            rotation_track_from_inertial *
-            scratch.rotation_inertial_from_body;
+        Eigen::Matrix3d rotation_track_from_profile =
+            rotation_track_from_inertial * scratch.rotation_inertial_from_body;
+        if (!binding.nonspinning_wheel_profile_is_body_frame) {
+            rotation_track_from_profile *=
+                binding.rotation_body_from_nonspinning_wheel_profile;
+        }
         const RollYawPitchAngles angles =
-            ResolveRollYawPitch(rotation_track_from_body);
+            ResolveRollYawPitch(rotation_track_from_profile);
         scratch.roll_radians = angles.roll_radians;
         scratch.yaw_radians = angles.yaw_radians;
 
@@ -353,7 +405,7 @@ void WheelRailContactForcePlan::CompleteCarrierKinematics(
         const RollYawPitchRates rates = ResolveRollYawPitchRates(
             relative_angular_velocity_in_track, scratch.roll_radians,
             scratch.yaw_radians);
-        scratch.wheel_pitch_rate_radians_per_second =
+        scratch.carrier_pitch_rate_radians_per_second =
             rates.pitch_rate_radians_per_second;
         scratch.curvature_radians_per_meter =
             line_.CurvatureRadiansPerMeter(scratch.track_station_meters);
@@ -366,10 +418,82 @@ void WheelRailContactForcePlan::CompleteCarrierKinematics(
             !std::isfinite(scratch.path_rate_meters_per_second) ||
             !std::isfinite(scratch.roll_radians) ||
             !std::isfinite(scratch.yaw_radians) ||
-            !std::isfinite(scratch.wheel_pitch_rate_radians_per_second)) {
+            !std::isfinite(scratch.carrier_pitch_rate_radians_per_second)) {
             throw std::runtime_error(
                 "wheel-rail contact force plan: carrier '" + binding.name +
                 "' produced non-finite track kinematics");
+        }
+    }
+}
+
+void WheelRailContactForcePlan::CompleteInterfaceKinematics(
+    const MultibodyEvaluationContext& context,
+    WheelRailContactForceWorkspace& workspace) const {
+    const Eigen::VectorXd& generalized_velocities =
+        context.generalized_velocities();
+    for (std::size_t ordinal = 0; ordinal < interfaces_.size(); ++ordinal) {
+        const InterfaceBinding& binding = interfaces_[ordinal];
+        const auto& carrier = workspace.carriers_[binding.carrier_ordinal];
+        auto& scratch = workspace.interfaces_[ordinal];
+
+        if (!binding.independent_wheel.has_value()) {
+            // Preserve the rigid-wheelset path exactly: no repeated model
+            // query and no new floating-point transformation.
+            scratch.wheel_body_origin_in_track_meters =
+                carrier.body_origin_in_track_meters;
+            scratch.wheel_body_origin_velocity_in_track_meters_per_second =
+                carrier.body_origin_velocity_in_track_meters_per_second;
+            scratch.wheel_body_angular_velocity_in_track_radians_per_second =
+                carrier.body_angular_velocity_in_track_radians_per_second;
+            scratch.wheel_pitch_rate_radians_per_second =
+                carrier.carrier_pitch_rate_radians_per_second;
+            continue;
+        }
+
+        // All multibody reads happen in this serial preparation pass. The
+        // independently rotating wheel supplies its own origin velocity and
+        // absolute angular velocity; its carrier continues to supply the
+        // non-spin profile pose and shared station history.
+        const auto wheel_pose =
+            model_->CalcPoseInWorld(context, binding.wheel_body);
+        const auto wheel_velocity =
+            model_->CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                context, binding.wheel_body);
+        const Eigen::Matrix3d rotation_track_from_inertial =
+            carrier.rotation_inertial_from_track.transpose();
+        scratch.wheel_body_origin_in_track_meters =
+            rotation_track_from_inertial *
+            (wheel_pose.translation() -
+             carrier.track_origin_in_inertial_meters);
+        scratch.wheel_body_origin_velocity_in_track_meters_per_second =
+            rotation_track_from_inertial *
+            wheel_velocity
+                .translational_velocity_at_frame_origin_meters_per_second();
+        scratch.wheel_body_angular_velocity_in_track_radians_per_second =
+            rotation_track_from_inertial *
+            wheel_velocity.angular_velocity_radians_per_second();
+
+        const int joint_velocity_index =
+            binding.independent_wheel->velocity_range.start();
+        const double relative_joint_rate =
+            generalized_velocities[joint_velocity_index];
+        scratch.wheel_pitch_rate_radians_per_second =
+            carrier.carrier_pitch_rate_radians_per_second -
+            relative_joint_rate;
+
+        RequireFinite(scratch.wheel_body_origin_in_track_meters,
+                      "independent-wheel body origin in the track frame");
+        RequireFinite(
+            scratch.wheel_body_origin_velocity_in_track_meters_per_second,
+            "independent-wheel body velocity in the track frame");
+        RequireFinite(
+            scratch.wheel_body_angular_velocity_in_track_radians_per_second,
+            "independent-wheel body angular velocity in the track frame");
+        if (!std::isfinite(scratch.wheel_pitch_rate_radians_per_second)) {
+            throw std::runtime_error(
+                "wheel-rail contact force plan: interface '" +
+                binding.name +
+                "' produced a non-finite independent-wheel pitch rate");
         }
     }
 }
@@ -436,10 +560,16 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
     EvaluateCarrierProjections(context, workspace,
                                projection_station_hints_meters);
     CompleteCarrierKinematics(context, workspace);
+    CompleteInterfaceKinematics(context, workspace);
+
+    // Resolve this immutable handle before the OpenMP region. No multibody
+    // model or context query is permitted while independent interfaces run.
+    const multibody_model::FrameHandle world_frame = model_->world_frame();
 
     const auto evaluate_interface = [&](std::size_t ordinal) {
         const InterfaceBinding& interface = interfaces_[ordinal];
         const auto& carrier = workspace.carriers_[interface.carrier_ordinal];
+        const auto& wheel = workspace.interfaces_[ordinal];
         const auto& constants = personality_->pose_constants(interface.side);
 
         // The active GZ18/WRL personality selects the wheel cross-section in
@@ -536,11 +666,11 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             RotationAboutZ(carrier.yaw_radians);
 
         const Eigen::Vector3d& wheel_body_origin_in_track =
-            carrier.body_origin_in_track_meters;
+            wheel.wheel_body_origin_in_track_meters;
         const Eigen::Vector3d& wheel_body_velocity_in_track =
-            carrier.body_origin_velocity_in_track_meters_per_second;
+            wheel.wheel_body_origin_velocity_in_track_meters_per_second;
         const Eigen::Vector3d& wheel_angular_velocity_in_track =
-            carrier.body_angular_velocity_in_track_radians_per_second;
+            wheel.wheel_body_angular_velocity_in_track_radians_per_second;
         const Eigen::Vector3d wheel_profile_offset_in_track =
             rotation_track_from_profile *
             Eigen::Vector3d(0.0, constants.wheel_lateral_datum_meters, 0.0);
@@ -559,7 +689,7 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         wheel_motion.arc_rate_meters_per_second =
             carrier.path_rate_meters_per_second;
         wheel_motion.wheel_pitch_rate_radians_per_second =
-            carrier.wheel_pitch_rate_radians_per_second;
+            wheel.wheel_pitch_rate_radians_per_second;
 
         const Eigen::Vector3d rail_offset_at_profile_station(
             0.0,
@@ -676,7 +806,7 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                       "aggregated contact moment");
         workspace.pending_wrenches_[ordinal] = AppliedBodyWrench{
             interface.wheel_body, Eigen::Vector3d::Zero(),
-            model_->world_frame(),
+            world_frame,
             accumulated_in_inertial.moment_newton_meters,
             accumulated_in_inertial.force_newtons};
         if (publish_observations) {

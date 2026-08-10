@@ -8,8 +8,20 @@
 #include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
 #include "orvd/wheel_rail_contact/rail_gauge_datum.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_model.h"
+#include "orvd/wheel_rail_contact/wheel_rail_contact_runtime_personality.h"
+
+namespace orvd::track_geometry {
+class TrackGeometry;
+}
+
+namespace orvd::wheel_rail_contact {
+class TrackIrregularityField;
+}
 
 namespace orvd::configuration {
+
+class AssembledVehicleContactScenario;
+struct VehicleDefinition;
 
 namespace internal {
 struct BoundWheelRailContact;
@@ -24,11 +36,9 @@ inline constexpr std::string_view kIrwWheelRailContactStrategyIdentifier =
 
 // The installed IRW contact personality resolved against one start-up
 // binding. It owns the prepared left/right S1002-UIC60 contact models and all
-// fixed inputs needed by G69's later vehicle connection.
-//
-// G68 deliberately stops at this immutable vehicle personality. It does not
-// infer the axle-bridge / independent-wheel kinematics or choose the eight
-// wrench application bodies; those are topology bindings owned by G69.
+// fixed contact inputs. Axle-bridge carriers, independently rotating wheel
+// bodies and their revolute joints remain topology bindings of the closed IRW
+// vehicle-contact scenario rather than properties inferred by this object.
 class IrwWheelRailContact {
    public:
     ~IrwWheelRailContact();
@@ -61,11 +71,22 @@ class IrwWheelRailContact {
     profile_track_roll_transport_strategy() const;
 
    private:
+    friend class AssembledVehicleContactScenario;
     friend std::unique_ptr<IrwWheelRailContact> AssembleIrwWheelRailContact(
         const std::filesystem::path&, const StartupWheelRailBinding&, double);
+    friend std::unique_ptr<AssembledVehicleContactScenario>
+    AssembleIrwContactScenario(
+        const VehicleDefinition&, const ResolvedStartupState&,
+        track_geometry::TrackGeometry, const std::filesystem::path&, double,
+        double,
+        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     explicit IrwWheelRailContact(
         std::unique_ptr<internal::BoundWheelRailContact> implementation);
+
+    [[nodiscard]] std::unique_ptr<
+        wheel_rail_contact::WheelRailContactRuntimePersonality>
+    ReleaseRuntimePersonality();
 
     std::unique_ptr<internal::BoundWheelRailContact> implementation_;
 };

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -28,6 +29,20 @@ struct WheelRailContactCarrierDefinition {
     std::string carrier_name;
     std::string body_name;
     double initial_projection_station_meters{0.0};
+    // Fixed basis of the non-spinning, axisymmetric wheel-profile frame P in
+    // the station-reference body B. The profile pose is R_TP = R_TB * R_BP;
+    // wheel spin never enters this rotation. Rigid GZ18 wheelsets use I,
+    // while IRW axle bridges use their frozen body/profile basis change.
+    Eigen::Matrix3d rotation_body_from_nonspinning_wheel_profile{
+        Eigen::Matrix3d::Identity()};
+};
+
+// The relative spin coordinate used when the projection carrier is an axle
+// bridge and the wheel is a separate rigid body. The closed vehicle scenario
+// names this relation explicitly; the force plan never infers it from body or
+// interface names.
+struct IndependentWheelRevoluteJointDefinition {
+    std::string joint_name;
 };
 
 struct WheelRailContactInterfaceDefinition {
@@ -36,6 +51,12 @@ struct WheelRailContactInterfaceDefinition {
     std::string wheel_body_name;
     wheel_rail_contact::WheelSide side{
         wheel_rail_contact::WheelSide::kRight};
+    // Absent for a rigid wheelset, where the projection carrier is also the
+    // wheel body. Present for an independently rotating wheel: the wheel's
+    // rigid motion then comes from `wheel_body_name`, while the frozen WRL
+    // pitch-rate scalar is the carrier pitch rate minus this joint's rate.
+    std::optional<IndependentWheelRevoluteJointDefinition>
+        independent_wheel_revolute_joint;
 };
 
 // Migration-time observations emitted from the same real contact evaluation
@@ -98,8 +119,18 @@ class WheelRailContactForceWorkspace {
         double path_rate_meters_per_second{0.0};
         double roll_radians{0.0};
         double yaw_radians{0.0};
-        double wheel_pitch_rate_radians_per_second{0.0};
+        double carrier_pitch_rate_radians_per_second{0.0};
         double curvature_radians_per_meter{0.0};
+    };
+
+    struct InterfaceScratch {
+        Eigen::Vector3d wheel_body_origin_in_track_meters{
+            Eigen::Vector3d::Zero()};
+        Eigen::Vector3d wheel_body_origin_velocity_in_track_meters_per_second{
+            Eigen::Vector3d::Zero()};
+        Eigen::Vector3d wheel_body_angular_velocity_in_track_radians_per_second{
+            Eigen::Vector3d::Zero()};
+        double wheel_pitch_rate_radians_per_second{0.0};
     };
 
     WheelRailContactForceWorkspace(
@@ -110,6 +141,7 @@ class WheelRailContactForceWorkspace {
     std::vector<wheel_rail_contact::WheelRailContactWorkspace>
         contact_workspaces_;
     std::vector<CarrierScratch> carriers_;
+    std::vector<InterfaceScratch> interfaces_;
     std::vector<multibody_model::AppliedBodyWrench> pending_wrenches_;
     std::vector<WheelRailContactInterfaceObservation>
         pending_interface_observations_;
@@ -196,25 +228,26 @@ class WheelRailContactForcePlan {
         std::span<const double> current_hints_meters,
         std::span<double> updated_hints_meters) const;
 
-    // G53's admitted topology has one GZ18 wheelset body serving as both the
-    // shared projection carrier and the body receiving its left/right contact
-    // wrenches.  Construction refuses split carrier/wheel bodies rather than
-    // pretending to implement the different orientation and spin kinematics
-    // required by an independently rotating wheel.  That topology is added
-    // with IRW's real consumer, not guessed here.
-
    private:
     struct CarrierBinding {
         std::string name;
         multibody_model::RigidBodyHandle body;
         double initial_projection_station_meters{0.0};
+        Eigen::Matrix3d rotation_body_from_nonspinning_wheel_profile{
+            Eigen::Matrix3d::Identity()};
+        bool nonspinning_wheel_profile_is_body_frame{true};
     };
     struct InterfaceBinding {
+        struct IndependentWheelBinding {
+            multibody_model::GeneralizedVelocityRange velocity_range;
+        };
+
         std::string name;
         std::size_t carrier_ordinal{0};
         multibody_model::RigidBodyHandle wheel_body;
         wheel_rail_contact::WheelSide side{
             wheel_rail_contact::WheelSide::kRight};
+        std::optional<IndependentWheelBinding> independent_wheel;
     };
 
     void EvaluateCarrierProjections(
@@ -222,6 +255,9 @@ class WheelRailContactForcePlan {
         WheelRailContactForceWorkspace& workspace,
         std::span<const double> projection_station_hints_meters) const;
     void CompleteCarrierKinematics(
+        const multibody_model::MultibodyEvaluationContext& context,
+        WheelRailContactForceWorkspace& workspace) const;
+    void CompleteInterfaceKinematics(
         const multibody_model::MultibodyEvaluationContext& context,
         WheelRailContactForceWorkspace& workspace) const;
     void CalcAppliedForcesImpl(

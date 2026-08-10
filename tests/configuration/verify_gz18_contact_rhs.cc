@@ -21,7 +21,7 @@
 #include <Eigen/Geometry>
 #include <omp.h>
 
-#include "orvd/configuration/assembled_gz18_contact_scenario.h"
+#include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/gz18_wheel_rail_contact.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
@@ -35,7 +35,7 @@
 
 namespace {
 
-using orvd::configuration::AssembledGz18ContactScenario;
+using orvd::configuration::AssembledVehicleContactScenario;
 using orvd::configuration::AssembleGz18ContactScenario;
 using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
 using orvd::configuration::LoadTrackGeometryFromJsonFile;
@@ -123,7 +123,7 @@ bool SameObservation(
 }
 
 std::vector<AppliedBodyWrench> EvaluateContactForces(
-    const AssembledGz18ContactScenario& scenario,
+    const AssembledVehicleContactScenario& scenario,
     orvd::forces::WheelRailContactForceWorkspace& workspace) {
     const auto& assembled = scenario.vehicle_system();
     const auto* plan = assembled.contact_force_plan();
@@ -143,7 +143,7 @@ std::vector<AppliedBodyWrench> EvaluateContactForces(
 
 std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
 EvaluateContactObservations(
-    const AssembledGz18ContactScenario& scenario,
+    const AssembledVehicleContactScenario& scenario,
     orvd::forces::WheelRailContactForceWorkspace& workspace) {
     const auto& assembled = scenario.vehicle_system();
     const auto* plan = assembled.contact_force_plan();
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
     constexpr double kReferenceStationMeters = 0.0;
     constexpr double kProjectionHalfWidthMeters = 0.01;
-    std::unique_ptr<AssembledGz18ContactScenario> scenario =
+    std::unique_ptr<AssembledVehicleContactScenario> scenario =
         AssembleGz18ContactScenario(
             vehicle, startup, std::move(line), std::filesystem::path(argv[4]),
             kReferenceStationMeters, kProjectionHalfWidthMeters);

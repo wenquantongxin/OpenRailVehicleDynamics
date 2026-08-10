@@ -14,7 +14,7 @@
 
 #include <Eigen/Core>
 
-#include "orvd/configuration/assembled_gz18_contact_scenario.h"
+#include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
@@ -25,7 +25,7 @@
 
 namespace {
 
-using orvd::configuration::AssembledGz18ContactScenario;
+using orvd::configuration::AssembledVehicleContactScenario;
 using orvd::configuration::AssembleGz18ContactScenario;
 using orvd::configuration::LoadResolvedStartupStateFromJsonFile;
 using orvd::configuration::LoadTrackGeometryFromJsonFile;
@@ -84,7 +84,7 @@ struct ShortWindowObservation {
 };
 
 std::array<ShortWindowObservation, kSampleCount> BuildObservationBatch(
-    const AssembledGz18ContactScenario& scenario,
+    const AssembledVehicleContactScenario& scenario,
     const std::array<double, kSampleCount>& sample_times,
     const Eigen::MatrixXd& dense_states) {
     const auto& assembled = scenario.vehicle_system();
@@ -144,7 +144,7 @@ std::array<ShortWindowObservation, kSampleCount> BuildObservationBatch(
 }
 
 void CheckInitialVerticalAcceleration(
-    const AssembledGz18ContactScenario& scenario,
+    const AssembledVehicleContactScenario& scenario,
     const orvd::configuration::ResolvedStartupState& startup) {
     const auto& assembled = scenario.vehicle_system();
     auto& context = scenario.initial_context().context();
@@ -181,7 +181,7 @@ void CheckInitialVerticalAcceleration(
 }
 
 void CheckPhysicalObservationBatch(
-    const AssembledGz18ContactScenario& scenario,
+    const AssembledVehicleContactScenario& scenario,
     const std::array<ShortWindowObservation, kSampleCount>& observations) {
     const auto& placements =
         scenario.initial_context().wheel_pair_placements();
@@ -244,7 +244,7 @@ void CheckPhysicalObservationBatch(
 }
 
 void CheckFinalDynamicWiring(
-    const AssembledGz18ContactScenario& scenario) {
+    const AssembledVehicleContactScenario& scenario) {
     const auto& assembled = scenario.vehicle_system();
     auto& context = scenario.initial_context().context();
     const auto* contact_plan = assembled.contact_force_plan();
@@ -342,7 +342,7 @@ int main(int argc, char** argv) {
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
     constexpr double kReferenceStationMeters = 0.0;
     constexpr double kProjectionHalfWidthMeters = 0.01;
-    std::unique_ptr<AssembledGz18ContactScenario> scenario =
+    std::unique_ptr<AssembledVehicleContactScenario> scenario =
         AssembleGz18ContactScenario(
             vehicle, startup, std::move(line), std::filesystem::path(argv[4]),
             kReferenceStationMeters, kProjectionHalfWidthMeters);
