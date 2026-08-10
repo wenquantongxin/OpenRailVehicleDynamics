@@ -26,11 +26,13 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 8) {
+    if (argc != 8 && argc != 11) {
         std::fprintf(
             stderr,
             "usage: orvd_irw_dynamics_qualification VEHICLE STARTUP LINE "
-            "DATA_ROOT OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS\n");
+            "DATA_ROOT OUTPUT_DIRECTORY DURATION_NS BASE_SAMPLE_PERIOD_NS "
+            "[REFINEMENT_BEGIN_NS REFINEMENT_END_NS "
+            "REFINEMENT_PERIOD_NS]\n");
         return 2;
     }
 
@@ -46,6 +48,25 @@ int main(int argc, char** argv) {
                      "duration and sample period must be positive integer "
                      "nanoseconds\n");
         return 2;
+    }
+    if (argc == 11) {
+        std::int64_t begin{};
+        std::int64_t end{};
+        std::int64_t period{};
+        if (!ParsePositiveInteger(argv[8], &begin) ||
+            !ParsePositiveInteger(argv[9], &end) ||
+            !ParsePositiveInteger(argv[10], &period)) {
+            std::fprintf(
+                stderr,
+                "refinement begin, end and period must be positive integer "
+                "nanoseconds\n");
+            return 2;
+        }
+        config.local_sample_refinement =
+            orvd::dynamics_qualification::QualificationSampleRefinement{
+                static_cast<std::uint64_t>(begin),
+                static_cast<std::uint64_t>(end),
+                static_cast<std::uint64_t>(period)};
     }
 
     try {

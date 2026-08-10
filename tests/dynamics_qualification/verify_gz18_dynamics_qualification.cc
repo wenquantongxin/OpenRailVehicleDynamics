@@ -23,6 +23,7 @@ using orvd::dynamics_qualification::AtomicQualificationDirectory;
 using orvd::dynamics_qualification::Gz18QualificationRunConfiguration;
 using orvd::dynamics_qualification::ProjectMonotoneSeriesToStationGrid;
 using orvd::dynamics_qualification::QualificationSampleClock;
+using orvd::dynamics_qualification::QualificationSampleRefinement;
 using orvd::dynamics_qualification::RunGz18Qualification;
 
 int failures = 0;
@@ -105,6 +106,33 @@ void CheckIntegerClock() {
                 (void)QualificationSampleClock(1'000'001ULL, 500'000ULL);
             }),
             "a terminal time not divisible by the sample period was accepted");
+
+    const QualificationSampleClock irw_a_layer(
+        30'000'000'000ULL, 500'000ULL,
+        QualificationSampleRefinement{
+            3'640'000'000ULL, 3'680'000'000ULL, 100'000ULL});
+    const auto irw_times = irw_a_layer.MakeSampleTimesSeconds();
+    Require(irw_a_layer.sample_count() == 60'321 &&
+                irw_times.front() == 0.0 && irw_times.back() == 30.0,
+            "the G71 base/refined integer-clock union is not 60321 points");
+    Require(irw_a_layer.TargetTimeNanoseconds(7'280) ==
+                    3'640'000'000ULL &&
+                irw_a_layer.TargetTimeNanoseconds(7'281) ==
+                    3'640'100'000ULL &&
+                irw_a_layer.TargetTimeNanoseconds(7'680) ==
+                    3'680'000'000ULL &&
+                irw_a_layer.TargetTimeNanoseconds(7'681) ==
+                    3'680'500'000ULL,
+            "the G71 refined window is not merged by integer nanosecond "
+            "identity");
+    Require(Throws([] {
+                (void)QualificationSampleClock(
+                    30'000'000'000ULL, 500'000ULL,
+                    QualificationSampleRefinement{
+                        3'640'000'000ULL, 3'680'000'001ULL, 100'000ULL});
+            }),
+            "a local-refinement interval not divisible by its period was "
+            "accepted");
 }
 
 void CheckStationProjection() {

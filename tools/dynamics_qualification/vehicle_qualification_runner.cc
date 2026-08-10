@@ -84,6 +84,8 @@ struct QualificationInterfaceObservation final {
 
 struct QualificationPatchObservation final {
     std::uint64_t sample_index{};
+    std::uint64_t time_nanoseconds{};
+    double time_seconds{};
     std::size_t interface_ordinal{};
     std::size_t patch_ordinal{};
     WheelRailContactPatchObservation patch;
@@ -91,6 +93,7 @@ struct QualificationPatchObservation final {
 
 struct QualificationObservation final {
     std::uint64_t sample_index{};
+    std::uint64_t time_nanoseconds{};
     double time_seconds{};
     std::array<CarrierObservation, kCarrierCount> carriers{};
     std::array<QualificationInterfaceObservation, kInterfaceCount>
@@ -498,7 +501,7 @@ void WriteObservationHeader(
     std::ofstream* output,
     const configuration::AssembledVehicleSystem& assembled,
     const VehicleQualificationRecipe& recipe) {
-    *output << "sample_index\ttime_seconds";
+    *output << "sample_index\ttime_nanoseconds\ttime_seconds";
     const auto* contact_plan = assembled.contact_force_plan();
     for (int carrier = 0; carrier < contact_plan->carrier_count(); ++carrier) {
         const std::string name(contact_plan->carrier_name(carrier));
@@ -537,7 +540,9 @@ void WriteObservationHeader(
 
 void WriteObservation(std::ofstream* output,
                       const QualificationObservation& observation) {
-    *output << observation.sample_index << '\t' << observation.time_seconds;
+    *output << observation.sample_index << '\t'
+            << observation.time_nanoseconds << '\t'
+            << observation.time_seconds;
     for (const CarrierObservation& carrier : observation.carriers) {
         *output << '\t' << carrier.track_station_meters << '\t'
                 << carrier.lateral_meters << '\t' << carrier.yaw_radians;
@@ -576,7 +581,8 @@ void WriteObservation(std::ofstream* output,
 
 void WritePatchObservationHeader(std::ofstream* output) {
     *output
-        << "sample_index\ttime_seconds\tinterface_name\tpatch_ordinal"
+        << "sample_index\ttime_nanoseconds\ttime_seconds\tinterface_name"
+        << "\tpatch_ordinal"
         << "\tnormal_force_newtons"
         << "\tlongitudinal_force_on_wheel_in_contact_frame_newtons"
         << "\tlateral_force_on_wheel_in_contact_frame_newtons"
@@ -591,12 +597,11 @@ void WritePatchObservationHeader(std::ofstream* output) {
 
 void WritePatchObservation(
     std::ofstream* output, const QualificationPatchObservation& observation,
-    std::span<const double> sample_times,
     const configuration::AssembledVehicleSystem& assembled) {
     const auto& patch = observation.patch;
     *output << observation.sample_index << '\t'
-            << sample_times[static_cast<std::size_t>(observation.sample_index)]
-            << '\t'
+            << observation.time_nanoseconds << '\t'
+            << observation.time_seconds << '\t'
             << assembled.contact_force_plan()->interface_name(
                    static_cast<int>(observation.interface_ordinal))
             << '\t' << observation.patch_ordinal << '\t'
@@ -748,6 +753,19 @@ void WriteMetadata(
            << "  },\n"
            << "  \"sample_period_nanoseconds\": "
            << clock.sample_period_nanoseconds() << ",\n"
+           << "  \"local_sample_refinement\": ";
+    if (!clock.local_refinement().has_value()) {
+        output << "null";
+    } else {
+        const auto& refinement = *clock.local_refinement();
+        output << "{\"begin_time_nanoseconds\": "
+               << refinement.begin_time_nanoseconds
+               << ", \"end_time_nanoseconds\": "
+               << refinement.end_time_nanoseconds
+               << ", \"sample_period_nanoseconds\": "
+               << refinement.sample_period_nanoseconds << '}';
+    }
+    output << ",\n"
            << "  \"terminal_time_nanoseconds\": "
            << clock.terminal_time_nanoseconds() << ",\n"
            << "  \"sample_count\": " << clock.sample_count() << ",\n"
@@ -898,7 +916,8 @@ QualificationRunSummary RunVehicleQualification(
     const QualificationSampleClock sample_clock(
         static_cast<std::uint64_t>(run_configuration.duration_nanoseconds),
         static_cast<std::uint64_t>(
-            run_configuration.sample_period_nanoseconds));
+            run_configuration.sample_period_nanoseconds),
+        run_configuration.local_sample_refinement);
     const std::vector<double> sample_times =
         sample_clock.MakeSampleTimesSeconds();
     const QualificationRunConfiguration resolved_run_configuration =
@@ -1081,6 +1100,8 @@ QualificationRunSummary RunVehicleQualification(
 
         QualificationObservation observation;
         observation.sample_index = static_cast<std::uint64_t>(sample);
+        observation.time_nanoseconds = sample_clock.TargetTimeNanoseconds(
+            static_cast<std::uint64_t>(sample));
         observation.time_seconds = sample_times[sample];
         for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
             observation.carriers[carrier] = ObserveCarrier(
@@ -1096,7 +1117,9 @@ QualificationRunSummary RunVehicleQualification(
                  patch < interface_observations[interface].contact_patch_count;
                  ++patch) {
                 patch_observations.push_back(QualificationPatchObservation{
-                    static_cast<std::uint64_t>(sample), interface, patch,
+                    static_cast<std::uint64_t>(sample),
+                    observation.time_nanoseconds, observation.time_seconds,
+                    interface, patch,
                     interface_observations[interface].patches[patch]});
             }
         }
@@ -1226,7 +1249,7 @@ QualificationRunSummary RunVehicleQualification(
     for (const QualificationPatchObservation& observation :
          patch_observations) {
         WritePatchObservation(&patch_observation_output, observation,
-                              sample_times, assembled);
+                              assembled);
     }
     CloseChecked(&patch_observation_output, patch_observation_path);
 

@@ -32,7 +32,8 @@ QualificationRunSummary RunIrwQualification(
             std::nullopt,
             input.output_directory,
             input.duration_nanoseconds,
-            input.sample_period_nanoseconds},
+            input.sample_period_nanoseconds,
+            input.local_sample_refinement},
         kRecipe);
 }
 

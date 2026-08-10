@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "qualification_run_summary.h"
+#include "qualification_sample_clock.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 
@@ -27,6 +28,7 @@ struct QualificationRunConfiguration final {
     std::filesystem::path output_directory;
     std::int64_t duration_nanoseconds{};
     std::int64_t sample_period_nanoseconds{};
+    std::optional<QualificationSampleRefinement> local_sample_refinement;
 };
 
 // A closed, private recipe used only by the two migration executables. It is

@@ -37,14 +37,15 @@ the terminal duration changes:
 ```text
 G60 duration_nanoseconds = 10000000000
 G61 duration_nanoseconds = 20000000000
-sample_period_nanoseconds = 500000
+sample_period_nanoseconds = 500000  # the base period when a local clock exists
 track_irregularity_identifier = gz18_aar6_reference_irregularity
 vehicle_layout_reference_track_station_meters = 0
 ```
 
 `run_qualification_with_metrics.py` is a Linux research wrapper for one such
 process. Select `--vehicle-recipe irw` for the seven-argument IRW executable;
-the default remains the eight-argument GZ18 executable. The wrapper pins the
+G71 adds three local-clock arguments to that same closed IRW entry point. The
+default remains the eight-argument GZ18 executable. The wrapper pins the
 requested logical processors and records the outer wall
 time, child CPU time, peak resident memory, executable digest, compiler/build
 identity, inherited OpenMP environment, complete runner arguments, output
@@ -195,3 +196,28 @@ different station observer merely to create a third line. Full trajectories,
 statistics, source paths and performance logs stay under the untracked `tmp/`
 tree. Only signed-off summary figures and concise tables may be copied into the
 developer documentation; they are not product inputs or test baselines.
+
+## G71 IRW layer-A comparison
+
+`analyze_irw_g71.py` compares one continuous 30 s ORVD H3/R300 passive run
+against the frozen SIMPACK layer-A run and the recent WRL control. The base
+clock is the native SIMPACK 0.5 ms sequence. ORVD adds a 100 microsecond local
+clock over 3.64--3.68 s to the same dense trajectory; the two integer clocks
+form a 60,321-sample union and do not create additional integrator stops.
+
+The macro gate independently interpolates each axle bridge by its own strictly
+increasing station onto the 100--450 m / 0.01 m grid. SIMPACK and WRL source
+yaw share the same physical-body convention. ORVD retains the WRL/Drake
+axle-bridge body basis, whose fixed relation is
+`R_TB,ORVD = R_TB,source * diag(1,-1,-1)`; therefore source yaw is negated once
+before comparison, while source lateral displacement is already in physical
+Track-T and is unchanged. This conversion follows the migrated body-basis
+contract and is not selected from the result.
+
+Q is compared between SIMPACK and ORVD as the complete interface support.
+Local N/Tx/Ty use all three implementations only where all three have exactly
+one patch. Same-station interpolation never crosses a zero- or multi-patch
+gap. Patch count and the known short seven-wheel interval remain observations,
+not an exact event-time or safety gate. The extractor reads only explicitly
+named local SBR channels into an untracked analysis archive; SBR files and all
+long-window artifacts stay outside Git.

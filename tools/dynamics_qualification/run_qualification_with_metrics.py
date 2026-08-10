@@ -17,8 +17,8 @@ from typing import Iterable
 
 
 RUNNER_LAYOUTS = {
-    "gz18": (8, 5),
-    "irw": (7, 4),
+    "gz18": ((8,), 5),
+    "irw": ((7, 10), 4),
 }
 
 
@@ -87,11 +87,11 @@ def parse_arguments(argv: Iterable[str]) -> argparse.Namespace:
         arguments.runner_arguments = arguments.runner_arguments[1:]
     if not arguments.runner_arguments:
         parser.error("runner arguments are empty")
-    argument_count, _ = RUNNER_LAYOUTS[arguments.vehicle_recipe]
-    if len(arguments.runner_arguments) != argument_count:
+    argument_counts, _ = RUNNER_LAYOUTS[arguments.vehicle_recipe]
+    if len(arguments.runner_arguments) not in argument_counts:
         parser.error(
             f"the {arguments.vehicle_recipe.upper()} qualification runner "
-            f"requires exactly {argument_count} arguments"
+            f"requires {argument_counts} arguments"
         )
     return arguments
 

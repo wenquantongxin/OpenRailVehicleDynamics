@@ -32,7 +32,8 @@ QualificationRunSummary RunGz18Qualification(
             input.track_irregularity_identifier,
             input.output_directory,
             input.duration_nanoseconds,
-            input.sample_period_nanoseconds},
+            input.sample_period_nanoseconds,
+            std::nullopt},
         kRecipe);
 }
 

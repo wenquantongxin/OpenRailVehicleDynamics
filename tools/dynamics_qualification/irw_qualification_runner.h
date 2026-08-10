@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 
 #include "qualification_run_summary.h"
+#include "qualification_sample_clock.h"
 
 namespace orvd::dynamics_qualification {
 
@@ -18,6 +20,7 @@ struct IrwQualificationRunConfiguration final {
     std::filesystem::path output_directory;
     std::int64_t duration_nanoseconds{};
     std::int64_t sample_period_nanoseconds{};
+    std::optional<QualificationSampleRefinement> local_sample_refinement;
 };
 
 // Runs one passive IRW qualification in a private assembled system. A
