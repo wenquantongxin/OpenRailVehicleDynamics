@@ -1,3 +1,4 @@
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <exception>
@@ -110,15 +111,30 @@ int main(int argc, char* argv[]) {
             irw_system.contact_force_plan() == nullptr ||
             irw_system.contact_force_plan()->carrier_count() != 4 ||
             irw_system.contact_force_plan()->interface_count() != 8 ||
+            irw_system.active_torque_plan() == nullptr ||
+            irw_system.active_torque_plan()->channel_count() != 8 ||
+            irw_system.active_torque_plan()->body_wrench_count() != 16 ||
+            irw_system.system().active_torque_body_wrench_count() != 16 ||
+            irw_system.system().held_active_torque_count() != 8 ||
             irw_resolved.context().generalized_positions().size() != 81 ||
             irw_resolved.context().generalized_velocities().size() != 74 ||
             irw_resolved.context().series_spring_damper_forces().size() != 2 ||
+            irw_resolved.context()
+                    .held_independent_wheel_active_torques_newton_metres()
+                    .size() != 8 ||
+            !irw_resolved.context()
+                 .held_independent_wheel_active_torques_newton_metres()
+                 .isZero(0.0) ||
             irw_resolved.wheel_pair_placements().size() != 4) {
             std::fprintf(stderr,
                          "installed IRW assets did not assemble their complete "
                          "contact-enabled H3 system\n");
             return 1;
         }
+        const std::array<double, 8> installed_active_torques{
+            10.0, -20.0, 30.0, -40.0, 50.0, -60.0, 70.0, -80.0};
+        irw_system.system().SetHeldIndependentWheelActiveTorques(
+            irw_resolved.context(), installed_active_torques);
         Eigen::VectorXd irw_derivatives(157);
         irw_system.compiled_plan().CalcStateTimeDerivatives(
             irw_resolved.context(), irw_derivatives);

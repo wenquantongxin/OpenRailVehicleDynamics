@@ -21,11 +21,14 @@ namespace {
 
 using forces::WheelRailContactCarrierDefinition;
 using forces::WheelRailContactInterfaceDefinition;
+using forces::IndependentWheelActiveTorqueCoupleDefinition;
 using wheel_rail_contact::WheelSide;
 
 struct FrozenContactTopology {
     std::vector<WheelRailContactCarrierDefinition> carriers;
     std::vector<WheelRailContactInterfaceDefinition> interfaces;
+    std::vector<IndependentWheelActiveTorqueCoupleDefinition>
+        active_torque_couples;
 };
 
 [[noreturn]] void Reject(std::string_view scenario,
@@ -131,6 +134,7 @@ struct IrwInterfaceTopology {
     std::string_view carrier_body_name;
     std::string_view wheel_body_name;
     std::string_view revolute_joint_name;
+    std::string_view reaction_frame_body_name;
     WheelSide side;
 };
 
@@ -140,20 +144,28 @@ constexpr std::array<std::string_view, 4> kIrwCarrierNames{
 // Frozen WRL order: each axle from front to rear, left before right.
 constexpr std::array<IrwInterfaceTopology, 8> kIrwInterfaces{{
     {"wheel_ff_l", "axlebridge_ff", "wheel_ff_l", "rev_wheel_ff_l",
+     "frame_front",
      WheelSide::kLeft},
     {"wheel_ff_r", "axlebridge_ff", "wheel_ff_r", "rev_wheel_ff_r",
+     "frame_front",
      WheelSide::kRight},
     {"wheel_fr_l", "axlebridge_fr", "wheel_fr_l", "rev_wheel_fr_l",
+     "frame_front",
      WheelSide::kLeft},
     {"wheel_fr_r", "axlebridge_fr", "wheel_fr_r", "rev_wheel_fr_r",
+     "frame_front",
      WheelSide::kRight},
     {"wheel_rf_l", "axlebridge_rf", "wheel_rf_l", "rev_wheel_rf_l",
+     "frame_rear",
      WheelSide::kLeft},
     {"wheel_rf_r", "axlebridge_rf", "wheel_rf_r", "rev_wheel_rf_r",
+     "frame_rear",
      WheelSide::kRight},
     {"wheel_rr_l", "axlebridge_rr", "wheel_rr_l", "rev_wheel_rr_l",
+     "frame_rear",
      WheelSide::kLeft},
     {"wheel_rr_r", "axlebridge_rr", "wheel_rr_r", "rev_wheel_rr_r",
+     "frame_rear",
      WheelSide::kRight},
 }};
 
@@ -235,6 +247,7 @@ FrozenContactTopology BuildIrwContactTopology(
     FrozenContactTopology topology;
     topology.carriers.reserve(kIrwCarrierNames.size());
     topology.interfaces.reserve(kIrwInterfaces.size());
+    topology.active_torque_couples.reserve(kIrwInterfaces.size());
     // The frozen WRL straight Track-T basis and the IRW axle-bridge body basis
     // differ by C = diag(1,-1,-1). ORVD's Track-T basis is already the
     // physical track basis, so this fixed R_BP keeps the non-spinning wheel
@@ -257,6 +270,15 @@ FrozenContactTopology BuildIrwContactTopology(
                 forces::IndependentWheelRevoluteJointDefinition{
                     std::string(interface.revolute_joint_name)},
         });
+        topology.active_torque_couples.push_back(
+            IndependentWheelActiveTorqueCoupleDefinition{
+                .channel_name = std::string(interface.interface_name),
+                .axis_provider_body_name =
+                    std::string(interface.carrier_body_name),
+                .wheel_body_name = std::string(interface.wheel_body_name),
+                .reaction_frame_body_name =
+                    std::string(interface.reaction_frame_body_name),
+            });
     }
     return topology;
 }
@@ -332,6 +354,7 @@ AssembleGz18ContactScenario(
             std::move(line), contact->ReleaseRuntimePersonality(),
             std::move(track_irregularity), std::move(topology.carriers),
             std::move(topology.interfaces),
+            std::move(topology.active_torque_couples),
             projection_search_half_width_meters);
     ResolvedInitialContext initial_context = AssembleResolvedInitialContext(
         *vehicle_system, startup_state,
@@ -373,6 +396,7 @@ AssembleIrwContactScenario(
             std::move(line), contact->ReleaseRuntimePersonality(),
             std::move(track_irregularity), std::move(topology.carriers),
             std::move(topology.interfaces),
+            std::move(topology.active_torque_couples),
             projection_search_half_width_meters);
     ResolvedInitialContext initial_context = AssembleResolvedInitialContext(
         *vehicle_system, startup_state,

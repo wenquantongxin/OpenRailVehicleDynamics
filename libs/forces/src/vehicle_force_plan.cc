@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "body_wrench_pair.h"
 #include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
 
@@ -209,22 +210,6 @@ void EmitTranslationalWrenchPair(
     destination[1] = AppliedBodyWrench{
         opposite.body, opposite.position_in_body_frame_meters, world,
         Eigen::Vector3d::Zero(), -force_on_reference_in_world};
-}
-
-// A pure couple: equal and opposite moments, no force, and therefore no
-// dependence on where the two application points are.
-void EmitCoupleWrenchPair(const MultibodyModel& model,
-                          const BodyFixedPoint& reference,
-                          const BodyFixedPoint& opposite,
-                          const Eigen::Vector3d& moment_on_reference_in_world,
-                          std::span<AppliedBodyWrench> destination) {
-    const FrameHandle world = model.world_frame();
-    destination[0] = AppliedBodyWrench{
-        reference.body, reference.position_in_body_frame_meters, world,
-        moment_on_reference_in_world, Eigen::Vector3d::Zero()};
-    destination[1] = AppliedBodyWrench{
-        opposite.body, opposite.position_in_body_frame_meters, world,
-        -moment_on_reference_in_world, Eigen::Vector3d::Zero()};
 }
 
 // The WRL half-angle bushing applies both resultants at one instantaneous
@@ -576,9 +561,9 @@ void VehicleForcePlan::CalcAppliedForces(
         // involved.
         const Eigen::Vector3d moment_in_world =
             motion.rotation_of_reference_in_world * Eigen::Vector3d(moment, 0.0, 0.0);
-        EmitCoupleWrenchPair(*model_, motion.reference_point,
-                             motion.opposite_point, moment_in_world,
-                             body_wrenches.subspan(slot, 2));
+        internal::EmitCoupleWrenchPair(
+            *model_, motion.reference_point, motion.opposite_point,
+            moment_in_world, body_wrenches.subspan(slot, 2));
         slot += 2;
     }
 

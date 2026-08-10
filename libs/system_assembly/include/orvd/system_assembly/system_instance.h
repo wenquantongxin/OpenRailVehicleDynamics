@@ -20,6 +20,7 @@ class MultibodyModel;
 }
 
 namespace orvd::forces {
+class IndependentWheelActiveTorquePlan;
 class VehicleForcePlan;
 class WheelRailContactForcePlan;
 class WheelRailContactForceWorkspace;
@@ -105,14 +106,15 @@ class SystemContinuousStateRange {
 
 /// The root runtime context for one `SystemInstance`.
 ///
-/// It owns exactly one time value, one multibody evaluation context, and the
-/// force-element state that belongs to no body.  Its owner decides whether a
-/// particular instance is the publicly accepted context or an integrator trial
-/// context.  The multibody context in turn owns the G21 state store; this class
-/// does not mirror q or v.  The model-bound forward-dynamics workspace and the
-/// scratch the plan needs to reach that facade are created beside it once and
-/// reused, so that two contexts of one system can be evaluated without sharing
-/// a buffer.
+/// It owns exactly one time value, one multibody evaluation context, the
+/// force-element state that belongs to no body, and all admitted context-local
+/// data including held active torques. Its owner decides whether a particular
+/// instance is the publicly accepted context or an integrator trial context.
+/// The multibody context in turn owns the G21 state store; this class does not
+/// mirror q or v. The model-bound forward-dynamics workspace and the scratch
+/// the plan needs to reach that facade are created beside it once and reused,
+/// so that two contexts of one system can be evaluated without sharing a
+/// buffer.
 class SystemRuntimeContext {
    public:
     ~SystemRuntimeContext();
@@ -139,6 +141,13 @@ class SystemRuntimeContext {
         return nominal_forces_;
     }
 
+    /// The already-conditioned wheel-side torques held between controller
+    /// events.  This fixed-layout context-local input is not part of [q;v;z].
+    [[nodiscard]] const Eigen::VectorXd&
+    held_independent_wheel_active_torques_newton_metres() const {
+        return held_independent_wheel_active_torques_newton_metres_;
+    }
+
     [[nodiscard]] double time_seconds() const { return time_seconds_; }
 
     /// The local projection branch currently held by this context for each
@@ -159,6 +168,7 @@ class SystemRuntimeContext {
                          double initial_time_seconds,
                          int series_spring_damper_force_state_count,
                          int nominal_force_component_count,
+                         int held_active_torque_count,
                          int body_wrench_count,
                          const forces::WheelRailContactForcePlan*
                              contact_force_plan);
@@ -175,6 +185,9 @@ class SystemRuntimeContext {
     /// bridge explicitly copies it into its trial context so RHS evaluations
     /// nevertheless see the accepted value.
     Eigen::VectorXd nominal_forces_;
+    /// Context-local zero-order-held input. G73 only stores and applies these
+    /// values; command conditioning and event updates belong to later goals.
+    Eigen::VectorXd held_independent_wheel_active_torques_newton_metres_;
     /// The wrenches the force plan produces, sized once. It belongs to the
     /// context so that two contexts of one system never write one buffer.
     std::vector<multibody_model::AppliedBodyWrench> body_wrenches_;
@@ -235,11 +248,22 @@ class SystemInstance {
         return contact_force_plan_;
     }
 
+    [[nodiscard]] const forces::IndependentWheelActiveTorquePlan*
+    active_torque_plan() const {
+        return active_torque_plan_;
+    }
+
     [[nodiscard]] int vehicle_body_wrench_count() const {
         return vehicle_body_wrench_count_;
     }
     [[nodiscard]] int contact_body_wrench_count() const {
         return contact_body_wrench_count_;
+    }
+    [[nodiscard]] int active_torque_body_wrench_count() const {
+        return active_torque_body_wrench_count_;
+    }
+    [[nodiscard]] int held_active_torque_count() const {
+        return held_active_torque_count_;
     }
 
     [[nodiscard]] MultibodyComponentIndex multibody_component() const;
@@ -327,14 +351,23 @@ class SystemInstance {
         const Eigen::Vector3d&
             nominal_force_on_reference_end_in_reference_frame_newtons) const;
 
-    /// Copies every currently admitted context-local physical parameter.
+    /// Atomically replaces every named held independent-wheel active torque.
     ///
-    /// Today these are joint damping and translational-element nominal forces.
-    /// Time, q, v, z and evaluation scratch are deliberately not copied.  Both
-    /// context identities are checked before either destination category is
-    /// written.
-    void CopyContextLocalParameters(const SystemRuntimeContext& source,
-                                    SystemRuntimeContext& destination) const;
+    /// The caller supplies the frozen plan order. Every entry is validated
+    /// before any write; a foreign context, wrong count or non-finite value
+    /// leaves the complete held vector unchanged.
+    void SetHeldIndependentWheelActiveTorques(
+        SystemRuntimeContext& context,
+        std::span<const double> held_wheel_torques_newton_metres) const;
+
+    /// Copies every currently admitted item of context-local data.
+    ///
+    /// These are joint damping, translational-element nominal forces and held
+    /// independent-wheel active torques. Time, q, v, z, projection history and
+    /// evaluation scratch are deliberately not copied. Both context identities
+    /// are checked before any destination category is written.
+    void CopyContextLocalData(const SystemRuntimeContext& source,
+                              SystemRuntimeContext& destination) const;
 
     /// Resolves the stable component index to direct references.  No name or
     /// run-time type lookup occurs on this path.
@@ -353,8 +386,12 @@ class SystemInstance {
     int nominal_force_component_count_{};
     const forces::VehicleForcePlan* force_plan_{nullptr};
     const forces::WheelRailContactForcePlan* contact_force_plan_{nullptr};
+    const forces::IndependentWheelActiveTorquePlan* active_torque_plan_{
+        nullptr};
     int vehicle_body_wrench_count_{};
     int contact_body_wrench_count_{};
+    int active_torque_body_wrench_count_{};
+    int held_active_torque_count_{};
 };
 
 }  // namespace orvd::system_assembly

@@ -31,9 +31,9 @@ int SystemRhsBridge::continuous_state_size() const {
     return system_->continuous_state_size();
 }
 
-void SystemRhsBridge::SynchronizeContextParametersFrom(
+void SystemRhsBridge::SynchronizeContextLocalDataFrom(
     const system_assembly::SystemRuntimeContext& source_context) {
-    system_->CopyContextLocalParameters(source_context, *trial_context_);
+    system_->CopyContextLocalData(source_context, *trial_context_);
 }
 
 void SystemRhsBridge::CalcTimeDerivatives(

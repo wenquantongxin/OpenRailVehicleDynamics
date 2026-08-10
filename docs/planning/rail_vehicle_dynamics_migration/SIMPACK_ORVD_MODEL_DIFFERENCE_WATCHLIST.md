@@ -788,8 +788,9 @@ force／torque 的表达基明确为 From Marker。模型的 `glob.compat.afcf=0
 当构架 From 标记 `+Y` 与轴桥／轮体共同转动轴在动态姿态下不同，同一标量转矩会产生不同世界系
 力偶方向和虚功；即使两轴暂时共轴，SIMPACK From 正号与 WRL 轮侧正号仍相反。差异可进入轮速、
 构架响应与轮轨力。项目负责人已裁决：ORVD 首轮必须先闭合近期冻结 WRL 的计算路径。因此 G73
-明确冻结“轴桥 `+Y` 提供轴、轮体受正转矩、对应构架受反转矩”，并用构架轴与共同转动轴可分辨的
-姿态夹具及同状态 WRL 对拍验证；不为 SIMPACK 的另一表达合同增加运行时策略或第二套产品公式。
+已由 G73 冻结“轴桥 `+Y` 提供轴、轮体受正转矩、对应构架受反转矩”，并用构架轴与共同转动轴
+可分辨的姿态夹具及同状态 WRL 对拍验证；不为 SIMPACK 的另一表达合同增加运行时策略或第二套
+产品公式。
 
 若 ORVD 与冻结 WRL 不闭合，按迁移错误立即修复。与 SIMPACK 原生输出核对时，必须先把 From 侧
 原始标量转换为规范轮侧标量 `tau_wheel = -tau_from_raw`，再分别观察构架轴与轴桥轴的方向差；
@@ -805,7 +806,7 @@ force／torque 的表达基明确为 From Marker。模型的 `glob.compat.afcf=0
   转动副拓扑。
 - 本地 QCH `Force Elements / Formulations`、`Outputs`、Type-93 与 Type-110 参数页：component
   力元的 From Marker 表达基、正反作用方向与 `Y` 分量身份。
-- ORVD DEC-040 与路书 G73：现行迁移处置。
+- ORVD DEC-040、R029 与路书 G73：已落地迁移处置。
 
 ## 新条目模板
 

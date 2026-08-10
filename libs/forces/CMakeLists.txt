@@ -3,6 +3,7 @@
 # wrench, and who integrates that wrench is not its concern.
 
 add_library(orvd_forces STATIC
+    src/independent_wheel_active_torque_plan.cc
     src/vehicle_force_plan.cc
     src/wheel_rail_contact_force_plan.cc)
 

@@ -1,11 +1,13 @@
-// G69: the frozen H3 IRW state drives eight independently rotating wheel
-// contacts through one complete q81/v74/z2 vehicle RHS.
+// G69/G73: the frozen H3 IRW state drives eight independently rotating wheel
+// contacts and eight held wheel--frame torque couples through one complete
+// q81/v74/z2 vehicle RHS.
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -20,7 +22,9 @@
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
+#include "orvd/forces/independent_wheel_active_torque_plan.h"
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
+#include "orvd/integrators/system_rhs_bridge.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "wheel_rail_contact/allocation_probe.h"
 
@@ -40,6 +44,8 @@ constexpr int kVelocityCount = 74;
 constexpr int kSeriesStateCount = 2;
 constexpr int kContinuousStateCount = 157;
 constexpr int kVehicleWrenchCount = 96;
+constexpr int kContactWrenchCount = 8;
+constexpr int kActiveTorqueWrenchCount = 16;
 
 constexpr std::array<std::string_view, kCarrierCount> kCarrierNames{
     "axlebridge_ff", "axlebridge_fr", "axlebridge_rf", "axlebridge_rr"};
@@ -50,6 +56,9 @@ constexpr std::array<std::string_view, kInterfaceCount> kWheelJointNames{
     "rev_wheel_ff_l", "rev_wheel_ff_r", "rev_wheel_fr_l",
     "rev_wheel_fr_r", "rev_wheel_rf_l", "rev_wheel_rf_r",
     "rev_wheel_rr_l", "rev_wheel_rr_r"};
+constexpr std::array<std::string_view, kInterfaceCount> kReactionFrameNames{
+    "frame_front", "frame_front", "frame_front", "frame_front",
+    "frame_rear", "frame_rear", "frame_rear", "frame_rear"};
 
 int failures = 0;
 
@@ -154,9 +163,12 @@ int main(int argc, char** argv) {
             kReferenceStationMeters, kProjectionHalfWidthMeters);
         const auto& assembled = scenario->vehicle_system();
         const auto* contact_plan = assembled.contact_force_plan();
+        const auto* active_torque_plan = assembled.active_torque_plan();
         Require(contact_plan != nullptr,
                 "the assembled system lost its IRW contact plan");
-        if (contact_plan == nullptr) {
+        Require(active_torque_plan != nullptr,
+                "the assembled IRW system lost its active torque plan");
+        if (contact_plan == nullptr || active_torque_plan == nullptr) {
             return 1;
         }
 
@@ -172,8 +184,13 @@ int main(int argc, char** argv) {
                     assembled.system().vehicle_body_wrench_count() ==
                         kVehicleWrenchCount &&
                     assembled.system().contact_body_wrench_count() ==
+                        kContactWrenchCount &&
+                    assembled.system().active_torque_body_wrench_count() ==
+                        kActiveTorqueWrenchCount &&
+                    assembled.system().held_active_torque_count() ==
                         static_cast<int>(kInterfaceCount),
-                "the 96 vehicle and eight contact wrench slices are wrong");
+                "the 96 vehicle, eight contact and 16 active-torque wrench "
+                "slices are wrong");
         Require(contact_plan->carrier_count() ==
                         static_cast<int>(kCarrierCount) &&
                     contact_plan->interface_count() ==
@@ -188,6 +205,13 @@ int main(int argc, char** argv) {
                         kVelocityCount &&
                     context.series_spring_damper_forces().size() ==
                         kSeriesStateCount &&
+                    context
+                            .held_independent_wheel_active_torques_newton_metres()
+                            .size() ==
+                        static_cast<Eigen::Index>(kInterfaceCount) &&
+                    context
+                        .held_independent_wheel_active_torques_newton_metres()
+                        .isZero(0.0) &&
                     context.wheel_rail_projection_station_hints_meters()
                             .size() == kCarrierCount,
                 "the resolved H3 context has the wrong state or history size");
@@ -215,8 +239,21 @@ int main(int argc, char** argv) {
         }
         for (std::size_t ordinal = 0; ordinal < kInterfaceCount; ++ordinal) {
             Require(contact_plan->interface_name(static_cast<int>(ordinal)) ==
-                        kInterfaceNames[ordinal],
-                    "the frozen IRW interface order is wrong");
+                            kInterfaceNames[ordinal] &&
+                        active_torque_plan->channel_name(
+                            static_cast<int>(ordinal)) ==
+                            kInterfaceNames[ordinal] &&
+                        active_torque_plan->axis_provider_body_name(
+                            static_cast<int>(ordinal)) ==
+                            kCarrierNames[ordinal / 2] &&
+                        active_torque_plan->wheel_body_name(
+                            static_cast<int>(ordinal)) ==
+                            kInterfaceNames[ordinal] &&
+                        active_torque_plan->reaction_frame_body_name(
+                            static_cast<int>(ordinal)) ==
+                            kReactionFrameNames[ordinal],
+                    "a frozen IRW contact or active-torque channel mapping is "
+                    "wrong");
         }
 
         Eigen::VectorXd compiled_rhs(kContinuousStateCount);
@@ -228,7 +265,8 @@ int main(int argc, char** argv) {
         const auto component = assembled.system().GetMultibodyComponentView(
             context, assembled.system().multibody_component());
         std::vector<AppliedBodyWrench> all_wrenches(
-            kVehicleWrenchCount + kInterfaceCount);
+            kVehicleWrenchCount + kContactWrenchCount +
+            kActiveTorqueWrenchCount);
         Eigen::VectorXd series_derivatives(kSeriesStateCount);
         assembled.force_plan().CalcAppliedForces(
             component.context(), context.series_spring_damper_forces(),
@@ -240,7 +278,17 @@ int main(int argc, char** argv) {
             component.context(), *contact_workspace,
             context.wheel_rail_projection_station_hints_meters(),
             std::span(all_wrenches).subspan(kVehicleWrenchCount,
-                                             kInterfaceCount));
+                                             kContactWrenchCount));
+        active_torque_plan->CalcAppliedForces(
+            component.context(),
+            std::span(
+                context
+                    .held_independent_wheel_active_torques_newton_metres()
+                    .data(),
+                kInterfaceCount),
+            std::span(all_wrenches)
+                .subspan(kVehicleWrenchCount + kContactWrenchCount,
+                         kActiveTorqueWrenchCount));
         Eigen::VectorXd multibody_derivatives(kPositionCount +
                                               kVelocityCount);
         component.model().CalcStateTimeDerivatives(
@@ -251,8 +299,20 @@ int main(int argc, char** argv) {
             multibody_derivatives;
         independently_rebuilt.tail(kSeriesStateCount) = series_derivatives;
         Require(Near(compiled_rhs, independently_rebuilt),
-                "the compiled 157-state RHS differs from its typed 96+8 "
+                "the compiled 157-state RHS differs from its typed 96+8+16 "
                 "wrench rebuild");
+
+        Eigen::VectorXd passive_contact_derivatives(kPositionCount +
+                                                    kVelocityCount);
+        component.model().CalcStateTimeDerivatives(
+            component.context(),
+            std::span(all_wrenches).first(kVehicleWrenchCount +
+                                           kContactWrenchCount),
+            {}, {}, component.forward_dynamics_workspace(),
+            passive_contact_derivatives);
+        Require(passive_contact_derivatives == multibody_derivatives,
+                "eight zero held torques did not preserve the G72 passive "
+                "multibody RHS bit for bit");
 
         const ContactBatch baseline =
             EvaluateContactBatch(assembled, context, *contact_workspace);
@@ -364,6 +424,189 @@ int main(int argc, char** argv) {
                      contact_generalized_force),
                 "the acceleration increment does not close against the eight "
                 "independent-wheel contact wrenches");
+
+        // The eight held values are context-local and committed as one finite
+        // batch. Distinct ordinary rail-vehicle torques make every named
+        // mapping observable without introducing a controller or limiter.
+        const std::array<double, kInterfaceCount> held_torques{
+            120.0, -240.0, 360.0, -480.0,
+            600.0, -720.0, 840.0, -960.0};
+        assembled.system().SetHeldIndependentWheelActiveTorques(
+            context, held_torques);
+        Require(std::equal(
+                    held_torques.begin(), held_torques.end(),
+                    context
+                        .held_independent_wheel_active_torques_newton_metres()
+                        .data()),
+                "the eight held torques were not committed together");
+        const Eigen::VectorXd held_snapshot =
+            context.held_independent_wheel_active_torques_newton_metres();
+        assembled.system().SetHeldIndependentWheelActiveTorques(
+            context, held_torques);
+        try {
+            assembled.system().SetHeldIndependentWheelActiveTorques(
+                context,
+                std::span<const double>(held_torques).first(
+                    kInterfaceCount - 1));
+            Require(false, "a seven-entry held-torque batch was accepted");
+        } catch (const std::invalid_argument&) {
+        }
+        Require(context.held_independent_wheel_active_torques_newton_metres() ==
+                    held_snapshot,
+                "a rejected held-torque count partially changed the context");
+        auto nonfinite_torques = held_torques;
+        nonfinite_torques.back() =
+            std::numeric_limits<double>::quiet_NaN();
+        try {
+            assembled.system().SetHeldIndependentWheelActiveTorques(
+                context, nonfinite_torques);
+            Require(false, "a non-finite held-torque batch was accepted");
+        } catch (const std::invalid_argument&) {
+        }
+        Require(context.held_independent_wheel_active_torques_newton_metres() ==
+                    held_snapshot,
+                "a rejected non-finite torque partially changed the context");
+
+        std::array<AppliedBodyWrench, kActiveTorqueWrenchCount>
+            active_wrenches;
+        active_torque_plan->CalcAppliedForces(
+            component.context(), held_torques, active_wrenches);
+        Eigen::Vector3d net_active_moment = Eigen::Vector3d::Zero();
+        double active_spatial_power_watts = 0.0;
+        double expected_active_power_watts = 0.0;
+        for (std::size_t ordinal = 0; ordinal < kInterfaceCount; ++ordinal) {
+            const auto provider = assembled.model().GetRigidBodyByName(
+                std::string(kCarrierNames[ordinal / 2]));
+            const auto wheel = assembled.model().GetRigidBodyByName(
+                std::string(kInterfaceNames[ordinal]));
+            const auto reaction = assembled.model().GetRigidBodyByName(
+                std::string(kReactionFrameNames[ordinal]));
+            const Eigen::Vector3d axis_in_world =
+                assembled.model()
+                    .CalcPoseInWorld(component.context(), provider)
+                    .rotation() *
+                Eigen::Vector3d::UnitY();
+            const auto& wheel_wrench = active_wrenches[2 * ordinal];
+            const auto& reaction_wrench = active_wrenches[2 * ordinal + 1];
+            Require(wheel_wrench.body == wheel &&
+                        reaction_wrench.body == reaction &&
+                        wheel_wrench.body != provider &&
+                        reaction_wrench.body != provider &&
+                        wheel_wrench.force_newtons.isZero() &&
+                        reaction_wrench.force_newtons.isZero() &&
+                        wheel_wrench.torque_about_point_newton_metres ==
+                            held_torques[ordinal] * axis_in_world &&
+                        reaction_wrench.torque_about_point_newton_metres ==
+                            -held_torques[ordinal] * axis_in_world,
+                    "an active channel did not apply wheel-positive and "
+                    "frame-negative torque about axle-bridge +Y");
+            net_active_moment +=
+                wheel_wrench.torque_about_point_newton_metres +
+                reaction_wrench.torque_about_point_newton_metres;
+            const auto wheel_velocity =
+                assembled.model()
+                    .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                        component.context(), wheel);
+            const auto reaction_velocity =
+                assembled.model()
+                    .CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
+                        component.context(), reaction);
+            active_spatial_power_watts +=
+                wheel_wrench.torque_about_point_newton_metres.dot(
+                    wheel_velocity.angular_velocity_radians_per_second()) +
+                reaction_wrench.torque_about_point_newton_metres.dot(
+                    reaction_velocity.angular_velocity_radians_per_second());
+            expected_active_power_watts +=
+                held_torques[ordinal] *
+                axis_in_world.dot(
+                    wheel_velocity.angular_velocity_radians_per_second() -
+                    reaction_velocity.angular_velocity_radians_per_second());
+        }
+        Require(net_active_moment.isZero(0.0) &&
+                    std::abs(active_spatial_power_watts -
+                             expected_active_power_watts) <=
+                        RelativeTolerance(
+                            std::abs(expected_active_power_watts)),
+                "the eight active pure couples lost zero resultant or virtual "
+                "power closure");
+
+        std::copy(active_wrenches.begin(), active_wrenches.end(),
+                  all_wrenches.begin() + kVehicleWrenchCount +
+                      kContactWrenchCount);
+        Eigen::VectorXd active_multibody_derivatives(kPositionCount +
+                                                     kVelocityCount);
+        component.model().CalcStateTimeDerivatives(
+            component.context(), all_wrenches, {}, {},
+            component.forward_dynamics_workspace(),
+            active_multibody_derivatives);
+        Eigen::VectorXd active_compiled_rhs(kContinuousStateCount);
+        assembled.compiled_plan().CalcStateTimeDerivatives(
+            context, active_compiled_rhs);
+        Require(active_compiled_rhs.allFinite() &&
+                    active_compiled_rhs != compiled_rhs &&
+                    Near(active_compiled_rhs.head(kPositionCount +
+                                                  kVelocityCount),
+                         active_multibody_derivatives) &&
+                    active_compiled_rhs.tail(kSeriesStateCount) ==
+                        series_derivatives,
+                "the fixed active-torque slice did not reach the complete "
+                "compiled RHS");
+
+        // Exercise the real accepted-to-trial bridge boundary used by CVODE.
+        // Held inputs are not part of [q;v;z], so an omitted explicit sync
+        // would otherwise leave a freshly created trial context at zero.
+        Eigen::VectorXd accepted_state(kContinuousStateCount);
+        assembled.system().CopyContinuousState(context, accepted_state);
+        auto trial_context =
+            assembled.system().CreateDefaultRuntimeContext(0.0);
+        orvd::integrators::SystemRhsBridge rhs_bridge(
+            assembled.system(), assembled.compiled_plan(), *trial_context,
+            orvd::integrators::NoCallTimeAppliedForces{});
+        rhs_bridge.SynchronizeContextLocalDataFrom(context);
+        Eigen::VectorXd bridged_active_rhs(kContinuousStateCount);
+        rhs_bridge.CalcTimeDerivatives(context.time_seconds(), accepted_state,
+                                       bridged_active_rhs);
+        Require(bridged_active_rhs == active_compiled_rhs &&
+                    trial_context
+                            ->held_independent_wheel_active_torques_newton_metres() ==
+                        held_snapshot &&
+                    context
+                            .held_independent_wheel_active_torques_newton_metres() ==
+                        held_snapshot,
+                "accepted held torques did not reach the CVODE trial RHS "
+                "without mutating the accepted context");
+
+        auto copied_context =
+            assembled.system().CreateDefaultRuntimeContext(37.0);
+        const Eigen::VectorXd copied_state_before = [&] {
+            Eigen::VectorXd state(kContinuousStateCount);
+            assembled.system().CopyContinuousState(*copied_context, state);
+            return state;
+        }();
+        assembled.system().CopyContextLocalData(context, *copied_context);
+        Eigen::VectorXd copied_state_after(kContinuousStateCount);
+        assembled.system().CopyContinuousState(*copied_context,
+                                                copied_state_after);
+        Require(copied_context->time_seconds() == 37.0 &&
+                    copied_state_after == copied_state_before &&
+                    copied_context
+                            ->held_independent_wheel_active_torques_newton_metres() ==
+                        held_snapshot,
+                "context-local synchronization did not copy held torques "
+                "without copying time or continuous state");
+        const std::array<double, kInterfaceCount> zero_torques{};
+        assembled.system().SetHeldIndependentWheelActiveTorques(
+            context, zero_torques);
+        Require(copied_context
+                        ->held_independent_wheel_active_torques_newton_metres() ==
+                    held_snapshot,
+                "two runtime contexts share held-torque storage");
+        Eigen::VectorXd restored_rhs(kContinuousStateCount);
+        assembled.compiled_plan().CalcStateTimeDerivatives(context,
+                                                            restored_rhs);
+        Require(restored_rhs == compiled_rhs,
+                "restoring all held torques to zero did not recover the G72 "
+                "passive RHS bit for bit");
 
         Eigen::VectorXd original_state(kContinuousStateCount);
         assembled.system().CopyContinuousState(context, original_state);

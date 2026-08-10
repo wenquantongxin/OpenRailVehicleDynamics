@@ -338,7 +338,7 @@ void CheckOneTransactionOverEveryBlock() {
            "one context's force state is not the other's");
 }
 
-void CheckNamedForceSlotsAndContextParameterCopy() {
+void CheckNamedForceSlotsAndContextLocalDataCopy() {
     const Fixture fixture;
     const auto rotor = fixture.model.GetFrameByName("rotor");
     const auto slider = fixture.model.GetFrameByName("slider");
@@ -393,7 +393,7 @@ void CheckNamedForceSlotsAndContextParameterCopy() {
     system.SetContinuousState(*destination, destination_state);
     const Eigen::Vector3d nominal(17.0, -23.0, 31.0);
     system.SetNominalForce(*source, nominal_slot, nominal);
-    system.CopyContextLocalParameters(*source, *destination);
+    system.CopyContextLocalData(*source, *destination);
     Expect(destination->nominal_forces().segment<3>(0).isZero() &&
                destination->nominal_forces().segment<3>(3) == nominal,
            "name resolution reaches the named declaration rather than a raw "
@@ -434,16 +434,16 @@ void CheckNamedForceSlotsAndContextParameterCopy() {
     const Eigen::VectorXd foreign_before = foreign_context->nominal_forces();
     ExpectInvalidArgument(
         [&] {
-            system.CopyContextLocalParameters(*source, *foreign_context);
+            system.CopyContextLocalData(*source, *foreign_context);
         },
-        "context-parameter copy checks a foreign destination before writing");
+        "context-local data copy checks a foreign destination before writing");
     Expect(foreign_context->nominal_forces() == foreign_before,
            "a foreign-destination refusal leaves its parameters unchanged");
     ExpectInvalidArgument(
         [&] {
-            system.CopyContextLocalParameters(*foreign_context, *destination);
+            system.CopyContextLocalData(*foreign_context, *destination);
         },
-        "context-parameter copy checks a foreign source before writing");
+        "context-local data copy checks a foreign source before writing");
     Expect(destination->nominal_forces() == before,
            "a foreign-source refusal leaves the destination unchanged");
 }
@@ -454,7 +454,7 @@ int main() {
     CheckFrozenLayoutAndSingleOwnership();
     CheckContextLocalDampingAndIsolation();
     CheckOneTransactionOverEveryBlock();
-    CheckNamedForceSlotsAndContextParameterCopy();
+        CheckNamedForceSlotsAndContextLocalDataCopy();
     if (failure_count != 0) {
         std::printf("%d system instance checks failed\n", failure_count);
         return 1;

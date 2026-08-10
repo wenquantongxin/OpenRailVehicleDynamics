@@ -24,7 +24,7 @@ struct NoCallTimeAppliedForces final {};
 /// The caller creates, owns and configures the dedicated trial context. An
 /// accepted context is intentionally absent from this type, so an RHS call
 /// cannot modify one and cannot require write-then-rollback semantics.
-/// Context-local parameters are not silently mirrored; explicit
+/// Context-local data are not silently mirrored; explicit
 /// accepted/trial synchronization belongs to the G45 transaction boundary.
 /// Construction also requires `NoCallTimeAppliedForces`, making the current
 /// graph's empty call-time force input an explicit choice rather than implying
@@ -63,10 +63,10 @@ class SystemRhsBridge final : public ContinuousStateRhs {
 
     [[nodiscard]] int continuous_state_size() const override;
 
-    /// Copies every currently admitted context-local physical parameter into
-    /// the trial context.  The source is borrowed only for this call; time and
-    /// continuous state are not part of this synchronization.
-    void SynchronizeContextParametersFrom(
+    /// Copies every currently admitted item of context-local data into the
+    /// trial context. The source is borrowed only for this call; time,
+    /// continuous state and projection history are not synchronized here.
+    void SynchronizeContextLocalDataFrom(
         const system_assembly::SystemRuntimeContext& source_context);
 
     void CalcTimeDerivatives(

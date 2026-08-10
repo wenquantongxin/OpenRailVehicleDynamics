@@ -832,17 +832,19 @@ add_test(NAME verify_irw_wheel_rail_contact_binding
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_CURRENT_BINARY_DIR}/irw-contact-fixtures)
 
-# G69 connects the real H3 IRW state to four axle-bridge projection carriers
-# and eight independently rotating wheel bodies. One direct-state gate checks
-# the complete 157-state RHS, fixed wheel targets, per-wheel independence and
-# deterministic 1/2/4/8-worker execution without advancing time.
+# G69/G73 connect the real H3 IRW state to four axle-bridge projection
+# carriers, eight independently rotating wheel bodies and eight held active
+# torque channels. One direct-state gate checks the complete 157-state RHS,
+# fixed wheel targets, per-wheel independence, accepted-to-trial local-data
+# synchronization and deterministic 1/2/4/8-worker execution without advancing
+# time.
 add_executable(verify_irw_contact_rhs
     configuration/verify_irw_contact_rhs.cc)
 orvd_configure_first_party_target(verify_irw_contact_rhs)
 target_include_directories(verify_irw_contact_rhs
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(verify_irw_contact_rhs
-    PRIVATE orvd_configuration OpenMP::OpenMP_CXX)
+    PRIVATE orvd_configuration orvd_integrators OpenMP::OpenMP_CXX)
 add_test(NAME verify_irw_contact_rhs
          COMMAND verify_irw_contact_rhs
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
@@ -973,6 +975,16 @@ target_link_libraries(verify_half_angle_midpoint_roll_pitch_yaw_bushing
     PRIVATE orvd_forces)
 add_test(NAME verify_half_angle_midpoint_roll_pitch_yaw_bushing
          COMMAND verify_half_angle_midpoint_roll_pitch_yaw_bushing)
+
+add_executable(verify_independent_wheel_active_torque_plan
+    forces/independent_wheel_active_torque_plan_header_self_containment.cc
+    forces/verify_independent_wheel_active_torque_plan.cc)
+orvd_configure_first_party_target(
+    verify_independent_wheel_active_torque_plan)
+target_link_libraries(verify_independent_wheel_active_torque_plan
+    PRIVATE orvd_forces)
+add_test(NAME verify_independent_wheel_active_torque_plan
+         COMMAND verify_independent_wheel_active_torque_plan)
 
 add_executable(verify_gz18_startup_assembly
     configuration/resolved_startup_state_header_self_containment.cc

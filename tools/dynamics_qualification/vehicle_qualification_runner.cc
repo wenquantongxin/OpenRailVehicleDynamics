@@ -988,7 +988,7 @@ QualificationRunSummary RunVehicleQualification(
     }
 
     auto observation_context = assembled.system().CreateDefaultRuntimeContext(0.0);
-    assembled.system().CopyContextLocalParameters(
+    assembled.system().CopyContextLocalData(
         scenario->initial_context().context(), *observation_context);
     auto contact_workspace = assembled.contact_force_plan()->CreateWorkspace();
     std::vector<AppliedBodyWrench> vehicle_wrenches(

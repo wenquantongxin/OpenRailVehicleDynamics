@@ -17,10 +17,12 @@
 ///
 /// The description carries no call-time applied force.  The system's admitted
 /// force sources are its typed vehicle plan and, when present, its typed
-/// wheel--rail contact plan. A caller who wants to apply an arbitrary wrench
-/// for research or for a unit test uses the multibody facade one layer below.
+/// wheel--rail contact and independent-wheel active-torque plans. A caller who
+/// wants to apply an arbitrary wrench for research or for a unit test uses the
+/// multibody facade one layer below.
 
 namespace orvd::forces {
+class IndependentWheelActiveTorquePlan;
 class VehicleForcePlan;
 class WheelRailContactForcePlan;
 }
@@ -61,6 +63,12 @@ class SystemAssemblyDescription {
         const multibody_model::MultibodyModel& model,
         const forces::VehicleForcePlan& vehicle_force_plan,
         const forces::WheelRailContactForcePlan& contact_force_plan);
+    /// The same vehicle and contact graph plus one frozen active-torque plan.
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel& model,
+        const forces::VehicleForcePlan& vehicle_force_plan,
+        const forces::WheelRailContactForcePlan& contact_force_plan,
+        const forces::IndependentWheelActiveTorquePlan& active_torque_plan);
     SystemAssemblyDescription(multibody_model::MultibodyModel&&,
                               const forces::VehicleForcePlan&) = delete;
     SystemAssemblyDescription(const multibody_model::MultibodyModel&&,
@@ -93,6 +101,46 @@ class SystemAssemblyDescription {
         const multibody_model::MultibodyModel&,
         const forces::VehicleForcePlan&,
         const forces::WheelRailContactForcePlan&&) = delete;
+    SystemAssemblyDescription(
+        multibody_model::MultibodyModel&&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&,
+        const forces::IndependentWheelActiveTorquePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&,
+        const forces::IndependentWheelActiveTorquePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        forces::VehicleForcePlan&&,
+        const forces::WheelRailContactForcePlan&,
+        const forces::IndependentWheelActiveTorquePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&&,
+        const forces::WheelRailContactForcePlan&,
+        const forces::IndependentWheelActiveTorquePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&,
+        forces::WheelRailContactForcePlan&&,
+        const forces::IndependentWheelActiveTorquePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&&,
+        const forces::IndependentWheelActiveTorquePlan&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&,
+        forces::IndependentWheelActiveTorquePlan&&) = delete;
+    SystemAssemblyDescription(
+        const multibody_model::MultibodyModel&,
+        const forces::VehicleForcePlan&,
+        const forces::WheelRailContactForcePlan&,
+        const forces::IndependentWheelActiveTorquePlan&&) = delete;
     SystemAssemblyDescription(multibody_model::MultibodyModel&&) = delete;
     SystemAssemblyDescription(const multibody_model::MultibodyModel&&) =
         delete;
@@ -117,6 +165,12 @@ class SystemAssemblyDescription {
         return contact_force_plan_;
     }
 
+    /// The named independent-wheel active-torque source, or null when absent.
+    [[nodiscard]] const forces::IndependentWheelActiveTorquePlan*
+    active_torque_plan() const {
+        return active_torque_plan_;
+    }
+
     /// Sizes of the distinct continuous-state blocks, in state order.
     [[nodiscard]] int generalized_position_count() const;
     [[nodiscard]] int generalized_velocity_count() const;
@@ -128,6 +182,8 @@ class SystemAssemblyDescription {
 
     [[nodiscard]] int vehicle_body_wrench_count() const;
     [[nodiscard]] int contact_body_wrench_count() const;
+    [[nodiscard]] int active_torque_body_wrench_count() const;
+    [[nodiscard]] int held_active_torque_count() const;
 
     /// Size of the output [qdot; vdot; zdot].
     [[nodiscard]] int state_time_derivative_size() const;
@@ -136,12 +192,16 @@ class SystemAssemblyDescription {
     const multibody_model::MultibodyModel* multibody_model_;
     const forces::VehicleForcePlan* force_plan_{nullptr};
     const forces::WheelRailContactForcePlan* contact_force_plan_{nullptr};
+    const forces::IndependentWheelActiveTorquePlan* active_torque_plan_{
+        nullptr};
     int generalized_position_count_{};
     int generalized_velocity_count_{};
     int series_spring_damper_force_state_count_{};
     int nominal_force_component_count_{};
     int vehicle_body_wrench_count_{};
     int contact_body_wrench_count_{};
+    int active_torque_body_wrench_count_{};
+    int held_active_torque_count_{};
 };
 
 }  // namespace orvd::system_assembly

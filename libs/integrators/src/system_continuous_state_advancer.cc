@@ -45,7 +45,7 @@ class SystemContinuousStateAdvancer::Implementation final {
             *candidate_context_, accepted_context_->time_seconds(),
             candidate_state_,
             accepted_context_->wheel_rail_projection_station_hints_meters());
-        rhs_.SynchronizeContextParametersFrom(*accepted_context_);
+        rhs_.SynchronizeContextLocalDataFrom(*accepted_context_);
         backend_ = std::make_unique<CvodeContinuousStateAdvancer>(
             rhs_, accepted_context_->time_seconds(), candidate_state_,
             std::move(tolerances));
@@ -238,7 +238,7 @@ class SystemContinuousStateAdvancer::Implementation final {
             *candidate_context_, accepted_context_->time_seconds(),
             candidate_state_,
             accepted_context_->wheel_rail_projection_station_hints_meters());
-        rhs_.SynchronizeContextParametersFrom(*accepted_context_);
+        rhs_.SynchronizeContextLocalDataFrom(*accepted_context_);
         backend_->ReinitializeAfterExternalChange(
             accepted_context_->time_seconds(), candidate_state_);
         requires_synchronization_ = false;

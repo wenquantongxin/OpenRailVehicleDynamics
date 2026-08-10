@@ -91,7 +91,7 @@ std::array<ShortWindowObservation, kSampleCount> BuildObservationBatch(
     const auto* contact_plan = assembled.contact_force_plan();
     auto observation_context =
         assembled.system().CreateDefaultRuntimeContext(sample_times.front());
-    assembled.system().CopyContextLocalParameters(
+    assembled.system().CopyContextLocalData(
         scenario.initial_context().context(), *observation_context);
     auto workspace = contact_plan->CreateWorkspace();
     std::vector<AppliedBodyWrench> wrenches(kInterfaceCount);

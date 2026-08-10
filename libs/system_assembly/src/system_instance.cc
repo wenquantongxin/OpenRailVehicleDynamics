@@ -6,11 +6,12 @@
 #include <stdexcept>
 #include <string>
 
+#include "orvd/forces/independent_wheel_active_torque_plan.h"
+#include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/forward_dynamics_workspace.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_model.h"
-#include "orvd/forces/vehicle_force_plan.h"
-#include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 
 namespace orvd::system_assembly {
@@ -31,7 +32,8 @@ SystemRuntimeContext::SystemRuntimeContext(
     internal::SystemIdentity issuer,
     const multibody_model::MultibodyModel& model, double initial_time_seconds,
     int series_spring_damper_force_state_count,
-    int nominal_force_component_count, int body_wrench_count,
+    int nominal_force_component_count, int held_active_torque_count,
+    int body_wrench_count,
     const forces::WheelRailContactForcePlan* contact_force_plan)
     : issuer_(issuer),
       time_seconds_(initial_time_seconds),
@@ -40,6 +42,8 @@ SystemRuntimeContext::SystemRuntimeContext(
       series_spring_damper_forces_(
           Eigen::VectorXd::Zero(series_spring_damper_force_state_count)),
       nominal_forces_(Eigen::VectorXd::Zero(nominal_force_component_count)),
+      held_independent_wheel_active_torques_newton_metres_(
+          Eigen::VectorXd::Zero(held_active_torque_count)),
       body_wrenches_(static_cast<std::size_t>(body_wrench_count)),
       contact_force_workspace_(contact_force_plan != nullptr
                                    ? contact_force_plan->CreateWorkspace()
@@ -98,8 +102,12 @@ SystemInstance::SystemInstance(const SystemAssemblyDescription& description)
           description.nominal_force_component_count()),
       force_plan_(description.force_plan()),
       contact_force_plan_(description.contact_force_plan()),
+      active_torque_plan_(description.active_torque_plan()),
       vehicle_body_wrench_count_(description.vehicle_body_wrench_count()),
-      contact_body_wrench_count_(description.contact_body_wrench_count()) {}
+      contact_body_wrench_count_(description.contact_body_wrench_count()),
+      active_torque_body_wrench_count_(
+          description.active_torque_body_wrench_count()),
+      held_active_torque_count_(description.held_active_torque_count()) {}
 
 MultibodyComponentIndex SystemInstance::multibody_component() const {
     return MultibodyComponentIndex(identity_, 0);
@@ -172,7 +180,9 @@ SystemInstance::CreateDefaultRuntimeContext(double initial_time_seconds) const {
     return std::unique_ptr<SystemRuntimeContext>(new SystemRuntimeContext(
         identity_, *multibody_model_, initial_time_seconds,
         series_spring_damper_force_state_count_, nominal_force_component_count_,
-        vehicle_body_wrench_count_ + contact_body_wrench_count_,
+        held_active_torque_count_,
+        vehicle_body_wrench_count_ + contact_body_wrench_count_ +
+            active_torque_body_wrench_count_,
         contact_force_plan_));
 }
 
@@ -304,16 +314,44 @@ void SystemInstance::SetNominalForce(
         nominal_force_on_reference_end_in_reference_frame_newtons;
 }
 
-void SystemInstance::CopyContextLocalParameters(
+void SystemInstance::SetHeldIndependentWheelActiveTorques(
+    SystemRuntimeContext& context,
+    std::span<const double> held_wheel_torques_newton_metres) const {
+    if (context.issuer_ != identity_) {
+        Reject("the runtime context belongs to a different system");
+    }
+    if (held_wheel_torques_newton_metres.size() !=
+        static_cast<std::size_t>(held_active_torque_count_)) {
+        Reject("the held independent-wheel active torque input has " +
+               std::to_string(held_wheel_torques_newton_metres.size()) +
+               " entries, but this system has " +
+               std::to_string(held_active_torque_count_) +
+               " active torque channels; nothing was written");
+    }
+    for (double torque : held_wheel_torques_newton_metres) {
+        if (!std::isfinite(torque)) {
+            Reject("a held independent-wheel active torque is not finite; "
+                   "nothing was written");
+        }
+    }
+    std::copy(held_wheel_torques_newton_metres.begin(),
+              held_wheel_torques_newton_metres.end(),
+              context
+                  .held_independent_wheel_active_torques_newton_metres_.begin());
+}
+
+void SystemInstance::CopyContextLocalData(
     const SystemRuntimeContext& source,
     SystemRuntimeContext& destination) const {
     if (source.issuer_ != identity_ || destination.issuer_ != identity_) {
         Reject("both runtime contexts must belong to this system before "
-               "context-local parameters can be copied; nothing was written");
+               "context-local data can be copied; nothing was written");
     }
     multibody_model_->CopyJointDampingParameters(
         *source.multibody_context_, destination.multibody_context_.get());
     destination.nominal_forces_ = source.nominal_forces_;
+    destination.held_independent_wheel_active_torques_newton_metres_ =
+        source.held_independent_wheel_active_torques_newton_metres_;
 }
 
 MultibodyComponentView SystemInstance::GetMultibodyComponentView(

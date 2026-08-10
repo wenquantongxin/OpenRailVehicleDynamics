@@ -15,10 +15,11 @@ namespace orvd::configuration {
 // One transactionally assembled vehicle contact scenario.
 //
 // The system owns the vehicle model, vehicle-force plan, wheel--rail force
-// plan, line and immutable contact personality. The resolved context is
-// created only after that ownership chain is complete, and is destroyed first.
-// Thus a successful return cannot contain a context whose line or contact
-// assets disagree with the force plan that will evaluate it.
+// plan, optional active-torque plan, line and immutable contact personality.
+// The resolved context is created only after that ownership chain is complete,
+// and is destroyed first. Thus a successful return cannot contain a context
+// whose line or contact assets disagree with the force plan that will evaluate
+// it.
 class AssembledVehicleContactScenario {
    public:
     ~AssembledVehicleContactScenario();
@@ -80,10 +81,11 @@ AssembleGz18ContactScenario(
 
 // Builds the IRW vehicle and its installed contact personality as one
 // operation. The closed topology has four axle-bridge station carriers and
-// eight independently jointed wheel bodies in frozen axle/side order. The
-// factory validates that every named wheel joint is exactly the expected
-// axle-bridge-to-wheel +Y revolute relation before any runtime object is
-// published.
+// eight independently jointed wheel bodies in frozen axle/side order. The same
+// closed table binds each wheel's active-torque axis provider and reaction
+// frame. The factory validates that every named wheel joint is exactly the
+// expected axle-bridge-to-wheel +Y revolute relation before any runtime object
+// is published.
 [[nodiscard]] std::unique_ptr<AssembledVehicleContactScenario>
 AssembleIrwContactScenario(
     const VehicleDefinition& vehicle,

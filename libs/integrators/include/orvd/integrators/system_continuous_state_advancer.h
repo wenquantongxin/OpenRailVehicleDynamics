@@ -98,7 +98,7 @@ class SystemContinuousStateAdvancer final {
     [[nodiscard]] ContinuousStateIntegrationStatistics
     integration_statistics() const;
 
-    /// Copies the accepted state, admitted context-local parameters and latest
+    /// Copies the accepted state, admitted context-local data and latest
     /// wheel-rail projection branches into the trial/backend configuration,
     /// then reinitializes numerical history.
     ///

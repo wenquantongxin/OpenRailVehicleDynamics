@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "orvd/forces/independent_wheel_active_torque_plan.h"
 #include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
@@ -14,7 +15,8 @@ CompiledSystemPlan::CompiledSystemPlan(const SystemInstance& system)
     : system_(&system),
       derivative_component_(system.multibody_component()),
       force_plan_(system.force_plan()),
-      contact_force_plan_(system.contact_force_plan()) {}
+      contact_force_plan_(system.contact_force_plan()),
+      active_torque_plan_(system.active_torque_plan()) {}
 
 void CompiledSystemPlan::CalcStateTimeDerivatives(
     SystemRuntimeContext& context,
@@ -50,6 +52,23 @@ void CompiledSystemPlan::CalcStateTimeDerivatives(
             std::span(context.body_wrenches_)
                 .subspan(static_cast<std::size_t>(vehicle_count),
                          static_cast<std::size_t>(contact_count)));
+    }
+    if (active_torque_plan_ != nullptr) {
+        const int active_offset = system_->vehicle_body_wrench_count() +
+                                  system_->contact_body_wrench_count();
+        const int active_count = system_->active_torque_body_wrench_count();
+        active_torque_plan_->CalcAppliedForces(
+            component.context(),
+            std::span(
+                context
+                    .held_independent_wheel_active_torques_newton_metres_.data(),
+                static_cast<std::size_t>(
+                    context
+                        .held_independent_wheel_active_torques_newton_metres_
+                        .size())),
+            std::span(context.body_wrenches_)
+                .subspan(static_cast<std::size_t>(active_offset),
+                         static_cast<std::size_t>(active_count)));
     }
 
     // The facade writes [qdot; vdot], which is shorter than this system's

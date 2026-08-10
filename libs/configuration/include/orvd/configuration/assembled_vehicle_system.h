@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "orvd/configuration/vehicle_definition.h"
+#include "orvd/forces/independent_wheel_active_torque_plan.h"
 #include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/multibody_model/multibody_model.h"
@@ -78,6 +79,10 @@ class AssembledVehicleSystem {
     contact_force_plan() const {
         return contact_force_plan_.get();
     }
+    [[nodiscard]] const forces::IndependentWheelActiveTorquePlan*
+    active_torque_plan() const {
+        return active_torque_plan_.get();
+    }
     [[nodiscard]] const system_assembly::SystemInstance& system() const {
         return *system_;
     }
@@ -108,6 +113,8 @@ class AssembledVehicleSystem {
         std::unique_ptr<multibody_model::MultibodyModel> model,
         std::unique_ptr<forces::VehicleForcePlan> force_plan,
         std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan,
+        std::unique_ptr<forces::IndependentWheelActiveTorquePlan>
+            active_torque_plan,
         std::unique_ptr<system_assembly::SystemInstance> system,
         std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
         VehicleBinding binding);
@@ -123,6 +130,8 @@ class AssembledVehicleSystem {
             track_irregularity,
         std::vector<forces::WheelRailContactCarrierDefinition> carriers,
         std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
+        std::vector<forces::IndependentWheelActiveTorqueCoupleDefinition>
+            active_torque_couples,
         double projection_search_half_width_meters);
 
     // Declaration order is construction order; destruction runs in reverse, so
@@ -130,6 +139,8 @@ class AssembledVehicleSystem {
     std::unique_ptr<multibody_model::MultibodyModel> model_;
     std::unique_ptr<forces::VehicleForcePlan> force_plan_;
     std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan_;
+    std::unique_ptr<forces::IndependentWheelActiveTorquePlan>
+        active_torque_plan_;
     std::unique_ptr<system_assembly::SystemInstance> system_;
     std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan_;
     VehicleBinding binding_;
