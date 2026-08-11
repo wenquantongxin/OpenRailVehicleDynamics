@@ -17,7 +17,10 @@
 namespace {
 
 using orvd::dynamics_qualification::IrwQualificationRunConfiguration;
+using orvd::dynamics_qualification::
+    IrwP179ControlledQualificationRunConfiguration;
 using orvd::dynamics_qualification::RunIrwQualification;
+using orvd::dynamics_qualification::RunIrwP179ControlledQualification;
 
 int failures = 0;
 
@@ -277,16 +280,118 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the required IRW AAR5 recipe accepted an empty identity");
 }
 
+void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
+    IrwP179ControlledQualificationRunConfiguration configuration;
+    configuration.vehicle_definition_path = argv[1];
+    configuration.resolved_startup_state_path = argv[2];
+    configuration.track_geometry_path = argv[3];
+    configuration.orvd_data_root = argv[4];
+    configuration.controller_configuration_path = argv[5];
+    configuration.torque_conditioner_configuration_path = argv[6];
+    configuration.output_directory = root / "controlled-irw";
+    configuration.duration_nanoseconds = 20'000'000;
+
+    const auto summary = RunIrwP179ControlledQualification(configuration);
+    Require(summary.observation_count == 3 &&
+                summary.control_audit_count == 4 &&
+                summary.positive_hold_interval_count == 2 &&
+                summary.backend_synchronization_count == 1,
+            "the 20 ms control recipe did not produce initialization, "
+            "U0..U2, two holds and one nonterminal synchronization");
+    Require(summary.integration_statistics.successful_internal_step_count > 0 &&
+                summary.integration_statistics
+                        .right_hand_side_evaluation_count > 0 &&
+                std::isfinite(
+                    summary.maximum_generalized_force_residual_inf_norm) &&
+                std::isfinite(
+                    summary.maximum_absolute_virtual_power_residual_watts),
+            "the real controlled IRW window did no finite numerical work");
+
+    constexpr std::array<std::string_view, 5> kFiles{
+        "COMPLETE", "metadata.json", "observations.tsv",
+        "control_events.tsv", "performance.json"};
+    for (const std::string_view file : kFiles) {
+        Require(std::filesystem::is_regular_file(
+                    configuration.output_directory / file),
+                "the controlled IRW atomic artifact is incomplete");
+    }
+    Require(!std::filesystem::exists(root / "controlled-irw.partial"),
+            "the controlled IRW run left a partial directory");
+
+    std::ifstream control(configuration.output_directory /
+                          "control_events.tsv");
+    std::string line;
+    std::vector<std::vector<std::string>> control_rows;
+    while (std::getline(control, line)) {
+        control_rows.push_back(SplitTabs(line));
+    }
+    Require(control_rows.size() == 5,
+            "the control audit is not one header plus four recurrences");
+    if (control_rows.size() == 5) {
+        const auto& header = control_rows.front();
+        const std::size_t kind = FindColumn(header, "event_kind");
+        const std::size_t ordinal =
+            FindColumn(header, "periodic_event_ordinal");
+        const std::size_t time = FindColumn(header, "event_time_seconds");
+        Require(control_rows[1][kind] == "initialization" &&
+                    control_rows[2][kind] == "periodic" &&
+                    ParseFiniteDouble(control_rows[1][ordinal]) == 0.0 &&
+                    ParseFiniteDouble(control_rows[2][ordinal]) == 0.0 &&
+                    ParseFiniteDouble(control_rows[3][ordinal]) == 1.0 &&
+                    ParseFiniteDouble(control_rows[4][ordinal]) == 2.0 &&
+                    ParseFiniteDouble(control_rows[1][time]) == 0.0 &&
+                    ParseFiniteDouble(control_rows[2][time]) == 0.0 &&
+                    ParseFiniteDouble(control_rows[3][time]) == 0.01 &&
+                    ParseFiniteDouble(control_rows[4][time]) == 0.02,
+                "the control audit does not use the startup double update "
+                "and integer event grid");
+        for (std::size_t row = 1; row < control_rows.size(); ++row) {
+            Require(control_rows[row].size() == header.size(),
+                    "a control audit row has the wrong fixed width");
+        }
+    }
+
+    std::ifstream observations(configuration.output_directory /
+                               "observations.tsv");
+    std::vector<std::vector<std::string>> observation_rows;
+    while (std::getline(observations, line)) {
+        observation_rows.push_back(SplitTabs(line));
+    }
+    Require(observation_rows.size() == 4,
+            "the controlled observation table is not U0..U2 plus header");
+    if (observation_rows.size() == 4) {
+        const auto& header = observation_rows.front();
+        const std::size_t time = FindColumn(header, "time_seconds");
+        Require(ParseFiniteDouble(observation_rows[1][time]) == 0.0 &&
+                    ParseFiniteDouble(observation_rows[2][time]) == 0.01 &&
+                    ParseFiniteDouble(observation_rows[3][time]) == 0.02,
+                "the controlled mechanical observations are not on the "
+                "integer event grid");
+    }
+
+    const std::string metadata =
+        ReadWholeFile(configuration.output_directory / "metadata.json");
+    Require(metadata.find("\"qualification_vehicle_recipe\": "
+                          "\"IRW_P179_100HZ_CONTROLLED\"") !=
+                    std::string::npos &&
+                metadata.find("\"control_audit_count\": 4") !=
+                    std::string::npos &&
+                metadata.find("\"backend_synchronization_count\": 1") !=
+                    std::string::npos,
+            "the controlled artifact lacks its event transaction identity");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 6) {
+    if (argc != 8) {
         std::fprintf(stderr,
                      "usage: verify_irw_dynamics_qualification VEHICLE "
-                     "STARTUP LINE DATA_ROOT TEST_ROOT\n");
+                     "STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER "
+                     "TEST_ROOT\n");
         return 2;
     }
-    const std::filesystem::path root = argv[5];
+    const std::filesystem::path root = argv[7];
     if (root.filename() != "irw-dynamics-qualification-fixtures") {
         std::fprintf(stderr, "refusing an unexpected IRW fixture directory\n");
         return 2;
@@ -296,6 +401,7 @@ int main(int argc, char** argv) {
 
     try {
         CheckRealIrwRun(argv, root);
+        CheckControlledIrwRun(argv, root);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "IRW qualification threw: %s\n", error.what());
         ++failures;

@@ -13,6 +13,7 @@
 
 #include "orvd/configuration/gz18_wheel_rail_contact.h"
 #include "orvd/configuration/irw_wheel_rail_contact.h"
+#include "irw_closed_topology.h"
 #include "resolved_startup_state_invariants.h"
 #include "vehicle_definition_invariants.h"
 
@@ -129,51 +130,11 @@ FrozenContactTopology BuildGz18ContactTopology(
     return topology;
 }
 
-struct IrwInterfaceTopology {
-    std::string_view interface_name;
-    std::string_view carrier_body_name;
-    std::string_view wheel_body_name;
-    std::string_view revolute_joint_name;
-    std::string_view reaction_frame_body_name;
-    WheelSide side;
-};
-
-constexpr std::array<std::string_view, 4> kIrwCarrierNames{
-    "axlebridge_ff", "axlebridge_fr", "axlebridge_rf", "axlebridge_rr"};
-
-// Frozen WRL order: each axle from front to rear, left before right.
-constexpr std::array<IrwInterfaceTopology, 8> kIrwInterfaces{{
-    {"wheel_ff_l", "axlebridge_ff", "wheel_ff_l", "rev_wheel_ff_l",
-     "frame_front",
-     WheelSide::kLeft},
-    {"wheel_ff_r", "axlebridge_ff", "wheel_ff_r", "rev_wheel_ff_r",
-     "frame_front",
-     WheelSide::kRight},
-    {"wheel_fr_l", "axlebridge_fr", "wheel_fr_l", "rev_wheel_fr_l",
-     "frame_front",
-     WheelSide::kLeft},
-    {"wheel_fr_r", "axlebridge_fr", "wheel_fr_r", "rev_wheel_fr_r",
-     "frame_front",
-     WheelSide::kRight},
-    {"wheel_rf_l", "axlebridge_rf", "wheel_rf_l", "rev_wheel_rf_l",
-     "frame_rear",
-     WheelSide::kLeft},
-    {"wheel_rf_r", "axlebridge_rf", "wheel_rf_r", "rev_wheel_rf_r",
-     "frame_rear",
-     WheelSide::kRight},
-    {"wheel_rr_l", "axlebridge_rr", "wheel_rr_l", "rev_wheel_rr_l",
-     "frame_rear",
-     WheelSide::kLeft},
-    {"wheel_rr_r", "axlebridge_rr", "wheel_rr_r", "rev_wheel_rr_r",
-     "frame_rear",
-     WheelSide::kRight},
-}};
-
 void RequireIrwMechanicalTopology(const VehicleDefinition& vehicle) {
     constexpr std::string_view kScenario = "IRW";
     const auto& carrier_names = vehicle.mechanical_track_station_layout
                                     .wheel_pair_station_reference_body_names;
-    if (carrier_names.size() != kIrwCarrierNames.size()) {
+    if (carrier_names.size() != internal::kIrwClosedCarrierNames.size()) {
         Reject(kScenario,
                "the mechanical layout must name exactly four axle-bridge "
                "station carriers");
@@ -183,7 +144,8 @@ void RequireIrwMechanicalTopology(const VehicleDefinition& vehicle) {
     for (const std::string& carrier_name : carrier_names) {
         stated_carriers.emplace(carrier_name);
     }
-    for (const std::string_view expected : kIrwCarrierNames) {
+    for (const std::string_view expected :
+         internal::kIrwClosedCarrierNames) {
         if (!stated_carriers.contains(std::string(expected))) {
             Reject(kScenario,
                    "the mechanical layout does not name the required "
@@ -191,7 +153,8 @@ void RequireIrwMechanicalTopology(const VehicleDefinition& vehicle) {
         }
     }
 
-    if (vehicle.revolute_joints.size() != kIrwInterfaces.size()) {
+    if (vehicle.revolute_joints.size() !=
+        internal::kIrwClosedInterfaces.size()) {
         Reject(kScenario,
                "the mechanical definition must contain exactly the eight "
                "independent-wheel revolute joints");
@@ -207,7 +170,8 @@ void RequireIrwMechanicalTopology(const VehicleDefinition& vehicle) {
                                   "'");
         }
     }
-    for (const IrwInterfaceTopology& expected : kIrwInterfaces) {
+    for (const internal::IrwClosedInterfaceTopology& expected :
+         internal::kIrwClosedInterfaces) {
         const auto found =
             joints_by_name.find(std::string(expected.revolute_joint_name));
         if (found == joints_by_name.end()) {
@@ -245,22 +209,25 @@ FrozenContactTopology BuildIrwContactTopology(
                                                           startup_state);
 
     FrozenContactTopology topology;
-    topology.carriers.reserve(kIrwCarrierNames.size());
-    topology.interfaces.reserve(kIrwInterfaces.size());
-    topology.active_torque_couples.reserve(kIrwInterfaces.size());
+    topology.carriers.reserve(internal::kIrwClosedCarrierNames.size());
+    topology.interfaces.reserve(internal::kIrwClosedInterfaces.size());
+    topology.active_torque_couples.reserve(
+        internal::kIrwClosedInterfaces.size());
     // The frozen WRL straight Track-T basis and the IRW axle-bridge body basis
     // differ by C = diag(1,-1,-1). ORVD's Track-T basis is already the
     // physical track basis, so this fixed R_BP keeps the non-spinning wheel
     // profile upright without rotating it by the wheel's joint phase.
-    const Eigen::Matrix3d rotation_body_from_profile =
-        Eigen::Vector3d(1.0, -1.0, -1.0).asDiagonal();
-    for (const std::string_view carrier : kIrwCarrierNames) {
+    const Eigen::Matrix3d& rotation_body_from_profile =
+        internal::kIrwBodyBasisHalfTurn;
+    for (const std::string_view carrier :
+         internal::kIrwClosedCarrierNames) {
         topology.carriers.push_back(MakeCarrier(
             kScenario, carrier, offsets,
             vehicle_layout_reference_track_station_meters,
             rotation_body_from_profile));
     }
-    for (const IrwInterfaceTopology& interface : kIrwInterfaces) {
+    for (const internal::IrwClosedInterfaceTopology& interface :
+         internal::kIrwClosedInterfaces) {
         topology.interfaces.push_back(WheelRailContactInterfaceDefinition{
             .interface_name = std::string(interface.interface_name),
             .carrier_name = std::string(interface.carrier_body_name),
