@@ -47,8 +47,12 @@ vehicle_layout_reference_track_station_meters = 0
 ```
 
 `run_qualification_with_metrics.py` is a Linux research wrapper for one such
-process. Select `--vehicle-recipe irw` for the eight-argument IRW executable;
-G71/G72 add three local-clock arguments to that same closed IRW entry point.
+process. Select `--vehicle-recipe irw` for the passive IRW executable and
+`--vehicle-recipe irw-p179-controlled` for the eight-argument P179 controlled
+IRW executable; the latter has an additional torque-conditioner input before
+its output-directory argument. The layouts are deliberately separate so an
+execution identity cannot mistake an input asset for the published artifact.
+G71/G72 add three local-clock arguments to the passive IRW entry point.
 The default remains the eight-argument GZ18 executable. The wrapper pins the
 requested logical processors and records the outer wall
 time, child CPU time, peak resident memory, executable digest, compiler/build
@@ -244,3 +248,38 @@ increment, native-time contact force and contact topology remain separate
 views. The `0.1 mm / 0.1 mrad` macro alarm applies to both direct B error and
 `delta_eir`; force and patch-count results remain diagnostic rather than a
 safety qualification.
+
+## P179 controlled IRW qualification
+
+`orvd_irw_p179_controlled_qualification` is the closed H3/R300/AAR5/100 Hz
+entry point. The controller and torque-conditioner assets provide one common
+10 ms event period; the runner performs the frozen initialization recurrence,
+installs U0 before constructing the backend, and advances one zero-order-held
+interval at a time. Each interval is one dense-output advance with a 0.5 ms
+integer mechanical clock. Its start and end are control boundaries, while the
+19 intermediate observations are not integrator stops. Adjacent interval
+boundaries are emitted once, giving 60,001 mechanical/contact rows over 30 s.
+`observations.tsv` keeps interface Q/N and the common Track-T total force;
+`contact_patches.tsv` separately retains every returned patch's local N/Tx/Ty,
+contact-frame angle and Track-T point/force. Local Tx/Ty from different contact
+frames are never summed.
+
+Dense states are replayed through a private observation context. That context
+owns its own sequential carrier-projection hints and receives only the held
+torque for the interval being observed; it cannot overwrite the integrator's
+accepted or trial histories. At each interval end, the arriving state and
+contact are observed under the preceding hold before the next periodic update
+is committed. `control_events.tsv` separately records initialization and
+U0..Uterminal, while `endpoint_diagnostics.tsv` keeps the lower-rate assembly
+residual and virtual-power checks, labelled by the held-torque event actually
+used at that state. This avoids repeating a full dynamics
+residual reconstruction at all 0.5 ms observation points.
+
+`analyze_irw_g77.py` compares one published 30 s artifact with the matching
+SIMPACK Realtime direct-contact export and, optionally, the frozen WRL macro
+and control records. It pairs mechanics on the integer 0.5 ms clock and
+controls by U0..U3000, then reports both native-time and per-axle 100--450 m
+statistics. Q remains an interface total; local N/Tx/Ty select each source's
+maximum-N patch or Type-78 slot and are interpolated only within contiguous
+runs whose source-local selected ordinal is unchanged. The script creates
+plots and a JSON report but defines no acceptance threshold.

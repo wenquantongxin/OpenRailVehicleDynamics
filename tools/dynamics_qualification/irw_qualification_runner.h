@@ -46,7 +46,8 @@ struct IrwP179ControlledQualificationSummary final {
     std::size_t positive_hold_interval_count{};
     std::size_t backend_synchronization_count{};
     double advance_and_synchronization_wall_seconds{};
-    double control_and_observation_wall_seconds{};
+    double control_wall_seconds{};
+    double observation_wall_seconds{};
     double data_and_metadata_write_wall_seconds{};
     double maximum_generalized_force_residual_inf_norm{};
     double maximum_absolute_virtual_power_residual_watts{};

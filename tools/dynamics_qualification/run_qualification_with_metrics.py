@@ -19,6 +19,7 @@ from typing import Iterable
 RUNNER_LAYOUTS = {
     "gz18": {8: 5},
     "irw": {8: 5, 11: 5},
+    "irw-p179-controlled": {8: 6},
 }
 
 

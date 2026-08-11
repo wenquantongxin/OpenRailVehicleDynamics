@@ -157,16 +157,16 @@ double IrwFullStateControlEventSession::next_periodic_event_time_seconds()
 }
 
 control::IrwFullStateWheelSpeedGuidanceControllerInput
-IrwFullStateControlEventSession::ObserveAcceptedMechanicalInput(
-    system_assembly::SystemRuntimeContext& accepted_context) const {
+IrwFullStateControlEventSession::ObserveMechanicalInput(
+    system_assembly::SystemRuntimeContext& context) const {
     const std::span<const double> stations =
-        accepted_context.wheel_rail_projection_station_hints_meters();
+        context.wheel_rail_projection_station_hints_meters();
     if (stations.size() != carrier_bodies_.size()) {
-        Reject("the accepted context does not hold four carrier projection "
+        Reject("the context does not hold four carrier projection "
                "stations");
     }
     auto component = assembled_->system().GetMultibodyComponentView(
-        accepted_context, assembled_->system().multibody_component());
+        context, assembled_->system().multibody_component());
     const auto& model = assembled_->model();
     const auto& line = assembled_->contact_force_plan()->track_geometry();
 
@@ -174,7 +174,7 @@ IrwFullStateControlEventSession::ObserveAcceptedMechanicalInput(
     for (std::size_t axle = 0; axle < carrier_bodies_.size(); ++axle) {
         const double station = stations[axle];
         if (!std::isfinite(station)) {
-            Reject("an accepted carrier projection station is not finite");
+            Reject("a carrier projection station is not finite");
         }
         const auto track = line.EvaluateTrackFrame(station);
         const auto body_pose =
@@ -202,7 +202,7 @@ IrwFullStateControlEventSession::ObserveAcceptedMechanicalInput(
     }
 
     const Eigen::VectorXd& velocities =
-        accepted_context.generalized_velocities();
+        context.generalized_velocities();
     for (std::size_t wheel = 0; wheel < wheel_velocity_ranges_.size();
          ++wheel) {
         // The frozen controller and conditioner scalar is the negative of the
@@ -232,7 +232,7 @@ IrwFullStateControlEventSession::ComputeCandidate(
     audit.kind = kind;
     audit.periodic_event_ordinal = ordinal;
     audit.event_time_seconds = event_time_seconds;
-    audit.mechanical_input = ObserveAcceptedMechanicalInput(accepted_context);
+    audit.mechanical_input = ObserveMechanicalInput(accepted_context);
     audit.controller_state_before = controller_state_;
     audit.conditioner_memory_before_newton_metres =
         conditioner_memory_newton_metres_;

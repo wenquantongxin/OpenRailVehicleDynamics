@@ -83,6 +83,17 @@ class IrwFullStateControlEventSession final {
         return conditioner_memory_newton_metres_;
     }
 
+    /// Observes the frozen P179 controller input from one compatible context.
+    ///
+    /// This is a read-only observation: it performs no projection, contact
+    /// solve, controller recurrence or state commit. The caller must first
+    /// install the four projection stations belonging to the context. Keeping
+    /// this binding here gives event updates and dense qualification samples
+    /// one authority for the axle-body basis and wheel-rate conventions.
+    [[nodiscard]] control::IrwFullStateWheelSpeedGuidanceControllerInput
+    ObserveMechanicalInput(
+        system_assembly::SystemRuntimeContext& context) const;
+
     /// Advances both memories once at the initial accepted mechanical state.
     /// Its output is audit-only and is not written to the held-torque vector.
     [[nodiscard]] IrwFullStateControlEventAudit ApplyInitializationUpdate(
@@ -136,9 +147,6 @@ class IrwFullStateControlEventSession final {
         actuation::WheelDriveTorqueCommandConditioner conditioner,
         ResolvedBinding binding);
 
-    [[nodiscard]] control::IrwFullStateWheelSpeedGuidanceControllerInput
-    ObserveAcceptedMechanicalInput(
-        system_assembly::SystemRuntimeContext& accepted_context) const;
     [[nodiscard]] IrwFullStateControlEventAudit ComputeCandidate(
         IrwFullStateControlEventKind kind, std::uint64_t ordinal,
         double event_time_seconds,

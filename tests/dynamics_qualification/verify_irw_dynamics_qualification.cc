@@ -1,6 +1,7 @@
 // The closed IRW runner keeps G70/G71 explicitly free of track irregularity
 // and accepts G72's frozen AAR5 asset through the same physical recipe.
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -292,7 +293,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.duration_nanoseconds = 20'000'000;
 
     const auto summary = RunIrwP179ControlledQualification(configuration);
-    Require(summary.observation_count == 3 &&
+    Require(summary.observation_count == 41 &&
                 summary.control_audit_count == 4 &&
                 summary.positive_hold_interval_count == 2 &&
                 summary.backend_synchronization_count == 1,
@@ -307,9 +308,10 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     summary.maximum_absolute_virtual_power_residual_watts),
             "the real controlled IRW window did no finite numerical work");
 
-    constexpr std::array<std::string_view, 5> kFiles{
+    constexpr std::array<std::string_view, 7> kFiles{
         "COMPLETE", "metadata.json", "observations.tsv",
-        "control_events.tsv", "performance.json"};
+        "contact_patches.tsv", "control_events.tsv",
+        "endpoint_diagnostics.tsv", "performance.json"};
     for (const std::string_view file : kFiles) {
         Require(std::filesystem::is_regular_file(
                     configuration.output_directory / file),
@@ -357,16 +359,100 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     while (std::getline(observations, line)) {
         observation_rows.push_back(SplitTabs(line));
     }
-    Require(observation_rows.size() == 4,
-            "the controlled observation table is not U0..U2 plus header");
-    if (observation_rows.size() == 4) {
+    Require(observation_rows.size() == 42,
+            "the controlled observation table is not the 0.5 ms clock plus "
+            "one header");
+    if (observation_rows.size() == 42) {
         const auto& header = observation_rows.front();
+        const std::size_t sample_index = FindColumn(header, "sample_index");
+        const std::size_t time_nanoseconds =
+            FindColumn(header, "time_nanoseconds");
         const std::size_t time = FindColumn(header, "time_seconds");
-        Require(ParseFiniteDouble(observation_rows[1][time]) == 0.0 &&
-                    ParseFiniteDouble(observation_rows[2][time]) == 0.01 &&
-                    ParseFiniteDouble(observation_rows[3][time]) == 0.02,
-                "the controlled mechanical observations are not on the "
-                "integer event grid");
+        for (std::size_t row = 1; row < observation_rows.size(); ++row) {
+            const double expected_index = static_cast<double>(row - 1U);
+            const double expected_nanoseconds = expected_index * 500'000.0;
+            const double expected_seconds =
+                (row - 1U) % 20U == 0U
+                    ? static_cast<double>((row - 1U) / 20U) * 0.01
+                    : expected_index * 0.0005;
+            Require(ParseFiniteDouble(observation_rows[row][sample_index]) ==
+                            expected_index &&
+                        ParseFiniteDouble(
+                            observation_rows[row][time_nanoseconds]) ==
+                            expected_nanoseconds &&
+                        ParseFiniteDouble(observation_rows[row][time]) ==
+                            expected_seconds,
+                    "the controlled mechanical observations are not on the "
+                    "integer 0.5 ms clock");
+        }
+    }
+
+    std::ifstream contact_patches(configuration.output_directory /
+                                  "contact_patches.tsv");
+    std::vector<std::vector<std::string>> patch_rows;
+    while (std::getline(contact_patches, line)) {
+        patch_rows.push_back(SplitTabs(line));
+    }
+    Require(patch_rows.size() > 1,
+            "the controlled contact-patch table contains no real patch");
+    if (patch_rows.size() > 1) {
+        const auto& header = patch_rows.front();
+        const std::size_t sample_index = FindColumn(header, "sample_index");
+        const std::size_t interface_name =
+            FindColumn(header, "interface_name");
+        const std::size_t normal =
+            FindColumn(header, "normal_force_newtons");
+        const std::size_t longitudinal = FindColumn(
+            header,
+            "longitudinal_force_on_wheel_in_contact_frame_newtons");
+        const std::size_t lateral = FindColumn(
+            header, "lateral_force_on_wheel_in_contact_frame_newtons");
+        std::array<bool, 41> observed_samples{};
+        for (std::size_t row = 1; row < patch_rows.size(); ++row) {
+            const double sample =
+                ParseFiniteDouble(patch_rows[row][sample_index]);
+            if (sample >= 0.0 && sample <= 40.0 &&
+                std::floor(sample) == sample) {
+                observed_samples[static_cast<std::size_t>(sample)] = true;
+            }
+            Require(!patch_rows[row][interface_name].empty() &&
+                        std::isfinite(
+                            ParseFiniteDouble(patch_rows[row][normal])) &&
+                        std::isfinite(ParseFiniteDouble(
+                            patch_rows[row][longitudinal])) &&
+                        std::isfinite(
+                            ParseFiniteDouble(patch_rows[row][lateral])),
+                    "a controlled patch row lost its interface or local "
+                    "N/Tx/Ty values");
+        }
+        Require(std::ranges::all_of(observed_samples,
+                                    [](bool observed) { return observed; }),
+                "the real 20 ms controlled window lacks a patch observation "
+                "at one or more 0.5 ms samples");
+    }
+
+    std::ifstream endpoint_diagnostics(
+        configuration.output_directory / "endpoint_diagnostics.tsv");
+    std::vector<std::vector<std::string>> endpoint_rows;
+    while (std::getline(endpoint_diagnostics, line)) {
+        endpoint_rows.push_back(SplitTabs(line));
+    }
+    Require(endpoint_rows.size() == 4,
+            "the endpoint diagnostic table is not t0 plus two arriving "
+            "control boundaries");
+    if (endpoint_rows.size() == 4) {
+        const auto& header = endpoint_rows.front();
+        const std::size_t hold =
+            FindColumn(header, "held_torque_event_ordinal");
+        const std::size_t time = FindColumn(header, "time_seconds");
+        Require(ParseFiniteDouble(endpoint_rows[1][hold]) == 0.0 &&
+                    ParseFiniteDouble(endpoint_rows[2][hold]) == 0.0 &&
+                    ParseFiniteDouble(endpoint_rows[3][hold]) == 1.0 &&
+                    ParseFiniteDouble(endpoint_rows[1][time]) == 0.0 &&
+                    ParseFiniteDouble(endpoint_rows[2][time]) == 0.01 &&
+                    ParseFiniteDouble(endpoint_rows[3][time]) == 0.02,
+                "an endpoint diagnostic was not taken under the preceding "
+                "zero-order hold before the new event commit");
     }
 
     const std::string metadata =
@@ -377,7 +463,10 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                 metadata.find("\"control_audit_count\": 4") !=
                     std::string::npos &&
                 metadata.find("\"backend_synchronization_count\": 1") !=
-                    std::string::npos,
+                    std::string::npos &&
+                metadata.find(
+                    "\"mechanical_observation_period_nanoseconds\": "
+                    "500000") != std::string::npos,
             "the controlled artifact lacks its event transaction identity");
 }
 
