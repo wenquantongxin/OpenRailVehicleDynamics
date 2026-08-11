@@ -165,7 +165,8 @@ install(DIRECTORY
         "${CMAKE_CURRENT_SOURCE_DIR}/vehicle_library/"
         DESTINATION
         "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library"
-        FILES_MATCHING PATTERN "*.json")
+        FILES_MATCHING PATTERN "*.json"
+        PATTERN "reference_models" EXCLUDE)
 
 install(DIRECTORY
         "${CMAKE_CURRENT_SOURCE_DIR}/controller_library/"

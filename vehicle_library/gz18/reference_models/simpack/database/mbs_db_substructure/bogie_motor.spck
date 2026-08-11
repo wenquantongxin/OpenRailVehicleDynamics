@@ -1,0 +1,1423 @@
+!file.version=3.5! Removing this line will make the file unreadable
+
+!**********************************************************************
+! Simpack Version Information
+!**********************************************************************
+version.number = 20210000
+version.desc   = ''
+version.build  = 101
+
+!**********************************************************************
+!  Global parameters
+!**********************************************************************
+searchpath (              1                                       ) = '..'
+gravity (                 1                                       ) = 0.00000000000000000E+00 ! Gravity
+gravity (                 2                                       ) = 0.00000000000000000E+00 ! Gravity
+gravity (                 3                                       ) = 9.81000000000000050E+00 ! Gravity
+vehicle.startvel                                                    = 0.00000000000000000E+00 ! Vehicle initial velocity
+vehicle.applystartvel                                               = 0                       ! Apply vehicle initial velocity at solver start
+glob.compat.flxnodeori                                              = 0                       ! Flexbody Node Orientation Method
+glob.compat.afcf                                                    = 0                       ! References Frame for Joint and Force Element Forces and Torques
+rw.cont.meth                                                        = 2                       ! MISCPAR_RW_CONTACT_METHOD
+rw.linear                                                           = 0                       ! MISCPAR_RW_PROFILE_LINEARIZATION_METHOD
+time                                                                = 0.00000000000000000E+00 ! Time
+slv.active                                                          = $SLV_SolverSettings     ! Active SolverSettings element
+track.active                                                        = $Trk_Track              ! Active Track element
+prop3d.bg.base.color.r                                              = 2.15000000000000000E+02 ! Background color (red component)
+prop3d.bg.base.color.g                                              = 2.15000000000000000E+02 ! Background color (green component)
+prop3d.bg.base.color.b                                              = 2.15000000000000000E+02 ! Background color (blue component)
+prop3d.bg.base.color.t                                              = 0.00000000000000000E+00 ! Background color (transparency component)
+prop3d.bg.grad.color.r                                              = 2.55000000000000000E+02 ! Gradient color (red component)
+prop3d.bg.grad.color.g                                              = 2.55000000000000000E+02 ! Gradient color (green component)
+prop3d.bg.grad.color.b                                              = 2.55000000000000000E+02 ! Gradient color (blue component)
+prop3d.bg.grad.color.t                                              = 0.00000000000000000E+00 ! Gradient color (transparency component)
+prop3d.bg.gradient                                                  = 1                       ! 0 = constant, 1 = gradient
+prop3d.marker.size                                                  = 0.00000000000000000E+00 ! length of Marker axes, if value is zero, use "auto"
+prop3d.marker.auto                                                  = 1                       ! 0 = user defined, 1 = auto size determination
+prop3d.marker.color.r                                               = 0.00000000000000000E+00 ! Marker color (red component)
+prop3d.marker.color.g                                               = 0.00000000000000000E+00 ! Marker color (green component)
+prop3d.marker.color.b                                               = 0.00000000000000000E+00 ! Marker color (blue component)
+prop3d.marker.color.t                                               = 0.00000000000000000E+00 ! Marker color (transparency component)
+prop3d.display                                                      = 1                       ! 1 = shaded,  2 = wireframe, 3 = hidden line
+prop3d.bbox                                                         = 0                       ! 0 = exclude all refsys objects, 1 = include all refsys objects
+prop2d.joint.visible                                                = 1                       ! Joints visible
+prop2d.force.visible                                                = 1                       ! Forces visible
+prop2d.constr.visible                                               = 1                       ! Constraints visible
+prop2d.sensor.visible                                               = 0                       ! Sensors visible
+prop2d.grid.visible                                                 = 0                       ! Show grid
+prop2d.grid.hor.start                                               = 0.00000000000000000E+00 ! Horizontal offset
+prop2d.grid.hor.step                                                = 1.00000000000000000E+01 ! Horizontal step
+prop2d.grid.vert.start                                              = 0.00000000000000000E+00 ! Vertical offset
+prop2d.grid.vert.step                                               = 1.00000000000000000E+01 ! Vertical step
+prop2d.line.width                                                   = 0                       ! Line width
+prop2d.proj.dir                                                     = 2                       ! Projection direction
+
+
+!**********************************************************************
+! Substructures
+!**********************************************************************
+substr.file (                       $S_WS_F                       ) = 'wheelset_motor.spck'   ! Filename
+substr.id (                         $S_WS_F                       ) = '1'                     ! Substructure Id
+substr.add.searchpath (   1 ,       $S_WS_F                       ) = '..'                    ! Substructure-specific search path
+
+substr.file (                       $S_WS_R                       ) = 'wheelset_motor.spck'   ! Filename
+substr.id (                         $S_WS_R                       ) = '2'                     ! Substructure Id
+substr.add.searchpath (   1 ,       $S_WS_R                       ) = '..'                    ! Substructure-specific search path
+
+!**********************************************************************
+! Views
+!**********************************************************************
+view.type (                         $V_WorkingView                ) = 0                       ! Projection type
+view.pos (                1 ,       $V_WorkingView                ) = -1.25000000000000000E+00 ! Position
+view.pos (                2 ,       $V_WorkingView                ) = 2.08459281921386719E+00 ! Position
+view.pos (                3 ,       $V_WorkingView                ) = -2.24306607246398926E+00 ! Position
+view.orient (             1 ,       $V_WorkingView                ) = 9.63630451481807704E-01 ! Orientation
+view.orient (             2 ,       $V_WorkingView                ) = 0.00000000000000000E+00 ! Orientation
+view.orient (             3 ,       $V_WorkingView                ) = 0.00000000000000000E+00 ! Orientation
+view.orient (             4 ,       $V_WorkingView                ) = -2.67238382304951505E-01 ! Orientation
+view.angle (                        $V_WorkingView                ) = 7.85398185253143311E-01 ! Lens angle
+view.fclip.auto (                   $V_WorkingView                ) = 1                       ! Front clipping plane auto
+view.bclip.auto (                   $V_WorkingView                ) = 1                       ! Back clipping plane auto
+view.fclip.value (                  $V_WorkingView                ) = 1.03023961186408997E-01 ! Front clipping plane value
+view.bclip.value (                  $V_WorkingView                ) = 1.03023956298828125E+02 ! Back clipping plane value
+view.rotcenter.type (               $V_WorkingView                ) = 0                       ! Rotation center type
+view.rotcenter.adjust (             $V_WorkingView                ) = 1                       ! Adjust rotation center
+view.motion.active (                $V_WorkingView                ) = 1                       ! Camera is moved
+view.motion.ref (                   $V_WorkingView                ) = $M_Isys_Track_Moved     ! Marker
+view.motion.x (                     $V_WorkingView                ) = 1                       ! Moved camera direction x
+view.motion.y (                     $V_WorkingView                ) = 1                       ! Moved camera direction y
+view.motion.z (                     $V_WorkingView                ) = 1                       ! Moved camera direction z
+view.motion.al (                    $V_WorkingView                ) = 1                       ! Moved camera direction alpha
+view.motion.be (                    $V_WorkingView                ) = 1                       ! Moved camera direction beta
+view.motion.ga (                    $V_WorkingView                ) = 1                       ! Moved camera direction gamma
+view.motion.pos (         1 ,       $V_WorkingView                ) = -1.25000000000000000E+00 ! Relative position
+view.motion.pos (         2 ,       $V_WorkingView                ) = 2.08459281921386719E+00 ! Relative position
+view.motion.pos (         3 ,       $V_WorkingView                ) = -2.24306607246398926E+00 ! Relative position
+view.motion.orient (      1 ,       $V_WorkingView                ) = 9.63630451481807704E-01 ! Relative orientation
+view.motion.orient (      2 ,       $V_WorkingView                ) = 0.00000000000000000E+00 ! Relative orientation
+view.motion.orient (      3 ,       $V_WorkingView                ) = 0.00000000000000000E+00 ! Relative orientation
+view.motion.orient (      4 ,       $V_WorkingView                ) = -2.67238382304951505E-01 ! Relative orientation
+
+view.type (                         $V_Perspective_Moved          ) = 0                       ! Projection type
+view.pos (                1 ,       $V_Perspective_Moved          ) = -1.14629710518056527E+00 ! Position
+view.pos (                2 ,       $V_Perspective_Moved          ) = 5.40825615142239258E-01 ! Position
+view.pos (                3 ,       $V_Perspective_Moved          ) = -3.16154684855064261E-01 ! Position
+view.orient (             1 ,       $V_Perspective_Moved          ) = -6.13824307918548584E-01 ! Orientation
+view.orient (             2 ,       $V_Perspective_Moved          ) = -4.47064399719238281E-01 ! Orientation
+view.orient (             3 ,       $V_Perspective_Moved          ) = 3.80551487207412720E-01 ! Orientation
+view.orient (             4 ,       $V_Perspective_Moved          ) = 5.27762949466705322E-01 ! Orientation
+view.angle (                        $V_Perspective_Moved          ) = 7.85398185253143311E-01 ! Lens angle
+view.fclip.auto (                   $V_Perspective_Moved          ) = 1                       ! Front clipping plane auto
+view.bclip.auto (                   $V_Perspective_Moved          ) = 1                       ! Back clipping plane auto
+view.rotcenter.type (               $V_Perspective_Moved          ) = 0                       ! Rotation center type
+view.rotcenter.adjust (             $V_Perspective_Moved          ) = 1                       ! Adjust rotation center
+view.motion.active (                $V_Perspective_Moved          ) = 1                       ! Camera is moved
+view.motion.ref (                   $V_Perspective_Moved          ) = $M_Isys_Track_Moved     ! Marker
+view.motion.x (                     $V_Perspective_Moved          ) = 1                       ! Moved camera direction x
+view.motion.y (                     $V_Perspective_Moved          ) = 1                       ! Moved camera direction y
+view.motion.z (                     $V_Perspective_Moved          ) = 1                       ! Moved camera direction z
+view.motion.al (                    $V_Perspective_Moved          ) = 1                       ! Moved camera direction alpha
+view.motion.be (                    $V_Perspective_Moved          ) = 1                       ! Moved camera direction beta
+view.motion.ga (                    $V_Perspective_Moved          ) = 1                       ! Moved camera direction gamma
+view.motion.pos (         1 ,       $V_Perspective_Moved          ) = -1.14629710518056527E+00 ! Relative position
+view.motion.pos (         2 ,       $V_Perspective_Moved          ) = 5.40825615142239258E-01 ! Relative position
+view.motion.pos (         3 ,       $V_Perspective_Moved          ) = -3.16154684855064261E-01 ! Relative position
+view.motion.orient (      1 ,       $V_Perspective_Moved          ) = 6.13824300634425168E-01 ! Relative orientation
+view.motion.orient (      2 ,       $V_Perspective_Moved          ) = 4.47064394414019628E-01 ! Relative orientation
+view.motion.orient (      3 ,       $V_Perspective_Moved          ) = -3.80551482691488641E-01 ! Relative orientation
+view.motion.orient (      4 ,       $V_Perspective_Moved          ) = -5.27762943203853974E-01 ! Relative orientation
+
+view.type (                         $V_Side_Orthographic_Moved    ) = 1                       ! Projection type
+view.pos (                1 ,       $V_Side_Orthographic_Moved    ) = 0.00000000000000000E+00 ! Position
+view.pos (                2 ,       $V_Side_Orthographic_Moved    ) = 5.99845588207244873E-01 ! Position
+view.pos (                3 ,       $V_Side_Orthographic_Moved    ) = -1.02445483207702637E-08 ! Position
+view.orient (             1 ,       $V_Side_Orthographic_Moved    ) = 7.07106888294219971E-01 ! Orientation
+view.orient (             2 ,       $V_Side_Orthographic_Moved    ) = 0.00000000000000000E+00 ! Orientation
+view.orient (             3 ,       $V_Side_Orthographic_Moved    ) = 0.00000000000000000E+00 ! Orientation
+view.orient (             4 ,       $V_Side_Orthographic_Moved    ) = -7.07106709480285645E-01 ! Orientation
+view.height (                       $V_Side_Orthographic_Moved    ) = 8.00000000000000044E-01 ! View height
+view.fclip.auto (                   $V_Side_Orthographic_Moved    ) = 1                       ! Front clipping plane auto
+view.bclip.auto (                   $V_Side_Orthographic_Moved    ) = 1                       ! Back clipping plane auto
+view.rotcenter.type (               $V_Side_Orthographic_Moved    ) = 0                       ! Rotation center type
+view.rotcenter.adjust (             $V_Side_Orthographic_Moved    ) = 1                       ! Adjust rotation center
+view.motion.active (                $V_Side_Orthographic_Moved    ) = 1                       ! Camera is moved
+view.motion.ref (                   $V_Side_Orthographic_Moved    ) = $M_Isys_Track_Moved     ! Marker
+view.motion.x (                     $V_Side_Orthographic_Moved    ) = 1                       ! Moved camera direction x
+view.motion.y (                     $V_Side_Orthographic_Moved    ) = 1                       ! Moved camera direction y
+view.motion.z (                     $V_Side_Orthographic_Moved    ) = 1                       ! Moved camera direction z
+view.motion.al (                    $V_Side_Orthographic_Moved    ) = 1                       ! Moved camera direction alpha
+view.motion.be (                    $V_Side_Orthographic_Moved    ) = 1                       ! Moved camera direction beta
+view.motion.ga (                    $V_Side_Orthographic_Moved    ) = 1                       ! Moved camera direction gamma
+view.motion.pos (         1 ,       $V_Side_Orthographic_Moved    ) = 0.00000000000000000E+00 ! Relative position
+view.motion.pos (         2 ,       $V_Side_Orthographic_Moved    ) = 5.99845588207244873E-01 ! Relative position
+view.motion.pos (         3 ,       $V_Side_Orthographic_Moved    ) = -1.02445483207702637E-08 ! Relative position
+view.motion.orient (      1 ,       $V_Side_Orthographic_Moved    ) = 7.07106870593506742E-01 ! Relative orientation
+view.motion.orient (      2 ,       $V_Side_Orthographic_Moved    ) = 0.00000000000000000E+00 ! Relative orientation
+view.motion.orient (      3 ,       $V_Side_Orthographic_Moved    ) = 0.00000000000000000E+00 ! Relative orientation
+view.motion.orient (      4 ,       $V_Side_Orthographic_Moved    ) = -7.07106691779576968E-01 ! Relative orientation
+
+view.type (                         $V_Top_Orthographic_Moved     ) = 1                       ! Projection type
+view.pos (                1 ,       $V_Top_Orthographic_Moved     ) = 0.00000000000000000E+00 ! Position
+view.pos (                2 ,       $V_Top_Orthographic_Moved     ) = -5.06639480590820312E-07 ! Position
+view.pos (                3 ,       $V_Top_Orthographic_Moved     ) = -9.67873191833496094E+00 ! Position
+view.orient (             1 ,       $V_Top_Orthographic_Moved     ) = 1.00000000000000000E+00 ! Orientation
+view.orient (             2 ,       $V_Top_Orthographic_Moved     ) = 0.00000000000000000E+00 ! Orientation
+view.orient (             3 ,       $V_Top_Orthographic_Moved     ) = 0.00000000000000000E+00 ! Orientation
+view.orient (             4 ,       $V_Top_Orthographic_Moved     ) = 1.05239450931549072E-07 ! Orientation
+view.height (                       $V_Top_Orthographic_Moved     ) = 2.27604870733313946E+00 ! View height
+view.fclip.auto (                   $V_Top_Orthographic_Moved     ) = 1                       ! Front clipping plane auto
+view.bclip.auto (                   $V_Top_Orthographic_Moved     ) = 1                       ! Back clipping plane auto
+view.rotcenter.type (               $V_Top_Orthographic_Moved     ) = 0                       ! Rotation center type
+view.rotcenter.adjust (             $V_Top_Orthographic_Moved     ) = 1                       ! Adjust rotation center
+view.motion.active (                $V_Top_Orthographic_Moved     ) = 1                       ! Camera is moved
+view.motion.ref (                   $V_Top_Orthographic_Moved     ) = $M_Isys_Track_Moved     ! Marker
+view.motion.x (                     $V_Top_Orthographic_Moved     ) = 1                       ! Moved camera direction x
+view.motion.y (                     $V_Top_Orthographic_Moved     ) = 1                       ! Moved camera direction y
+view.motion.z (                     $V_Top_Orthographic_Moved     ) = 1                       ! Moved camera direction z
+view.motion.al (                    $V_Top_Orthographic_Moved     ) = 1                       ! Moved camera direction alpha
+view.motion.be (                    $V_Top_Orthographic_Moved     ) = 1                       ! Moved camera direction beta
+view.motion.ga (                    $V_Top_Orthographic_Moved     ) = 1                       ! Moved camera direction gamma
+view.motion.pos (         1 ,       $V_Top_Orthographic_Moved     ) = 0.00000000000000000E+00 ! Relative position
+view.motion.pos (         2 ,       $V_Top_Orthographic_Moved     ) = -5.06639480590820312E-07 ! Relative position
+view.motion.pos (         3 ,       $V_Top_Orthographic_Moved     ) = -9.67873191833496094E+00 ! Relative position
+view.motion.orient (      1 ,       $V_Top_Orthographic_Moved     ) = 9.99999999999994449E-01 ! Relative orientation
+view.motion.orient (      2 ,       $V_Top_Orthographic_Moved     ) = 0.00000000000000000E+00 ! Relative orientation
+view.motion.orient (      3 ,       $V_Top_Orthographic_Moved     ) = 0.00000000000000000E+00 ! Relative orientation
+view.motion.orient (      4 ,       $V_Top_Orthographic_Moved     ) = 1.05239450931548490E-07 ! Relative orientation
+
+!**********************************************************************
+! Solver Settings
+!**********************************************************************
+slv.kin.task (                      $SLV_SolverSettings           ) = 3                       ! KIN_INTPAR_TASK
+slv.kin.tout.n (                    $SLV_SolverSettings           ) = 201                     ! KIN_INTPAR_NUM_STEPS
+slv.kin.tol (                       $SLV_SolverSettings           ) = 9.99999999999999955E-07 ! Kinematics tolerance
+slv.integ.fix.driftstab (           $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_INTPAR_FIXINT_CONSTAB
+slv.integ.fix.jac.update (          $SLV_SolverSettings           ) = 3                       ! TIME_INTEG_PAR_FIXINT_JACOBIAN_EVAL
+slv.integ.fix.part.type (           $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_INTPAR_FIXINT_JAC_PART_TYPE
+slv.integ.fix.order (               $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_FIXINT_METHOD_ORDER
+slv.integ.fix.posup (               $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_FIXINT_POS_COORD_UPDATE
+slv.integ.sodasrt.formalism (       $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_FORMALISM
+slv.integ.type (                    $SLV_SolverSettings           ) = 1                       ! Integrator type
+slv.integ.jac.struc (               $SLV_SolverSettings           ) = 3                       ! SOLVER_TIME_INTEG_PAR_JACOBIAN_STRUC
+slv.integ.jac.incr.type (           $SLV_SolverSettings           ) = 2                       ! Jacobian increment type
+slv.integ.linalg.slv (              $SLV_SolverSettings           ) = 1                       ! 1 = dense ; 2 = sparse (UMFPACK) ; 3 = sparse (PARDISO)
+slv.integ.lsode.meth (              $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_LSODE_INTEG_METHOD
+slv.integ.lsode.jac.struc (         $SLV_SolverSettings           ) = 3                       ! SOLVER_TIME_INTEG_PAR_LSODE_JACOBIAN_STRUC
+slv.integ.lsode.maxord (            $SLV_SolverSettings           ) = 5                       ! TIME_INTEG_INTPAR_LSODE_MAX_ORDER
+slv.integ.maxrhs (                  $SLV_SolverSettings           ) = -1                      ! TIME_INTEG_INTPAR_MAX_RHS
+slv.integ.maxstp (                  $SLV_SolverSettings           ) = -1                      ! TIME_INTEG_INTPAR_MAX_TIME_STEPS
+slv.integ.newton.maxit (            $SLV_SolverSettings           ) = 7                       ! TIME_INTEG_INTPAR_NEWTON_ITERS
+slv.integ.tout.n (                  $SLV_SolverSettings           ) = 101                     ! TIME_INTEG_INTPAR_OUTPUT_NUM_POINTS
+slv.integ.sodasrt2.iestsc (         $SLV_SolverSettings           ) = 2                       ! TIME_INTEG_PAR_SODASRT20_ERROR_EST_SCALE_METHOD
+slv.integ.sodasrt.maxord (          $SLV_SolverSettings           ) = 5                       ! TIME_INTEG_INTPAR_SODASRT_MAX_ORDER
+slv.integ.sodasrt1.errnorm (        $SLV_SolverSettings           ) = 3                       ! TIME_INTEG_PAR_SODASRT_NORM_TYPE
+slv.integ.tout.mode (               $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_INTPAR_TOUT_MODE
+slv.integ.meetop (                  $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_BOOLPAR_EVAL_MOTION_EQ_AT_COMM_POINTS
+slv.integ.driftstab (               $SLV_SolverSettings           ) = 2                       ! TIME_INTEG_BOOLPAR_ACCEPT_DRIFT
+slv.integ.root (                    $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_DETECT_IMPLICIT_DISCONTINUITIES
+slv.integ.jac.part (                $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_PARTITIONED_EVAL_JACOBIAN
+slv.integ.addrhscall (              $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_BOOLPAR_EXTRA_EVAL_AFTER_SUCCESSFUL_STEP
+slv.integ.linalg.red2nd (           $SLV_SolverSettings           ) = 1                       ! Linear equations second order reduction
+slv.integ.fix.oneleg (              $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_FIXINT_IMPLICIT_ONE_LEG_OLC
+slv.integ.fix.conforce (            $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_BOOLPAR_FIXINT_CONFORCE
+slv.integ.fix.clss (                $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_FIXINT_METHOD_CLASS
+slv.integ.sodasrt1.scal.lam (       $SLV_SolverSettings           ) = 9.99999999999999955E-08 ! TIME_INTEG_SCALARPAR_SCALE_CONSTRAINT_FORCES
+slv.integ.sodasrt1.scal.acc (       $SLV_SolverSettings           ) = 1.00000000000000000E+00 ! TIME_INTEG_SCALARPAR_SCALE_ACCELERATIONS
+slv.integ.newton.eps (              $SLV_SolverSettings           ) = 3.33000000000000018E-01 ! TIME_INTEG_SCALARPAR_NEWTON_ERROR_BOUND
+slv.integ.fix.utcpar (              $SLV_SolverSettings           ) = 1.00000000000000000E+00 ! TIME_INTEG_SCALARPAR_FIXINT_EULER_UTC
+slv.integ.fix.olcpar (              $SLV_SolverSettings           ) = 5.00000000000000000E-01 ! TIME_INTEG_SCALARPAR_FIXINT_ONE_LEG_OLC
+slv.integ.sodasrt2.estfac (         $SLV_SolverSettings           ) = 9.99999999999999955E-07 ! TIME_INTEG_SCALARPAR_SODASRT20_ERROR_EST_SCALE_FACTOR
+slv.integ.tout.freq (               $SLV_SolverSettings           ) = { 200 Hz }              ! TIME_INTEG_PAR_OUTPUT_FREQ
+slv.integ.tend.time (               $SLV_SolverSettings           ) = { 2 s }                 ! TIME_INTEG_TIMEPAR_END_TIME
+slv.integ.atol.gen (                $SLV_SolverSettings           ) = 1.00000000000000008E-05 ! TIME_INTEG_PARSTATE_DEFAULT
+slv.integ.atol.vel (                $SLV_SolverSettings           ) = 1.00000000000000005E-04 ! TIME_INTEG_PARSTATE_VEL
+slv.integ.rtol.gen (                $SLV_SolverSettings           ) = 1.00000000000000004E-10 ! TIME_INTEG_PARSTATE_DEFAULT
+slv.integ.rtol.vel (                $SLV_SolverSettings           ) = 1.00000000000000005E-04 ! TIME_INTEG_PARSTATE_VEL
+slv.meas.geo (                      $SLV_SolverSettings           ) = 1                       ! Animation data to result file
+slv.meas.sensor.pos (               $SLV_SolverSettings           ) = 1                       ! Sensor position to result file
+slv.meas.sensor.vel (               $SLV_SolverSettings           ) = 1                       ! Sensor velocity to result file
+slv.meas.sensor.acc (               $SLV_SolverSettings           ) = 1                       ! Sensor acceleration to result file
+slv.meas.force.af (                 $SLV_SolverSettings           ) = 1                       ! applied forces to result file
+slv.meas.force.ov (                 $SLV_SolverSettings           ) = 1                       ! Force outpur values to result file
+slv.meas.force.st.dyn (             $SLV_SolverSettings           ) = 1                       ! Force dynamic states to result file
+slv.meas.force.st.alg (             $SLV_SolverSettings           ) = 1                       ! Force algebraic states to result file
+slv.meas.joint.st.pos (             $SLV_SolverSettings           ) = 1                       ! Joint position to result file
+slv.meas.joint.st.vel (             $SLV_SolverSettings           ) = 1                       ! Joint velocity to result file
+slv.meas.joint.st.acc (             $SLV_SolverSettings           ) = 1                       ! Joint acceleration to result file
+slv.meas.joint.cf (                 $SLV_SolverSettings           ) = 1                       ! Joint constraining forces to result file
+slv.meas.body.pos (                 $SLV_SolverSettings           ) = 1                       ! Body position to result file
+slv.meas.body.flx.st.pos (          $SLV_SolverSettings           ) = 1                       ! Body elastic state position to result file
+slv.meas.body.flx.st.vel (          $SLV_SolverSettings           ) = 1                       ! Body elastic state velocity to result file
+slv.meas.body.flx.st.acc (          $SLV_SolverSettings           ) = 1                       ! Body elastic state acceleration to result file
+slv.meas.marker.st.alg (            $SLV_SolverSettings           ) = 1                       ! Marker algebraic state to result file
+slv.meas.constr.cf (                $SLV_SolverSettings           ) = 1                       ! Constraint constrained state to result file
+slv.meas.yout (                     $SLV_SolverSettings           ) = 1                       ! y-Outputs to result file
+slv.meas.result (                   $SLV_SolverSettings           ) = 1                       ! Result elements to result file
+slv.meas.subvar (                   $SLV_SolverSettings           ) = 1                       ! MEAS_BOOLPAR_SUBVAR
+slv.assmbl.task (                   $SLV_SolverSettings           ) = 3                       ! ASSMBL_PAR_SOLVER_MODE
+slv.output.path.type (              $SLV_SolverSettings           ) = 1                       ! OUTPUT_PATH_PAR_TYPE
+slv.compat.solver (                 $SLV_SolverSettings           ) = 0                       ! 0 = no (new solver); 1 = yes (classic solver)
+slv.txt (                           $SLV_SolverSettings           ) = ''                      ! Comment
+
+!**********************************************************************
+! SubVars
+!**********************************************************************
+subvar.str (                        $_Mt                          ) = '8900'                  ! Definition
+subvar.txt (                        $_Mt                          ) = '构架质量（簧间）' ! Comment
+
+subvar.str (                        $_Itx                         ) = '1650'                  ! Definition
+subvar.txt (                        $_Itx                         ) = '构架侧滚转动惯量' ! Comment
+
+subvar.str (                        $_Ity                         ) = '3419'                  ! Definition
+subvar.txt (                        $_Ity                         ) = '构架点头转动惯量' ! Comment
+
+subvar.str (                        $_Itz                         ) = '4994'                  ! Definition
+subvar.txt (                        $_Itz                         ) = '构架摇头转动惯量' ! Comment
+
+subvar.str (                        $_ht                          ) = '557'                   ! Definition
+subvar.txt (                        $_ht                          ) = '构架重心距轨面高' ! Comment
+
+subvar.str (                        $_lt                          ) = '2500'                  ! Definition
+subvar.txt (                        $_lt                          ) = '轴距'                ! Comment
+
+subvar.str (                        $_h1                          ) = '438'                   ! Definition
+subvar.txt (                        $_h1                          ) = '一系簧下作用点距轨面高' ! Comment
+
+subvar.str (                        $_bAxle_x                     ) = '480'                   ! Definition
+subvar.txt (                        $_bAxle_x                     ) = '轴箱转臂节点距车轴中心纵向距离' ! Comment
+
+subvar.str (                        $_bAxle_y                     ) = '2110'                  ! Definition
+subvar.txt (                        $_bAxle_y                     ) = '轴箱转臂节点横向跨距' ! Comment
+
+subvar.str (                        $_hAxle                       ) = '433.5'                 ! Definition
+subvar.txt (                        $_hAxle                       ) = '轴箱转臂节点距车轴中心纵向距离' ! Comment
+
+subvar.str (                        $_KxAxle                      ) = '17'                    ! Definition
+subvar.txt (                        $_KxAxle                      ) = '轴箱转臂节点纵向刚度（每轴箱）' ! Comment
+
+subvar.str (                        $_KyAxle                      ) = '9'                     ! Definition
+subvar.txt (                        $_KyAxle                      ) = '轴箱转臂节点横向刚度（每轴箱）' ! Comment
+
+subvar.str (                        $_Kxp                         ) = '0'                     ! Definition
+subvar.txt (                        $_Kxp                         ) = '一系钢簧纵向刚度（每轴箱）' ! Comment
+
+subvar.str (                        $_Kzp                         ) = '1.4'                   ! Definition
+subvar.txt (                        $_Kzp                         ) = '一系钢簧垂向刚度（每轴箱）' ! Comment
+
+subvar.str (                        $_Czp_serial                  ) = '10'                    ! Definition
+subvar.txt (                        $_Czp_serial                  ) = '一系垂向阻尼（每轴箱） ' ! Comment
+
+subvar.str (                        $_Kzp_serial                  ) = '1000'                  ! Definition
+subvar.txt (                        $_Kzp_serial                  ) = '一系垂向减振器串联刚度' ! Comment
+
+subvar.str (                        $_b2                          ) = '1900'                  ! Definition
+subvar.txt (                        $_b2                          ) = '空气簧横向跨距 ' ! Comment
+
+subvar.str (                        $_h2                          ) = '638'                   ! Definition
+subvar.txt (                        $_h2                          ) = '空气簧下表面距轨面高' ! Comment
+
+subvar.str (                        $_bsd_y                       ) = '1900'                  ! Definition
+subvar.txt (                        $_bsd_y                       ) = '二系垂向减振器横向跨距' ! Comment
+
+subvar.str (                        $_hsd                         ) = '638'                   ! Definition
+subvar.txt (                        $_hsd                         ) = '二系垂向减振器下表面距轨面高 ' ! Comment
+
+subvar.str (                        $_bsd_x                       ) = '0'                     ! Definition
+subvar.txt (                        $_bsd_x                       ) = '二系垂向减振器离转向架中心纵向距离' ! Comment
+
+subvar.str (                        $_hsld                        ) = '557'                   ! Definition
+subvar.txt (                        $_hsld                        ) = '二系横向减振器与构架连接点距轨面高' ! Comment
+
+subvar.str (                        $_h_traction_rod              ) = '0'                     ! Definition
+subvar.txt (                        $_h_traction_rod              ) = '牵引拉杆与构架连接点距轨面高 ' ! Comment
+
+subvar.str (                        $_b_traction_rod              ) = '0'                     ! Definition
+subvar.txt (                        $_b_traction_rod              ) = '牵引拉杆横向跨距' ! Comment
+
+subvar.str (                        $_b_traction_rod_bogie        ) = '0'                     ! Definition
+subvar.txt (                        $_b_traction_rod_bogie        ) = '牵引拉杆与构架连接距转向架中心纵向距离 ' ! Comment
+
+subvar.str (                        $_htb                         ) = '557'                   ! Definition
+subvar.txt (                        $_htb                         ) = '抗侧滚扭杆距轨面高 ' ! Comment
+
+subvar.str (                        $_Kssx                        ) = '0.185'                 ! Definition
+subvar.txt (                        $_Kssx                        ) = '二系空气弹簧水平刚度 AW0' ! Comment
+
+subvar.str (                        $_Kssz                        ) = '0.23'                  ! Definition
+subvar.txt (                        $_Kssz                        ) = '二系空气弹簧垂向刚度 AW0' ! Comment
+
+subvar.str (                        $_Csd                         ) = '20'                    ! Definition
+subvar.txt (                        $_Csd                         ) = '二系垂向阻尼 '   ! Comment
+
+subvar.str (                        $_Ksd                         ) = '1000'                  ! Definition
+subvar.txt (                        $_Ksd                         ) = '二系垂向减振器串联刚度' ! Comment
+
+subvar.str (                        $_Csld                        ) = '60'                    ! Definition
+subvar.txt (                        $_Csld                        ) = '二系横向阻尼 '   ! Comment
+
+subvar.str (                        $_Ksld                        ) = '1000'                  ! Definition
+subvar.txt (                        $_Ksld                        ) = '二系横向减振器串联刚度' ! Comment
+
+subvar.str (                        $_K_traction_rod              ) = '0'                     ! Definition
+subvar.txt (                        $_K_traction_rod              ) = '牵引拉杆纵向刚度' ! Comment
+
+subvar.str (                        $_Ktb                         ) = '3.5'                   ! Definition
+subvar.txt (                        $_Ktb                         ) = '抗侧滚扭杆侧滚角刚度' ! Comment
+
+subvar.str (                        $_Csx                         ) = '500'                   ! Definition
+subvar.txt (                        $_Csx                         ) = '抗蛇行阻尼系数' ! Comment
+
+subvar.str (                        $_b_Csx                       ) = '2400'                  ! Definition
+subvar.txt (                        $_b_Csx                       ) = '抗蛇行减振器横向跨距' ! Comment
+
+subvar.str (                        $_P002_TYPE5_NOMINAL_Z        ) = '74926.3275'            ! P002 symmetric Type-5 nominal z force [N]
+
+subvar.str (                        $_P002_TYPE86_NOMINAL_Z       ) = '-59290.41375'          ! P002 symmetric Type-86 nominal z force [N]
+
+!**********************************************************************
+! Reference systems
+!**********************************************************************
+refsys.type (                       $R_Isys                       ) = 1                       ! Type
+refsys.attr.2d.pos.x (              $R_Isys                       ) = -9.00000000000000000E+01
+refsys.attr.2d.pos.y (              $R_Isys                       ) = -1.00000000000000000E+01
+refsys.attr.2d.width (              $R_Isys                       ) = 2.40000000000000000E+02
+refsys.attr.2d.height (             $R_Isys                       ) = 2.20000000000000000E+02
+
+marker.type (                       $M_Isys                       ) = 1                       ! Type
+marker.parent (                     $M_Isys                       ) = $R_Isys                 ! Reference system
+
+marker.type (                       $M_Isys_Track_Moved           ) = -98                     ! Type
+marker.parent (                     $M_Isys_Track_Moved           ) = $R_Isys                 ! Reference system
+marker.par (              1 ,       $M_Isys_Track_Moved           ) = $J_BF                   ! [-] Track Connection/Joint
+marker.par (              3 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [-] Disregard Track elevation
+marker.par (              4 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [-] Disregard Track roll
+marker.par (              5 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [-] Disregard Track pitch
+marker.par (              6 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [m] Offset in x of Track frame
+marker.par (              7 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [m] Offset in y of Track frame
+marker.par (              8 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [m] Offset in z of Track frame
+marker.par (              9 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [m] Offset in s along Track
+marker.par (             10 ,       $M_Isys_Track_Moved           ) = 0.00000000000000000E+00 ! [-] Calculate derivatives
+
+marker.type (                       $M_Isys_DUM                   ) = 2                       ! Type
+marker.parent (                     $M_Isys_DUM                   ) = $R_Isys                 ! Reference system
+marker.pos (              3 ,       $M_Isys_DUM                   ) = -1.00000000000000000E+00 ! Position
+
+prim.type (                         $P_Isys                       ) = 30                      ! Type
+prim.ref (                          $P_Isys                       ) = $M_Isys                 ! Reference Marker
+prim.color.r (            1 ,       $P_Isys                       ) = 1.48000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_Isys                       ) = 1.48000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_Isys                       ) = 1.48000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_Isys                       ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                3 ,       $P_Isys                       ) = 1.00000000000000006E-01 ! [m] Length
+
+prim.type (                         $P_R_Isys_Track               ) = 41                      ! Type
+prim.ref (                          $P_R_Isys_Track               ) = $M_Isys                 ! Reference Marker
+
+
+!**********************************************************************
+! Bodies
+!**********************************************************************
+body.m (                            $B_BF                         ) = $_Mt                    ! Mass of the Body
+body.mp (                           $B_BF                         ) = 0                       ! 0=manual; 1=auto (based on geometry); 2=mass manual, CG & Inertia auto
+body.cg.pos (             3 ,       $B_BF                         ) = { -$_ht/1000 }          ! Center of gravity
+body.I.tens (             1 ,   1 , $B_BF                         ) = $_Itx                   ! Moments of inertia
+body.I.tens (             2 ,   2 , $B_BF                         ) = $_Ity                   ! Moments of inertia
+body.I.tens (             3 ,   3 , $B_BF                         ) = $_Itz                   ! Moments of inertia
+body.I.kind (                       $B_BF                         ) = -1                      ! Kind of I-tensor specification: -1=wrt CG; 0=wrt BRF; 1=wrt Marker
+body.attr.2d.pos.x (                $B_BF                         ) = -3.00000000000000000E+01
+body.attr.2d.pos.y (                $B_BF                         ) = 3.00000000000000000E+01
+body.attr.2d.width (                $B_BF                         ) = 1.10000000000000000E+02
+body.attr.2d.height (               $B_BF                         ) = 8.00000000000000000E+01
+
+marker.type (                       $M_BF_BRF                     ) = 1                       ! Type
+marker.parent (                     $M_BF_BRF                     ) = $B_BF                   ! Body
+marker.flx.type (                   $M_BF_BRF                     ) = 4                       ! Flexible type
+
+marker.type (                       $M_BF_FR                      ) = 2                       ! Type
+marker.parent (                     $M_BF_FR                      ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_FR                      ) = { $_lt/1000/2 }         ! Position
+marker.pos (              2 ,       $M_BF_FR                      ) = { $S_WS_F.$_b1/2/1000 } ! Position
+marker.pos (              3 ,       $M_BF_FR                      ) = { -$_h1/1000 }          ! Position
+
+marker.type (                       $M_BF_FL                      ) = 2                       ! Type
+marker.parent (                     $M_BF_FL                      ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_FL                      ) = { $_lt/1000/2 }         ! Position
+marker.pos (              2 ,       $M_BF_FL                      ) = { -$S_WS_F.$_b1/2/1000 } ! Position
+marker.pos (              3 ,       $M_BF_FL                      ) = { -$_h1/1000 }          ! Position
+
+marker.type (                       $M_BF_RR                      ) = 2                       ! Type
+marker.parent (                     $M_BF_RR                      ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_RR                      ) = { -$_lt/1000/2 }        ! Position
+marker.pos (              2 ,       $M_BF_RR                      ) = { $S_WS_F.$_b1/2/1000 } ! Position
+marker.pos (              3 ,       $M_BF_RR                      ) = { -$_h1/1000 }          ! Position
+
+marker.type (                       $M_BF_RL                      ) = 2                       ! Type
+marker.parent (                     $M_BF_RL                      ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_RL                      ) = { -$_lt/1000/2 }        ! Position
+marker.pos (              2 ,       $M_BF_RL                      ) = { -$S_WS_F.$_b1/2/1000 } ! Position
+marker.pos (              3 ,       $M_BF_RL                      ) = { -$_h1/1000 }          ! Position
+
+marker.type (                       $M_BF_FRAxle                  ) = 2                       ! Type
+marker.parent (                     $M_BF_FRAxle                  ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_FRAxle                  ) = { ($_lt/2-$_bAxle_x)/1000 } ! Position
+marker.pos (              2 ,       $M_BF_FRAxle                  ) = { $_bAxle_y/2/1000 }    ! Position
+marker.pos (              3 ,       $M_BF_FRAxle                  ) = { -$_hAxle/1000 }       ! Position
+
+marker.type (                       $M_BF_FLAxle                  ) = 2                       ! Type
+marker.parent (                     $M_BF_FLAxle                  ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_FLAxle                  ) = { ($_lt/2-$_bAxle_x)/1000 } ! Position
+marker.pos (              2 ,       $M_BF_FLAxle                  ) = { -$_bAxle_y/2/1000 }   ! Position
+marker.pos (              3 ,       $M_BF_FLAxle                  ) = { -$_hAxle/1000 }       ! Position
+
+marker.type (                       $M_BF_RRAxle                  ) = 2                       ! Type
+marker.parent (                     $M_BF_RRAxle                  ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_RRAxle                  ) = { -($_lt/2-$_bAxle_x)/1000 } ! Position
+marker.pos (              2 ,       $M_BF_RRAxle                  ) = { $_bAxle_y/2/1000 }    ! Position
+marker.pos (              3 ,       $M_BF_RRAxle                  ) = { -$_hAxle/1000 }       ! Position
+
+marker.type (                       $M_BF_RLAxle                  ) = 2                       ! Type
+marker.parent (                     $M_BF_RLAxle                  ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_RLAxle                  ) = { -($_lt/2-$_bAxle_x)/1000 } ! Position
+marker.pos (              2 ,       $M_BF_RLAxle                  ) = { -$_bAxle_y/2/1000 }   ! Position
+marker.pos (              3 ,       $M_BF_RLAxle                  ) = { -$_hAxle/1000 }       ! Position
+
+marker.type (                       $M_BF_SS_R                    ) = 2                       ! Type
+marker.parent (                     $M_BF_SS_R                    ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_SS_R                    ) = 0.00000000000000000E+00 ! Position
+marker.pos (              2 ,       $M_BF_SS_R                    ) = { $_b2/2/1000 }         ! Position
+marker.pos (              3 ,       $M_BF_SS_R                    ) = { -$_h2/1000 }          ! Position
+
+marker.type (                       $M_BF_SS_L                    ) = 2                       ! Type
+marker.parent (                     $M_BF_SS_L                    ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_SS_L                    ) = 0.00000000000000000E+00 ! Position
+marker.pos (              2 ,       $M_BF_SS_L                    ) = { -$_b2/2/1000 }        ! Position
+marker.pos (              3 ,       $M_BF_SS_L                    ) = { -$_h2/1000 }          ! Position
+
+marker.type (                       $M_BF_SD_R                    ) = 2                       ! Type
+marker.parent (                     $M_BF_SD_R                    ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_SD_R                    ) = { $_bsd_x/1000 }        ! Position
+marker.pos (              2 ,       $M_BF_SD_R                    ) = { $_bsd_y/2/1000 }      ! Position
+marker.pos (              3 ,       $M_BF_SD_R                    ) = { -$_hsd/1000 }         ! Position
+
+marker.type (                       $M_BF_SD_L                    ) = 2                       ! Type
+marker.parent (                     $M_BF_SD_L                    ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_SD_L                    ) = { $_bsd_x/1000 }        ! Position
+marker.pos (              2 ,       $M_BF_SD_L                    ) = { -$_bsd_y/2/1000 }     ! Position
+marker.pos (              3 ,       $M_BF_SD_L                    ) = { -$_hsd/1000 }         ! Position
+
+marker.type (                       $M_BF_SLD                     ) = 2                       ! Type
+marker.parent (                     $M_BF_SLD                     ) = $B_BF                   ! Body
+marker.pos (              3 ,       $M_BF_SLD                     ) = { -$_hsld/1000 }        ! Position
+
+marker.type (                       $M_BF_traction_rod_R          ) = 2                       ! Type
+marker.parent (                     $M_BF_traction_rod_R          ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_traction_rod_R          ) = { $_b_traction_rod_bogie/1000 } ! Position
+marker.pos (              2 ,       $M_BF_traction_rod_R          ) = { $_b_traction_rod/2/1000 } ! Position
+marker.pos (              3 ,       $M_BF_traction_rod_R          ) = { -$_h_traction_rod/1000 } ! Position
+
+marker.type (                       $M_BF_traction_rod_L          ) = 2                       ! Type
+marker.parent (                     $M_BF_traction_rod_L          ) = $B_BF                   ! Body
+marker.pos (              1 ,       $M_BF_traction_rod_L          ) = { $_b_traction_rod_bogie/1000 } ! Position
+marker.pos (              2 ,       $M_BF_traction_rod_L          ) = { -$_b_traction_rod/2/1000 } ! Position
+marker.pos (              3 ,       $M_BF_traction_rod_L          ) = { -$_h_traction_rod/1000 } ! Position
+
+marker.type (                       $M_BF_TB                      ) = 2                       ! Type
+marker.parent (                     $M_BF_TB                      ) = $B_BF                   ! Body
+marker.pos (              3 ,       $M_BF_TB                      ) = { -$_htb/1000 }         ! Position
+
+marker.type (                       $M_BF_SSX_L                   ) = 2                       ! Type
+marker.parent (                     $M_BF_SSX_L                   ) = $B_BF                   ! Body
+marker.pos (              2 ,       $M_BF_SSX_L                   ) = { -$_b_Csx/2000 }       ! Position
+marker.pos (              3 ,       $M_BF_SSX_L                   ) = { -$_ht/1000 }          ! Position
+
+marker.type (                       $M_BF_SSX_R                   ) = 2                       ! Type
+marker.parent (                     $M_BF_SSX_R                   ) = $B_BF                   ! Body
+marker.pos (              2 ,       $M_BF_SSX_R                   ) = { $_b_Csx/2000 }        ! Position
+marker.pos (              3 ,       $M_BF_SSX_R                   ) = { -$_ht/1000 }          ! Position
+
+joint.from (                        $J_BF                         ) = $M_Isys                 ! From Marker
+joint.to (                          $J_BF                         ) = $M_BF_BRF               ! To Marker
+joint.type (                        $J_BF                         ) = 7                       ! Type
+joint.st.vel (            1 ,       $J_BF                         ) = 1.00000000000000000E+00 ! Velocity
+joint.par (               3 ,       $J_BF                         ) = 0.00000000000000000E+00 ! [-] Degrees of freedom
+
+prim.type (                         $P_BF_cuboid                  ) = 22                      ! Type
+prim.ref (                          $P_BF_cuboid                  ) = $M_BF_BRF               ! Reference Marker
+prim.color.r (            1 ,       $P_BF_cuboid                  ) = 3.00000000000000000E+01 ! Colors (red component)
+prim.color.g (            1 ,       $P_BF_cuboid                  ) = 1.44000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_BF_cuboid                  ) = 2.55000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_BF_cuboid                  ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.transparency (                 $P_BF_cuboid                  ) = 2.50000000000000000E-01 ! Transparency
+prim.mp.dens.solid (                $P_BF_cuboid                  ) = { 7850 kg/m^3 }         ! Density
+prim.par (                2 ,       $P_BF_cuboid                  ) = 4.00000000000000000E+00 ! [m] Length L1
+prim.par (                3 ,       $P_BF_cuboid                  ) = 8.00000000000000044E-01 ! [m] Length L2
+prim.par (                4 ,       $P_BF_cuboid                  ) = 8.00000000000000044E-01 ! [m] Height H1
+prim.par (                5 ,       $P_BF_cuboid                  ) = 2.00000000000000011E-01 ! [m] Height H2
+prim.par (                6 ,       $P_BF_cuboid                  ) = 2.20000000000000001E-01 ! [m] Width B1
+prim.par (                7 ,       $P_BF_cuboid                  ) = 2.20000000000000018E+00 ! [m] Distance right left
+
+prim.type (                         $P_BF_F                       ) = 1                       ! Type
+prim.ref (                          $P_BF_F                       ) = $M_BF_BRF               ! Reference Marker
+prim.pos (                1 ,       $P_BF_F                       ) = 9.00000000000000022E-01 ! Position
+prim.pos (                3 ,       $P_BF_F                       ) = -9.00000000000000022E-01 ! Position
+prim.color.r (            1 ,       $P_BF_F                       ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_BF_F                       ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_BF_F                       ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_BF_F                       ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                2 ,       $P_BF_F                       ) = 2.00000000000000011E-01 ! [m] Length in X
+prim.par (                3 ,       $P_BF_F                       ) = 2.00000000000000000E+00 ! [m] Length in Y
+prim.par (                4 ,       $P_BF_F                       ) = 2.00000000000000011E-01 ! [m] Length in Z
+
+prim.type (                         $P_BF_R                       ) = 1                       ! Type
+prim.ref (                          $P_BF_R                       ) = $M_BF_BRF               ! Reference Marker
+prim.pos (                1 ,       $P_BF_R                       ) = -9.00000000000000022E-01 ! Position
+prim.pos (                3 ,       $P_BF_R                       ) = -9.00000000000000022E-01 ! Position
+prim.color.r (            1 ,       $P_BF_R                       ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_BF_R                       ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_BF_R                       ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_BF_R                       ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                2 ,       $P_BF_R                       ) = 2.00000000000000011E-01 ! [m] Length in X
+prim.par (                3 ,       $P_BF_R                       ) = 2.00000000000000000E+00 ! [m] Length in Y
+prim.par (                4 ,       $P_BF_R                       ) = 2.00000000000000011E-01 ! [m] Length in Z
+
+
+body.m (                            $B_FR                         ) = 1.00000000000000000E+00 ! Mass of the Body
+body.I.tens (             1 ,   1 , $B_FR                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             2 ,   2 , $B_FR                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             3 ,   3 , $B_FR                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.kind (                       $B_FR                         ) = -1                      ! Kind of I-tensor specification: -1=wrt CG; 0=wrt BRF; 1=wrt Marker
+
+marker.type (                       $M_FR_BRF                     ) = 1                       ! Type
+marker.parent (                     $M_FR_BRF                     ) = $B_FR                   ! Body
+marker.flx.type (                   $M_FR_BRF                     ) = 4                       ! Flexible type
+
+marker.type (                       $M_FR_Axle                    ) = 2                       ! Type
+marker.parent (                     $M_FR_Axle                    ) = $B_FR                   ! Body
+marker.pos (              1 ,       $M_FR_Axle                    ) = { -$_bAxle_x/1000 }     ! Position
+marker.pos (              2 ,       $M_FR_Axle                    ) = { ($_bAxle_y-$S_WS_F.$_b1)/2/1000 } ! Position
+marker.pos (              3 ,       $M_FR_Axle                    ) = { $S_WS_F.$_R_wheelset-$_hAxle/1000 } ! Position
+
+marker.type (                       $M_FR_PS                      ) = 2                       ! Type
+marker.parent (                     $M_FR_PS                      ) = $B_FR                   ! Body
+marker.pos (              3 ,       $M_FR_PS                      ) = { $S_WS_F.$_R_wheelset-$_h1/1000 } ! Position
+
+joint.from (                        $J_FR                         ) = $S_WS_F.$M_wheelset_R   ! From Marker
+joint.to (                          $J_FR                         ) = $M_FR_BRF               ! To Marker
+joint.type (                        $J_FR                         ) = 2                       ! Type
+
+prim.type (                         $P_FR                         ) = 1                       ! Type
+prim.ref (                          $P_FR                         ) = $M_FR_BRF               ! Reference Marker
+prim.color.r (            1 ,       $P_FR                         ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_FR                         ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_FR                         ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_FR                         ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                2 ,       $P_FR                         ) = 1.19999999999999996E+00 ! [m] Length in X
+prim.par (                3 ,       $P_FR                         ) = 2.00000000000000011E-01 ! [m] Length in Y
+prim.par (                4 ,       $P_FR                         ) = 2.00000000000000011E-01 ! [m] Length in Z
+
+
+body.m (                            $B_FL                         ) = 1.00000000000000000E+00 ! Mass of the Body
+body.I.tens (             1 ,   1 , $B_FL                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             2 ,   2 , $B_FL                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             3 ,   3 , $B_FL                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.kind (                       $B_FL                         ) = -1                      ! Kind of I-tensor specification: -1=wrt CG; 0=wrt BRF; 1=wrt Marker
+
+marker.type (                       $M_FL_BRF                     ) = 1                       ! Type
+marker.parent (                     $M_FL_BRF                     ) = $B_FL                   ! Body
+marker.flx.type (                   $M_FL_BRF                     ) = 4                       ! Flexible type
+
+marker.type (                       $M_FL_Axle                    ) = 2                       ! Type
+marker.parent (                     $M_FL_Axle                    ) = $B_FL                   ! Body
+marker.pos (              1 ,       $M_FL_Axle                    ) = { -$_bAxle_x/1000 }     ! Position
+marker.pos (              2 ,       $M_FL_Axle                    ) = { -($_bAxle_y-$S_WS_F.$_b1)/2/1000 } ! Position
+marker.pos (              3 ,       $M_FL_Axle                    ) = { $S_WS_F.$_R_wheelset-$_hAxle/1000 } ! Position
+
+marker.type (                       $M_FL_PS                      ) = 2                       ! Type
+marker.parent (                     $M_FL_PS                      ) = $B_FL                   ! Body
+marker.pos (              3 ,       $M_FL_PS                      ) = { $S_WS_F.$_R_wheelset-$_h1/1000 } ! Position
+
+joint.from (                        $J_FL                         ) = $S_WS_F.$M_wheelset_L   ! From Marker
+joint.to (                          $J_FL                         ) = $M_FL_BRF               ! To Marker
+joint.type (                        $J_FL                         ) = 2                       ! Type
+
+prim.type (                         $P_FL                         ) = 1                       ! Type
+prim.ref (                          $P_FL                         ) = $M_FL_BRF               ! Reference Marker
+prim.color.r (            1 ,       $P_FL                         ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_FL                         ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_FL                         ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_FL                         ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                2 ,       $P_FL                         ) = 1.19999999999999996E+00 ! [m] Length in X
+prim.par (                3 ,       $P_FL                         ) = 2.00000000000000011E-01 ! [m] Length in Y
+prim.par (                4 ,       $P_FL                         ) = 2.00000000000000011E-01 ! [m] Length in Z
+
+
+body.m (                            $B_RR                         ) = 1.00000000000000000E+00 ! Mass of the Body
+body.I.tens (             1 ,   1 , $B_RR                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             2 ,   2 , $B_RR                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             3 ,   3 , $B_RR                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.kind (                       $B_RR                         ) = -1                      ! Kind of I-tensor specification: -1=wrt CG; 0=wrt BRF; 1=wrt Marker
+
+marker.type (                       $M_RR_BRF                     ) = 1                       ! Type
+marker.parent (                     $M_RR_BRF                     ) = $B_RR                   ! Body
+marker.flx.type (                   $M_RR_BRF                     ) = 4                       ! Flexible type
+
+marker.type (                       $M_RR_Axle                    ) = 2                       ! Type
+marker.parent (                     $M_RR_Axle                    ) = $B_RR                   ! Body
+marker.pos (              1 ,       $M_RR_Axle                    ) = { $_bAxle_x/1000 }      ! Position
+marker.pos (              2 ,       $M_RR_Axle                    ) = { ($_bAxle_y-$S_WS_F.$_b1)/2/1000 } ! Position
+marker.pos (              3 ,       $M_RR_Axle                    ) = { $S_WS_F.$_R_wheelset-$_hAxle/1000 } ! Position
+
+marker.type (                       $M_RR_PS                      ) = 2                       ! Type
+marker.parent (                     $M_RR_PS                      ) = $B_RR                   ! Body
+marker.pos (              3 ,       $M_RR_PS                      ) = { $S_WS_F.$_R_wheelset-$_h1/1000 } ! Position
+
+joint.from (                        $J_RR                         ) = $S_WS_R.$M_wheelset_R   ! From Marker
+joint.to (                          $J_RR                         ) = $M_RR_BRF               ! To Marker
+joint.type (                        $J_RR                         ) = 2                       ! Type
+
+prim.type (                         $P_RR                         ) = 1                       ! Type
+prim.ref (                          $P_RR                         ) = $M_RR_BRF               ! Reference Marker
+prim.color.r (            1 ,       $P_RR                         ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_RR                         ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_RR                         ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_RR                         ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                2 ,       $P_RR                         ) = 1.19999999999999996E+00 ! [m] Length in X
+prim.par (                3 ,       $P_RR                         ) = 2.00000000000000011E-01 ! [m] Length in Y
+prim.par (                4 ,       $P_RR                         ) = 2.00000000000000011E-01 ! [m] Length in Z
+
+
+body.m (                            $B_RL                         ) = 1.00000000000000000E+00 ! Mass of the Body
+body.I.tens (             1 ,   1 , $B_RL                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             2 ,   2 , $B_RL                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             3 ,   3 , $B_RL                         ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.kind (                       $B_RL                         ) = -1                      ! Kind of I-tensor specification: -1=wrt CG; 0=wrt BRF; 1=wrt Marker
+
+marker.type (                       $M_RL_BRF                     ) = 1                       ! Type
+marker.parent (                     $M_RL_BRF                     ) = $B_RL                   ! Body
+marker.flx.type (                   $M_RL_BRF                     ) = 4                       ! Flexible type
+
+marker.type (                       $M_RL_Axle                    ) = 2                       ! Type
+marker.parent (                     $M_RL_Axle                    ) = $B_RL                   ! Body
+marker.pos (              1 ,       $M_RL_Axle                    ) = { $_bAxle_x/1000 }      ! Position
+marker.pos (              2 ,       $M_RL_Axle                    ) = { -($_bAxle_y-$S_WS_F.$_b1)/2/1000 } ! Position
+marker.pos (              3 ,       $M_RL_Axle                    ) = { $S_WS_F.$_R_wheelset-$_hAxle/1000 } ! Position
+
+marker.type (                       $M_RL_PS                      ) = 2                       ! Type
+marker.parent (                     $M_RL_PS                      ) = $B_RL                   ! Body
+marker.pos (              3 ,       $M_RL_PS                      ) = { $S_WS_F.$_R_wheelset-$_h1/1000 } ! Position
+
+joint.from (                        $J_RL                         ) = $S_WS_R.$M_wheelset_L   ! From Marker
+joint.to (                          $J_RL                         ) = $M_RL_BRF               ! To Marker
+joint.type (                        $J_RL                         ) = 2                       ! Type
+
+prim.type (                         $P_RL                         ) = 1                       ! Type
+prim.ref (                          $P_RL                         ) = $M_RL_BRF               ! Reference Marker
+prim.color.r (            1 ,       $P_RL                         ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_RL                         ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_RL                         ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_RL                         ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.par (                2 ,       $P_RL                         ) = 1.19999999999999996E+00 ! [m] Length in X
+prim.par (                3 ,       $P_RL                         ) = 2.00000000000000011E-01 ! [m] Length in Y
+prim.par (                4 ,       $P_RL                         ) = 2.00000000000000011E-01 ! [m] Length in Z
+
+
+body.m (                            $B_DUM                        ) = 1.00000000000000000E+00 ! Mass of the Body
+body.I.tens (             1 ,   1 , $B_DUM                        ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             2 ,   2 , $B_DUM                        ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.tens (             3 ,   3 , $B_DUM                        ) = 1.00000000000000000E+00 ! Moments of inertia
+body.I.kind (                       $B_DUM                        ) = -1                      ! Kind of I-tensor specification: -1=wrt CG; 0=wrt BRF; 1=wrt Marker
+
+marker.type (                       $M_DUM_BRF                    ) = 1                       ! Type
+marker.parent (                     $M_DUM_BRF                    ) = $B_DUM                  ! Body
+marker.flx.type (                   $M_DUM_BRF                    ) = 4                       ! Flexible type
+
+marker.type (                       $M_DUM_SS_R                   ) = 2                       ! Type
+marker.parent (                     $M_DUM_SS_R                   ) = $B_DUM                  ! Body
+marker.pos (              1 ,       $M_DUM_SS_R                   ) = 0.00000000000000000E+00 ! Position
+marker.pos (              2 ,       $M_DUM_SS_R                   ) = { $_b2/2/1000 }         ! Position
+marker.pos (              3 ,       $M_DUM_SS_R                   ) = { 1-$_h2/1000 }         ! Position
+
+marker.type (                       $M_DUM_SS_L                   ) = 2                       ! Type
+marker.parent (                     $M_DUM_SS_L                   ) = $B_DUM                  ! Body
+marker.pos (              1 ,       $M_DUM_SS_L                   ) = 0.00000000000000000E+00 ! Position
+marker.pos (              2 ,       $M_DUM_SS_L                   ) = { -$_b2/2/1000 }        ! Position
+marker.pos (              3 ,       $M_DUM_SS_L                   ) = { 1-$_h2/1000 }         ! Position
+
+marker.type (                       $M_DUM_SD_R                   ) = 2                       ! Type
+marker.parent (                     $M_DUM_SD_R                   ) = $B_DUM                  ! Body
+marker.pos (              1 ,       $M_DUM_SD_R                   ) = { $_bsd_x/1000 }        ! Position
+marker.pos (              2 ,       $M_DUM_SD_R                   ) = { $_bsd_y/2/1000 }      ! Position
+marker.pos (              3 ,       $M_DUM_SD_R                   ) = { 1-$_hsd/1000 }        ! Position
+
+marker.type (                       $M_DUM_SD_L                   ) = 2                       ! Type
+marker.parent (                     $M_DUM_SD_L                   ) = $B_DUM                  ! Body
+marker.pos (              1 ,       $M_DUM_SD_L                   ) = { $_bsd_x/1000 }        ! Position
+marker.pos (              2 ,       $M_DUM_SD_L                   ) = { -$_bsd_y/2/1000 }     ! Position
+marker.pos (              3 ,       $M_DUM_SD_L                   ) = { 1-$_hsd/1000 }        ! Position
+
+marker.type (                       $M_DUM_SLD                    ) = 2                       ! Type
+marker.parent (                     $M_DUM_SLD                    ) = $B_DUM                  ! Body
+marker.pos (              3 ,       $M_DUM_SLD                    ) = { 1-$_hsld/1000 }       ! Position
+
+marker.type (                       $M_DUM_traction_rod_R         ) = 2                       ! Type
+marker.parent (                     $M_DUM_traction_rod_R         ) = $B_DUM                  ! Body
+marker.pos (              1 ,       $M_DUM_traction_rod_R         ) = { $_b_traction_rod_bogie/1000 } ! Position
+marker.pos (              2 ,       $M_DUM_traction_rod_R         ) = { $_b_traction_rod/2/1000 } ! Position
+marker.pos (              3 ,       $M_DUM_traction_rod_R         ) = { 1-$_h_traction_rod/1000 } ! Position
+
+marker.type (                       $M_DUM_traction_rod_L         ) = 2                       ! Type
+marker.parent (                     $M_DUM_traction_rod_L         ) = $B_DUM                  ! Body
+marker.pos (              1 ,       $M_DUM_traction_rod_L         ) = { $_b_traction_rod_bogie/1000 } ! Position
+marker.pos (              2 ,       $M_DUM_traction_rod_L         ) = { -$_b_traction_rod/2/1000 } ! Position
+marker.pos (              3 ,       $M_DUM_traction_rod_L         ) = { 1-$_h_traction_rod/1000 } ! Position
+
+marker.type (                       $M_DUM_TB                     ) = 2                       ! Type
+marker.parent (                     $M_DUM_TB                     ) = $B_DUM                  ! Body
+marker.pos (              3 ,       $M_DUM_TB                     ) = { 1-$_htb/1000 }        ! Position
+
+marker.type (                       $M_DUM_SSX_L                  ) = 2                       ! Type
+marker.parent (                     $M_DUM_SSX_L                  ) = $B_DUM                  ! Body
+marker.pos (              2 ,       $M_DUM_SSX_L                  ) = { -$_b_Csx/2000 }       ! Position
+marker.pos (              3 ,       $M_DUM_SSX_L                  ) = { 1-$_ht/1000 }         ! Position
+
+marker.type (                       $M_DUM_SSX_R                  ) = 2                       ! Type
+marker.parent (                     $M_DUM_SSX_R                  ) = $B_DUM                  ! Body
+marker.pos (              2 ,       $M_DUM_SSX_R                  ) = { $_b_Csx/2000 }        ! Position
+marker.pos (              3 ,       $M_DUM_SSX_R                  ) = { 1-$_ht/1000 }         ! Position
+
+joint.from (                        $J_DUM                        ) = $M_Isys_DUM             ! From Marker
+joint.to (                          $J_DUM                        ) = $M_DUM_BRF              ! To Marker
+joint.type (                        $J_DUM                        ) = 0                       ! Type
+joint.disabled (                    $J_DUM                        ) = 0                       ! Disabled
+joint.par (               1 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [rad] Rotation about alpha
+joint.par (               2 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [rad] Rotation about beta
+joint.par (               3 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [rad] Rotation about gamma
+joint.par (               4 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [m] Translation in x
+joint.par (               5 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [m] Translation in y
+joint.par (               6 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [m] Translation in z
+joint.par (               7 ,       $J_DUM                        ) = 0.00000000000000000E+00 ! [-] Rotation sequence
+
+prim.type (                         $P_DUM                        ) = 1                       ! Type
+prim.ref (                          $P_DUM                        ) = $M_DUM_BRF              ! Reference Marker
+prim.color.r (            1 ,       $P_DUM                        ) = 1.28000000000000000E+02 ! Colors (red component)
+prim.color.g (            1 ,       $P_DUM                        ) = 1.28000000000000000E+02 ! Colors (green component)
+prim.color.b (            1 ,       $P_DUM                        ) = 1.28000000000000000E+02 ! Colors (blue component)
+prim.color.t (            1 ,       $P_DUM                        ) = 0.00000000000000000E+00 ! Colors (transparency component)
+prim.drawstyle (                    $P_DUM                        ) = 2                       ! Draw style
+prim.par (                2 ,       $P_DUM                        ) = 1.00000000000000000E+00 ! [m] Length in X
+prim.par (                3 ,       $P_DUM                        ) = 2.00000000000000000E+00 ! [m] Length in Y
+prim.par (                4 ,       $P_DUM                        ) = 2.99999999999999989E-01 ! [m] Length in Z
+
+
+!**********************************************************************
+! Force Elements
+!**********************************************************************
+force.type (                        $F_FL_Axle                    ) = 43                      ! Type
+force.from (                        $F_FL_Axle                    ) = $M_BF_FLAxle            ! From Marker
+force.to (                          $F_FL_Axle                    ) = $M_FL_Axle              ! To Marker
+force.par (               1 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in al
+force.par (               5 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in be
+force.par (               6 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in ga
+force.par (               7 ,       $F_FL_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in x
+force.par (               8 ,       $F_FL_Axle                    ) = { $_KyAxle*1000000 }    ! [N/m] Transl. stiffness in y
+force.par (               9 ,       $F_FL_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in z
+force.par (              10 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in al
+force.par (              11 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in be
+force.par (              12 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in ga
+force.par (              13 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in x
+force.par (              14 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in y
+force.par (              15 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in z
+force.par (              16 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in al
+force.par (              17 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in be
+force.par (              18 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in ga
+force.par (              19 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function F_c(x)
+force.par (              20 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function F_c(y)
+force.par (              21 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function F_c(z)
+force.par (              22 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function T_c(al)
+force.par (              23 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function T_c(be)
+force.par (              24 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function T_c(ga)
+force.par (              25 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function F_d(xd)
+force.par (              26 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function F_d(yd)
+force.par (              27 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function F_d(zd)
+force.par (              28 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function T_d(ald)
+force.par (              29 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function T_d(bed)
+force.par (              30 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function T_d(gad)
+force.par (              31 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+force.par (              33 ,       $F_FL_Axle                    ) = null                    ! [-] Expression for force in x
+force.par (              34 ,       $F_FL_Axle                    ) = null                    ! [-] Expression for force in y
+force.par (              35 ,       $F_FL_Axle                    ) = null                    ! [-] Expression for force in z
+force.par (              36 ,       $F_FL_Axle                    ) = null                    ! [-] Expression for torque in al
+force.par (              37 ,       $F_FL_Axle                    ) = null                    ! [-] Expression for torque in be
+force.par (              38 ,       $F_FL_Axle                    ) = null                    ! [-] Expression for torque in ga
+force.par (              39 ,       $F_FL_Axle                    ) = null                    ! [-] Input Function Set
+force.par (              40 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in x
+force.par (              41 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in y
+force.par (              42 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in z
+force.par (              43 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in al
+force.par (              44 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in be
+force.par (              45 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in ga
+force.par (              46 ,       $F_FL_Axle                    ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_FR_Axle                    ) = 43                      ! Type
+force.from (                        $F_FR_Axle                    ) = $M_BF_FRAxle            ! From Marker
+force.to (                          $F_FR_Axle                    ) = $M_FR_Axle              ! To Marker
+force.par (               1 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in al
+force.par (               5 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in be
+force.par (               6 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in ga
+force.par (               7 ,       $F_FR_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in x
+force.par (               8 ,       $F_FR_Axle                    ) = { $_KyAxle*1000000 }    ! [N/m] Transl. stiffness in y
+force.par (               9 ,       $F_FR_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in z
+force.par (              10 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in al
+force.par (              11 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in be
+force.par (              12 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in ga
+force.par (              13 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in x
+force.par (              14 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in y
+force.par (              15 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in z
+force.par (              16 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in al
+force.par (              17 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in be
+force.par (              18 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in ga
+force.par (              19 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function F_c(x)
+force.par (              20 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function F_c(y)
+force.par (              21 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function F_c(z)
+force.par (              22 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function T_c(al)
+force.par (              23 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function T_c(be)
+force.par (              24 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function T_c(ga)
+force.par (              25 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function F_d(xd)
+force.par (              26 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function F_d(yd)
+force.par (              27 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function F_d(zd)
+force.par (              28 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function T_d(ald)
+force.par (              29 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function T_d(bed)
+force.par (              30 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function T_d(gad)
+force.par (              31 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+force.par (              33 ,       $F_FR_Axle                    ) = null                    ! [-] Expression for force in x
+force.par (              34 ,       $F_FR_Axle                    ) = null                    ! [-] Expression for force in y
+force.par (              35 ,       $F_FR_Axle                    ) = null                    ! [-] Expression for force in z
+force.par (              36 ,       $F_FR_Axle                    ) = null                    ! [-] Expression for torque in al
+force.par (              37 ,       $F_FR_Axle                    ) = null                    ! [-] Expression for torque in be
+force.par (              38 ,       $F_FR_Axle                    ) = null                    ! [-] Expression for torque in ga
+force.par (              39 ,       $F_FR_Axle                    ) = null                    ! [-] Input Function Set
+force.par (              40 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in x
+force.par (              41 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in y
+force.par (              42 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in z
+force.par (              43 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in al
+force.par (              44 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in be
+force.par (              45 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in ga
+force.par (              46 ,       $F_FR_Axle                    ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_RL_Axle                    ) = 43                      ! Type
+force.from (                        $F_RL_Axle                    ) = $M_BF_RLAxle            ! From Marker
+force.to (                          $F_RL_Axle                    ) = $M_RL_Axle              ! To Marker
+force.par (               1 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in al
+force.par (               5 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in be
+force.par (               6 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in ga
+force.par (               7 ,       $F_RL_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in x
+force.par (               8 ,       $F_RL_Axle                    ) = { $_KyAxle*1000000 }    ! [N/m] Transl. stiffness in y
+force.par (               9 ,       $F_RL_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in z
+force.par (              10 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in al
+force.par (              11 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in be
+force.par (              12 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in ga
+force.par (              13 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in x
+force.par (              14 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in y
+force.par (              15 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in z
+force.par (              16 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in al
+force.par (              17 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in be
+force.par (              18 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in ga
+force.par (              19 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function F_c(x)
+force.par (              20 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function F_c(y)
+force.par (              21 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function F_c(z)
+force.par (              22 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function T_c(al)
+force.par (              23 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function T_c(be)
+force.par (              24 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function T_c(ga)
+force.par (              25 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function F_d(xd)
+force.par (              26 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function F_d(yd)
+force.par (              27 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function F_d(zd)
+force.par (              28 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function T_d(ald)
+force.par (              29 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function T_d(bed)
+force.par (              30 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function T_d(gad)
+force.par (              31 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+force.par (              33 ,       $F_RL_Axle                    ) = null                    ! [-] Expression for force in x
+force.par (              34 ,       $F_RL_Axle                    ) = null                    ! [-] Expression for force in y
+force.par (              35 ,       $F_RL_Axle                    ) = null                    ! [-] Expression for force in z
+force.par (              36 ,       $F_RL_Axle                    ) = null                    ! [-] Expression for torque in al
+force.par (              37 ,       $F_RL_Axle                    ) = null                    ! [-] Expression for torque in be
+force.par (              38 ,       $F_RL_Axle                    ) = null                    ! [-] Expression for torque in ga
+force.par (              39 ,       $F_RL_Axle                    ) = null                    ! [-] Input Function Set
+force.par (              40 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in x
+force.par (              41 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in y
+force.par (              42 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in z
+force.par (              43 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in al
+force.par (              44 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in be
+force.par (              45 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in ga
+force.par (              46 ,       $F_RL_Axle                    ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_RR_Axle                    ) = 43                      ! Type
+force.from (                        $F_RR_Axle                    ) = $M_BF_RRAxle            ! From Marker
+force.to (                          $F_RR_Axle                    ) = $M_RR_Axle              ! To Marker
+force.par (               1 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in al
+force.par (               5 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in be
+force.par (               6 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in ga
+force.par (               7 ,       $F_RR_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in x
+force.par (               8 ,       $F_RR_Axle                    ) = { $_KyAxle*1000000 }    ! [N/m] Transl. stiffness in y
+force.par (               9 ,       $F_RR_Axle                    ) = { $_KxAxle*1000000 }    ! [N/m] Transl. stiffness in z
+force.par (              10 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in al
+force.par (              11 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in be
+force.par (              12 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat. stiffness in ga
+force.par (              13 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in x
+force.par (              14 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in y
+force.par (              15 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Ns/m] Transl. damping in z
+force.par (              16 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in al
+force.par (              17 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in be
+force.par (              18 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat. damping in ga
+force.par (              19 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function F_c(x)
+force.par (              20 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function F_c(y)
+force.par (              21 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function F_c(z)
+force.par (              22 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function T_c(al)
+force.par (              23 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function T_c(be)
+force.par (              24 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function T_c(ga)
+force.par (              25 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function F_d(xd)
+force.par (              26 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function F_d(yd)
+force.par (              27 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function F_d(zd)
+force.par (              28 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function T_d(ald)
+force.par (              29 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function T_d(bed)
+force.par (              30 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function T_d(gad)
+force.par (              31 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+force.par (              33 ,       $F_RR_Axle                    ) = null                    ! [-] Expression for force in x
+force.par (              34 ,       $F_RR_Axle                    ) = null                    ! [-] Expression for force in y
+force.par (              35 ,       $F_RR_Axle                    ) = null                    ! [-] Expression for force in z
+force.par (              36 ,       $F_RR_Axle                    ) = null                    ! [-] Expression for torque in al
+force.par (              37 ,       $F_RR_Axle                    ) = null                    ! [-] Expression for torque in be
+force.par (              38 ,       $F_RR_Axle                    ) = null                    ! [-] Expression for torque in ga
+force.par (              39 ,       $F_RR_Axle                    ) = null                    ! [-] Input Function Set
+force.par (              40 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in x
+force.par (              41 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in y
+force.par (              42 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [m] Nominal displacement in z
+force.par (              43 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in al
+force.par (              44 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in be
+force.par (              45 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [rad] Nominal angle in ga
+force.par (              46 ,       $F_RR_Axle                    ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_PS_Spring_A                ) = 86                      ! Type
+force.from (                        $F_PS_Spring_A                ) = $M_BF_FL                ! From Marker
+force.to (                          $F_PS_Spring_A                ) = $M_FL_PS                ! To Marker
+force.st.dyn (            1 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! Dynamic states
+force.st.equi (           1 ,       $F_PS_Spring_A                ) = 1                       ! Equilibrium
+force.par (               2 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_x
+force.par (               3 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_y
+force.par (               4 ,       $F_PS_Spring_A                ) = { $_P002_TYPE86_NOMINAL_Z } ! [N] Nominal force F_nom_z
+force.par (               5 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_al
+force.par (               6 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_be
+force.par (               7 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_ga
+force.par (               8 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_x
+force.par (               9 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_y
+force.par (              10 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_z
+force.par (              11 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_al
+force.par (              12 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_be
+force.par (              13 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_ga
+force.par (              20 ,       $F_PS_Spring_A                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_x
+force.par (              21 ,       $F_PS_Spring_A                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_y
+force.par (              22 ,       $F_PS_Spring_A                ) = { $_Kzp*1000000 }       ! [N/m] Transl. par. stiffness cp_z
+force.par (              23 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_al
+force.par (              24 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_be
+force.par (              25 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_ga
+force.par (              26 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_x
+force.par (              27 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_y
+force.par (              28 ,       $F_PS_Spring_A                ) = { $_Czp_serial*1000 }   ! [Ns/m] Transl. par. damping dp_z
+force.par (              29 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_al
+force.par (              30 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_be
+force.par (              31 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_ga
+force.par (              32 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [m] Nominal length x_nom
+force.par (              33 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [m] Nominal length y_nom
+force.par (              34 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [m] Nominal length z_nom
+force.par (              35 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [rad] Nominal angle al_nom
+force.par (              36 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [rad] Nominal angle be_nom
+force.par (              37 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [rad] Nominal angle ga_nom
+force.par (              38 ,       $F_PS_Spring_A                ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+
+force.type (                        $F_PS_Spring_B                ) = 86                      ! Type
+force.from (                        $F_PS_Spring_B                ) = $M_BF_FR                ! From Marker
+force.to (                          $F_PS_Spring_B                ) = $M_FR_PS                ! To Marker
+force.st.dyn (            1 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! Dynamic states
+force.st.equi (           1 ,       $F_PS_Spring_B                ) = 1                       ! Equilibrium
+force.par (               2 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_x
+force.par (               3 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_y
+force.par (               4 ,       $F_PS_Spring_B                ) = { $_P002_TYPE86_NOMINAL_Z } ! [N] Nominal force F_nom_z
+force.par (               5 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_al
+force.par (               6 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_be
+force.par (               7 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_ga
+force.par (               8 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_x
+force.par (               9 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_y
+force.par (              10 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_z
+force.par (              11 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_al
+force.par (              12 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_be
+force.par (              13 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_ga
+force.par (              20 ,       $F_PS_Spring_B                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_x
+force.par (              21 ,       $F_PS_Spring_B                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_y
+force.par (              22 ,       $F_PS_Spring_B                ) = { $_Kzp*1000000 }       ! [N/m] Transl. par. stiffness cp_z
+force.par (              23 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_al
+force.par (              24 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_be
+force.par (              25 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_ga
+force.par (              26 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_x
+force.par (              27 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_y
+force.par (              28 ,       $F_PS_Spring_B                ) = { $_Czp_serial*1000 }   ! [Ns/m] Transl. par. damping dp_z
+force.par (              29 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_al
+force.par (              30 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_be
+force.par (              31 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_ga
+force.par (              32 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [m] Nominal length x_nom
+force.par (              33 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [m] Nominal length y_nom
+force.par (              34 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [m] Nominal length z_nom
+force.par (              35 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [rad] Nominal angle al_nom
+force.par (              36 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [rad] Nominal angle be_nom
+force.par (              37 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [rad] Nominal angle ga_nom
+force.par (              38 ,       $F_PS_Spring_B                ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+
+force.type (                        $F_PS_Spring_C                ) = 86                      ! Type
+force.from (                        $F_PS_Spring_C                ) = $M_BF_RL                ! From Marker
+force.to (                          $F_PS_Spring_C                ) = $M_RL_PS                ! To Marker
+force.st.dyn (            1 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! Dynamic states
+force.st.equi (           1 ,       $F_PS_Spring_C                ) = 1                       ! Equilibrium
+force.par (               2 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_x
+force.par (               3 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_y
+force.par (               4 ,       $F_PS_Spring_C                ) = { $_P002_TYPE86_NOMINAL_Z } ! [N] Nominal force F_nom_z
+force.par (               5 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_al
+force.par (               6 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_be
+force.par (               7 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_ga
+force.par (               8 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_x
+force.par (               9 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_y
+force.par (              10 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_z
+force.par (              11 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_al
+force.par (              12 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_be
+force.par (              13 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_ga
+force.par (              20 ,       $F_PS_Spring_C                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_x
+force.par (              21 ,       $F_PS_Spring_C                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_y
+force.par (              22 ,       $F_PS_Spring_C                ) = { $_Kzp*1000000 }       ! [N/m] Transl. par. stiffness cp_z
+force.par (              23 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_al
+force.par (              24 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_be
+force.par (              25 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_ga
+force.par (              26 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_x
+force.par (              27 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_y
+force.par (              28 ,       $F_PS_Spring_C                ) = { $_Czp_serial*1000 }   ! [Ns/m] Transl. par. damping dp_z
+force.par (              29 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_al
+force.par (              30 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_be
+force.par (              31 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_ga
+force.par (              32 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [m] Nominal length x_nom
+force.par (              33 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [m] Nominal length y_nom
+force.par (              34 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [m] Nominal length z_nom
+force.par (              35 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [rad] Nominal angle al_nom
+force.par (              36 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [rad] Nominal angle be_nom
+force.par (              37 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [rad] Nominal angle ga_nom
+force.par (              38 ,       $F_PS_Spring_C                ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+
+force.type (                        $F_PS_Spring_D                ) = 86                      ! Type
+force.from (                        $F_PS_Spring_D                ) = $M_BF_RR                ! From Marker
+force.to (                          $F_PS_Spring_D                ) = $M_RR_PS                ! To Marker
+force.st.dyn (            1 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! Dynamic states
+force.st.equi (           1 ,       $F_PS_Spring_D                ) = 1                       ! Equilibrium
+force.par (               2 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_x
+force.par (               3 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_y
+force.par (               4 ,       $F_PS_Spring_D                ) = { $_P002_TYPE86_NOMINAL_Z } ! [N] Nominal force F_nom_z
+force.par (               5 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_al
+force.par (               6 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_be
+force.par (               7 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_ga
+force.par (               8 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_x
+force.par (               9 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_y
+force.par (              10 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_z
+force.par (              11 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_al
+force.par (              12 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_be
+force.par (              13 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_ga
+force.par (              20 ,       $F_PS_Spring_D                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_x
+force.par (              21 ,       $F_PS_Spring_D                ) = { $_Kxp*1000000 }       ! [N/m] Transl. par. stiffness cp_y
+force.par (              22 ,       $F_PS_Spring_D                ) = { $_Kzp*1000000 }       ! [N/m] Transl. par. stiffness cp_z
+force.par (              23 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_al
+force.par (              24 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_be
+force.par (              25 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_ga
+force.par (              26 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_x
+force.par (              27 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_y
+force.par (              28 ,       $F_PS_Spring_D                ) = { $_Czp_serial*1000 }   ! [Ns/m] Transl. par. damping dp_z
+force.par (              29 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_al
+force.par (              30 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_be
+force.par (              31 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_ga
+force.par (              32 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [m] Nominal length x_nom
+force.par (              33 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [m] Nominal length y_nom
+force.par (              34 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [m] Nominal length z_nom
+force.par (              35 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [rad] Nominal angle al_nom
+force.par (              36 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [rad] Nominal angle be_nom
+force.par (              37 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [rad] Nominal angle ga_nom
+force.par (              38 ,       $F_PS_Spring_D                ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+
+force.type (                        $F_AirSpring_A                ) = 5                       ! Type
+force.from (                        $F_AirSpring_A                ) = $M_BF_SS_L              ! From Marker
+force.to (                          $F_AirSpring_A                ) = $M_DUM_SS_L             ! To Marker
+force.par (               1 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_AirSpring_A                ) = { $_P002_TYPE5_NOMINAL_Z } ! [N] Nominal force in z
+force.par (               4 ,       $F_AirSpring_A                ) = { $_Kssx*1000000 }      ! [N/m] Stiffness in x
+force.par (               5 ,       $F_AirSpring_A                ) = { $_Kssx*1000000 }      ! [N/m] Stiffness in y
+force.par (               6 ,       $F_AirSpring_A                ) = { $_Kssz*1000000 }      ! [N/m] Stiffness in z
+force.par (               7 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [Ns/m] Damping in x
+force.par (               8 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [Ns/m] Damping in y
+force.par (               9 ,       $F_AirSpring_A                ) = { $_Csd*1000 }          ! [Ns/m] Damping in z
+force.par (              10 ,       $F_AirSpring_A                ) = null                    ! [-] Input Function Fc(x)
+force.par (              11 ,       $F_AirSpring_A                ) = null                    ! [-] Input Function Fc(y)
+force.par (              12 ,       $F_AirSpring_A                ) = null                    ! [-] Input Function Fc(z)
+force.par (              13 ,       $F_AirSpring_A                ) = null                    ! [-] Input Function Fd(xd)
+force.par (              14 ,       $F_AirSpring_A                ) = null                    ! [-] Input Function Fd(yd)
+force.par (              15 ,       $F_AirSpring_A                ) = null                    ! [-] Input Function Fd(zd)
+force.par (              16 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [m] Clearance in x
+force.par (              17 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [m] Clearance in y
+force.par (              18 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [m] Clearance in z
+force.par (              20 ,       $F_AirSpring_A                ) = null                    ! [-] Reference Marker for meas+calc
+force.par (              21 ,       $F_AirSpring_A                ) = null                    ! [-] Expression for Fx
+force.par (              22 ,       $F_AirSpring_A                ) = null                    ! [-] Expression for Fy
+force.par (              23 ,       $F_AirSpring_A                ) = null                    ! [-] Expression for Fz
+force.par (              27 ,       $F_AirSpring_A                ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_AirSpring_B                ) = 5                       ! Type
+force.from (                        $F_AirSpring_B                ) = $M_BF_SS_R              ! From Marker
+force.to (                          $F_AirSpring_B                ) = $M_DUM_SS_R             ! To Marker
+force.par (               1 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_AirSpring_B                ) = { $_P002_TYPE5_NOMINAL_Z } ! [N] Nominal force in z
+force.par (               4 ,       $F_AirSpring_B                ) = { $_Kssx*1000000 }      ! [N/m] Stiffness in x
+force.par (               5 ,       $F_AirSpring_B                ) = { $_Kssx*1000000 }      ! [N/m] Stiffness in y
+force.par (               6 ,       $F_AirSpring_B                ) = { $_Kssz*1000000 }      ! [N/m] Stiffness in z
+force.par (               7 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [Ns/m] Damping in x
+force.par (               8 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [Ns/m] Damping in y
+force.par (               9 ,       $F_AirSpring_B                ) = { $_Csd*1000 }          ! [Ns/m] Damping in z
+force.par (              10 ,       $F_AirSpring_B                ) = null                    ! [-] Input Function Fc(x)
+force.par (              11 ,       $F_AirSpring_B                ) = null                    ! [-] Input Function Fc(y)
+force.par (              12 ,       $F_AirSpring_B                ) = null                    ! [-] Input Function Fc(z)
+force.par (              13 ,       $F_AirSpring_B                ) = null                    ! [-] Input Function Fd(xd)
+force.par (              14 ,       $F_AirSpring_B                ) = null                    ! [-] Input Function Fd(yd)
+force.par (              15 ,       $F_AirSpring_B                ) = null                    ! [-] Input Function Fd(zd)
+force.par (              16 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [m] Clearance in x
+force.par (              17 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [m] Clearance in y
+force.par (              18 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [m] Clearance in z
+force.par (              20 ,       $F_AirSpring_B                ) = null                    ! [-] Reference Marker for meas+calc
+force.par (              21 ,       $F_AirSpring_B                ) = null                    ! [-] Expression for Fx
+force.par (              22 ,       $F_AirSpring_B                ) = null                    ! [-] Expression for Fy
+force.par (              23 ,       $F_AirSpring_B                ) = null                    ! [-] Expression for Fz
+force.par (              27 ,       $F_AirSpring_B                ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_SS_LatDmp                  ) = 86                      ! Type
+force.from (                        $F_SS_LatDmp                  ) = $M_BF_SLD               ! From Marker
+force.to (                          $F_SS_LatDmp                  ) = $M_DUM_SLD              ! To Marker
+force.st.dyn (            1 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! Dynamic states
+force.st.equi (           1 ,       $F_SS_LatDmp                  ) = 0                       ! Equilibrium
+force.par (               2 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_x
+force.par (               3 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_y
+force.par (               4 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N] Nominal force F_nom_z
+force.par (               5 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_al
+force.par (               6 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_be
+force.par (               7 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm] Nominal torque T_nom_ga
+force.par (               8 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_x
+force.par (               9 ,       $F_SS_LatDmp                  ) = { $_Ksld*1000000 }      ! [N/m] Transl. ser. stiffness cs_y
+force.par (              10 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N/m] Transl. ser. stiffness cs_z
+force.par (              11 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_al
+force.par (              12 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_be
+force.par (              13 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  ser. stiffness cs_ga
+force.par (              15 ,       $F_SS_LatDmp                  ) = { $_Csld*1000 }         ! [Ns/m] Transl. ser. damping  ds_y
+force.par (              20 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N/m] Transl. par. stiffness cp_x
+force.par (              21 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N/m] Transl. par. stiffness cp_y
+force.par (              22 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [N/m] Transl. par. stiffness cp_z
+force.par (              23 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_al
+force.par (              24 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_be
+force.par (              25 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nm/rad] Rotat.  par. stiffness cp_ga
+force.par (              26 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_x
+force.par (              27 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_y
+force.par (              28 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Ns/m] Transl. par. damping dp_z
+force.par (              29 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_al
+force.par (              30 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_be
+force.par (              31 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [Nms/rad] Rotat.  par. damping dp_ga
+force.par (              32 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [m] Nominal length x_nom
+force.par (              33 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [m] Nominal length y_nom
+force.par (              34 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [m] Nominal length z_nom
+force.par (              35 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [rad] Nominal angle al_nom
+force.par (              36 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [rad] Nominal angle be_nom
+force.par (              37 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [rad] Nominal angle ga_nom
+force.par (              38 ,       $F_SS_LatDmp                  ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+
+force.type (                        $F_AntiRoll                   ) = 13                      ! Type
+force.from (                        $F_AntiRoll                   ) = $M_BF_TB                ! From Marker
+force.to (                          $F_AntiRoll                   ) = $M_DUM_TB               ! To Marker
+force.par (               1 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in al
+force.par (               2 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in be
+force.par (               3 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nm] Nominal torque in ga
+force.par (               4 ,       $F_AntiRoll                   ) = { $_Ktb*1000000 }       ! [Nm/rad] Stiffness in al
+force.par (               5 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nm/rad] Stiffness in be
+force.par (               6 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nm/rad] Stiffness in ga
+force.par (               7 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nms/rad] Damping in al
+force.par (               8 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nms/rad] Damping in be
+force.par (               9 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [Nms/rad] Damping in ga
+force.par (              10 ,       $F_AntiRoll                   ) = 0.00000000000000000E+00 ! [-] Mode of angle calculation
+force.par (              11 ,       $F_AntiRoll                   ) = null                    ! [-] Input Function T_c(al)
+force.par (              12 ,       $F_AntiRoll                   ) = null                    ! [-] Input Function T_c(be)
+force.par (              13 ,       $F_AntiRoll                   ) = null                    ! [-] Input Function T_c(ga)
+force.par (              14 ,       $F_AntiRoll                   ) = null                    ! [-] Input Function T_d(ald)
+force.par (              15 ,       $F_AntiRoll                   ) = null                    ! [-] Input Function T_d(bed)
+force.par (              16 ,       $F_AntiRoll                   ) = null                    ! [-] Input Function T_d(gad)
+force.par (              18 ,       $F_AntiRoll                   ) = null                    ! [-] Expression for T_al
+force.par (              19 ,       $F_AntiRoll                   ) = null                    ! [-] Expression for T_be
+force.par (              20 ,       $F_AntiRoll                   ) = null                    ! [-] Expression for T_ga
+
+force.type (                        $F_SS_TractionRod_A           ) = 3                       ! Type
+force.from (                        $F_SS_TractionRod_A           ) = $M_BF_traction_rod_L    ! From Marker
+force.to (                          $F_SS_TractionRod_A           ) = $M_DUM_traction_rod_L   ! To Marker
+force.disabled (                    $F_SS_TractionRod_A           ) = 0                       ! Disabled
+force.par (               1 ,       $F_SS_TractionRod_A           ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_SS_TractionRod_A           ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_SS_TractionRod_A           ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_SS_TractionRod_A           ) = { $_K_traction_rod*1000000 } ! [N/m] Stiffness in x
+force.par (               5 ,       $F_SS_TractionRod_A           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in y
+force.par (               6 ,       $F_SS_TractionRod_A           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in z
+
+force.type (                        $F_SS_TractionRod_B           ) = 3                       ! Type
+force.from (                        $F_SS_TractionRod_B           ) = $M_BF_traction_rod_R    ! From Marker
+force.to (                          $F_SS_TractionRod_B           ) = $M_DUM_traction_rod_R   ! To Marker
+force.disabled (                    $F_SS_TractionRod_B           ) = 0                       ! Disabled
+force.par (               1 ,       $F_SS_TractionRod_B           ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_SS_TractionRod_B           ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_SS_TractionRod_B           ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_SS_TractionRod_B           ) = { $_K_traction_rod*1000000 } ! [N/m] Stiffness in x
+force.par (               5 ,       $F_SS_TractionRod_B           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in y
+force.par (               6 ,       $F_SS_TractionRod_B           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in z
+
+force.type (                        $F_AntiHuntingDmp_A           ) = 5                       ! Type
+force.from (                        $F_AntiHuntingDmp_A           ) = $M_BF_SSX_L             ! From Marker
+force.to (                          $F_AntiHuntingDmp_A           ) = $M_DUM_SSX_L            ! To Marker
+force.par (               1 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in x
+force.par (               5 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in y
+force.par (               6 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in z
+force.par (               7 ,       $F_AntiHuntingDmp_A           ) = { $_Csx*1000 }          ! [Ns/m] Damping in x
+force.par (               8 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [Ns/m] Damping in y
+force.par (               9 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [Ns/m] Damping in z
+force.par (              10 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Input Function Fc(x)
+force.par (              11 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Input Function Fc(y)
+force.par (              12 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Input Function Fc(z)
+force.par (              13 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Input Function Fd(xd)
+force.par (              14 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Input Function Fd(yd)
+force.par (              15 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Input Function Fd(zd)
+force.par (              16 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [m] Clearance in x
+force.par (              17 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [m] Clearance in y
+force.par (              18 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [m] Clearance in z
+force.par (              20 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Reference Marker for meas+calc
+force.par (              21 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Expression for Fx
+force.par (              22 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Expression for Fy
+force.par (              23 ,       $F_AntiHuntingDmp_A           ) = null                    ! [-] Expression for Fz
+force.par (              27 ,       $F_AntiHuntingDmp_A           ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+force.type (                        $F_AntiHuntingDmp_B           ) = 5                       ! Type
+force.from (                        $F_AntiHuntingDmp_B           ) = $M_BF_SSX_R             ! From Marker
+force.to (                          $F_AntiHuntingDmp_B           ) = $M_DUM_SSX_R            ! To Marker
+force.par (               1 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [N] Nominal force in x
+force.par (               2 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [N] Nominal force in y
+force.par (               3 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [N] Nominal force in z
+force.par (               4 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in x
+force.par (               5 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in y
+force.par (               6 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [N/m] Stiffness in z
+force.par (               7 ,       $F_AntiHuntingDmp_B           ) = { $_Csx*1000 }          ! [Ns/m] Damping in x
+force.par (               8 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [Ns/m] Damping in y
+force.par (               9 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [Ns/m] Damping in z
+force.par (              10 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Input Function Fc(x)
+force.par (              11 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Input Function Fc(y)
+force.par (              12 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Input Function Fc(z)
+force.par (              13 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Input Function Fd(xd)
+force.par (              14 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Input Function Fd(yd)
+force.par (              15 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Input Function Fd(zd)
+force.par (              16 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [m] Clearance in x
+force.par (              17 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [m] Clearance in y
+force.par (              18 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [m] Clearance in z
+force.par (              20 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Reference Marker for meas+calc
+force.par (              21 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Expression for Fx
+force.par (              22 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Expression for Fy
+force.par (              23 ,       $F_AntiHuntingDmp_B           ) = null                    ! [-] Expression for Fz
+force.par (              27 ,       $F_AntiHuntingDmp_B           ) = 0.00000000000000000E+00 ! [-] Output force in To Marker
+
+!**********************************************************************
+! Tracks
+!**********************************************************************
+track.type (                        $Trk_Track                    ) = 2                       ! Type
+track.kind (                        $Trk_Track                    ) = 1                       ! Kind
+track.excit.lat (                   $Trk_Track                    ) = null                    ! Track::EXC_TRACK_LATERAL
+track.excit.vert (                  $Trk_Track                    ) = null                    ! Track::EXC_TRACK_VERTICAL
+track.excit.roll (                  $Trk_Track                    ) = null                    ! Track::EXC_TRACK_ROLL
+track.excit.left.lat (              $Trk_Track                    ) = null                    ! Track::EXC_RAIL_LATERAL_LEFT
+track.excit.left.vert (             $Trk_Track                    ) = null                    ! Track::EXC_RAIL_VERTICAL_LEFT
+track.excit.left.roll (             $Trk_Track                    ) = null                    ! Track::EXC_RAIL_ROLL_LEFT
+track.excit.right.lat (             $Trk_Track                    ) = null                    ! Track::EXC_RAIL_LATERAL_RIGHT
+track.excit.right.vert (            $Trk_Track                    ) = null                    ! Track::EXC_RAIL_VERTICAL_RIGHT
+track.excit.right.roll (            $Trk_Track                    ) = null                    ! Track::EXC_RAIL_ROLL_RIGHT
+track.excit.gauge (                 $Trk_Track                    ) = null                    ! Track::EXC_TRACK_GAUGE
+track.meas.superelev.kind (         $Trk_Track                    ) = 1                       ! Superelevation kind (measured track)
+track.meas.superelev.reflen (       $Trk_Track                    ) = 0.00000000000000000E+00 ! Superelevation reference length (measured track)
+track.meas.len (                    $Trk_Track                    ) = 0.00000000000000000E+00 ! Total measured length
+track.meas.discr.fromfile (         $Trk_Track                    ) = 0                       ! Discretisation from file
+track.meas.discr.num (              $Trk_Track                    ) = 0                       ! Number of discretisation points
+track.cart.file (                   $Trk_Track                    ) = ''                      ! Cartographic filename
+track.meas.file (                   $Trk_Track                    ) = ''                      ! Measured filename
+track.crg.dir (                     $Trk_Track                    ) = ''                      ! CRG file directory
+track.excit.type (                  $Trk_Track                    ) = 0                       ! Excitations type
+track.excit.start (                 $Trk_Track                    ) = 0.00000000000000000E+00 ! Excitations start
+track.excit.end (                   $Trk_Track                    ) = 0.00000000000000000E+00 ! Excitations end
+track.excit.fade.len (              $Trk_Track                    ) = 0.00000000000000000E+00 ! Excitations fade in/out
+track.meas.sec.start (              $Trk_Track                    ) = 0.00000000000000000E+00 ! Section start
+track.meas.sec.end (                $Trk_Track                    ) = 0.00000000000000000E+00 ! Section end
+track.meas.datared.fromfile (       $Trk_Track                    ) = 0                       ! Data reduction from file
+track.meas.datared.incr (           $Trk_Track                    ) = 0                       ! Data increment
+track.meas.startend.fromexcit (     $Trk_Track                    ) = 0                       ! Start/End from excitation
+track.meas.start (                  $Trk_Track                    ) = 0.00000000000000000E+00 ! Start
+track.meas.fade.len (               $Trk_Track                    ) = 0.00000000000000000E+00 ! Fade length
+track.cart.horizontal.curvature.kind ( $Trk_Track                 ) = 0                       ! 0=radius; 1=arc length; 2=chord length
+track.cart.horizontal.curvature.reflen ( $Trk_Track               ) = 1.00000000000000000E+00 ! Reference length
+track.cart.superelev.fromfile (     $Trk_Track                    ) = 0                       ! Superelevation from file (cartographic track)
+track.cart.superelev.kind (         $Trk_Track                    ) = 2                       ! Superelevation kind (cartographic track)
+track.cart.superelev.reflen (       $Trk_Track                    ) = 1.50000000000000000E+00 ! Superelevation reference length (cartographic track)
+track.cart.discr.gen (              $Trk_Track                    ) = 1.00000000000000000E+00 ! Discr. gen
+track.cart.discr.fine (             $Trk_Track                    ) = 5.00000000000000000E-01 ! Discr. fine
+track.txt (                         $Trk_Track                    ) = ''                      ! Comment
+track.cart.h.type (       1 ,       $Trk_Track                    ) = 1                       ! Type
+track.cart.h.txt (        1 ,       $Trk_Track                    ) = ''                      ! Comment
+track.cart.h.par (        1 ,   1 , $Trk_Track                    ) = 1.00000000000000000E+02 ! [m] L
+track.cart.h.par (       10 ,   1 , $Trk_Track                    ) = 1.50000000000000000E+00 ! [m] Lsmo/2
+track.cart.v.type (       1 ,       $Trk_Track                    ) = 201                     ! Type
+track.cart.v.txt (        1 ,       $Trk_Track                    ) = ''                      ! Comment
+track.cart.v.par (        1 ,   1 , $Trk_Track                    ) = 1.00000000000000000E+02 ! [m] L
+track.cart.v.par (        2 ,   1 , $Trk_Track                    ) = 0.00000000000000000E+00 ! [-] P
+track.cart.v.par (       10 ,   1 , $Trk_Track                    ) = 1.50000000000000000E+00 ! [m] Lsmo/2
+track.cart.s.type (       1 ,       $Trk_Track                    ) = 101                     ! Type
+track.cart.s.txt (        1 ,       $Trk_Track                    ) = ''                      ! Comment
+track.cart.s.par (        1 ,   1 , $Trk_Track                    ) = 1.00000000000000000E+02 ! [m] L
+track.cart.s.par (        2 ,   1 , $Trk_Track                    ) = 0.00000000000000000E+00 ! [m] U
+track.cart.s.par (       10 ,   1 , $Trk_Track                    ) = 1.50000000000000000E+00 ! [m] Lsmo/2
+
+
+! Overwritten substructure values
+joint.st.pos (            1 ,       $S_WS_F.$J_wheelset           ) = { $_lt/2/1000 }         ! Position
+
+
+rwpair.wheel.prof.file (            $S_WS_F.$RWP_L                ) = 'LM.prw'                ! RWP_WHEEL_PROFILE_URI
+
+rwpair.wheel.prof.file (            $S_WS_F.$RWP_R                ) = 'LM.prw'                ! RWP_WHEEL_PROFILE_URI
+
+joint.st.pos (            1 ,       $S_WS_R.$J_wheelset           ) = { -$_lt/2/1000 }        ! Position
+
+
+rwpair.wheel.prof.file (            $S_WS_R.$RWP_L                ) = 'LM.prw'                ! RWP_WHEEL_PROFILE_URI
+
+rwpair.wheel.prof.file (            $S_WS_R.$RWP_R                ) = 'LM.prw'                ! RWP_WHEEL_PROFILE_URI
+
+                                       

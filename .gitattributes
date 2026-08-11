@@ -1,2 +1,8 @@
 # This vendored license is preserved byte-for-byte from upstream.
 external/drake_mbtree/LICENSE.TXT whitespace=-trailing-space
+
+# SIMPACK reference inputs are source snapshots whose bytes must not be changed
+# by platform-specific end-of-line conversion.
+vehicle_library/**/reference_models/simpack/**/*.spck -text whitespace=-trailing-space
+vehicle_library/**/reference_models/simpack/**/*.subvar -text whitespace=-trailing-space
+vehicle_library/**/reference_models/simpack/**/*.STL binary

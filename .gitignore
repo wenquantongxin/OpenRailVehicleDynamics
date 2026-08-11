@@ -33,3 +33,10 @@ CMakeUserPresets.json
 # Numeric archives are never committed: no golden vectors, snapshots or hashes
 # take part in acceptance.
 *.npz
+
+# SIMPACK generated solver metadata and result databases.
+*.intinfo
+*.licreq.log
+*.sbr
+*.sir
+vehicle_library/**/reference_models/simpack/**/*.output/
