@@ -1005,6 +1005,24 @@ add_test(NAME verify_wheel_drive_torque_command_conditioner
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json
              ${CMAKE_CURRENT_BINARY_DIR}/wheel-drive-torque-conditioner-fixture.json)
 
+# G75's state-explicit 100 Hz IRW controller. Analytic fixtures distinguish
+# first and subsequent derivative estimates, both guidance-state resets, the
+# pre-clamp outer-filter memory and all eight filtered PI channels; the same
+# target also loads the one strict first-party controller asset.
+add_executable(verify_irw_full_state_wheel_speed_guidance_controller
+    control/sampled_filtered_pi_header_self_containment.cc
+    control/irw_full_state_wheel_speed_guidance_controller_header_self_containment.cc
+    configuration/load_irw_full_state_wheel_speed_guidance_controller_header_self_containment.cc
+    control/verify_irw_full_state_wheel_speed_guidance_controller.cc)
+orvd_configure_first_party_target(
+    verify_irw_full_state_wheel_speed_guidance_controller)
+target_link_libraries(
+    verify_irw_full_state_wheel_speed_guidance_controller
+    PRIVATE orvd_configuration)
+add_test(NAME verify_irw_full_state_wheel_speed_guidance_controller
+         COMMAND verify_irw_full_state_wheel_speed_guidance_controller
+             ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json)
+
 add_executable(verify_gz18_startup_assembly
     configuration/resolved_startup_state_header_self_containment.cc
     configuration/load_resolved_startup_state_header_self_containment.cc

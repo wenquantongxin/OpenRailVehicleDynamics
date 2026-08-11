@@ -9,6 +9,7 @@ add_library(orvd_configuration STATIC
     src/assembled_vehicle_system.cc
     src/gz18_wheel_rail_contact.cc
     src/irw_wheel_rail_contact.cc
+    src/load_irw_full_state_wheel_speed_guidance_controller.cc
     src/load_profile_points.cc
     src/load_resolved_startup_state.cc
     src/load_track_irregularity_field.cc
@@ -29,8 +30,8 @@ target_include_directories(orvd_configuration
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 target_link_libraries(orvd_configuration
-    PUBLIC orvd_actuation orvd_forces orvd_multibody_model orvd_system_assembly
-           orvd_track_geometry orvd_wheel_rail_contact
+    PUBLIC orvd_actuation orvd_control orvd_forces orvd_multibody_model
+           orvd_system_assembly orvd_track_geometry orvd_wheel_rail_contact
     PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 set_target_properties(orvd_configuration PROPERTIES

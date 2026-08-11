@@ -94,6 +94,12 @@ if(NOT EXISTS "${installed_irw_startup_state}")
     message(FATAL_ERROR
         "the relocated prefix has no installed IRW H3 start-up record")
 endif()
+set(installed_irw_controller
+    "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json")
+if(NOT EXISTS "${installed_irw_controller}")
+    message(FATAL_ERROR
+        "the relocated prefix has no installed IRW full-state controller record")
+endif()
 
 # The start-up state sits in a subdirectory of the vehicle library, so it is
 # carried by the same recursive install rule. The consumer below loads it for

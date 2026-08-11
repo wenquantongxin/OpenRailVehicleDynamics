@@ -12,6 +12,7 @@
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
+#include "orvd/configuration/load_irw_full_state_wheel_speed_guidance_controller.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/load_track_geometry.h"
@@ -87,6 +88,42 @@ int main(int argc, char* argv[]) {
                 std::filesystem::path(argv[4]) / "vehicle_library" / "irw" /
                 "drive_torque_conditioners" /
                 "irw_reference_wheel_drive_torque_conditioner.json");
+        const auto irw_controller = orvd::configuration::
+            LoadIrwFullStateWheelSpeedGuidanceControllerFromJsonFile(
+                std::filesystem::path(argv[4]) / "controller_library" /
+                "irw" /
+                "irw_r300_v60_full_state_wheel_speed_guidance_controller.json");
+        orvd::control::IrwFullStateWheelSpeedGuidanceControllerInput
+            controller_input;
+        controller_input.axle_track_stations_meters.fill(100.0);
+        controller_input
+            .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second
+            .fill(-38.0);
+        const auto controller_result = irw_controller.Step(
+            controller_input,
+            orvd::control::IrwFullStateWheelSpeedGuidanceControllerState{});
+        bool controller_produced_nonzero_finite_request = false;
+        for (const double request :
+             controller_result.requested_wheel_torques_newton_metres) {
+            if (!std::isfinite(request)) {
+                std::fprintf(stderr,
+                             "installed IRW controller produced a non-finite "
+                             "request\n");
+                return 1;
+            }
+            controller_produced_nonzero_finite_request =
+                controller_produced_nonzero_finite_request || request != 0.0;
+        }
+        if (irw_controller.config().identifier !=
+                "irw_r300_v60_full_state_wheel_speed_guidance_controller" ||
+            irw_controller.config().sample_period_seconds != 0.01 ||
+            !controller_result.next_state.initialized ||
+            !controller_produced_nonzero_finite_request) {
+            std::fprintf(stderr,
+                         "installed IRW controller did not load and execute "
+                         "its real active personality\n");
+            return 1;
+        }
         const std::array<double, 8> conditioner_requests{
             -194.0, -194.0, -194.0, -194.0,
             -194.0, -194.0, -194.0, -194.0};

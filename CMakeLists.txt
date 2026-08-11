@@ -75,8 +75,9 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: multibody_runtime + internal rigid tree
 #   -> multibody_model -> forces -> system_assembly -> integrators.
-# Actuation owns state-explicit command laws and is independent of the vehicle
-# topology; configuration is its first typed asset consumer.
+# Control owns state-explicit sampled algorithms, while actuation owns
+# state-explicit command-conditioning laws. Both are independent of vehicle
+# topology; configuration is their first typed asset consumer.
 # Track geometry and the wheel-rail contact core also feed the typed force
 # plans; configuration consumes those lower layers and equilibrium/tests come
 # last.
@@ -88,6 +89,7 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # are supposed to link Drake.
 set(ORVD_PRODUCT_MODULE_DIRECTORIES
     external/drake_mbtree
+    libs/control
     libs/actuation
     libs/track_geometry
     libs/wheel_rail_contact
@@ -111,10 +113,11 @@ add_subdirectory(tools/profile_conversion)
 add_subdirectory(tools/dynamics_qualification)
 
 # --- Installable package ---
-# Nine first-party targets form the documented surface. The rigid-tree archive
+# Eleven first-party targets form the documented surface. The rigid-tree archive
 # is exported only because a static modelling archive must retain its private
 # implementation link edge; no vendored or adapter header is installed.
 set(ORVD_INSTALL_TARGETS
+    orvd_control
     orvd_actuation
     orvd_track_geometry
     orvd_wheel_rail_contact
@@ -132,8 +135,8 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 foreach(orvd_public_module
-        actuation track_geometry wheel_rail_contact configuration multibody_runtime
-        multibody_model forces system_assembly integrators)
+        control actuation track_geometry wheel_rail_contact configuration
+        multibody_runtime multibody_model forces system_assembly integrators)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -162,6 +165,12 @@ install(DIRECTORY
         "${CMAKE_CURRENT_SOURCE_DIR}/vehicle_library/"
         DESTINATION
         "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library"
+        FILES_MATCHING PATTERN "*.json")
+
+install(DIRECTORY
+        "${CMAKE_CURRENT_SOURCE_DIR}/controller_library/"
+        DESTINATION
+        "${CMAKE_INSTALL_DATADIR}/OpenRailVehicleDynamics/controller_library"
         FILES_MATCHING PATTERN "*.json")
 
 set(ORVD_INSTALL_CMAKEDIR
