@@ -209,17 +209,18 @@ target_link_libraries(orvd_vendored_drake_rigid_tree_objects
            orvd_vendored_drake_double_pose_math_objects
            orvd_multibody_runtime)
 
-# Drake's variadic assertion macros use C++20 __VA_OPT__.  VS 2019 supports
-# that syntax only through its conforming preprocessor; without this option the
-# parser fails at every no-detail DRAKE_THROW_UNLESS call before it reaches the
-# actual C++ source.  This is a language-conformance option, not an attempt to
+# Drake's variadic assertion macros use C++20 __VA_OPT__.  Native VS 2019 MSVC
+# supports that syntax only through its conforming preprocessor; without this
+# option the parser fails at every no-detail DRAKE_THROW_UNLESS call before it
+# reaches the actual C++ source. clang-cl implements the syntax without this
+# MSVC-only option. This is a language-conformance option, not an attempt to
 # apply the first-party warning policy to vendored code.
 set(ORVD_VENDORED_DRAKE_OBJECT_OWNER_TARGETS
     orvd_vendored_drake_rigid_tree_objects
     orvd_vendored_drake_multibody_topology_objects
     orvd_vendored_drake_double_pose_math_objects
     orvd_vendored_drake_common_support_objects)
-if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     foreach(orvd_vendored_drake_object_owner
             IN LISTS ORVD_VENDORED_DRAKE_OBJECT_OWNER_TARGETS)
         target_compile_options(

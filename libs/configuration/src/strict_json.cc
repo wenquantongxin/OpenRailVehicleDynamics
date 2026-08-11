@@ -208,11 +208,11 @@ Json ParseStrictJson(const std::string& document) {
 namespace {
 
 bool IsExactlyRepresentableAsBinary64(std::uint64_t magnitude) {
-    const unsigned int width = std::bit_width(magnitude);
-    if (width <= 53U) {
+    const auto width = std::bit_width(magnitude);
+    if (width <= 53) {
         return true;
     }
-    const unsigned int discarded_bits = width - 53U;
+    const auto discarded_bits = width - 53;
     const std::uint64_t discarded_mask =
         (std::uint64_t{1} << discarded_bits) - 1U;
     return (magnitude & discarded_mask) == 0U;

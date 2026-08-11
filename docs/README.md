@@ -8,7 +8,7 @@
 | [planning/rail_vehicle_dynamics_migration/DISCUSSION_AND_DECISION_LOG.md](planning/rail_vehicle_dynamics_migration/DISCUSSION_AND_DECISION_LOG.md) | **车辆迁移讨论与裁决账本**：逐轮记录分歧、裁决、项目负责人的总规划与待决问题；不定义实施顺序。 |
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md](planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md) | **车辆迁移协作观察簿**：Codex、Claude 等共同维护的源码事实、规划初期五组只读清单快照、假设和开放问题。 |
 | [planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md](planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md) | **参考模型差异观察表**：登记 GZ18／IRW 的 SIMPACK 参考模型与 ORVD 动力学模型之间可能被宏观闭合掩盖的差异及其筛查结论。 |
-| [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **现行车辆迁移路书与唯一进度权威**：覆盖 GZ18 首次短窗、GZ18 不平顺长窗、IRW 被动、IRW 100 Hz 全状态控制与转矩指令调理，以及最小产品闭包；实施状态、顺序和完成门只在该文件维护。 |
+| [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **已完成车辆迁移路书**：覆盖 GZ18 首次短窗与不平顺长窗、IRW 被动、IRW 100 Hz 全状态控制与转矩指令调理，以及 G82 现有库跨平台构建与可重定位安装验证；现已封存。 |
 | [engineering/FIRST_PARTY_ENGINEERING_RULES.md](engineering/FIRST_PARTY_ENGINEERING_RULES.md) | **第一方工程约束**：命名、兼容层、输入解析、检查深度、热路径与验收依据；即刻生效。 |
 | [adr/](adr/) | **架构决策记录**：方案 B、单一 Context、CVODE 优先等已接受决策。 |
 | [design/MULTIBODY_RUNTIME_CONTRACT.md](design/MULTIBODY_RUNTIME_CONTRACT.md) | **多体运行时契约**：落位树对 systems 类型、状态、参数与缓存的逐项消费与处置，以及目标依赖方向。G20 的产物，G21–G28 的输入。 |
@@ -23,16 +23,17 @@
 ## 阅读顺序
 
 1. 先读已完成底座路书，确认 ORVD 已有能力及 G46 的边界。
-2. 车辆迁移讨论阶段依次读裁决账本和协作观察簿；不得把其中的假设当作实施命令。
-3. 开工前到现行车辆迁移路书读取当前状态和唯一激活 Goal；只实施该 Goal 的唯一产物，并逐条满足其完成门。
+2. 追查车辆迁移裁决时依次读裁决账本和协作观察簿；不得把其中的假设当作实施命令。
+3. 车辆能力与既有实施边界从两份已完成路书查阅；新的产品或研究工作须另行建立实施边界，不能把
+   新范围回填到已封存 Goal。
 4. 写第一方代码前读第一方工程约束；它即刻生效，不随 Goal 变化。
 5. 遇到长期架构取舍时读对应 ADR。
 6. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
 
 ## 文档纪律
 
-- G01–G46 的状态只在已完成底座路书中维护；G47 之后的车辆迁移状态只在现行迁移路书中维护，
-  本索引不重复当前 Goal、暂停点或完成勾选。
-- 讨论裁决与技术观察分别进入账本和观察簿；任何实施状态、顺序和完成门只写在激活后的唯一迁移路书中，不建立平行规划。
+- G01–G46 与 G47–G82 的历史状态分别由两份已完成路书维护；本索引不重复逐 Goal 完成记录。
+- 讨论裁决与技术观察分别进入账本和观察簿；新的实施状态、顺序和完成门必须进入新立的唯一权威
+  路书，不建立平行规划。
 - 决策改变走新 ADR；Git 历史承担旧内容追溯，不保留废弃兼容说明。
 - 不把文件数、符号数、哈希、历史输出或某次性能结果写成永久验收依据。

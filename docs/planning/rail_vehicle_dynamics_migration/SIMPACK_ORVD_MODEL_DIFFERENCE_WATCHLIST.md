@@ -768,7 +768,7 @@ P179 冻结 Drake 的累计控制边界还会影响控制记录落入整数观�
   机械观察龄的字段边界与早期转矩证据。
 - P160 外置 `p160_drake_100hz_startup_double_update_counterfactual/RESEARCH_NOTE.md`：同一 H3
   输入启动双更新的独立证据。
-- ORVD DEC-039 与路书 G73–G78：现行迁移处置。
+- ORVD DEC-039 与路书 G73–G77：现行迁移处置。
 
 ### MD-016 — IRW 主动转矩的 SIMPACK 标记表达基与冻结 WRL 轴桥轴
 

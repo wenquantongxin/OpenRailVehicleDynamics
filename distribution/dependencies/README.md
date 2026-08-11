@@ -1,6 +1,6 @@
 # 离线依赖超级构建
 
-本目录是官方源码包根 `CMakeLists.txt`、严格依赖声明及其共享校验器的源模板。它不直接作为仓库根构建入口；
+本目录是 ORVD 离线源码包根 `CMakeLists.txt`、严格依赖声明及其共享校验器的源模板。它不直接作为仓库根构建入口；
 开发者使用 `tools/package_distribution/assemble_source_bundle.py` 生成完整源码包后，普通用户在
 该包根运行：
 
@@ -32,9 +32,15 @@ cmake -S . -B build -G "Visual Studio 16 2019" -A x64 `
 cmake --build build --config Release
 ```
 
+也可在 Visual Studio 开发者命令环境中使用较新的独立 clang-cl；C 与 C++ 编译器必须属于同一
+工具链，且仍使用所选 Visual Studio 提供的 Windows SDK 与标准库。Visual Studio 2019 随附的
+Clang 12 不满足本项目的 C++23 编译前沿；其 MSVC 19.29 标准库也不足以构建少数使用较新 C++23
+设施的测试。因此该环境只资格 Release 产品库和独立安装消费者，不应通过降低语言级别来伪造完整
+测试通过。
+
 Visual Studio 2019 的 FileTracker 仍受嵌套工程路径长度约束，即使系统已经启用长路径也可能
-失败。源码包、构建树与安装树的实体目录可以统一放在项目辅助目录中；若该根路径较长，构建
-期间给该根建立一个短目录联接并从短路径配置，完成后删除联接即可，实体文件不必搬散。
+失败。源码包、构建树与安装树应直接放在短的真实物理目录中；不要用目录联接掩盖路径问题，因为
+MSBuild／FileTracker 仍可能解析到较长的实体路径。
 
 SUNDIALS 配置只启用 CVODE 软件包，关闭其全部当前不消费的并行后端和第三方线性代数依赖。
 SUNDIALS 7.7.0 上游仍无条件构建一组基础矩阵、线性/非线性求解模块；本项目不维护私有补丁
