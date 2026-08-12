@@ -102,6 +102,17 @@ struct WheelRailContactInterfaceObservation {
 };
 
 class WheelRailContactForcePlan;
+class WheelRailContactForceWorkspace;
+
+namespace internal {
+
+// Seeds only the exact per-interface input-key/result caches. Contact-core
+// workspaces and all other evaluation scratch remain context-owned.
+void SeedExactWheelRailContactEvaluationCaches(
+    const WheelRailContactForceWorkspace& source,
+    WheelRailContactForceWorkspace& destination);
+
+}  // namespace internal
 
 // Mutable scratch for one runtime context. Each frozen interface owns one
 // heavy contact-core workspace so the independent wheel evaluations can run
@@ -121,6 +132,9 @@ class WheelRailContactForceWorkspace {
 
    private:
     friend class WheelRailContactForcePlan;
+    friend void internal::SeedExactWheelRailContactEvaluationCaches(
+        const WheelRailContactForceWorkspace&,
+        WheelRailContactForceWorkspace&);
 
     struct CarrierScratch {
         Eigen::Vector3d body_origin_in_inertial_meters{Eigen::Vector3d::Zero()};

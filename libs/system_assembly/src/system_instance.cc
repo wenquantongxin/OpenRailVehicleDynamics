@@ -69,6 +69,26 @@ SystemRuntimeContext::SystemRuntimeContext(
 
 SystemRuntimeContext::~SystemRuntimeContext() = default;
 
+void internal::SeedExactWheelRailContactEvaluationCaches(
+    const SystemRuntimeContext& source, SystemRuntimeContext& destination) {
+    if (source.issuer_ != destination.issuer_) {
+        Reject("exact wheel-rail cache seed contexts belong to different "
+               "system instances");
+    }
+    if (source.contact_force_workspace_ == nullptr ||
+        destination.contact_force_workspace_ == nullptr) {
+        if (source.contact_force_workspace_ == nullptr &&
+            destination.contact_force_workspace_ == nullptr) {
+            return;
+        }
+        Reject("exact wheel-rail cache seed contexts disagree about contact "
+               "workspace ownership");
+    }
+    forces::internal::SeedExactWheelRailContactEvaluationCaches(
+        *source.contact_force_workspace_,
+        *destination.contact_force_workspace_);
+}
+
 const Eigen::VectorXd& SystemRuntimeContext::generalized_positions() const {
     return multibody_context_->generalized_positions();
 }

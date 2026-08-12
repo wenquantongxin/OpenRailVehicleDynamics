@@ -143,6 +143,37 @@ WheelRailContactForceWorkspace::WheelRailContactForceWorkspace(
 
 WheelRailContactForceWorkspace::~WheelRailContactForceWorkspace() = default;
 
+void internal::SeedExactWheelRailContactEvaluationCaches(
+    const WheelRailContactForceWorkspace& source,
+    WheelRailContactForceWorkspace& destination) {
+    if (source.issuer_ == nullptr || source.issuer_ != destination.issuer_ ||
+        source.interface_evaluation_caches_.size() !=
+            destination.interface_evaluation_caches_.size()) {
+        throw std::invalid_argument(
+            "wheel-rail contact force plan: exact cache seed workspaces do "
+            "not belong to the same frozen plan");
+    }
+    for (std::size_t ordinal = 0;
+         ordinal < source.interface_evaluation_caches_.size(); ++ordinal) {
+        const auto& source_cache =
+            source.interface_evaluation_caches_[ordinal];
+        auto& destination_cache =
+            destination.interface_evaluation_caches_[ordinal];
+        if (!source_cache.valid) {
+            destination_cache.valid = false;
+            continue;
+        }
+        if (destination_cache.valid &&
+            destination_cache.input_key == source_cache.input_key) {
+            continue;
+        }
+        destination_cache.valid = false;
+        destination_cache.input_key = source_cache.input_key;
+        destination_cache.result = source_cache.result;
+        destination_cache.valid = true;
+    }
+}
+
 WheelRailContactForcePlan::WheelRailContactForcePlan(
     const MultibodyModel& model, track_geometry::TrackGeometry line,
     std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>

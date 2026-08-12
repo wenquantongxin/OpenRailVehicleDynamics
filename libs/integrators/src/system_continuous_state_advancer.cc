@@ -133,6 +133,13 @@ class SystemDenseFiniteDifferenceJacobian final
                 try {
                     worker.state = continuous_state;
                     worker.state[column] += increments[column];
+                    // Dynamic scheduling can reuse this worker for unrelated
+                    // columns. Restore the exact base-state contact result
+                    // after preparing every perturbed state and before the
+                    // RHS may replace the worker's cache.
+                    system_assembly::internal::
+                        SeedExactWheelRailContactEvaluationCaches(
+                            *source_context_, *worker.context);
                     attempted_[static_cast<std::size_t>(column)] = 1U;
                     worker.rhs->CalcTimeDerivatives(
                         time_seconds, worker.state, worker.derivatives);

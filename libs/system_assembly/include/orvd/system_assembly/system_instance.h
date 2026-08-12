@@ -31,9 +31,15 @@ namespace orvd::system_assembly {
 class CompiledSystemPlan;
 class SystemAssemblyDescription;
 class SystemInstance;
+class SystemRuntimeContext;
 
 namespace internal {
 using SystemIdentity = std::uint64_t;
+
+// Seeds only exact wheel--rail input-key/result caches between two contexts
+// of the same system. The caches are evaluation accelerators, not state.
+void SeedExactWheelRailContactEvaluationCaches(
+    const SystemRuntimeContext& source, SystemRuntimeContext& destination);
 }
 
 /// The stable identity of the first multibody component in one system.
@@ -163,6 +169,8 @@ class SystemRuntimeContext {
    private:
     friend class SystemInstance;
     friend class CompiledSystemPlan;
+    friend void internal::SeedExactWheelRailContactEvaluationCaches(
+        const SystemRuntimeContext&, SystemRuntimeContext&);
     SystemRuntimeContext(internal::SystemIdentity issuer,
                          const multibody_model::MultibodyModel& model,
                          double initial_time_seconds,
