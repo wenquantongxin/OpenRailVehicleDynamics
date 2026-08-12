@@ -18,6 +18,7 @@ target_link_libraries(orvd_integrators
 # ORVD header; static-library consumers receive only the link edge needed to
 # resolve this object's private implementation.
 target_link_libraries(orvd_integrators PRIVATE
+    OpenMP::OpenMP_CXX
     SUNDIALS::cvode
     SUNDIALS::nvecserial
     SUNDIALS::sunmatrixdense

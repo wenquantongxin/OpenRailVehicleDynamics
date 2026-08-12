@@ -17,6 +17,7 @@
 #include <sunlinsol/sunlinsol_dense.h>
 #include <sunmatrix/sunmatrix_dense.h>
 
+#include "dense_finite_difference_jacobian_provider.h"
 #include "integrator_limits.h"
 
 namespace orvd::integrators {
@@ -28,6 +29,7 @@ static_assert(std::is_same_v<sunindextype, std::int32_t>);
 constexpr int kMaximumBdfOrder = 2;
 constexpr long int kJacobianEvaluationFrequency = 51;
 constexpr long int kLinearSetupFrequency = 20;
+constexpr double kMinimumDifferenceIncrementMultiplier = 1000.0;
 
 [[noreturn]] void ThrowSundialsFailure(const char* operation, int flag) {
     throw std::runtime_error(
@@ -162,7 +164,8 @@ class CvodeContinuousStateAdvancer::Implementation final {
             RequireNonnegativeCount(rhs_evaluations,
                                     "CVodeGetNumRhsEvals"),
             RequireNonnegativeCount(linear_rhs_evaluations,
-                                    "CVodeGetNumLinRhsEvals"),
+                                    "CVodeGetNumLinRhsEvals") +
+                custom_jacobian_rhs_evaluations_,
             RequireNonnegativeCount(error_test_failures,
                                     "CVodeGetNumErrTestFails"),
             RequireNonnegativeCount(nonlinear_iterations,
@@ -173,7 +176,32 @@ class CvodeContinuousStateAdvancer::Implementation final {
             RequireNonnegativeCount(linear_solver_setups,
                                     "CVodeGetNumLinSolvSetups"),
             RequireNonnegativeCount(jacobian_evaluations,
-                                    "CVodeGetNumJacEvals")};
+                                    "CVodeGetNumJacEvals"),
+            dense_jacobian_provider_ == nullptr
+                ? 1
+                : dense_jacobian_provider_->requested_worker_count()};
+    }
+
+    void AttachDenseJacobianProvider(
+        internal::DenseFiniteDifferenceJacobianProvider& provider) {
+        if (dense_jacobian_provider_ != nullptr) {
+            throw std::logic_error(
+                "CVODE continuous-state advancer: a dense Jacobian provider "
+                "is already attached");
+        }
+        if (provider.continuous_state_size() != state_size_ ||
+            provider.requested_worker_count() < 2) {
+            throw std::invalid_argument(
+                "CVODE continuous-state advancer: the dense Jacobian provider "
+                "does not match this backend");
+        }
+        dense_jacobian_provider_ = &provider;
+        jacobian_increments_.resize(state_size_);
+        perturbed_derivatives_.resize(state_size_, state_size_);
+        RequireCvodeSuccess(
+            CVodeSetJacFn(resources_.memory,
+                          &Implementation::EvaluateDenseJacobian),
+            "CVodeSetJacFn");
     }
 
     void CopyPublicState(Eigen::Ref<Eigen::VectorXd> output) const {
@@ -215,7 +243,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
 
         const double step_begin_time_seconds = public_time_seconds_;
         dense_interval_.reset();
-        rhs_exception_ = nullptr;
+        backend_exception_ = nullptr;
         const int stop_flag =
             CVodeSetStopTime(resources_.memory, stop_time_seconds);
         if (stop_flag != CV_SUCCESS) {
@@ -228,7 +256,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
                                        resources_.state, &reached_time,
                                        CV_ONE_STEP);
         if (advance_flag != CV_SUCCESS && advance_flag != CV_TSTOP_RETURN) {
-            const std::exception_ptr exception = rhs_exception_;
+            const std::exception_ptr exception = backend_exception_;
             MarkBackendFailure();
             if (exception != nullptr) {
                 std::rethrow_exception(exception);
@@ -238,7 +266,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
         // A recoverable RHS refusal may have preceded this successful step.
         // Do not let that rejected trial escape after CVODE has reduced its
         // step and found an admissible endpoint.
-        rhs_exception_ = nullptr;
+        backend_exception_ = nullptr;
         sunrealtype backend_time{};
         sunrealtype last_step{};
         const int time_flag =
@@ -293,7 +321,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
         }
 
         dense_interval_.reset();
-        rhs_exception_ = nullptr;
+        backend_exception_ = nullptr;
         CopyEigenToNVector(committed_continuous_state, resources_.state);
         const int flag = CVodeReInit(resources_.memory, committed_time_seconds,
                                      resources_.state);
@@ -304,6 +332,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
 
         public_state_ = committed_continuous_state;
         public_time_seconds_ = committed_time_seconds;
+        custom_jacobian_rhs_evaluations_ = 0;
         needs_reinitialization_ = false;
     }
 
@@ -354,12 +383,143 @@ class CvodeContinuousStateAdvancer::Implementation final {
             Eigen::Map<Eigen::VectorXd> output(
                 N_VGetArrayPointer(state_time_derivatives), self.state_size_);
             self.rhs_->CalcTimeDerivatives(time_seconds, input, output);
-            self.rhs_exception_ = nullptr;
+            self.backend_exception_ = nullptr;
             return 0;
         } catch (...) {
-            self.rhs_exception_ = std::current_exception();
-            return self.rhs_->IsRecoverableFailure(self.rhs_exception_) ? 1
-                                                                        : -1;
+            self.backend_exception_ = std::current_exception();
+            return self.rhs_->IsRecoverableFailure(self.backend_exception_)
+                       ? 1
+                       : -1;
+        }
+    }
+
+    static int EvaluateDenseJacobian(
+        sunrealtype time_seconds, N_Vector state, N_Vector state_derivatives,
+        SUNMatrix jacobian, void* user_data, N_Vector error_weights,
+        N_Vector, N_Vector) noexcept {
+        auto& self = *static_cast<Implementation*>(user_data);
+        try {
+            if (self.dense_jacobian_provider_ == nullptr ||
+                jacobian == nullptr ||
+                SUNMatGetID(jacobian) != SUNMATRIX_DENSE ||
+                SM_ROWS_D(jacobian) != self.state_size_ ||
+                SM_COLUMNS_D(jacobian) != self.state_size_) {
+                throw std::logic_error(
+                    "CVODE continuous-state advancer: the parallel dense "
+                    "Jacobian callback received incompatible storage");
+            }
+
+            RequireCvodeSuccess(
+                CVodeGetErrWeights(self.resources_.memory, error_weights),
+                "CVodeGetErrWeights");
+            sunrealtype nonlinear_system_time_seconds{};
+            N_Vector predicted_state{nullptr};
+            N_Vector current_state{nullptr};
+            N_Vector current_state_derivatives{nullptr};
+            sunrealtype gamma{};
+            sunrealtype inverse_method_coefficient{};
+            N_Vector scaled_correction{nullptr};
+            void* nonlinear_system_user_data{nullptr};
+            RequireCvodeSuccess(
+                CVodeGetNonlinearSystemData(
+                    self.resources_.memory, &nonlinear_system_time_seconds,
+                    &predicted_state, &current_state,
+                    &current_state_derivatives, &gamma,
+                    &inverse_method_coefficient, &scaled_correction,
+                    &nonlinear_system_user_data),
+                "CVodeGetNonlinearSystemData");
+            if (inverse_method_coefficient == 0.0) {
+                throw std::runtime_error(
+                    "CVODE continuous-state advancer: the nonlinear-system "
+                    "method coefficient is zero while constructing a dense "
+                    "Jacobian");
+            }
+
+            // SUNDIALS' built-in dense finite-difference Jacobian uses the
+            // active internal step cv_h. gamma = cv_h * rl1 normally recovers
+            // it by division. If the product has adjacent floating-point
+            // preimages, the current-step query retains the original value
+            // while that value remains consistent with this trial endpoint.
+            double current_step_seconds =
+                gamma / inverse_method_coefficient;
+            sunrealtype proposed_step_seconds{};
+            RequireCvodeSuccess(
+                CVodeGetCurrentStep(self.resources_.memory,
+                                    &proposed_step_seconds),
+                "CVodeGetCurrentStep");
+            if (proposed_step_seconds * inverse_method_coefficient == gamma &&
+                self.public_time_seconds_ + proposed_step_seconds ==
+                    time_seconds) {
+                current_step_seconds = proposed_step_seconds;
+            }
+
+            const double derivative_norm =
+                N_VWrmsNorm(state_derivatives, error_weights);
+            const double minimum_increment =
+                derivative_norm != 0.0
+                    ? kMinimumDifferenceIncrementMultiplier *
+                          std::abs(current_step_seconds) * SUN_UNIT_ROUNDOFF *
+                          static_cast<double>(self.state_size_) *
+                          derivative_norm
+                    : 1.0;
+            const double square_root_roundoff =
+                std::sqrt(SUN_UNIT_ROUNDOFF);
+            const double* const state_data = N_VGetArrayPointer(state);
+            const double* const error_weight_data =
+                N_VGetArrayPointer(error_weights);
+            for (int column = 0; column < self.state_size_; ++column) {
+                self.jacobian_increments_[column] = std::max(
+                    square_root_roundoff * std::abs(state_data[column]),
+                    minimum_increment / error_weight_data[column]);
+            }
+
+            const Eigen::Map<const Eigen::VectorXd> state_view(
+                state_data, self.state_size_);
+            const internal::DenseFiniteDifferenceJacobianBatchResult batch =
+                self.dense_jacobian_provider_->CalcPerturbedDerivatives(
+                    time_seconds, state_view, self.jacobian_increments_,
+                    self.perturbed_derivatives_);
+            if (batch.attempted_right_hand_side_evaluation_count < 0) {
+                throw std::runtime_error(
+                    "CVODE continuous-state advancer: the dense Jacobian "
+                    "provider returned a negative RHS count");
+            }
+            self.custom_jacobian_rhs_evaluations_ +=
+                static_cast<std::uint64_t>(
+                    batch.attempted_right_hand_side_evaluation_count);
+            if (batch.lowest_column_failure != nullptr) {
+                std::rethrow_exception(batch.lowest_column_failure);
+            }
+            if (batch.attempted_right_hand_side_evaluation_count !=
+                self.state_size_) {
+                throw std::runtime_error(
+                    "CVODE continuous-state advancer: the dense Jacobian "
+                    "provider did not evaluate every state column");
+            }
+
+            const double* const baseline_derivative_data =
+                N_VGetArrayPointer(state_derivatives);
+            for (int column = 0; column < self.state_size_; ++column) {
+                double* const output_column =
+                    SUNDenseMatrix_Column(jacobian, column);
+                const double inverse_increment =
+                    1.0 / self.jacobian_increments_[column];
+                for (int row = 0; row < self.state_size_; ++row) {
+                    output_column[row] =
+                        inverse_increment *
+                        (self.perturbed_derivatives_(row, column) -
+                         baseline_derivative_data[row]);
+                }
+            }
+            self.backend_exception_ = nullptr;
+            return 0;
+        } catch (...) {
+            self.backend_exception_ = std::current_exception();
+            return self.dense_jacobian_provider_ != nullptr &&
+                           self.dense_jacobian_provider_->IsRecoverableFailure(
+                               self.backend_exception_)
+                       ? 1
+                       : -1;
         }
     }
 
@@ -485,8 +645,13 @@ class CvodeContinuousStateAdvancer::Implementation final {
     double public_time_seconds_;
     Eigen::VectorXd public_state_;
     CvodeResources resources_;
+    internal::DenseFiniteDifferenceJacobianProvider*
+        dense_jacobian_provider_{nullptr};
+    Eigen::VectorXd jacobian_increments_;
+    Eigen::MatrixXd perturbed_derivatives_;
+    std::uint64_t custom_jacobian_rhs_evaluations_{0};
     std::optional<ContinuousStateDenseOutputInterval> dense_interval_;
-    std::exception_ptr rhs_exception_;
+    std::exception_ptr backend_exception_;
     bool needs_reinitialization_{false};
 };
 
@@ -500,6 +665,12 @@ CvodeContinuousStateAdvancer::CvodeContinuousStateAdvancer(
           std::move(tolerances))) {}
 
 CvodeContinuousStateAdvancer::~CvodeContinuousStateAdvancer() = default;
+
+void internal::DenseFiniteDifferenceJacobianRegistration::Attach(
+    CvodeContinuousStateAdvancer& advancer,
+    DenseFiniteDifferenceJacobianProvider& provider) {
+    advancer.implementation_->AttachDenseJacobianProvider(provider);
+}
 
 int CvodeContinuousStateAdvancer::continuous_state_size() const {
     return implementation_->state_size();

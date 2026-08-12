@@ -206,12 +206,17 @@ bool SameStatistics(
            left.nonlinear_solver_convergence_failure_count ==
                right.nonlinear_solver_convergence_failure_count &&
            left.linear_solver_setup_count == right.linear_solver_setup_count &&
-           left.jacobian_evaluation_count == right.jacobian_evaluation_count;
+           left.jacobian_evaluation_count == right.jacobian_evaluation_count &&
+           left.requested_dense_finite_difference_jacobian_worker_count ==
+               right.requested_dense_finite_difference_jacobian_worker_count;
 }
 
 bool StatisticsAreZero(
     const orvd::integrators::ContinuousStateIntegrationStatistics& value) {
-    return SameStatistics(value, {});
+    auto work = value;
+    work.requested_dense_finite_difference_jacobian_worker_count = 0;
+    return SameStatistics(work, {}) &&
+           value.requested_dense_finite_difference_jacobian_worker_count == 1;
 }
 
 Eigen::Vector2d ConstantAccelerationState(double initial_time,

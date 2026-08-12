@@ -22,10 +22,12 @@ struct Gz18QualificationRunConfiguration final {
 };
 
 // Runs one qualification in a private assembled system. The input files are
-// read once; neither a mutable runtime context nor a final state is accepted or
-// returned. The destination must not already exist. A successful call publishes
-// one complete directory with a same-parent rename; a failure publishes no
-// destination and destroys the private simulation state.
+// read once and no mutable runtime context is accepted or returned. The
+// internal summary retains the terminal vector for executable qualification;
+// it is not an installed vehicle output contract. The destination must not
+// already exist. A successful call publishes one complete directory with a
+// same-parent rename; a failure publishes no destination and destroys the
+// private simulation state.
 [[nodiscard]] QualificationRunSummary RunGz18Qualification(
     const Gz18QualificationRunConfiguration& configuration);
 

@@ -916,8 +916,8 @@ add_test(NAME verify_gz18_passive_short_window
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
 
-# G58's non-installed qualification leaf. A 2 ms real GZ18 run with only its
-# two endpoints exercises one dense advance, observation projection across a
+# G58's non-installed qualification leaf. A 30 ms real GZ18 run with only its
+# two endpoints exercises multiple dense Jacobians, observation projection across a
 # sample displacement larger than the RHS's one-centimetre local window, the
 # formal s_ref=0 boundary summary and directory-level publication. The 10/20 s
 # science windows remain explicit local qualifications and never enter the
@@ -935,6 +935,8 @@ add_test(NAME verify_gz18_dynamics_qualification
              ${CMAKE_SOURCE_DIR}
              gz18_aar6_reference_irregularity
              ${CMAKE_CURRENT_BINARY_DIR}/g58-dynamics-qualification-fixtures)
+set_tests_properties(verify_gz18_dynamics_qualification PROPERTIES
+    PROCESSORS 8)
 
 add_executable(verify_irw_dynamics_qualification
     dynamics_qualification/verify_irw_dynamics_qualification.cc)

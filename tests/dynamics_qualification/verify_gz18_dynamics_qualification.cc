@@ -12,6 +12,8 @@
 #include <string_view>
 #include <vector>
 
+#include <omp.h>
+
 #include "atomic_qualification_directory.h"
 #include "gz18_qualification_runner.h"
 #include "qualification_sample_clock.h"
@@ -21,6 +23,7 @@ namespace {
 
 using orvd::dynamics_qualification::AtomicQualificationDirectory;
 using orvd::dynamics_qualification::Gz18QualificationRunConfiguration;
+using orvd::dynamics_qualification::QualificationRunSummary;
 using orvd::dynamics_qualification::ProjectMonotoneSeriesToStationGrid;
 using orvd::dynamics_qualification::QualificationSampleClock;
 using orvd::dynamics_qualification::QualificationSampleRefinement;
@@ -75,6 +78,33 @@ double ParseDouble(const std::string& text) {
         throw std::runtime_error("invalid finite number in observation file");
     }
     return result;
+}
+
+bool SameTrajectoryWork(
+    const orvd::integrators::ContinuousStateIntegrationStatistics& left,
+    const orvd::integrators::ContinuousStateIntegrationStatistics& right) {
+    return left.successful_internal_step_count ==
+               right.successful_internal_step_count &&
+           left.right_hand_side_evaluation_count ==
+               right.right_hand_side_evaluation_count &&
+           left.linear_solver_right_hand_side_evaluation_count ==
+               right.linear_solver_right_hand_side_evaluation_count &&
+           left.error_test_failure_count == right.error_test_failure_count &&
+           left.nonlinear_solver_iteration_count ==
+               right.nonlinear_solver_iteration_count &&
+           left.nonlinear_solver_convergence_failure_count ==
+               right.nonlinear_solver_convergence_failure_count &&
+           left.linear_solver_setup_count == right.linear_solver_setup_count &&
+           left.jacobian_evaluation_count == right.jacobian_evaluation_count;
+}
+
+bool SameTerminalState(const QualificationRunSummary& left,
+                       const QualificationRunSummary& right) {
+    return left.terminal_continuous_state.size() ==
+               right.terminal_continuous_state.size() &&
+           (left.terminal_continuous_state.array() ==
+            right.terminal_continuous_state.array())
+               .all();
 }
 
 std::size_t FindColumn(const std::vector<std::string>& header,
@@ -182,6 +212,10 @@ void CheckAtomicDirectory(const std::filesystem::path& root) {
 }
 
 void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
+    const int original_openmp_dynamic = omp_get_dynamic();
+    const int original_openmp_max_threads = omp_get_max_threads();
+    omp_set_dynamic(0);
+    omp_set_num_threads(8);
     Gz18QualificationRunConfiguration configuration;
     configuration.vehicle_definition_path =
         std::filesystem::relative(argv[1]);
@@ -191,8 +225,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     configuration.orvd_data_root = std::filesystem::relative(argv[4]);
     configuration.track_irregularity_identifier = argv[5];
     configuration.output_directory = root / "real-gz18";
-    configuration.duration_nanoseconds = 2'000'000;
-    configuration.sample_period_nanoseconds = 2'000'000;
+    configuration.duration_nanoseconds = 30'000'000;
+    configuration.sample_period_nanoseconds = 30'000'000;
 
     const auto summary = RunGz18Qualification(configuration);
     Require(summary.sample_count == 2 &&
@@ -203,6 +237,10 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                         summary.integration_statistics
                             .linear_solver_right_hand_side_evaluation_count >
                     0 &&
+                summary.integration_statistics.jacobian_evaluation_count > 1 &&
+                summary.integration_statistics
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    8 &&
                 summary.used_before_track_definition_interval &&
                 !summary.used_after_track_definition_interval,
             "the short real run has the wrong sample, numerical-work or boundary summary");
@@ -276,9 +314,12 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 "the initial mean rail-profile reference-marker station does "
                 "not reproduce the formal s_ref=0 placement");
     }
+    const std::size_t time_nanoseconds_column =
+        FindColumn(header, "time_nanoseconds");
     const std::size_t time_column = FindColumn(header, "time_seconds");
-    Require(ParseDouble(rows[0][time_column]) == 0.0 &&
-                ParseDouble(rows[1][time_column]) == 0.002,
+    Require(rows[0][time_nanoseconds_column] == "0" &&
+                rows[1][time_nanoseconds_column] == "30000000" &&
+                ParseDouble(rows[0][time_column]) == 0.0,
             "the artifact does not use the integer-index sample times");
 
     const std::array<std::string, 8> interface_names{
@@ -439,11 +480,44 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                     std::string::npos &&
                 performance.find(
                     "\"linear_solver_right_hand_side_evaluation_count\": ") !=
+                    std::string::npos &&
+                performance.find(
+                    "\"requested_dense_finite_difference_jacobian_worker_count\": 8") !=
                     std::string::npos,
             "the successful artifact lacks its lightweight integration statistics");
 
     Require(Throws([&] { (void)RunGz18Qualification(configuration); }),
             "the runner overwrote an existing successful artifact");
+
+    const std::string parallel_observations = ReadWholeFile(
+        configuration.output_directory / "observations.tsv");
+    const std::string parallel_patches = ReadWholeFile(
+        configuration.output_directory / "contact_patches.tsv");
+    for (const int requested_threads : {1, 4}) {
+        omp_set_num_threads(requested_threads);
+        Gz18QualificationRunConfiguration comparison = configuration;
+        comparison.output_directory =
+            root / ("real-gz18-t" + std::to_string(requested_threads));
+        const QualificationRunSummary candidate =
+            RunGz18Qualification(comparison);
+        Require(candidate.integration_statistics
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    requested_threads &&
+                    SameTrajectoryWork(summary.integration_statistics,
+                                       candidate.integration_statistics) &&
+                    SameTerminalState(summary, candidate),
+                "the 1/4/8-thread dense Jacobian changed the complete GZ18 "
+                "trajectory or numerical work");
+        Require(ReadWholeFile(comparison.output_directory /
+                              "observations.tsv") ==
+                        parallel_observations &&
+                    ReadWholeFile(comparison.output_directory /
+                                  "contact_patches.tsv") == parallel_patches,
+                "the 1/4/8-thread dense Jacobian changed a GZ18 physical "
+                "artifact");
+    }
+    omp_set_num_threads(original_openmp_max_threads);
+    omp_set_dynamic(original_openmp_dynamic);
 }
 
 }  // namespace

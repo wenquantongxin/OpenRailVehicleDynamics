@@ -11,6 +11,10 @@
 
 namespace orvd::integrators {
 
+namespace internal {
+class DenseFiniteDifferenceJacobianRegistration;
+}
+
 /// Advances one positive-dimensional continuous state with SUNDIALS CVODE.
 ///
 /// The numerical method is fixed to the admitted first-backend configuration:
@@ -53,6 +57,8 @@ class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
         Eigen::Ref<Eigen::VectorXd> continuous_state) const override;
 
    private:
+    friend class internal::DenseFiniteDifferenceJacobianRegistration;
+
     class Implementation;
     std::unique_ptr<Implementation> implementation_;
 };

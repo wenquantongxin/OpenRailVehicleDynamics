@@ -864,6 +864,10 @@ void WritePerformance(const std::filesystem::path& path,
            << ",\n"
            << "    \"jacobian_evaluation_count\": "
            << summary.integration_statistics.jacobian_evaluation_count
+           << ",\n"
+           << "    \"requested_dense_finite_difference_jacobian_worker_count\": "
+           << summary.integration_statistics
+                  .requested_dense_finite_difference_jacobian_worker_count
            << "\n"
            << "  }\n"
            << "}\n";
@@ -1219,6 +1223,10 @@ QualificationRunSummary RunVehicleQualification(
         endpoint_diagnostics
             .series_force_derivative_slice_consistency_inf_norm;
     summary.integration_statistics = integration_statistics;
+    summary.terminal_continuous_state.resize(
+        assembled.system().continuous_state_size());
+    assembled.system().CopyContinuousState(
+        accepted, summary.terminal_continuous_state);
     summary.used_before_track_definition_interval =
         before_definition_interval.observed;
     summary.used_after_track_definition_interval =

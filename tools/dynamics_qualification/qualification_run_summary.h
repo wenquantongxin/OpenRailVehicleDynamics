@@ -2,6 +2,8 @@
 
 #include <cstddef>
 
+#include <Eigen/Core>
+
 #include "orvd/integrators/continuous_state_advancer.h"
 
 namespace orvd::dynamics_qualification {
@@ -19,6 +21,7 @@ struct QualificationRunSummary final {
     double endpoint_position_derivative_slice_consistency_inf_norm{};
     double endpoint_series_force_derivative_slice_consistency_inf_norm{};
     integrators::ContinuousStateIntegrationStatistics integration_statistics;
+    Eigen::VectorXd terminal_continuous_state;
     bool used_before_track_definition_interval{false};
     bool used_after_track_definition_interval{false};
 };

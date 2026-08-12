@@ -201,6 +201,19 @@ void AccumulateStatistics(
     destination->linear_solver_setup_count += source.linear_solver_setup_count;
     destination->jacobian_evaluation_count +=
         source.jacobian_evaluation_count;
+    const int requested_workers =
+        source.requested_dense_finite_difference_jacobian_worker_count;
+    if (destination
+            ->requested_dense_finite_difference_jacobian_worker_count == 0) {
+        destination
+            ->requested_dense_finite_difference_jacobian_worker_count =
+            requested_workers;
+    } else if (destination
+                   ->requested_dense_finite_difference_jacobian_worker_count !=
+               requested_workers) {
+        Reject("the requested dense-Jacobian worker count changed between "
+               "control intervals");
+    }
 }
 
 [[nodiscard]] double WrenchPower(
@@ -833,7 +846,10 @@ void WritePerformance(
            << ", \"linear_solver_setup_count\": "
            << stats.linear_solver_setup_count
            << ", \"jacobian_evaluation_count\": "
-           << stats.jacobian_evaluation_count << "}\n}\n";
+           << stats.jacobian_evaluation_count
+           << ", \"requested_dense_finite_difference_jacobian_worker_count\": "
+           << stats.requested_dense_finite_difference_jacobian_worker_count
+           << "}\n}\n";
     CloseChecked(&output, path);
 }
 
@@ -1031,6 +1047,10 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
     summary.control_audit_count = audits.size();
     summary.positive_hold_interval_count =
         static_cast<std::size_t>(terminal_event_ordinal);
+    summary.terminal_continuous_state.resize(
+        assembled.system().continuous_state_size());
+    assembled.system().CopyContinuousState(
+        accepted, summary.terminal_continuous_state);
     for (const ControlledEndpointDiagnostics& diagnostics :
          endpoint_diagnostics) {
         summary.maximum_generalized_force_residual_inf_norm = std::max(

@@ -89,6 +89,9 @@ struct ContinuousStateIntegrationStatistics final {
     std::uint64_t nonlinear_solver_convergence_failure_count{};
     std::uint64_t linear_solver_setup_count{};
     std::uint64_t jacobian_evaluation_count{};
+    // Numerical execution identity, not an observed OpenMP team size. A value
+    // of one denotes SUNDIALS' built-in serial dense difference path.
+    int requested_dense_finite_difference_jacobian_worker_count{};
 };
 
 /// The numerical-backend-independent advancement surface.

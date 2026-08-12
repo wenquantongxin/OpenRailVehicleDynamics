@@ -8,10 +8,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <omp.h>
 
 #include "irw_qualification_runner.h"
 
@@ -72,6 +75,33 @@ double ParseFiniteDouble(const std::string& text) {
         throw std::runtime_error("invalid finite number in IRW observation");
     }
     return value;
+}
+
+bool SameTrajectoryWork(
+    const orvd::integrators::ContinuousStateIntegrationStatistics& left,
+    const orvd::integrators::ContinuousStateIntegrationStatistics& right) {
+    return left.successful_internal_step_count ==
+               right.successful_internal_step_count &&
+           left.right_hand_side_evaluation_count ==
+               right.right_hand_side_evaluation_count &&
+           left.linear_solver_right_hand_side_evaluation_count ==
+               right.linear_solver_right_hand_side_evaluation_count &&
+           left.error_test_failure_count == right.error_test_failure_count &&
+           left.nonlinear_solver_iteration_count ==
+               right.nonlinear_solver_iteration_count &&
+           left.nonlinear_solver_convergence_failure_count ==
+               right.nonlinear_solver_convergence_failure_count &&
+           left.linear_solver_setup_count == right.linear_solver_setup_count &&
+           left.jacobian_evaluation_count == right.jacobian_evaluation_count;
+}
+
+template <class Summary>
+bool SameTerminalState(const Summary& left, const Summary& right) {
+    return left.terminal_continuous_state.size() ==
+               right.terminal_continuous_state.size() &&
+           (left.terminal_continuous_state.array() ==
+            right.terminal_continuous_state.array())
+               .all();
 }
 
 std::size_t FindColumn(const std::vector<std::string>& header,
@@ -281,7 +311,68 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the required IRW AAR5 recipe accepted an empty identity");
 }
 
+void CheckPassiveDenseJacobianThreading(
+    char** argv, const std::filesystem::path& root) {
+    const int original_openmp_dynamic = omp_get_dynamic();
+    const int original_openmp_max_threads = omp_get_max_threads();
+    omp_set_dynamic(0);
+
+    IrwQualificationRunConfiguration configuration;
+    configuration.vehicle_definition_path = std::filesystem::relative(argv[1]);
+    configuration.resolved_startup_state_path =
+        std::filesystem::relative(argv[2]);
+    configuration.track_geometry_path = std::filesystem::relative(argv[3]);
+    configuration.orvd_data_root = std::filesystem::relative(argv[4]);
+    configuration.track_irregularity_identifier =
+        "irw_r300_aar5_reference_irregularity";
+    configuration.duration_nanoseconds = 30'000'000;
+    configuration.sample_period_nanoseconds = 30'000'000;
+
+    std::optional<orvd::dynamics_qualification::QualificationRunSummary>
+        reference;
+    std::string reference_observations;
+    std::string reference_patches;
+    for (const int requested_threads : {1, 4, 8}) {
+        omp_set_num_threads(requested_threads);
+        configuration.output_directory =
+            root / ("irw-aar5-jacobian-t" +
+                    std::to_string(requested_threads));
+        const auto candidate = RunIrwQualification(configuration);
+        Require(candidate.integration_statistics.jacobian_evaluation_count >
+                        1 &&
+                    candidate.integration_statistics
+                            .requested_dense_finite_difference_jacobian_worker_count ==
+                        requested_threads &&
+                    candidate.terminal_continuous_state.size() == 157,
+                "the passive IRW 1/4/8-thread run did not exercise the "
+                "requested 157-state dense Jacobian");
+        const std::string observations = ReadWholeFile(
+            configuration.output_directory / "observations.tsv");
+        const std::string patches = ReadWholeFile(
+            configuration.output_directory / "contact_patches.tsv");
+        if (!reference.has_value()) {
+            reference = candidate;
+            reference_observations = observations;
+            reference_patches = patches;
+        } else {
+            Require(SameTrajectoryWork(reference->integration_statistics,
+                                       candidate.integration_statistics) &&
+                        SameTerminalState(*reference, candidate) &&
+                        observations == reference_observations &&
+                        patches == reference_patches,
+                    "the passive IRW 1/4/8-thread dense Jacobian changed "
+                    "the trajectory, numerical work or contact artifacts");
+        }
+    }
+    omp_set_num_threads(original_openmp_max_threads);
+    omp_set_dynamic(original_openmp_dynamic);
+}
+
 void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
+    const int original_openmp_dynamic = omp_get_dynamic();
+    const int original_openmp_max_threads = omp_get_max_threads();
+    omp_set_dynamic(0);
+    omp_set_num_threads(8);
     IrwP179ControlledQualificationRunConfiguration configuration;
     configuration.vehicle_definition_path = argv[1];
     configuration.resolved_startup_state_path = argv[2];
@@ -296,7 +387,12 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     Require(summary.observation_count == 41 &&
                 summary.control_audit_count == 4 &&
                 summary.positive_hold_interval_count == 2 &&
-                summary.backend_synchronization_count == 1,
+                summary.backend_synchronization_count == 1 &&
+                summary.integration_statistics.jacobian_evaluation_count > 1 &&
+                summary.integration_statistics
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    8 &&
+                summary.terminal_continuous_state.size() == 157,
             "the 20 ms control recipe did not produce initialization, "
             "U0..U2, two holds and one nonterminal synchronization");
     Require(summary.integration_statistics.successful_internal_step_count > 0 &&
@@ -335,6 +431,8 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
         const std::size_t ordinal =
             FindColumn(header, "periodic_event_ordinal");
         const std::size_t time = FindColumn(header, "event_time_seconds");
+        const std::size_t actual_torque =
+            FindColumn(header, "conditioner.actual_torque.ff_l");
         Require(control_rows[1][kind] == "initialization" &&
                     control_rows[2][kind] == "periodic" &&
                     ParseFiniteDouble(control_rows[1][ordinal]) == 0.0 &&
@@ -347,6 +445,9 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     ParseFiniteDouble(control_rows[4][time]) == 0.02,
                 "the control audit does not use the startup double update "
                 "and integer event grid");
+        Require(control_rows[2][actual_torque] !=
+                    control_rows[3][actual_torque],
+                "U0 and U1 did not change the held wheel torque");
         for (std::size_t row = 1; row < control_rows.size(); ++row) {
             Require(control_rows[row].size() == header.size(),
                     "a control audit row has the wrong fixed width");
@@ -468,6 +569,35 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     "\"mechanical_observation_period_nanoseconds\": "
                     "500000") != std::string::npos,
             "the controlled artifact lacks its event transaction identity");
+
+    const std::array<std::string_view, 4> physical_files{
+        "observations.tsv", "contact_patches.tsv", "control_events.tsv",
+        "endpoint_diagnostics.tsv"};
+    for (const int requested_threads : {1, 4}) {
+        omp_set_num_threads(requested_threads);
+        auto comparison = configuration;
+        comparison.output_directory =
+            root / ("controlled-irw-t" +
+                    std::to_string(requested_threads));
+        const auto candidate =
+            RunIrwP179ControlledQualification(comparison);
+        Require(candidate.integration_statistics
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    requested_threads &&
+                    SameTrajectoryWork(summary.integration_statistics,
+                                       candidate.integration_statistics) &&
+                    SameTerminalState(summary, candidate),
+                "the controlled IRW 1/4/8-thread dense Jacobian changed "
+                "the complete state, event history or numerical work");
+        for (const std::string_view file : physical_files) {
+            Require(ReadWholeFile(configuration.output_directory / file) ==
+                        ReadWholeFile(comparison.output_directory / file),
+                    "the controlled IRW 1/4/8-thread dense Jacobian changed "
+                    "a physical or control artifact");
+        }
+    }
+    omp_set_num_threads(original_openmp_max_threads);
+    omp_set_dynamic(original_openmp_dynamic);
 }
 
 }  // namespace
@@ -490,6 +620,7 @@ int main(int argc, char** argv) {
 
     try {
         CheckRealIrwRun(argv, root);
+        CheckPassiveDenseJacobianThreading(argv, root);
         CheckControlledIrwRun(argv, root);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "IRW qualification threw: %s\n", error.what());

@@ -5,6 +5,8 @@
 #include <optional>
 #include <string>
 
+#include <Eigen/Core>
+
 #include "qualification_run_summary.h"
 #include "qualification_sample_clock.h"
 
@@ -52,6 +54,7 @@ struct IrwP179ControlledQualificationSummary final {
     double maximum_generalized_force_residual_inf_norm{};
     double maximum_absolute_virtual_power_residual_watts{};
     integrators::ContinuousStateIntegrationStatistics integration_statistics;
+    Eigen::VectorXd terminal_continuous_state;
 };
 
 // Runs one passive IRW qualification in a private assembled system. A
