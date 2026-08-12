@@ -1,5 +1,7 @@
 #include "orvd/wheel_rail_contact/contact_geometry.h"
 
+#include "monotone_cubic_interpolant_internal.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -8,12 +10,6 @@
 
 namespace orvd::wheel_rail_contact {
 namespace {
-
-// The vertical height below which a bin is considered never to have been
-// written. A finite sentinel rather than negative infinity, so that a
-// comparison against it is an ordinary comparison and a bin that somehow
-// received a non-finite sample does not silently win.
-constexpr double kUnwrittenBinHeight = -1.0e300;
 
 // The step the longitudinal resolution starts its outward search at, and how
 // far around the wheel it is willing to look before giving up. A quarter radian
@@ -158,8 +154,8 @@ double RefineEdge(double left_at, double left_gap, double right_at,
     return left_at + (0.0 - left_gap) * (right_at - left_at) / (right_gap - left_gap);
 }
 
-double SurfaceCurvature(const MonotoneCubicInterpolant& surface, double at) {
-    const double slope = surface.EvaluateFirstDerivative(at);
+double SurfaceCurvatureFromKnownSlope(const MonotoneCubicInterpolant& surface,
+                                      double at, double slope) {
     const double bend = surface.EvaluateSecondDerivative(at);
     if (!std::isfinite(slope) || !std::isfinite(bend)) {
         return std::numeric_limits<double>::quiet_NaN();
@@ -169,6 +165,11 @@ double SurfaceCurvature(const MonotoneCubicInterpolant& surface, double at) {
         return std::numeric_limits<double>::quiet_NaN();
     }
     return bend / denominator;
+}
+
+double SurfaceCurvature(const MonotoneCubicInterpolant& surface, double at) {
+    return SurfaceCurvatureFromKnownSlope(
+        surface, at, surface.EvaluateFirstDerivative(at));
 }
 
 WheelProfileControlNodes ResolveWheelNodes(
@@ -235,6 +236,9 @@ void ContactGeometryWorkspace::EnsureCapacity(std::size_t sample_capacity,
     if (bin_argument_.size() < bin_capacity) {
         bin_argument_.resize(bin_capacity);
     }
+    if (bin_generation_.size() < bin_capacity) {
+        bin_generation_.resize(bin_capacity);
+    }
 
     grow(envelope_lateral_, envelope_capacity);
     grow(envelope_vertical_, envelope_capacity);
@@ -243,7 +247,6 @@ void ContactGeometryWorkspace::EnsureCapacity(std::size_t sample_capacity,
     grow(envelope_spacing_scratch_, envelope_capacity);
     grow(envelope_secant_scratch_, envelope_capacity);
 
-    grow(merged_lateral_, union_capacity);
     grow(union_lateral_, union_capacity);
     grow(union_gap_, union_capacity);
 
@@ -581,10 +584,15 @@ ContactPatchSet ContactGeometrySolver::Solve(
     }
     double* const bin_highest = workspace.bin_highest_.data();
     int* const bin_argument = workspace.bin_argument_.data();
-    for (std::size_t bin = 0; bin < bin_count; ++bin) {
-        bin_highest[bin] = kUnwrittenBinHeight;
-        bin_argument[bin] = -1;
+    std::size_t* const bin_generation = workspace.bin_generation_.data();
+    ++workspace.current_bin_generation_;
+    if (workspace.current_bin_generation_ == 0) {
+        std::fill(workspace.bin_generation_.begin(),
+                  workspace.bin_generation_.end(), 0);
+        ++workspace.current_bin_generation_;
     }
+    const std::size_t current_bin_generation =
+        workspace.current_bin_generation_;
 
     for (std::size_t index = 0; index < samples; ++index) {
         if (!std::isfinite(projected_lateral[index]) ||
@@ -604,7 +612,11 @@ ContactPatchSet ContactGeometrySolver::Solve(
         // station keeps it. The sweep runs forward, so "earlier" is whichever
         // reached the bin first, and the rule is only ever exercised where the
         // projection folds one station onto another.
-        if (projected_vertical[index] > bin_highest[bin] || bin_argument[bin] < 0) {
+        if (bin_generation[bin] != current_bin_generation) {
+            bin_generation[bin] = current_bin_generation;
+            bin_highest[bin] = projected_vertical[index];
+            bin_argument[bin] = static_cast<int>(index);
+        } else if (projected_vertical[index] > bin_highest[bin]) {
             bin_highest[bin] = projected_vertical[index];
             bin_argument[bin] = static_cast<int>(index);
         }
@@ -615,7 +627,7 @@ ContactPatchSet ContactGeometrySolver::Solve(
     double* const envelope_station = workspace.envelope_station_.data();
     std::size_t envelope_size = 0;
     for (std::size_t bin = 0; bin < bin_count; ++bin) {
-        if (bin_argument[bin] < 0) {
+        if (bin_generation[bin] != current_bin_generation) {
             continue;
         }
         const std::size_t source = static_cast<std::size_t>(bin_argument[bin]);
@@ -655,42 +667,42 @@ ContactPatchSet ContactGeometrySolver::Solve(
 
     // --- the shared grid ---
 
-    // Each outline sample enters exactly one bin, so `envelope_size` cannot
-    // exceed the sample count. Merging that envelope with the rail nodes can
-    // therefore not exceed the union capacity prepared from their two counts.
-    // This is a construction proof, not a branch repeated on the hot path.
-    double* const merged = workspace.merged_lateral_.data();
-    std::size_t merged_size = 0;
+    // Each outline sample enters exactly one bin, so the final union cannot
+    // exceed the capacity prepared from the outline and rail node counts. Only
+    // nodes in the common lateral interval can reach the gap calculation;
+    // locate those subranges first instead of merging both complete profiles
+    // and filtering the same values in a second pass.
+    double* const union_lateral = workspace.union_lateral_.data();
+    std::size_t union_size = 0;
     {
-        std::size_t from_envelope = 0;
-        std::size_t from_rail = 0;
+        const double* const envelope_data = envelope_lateral;
+        const double* const envelope_data_end = envelope_data + envelope_size;
+        const double* const envelope_begin = std::lower_bound(
+            envelope_data, envelope_data_end, overlap_low);
+        const double* const envelope_end = std::upper_bound(
+            envelope_begin, envelope_data_end, overlap_high);
+        const double* const rail_begin = std::lower_bound(
+            rail_lateral.data(), rail_lateral.data() + rail_lateral.size(), overlap_low);
+        const double* const rail_end = std::upper_bound(
+            rail_begin, rail_lateral.data() + rail_lateral.size(), overlap_high);
+
+        const double* from_envelope = envelope_begin;
+        const double* from_rail = rail_begin;
         bool has_previous = false;
         double previous = 0.0;
-        while (from_envelope < envelope_size || from_rail < rail_lateral.size()) {
+        while (from_envelope != envelope_end || from_rail != rail_end) {
             double value;
-            if (from_rail >= rail_lateral.size() ||
-                (from_envelope < envelope_size &&
-                 envelope_lateral[from_envelope] <= rail_lateral[from_rail])) {
-                value = envelope_lateral[from_envelope++];
+            if (from_rail == rail_end ||
+                (from_envelope != envelope_end && *from_envelope <= *from_rail)) {
+                value = *from_envelope++;
             } else {
-                value = rail_lateral[from_rail++];
+                value = *from_rail++;
             }
             if (!has_previous || value != previous) {
-                merged[merged_size++] = value;
+                union_lateral[union_size++] = value;
                 previous = value;
                 has_previous = true;
             }
-        }
-    }
-
-    double* const union_lateral = workspace.union_lateral_.data();
-    std::size_t union_size = 0;
-    for (std::size_t index = 0; index < merged_size; ++index) {
-        // Both bounds inclusive. That inclusivity is what guarantees the grid's
-        // ends coincide with a knot of at least one of the two surfaces, so
-        // neither is ever asked for a value outside its own width.
-        if (merged[index] >= overlap_low && merged[index] <= overlap_high) {
-            union_lateral[union_size++] = merged[index];
         }
     }
     workspace.union_size_ = union_size;
@@ -705,61 +717,54 @@ ContactPatchSet ContactGeometrySolver::Solve(
         workspace.envelope_spacing_scratch_.data(), envelope_size);
     const std::span<double> secant_scratch(
         workspace.envelope_secant_scratch_.data(), envelope_size);
-    ComputeShapePreservingNodalSlopes(
+    internal::ComputeShapePreservingNodalSlopesForTrustedNodes(
         std::span<const double>(envelope_lateral, envelope_size),
         std::span<const double>(envelope_vertical, envelope_size),
         std::span<double>(envelope_vertical_slopes, envelope_size), spacing_scratch,
         secant_scratch);
 
     double* const union_gap = workspace.union_gap_.data();
-    bool any_contact = false;
+    const double epsilon = configuration_.contact_gap_epsilon_meters;
+    std::size_t island_count = 0;
     {
         std::size_t cursor = 0;
+        std::size_t coefficients_cursor = std::numeric_limits<std::size_t>::max();
+        CubicSegment segment;
         std::size_t rail_segment_hint = 0;
+        bool inside = false;
+        std::size_t island_start = 0;
         for (std::size_t index = 0; index < union_size; ++index) {
             const double at = union_lateral[index];
             cursor = AdvanceSegment(envelope_lateral, envelope_size, at, cursor);
-            const CubicSegment segment = CubicSegment::Between(
-                envelope_lateral[cursor], envelope_lateral[cursor + 1],
-                envelope_vertical[cursor], envelope_vertical[cursor + 1],
-                envelope_vertical_slopes[cursor], envelope_vertical_slopes[cursor + 1]);
+            if (cursor != coefficients_cursor) {
+                segment = CubicSegment::Between(
+                    envelope_lateral[cursor], envelope_lateral[cursor + 1],
+                    envelope_vertical[cursor], envelope_vertical[cursor + 1],
+                    envelope_vertical_slopes[cursor],
+                    envelope_vertical_slopes[cursor + 1]);
+                coefficients_cursor = cursor;
+            }
             const double wheel_height = segment.Value(
                 LocalParameter(at, envelope_lateral[cursor], segment.spacing));
             const double rail_height =
                 rail_surface_.EvaluateWithSegmentHint(at, rail_segment_hint);
             const double gap = wheel_height - rail_height;
             union_gap[index] = gap;
-            any_contact =
-                any_contact || gap > configuration_.contact_gap_epsilon_meters;
-        }
-    }
-    if (!any_contact) {
-        return result;
-    }
-
-    // --- islands ---
-
-    const double epsilon = configuration_.contact_gap_epsilon_meters;
-    std::size_t island_count = 0;
-    {
-        bool inside = false;
-        std::size_t start = 0;
-        for (std::size_t index = 0; index < union_size; ++index) {
-            const bool in_contact = union_gap[index] > epsilon;
+            const bool in_contact = gap > epsilon;
             if (in_contact && !inside) {
                 inside = true;
-                start = index;
+                island_start = index;
             } else if (!in_contact && inside) {
                 inside = false;
                 if (island_count < kMaxContactIslands) {
-                    workspace.island_start_[island_count] = start;
+                    workspace.island_start_[island_count] = island_start;
                     workspace.island_end_[island_count] = index - 1;
                     ++island_count;
                 }
             }
         }
         if (inside && island_count < kMaxContactIslands) {
-            workspace.island_start_[island_count] = start;
+            workspace.island_start_[island_count] = island_start;
             workspace.island_end_[island_count] = union_size - 1;
             ++island_count;
         }
@@ -819,14 +824,6 @@ ContactPatchSet ContactGeometrySolver::Solve(
         const std::size_t start = workspace.merged_start_[island];
         const std::size_t end = workspace.merged_end_[island];
 
-        double deepest = std::numeric_limits<double>::lowest();
-        for (std::size_t index = start; index <= end; ++index) {
-            deepest = std::max(deepest, union_gap[index]);
-        }
-        if (deepest <= epsilon) {
-            continue;
-        }
-
         const double left_edge =
             start == 0 ? union_lateral[0]
                        : RefineEdge(union_lateral[start - 1],
@@ -848,7 +845,11 @@ ContactPatchSet ContactGeometrySolver::Solve(
         // are honest answers to slightly different questions, and it is this
         // one the patch's shape is built from.
         std::size_t envelope_cursor = 0;
+        std::size_t coefficients_cursor = std::numeric_limits<std::size_t>::max();
+        CubicSegment height_segment;
         std::size_t rail_segment_hint = 0;
+        double vertical_penetration = std::numeric_limits<double>::lowest();
+        std::size_t deepest_station = 0;
         for (std::size_t index = 0; index < stations; ++index) {
             const double fraction =
                 static_cast<double>(index) / static_cast<double>(stations - 1);
@@ -858,28 +859,39 @@ ContactPatchSet ContactGeometrySolver::Solve(
             envelope_cursor =
                 AdvanceSegment(envelope_lateral, envelope_size, at, envelope_cursor);
             const double left_knot = envelope_lateral[envelope_cursor];
-            const CubicSegment height_segment = CubicSegment::Between(
-                left_knot, envelope_lateral[envelope_cursor + 1],
-                envelope_vertical[envelope_cursor],
-                envelope_vertical[envelope_cursor + 1],
-                envelope_vertical_slopes[envelope_cursor],
-                envelope_vertical_slopes[envelope_cursor + 1]);
+            if (envelope_cursor != coefficients_cursor) {
+                height_segment = CubicSegment::Between(
+                    left_knot, envelope_lateral[envelope_cursor + 1],
+                    envelope_vertical[envelope_cursor],
+                    envelope_vertical[envelope_cursor + 1],
+                    envelope_vertical_slopes[envelope_cursor],
+                    envelope_vertical_slopes[envelope_cursor + 1]);
+                coefficients_cursor = envelope_cursor;
+            }
             const double local = LocalParameter(at, left_knot, height_segment.spacing);
 
             const double wheel_height = height_segment.Value(local);
             const double rail_height =
                 rail_surface_.EvaluateWithSegmentHint(at, rail_segment_hint);
             quadrature_rail[index] = rail_height;
-            quadrature_overlap[index] = std::max(0.0, wheel_height - rail_height);
-            quadrature_wheel_slope[index] = height_segment.Slope(local);
-        }
-
-        double vertical_penetration = quadrature_overlap[0];
-        std::size_t deepest_station = 0;
-        for (std::size_t index = 0; index < stations; ++index) {
-            if (quadrature_overlap[index] > vertical_penetration) {
-                vertical_penetration = quadrature_overlap[index];
+            const double overlap = std::max(0.0, wheel_height - rail_height);
+            quadrature_overlap[index] = overlap;
+            if (overlap > vertical_penetration) {
+                vertical_penetration = overlap;
                 deepest_station = index;
+            }
+            quadrature_wheel_slope[index] = height_segment.Slope(local);
+            if (at <= envelope_lateral[0]) {
+                quadrature_station[index] = envelope_station[0];
+            } else if (at >= envelope_lateral[envelope_size - 1]) {
+                quadrature_station[index] = envelope_station[envelope_size - 1];
+            } else {
+                quadrature_station[index] =
+                    envelope_station[envelope_cursor] +
+                    (envelope_station[envelope_cursor + 1] -
+                     envelope_station[envelope_cursor]) *
+                        (at - left_knot) /
+                        height_segment.spacing;
             }
         }
         if (vertical_penetration <= epsilon) {
@@ -906,21 +918,32 @@ ContactPatchSet ContactGeometrySolver::Solve(
             const double top = rail_height + quadrature_overlap[index];
             return 0.5 * (top * top - rail_height * rail_height);
         };
+        double left_wheel_jacobian = wheel_jacobian(0);
+        double left_arc_weighted_overlap =
+            quadrature_overlap[0] * left_wheel_jacobian;
+        double left_vertical_moment = vertical_moment_term(0);
         for (std::size_t index = 0; index + 1 < stations; ++index) {
             const double spacing =
                 quadrature_lateral[index + 1] - quadrature_lateral[index];
+            const double right_wheel_jacobian = wheel_jacobian(index + 1);
+            const double right_arc_weighted_overlap =
+                quadrature_overlap[index + 1] * right_wheel_jacobian;
+            const double right_vertical_moment =
+                vertical_moment_term(index + 1);
             area.Add(spacing, quadrature_overlap[index], quadrature_overlap[index + 1]);
-            arc_width.Add(spacing, wheel_jacobian(index), wheel_jacobian(index + 1));
-            arc_weighted_area.Add(spacing,
-                                  quadrature_overlap[index] * wheel_jacobian(index),
-                                  quadrature_overlap[index + 1] *
-                                      wheel_jacobian(index + 1));
+            arc_width.Add(spacing, left_wheel_jacobian,
+                          right_wheel_jacobian);
+            arc_weighted_area.Add(spacing, left_arc_weighted_overlap,
+                                  right_arc_weighted_overlap);
             lateral_moment.Add(spacing,
                                quadrature_lateral[index] * quadrature_overlap[index],
                                quadrature_lateral[index + 1] *
                                    quadrature_overlap[index + 1]);
-            vertical_moment.Add(spacing, vertical_moment_term(index),
-                                vertical_moment_term(index + 1));
+            vertical_moment.Add(spacing, left_vertical_moment,
+                                right_vertical_moment);
+            left_wheel_jacobian = right_wheel_jacobian;
+            left_arc_weighted_overlap = right_arc_weighted_overlap;
+            left_vertical_moment = right_vertical_moment;
         }
 
         const double cross_section_area = area.total;
@@ -983,11 +1006,6 @@ ContactPatchSet ContactGeometrySolver::Solve(
         const double rail_slope_angle =
             rail_surface_angle + side_sign_ * configuration_.rail_cant_radians;
 
-        for (std::size_t index = 0; index < stations; ++index) {
-            quadrature_station[index] =
-                InterpolateLinear(envelope_lateral, envelope_station, envelope_size,
-                                  quadrature_lateral[index]);
-        }
         const double longitudinal_length = ResolveLongitudinalLength(
             pose, lateral_offset, vertical_offset,
             std::span<const double>(quadrature_station, stations));
@@ -1008,7 +1026,8 @@ ContactPatchSet ContactGeometrySolver::Solve(
         patch.arc_weighted_area_square_meters = weighted_area;
         patch.longitudinal_length_meters = longitudinal_length;
         patch.wheel_curvature_per_meter = SurfaceCurvature(wheel_surface_, wheel_station);
-        patch.rail_curvature_per_meter = SurfaceCurvature(rail_surface_, centroid_lateral);
+        patch.rail_curvature_per_meter = SurfaceCurvatureFromKnownSlope(
+            rail_surface_, centroid_lateral, rail_slope_at_centroid);
         ++result.count;
     }
 

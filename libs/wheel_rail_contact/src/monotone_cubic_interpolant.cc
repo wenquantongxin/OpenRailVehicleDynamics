@@ -1,5 +1,7 @@
 #include "orvd/wheel_rail_contact/monotone_cubic_interpolant.h"
 
+#include "monotone_cubic_interpolant_internal.h"
+
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -95,6 +97,17 @@ void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
                std::to_string(spacings.size()) + " and " +
                std::to_string(secants.size()));
     }
+    internal::ComputeShapePreservingNodalSlopesForTrustedNodes(
+        knots, values, slopes_out, spacings, secants);
+}
+
+namespace internal {
+
+void ComputeShapePreservingNodalSlopesForTrustedNodes(
+    std::span<const double> knots, std::span<const double> values,
+    std::span<double> slopes_out, std::span<double> spacings,
+    std::span<double> secants) {
+    const std::size_t count = knots.size();
     if (count == 2) {
         const double secant = (values[1] - values[0]) / (knots[1] - knots[0]);
         slopes_out[0] = secant;
@@ -131,6 +144,8 @@ void ComputeShapePreservingNodalSlopes(std::span<const double> knots,
                            (left_weight / left_secant + right_weight / right_secant);
     }
 }
+
+}  // namespace internal
 
 MonotoneCubicInterpolant::MonotoneCubicInterpolant(
     std::vector<double> knots, std::vector<double> values,

@@ -213,6 +213,8 @@ class ContactGeometryWorkspace {
     // The binning, one entry per bin.
     std::vector<double> bin_highest_;
     std::vector<int> bin_argument_;
+    std::vector<std::size_t> bin_generation_;
+    std::size_t current_bin_generation_{0};
 
     // The envelope, one entry per occupied bin.
     std::vector<double> envelope_lateral_;
@@ -225,7 +227,6 @@ class ContactGeometryWorkspace {
     std::vector<double> envelope_secant_scratch_;
 
     // The shared grid the two surfaces are differenced on.
-    std::vector<double> merged_lateral_;
     std::vector<double> union_lateral_;
     std::vector<double> union_gap_;
 
