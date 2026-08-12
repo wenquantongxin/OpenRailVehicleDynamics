@@ -650,8 +650,12 @@ int main(int argc, char** argv) {
         bool have_parallel_reference = false;
         for (const int requested_threads : {1, 2, 4, 8}) {
             omp_set_num_threads(requested_threads);
+            // A fresh workspace prevents exact-input hits from hiding the
+            // parallel eight-interface kernel after the first request.
+            auto parallel_contact_workspace = contact_plan->CreateWorkspace();
             const ContactBatch candidate =
-                EvaluateContactBatch(assembled, context, *contact_workspace);
+                EvaluateContactBatch(assembled, context,
+                                     *parallel_contact_workspace);
             Eigen::VectorXd candidate_rhs(kContinuousStateCount);
             assembled.compiled_plan().CalcStateTimeDerivatives(
                 context, candidate_rhs);
@@ -676,9 +680,12 @@ int main(int argc, char** argv) {
                     "RHS");
         }
 
+        auto allocation_contact_workspace = contact_plan->CreateWorkspace();
         std::size_t rhs_allocations = 0;
         {
             orvd::test::AllocationScope allocation_scope;
+            (void)EvaluateContactBatch(assembled, context,
+                                       *allocation_contact_workspace);
             assembled.compiled_plan().CalcStateTimeDerivatives(context,
                                                                 compiled_rhs);
             assembled.compiled_plan().CalcStateTimeDerivatives(context,
@@ -686,8 +693,8 @@ int main(int argc, char** argv) {
             rhs_allocations = allocation_scope.allocations();
         }
         Require(rhs_allocations == 0,
-                "a warmed IRW contact RHS called first-party ordinary C++ "
-                "operator new/new[]");
+                "a prepared cold-cache IRW contact batch or warmed RHS called "
+                "first-party ordinary C++ operator new/new[]");
         omp_set_num_threads(original_openmp_max_threads);
         omp_set_dynamic(original_openmp_dynamic);
     } catch (const std::exception& error) {

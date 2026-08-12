@@ -388,11 +388,15 @@ int main(int argc, char** argv) {
     bool have_parallel_reference = false;
     for (const int requested_threads : {1, 2, 4, 8}) {
         omp_set_num_threads(requested_threads);
+        // Keep every worker-count comparison on a fresh exact-input cache so
+        // the real eight-interface contact kernel, rather than eight cache
+        // hits left by the preceding request, remains under test.
+        auto parallel_contact_workspace = contact_plan->CreateWorkspace();
         std::array<AppliedBodyWrench, 8> candidate_wrenches;
         std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
             candidate_observations;
         contact_plan->CalcAppliedForcesAndObservations(
-            component.context(), *independent_contact_workspace,
+            component.context(), *parallel_contact_workspace,
             runtime_context.wheel_rail_projection_station_hints_meters(),
             candidate_wrenches, candidate_observations);
         Eigen::VectorXd candidate_rhs(109);
@@ -428,13 +432,20 @@ int main(int argc, char** argv) {
                 "109-state RHS");
     }
 
-    // The eight-worker request has now entered its OpenMP path and warmed every
-    // interface workspace. Repeated calls must not reach the ordinary global
-    // C++ allocation replacements; the probe intentionally does not claim to
-    // intercept direct malloc or an OpenMP runtime's private allocator.
+    // Create and prepare a fresh cache outside the allocation scope. Its first
+    // batch is then a real cold-cache contact evaluation, not a cache-only
+    // surrogate. Neither that batch nor the warmed direct RHS may reach the
+    // ordinary global C++ allocation replacements; the probe intentionally
+    // does not claim to intercept direct malloc or an OpenMP runtime's private
+    // allocator.
+    auto allocation_contact_workspace = contact_plan->CreateWorkspace();
     std::size_t rhs_allocations = 0;
     {
         orvd::test::AllocationScope allocation_scope;
+        contact_plan->CalcAppliedForces(
+            component.context(), *allocation_contact_workspace,
+            runtime_context.wheel_rail_projection_station_hints_meters(),
+            std::span(all_wrenches).subspan(56, 8));
         assembled.compiled_plan().CalcStateTimeDerivatives(
             runtime_context, compiled_derivatives);
         assembled.compiled_plan().CalcStateTimeDerivatives(
@@ -442,8 +453,8 @@ int main(int argc, char** argv) {
         rhs_allocations = allocation_scope.allocations();
     }
     Require(rhs_allocations == 0,
-            "a warmed contact-enabled direct RHS called first-party ordinary "
-            "C++ operator new/new[]");
+            "a prepared cold-cache contact batch or warmed direct RHS called "
+            "first-party ordinary C++ operator new/new[]");
     omp_set_num_threads(original_openmp_max_threads);
     omp_set_dynamic(original_openmp_dynamic);
 

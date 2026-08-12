@@ -1,8 +1,10 @@
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <stdexcept>
 #include <string>
@@ -88,6 +90,43 @@ std::string SideName(WheelSide side) {
     return side == WheelSide::kRight ? "right" : "left";
 }
 
+std::array<std::uint64_t, 39> MakeContactInputKey(
+    const WheelRailContactInput& input) {
+    // Keep this centralized list in lockstep with WheelRailContactInput and
+    // its nested value types. Do not replace it with a raw comparison of
+    // Eigen objects or structure padding.
+    std::array<std::uint64_t, 39> key{};
+    std::size_t slot = 0;
+    const auto append = [&key, &slot](double value) {
+        key[slot++] = std::bit_cast<std::uint64_t>(value);
+    };
+    const auto append_values = [&append](const double* values,
+                                         std::size_t count) {
+        for (std::size_t index = 0; index < count; ++index) {
+            append(values[index]);
+        }
+    };
+
+    append(input.pose.roll_radians);
+    append(input.pose.yaw_radians);
+    append(input.pose.lateral_offset_meters);
+    append(input.pose.vertical_raise_meters);
+    append_values(input.rail_frame.origin_track_meters.data(), 3);
+    append_values(input.rail_frame.rotation_track_from_profile.data(), 9);
+    append_values(input.wheel.origin_track_meters.data(), 3);
+    append_values(input.wheel.rotation_track_from_profile.data(), 9);
+    append_values(
+        input.wheel.origin_velocity_track_meters_per_second.data(), 3);
+    append_values(
+        input.wheel.angular_velocity_track_radians_per_second.data(), 3);
+    append(input.wheel.arc_rate_meters_per_second);
+    append(input.wheel.wheel_pitch_rate_radians_per_second);
+    append(input.roll_transport.roll_offset_radians);
+    append(input.roll_transport.lateral_offset_meters);
+    append(input.roll_transport.vertical_offset_meters);
+    return key;
+}
+
 }  // namespace
 
 WheelRailContactForceWorkspace::WheelRailContactForceWorkspace(
@@ -95,6 +134,7 @@ WheelRailContactForceWorkspace::WheelRailContactForceWorkspace(
     std::size_t interface_count)
     : issuer_(issuer),
       contact_workspaces_(interface_count),
+      interface_evaluation_caches_(interface_count),
       carriers_(carrier_count),
       interfaces_(interface_count),
       pending_wrenches_(interface_count),
@@ -743,9 +783,19 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         input.rail_frame = rail_frame;
         input.wheel = wheel_motion;
         input.roll_transport = roll_transport;
-        const WheelRailContactResult result =
-            personality_->model(interface.side)
-                .Evaluate(input, workspace.contact_workspaces_[ordinal]);
+        WheelRailContactForceWorkspace::InterfaceEvaluationCache& cache =
+            workspace.interface_evaluation_caches_[ordinal];
+        const std::array<std::uint64_t, 39> input_key =
+            MakeContactInputKey(input);
+        if (!cache.valid || cache.input_key != input_key) {
+            WheelRailContactResult evaluated =
+                personality_->model(interface.side)
+                    .Evaluate(input, workspace.contact_workspaces_[ordinal]);
+            cache.result = std::move(evaluated);
+            cache.input_key = input_key;
+            cache.valid = true;
+        }
+        const WheelRailContactResult& result = cache.result;
         if (result.count > result.patches.size()) {
             throw std::runtime_error(
                 "wheel-rail contact force plan: interface '" +

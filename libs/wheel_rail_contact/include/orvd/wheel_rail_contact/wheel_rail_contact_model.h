@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
 #include <Eigen/Core>
 
@@ -164,6 +165,8 @@ struct WheelRailContactResult {
     std::size_t analytic_longitudinal_length_fallback_count{0};
 };
 
+class WheelRailContactModel;
+
 // The buffers one evaluation needs. One per context; never shared between
 // threads.
 class WheelRailContactWorkspace {
@@ -174,6 +177,16 @@ class WheelRailContactWorkspace {
     friend class WheelRailContactModel;
 
     ContactGeometryWorkspace geometry_;
+    // A numerical Jacobian frequently changes only wheel motion, while the
+    // four pose scalars that define the contact geometry remain exactly the
+    // same. Cache that geometry per interface. The model identity belongs to
+    // the key because this workspace is default-constructible and may be used
+    // sequentially with different immutable models. The four scalar object
+    // representations preserve signed zero and admit no tolerance.
+    bool geometry_cache_valid_{false};
+    const WheelRailContactModel* geometry_cache_model_{nullptr};
+    std::array<std::uint64_t, 4> geometry_cache_pose_key_{};
+    ContactPatchSet geometry_cache_patches_;
     TangentialContactWorkspace tangential_;
 };
 

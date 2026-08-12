@@ -608,17 +608,21 @@ int main() {
     }
 
     {
-        // The evaluation runs twice per wheelset per derivative evaluation.
-        (void)model.Evaluate(rolling, workspace);
+        // Preparing capacities does not populate either exact-input cache. A
+        // first real evaluation through that cold cache, followed by exact
+        // repeats, must all remain free of ordinary C++ allocations.
+        WheelRailContactWorkspace allocation_workspace;
+        model.PrepareWorkspace(allocation_workspace);
         double sink = 0.0;
         const AllocationScope scope;
         for (int step = 0; step < 8; ++step) {
-            const WheelRailContactResult result = model.Evaluate(rolling, workspace);
+            const WheelRailContactResult result =
+                model.Evaluate(rolling, allocation_workspace);
             sink += result.patches[0].normal.normal_force_newtons;
         }
         Require(scope.allocations() == 0,
-                "the assembled contact evaluation allocated after its workspace "
-                "was warm");
+                "a prepared cold-cache or exact-repeat contact evaluation "
+                "called ordinary C++ operator new/new[]");
         Require(sink > 0.0, "the allocation sweep produced no force");
     }
 

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -157,6 +158,17 @@ class WheelRailContactForceWorkspace {
         double wheel_pitch_rate_radians_per_second{0.0};
     };
 
+    struct InterfaceEvaluationCache {
+        // The canonical key contains every double consumed by
+        // WheelRailContactModel::Evaluate: pose (4), rail frame (12), wheel
+        // rigid motion (20), and roll transport (3). It is built field by
+        // field rather than from Eigen or structure padding. One changed bit,
+        // including the sign of zero, is a miss.
+        bool valid{false};
+        std::array<std::uint64_t, 39> input_key{};
+        wheel_rail_contact::WheelRailContactResult result;
+    };
+
     WheelRailContactForceWorkspace(
         const WheelRailContactForcePlan* issuer, std::size_t carrier_count,
         std::size_t interface_count);
@@ -164,6 +176,7 @@ class WheelRailContactForceWorkspace {
     const WheelRailContactForcePlan* issuer_;
     std::vector<wheel_rail_contact::WheelRailContactWorkspace>
         contact_workspaces_;
+    std::vector<InterfaceEvaluationCache> interface_evaluation_caches_;
     std::vector<CarrierScratch> carriers_;
     std::vector<InterfaceScratch> interfaces_;
     std::vector<multibody_model::AppliedBodyWrench> pending_wrenches_;

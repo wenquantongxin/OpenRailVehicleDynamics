@@ -1,7 +1,18 @@
 #include "orvd/wheel_rail_contact/wheel_rail_contact_model.h"
 
+#include <bit>
+#include <cstdint>
+
 namespace orvd::wheel_rail_contact {
 namespace {
+
+std::array<std::uint64_t, 4> MakeGeometryPoseKey(
+    const ContactPoseScalars& pose) {
+    return {std::bit_cast<std::uint64_t>(pose.roll_radians),
+            std::bit_cast<std::uint64_t>(pose.yaw_radians),
+            std::bit_cast<std::uint64_t>(pose.lateral_offset_meters),
+            std::bit_cast<std::uint64_t>(pose.vertical_raise_meters)};
+}
 
 // The material is set on the model, not on the two force laws, so that they
 // cannot be given different steel. Whatever a sub-configuration carried is
@@ -48,8 +59,19 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
     WheelRailContactWorkspace& workspace) const {
     WheelRailContactResult result;
     PrepareWorkspace(workspace);
-    const ContactPatchSet patches =
-        geometry_.Solve(input.pose, workspace.geometry_);
+    const std::array<std::uint64_t, 4> pose_key =
+        MakeGeometryPoseKey(input.pose);
+    if (!workspace.geometry_cache_valid_ ||
+        workspace.geometry_cache_model_ != this ||
+        workspace.geometry_cache_pose_key_ != pose_key) {
+        const ContactPatchSet evaluated =
+            geometry_.Solve(input.pose, workspace.geometry_);
+        workspace.geometry_cache_patches_ = evaluated;
+        workspace.geometry_cache_pose_key_ = pose_key;
+        workspace.geometry_cache_model_ = this;
+        workspace.geometry_cache_valid_ = true;
+    }
+    const ContactPatchSet& patches = workspace.geometry_cache_patches_;
     result.geometric_patch_count = patches.count;
 
     for (std::size_t slot = 0; slot < patches.count; ++slot) {
