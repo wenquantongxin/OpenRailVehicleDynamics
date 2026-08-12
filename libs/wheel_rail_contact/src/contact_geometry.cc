@@ -365,12 +365,18 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
     const double yaw_sine = std::sin(pose.yaw_radians);
     const double roll_cosine = std::cos(pose.roll_radians);
     const double roll_sine = std::sin(pose.roll_radians);
+    std::size_t silhouette_rail_segment_hint =
+        std::numeric_limits<std::size_t>::max();
+    std::size_t behind_rail_segment_hint =
+        std::numeric_limits<std::size_t>::max();
+    std::size_t ahead_rail_segment_hint =
+        std::numeric_limits<std::size_t>::max();
 
     // The same vertical measure the envelope produced, but with the wheel's
     // circumferential angle restored as a free variable instead of fixed at the
     // silhouette. Positive means the wheel's surface is inside the rail.
-    const auto overlap_at = [&](double station, double angle) {
-        const double local_radius = radius + wheel_spline_.Evaluate(station);
+    const auto overlap_at = [&](double station, double local_radius, double angle,
+                                std::size_t& rail_segment_hint) {
         const double wheel_x = local_radius * std::sin(angle);
         const double wheel_z = local_radius * std::cos(angle) - radius;
         const double yawed_lateral = yaw_sine * wheel_x + yaw_cosine * station;
@@ -378,7 +384,8 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
             roll_cosine * yawed_lateral - roll_sine * wheel_z + lateral_offset;
         const double vertical =
             roll_sine * yawed_lateral + roll_cosine * wheel_z + vertical_offset;
-        return vertical - rail_surface_.Evaluate(lateral);
+        return vertical -
+               rail_surface_.EvaluateWithSegmentHint(lateral, rail_segment_hint);
     };
 
     // Bisection against the sign at the outside end of the bracket. Fixed
@@ -386,13 +393,16 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
     // the two ends straddle the crossing, so there is nothing to test for and
     // the count is chosen to reduce the bracket far below the precision the
     // chord is used at.
-    const auto refine = [&](double station, double outside, double inside) {
+    const auto refine = [&](double station, double local_radius, double outside,
+                            double inside, double outside_overlap,
+                            std::size_t& rail_segment_hint) {
         double low = outside;
         double high = inside;
-        double low_value = overlap_at(station, low);
+        double low_value = outside_overlap;
         for (int step = 0; step < kLongitudinalBisections; ++step) {
             const double middle = 0.5 * (low + high);
-            const double middle_value = overlap_at(station, middle);
+            const double middle_value =
+                overlap_at(station, local_radius, middle, rail_segment_hint);
             if ((middle_value > 0.0) == (low_value > 0.0)) {
                 low = middle;
                 low_value = middle_value;
@@ -408,14 +418,19 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
         if (!std::isfinite(station)) {
             continue;
         }
-        const double local_radius = radius + wheel_spline_.Evaluate(station);
+        const auto wheel_sample =
+            wheel_spline_.EvaluateValueAndFirstDerivativeForFiniteAbscissa(
+                station);
+        const double local_radius = radius + wheel_sample.value;
         if (!std::isfinite(local_radius) || !(local_radius > 0.0)) {
             continue;
         }
         const double silhouette_sine = Clamp(
-            -yaw_tangent * wheel_spline_.EvaluateFirstDerivative(station), -1.0, 1.0);
+            -yaw_tangent * wheel_sample.first_derivative, -1.0, 1.0);
         const double silhouette_angle = std::asin(silhouette_sine);
-        const double silhouette_overlap = overlap_at(station, silhouette_angle);
+        const double silhouette_overlap = overlap_at(
+            station, local_radius, silhouette_angle,
+            silhouette_rail_segment_hint);
         // The envelope said this station penetrates; the exact circle can
         // disagree, because the envelope reads a shape-preserving fit of a
         // projection while this reads the surface itself. When it disagrees the
@@ -433,14 +448,20 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
         bool bracketed_ahead = false;
         double behind = silhouette_angle;
         double ahead = silhouette_angle;
+        double behind_overlap = silhouette_overlap;
+        double ahead_overlap = silhouette_overlap;
         while (offset <= kLongitudinalSearchLimit * (1.0 + 1.0e-12)) {
             if (!bracketed_behind) {
                 behind = silhouette_angle - offset;
-                bracketed_behind = overlap_at(station, behind) <= 0.0;
+                behind_overlap = overlap_at(station, local_radius, behind,
+                                            behind_rail_segment_hint);
+                bracketed_behind = behind_overlap <= 0.0;
             }
             if (!bracketed_ahead) {
                 ahead = silhouette_angle + offset;
-                bracketed_ahead = overlap_at(station, ahead) <= 0.0;
+                ahead_overlap = overlap_at(station, local_radius, ahead,
+                                           ahead_rail_segment_hint);
+                bracketed_ahead = ahead_overlap <= 0.0;
             }
             if (bracketed_behind && bracketed_ahead) {
                 break;
@@ -454,8 +475,12 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
             continue;
         }
 
-        const double behind_crossing = refine(station, behind, silhouette_angle);
-        const double ahead_crossing = refine(station, ahead, silhouette_angle);
+        const double behind_crossing =
+            refine(station, local_radius, behind, silhouette_angle,
+                   behind_overlap, behind_rail_segment_hint);
+        const double ahead_crossing =
+            refine(station, local_radius, ahead, silhouette_angle, ahead_overlap,
+                   ahead_rail_segment_hint);
         // The chord is measured along the track, so the wheel-frame chord is
         // shortened by the yaw.
         const double chord =
@@ -690,6 +715,7 @@ ContactPatchSet ContactGeometrySolver::Solve(
     bool any_contact = false;
     {
         std::size_t cursor = 0;
+        std::size_t rail_segment_hint = 0;
         for (std::size_t index = 0; index < union_size; ++index) {
             const double at = union_lateral[index];
             cursor = AdvanceSegment(envelope_lateral, envelope_size, at, cursor);
@@ -699,7 +725,8 @@ ContactPatchSet ContactGeometrySolver::Solve(
                 envelope_vertical_slopes[cursor], envelope_vertical_slopes[cursor + 1]);
             const double wheel_height = segment.Value(
                 LocalParameter(at, envelope_lateral[cursor], segment.spacing));
-            const double rail_height = rail_surface_.Evaluate(at);
+            const double rail_height =
+                rail_surface_.EvaluateWithSegmentHint(at, rail_segment_hint);
             const double gap = wheel_height - rail_height;
             union_gap[index] = gap;
             any_contact =
@@ -821,6 +848,7 @@ ContactPatchSet ContactGeometrySolver::Solve(
         // are honest answers to slightly different questions, and it is this
         // one the patch's shape is built from.
         std::size_t envelope_cursor = 0;
+        std::size_t rail_segment_hint = 0;
         for (std::size_t index = 0; index < stations; ++index) {
             const double fraction =
                 static_cast<double>(index) / static_cast<double>(stations - 1);
@@ -839,7 +867,8 @@ ContactPatchSet ContactGeometrySolver::Solve(
             const double local = LocalParameter(at, left_knot, height_segment.spacing);
 
             const double wheel_height = height_segment.Value(local);
-            const double rail_height = rail_surface_.Evaluate(at);
+            const double rail_height =
+                rail_surface_.EvaluateWithSegmentHint(at, rail_segment_hint);
             quadrature_rail[index] = rail_height;
             quadrature_overlap[index] = std::max(0.0, wheel_height - rail_height);
             quadrature_wheel_slope[index] = height_segment.Slope(local);

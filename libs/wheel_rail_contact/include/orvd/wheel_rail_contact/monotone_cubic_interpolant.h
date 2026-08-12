@@ -92,6 +92,8 @@ class MonotoneCubicInterpolant {
     [[nodiscard]] std::size_t size() const { return knots_.size(); }
 
    private:
+    friend class ContactGeometrySolver;
+
     struct SegmentCoefficients {
         double constant{0.0};
         double linear{0.0};
@@ -111,6 +113,12 @@ class MonotoneCubicInterpolant {
                              OutsideDerivativeRule outside_rule);
 
     [[nodiscard]] Location Locate(double abscissa) const;
+    // Contact geometry repeatedly probes the same or a neighbouring immutable
+    // rail segment. The caller owns the hint, while every miss still goes
+    // through `Locate`; the hint can therefore remove a search but cannot
+    // choose a different interpolation segment.
+    [[nodiscard]] double EvaluateWithSegmentHint(
+        double abscissa, std::size_t& segment_hint) const;
 
     std::vector<double> knots_;
     std::vector<double> values_;

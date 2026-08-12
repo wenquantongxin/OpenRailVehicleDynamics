@@ -222,6 +222,57 @@ double MonotoneCubicInterpolant::Evaluate(double abscissa) const {
            coefficients.constant;
 }
 
+double MonotoneCubicInterpolant::EvaluateWithSegmentHint(
+    double abscissa, std::size_t& segment_hint) const {
+    const std::size_t last_segment = segments_.size() - 1;
+    Location location;
+    if (!(abscissa > knots_.front())) {
+        // Preserve `Locate`'s left-end and not-a-number behaviour.
+        location = Location{0, 0.0};
+    } else if (abscissa >= knots_.back()) {
+        // `Locate` makes the right endpoint exactly one. Recomputing the local
+        // parameter on the adjacent fast path can instead round one ulp below
+        // one for a non-binary interval spacing.
+        location = Location{last_segment, 1.0};
+    } else if (segment_hint <= last_segment &&
+               abscissa >= knots_[segment_hint] &&
+               abscissa < knots_[segment_hint + 1]) {
+        location = Location{
+            segment_hint,
+            std::clamp((abscissa - knots_[segment_hint]) *
+                           segments_[segment_hint].inverse_spacing,
+                       0.0, 1.0)};
+    } else if (segment_hint < last_segment &&
+               abscissa >= knots_[segment_hint + 1] &&
+               (segment_hint + 1 == last_segment ||
+                abscissa < knots_[segment_hint + 2])) {
+        const std::size_t segment = segment_hint + 1;
+        location = Location{
+            segment,
+            std::clamp((abscissa - knots_[segment]) *
+                           segments_[segment].inverse_spacing,
+                       0.0, 1.0)};
+    } else if (segment_hint > 0 && segment_hint <= last_segment &&
+               abscissa >= knots_[segment_hint - 1] &&
+               abscissa < knots_[segment_hint]) {
+        const std::size_t segment = segment_hint - 1;
+        location = Location{
+            segment,
+            std::clamp((abscissa - knots_[segment]) *
+                           segments_[segment].inverse_spacing,
+                       0.0, 1.0)};
+    } else {
+        location = Locate(abscissa);
+    }
+    segment_hint = location.segment;
+    const SegmentCoefficients& coefficients = segments_[location.segment];
+    const double t = location.local_parameter;
+    return ((coefficients.cubic * t + coefficients.quadratic) * t +
+            coefficients.linear) *
+               t +
+           coefficients.constant;
+}
+
 double MonotoneCubicInterpolant::EvaluateFirstDerivative(double abscissa) const {
     if (outside_rule_ == OutsideDerivativeRule::kZeroOutsideKnots &&
         (abscissa < knots_.front() || abscissa > knots_.back())) {

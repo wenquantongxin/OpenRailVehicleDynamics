@@ -73,6 +73,13 @@ class NaturalCubicSpline {
     [[nodiscard]] std::size_t size() const { return values_.size(); }
 
    private:
+    friend class ContactGeometrySolver;
+
+    struct ValueAndFirstDerivative {
+        double value{0.0};
+        double first_derivative{0.0};
+    };
+
     // One segment's cubic in the local parameter t = (s - x_i) / h_i, stored in
     // the scaled Hermite form so that evaluation never divides.
     struct SegmentCoefficients {
@@ -90,6 +97,8 @@ class NaturalCubicSpline {
     };
 
     [[nodiscard]] Location Locate(double abscissa) const;
+    [[nodiscard]] ValueAndFirstDerivative
+    EvaluateValueAndFirstDerivativeForFiniteAbscissa(double abscissa) const;
 
     // Empty on the uniform path: the idealised grid replaces it, and keeping a
     // copy would invite an evaluation that mixed the two.

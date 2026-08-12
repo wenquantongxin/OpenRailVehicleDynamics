@@ -312,6 +312,35 @@ double NaturalCubicSpline::EvaluateFirstDerivative(double abscissa) const {
             3.0 * coefficients.cubic * t * t);
 }
 
+NaturalCubicSpline::ValueAndFirstDerivative
+NaturalCubicSpline::EvaluateValueAndFirstDerivativeForFiniteAbscissa(
+    double abscissa) const {
+    if (abscissa < first_knot_) {
+        return ValueAndFirstDerivative{values_.front(), 0.0};
+    }
+    if (abscissa > last_knot_) {
+        return ValueAndFirstDerivative{values_.back(), 0.0};
+    }
+
+    const Location location = Locate(abscissa);
+    const SegmentCoefficients& coefficients = segments_[location.segment];
+    const double t = location.local_parameter;
+    const double value =
+        abscissa <= first_knot_
+            ? values_.front()
+            : (abscissa >= last_knot_
+                   ? values_.back()
+                   : ((coefficients.cubic * t + coefficients.quadratic) * t +
+                      coefficients.linear) *
+                             t +
+                         coefficients.constant);
+    const double first_derivative =
+        coefficients.inverse_spacing *
+        (coefficients.linear + 2.0 * coefficients.quadratic * t +
+         3.0 * coefficients.cubic * t * t);
+    return ValueAndFirstDerivative{value, first_derivative};
+}
+
 double NaturalCubicSpline::EvaluateSecondDerivative(double abscissa) const {
     // Inclusive at both boundary knots, which makes the natural boundary
     // condition exact instead of leaving rounding noise where the contract says
