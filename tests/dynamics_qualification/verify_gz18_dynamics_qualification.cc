@@ -503,7 +503,7 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
         configuration.output_directory / "observations.tsv");
     const std::string parallel_patches = ReadWholeFile(
         configuration.output_directory / "contact_patches.tsv");
-    for (const int requested_threads : {1, 4}) {
+    for (const int requested_threads : {1, 4, 16}) {
         omp_set_num_threads(requested_threads);
         Gz18QualificationRunConfiguration comparison = configuration;
         comparison.output_directory =
@@ -516,14 +516,14 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                     SameTrajectoryWork(summary.integration_statistics,
                                        candidate.integration_statistics) &&
                     SameTerminalState(summary, candidate),
-                "the 1/4/8-thread dense Jacobian changed the complete GZ18 "
+                "the 1/4/8/16-thread dense Jacobian changed the complete GZ18 "
                 "trajectory or numerical work");
         Require(ReadWholeFile(comparison.output_directory /
                               "observations.tsv") ==
                         parallel_observations &&
                     ReadWholeFile(comparison.output_directory /
                                   "contact_patches.tsv") == parallel_patches,
-                "the 1/4/8-thread dense Jacobian changed a GZ18 physical "
+                "the 1/4/8/16-thread dense Jacobian changed a GZ18 physical "
                 "artifact");
     }
     omp_set_num_threads(original_openmp_max_threads);

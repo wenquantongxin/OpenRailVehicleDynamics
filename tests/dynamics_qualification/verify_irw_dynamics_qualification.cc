@@ -249,13 +249,13 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                 metadata.find("\"track_irregularity_identifier\": null") !=
                     std::string::npos,
             "the IRW recipe or explicit no-irregularity identity is wrong");
-    Require(metadata.find("\"relative_tolerance\": 9.9999999999999995e-08") !=
+    Require(metadata.find("\"relative_tolerance\": 9.9999999999999995e-07") !=
+                std::string::npos &&
+                metadata.find(
+                    "\"generalized_position_absolute_tolerance\": 9.9999999999999995e-07") !=
                     std::string::npos &&
                 metadata.find(
-                    "\"generalized_position_absolute_tolerance\": 1.0000000000000001e-09") !=
-                    std::string::npos &&
-                metadata.find(
-                    "\"generalized_velocity_absolute_tolerance\": 1e-08") !=
+                    "\"generalized_velocity_absolute_tolerance\": 1.0000000000000001e-05") !=
                     std::string::npos &&
                 metadata.find(
                     "\"series_force_absolute_tolerance_newtons\": 9.9999999999999995e-07") !=
@@ -332,7 +332,7 @@ void CheckPassiveDenseJacobianThreading(
         reference;
     std::string reference_observations;
     std::string reference_patches;
-    for (const int requested_threads : {1, 4, 8}) {
+    for (const int requested_threads : {1, 4, 8, 16}) {
         omp_set_num_threads(requested_threads);
         configuration.output_directory =
             root / ("irw-aar5-jacobian-t" +
@@ -344,7 +344,7 @@ void CheckPassiveDenseJacobianThreading(
                             .requested_dense_finite_difference_jacobian_worker_count ==
                         requested_threads &&
                     candidate.terminal_continuous_state.size() == 157,
-                "the passive IRW 1/4/8-thread run did not exercise the "
+                "the passive IRW 1/4/8/16-thread run did not exercise the "
                 "requested 157-state dense Jacobian");
         const std::string observations = ReadWholeFile(
             configuration.output_directory / "observations.tsv");
@@ -360,7 +360,7 @@ void CheckPassiveDenseJacobianThreading(
                         SameTerminalState(*reference, candidate) &&
                         observations == reference_observations &&
                         patches == reference_patches,
-                    "the passive IRW 1/4/8-thread dense Jacobian changed "
+                    "the passive IRW 1/4/8/16-thread dense Jacobian changed "
                     "the trajectory, numerical work or contact artifacts");
         }
     }
@@ -561,6 +561,13 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     Require(metadata.find("\"qualification_vehicle_recipe\": "
                           "\"IRW_P179_100HZ_CONTROLLED\"") !=
                     std::string::npos &&
+                metadata.find("\"numerical_tolerances\": {\"relative\": "
+                              "9.9999999999999995e-07, \"q_absolute\": "
+                              "9.9999999999999995e-07, \"v_absolute\": "
+                              "1.0000000000000001e-05, "
+                              "\"z_absolute_newtons\": "
+                              "9.9999999999999995e-07}") !=
+                    std::string::npos &&
                 metadata.find("\"control_audit_count\": 4") !=
                     std::string::npos &&
                 metadata.find("\"backend_synchronization_count\": 1") !=
@@ -573,7 +580,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const std::array<std::string_view, 4> physical_files{
         "observations.tsv", "contact_patches.tsv", "control_events.tsv",
         "endpoint_diagnostics.tsv"};
-    for (const int requested_threads : {1, 4}) {
+    for (const int requested_threads : {1, 4, 16}) {
         omp_set_num_threads(requested_threads);
         auto comparison = configuration;
         comparison.output_directory =
@@ -587,12 +594,12 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     SameTrajectoryWork(summary.integration_statistics,
                                        candidate.integration_statistics) &&
                     SameTerminalState(summary, candidate),
-                "the controlled IRW 1/4/8-thread dense Jacobian changed "
+                "the controlled IRW 1/4/8/16-thread dense Jacobian changed "
                 "the complete state, event history or numerical work");
         for (const std::string_view file : physical_files) {
             Require(ReadWholeFile(configuration.output_directory / file) ==
                         ReadWholeFile(comparison.output_directory / file),
-                    "the controlled IRW 1/4/8-thread dense Jacobian changed "
+                    "the controlled IRW 1/4/8/16-thread dense Jacobian changed "
                     "a physical or control artifact");
         }
     }

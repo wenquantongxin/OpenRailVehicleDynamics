@@ -30,7 +30,8 @@ bool SameDoubleBits(double left, double right) {
 }
 
 constexpr int kMinimumParallelJacobianWorkerCount = 4;
-constexpr int kMaximumParallelJacobianWorkerCount = 8;
+constexpr int kIntermediateParallelJacobianWorkerCount = 8;
+constexpr int kMaximumParallelJacobianWorkerCount = 16;
 
 int ResolveParallelJacobianWorkerCount(
     const system_assembly::SystemInstance& system) {
@@ -40,6 +41,9 @@ int ResolveParallelJacobianWorkerCount(
     const int maximum_threads = omp_get_max_threads();
     if (maximum_threads >= kMaximumParallelJacobianWorkerCount) {
         return kMaximumParallelJacobianWorkerCount;
+    }
+    if (maximum_threads >= kIntermediateParallelJacobianWorkerCount) {
+        return kIntermediateParallelJacobianWorkerCount;
     }
     if (maximum_threads >= kMinimumParallelJacobianWorkerCount) {
         return kMinimumParallelJacobianWorkerCount;
@@ -63,9 +67,11 @@ class SystemDenseFiniteDifferenceJacobian final
           failures_(static_cast<std::size_t>(state_size_)),
           attempted_(static_cast<std::size_t>(state_size_)) {
         if (worker_count_ != kMinimumParallelJacobianWorkerCount &&
+            worker_count_ != kIntermediateParallelJacobianWorkerCount &&
             worker_count_ != kMaximumParallelJacobianWorkerCount) {
             throw std::invalid_argument(
-                "system dense Jacobian: worker count must be four or eight");
+                "system dense Jacobian: worker count must be four, eight, or "
+                "sixteen");
         }
 
         Eigen::VectorXd initial_state(state_size_);

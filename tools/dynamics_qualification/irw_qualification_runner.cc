@@ -1,5 +1,6 @@
 #include "irw_qualification_runner.h"
 
+#include "irw_integration_recipe.h"
 #include "vehicle_qualification_runner_internal.h"
 
 namespace orvd::dynamics_qualification {
@@ -8,10 +9,10 @@ namespace {
 constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe{
     "IRW",
     {"carbody", "frame_front", "frame_rear"},
-    1.0e-7,
-    1.0e-9,
-    1.0e-8,
-    1.0e-6,
+    internal::kIrwRelativeTolerance,
+    internal::kIrwPositionAbsoluteTolerance,
+    internal::kIrwVelocityAbsoluteTolerance,
+    internal::kIrwSeriesForceAbsoluteToleranceNewtons,
     81,
     74,
     2,
@@ -22,10 +23,10 @@ constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe{
 constexpr internal::VehicleQualificationRecipe kAar5Recipe{
     "IRW",
     {"carbody", "frame_front", "frame_rear"},
-    1.0e-7,
-    1.0e-9,
-    1.0e-8,
-    1.0e-6,
+    internal::kIrwRelativeTolerance,
+    internal::kIrwPositionAbsoluteTolerance,
+    internal::kIrwVelocityAbsoluteTolerance,
+    internal::kIrwSeriesForceAbsoluteToleranceNewtons,
     81,
     74,
     2,

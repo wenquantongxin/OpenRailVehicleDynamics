@@ -936,7 +936,7 @@ add_test(NAME verify_gz18_dynamics_qualification
              gz18_aar6_reference_irregularity
              ${CMAKE_CURRENT_BINARY_DIR}/g58-dynamics-qualification-fixtures)
 set_tests_properties(verify_gz18_dynamics_qualification PROPERTIES
-    PROCESSORS 8)
+    PROCESSORS 16)
 
 add_executable(verify_irw_dynamics_qualification
     dynamics_qualification/verify_irw_dynamics_qualification.cc)
@@ -953,7 +953,7 @@ add_test(NAME verify_irw_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json
              ${CMAKE_CURRENT_BINARY_DIR}/irw-dynamics-qualification-fixtures)
 set_tests_properties(verify_irw_dynamics_qualification PROPERTIES
-    PROCESSORS 8)
+    PROCESSORS 16)
 
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc

@@ -22,6 +22,7 @@
 #include <Eigen/Core>
 
 #include "atomic_qualification_directory.h"
+#include "irw_integration_recipe.h"
 #include "qualification_sample_clock.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
@@ -174,14 +175,17 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 [[nodiscard]] integrators::ContinuousStateErrorTolerances MakeTolerances(
     const configuration::AssembledVehicleSystem& assembled) {
     const auto& system = assembled.system();
-    Eigen::VectorXd absolute =
-        Eigen::VectorXd::Constant(system.continuous_state_size(), 1.0e-8);
+    Eigen::VectorXd absolute = Eigen::VectorXd::Constant(
+        system.continuous_state_size(),
+        internal::kIrwVelocityAbsoluteTolerance);
     const auto q = system.generalized_positions_state_range();
     const auto z = system.series_spring_damper_force_state_range();
-    absolute.segment(q.start(), q.size()).setConstant(1.0e-9);
-    absolute.segment(z.start(), z.size()).setConstant(1.0e-6);
-    return integrators::ContinuousStateErrorTolerances(1.0e-7,
-                                                       std::move(absolute));
+    absolute.segment(q.start(), q.size())
+        .setConstant(internal::kIrwPositionAbsoluteTolerance);
+    absolute.segment(z.start(), z.size())
+        .setConstant(internal::kIrwSeriesForceAbsoluteToleranceNewtons);
+    return integrators::ContinuousStateErrorTolerances(
+        internal::kIrwRelativeTolerance, std::move(absolute));
 }
 
 void AccumulateStatistics(
@@ -748,9 +752,13 @@ void WriteMetadata(
            << assembled.contact_force_plan()->body_wrench_count()
            << ", \"active_torque_body_wrench_count\": "
            << assembled.active_torque_plan()->body_wrench_count() << "},\n"
-           << "  \"numerical_tolerances\": {\"relative\": 1e-07, "
-              "\"q_absolute\": 1e-09, \"v_absolute\": 1e-08, "
-              "\"z_absolute_newtons\": 9.9999999999999995e-07},\n"
+           << "  \"numerical_tolerances\": {\"relative\": "
+           << internal::kIrwRelativeTolerance << ", \"q_absolute\": "
+           << internal::kIrwPositionAbsoluteTolerance
+           << ", \"v_absolute\": "
+           << internal::kIrwVelocityAbsoluteTolerance
+           << ", \"z_absolute_newtons\": "
+           << internal::kIrwSeriesForceAbsoluteToleranceNewtons << "},\n"
            << "  \"input_paths\": {\n"
            << "    \"vehicle_definition\": "
            << JsonString(configuration.vehicle_definition_path.string())
