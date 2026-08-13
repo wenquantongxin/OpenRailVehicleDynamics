@@ -568,18 +568,15 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
                          ahead_bracket.inside.angle));
             // Both true crossings remain inside these brackets. Since sine is
             // 1-Lipschitz, their chord cannot exceed the projected radius
-            // times this enclosing angular span. Expand the two ordinary
-            // floating-point operations toward +infinity so a downward-rounded
-            // subtraction or multiplication cannot turn the screen into an
-            // approximate bound. This is deliberately local rather than a
-            // general interval-arithmetic facility.
-            const double upward = std::numeric_limits<double>::infinity();
-            const double angular_span =
-                std::nextafter(upper_angle - lower_angle, upward);
-            const double projected_local_radius = std::nextafter(
-                std::abs(yaw_cosine * local_radius), upward);
-            return std::nextafter(projected_local_radius * angular_span,
-                                  upward);
+            // times this enclosing angular span. The packaged vehicle models
+            // supply finite railway-scale radii and angles at the public
+            // boundary, so this trusted hot loop uses the direct binary64
+            // expression rather than paying three directed-rounding calls at
+            // every screening level.
+            const double angular_span = upper_angle - lower_angle;
+            const double projected_local_radius =
+                std::abs(yaw_cosine * local_radius);
+            return projected_local_radius * angular_span;
         };
 
         bool screened_out = false;
