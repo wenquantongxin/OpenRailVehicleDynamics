@@ -12,8 +12,8 @@
 
 namespace orvd::dynamics_qualification {
 
-// One internal IRW qualification configuration. G70/G71 leave the
-// track-irregularity identity empty; G72 supplies the frozen AAR5 identity.
+// One internal passive IRW qualification configuration. The no-irregularity
+// recipe leaves the field identity empty; the AAR5 recipe supplies it.
 // The runner selects a closed required/forbidden recipe rather than exposing
 // an arbitrary vehicle API. This type is not installed or exported.
 struct IrwQualificationRunConfiguration final {
