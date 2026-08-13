@@ -376,6 +376,45 @@ int main() {
     }
 
     {
+        // The deepest transverse station need not own the longest
+        // longitudinal chord. These two gently sloped profiles have their
+        // largest overlap at y=0, while the wheel radius grows toward +y fast
+        // enough that a shallower, non-preferred station has the longer chord.
+        // Resolving the deepest station first may establish a lower bound, but
+        // it must not turn into a midpoint-wins assumption.
+        constexpr double profile_slope = 0.05;
+        constexpr double deepest_overlap = 5.0e-5;
+        constexpr double overlap_curvature = 5.0e-5;
+        const ProfilePoints tapered_wheel =
+            Sample(ProfileRole::kWheel, "tapered_wheel", 0.05, 1001,
+                   [](double at) { return profile_slope * at; });
+        const ProfilePoints following_rail =
+            Sample(ProfileRole::kRail, "following_rail", 0.06, 1201,
+                   [](double at) {
+                       return profile_slope * at - deepest_overlap +
+                              overlap_curvature * at * at;
+                   });
+        const ContactGeometrySolver solver(
+            tapered_wheel, following_rail, WheelSide::kRight, no_preparation,
+            DefaultConfiguration());
+        ContactGeometryWorkspace workspace;
+        const ContactPatchSet patches =
+            solver.Solve(StraightDown(0.0, 0.0), workspace);
+        Require(patches.count == 1,
+                "the non-preferred-longest fixture did not make one patch");
+        if (patches.count == 1) {
+            constexpr double nominal_radius = 0.42;
+            const double deepest_station_chord =
+                2.0 * std::sqrt(2.0 * nominal_radius * deepest_overlap -
+                                deepest_overlap * deepest_overlap);
+            Require(patches.patches[0].longitudinal_length_meters >
+                        deepest_station_chord + 1.0e-6,
+                    "the deepest station was assumed to own the longest "
+                    "longitudinal chord");
+        }
+    }
+
+    {
         // PrepareWorkspace must cover a later pose whose projection is wider
         // than the authored lateral span. A modest 0.2 profile slope and
         // -0.1-radian roll make the old unrotated-span capacity allocate eight

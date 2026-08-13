@@ -319,7 +319,8 @@ class ContactGeometrySolver {
     // report the analytic baseline without a second geometry evaluation.
     [[nodiscard]] double ResolveLongitudinalLength(
         const ContactPoseScalars& pose, double lateral_offset,
-        double vertical_offset, std::span<const double> stations) const;
+        double vertical_offset, std::span<const double> stations,
+        std::size_t deepest_station) const;
 
     ContactGeometryConfiguration configuration_;
     WheelSide side_{WheelSide::kRight};

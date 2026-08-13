@@ -20,6 +20,9 @@ constexpr double kLongitudinalSearchLimit = 0.25;
 constexpr double kThreeDimensionalLongitudinalChordAbsoluteResolutionMeters =
     2.0e-8;
 constexpr int kMaximumLongitudinalBisectionCount = 36;
+// This depth controls work screening only. Every station that can still beat
+// the current longest chord continues to the 20 nm physical contract above.
+constexpr int kLongitudinalScreeningBisectionCount = 7;
 
 // Divisor floors. They exist so that a degenerate island returns a finite
 // number instead of an infinity that would propagate silently; both are far
@@ -363,7 +366,7 @@ void ContactGeometrySolver::PrepareWorkspace(
 
 double ContactGeometrySolver::ResolveLongitudinalLength(
     const ContactPoseScalars& pose, double lateral_offset, double vertical_offset,
-    std::span<const double> stations) const {
+    std::span<const double> stations, std::size_t deepest_station) const {
     const double radius = configuration_.nominal_rolling_radius_meters;
     const double yaw_tangent = std::tan(pose.yaw_radians);
     const double yaw_cosine = std::cos(pose.yaw_radians);
@@ -393,6 +396,13 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
                rail_surface_.EvaluateWithSegmentHint(lateral, rail_segment_hint);
     };
 
+    struct RootBracket final {
+        double outside_angle{0.0};
+        double inside_angle{0.0};
+        double outside_overlap{0.0};
+        int bisection_count{0};
+    };
+
     // Bisection against the sign at the outside end of the bracket. Sine is
     // 1-Lipschitz, so `|local_radius * cos(yaw)|` times the angular bracket
     // width bounds the corresponding longitudinal-coordinate width. Returning
@@ -400,34 +410,43 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
     // satisfy the 20 nm width contract, their chord therefore differs from the
     // exact chord by at most 20 nm. The former 36 iterations remain the hard
     // ceiling for the two packaged vehicles at railway scale.
-    const auto refine = [&](double station, double local_radius, double outside,
-                            double inside, double outside_overlap,
-                            std::size_t& rail_segment_hint) {
-        double low = outside;
-        double high = inside;
-        double low_value = outside_overlap;
+    const auto refine = [&](double station, double local_radius,
+                            int target_bisection_count,
+                            std::size_t& rail_segment_hint,
+                            RootBracket& bracket) {
         const double projected_local_radius =
             std::abs(yaw_cosine * local_radius);
-        for (int step = 0;
-             step < kMaximumLongitudinalBisectionCount &&
-             projected_local_radius * std::abs(high - low) >
-                 kThreeDimensionalLongitudinalChordAbsoluteResolutionMeters;
-             ++step) {
-            const double middle = 0.5 * (low + high);
+        while (bracket.bisection_count < target_bisection_count &&
+               bracket.bisection_count <
+                   kMaximumLongitudinalBisectionCount &&
+               projected_local_radius *
+                       std::abs(bracket.inside_angle - bracket.outside_angle) >
+                   kThreeDimensionalLongitudinalChordAbsoluteResolutionMeters) {
+            const double middle =
+                0.5 * (bracket.outside_angle + bracket.inside_angle);
             const double middle_value =
                 overlap_at(station, local_radius, middle, rail_segment_hint);
-            if ((middle_value > 0.0) == (low_value > 0.0)) {
-                low = middle;
-                low_value = middle_value;
+            if ((middle_value > 0.0) ==
+                (bracket.outside_overlap > 0.0)) {
+                bracket.outside_angle = middle;
+                bracket.outside_overlap = middle_value;
             } else {
-                high = middle;
+                bracket.inside_angle = middle;
             }
+            ++bracket.bisection_count;
         }
-        return 0.5 * (low + high);
     };
 
     double longest = 0.0;
-    for (const double station : stations) {
+    for (std::size_t order = 0; order < stations.size(); ++order) {
+        std::size_t station_index = deepest_station;
+        if (order != 0) {
+            station_index = order - 1;
+            if (station_index >= deepest_station) {
+                ++station_index;
+            }
+        }
+        const double station = stations[station_index];
         if (!std::isfinite(station)) {
             continue;
         }
@@ -488,12 +507,64 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
             continue;
         }
 
+        RootBracket behind_bracket{
+            behind, silhouette_angle, behind_overlap, 0};
+        RootBracket ahead_bracket{ahead, silhouette_angle, ahead_overlap, 0};
+
+        const auto chord_upper_bound = [&]() {
+            const double lower_angle = std::min(
+                std::min(behind_bracket.outside_angle,
+                         behind_bracket.inside_angle),
+                std::min(ahead_bracket.outside_angle,
+                         ahead_bracket.inside_angle));
+            const double upper_angle = std::max(
+                std::max(behind_bracket.outside_angle,
+                         behind_bracket.inside_angle),
+                std::max(ahead_bracket.outside_angle,
+                         ahead_bracket.inside_angle));
+            // Both true crossings remain inside these brackets. Since sine is
+            // 1-Lipschitz, their chord cannot exceed the projected radius
+            // times this enclosing angular span. Expand the two ordinary
+            // floating-point operations toward +infinity so a downward-rounded
+            // subtraction or multiplication cannot turn the screen into an
+            // approximate bound. This is deliberately local rather than a
+            // general interval-arithmetic facility.
+            const double upward = std::numeric_limits<double>::infinity();
+            const double angular_span =
+                std::nextafter(upper_angle - lower_angle, upward);
+            const double projected_local_radius = std::nextafter(
+                std::abs(yaw_cosine * local_radius), upward);
+            return std::nextafter(projected_local_radius * angular_span,
+                                  upward);
+        };
+
+        bool screened_out = false;
+        if (order != 0 && chord_upper_bound() <= longest) {
+            screened_out = true;
+        }
+        for (int screening_depth = 1;
+             !screened_out && order != 0 &&
+             screening_depth <= kLongitudinalScreeningBisectionCount;
+             ++screening_depth) {
+            refine(station, local_radius, screening_depth,
+                   behind_rail_segment_hint, behind_bracket);
+            refine(station, local_radius, screening_depth,
+                   ahead_rail_segment_hint, ahead_bracket);
+            screened_out = chord_upper_bound() <= longest;
+        }
+        if (screened_out) {
+            continue;
+        }
+
+        refine(station, local_radius, kMaximumLongitudinalBisectionCount,
+               behind_rail_segment_hint, behind_bracket);
+        refine(station, local_radius, kMaximumLongitudinalBisectionCount,
+               ahead_rail_segment_hint, ahead_bracket);
         const double behind_crossing =
-            refine(station, local_radius, behind, silhouette_angle,
-                   behind_overlap, behind_rail_segment_hint);
+            0.5 * (behind_bracket.outside_angle +
+                   behind_bracket.inside_angle);
         const double ahead_crossing =
-            refine(station, local_radius, ahead, silhouette_angle, ahead_overlap,
-                   ahead_rail_segment_hint);
+            0.5 * (ahead_bracket.outside_angle + ahead_bracket.inside_angle);
         // The chord is measured along the track, so the wheel-frame chord is
         // shortened by the yaw.
         const double chord =
@@ -1019,7 +1090,8 @@ ContactPatchSet ContactGeometrySolver::Solve(
 
         const double longitudinal_length = ResolveLongitudinalLength(
             pose, lateral_offset, vertical_offset,
-            std::span<const double>(quadrature_station, stations));
+            std::span<const double>(quadrature_station, stations),
+            deepest_station);
 
         ContactPatch& patch = result.patches[result.count];
         patch.common_normal_angle_radians = normal_angle;
