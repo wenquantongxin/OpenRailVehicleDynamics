@@ -447,8 +447,18 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 metadata.find(std::filesystem::canonical(argv[4]).string()) !=
                     std::string::npos,
             "the successful artifact lacks its physical input identity");
-    Require(metadata.find("\"relative_tolerance\": 1e-08") !=
+    Require(metadata.find(
+                "\"relative_tolerance\": 9.9999999999999995e-07") !=
                 std::string::npos &&
+                metadata.find(
+                    "\"generalized_position_absolute_tolerance\": "
+                    "9.9999999999999995e-08") != std::string::npos &&
+                metadata.find(
+                    "\"generalized_velocity_absolute_tolerance\": "
+                    "9.9999999999999995e-07") != std::string::npos &&
+                metadata.find(
+                    "\"series_force_absolute_tolerance_newtons\": "
+                    "0.10000000000000001") != std::string::npos &&
                 metadata.find("\"openmp_dynamic_teams_enabled\": ") !=
                     std::string::npos &&
                 metadata.find("\"contact_batch_worker_cap\": 8") !=

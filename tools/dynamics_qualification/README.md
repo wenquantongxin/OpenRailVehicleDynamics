@@ -27,7 +27,10 @@ clock over 30 s.
 
 `orvd_gz18_dynamics_qualification` retains the existing GZ18 long-window
 recipe. It requires a named track-irregularity asset and keeps the GZ18
-numerical identity independently of the IRW recipe.
+numerical identity independently of the IRW recipe. Its private execution
+identity uses relative tolerance `1e-6` and q/v/z absolute tolerances
+`1e-7 / 1e-6 / 0.1 N`; these values are qualification-tool internals, not a
+public integrator policy API.
 
 `orvd_gz18_dynamics_qualification` assembles one private GZ18 scenario and
 advances it once to the requested terminal time. Integer nanosecond sample
