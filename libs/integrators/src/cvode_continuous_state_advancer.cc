@@ -28,7 +28,7 @@ static_assert(std::is_same_v<sunindextype, std::int32_t>);
 
 constexpr int kMaximumBdfOrder = 2;
 constexpr long int kJacobianEvaluationFrequency = 51;
-constexpr long int kLinearSetupFrequency = 20;
+constexpr long int kLinearSetupFrequency = 30;
 constexpr double kMinimumDifferenceIncrementMultiplier = 1000.0;
 
 [[noreturn]] void ThrowSundialsFailure(const char* operation, int flag) {
