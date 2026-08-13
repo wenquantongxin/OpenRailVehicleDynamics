@@ -17,7 +17,9 @@ namespace {
 // beyond any real contact patch.
 constexpr double kLongitudinalSearchStep = 5.0e-4;
 constexpr double kLongitudinalSearchLimit = 0.25;
-constexpr int kLongitudinalBisections = 36;
+constexpr double kThreeDimensionalLongitudinalChordAbsoluteResolutionMeters =
+    2.0e-8;
+constexpr int kMaximumLongitudinalBisectionCount = 36;
 
 // Divisor floors. They exist so that a degenerate island returns a finite
 // number instead of an infinity that would propagate silently; both are far
@@ -391,18 +393,26 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
                rail_surface_.EvaluateWithSegmentHint(lateral, rail_segment_hint);
     };
 
-    // Bisection against the sign at the outside end of the bracket. Fixed
-    // iteration count, no early exit: the caller has already established that
-    // the two ends straddle the crossing, so there is nothing to test for and
-    // the count is chosen to reduce the bracket far below the precision the
-    // chord is used at.
+    // Bisection against the sign at the outside end of the bracket. Sine is
+    // 1-Lipschitz, so `|local_radius * cos(yaw)|` times the angular bracket
+    // width bounds the corresponding longitudinal-coordinate width. Returning
+    // each root's midpoint contributes at most half that width; when both roots
+    // satisfy the 20 nm width contract, their chord therefore differs from the
+    // exact chord by at most 20 nm. The former 36 iterations remain the hard
+    // ceiling for the two packaged vehicles at railway scale.
     const auto refine = [&](double station, double local_radius, double outside,
                             double inside, double outside_overlap,
                             std::size_t& rail_segment_hint) {
         double low = outside;
         double high = inside;
         double low_value = outside_overlap;
-        for (int step = 0; step < kLongitudinalBisections; ++step) {
+        const double projected_local_radius =
+            std::abs(yaw_cosine * local_radius);
+        for (int step = 0;
+             step < kMaximumLongitudinalBisectionCount &&
+             projected_local_radius * std::abs(high - low) >
+                 kThreeDimensionalLongitudinalChordAbsoluteResolutionMeters;
+             ++step) {
             const double middle = 0.5 * (low + high);
             const double middle_value =
                 overlap_at(station, local_radius, middle, rail_segment_hint);
@@ -647,10 +657,11 @@ ContactPatchSet ContactGeometrySolver::Solve(
     // different bins therefore cannot coincide or cross.
     //
     // This matters because everything downstream divides by the spacing between
-    // adjacent knots. Were the invariant ever broken by a change to how the
-    // envelope is emitted, the slope construction below refuses non-increasing
-    // knots outright — so the failure would be an exception naming the problem,
-    // not a silent infinity propagating into the gap function.
+    // adjacent knots. Stable bin traversal therefore constructs a strictly
+    // increasing envelope, and the direct shared-grid merge below preserves
+    // that order while removing equal nodes. The trusted slope entry relies on
+    // this construction instead of repeating the same validation on the hot
+    // path.
     workspace.envelope_size_ = envelope_size;
 
     const std::span<const double> rail_lateral = rail_side_.lateral_meters();

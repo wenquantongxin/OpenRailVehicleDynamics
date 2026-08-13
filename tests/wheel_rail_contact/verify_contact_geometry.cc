@@ -54,6 +54,18 @@ void RequireClose(double actual, double expected, double relative_tolerance,
     }
 }
 
+void RequireAbsoluteClose(double actual, double expected,
+                          double absolute_tolerance, std::string_view what) {
+    if (!(std::abs(actual - expected) <= absolute_tolerance)) {
+        std::fprintf(stderr,
+                     "contact geometry: %.*s (expected %.17g, got %.17g, "
+                     "absolute %.3g)\n",
+                     static_cast<int>(what.size()), what.data(), expected, actual,
+                     std::abs(actual - expected));
+        ++failures;
+    }
+}
+
 void RequireRefusal(const std::function<void()>& action, std::string_view fragment,
                     std::string_view what) {
     try {
@@ -234,9 +246,14 @@ int main() {
             const double expected_chord =
                 2.0 * std::sqrt(2.0 * kNominalRadius * penetration -
                                 penetration * penetration);
-            RequireClose(patch.longitudinal_length_meters, expected_chord, 1.0e-9,
-                         "the longitudinal extent is not the chord a cylinder "
-                         "cuts through a plane");
+            // The longitudinal root solve owns a 20 nm absolute chord budget.
+            // This fixture checks that physical contract against the closed
+            // form without retaining a picometre-scale historical requirement
+            // or exposing the private bisection count.
+            RequireAbsoluteClose(
+                patch.longitudinal_length_meters, expected_chord, 2.0e-8,
+                "the longitudinal extent is not the chord a cylinder cuts "
+                "through a plane");
             RequireClose(patch.vertical_penetration_meters, penetration, 1.0e-12,
                          "a flat pair does not overlap by the depth it was "
                          "pushed in");
