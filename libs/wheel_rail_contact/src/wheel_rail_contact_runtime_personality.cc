@@ -30,13 +30,11 @@ WheelRailContactRuntimePersonality::WheelRailContactRuntimePersonality(
     std::unique_ptr<WheelRailContactModel> left_model,
     WheelRailPoseConstants right_pose_constants,
     WheelRailPoseConstants left_pose_constants,
-    ProfileTrackRollTransportStrategy roll_transport_strategy,
     RailProfileOriginMode rail_profile_origin_mode)
     : right_model_(std::move(right_model)),
       left_model_(std::move(left_model)),
       right_pose_constants_(right_pose_constants),
       left_pose_constants_(left_pose_constants),
-      roll_transport_strategy_(roll_transport_strategy),
       rail_profile_origin_mode_(rail_profile_origin_mode) {
     if (right_model_ == nullptr || left_model_ == nullptr) {
         throw std::invalid_argument(

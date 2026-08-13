@@ -30,7 +30,7 @@
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/wheel_rail_contact/contact_wrench.h"
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
+#include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 #include "wheel_rail_contact/allocation_probe.h"
 
 namespace {
@@ -824,8 +824,7 @@ int main(int argc, char** argv) {
             irregularity_lateral, irregularity_vertical,
             lateral_slope * station_rate, vertical_slope * station_rate};
         WheelRailContactInput contact_input;
-        contact_input.pose =
-            BuildContactPoseScalars(constants, pose_input, {});
+        contact_input.pose = BuildContactPoseScalars(constants, pose_input);
         contact_input.rail_frame = rail_frame;
         contact_input.wheel = wheel_motion;
         orvd::wheel_rail_contact::WheelRailContactWorkspace contact_workspace;

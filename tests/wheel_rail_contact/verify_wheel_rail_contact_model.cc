@@ -27,7 +27,6 @@ using orvd::wheel_rail_contact::ContactPoseScalars;
 using orvd::wheel_rail_contact::ContactPatch;
 using orvd::wheel_rail_contact::ProfilePoints;
 using orvd::wheel_rail_contact::ProfileRole;
-using orvd::wheel_rail_contact::ProfileTrackRollTransport;
 using orvd::wheel_rail_contact::SpatialWrench;
 using orvd::wheel_rail_contact::TransportWrench;
 using orvd::wheel_rail_contact::WheelProfilePreprocessingConfiguration;
@@ -321,76 +320,6 @@ int main() {
                     "moving the wrench a metre and a half produced no moment, so "
                     "this fixture cannot tell a working transport from a "
                     "no-op");
-        }
-    }
-
-    {
-        // Where the profile/track roll correction reaches, and where it does
-        // not. Its roll offset tilts the frame the contact resolves its forces
-        // in and nothing else inside this model: the patch's shape, the point
-        // it reduces about and the relative velocity at that point are all
-        // untouched. The lateral and vertical offsets never arrive here at all
-        // — they enter the pose reduction upstream.
-        const WheelRailContactResult plain = model.Evaluate(rolling, workspace);
-        Require(plain.count == 1, "the transport fixture lost its patch");
-
-        WheelRailContactInput suppressed = rolling;
-        suppressed.roll_transport = ProfileTrackRollTransport{};
-        const WheelRailContactResult unchanged = model.Evaluate(suppressed, workspace);
-        Require(unchanged.count == plain.count &&
-                    unchanged.patches[0].wrench.rail_on_wheel.force_newtons ==
-                        plain.patches[0].wrench.rail_on_wheel.force_newtons &&
-                    unchanged.patches[0].contact_frame_angle_radians ==
-                        plain.patches[0].contact_frame_angle_radians,
-                "a suppressed roll transport is not bit-for-bit no transport");
-
-        WheelRailContactInput corrected = rolling;
-        corrected.roll_transport.roll_offset_radians = 1.5e-3;
-        corrected.roll_transport.lateral_offset_meters = 2.0e-6;
-        corrected.roll_transport.vertical_offset_meters = -3.0e-6;
-        const WheelRailContactResult tilted = model.Evaluate(corrected, workspace);
-        Require(tilted.count == 1, "the corrected transport lost its patch");
-        if (tilted.count == 1 && plain.count == 1) {
-            RequireClose(tilted.patches[0].contact_frame_angle_radians -
-                             plain.patches[0].contact_frame_angle_radians,
-                         1.5e-3, 1.0e-12,
-                         "the roll offset did not tilt the contact frame by "
-                         "itself");
-            RequireClose(tilted.patches[0].contact_frame_angle_radians,
-                         tilted.patches[0].geometry.rail_slope_angle_radians +
-                             1.5e-3,
-                         1.0e-12,
-                         "the contact frame is not the rail's slope angle plus "
-                         "the roll offset");
-            Require((tilted.patches[0].wrench.rail_on_wheel.force_newtons -
-                     plain.patches[0].wrench.rail_on_wheel.force_newtons)
-                            .cwiseAbs()
-                            .maxCoeff() > 1.0,
-                    "the roll offset did not reach the force");
-
-            // And nowhere else. The patch's shape and the point it reduces
-            // about come from the geometry, which never saw the correction.
-            Require(tilted.patches[0].wrench.contact_point_meters ==
-                        plain.patches[0].wrench.contact_point_meters,
-                    "the roll transport moved the contact point, which it must "
-                    "not — the contact-point reduction uses the raw pose");
-            Require(tilted.patches[0].geometry.rail_slope_angle_radians ==
-                            plain.patches[0].geometry.rail_slope_angle_radians &&
-                        tilted.patches[0].geometry.vertical_penetration_meters ==
-                            plain.patches[0].geometry.vertical_penetration_meters &&
-                        tilted.patches[0].geometry.arc_width_meters ==
-                            plain.patches[0].geometry.arc_width_meters,
-                    "the roll transport reached the patch's own geometry");
-            // The two translational offsets are not read here. Passing them and
-            // getting the same answer as passing only the roll is the check.
-            WheelRailContactInput roll_only = rolling;
-            roll_only.roll_transport.roll_offset_radians = 1.5e-3;
-            const WheelRailContactResult without_translation =
-                model.Evaluate(roll_only, workspace);
-            Require(without_translation.patches[0].wrench.rail_on_wheel.force_newtons ==
-                        tilted.patches[0].wrench.rail_on_wheel.force_newtons,
-                    "the transport's lateral or vertical offset reached this "
-                    "model, which only the pose reduction upstream may read");
         }
     }
 

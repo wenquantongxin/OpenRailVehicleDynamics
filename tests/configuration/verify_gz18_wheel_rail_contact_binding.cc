@@ -38,7 +38,6 @@ using orvd::configuration::StartupWheelRailBinding;
 using orvd::test::AllocationScope;
 using orvd::wheel_rail_contact::BuildContactPoseScalars;
 using orvd::wheel_rail_contact::OutsideTableRule;
-using orvd::wheel_rail_contact::ProfileTrackRollTransportPolicy;
 using orvd::wheel_rail_contact::WheelRailContactInput;
 using orvd::wheel_rail_contact::WheelRailContactResult;
 using orvd::wheel_rail_contact::WheelRailContactWorkspace;
@@ -128,7 +127,7 @@ WheelRailContactInput MakeInput(const Gz18WheelRailContact& contact,
         startup.initial_longitudinal_speed_meters_per_second;
 
     WheelRailContactInput input;
-    input.pose = BuildContactPoseScalars(constants, pose_input, {});
+    input.pose = BuildContactPoseScalars(constants, pose_input);
     input.rail_frame.origin_track_meters = Eigen::Vector3d(
         0.0, constants.rail_lateral_datum_meters,
         constants.rail_vertical_datum_meters);
@@ -202,13 +201,8 @@ void CheckPersonality(const Gz18WheelRailContact& contact,
             "the GZ18 creepage, friction or FASTSIM personality is incomplete");
     const auto& preparation =
         contact.wheel_profile_preprocessing_configuration();
-    Require(preparation.equal_arc_length_rescan_step_meters == 0.0005 &&
-                preparation.source_lateral_rediscretisation_step_meters == 0.0,
-            "the GZ18 wheel preparation is not the equal-arc rescan");
-    Require(contact.profile_track_roll_transport_strategy().policy() ==
-                ProfileTrackRollTransportPolicy::kSuppressed,
-            "GZ18 unexpectedly applies the profile/track roll transport");
-
+    Require(preparation.equal_arc_length_rescan_step_meters == 0.0005,
+            "the GZ18 wheel preparation is not the qualified equal-arc rescan");
     Require(contact.track_gauge_meters() == 1.435 &&
                 contact.gauge_measuring_depth_meters() == 0.016 &&
                 contact.pose_rail_cant_radians() ==
@@ -277,20 +271,44 @@ void CheckPersonality(const Gz18WheelRailContact& contact,
                     .wheel_lateral_datum_meters < 0.0,
             "the wheel pose constants lost their signed side identity");
 
-    const auto right_nodes = contact.model(WheelSide::kRight)
-                                 .geometry()
-                                 .wheel_node_lateral_meters();
-    const auto left_nodes = contact.model(WheelSide::kLeft)
-                                .geometry()
-                                .wheel_node_lateral_meters();
-    Require(right_nodes.size() == left_nodes.size() &&
-                right_nodes.size() > 100 && right_nodes.size() < 1000,
-            "the real wheel did not pass through equal-arc preprocessing");
+    const auto& right_geometry =
+        contact.model(WheelSide::kRight).geometry();
+    const auto& left_geometry = contact.model(WheelSide::kLeft).geometry();
+    const auto right_nodes = right_geometry.wheel_node_lateral_meters();
+    const auto left_nodes = left_geometry.wheel_node_lateral_meters();
+    Require(right_nodes.size() == 226 && left_nodes.size() == 226,
+            "the LM wheel did not retain the qualified 0.5 mm equal-arc grid");
     if (right_nodes.size() == left_nodes.size()) {
         for (std::size_t index = 0; index < right_nodes.size(); ++index) {
             Require(left_nodes[index] ==
                         -right_nodes[right_nodes.size() - 1 - index],
                     "the prepared left and right wheel nodes are not mirrors");
+        }
+    }
+
+    const auto right_stations = right_geometry.outline_station_meters();
+    const auto left_stations = left_geometry.outline_station_meters();
+    const auto right_heights = right_geometry.outline_height_meters();
+    const auto left_heights = left_geometry.outline_height_meters();
+    const auto right_slopes = right_geometry.outline_height_slope();
+    const auto left_slopes = left_geometry.outline_height_slope();
+    const bool matching_outline_sizes =
+        right_stations.size() == left_stations.size() &&
+        right_heights.size() == left_heights.size() &&
+        right_slopes.size() == left_slopes.size() &&
+        right_stations.size() == right_heights.size() &&
+        right_stations.size() == right_slopes.size();
+    Require(matching_outline_sizes,
+            "the prepared left and right wheel outlines have different sizes");
+    if (matching_outline_sizes) {
+        for (std::size_t index = 0; index < right_stations.size(); ++index) {
+            const std::size_t mirror = right_stations.size() - 1 - index;
+            RequireClose(left_stations[index], -right_stations[mirror], 1.0e-14,
+                         "the prepared wheel outline stations are not mirrors");
+            RequireClose(left_heights[index], right_heights[mirror], 1.0e-14,
+                         "the prepared wheel outline heights are not mirrors");
+            RequireClose(left_slopes[index], -right_slopes[mirror], 1.0e-12,
+                         "the prepared wheel outline slopes are not mirrors");
         }
     }
 }

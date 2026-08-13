@@ -83,33 +83,17 @@ double SafeAtan2Ratio(double numerator, double denominator) {
 }
 
 ContactPoseScalars BuildContactPoseScalars(
-    const WheelRailPoseConstants& constants, const WheelRailPoseInput& input,
-    const ProfileTrackRollTransport& transport) {
+    const WheelRailPoseConstants& constants, const WheelRailPoseInput& input) {
     const WheelsetPlacement& placement = input.placement;
     const TrackIrregularity& irregularity = input.irregularity;
-
-    // The correction enters the placement and nothing else. The comparisons are
-    // exact so that a suppressed correction is bit-for-bit no correction rather
-    // than an addition of zero, which is not the same thing for a negative zero.
-    const double lateral = transport.lateral_offset_meters == 0.0
-                               ? placement.lateral_meters
-                               : placement.lateral_meters +
-                                     transport.lateral_offset_meters;
-    const double vertical = transport.vertical_offset_meters == 0.0
-                                ? placement.vertical_meters
-                                : placement.vertical_meters +
-                                      transport.vertical_offset_meters;
-    const double roll = transport.roll_offset_radians == 0.0
-                            ? placement.roll_radians
-                            : placement.roll_radians -
-                                  transport.roll_offset_radians;
 
     // The two pair angles. The roll is a full three-dimensional extraction; the
     // yaw is not, and must not be unified with it — the yaw is the wheelset's
     // own yaw measured against the rail's actual lateral direction, which is an
     // angle of attack, not a component of the relative orientation.
     const double pair_roll = ComputePairRoll(
-        roll, placement.yaw_radians, constants.rail_roll_radians,
+        placement.roll_radians, placement.yaw_radians,
+        constants.rail_roll_radians,
         irregularity.lateral_rate_meters_per_second,
         irregularity.vertical_rate_meters_per_second,
         input.track_station_rate_meters_per_second);
@@ -140,12 +124,13 @@ ContactPoseScalars BuildContactPoseScalars(
     // lever is a piece of the wheelset and is placed by the wheelset's attitude.
     const double reach =
         std::cos(placement.yaw_radians) * constants.wheel_lateral_datum_meters;
-    const double roll_cosine = std::cos(roll);
-    const double roll_sine = std::sin(roll);
-    const double wheel_lateral = lateral + roll_cosine * reach -
+    const double roll_cosine = std::cos(placement.roll_radians);
+    const double roll_sine = std::sin(placement.roll_radians);
+    const double wheel_lateral = placement.lateral_meters + roll_cosine * reach -
                                  roll_sine * rolling_radius;
-    const double wheel_vertical = vertical + roll_sine * reach +
-                                  roll_cosine * rolling_radius;
+    const double wheel_vertical =
+        placement.vertical_meters + roll_sine * reach +
+        roll_cosine * rolling_radius;
 
     // Where the rail actually is, as opposed to where the line says it is.
     const double rail_lateral =

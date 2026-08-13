@@ -19,6 +19,7 @@
 #include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
 #include "orvd/wheel_rail_contact/contact_wrench.h"
+#include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 
 namespace orvd::forces {
 namespace {
@@ -28,7 +29,6 @@ using multibody_model::MultibodyEvaluationContext;
 using multibody_model::MultibodyModel;
 using wheel_rail_contact::BuildContactPoseScalars;
 using wheel_rail_contact::ContactPoseScalars;
-using wheel_rail_contact::ProfileTrackRollTransport;
 using wheel_rail_contact::PlaceRailProfileLongitudinalOrigin;
 using wheel_rail_contact::RailProfileFrame;
 using wheel_rail_contact::RailProfileOriginMode;
@@ -90,12 +90,12 @@ std::string SideName(WheelSide side) {
     return side == WheelSide::kRight ? "right" : "left";
 }
 
-std::array<std::uint64_t, 39> MakeContactInputKey(
+std::array<std::uint64_t, 36> MakeContactInputKey(
     const WheelRailContactInput& input) {
     // Keep this centralized list in lockstep with WheelRailContactInput and
     // its nested value types. Do not replace it with a raw comparison of
     // Eigen objects or structure padding.
-    std::array<std::uint64_t, 39> key{};
+    std::array<std::uint64_t, 36> key{};
     std::size_t slot = 0;
     const auto append = [&key, &slot](double value) {
         key[slot++] = std::bit_cast<std::uint64_t>(value);
@@ -121,9 +121,6 @@ std::array<std::uint64_t, 39> MakeContactInputKey(
         input.wheel.angular_velocity_track_radians_per_second.data(), 3);
     append(input.wheel.arc_rate_meters_per_second);
     append(input.wheel.wheel_pitch_rate_radians_per_second);
-    append(input.roll_transport.roll_offset_radians);
-    append(input.roll_transport.lateral_offset_meters);
-    append(input.roll_transport.vertical_offset_meters);
     return key;
 }
 
@@ -711,14 +708,6 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                 carrier.station_rate_meters_per_second;
         }
 
-        const ProfileTrackRollTransport roll_transport =
-            personality_->roll_transport_strategy().Compute(
-                carrier.track_origin_in_inertial_meters,
-                carrier.rotation_inertial_from_track,
-                carrier.body_origin_in_track_meters,
-                profile_track.pose().origin_in_inertial_meters(),
-                profile_track.pose().rotation_inertial_from_track());
-
         WheelRailPoseInput pose_input;
         pose_input.placement = WheelsetPlacement{
             carrier.body_origin_in_track_meters.y(),
@@ -809,14 +798,12 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                       "rail profile rotation");
 
         WheelRailContactInput input;
-        input.pose = BuildContactPoseScalars(
-            constants, pose_input, roll_transport);
+        input.pose = BuildContactPoseScalars(constants, pose_input);
         input.rail_frame = rail_frame;
         input.wheel = wheel_motion;
-        input.roll_transport = roll_transport;
         WheelRailContactForceWorkspace::InterfaceEvaluationCache& cache =
             workspace.interface_evaluation_caches_[ordinal];
-        const std::array<std::uint64_t, 39> input_key =
+        const std::array<std::uint64_t, 36> input_key =
             MakeContactInputKey(input);
         if (!cache.valid || cache.input_key != input_key) {
             WheelRailContactResult evaluated =

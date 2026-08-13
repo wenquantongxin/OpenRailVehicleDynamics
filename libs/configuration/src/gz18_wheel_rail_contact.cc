@@ -14,10 +14,8 @@ using wheel_rail_contact::CreepageConfiguration;
 using wheel_rail_contact::FrictionLaw;
 using wheel_rail_contact::NormalContactConfiguration;
 using wheel_rail_contact::OutsideTableRule;
-using wheel_rail_contact::ProfileTrackRollTransportPolicy;
 using wheel_rail_contact::RailProfileOriginMode;
 using wheel_rail_contact::TangentialContactConfiguration;
-using wheel_rail_contact::WheelProfilePreprocessingConfiguration;
 using wheel_rail_contact::WheelRailContactConfiguration;
 
 constexpr double kNominalRollingRadiusMeters = 0.42;
@@ -92,19 +90,12 @@ internal::WheelRailContactPersonalitySpecification MakeGz18Specification() {
         .wheel_profile_relative_path = kWheelProfileRelativePath,
         .rail_profile_relative_path = kRailProfileRelativePath,
         .contact_configuration = MakeGz18ContactConfiguration(),
-        .wheel_profile_preprocessing_configuration =
-            WheelProfilePreprocessingConfiguration{
-                .equal_arc_length_rescan_step_meters = 0.0005,
-                .source_lateral_rediscretisation_step_meters = 0.0,
-            },
         .track_gauge_meters = kTrackGaugeMeters,
         .gauge_measuring_depth_meters = kGaugeMeasuringDepthMeters,
         .pose_rail_cant_radians = kPoseRailCantRadians,
         .wheel_lateral_datum_magnitude_meters =
             kWheelLateralDatumMagnitudeMeters,
         .rail_profile_origin_mode = RailProfileOriginMode::kProfileCoordinate,
-        .roll_transport_policy =
-            ProfileTrackRollTransportPolicy::kSuppressed,
     };
 }
 
@@ -164,11 +155,6 @@ Gz18WheelRailContact::pose_constants(
 const wheel_rail_contact::WheelRailContactModel& Gz18WheelRailContact::model(
     wheel_rail_contact::WheelSide side) const {
     return implementation_->runtime_personality->model(side);
-}
-
-const wheel_rail_contact::ProfileTrackRollTransportStrategy&
-Gz18WheelRailContact::profile_track_roll_transport_strategy() const {
-    return implementation_->runtime_personality->roll_transport_strategy();
 }
 
 std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality>

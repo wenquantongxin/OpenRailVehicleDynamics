@@ -18,7 +18,7 @@ add_library(orvd_wheel_rail_contact STATIC
     src/normal_contact_force.cc
     src/profile_arc_length.cc
     src/profile_points.cc
-    src/profile_track_roll_transport.cc
+    src/roll_yaw_pitch.cc
     src/rail_gauge_datum.cc
     src/tangential_contact_force.cc
     src/track_irregularity_field.cc
@@ -34,8 +34,8 @@ target_include_directories(orvd_wheel_rail_contact
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
-# PUBLIC: the roll transport carries Eigen types in its interface, so a consumer
-# compiling against these headers needs Eigen's include directories.
+# PUBLIC: public wheel-rail value types and kinematic utilities carry Eigen
+# types, so a consumer compiling against these headers needs Eigen's includes.
 target_link_libraries(orvd_wheel_rail_contact PUBLIC Eigen3::Eigen)
 
 set_target_properties(orvd_wheel_rail_contact PROPERTIES

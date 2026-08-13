@@ -664,10 +664,10 @@ add_test(NAME verify_track_geometry_json_loading
              ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
              ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
 
-# G52a's profile layer: the two interpolants a surface is read through, the two
-# admitted wheel-profile preparations and their mutual exclusion, and the roll
-# transport mathematics. Every gate is a property the implementation claims, not
-# a remembered table of numbers.
+# G52a's profile layer: the two interpolants a surface is read through, the
+# qualified equal-arc wheel-profile preparation, and the shared roll-yaw-pitch
+# kinematics. Every gate is a property the implementation claims, not a
+# remembered table of numbers.
 add_executable(verify_profile_interpolants
     wheel_rail_contact/natural_cubic_spline_header_self_containment.cc
     wheel_rail_contact/monotone_cubic_interpolant_header_self_containment.cc
@@ -759,14 +759,13 @@ target_link_libraries(verify_wheel_rail_contact_model PRIVATE orvd_wheel_rail_co
 add_test(NAME verify_wheel_rail_contact_model
          COMMAND verify_wheel_rail_contact_model)
 
-add_executable(verify_profile_track_roll_transport
-    wheel_rail_contact/profile_track_roll_transport_header_self_containment.cc
-    wheel_rail_contact/verify_profile_track_roll_transport.cc)
-orvd_configure_first_party_target(verify_profile_track_roll_transport)
-target_link_libraries(verify_profile_track_roll_transport
+add_executable(verify_roll_yaw_pitch
+    wheel_rail_contact/roll_yaw_pitch_header_self_containment.cc
+    wheel_rail_contact/verify_roll_yaw_pitch.cc)
+orvd_configure_first_party_target(verify_roll_yaw_pitch)
+target_link_libraries(verify_roll_yaw_pitch
     PRIVATE orvd_wheel_rail_contact)
-add_test(NAME verify_profile_track_roll_transport
-         COMMAND verify_profile_track_roll_transport)
+add_test(NAME verify_roll_yaw_pitch COMMAND verify_roll_yaw_pitch)
 
 # The product record and the local interoperability path meet here: a profile
 # must survive a trip out to the reference format and back with its meaning
@@ -815,9 +814,8 @@ add_test(NAME verify_gz18_wheel_rail_contact_binding
              ${CMAKE_CURRENT_BINARY_DIR}/gz18-contact-fixtures)
 
 # G68 resolves the IRW logical identities to its S1002 wheel and the shared
-# UIC60 rail, checks the complete vehicle personality, then reaches a real
-# static contact and the applied roll-transport path without inventing G69's
-# independent-wheel body kinematics.
+# UIC60 rail, checks the common equal-arc personality, then reaches a real
+# static contact without inventing G69's independent-wheel body kinematics.
 add_executable(verify_irw_wheel_rail_contact_binding
     configuration/irw_wheel_rail_contact_header_self_containment.cc
     configuration/verify_irw_wheel_rail_contact_binding.cc)

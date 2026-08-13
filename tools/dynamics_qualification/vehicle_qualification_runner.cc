@@ -36,7 +36,7 @@
 #include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/track_geometry/track_geometry.h"
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
+#include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 
 namespace orvd::dynamics_qualification::internal {
 namespace {

@@ -21,7 +21,7 @@
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_model.h"
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
+#include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 
 namespace {
 

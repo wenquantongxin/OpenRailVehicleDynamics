@@ -21,6 +21,7 @@
 #include "orvd/configuration/load_wheel_drive_torque_command_conditioner.h"
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/integrators/system_continuous_state_advancer.h"
+#include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 
 namespace {
 

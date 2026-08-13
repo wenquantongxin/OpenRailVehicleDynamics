@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_model.h"
 #include "orvd/wheel_rail_contact/wheel_rail_pose.h"
 
@@ -11,9 +10,9 @@
 //
 // Asset identities, source-facing configuration and scientific inspection
 // remain the configuration layer's concern.  This narrower value owns exactly
-// the two side models and the fixed pose policies the runtime needs, so a
-// compiled force plan can own all of its dependencies without depending back
-// on configuration.
+// the two side models, fixed pose constants and rail-origin convention the
+// runtime needs, so a compiled force plan can own all of its dependencies
+// without depending back on configuration.
 
 namespace orvd::wheel_rail_contact {
 
@@ -24,7 +23,6 @@ class WheelRailContactRuntimePersonality {
         std::unique_ptr<WheelRailContactModel> left_model,
         WheelRailPoseConstants right_pose_constants,
         WheelRailPoseConstants left_pose_constants,
-        ProfileTrackRollTransportStrategy roll_transport_strategy,
         RailProfileOriginMode rail_profile_origin_mode);
 
     WheelRailContactRuntimePersonality(
@@ -44,10 +42,6 @@ class WheelRailContactRuntimePersonality {
         return side == WheelSide::kRight ? right_pose_constants_
                                          : left_pose_constants_;
     }
-    [[nodiscard]] const ProfileTrackRollTransportStrategy&
-    roll_transport_strategy() const {
-        return roll_transport_strategy_;
-    }
     [[nodiscard]] RailProfileOriginMode rail_profile_origin_mode() const {
         return rail_profile_origin_mode_;
     }
@@ -57,7 +51,6 @@ class WheelRailContactRuntimePersonality {
     std::unique_ptr<WheelRailContactModel> left_model_;
     WheelRailPoseConstants right_pose_constants_;
     WheelRailPoseConstants left_pose_constants_;
-    ProfileTrackRollTransportStrategy roll_transport_strategy_;
     RailProfileOriginMode rail_profile_origin_mode_;
 };
 

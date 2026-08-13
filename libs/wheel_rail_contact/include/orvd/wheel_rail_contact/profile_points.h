@@ -16,13 +16,12 @@
 // Two stages exist and both are real. `ProfilePoints` holds the list exactly as
 // the asset author wrote it, in the asset's own order; `SideResolvedProfile`
 // holds it mirrored for the wheel it belongs to and sorted ascending in the
-// lateral coordinate. The distinction is not bookkeeping. One preprocessing
-// strategy marches a fixed step from the authored first element, so it sees a
-// different grid depending on whether the asset was written flange-first or
-// field-first; the other runs on the physical right-hand ordering and mirrors
-// afterwards. An implementation that collapses the two stages into one gets the
-// right answer for the right wheel and a silently different left wheel, and the
-// two then stop being each other's mirror.
+// lateral coordinate. The distinction preserves asset provenance while giving
+// every interpolant the increasing abscissa it requires. Production wheel
+// preparation always resolves the physical right-hand ordering first, lays its
+// replacement grid there, and mirrors that result to the left; independently
+// preparing an already-mirrored list would shift the grid's remainder interval
+// and break the two sides' common phase.
 //
 // The coordinates are metres in the profile's own frame: lateral across the
 // track, vertical positive downward, consistent with the inertial frame this
@@ -53,10 +52,11 @@ class ProfilePoints {
    public:
     // Builds the value object from the authored point list.
     //
-    // The order is preserved exactly, including a descending list: the order is
-    // information one preprocessing strategy consumes. What is checked is that
-    // the points are usable at all — at least two of them, every coordinate
-    // finite, and a lateral coordinate that runs strictly in one direction.
+    // The authored order is preserved exactly, including a descending list;
+    // physical-right resolution normalizes it before production preprocessing.
+    // What is checked is that the points are usable at all — at least two of
+    // them, every coordinate finite, and a lateral coordinate that runs
+    // strictly in one direction.
     // Sorting a list that doubles back would turn a malformed profile into a
     // plausible but different surface; a repeated abscissa is likewise
     // ill-posed for every interpolant on this list.

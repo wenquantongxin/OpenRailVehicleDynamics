@@ -6,6 +6,5 @@
 static_assert(std::is_same_v<
               decltype(orvd::wheel_rail_contact::BuildContactPoseScalars(
                   std::declval<const orvd::wheel_rail_contact::WheelRailPoseConstants&>(),
-                  std::declval<const orvd::wheel_rail_contact::WheelRailPoseInput&>(),
-                  std::declval<const orvd::wheel_rail_contact::ProfileTrackRollTransport&>())),
+                  std::declval<const orvd::wheel_rail_contact::WheelRailPoseInput&>())),
               orvd::wheel_rail_contact::ContactPoseScalars>);

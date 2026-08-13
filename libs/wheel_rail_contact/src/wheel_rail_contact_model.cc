@@ -3,6 +3,8 @@
 #include <bit>
 #include <cstdint>
 
+#include <Eigen/Geometry>
+
 namespace orvd::wheel_rail_contact {
 namespace {
 
@@ -107,16 +109,7 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
         // One frame, built once, used by all three of the closing speed, the
         // creepages and the wrench. Building it three times is how the three
         // end up disagreeing.
-        //
-        // This is where the roll transport's offset lands, and the only place
-        // inside this model that it does. The comparison is exact so that a
-        // suppressed transport is bit-for-bit no transport rather than the
-        // addition of a zero, which is not the same thing for a negative zero.
-        const double frame_angle =
-            input.roll_transport.roll_offset_radians == 0.0
-                ? patch.rail_slope_angle_radians
-                : patch.rail_slope_angle_radians +
-                      input.roll_transport.roll_offset_radians;
+        const double frame_angle = patch.rail_slope_angle_radians;
         const ContactFrame frame = MakeContactFrame(frame_angle);
 
         NormalContactGeometry normal_geometry;

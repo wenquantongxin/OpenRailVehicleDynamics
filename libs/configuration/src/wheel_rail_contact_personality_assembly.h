@@ -5,7 +5,6 @@
 #include <string_view>
 
 #include "orvd/configuration/resolved_startup_state.h"
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
 #include "orvd/wheel_rail_contact/rail_gauge_datum.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_model.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_runtime_personality.h"
@@ -33,14 +32,11 @@ struct WheelRailContactPersonalitySpecification {
     std::string_view rail_profile_relative_path;
 
     wheel_rail_contact::WheelRailContactConfiguration contact_configuration;
-    wheel_rail_contact::WheelProfilePreprocessingConfiguration
-        wheel_profile_preprocessing_configuration;
     double track_gauge_meters;
     double gauge_measuring_depth_meters;
     double pose_rail_cant_radians;
     double wheel_lateral_datum_magnitude_meters;
     wheel_rail_contact::RailProfileOriginMode rail_profile_origin_mode;
-    wheel_rail_contact::ProfileTrackRollTransportPolicy roll_transport_policy;
 };
 
 // Everything a source-facing vehicle factory retains after resolving its

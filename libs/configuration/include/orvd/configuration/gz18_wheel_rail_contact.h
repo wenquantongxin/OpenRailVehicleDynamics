@@ -5,7 +5,6 @@
 #include <string_view>
 
 #include "orvd/configuration/resolved_startup_state.h"
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
 #include "orvd/wheel_rail_contact/rail_gauge_datum.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_model.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_runtime_personality.h"
@@ -39,9 +38,9 @@ inline constexpr std::string_view kGz18WheelRailContactStrategyIdentifier =
 // This object owns both side-specific immutable contact models and every fixed
 // value the later vehicle/track connection needs beside them. The two loaded
 // point lists need not remain alive: each model has already built and owns its
-// prepared surfaces. The identifiers, pose constants and low-level roll policy
-// do remain here because they are part of the binding, not transient loader
-// state.
+// prepared surfaces. The identifiers, pose constants, gauge data and inspected
+// contact configuration do remain here because they are part of the binding,
+// not transient loader state.
 //
 // The public configuration accessors are for scientific inspection. They
 // return const references; changing a configuration after its model was built
@@ -73,10 +72,6 @@ class Gz18WheelRailContact {
     pose_constants(wheel_rail_contact::WheelSide side) const;
     [[nodiscard]] const wheel_rail_contact::WheelRailContactModel& model(
         wheel_rail_contact::WheelSide side) const;
-    [[nodiscard]]
-    const wheel_rail_contact::ProfileTrackRollTransportStrategy&
-    profile_track_roll_transport_strategy() const;
-
    private:
     friend class AssembledVehicleContactScenario;
     friend std::unique_ptr<Gz18WheelRailContact> AssembleGz18WheelRailContact(

@@ -12,7 +12,6 @@
 #include "orvd/wheel_rail_contact/kalker_coefficient_table.h"
 #include "orvd/wheel_rail_contact/normal_contact_force.h"
 #include "orvd/wheel_rail_contact/profile_points.h"
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
 #include "orvd/wheel_rail_contact/tangential_contact_force.h"
 #include "orvd/wheel_rail_contact/wheel_profile_preprocessing.h"
 #include "orvd/wheel_rail_contact/wheel_rail_pose.h"
@@ -117,16 +116,6 @@ struct WheelRailContactInput {
     ContactPoseScalars pose;
     RailProfileFrame rail_frame;
     WheelProfileRigidMotion wheel;
-    // The profile/track roll correction, when the vehicle type applies one.
-    //
-    // Its three offsets reach exactly two places, and this is the second of
-    // them: the lateral, vertical and roll offsets all enter the pose reduction
-    // upstream of this model, and the roll offset additionally tilts the frame
-    // the contact resolves its forces in. It reaches nothing else — not the
-    // relative velocity, not the contact point, not the patch's shape. Under a
-    // suppressed policy it is three zeros and the evaluation is bit-for-bit the
-    // one without it.
-    ProfileTrackRollTransport roll_transport;
 };
 
 struct WheelRailContactPatchResult {
@@ -144,9 +133,9 @@ struct WheelRailContactPatchResult {
     double friction_coefficient{0.0};
     double approach_speed_meters_per_second{0.0};
     // The angle of the frame the creepages were resolved in and the force was
-    // written in. It is the rail's slope angle plus the roll transport's
-    // offset, and it is reported because a consumer resolving anything else
-    // into this contact's axes must use the same angle rather than rebuild it.
+    // written in. It is the rail's surface slope angle, and is reported because
+    // a consumer resolving anything else into this contact's axes must use the
+    // same angle rather than rebuild it.
     double contact_frame_angle_radians{0.0};
 };
 

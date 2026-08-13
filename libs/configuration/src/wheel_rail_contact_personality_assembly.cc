@@ -12,11 +12,19 @@ namespace {
 
 using wheel_rail_contact::ProfilePoints;
 using wheel_rail_contact::ProfileRole;
-using wheel_rail_contact::ProfileTrackRollTransportStrategy;
 using wheel_rail_contact::RailGaugeDatum;
+using wheel_rail_contact::WheelProfilePreprocessingConfiguration;
 using wheel_rail_contact::WheelRailContactModel;
 using wheel_rail_contact::WheelRailPoseConstants;
 using wheel_rail_contact::WheelSide;
+
+// The two production vehicles share one profile-grid contract. Keep its only
+// numerical parameter here, below the public configuration API and outside
+// either vehicle factory, so the grids cannot drift independently.
+constexpr WheelProfilePreprocessingConfiguration
+    kProductionWheelProfilePreprocessingConfiguration{
+        .equal_arc_length_rescan_step_meters = 0.0005,
+    };
 
 [[noreturn]] void Reject(std::string_view vehicle, const std::string& detail) {
     throw std::invalid_argument(std::string(vehicle) +
@@ -148,25 +156,23 @@ std::unique_ptr<BoundWheelRailContact> AssembleBoundWheelRailContact(
 
     auto right_model = std::make_unique<WheelRailContactModel>(
         wheel_profile, rail_profile, WheelSide::kRight,
-        specification.wheel_profile_preprocessing_configuration,
+        kProductionWheelProfilePreprocessingConfiguration,
         specification.contact_configuration);
     auto left_model = std::make_unique<WheelRailContactModel>(
         wheel_profile, rail_profile, WheelSide::kLeft,
-        specification.wheel_profile_preprocessing_configuration,
+        kProductionWheelProfilePreprocessingConfiguration,
         specification.contact_configuration);
     auto runtime_personality = std::make_unique<
         wheel_rail_contact::WheelRailContactRuntimePersonality>(
         std::move(right_model), std::move(left_model), right_pose_constants,
-        left_pose_constants,
-        ProfileTrackRollTransportStrategy{specification.roll_transport_policy},
-        specification.rail_profile_origin_mode);
+        left_pose_constants, specification.rail_profile_origin_mode);
 
     return std::make_unique<BoundWheelRailContact>(BoundWheelRailContact{
         .binding = startup_binding,
         .contact_configuration =
             std::move(specification.contact_configuration),
         .wheel_profile_preprocessing_configuration =
-            specification.wheel_profile_preprocessing_configuration,
+            kProductionWheelProfilePreprocessingConfiguration,
         .track_gauge_meters = specification.track_gauge_meters,
         .gauge_measuring_depth_meters =
             specification.gauge_measuring_depth_meters,

@@ -8,7 +8,8 @@
 #include <string_view>
 #include <vector>
 
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
+#include <Eigen/Geometry>
+
 #include "orvd/wheel_rail_contact/rail_gauge_datum.h"
 #include "orvd/wheel_rail_contact/wheel_rail_pose.h"
 
@@ -21,7 +22,6 @@ using orvd::wheel_rail_contact::RailProfileOriginMode;
 using orvd::wheel_rail_contact::BuildContactPoseScalars;
 using orvd::wheel_rail_contact::ProfilePoints;
 using orvd::wheel_rail_contact::ProfileRole;
-using orvd::wheel_rail_contact::ProfileTrackRollTransport;
 using orvd::wheel_rail_contact::RailGaugeDatum;
 using orvd::wheel_rail_contact::SafeAtan2Ratio;
 using orvd::wheel_rail_contact::TrackIrregularity;
@@ -208,8 +208,6 @@ int main() {
     constants.wheel_lateral_datum_meters = 0.7465;
     constants.nominal_rolling_radius_meters = 0.42;
 
-    const ProfileTrackRollTransport no_transport;
-
     {
         // A centred, upright, unyawed wheelset whose centre sits one nominal
         // radius above the rail datum must produce no raise and a lateral
@@ -219,7 +217,7 @@ int main() {
         centred.vertical_meters =
             constants.rail_vertical_datum_meters - constants.nominal_rolling_radius_meters;
         const ContactPoseScalars scalars =
-            BuildContactPoseScalars(constants, Running(centred), no_transport);
+            BuildContactPoseScalars(constants, Running(centred));
         Require(std::abs(scalars.roll_radians + datum.roll_radians) < 1.0e-15,
                 "an upright wheelset over a canted rail did not acquire the "
                 "cant as its pair roll");
@@ -241,50 +239,15 @@ int main() {
         WheelsetPlacement low = high;
         low.vertical_meters = -0.42 + 0.001;
         const ContactPoseScalars raised =
-            BuildContactPoseScalars(constants, Running(high), no_transport);
+            BuildContactPoseScalars(constants, Running(high));
         const ContactPoseScalars dropped =
-            BuildContactPoseScalars(constants, Running(low), no_transport);
+            BuildContactPoseScalars(constants, Running(low));
         Require(dropped.vertical_raise_meters < raised.vertical_raise_meters,
                 "moving the wheelset down did not reduce its raise above the "
                 "rail");
         Require(std::abs((raised.vertical_raise_meters -
                           dropped.vertical_raise_meters) - 0.001) < 1.0e-6,
                 "a one millimetre drop did not move the raise by one millimetre");
-    }
-
-    {
-        // The transport correction reaches the pose and nothing else here. A
-        // suppressed correction must leave the answer bit-for-bit alone.
-        WheelsetPlacement placement;
-        placement.lateral_meters = 0.002;
-        placement.vertical_meters = -0.4195;
-        placement.roll_radians = 0.001;
-        placement.yaw_radians = 0.0005;
-        const ContactPoseScalars plain =
-            BuildContactPoseScalars(constants, Running(placement), no_transport);
-
-        ProfileTrackRollTransport correction;
-        correction.roll_offset_radians = 1.0e-5;
-        correction.lateral_offset_meters = 2.0e-6;
-        correction.vertical_offset_meters = -3.0e-6;
-        const ContactPoseScalars corrected =
-            BuildContactPoseScalars(constants, Running(placement), correction);
-        Require(std::abs(corrected.roll_radians - plain.roll_radians -
-                         (-1.0e-5)) < 1.0e-15,
-                "the transport roll is not subtracted from the pair roll");
-        Require(corrected.yaw_radians == plain.yaw_radians,
-                "the transport correction reached the pair yaw");
-        Require(corrected.lateral_offset_meters != plain.lateral_offset_meters &&
-                    corrected.vertical_raise_meters != plain.vertical_raise_meters,
-                "the transport correction did not reach the two offsets");
-
-        const ContactPoseScalars suppressed =
-            BuildContactPoseScalars(constants, Running(placement), ProfileTrackRollTransport{});
-        Require(suppressed.roll_radians == plain.roll_radians &&
-                    suppressed.yaw_radians == plain.yaw_radians &&
-                    suppressed.lateral_offset_meters == plain.lateral_offset_meters &&
-                    suppressed.vertical_raise_meters == plain.vertical_raise_meters,
-                "a suppressed transport is not bit-for-bit no transport");
     }
 
     {
@@ -297,7 +260,7 @@ int main() {
         placement.roll_radians = -0.0024;
         placement.yaw_radians = 0.0011;
         const ContactPoseScalars scalars =
-            BuildContactPoseScalars(constants, Running(placement), no_transport);
+            BuildContactPoseScalars(constants, Running(placement));
         const double cosine = std::cos(scalars.roll_radians);
         const double sine = std::sin(scalars.roll_radians);
         const double lateral = scalars.lateral_offset_meters * cosine +
@@ -305,7 +268,7 @@ int main() {
         const double vertical = scalars.lateral_offset_meters * sine -
                                 scalars.vertical_raise_meters * cosine;
         const ContactPoseScalars again =
-            BuildContactPoseScalars(constants, Running(placement), no_transport);
+            BuildContactPoseScalars(constants, Running(placement));
         const double re_lateral = again.lateral_offset_meters * cosine +
                                   again.vertical_raise_meters * sine;
         Require(std::abs(lateral - re_lateral) == 0.0,
@@ -335,7 +298,7 @@ int main() {
         // to an exact comparison will be reverting a correction, not finding a
         // bug.
         const ContactPoseScalars scalars =
-            BuildContactPoseScalars(constants, Running(general), no_transport);
+            BuildContactPoseScalars(constants, Running(general));
         const double limit_roll = general.roll_radians - constants.rail_roll_radians;
         Require(std::abs(scalars.roll_radians - limit_roll) < 1.0e-15,
                 "the smooth-track pair roll is not the wheelset roll less the "
@@ -351,9 +314,9 @@ int main() {
         WheelRailPoseInput displaced = Running(general);
         displaced.irregularity.lateral_meters = 0.004;
         const ContactPoseScalars plain =
-            BuildContactPoseScalars(constants, Running(general), no_transport);
+            BuildContactPoseScalars(constants, Running(general));
         const ContactPoseScalars moved =
-            BuildContactPoseScalars(constants, displaced, no_transport);
+            BuildContactPoseScalars(constants, displaced);
         Require(std::abs((plain.lateral_offset_meters -
                           moved.lateral_offset_meters) - 0.004) < 1.0e-7,
                 "a laterally displaced rail did not move the lateral offset by "
@@ -362,7 +325,7 @@ int main() {
         WheelRailPoseInput lifted = Running(general);
         lifted.irregularity.vertical_meters = -0.002;
         const ContactPoseScalars raised =
-            BuildContactPoseScalars(constants, lifted, no_transport);
+            BuildContactPoseScalars(constants, lifted);
         Require(std::abs((raised.vertical_raise_meters -
                           plain.vertical_raise_meters) - (-0.002)) < 1.0e-7,
                 "a rail lifted by two millimetres did not reduce the raise by "
@@ -376,7 +339,7 @@ int main() {
         WheelRailPoseInput sloped = Running(general);
         sloped.irregularity.lateral_rate_meters_per_second = 0.05;
         const ContactPoseScalars slanted =
-            BuildContactPoseScalars(constants, sloped, no_transport);
+            BuildContactPoseScalars(constants, sloped);
         const double expected_correction =
             SafeAtan2Ratio(0.05,
                            sloped.track_station_rate_meters_per_second);
@@ -386,7 +349,7 @@ int main() {
                          (general.yaw_radians - expected_correction)) < 1.0e-15,
                 "the pair yaw did not lose the alignment slope angle");
         const ContactPoseScalars plain =
-            BuildContactPoseScalars(constants, Running(general), no_transport);
+            BuildContactPoseScalars(constants, Running(general));
         Require(slanted.roll_radians != plain.roll_radians,
                 "the alignment slope did not reach the pair roll, so the pair "
                 "roll is not being measured against the tangential rail frame");
@@ -399,12 +362,12 @@ int main() {
         WheelRailPoseInput graded = Running(general);
         graded.irregularity.vertical_rate_meters_per_second = 0.2;
         const ContactPoseScalars corrected =
-            BuildContactPoseScalars(constants, graded, no_transport);
+            BuildContactPoseScalars(constants, graded);
 
         WheelRailPoseConstants uncorrected_constants = constants;
         uncorrected_constants.apply_pitch_correction = false;
         const ContactPoseScalars uncorrected =
-            BuildContactPoseScalars(uncorrected_constants, graded, no_transport);
+            BuildContactPoseScalars(uncorrected_constants, graded);
         Require(corrected.vertical_raise_meters != uncorrected.vertical_raise_meters,
                 "the pitch correction did not reach the raise");
 
@@ -435,7 +398,7 @@ int main() {
         standing.track_station_rate_meters_per_second = 0.0;
         standing.irregularity.lateral_rate_meters_per_second = 0.05;
         const ContactPoseScalars still =
-            BuildContactPoseScalars(constants, standing, no_transport);
+            BuildContactPoseScalars(constants, standing);
         Require(still.yaw_radians == general.yaw_radians,
                 "a stationary wheelset was given an angle-of-attack correction "
                 "from a ratio with no denominator");
@@ -444,7 +407,7 @@ int main() {
         reversing.track_station_rate_meters_per_second =
             -16.666666666666668;
         const ContactPoseScalars backwards =
-            BuildContactPoseScalars(constants, reversing, no_transport);
+            BuildContactPoseScalars(constants, reversing);
         Require(std::abs(backwards.yaw_radians -
                          (general.yaw_radians - std::acos(-1.0))) < 1.0e-15,
                 "the documented reverse-travel trap did not fire: either the "

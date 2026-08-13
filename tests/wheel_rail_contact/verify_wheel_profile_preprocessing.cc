@@ -1,10 +1,11 @@
-// The two admitted wheel-profile preparations, their mutual exclusion, and the
-// arc-length primitive one of them is built on.
+// The equal-arc wheel-profile rescan, its authored-node limit, and the
+// arc-length primitive it is built on.
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -25,7 +26,6 @@ using orvd::wheel_rail_contact::ProfilePoints;
 using orvd::wheel_rail_contact::ProfileRole;
 using orvd::wheel_rail_contact::WheelProfileControlNodes;
 using orvd::wheel_rail_contact::WheelProfileOutline;
-using orvd::wheel_rail_contact::WheelProfilePreparation;
 using orvd::wheel_rail_contact::WheelProfilePreprocessing;
 using orvd::wheel_rail_contact::WheelProfilePreprocessingConfiguration;
 using orvd::wheel_rail_contact::WheelSide;
@@ -60,9 +60,9 @@ void RequireRefusal(const std::function<void()>& action, std::string_view fragme
 }
 
 // A synthetic wheel-shaped profile: a coned tread that turns sharply into a
-// flange. The turn is what makes the two preparations disagree — one puts more
-// points where the curve bends and the other spaces them evenly across it — so
-// a fixture without it cannot tell them apart.
+// flange. The turn makes an equal-arc rescan place more nodes where the curve
+// bends, so a fixture without it cannot prove that the grid follows curve
+// length rather than lateral distance.
 ProfilePoints MakeSyntheticWheelProfile(std::string identifier,
                                         bool authored_descending = false) {
     std::vector<double> lateral;
@@ -135,52 +135,40 @@ int main() {
 
     const WheelProfilePreprocessing plain{WheelProfilePreprocessingConfiguration{}};
     const WheelProfilePreprocessing rescanning{
-        WheelProfilePreprocessingConfiguration{0.0015, 0.0}};
-    const WheelProfilePreprocessing rediscretising{
-        WheelProfilePreprocessingConfiguration{0.0, 0.0015}};
+        WheelProfilePreprocessingConfiguration{0.0015}};
 
-    Require(plain.preparation() == WheelProfilePreparation::kAuthoredNodes &&
-                rescanning.preparation() ==
-                    WheelProfilePreparation::kEqualArcLengthRescan &&
-                rediscretising.preparation() ==
-                    WheelProfilePreparation::kSourceLateralRediscretisation,
-            "a configuration did not resolve to the preparation it selects");
-
-    // The rule that has to be enforceable rather than merely true.
-    RequireRefusal(
-        [] {
-            WheelProfilePreprocessing both{
-                WheelProfilePreprocessingConfiguration{0.001, 0.001}};
-            (void)both;
-        },
-        "at most one may be active",
-        "a configuration selecting both preparations");
+    Require(plain.step_meters() == 0.0 &&
+                rescanning.step_meters() == 0.0015,
+            "a configuration did not retain its equal-arc rescan step");
+    const WheelProfileControlNodes authored_nodes =
+        plain.LayControlNodes(wheel, WheelSide::kRight);
+    Require(authored_nodes.lateral_meters.empty() &&
+                authored_nodes.vertical_meters.empty() &&
+                authored_nodes.total_arc_length_meters == 0.0,
+            "a zero rescan step replaced the authored nodes");
     RequireRefusal(
         [] {
             WheelProfilePreprocessing negative{
-                WheelProfilePreprocessingConfiguration{-0.001, 0.0}};
+                WheelProfilePreprocessingConfiguration{-0.001}};
             (void)negative;
         },
         "not negative", "a negative rescan step");
+    RequireRefusal(
+        [] {
+            WheelProfilePreprocessing infinite{
+                WheelProfilePreprocessingConfiguration{
+                    std::numeric_limits<double>::infinity()}};
+            (void)infinite;
+        },
+        "finite", "an infinite rescan step");
 
     const WheelProfileOutline plain_outline =
         plain.SampleVisibleOutline(wheel, WheelSide::kRight, kOutlineSamples);
     const WheelProfileOutline rescan_outline =
         rescanning.SampleVisibleOutline(wheel, WheelSide::kRight, kOutlineSamples);
-    const WheelProfileOutline rediscretised_outline =
-        rediscretising.SampleVisibleOutline(wheel, WheelSide::kRight,
-                                            kOutlineSamples);
 
-    // The discriminating comparison: the two preparations produce different
-    // kinds of artefact, and the sampled outline is where they can be held
-    // against each other point by point.
-    const double between_preparations =
-        WorstOutlineDifference(rescan_outline, rediscretised_outline);
-    Require(between_preparations > 1.0e-6,
-            "the two preparations produce the same outline, so nothing in this "
-            "test can tell them apart");
-    Require(WorstOutlineDifference(plain_outline, rediscretised_outline) > 1.0e-6,
-            "the rediscretisation left the outline as the authored nodes gave it");
+    Require(WorstOutlineDifference(plain_outline, rescan_outline) > 1.0e-8,
+            "the equal-arc rescan left the authored spline unchanged");
 
     Require(rescan_outline.station_meters.front() ==
                     plain_outline.station_meters.front() &&
@@ -266,74 +254,64 @@ int main() {
     }
 
     {
-        // The rediscretisation marches from the authored first point, so which
-        // end carries the short remainder is a property of how the asset was
-        // written. Reversing the authored order must therefore move it.
+        // Authored direction is metadata, not the phase authority. Resolving
+        // both inputs to the physical right side before rescanning must make
+        // the complete replacement grid independent of input order.
         const ProfilePoints descending =
             MakeSyntheticWheelProfile("synthetic_wheel_reversed", true);
         const WheelProfileControlNodes forward =
-            rediscretising.LayControlNodes(wheel, WheelSide::kRight);
+            rescanning.LayControlNodes(wheel, WheelSide::kRight);
         const WheelProfileControlNodes backward =
-            rediscretising.LayControlNodes(descending, WheelSide::kRight);
-        Require(forward.lateral_meters.front() == backward.lateral_meters.front() &&
-                    forward.lateral_meters.back() == backward.lateral_meters.back(),
-                "reversing the authored order moved an endpoint");
-
-        const std::size_t forward_last = forward.lateral_meters.size() - 1;
-        const double forward_remainder =
-            forward.lateral_meters[forward_last] -
-            forward.lateral_meters[forward_last - 1];
-        const double backward_remainder =
-            backward.lateral_meters[1] - backward.lateral_meters[0];
-        Require(forward_remainder < 0.0015 - 1.0e-9 &&
-                    backward_remainder < 0.0015 - 1.0e-9,
-                "the fixture has no short remainder interval to place");
-        Require(std::abs(forward_remainder - backward_remainder) < 1.0e-12,
-                "the remainder changed size when the authored order was "
-                "reversed");
-        double worst = 0.0;
-        for (std::size_t node = 1; node + 1 < forward.lateral_meters.size();
-             ++node) {
-            worst = std::max(worst, std::abs(forward.lateral_meters[node] -
-                                             backward.lateral_meters[node]));
-        }
-        Require(worst > 1.0e-6,
-                "reversing the authored order left every interior node where it "
-                "was, so the march is not anchored on the authored first point");
+            rescanning.LayControlNodes(descending, WheelSide::kRight);
+        Require(forward.lateral_meters == backward.lateral_meters &&
+                    forward.vertical_meters == backward.vertical_meters &&
+                    forward.total_arc_length_meters ==
+                        backward.total_arc_length_meters,
+                "authored point order changed the physical-right rescan phase");
     }
 
     {
-        // The control polygon is a polygon: between its nodes the outline is a
-        // straight line and its slope is constant. That is the visible
-        // difference from the other two preparations, which are curves.
+        // The replacement nodes define a second natural cubic spline, not a
+        // control polygon. Rebuild that spline independently and require every
+        // published outline value and slope to come from it; then show that the
+        // curved fixture is observably different from straight interpolation
+        // between the same replacement nodes.
         const WheelProfileControlNodes nodes =
-            rediscretising.LayControlNodes(wheel, WheelSide::kRight);
-        const double first = nodes.lateral_meters[10];
-        const double second = nodes.lateral_meters[11];
-        const WheelProfileOutline dense = rediscretising.SampleVisibleOutline(
-            wheel, WheelSide::kRight, kOutlineSamples);
-        double worst_slope_spread = 0.0;
-        double reference = 0.0;
-        bool have_reference = false;
-        for (std::size_t index = 0; index < dense.station_meters.size(); ++index) {
-            const double station = dense.station_meters[index];
-            if (station <= first || station >= second) {
+            rescanning.LayControlNodes(wheel, WheelSide::kRight);
+        const NaturalCubicSpline second_pass(nodes.lateral_meters,
+                                             nodes.vertical_meters);
+        double worst_linear_difference = 0.0;
+        for (std::size_t index = 0; index < rescan_outline.station_meters.size();
+             ++index) {
+            const double station = rescan_outline.station_meters[index];
+            Require(rescan_outline.height_meters[index] ==
+                            second_pass.Evaluate(station) &&
+                        rescan_outline.height_slope[index] ==
+                            second_pass.EvaluateFirstDerivative(station),
+                    "the rescan outline did not use its second natural spline");
+            if (station <= nodes.lateral_meters.front() ||
+                station >= nodes.lateral_meters.back()) {
                 continue;
             }
-            if (!have_reference) {
-                reference = dense.height_slope[index];
-                have_reference = true;
-                continue;
-            }
-            worst_slope_spread =
-                std::max(worst_slope_spread,
-                         std::abs(dense.height_slope[index] - reference));
+            const auto upper = std::upper_bound(nodes.lateral_meters.begin(),
+                                                nodes.lateral_meters.end(),
+                                                station);
+            const std::size_t above =
+                static_cast<std::size_t>(upper - nodes.lateral_meters.begin());
+            const std::size_t below = above - 1;
+            const double parameter =
+                (station - nodes.lateral_meters[below]) /
+                (nodes.lateral_meters[above] - nodes.lateral_meters[below]);
+            const double linear =
+                nodes.vertical_meters[below] +
+                parameter * (nodes.vertical_meters[above] -
+                             nodes.vertical_meters[below]);
+            worst_linear_difference =
+                std::max(worst_linear_difference,
+                         std::abs(rescan_outline.height_meters[index] - linear));
         }
-        Require(have_reference,
-                "no outline station fell inside a control interval");
-        Require(worst_slope_spread == 0.0,
-                "the rediscretised outline's slope varies inside a control "
-                "interval, so it is not a polygon");
+        Require(worst_linear_difference > 1.0e-8,
+                "the second natural spline collapsed to a control polygon");
     }
 
     {

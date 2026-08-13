@@ -2,8 +2,8 @@
 //
 // G68 stops before the eight independent wheel bodies are connected to the
 // vehicle RHS. This gate therefore checks the closed vehicle personality, the
-// source-lateral wheel preparation, the applied roll transport and a real
-// static contact without inventing G69's axle-bridge kinematics.
+// common equal-arc wheel preparation and a real static contact without
+// inventing G69's axle-bridge kinematics.
 
 #include <cmath>
 #include <cstdio>
@@ -38,8 +38,6 @@ using orvd::configuration::StartupWheelRailBinding;
 using orvd::test::AllocationScope;
 using orvd::wheel_rail_contact::BuildContactPoseScalars;
 using orvd::wheel_rail_contact::OutsideTableRule;
-using orvd::wheel_rail_contact::ProfileTrackRollTransport;
-using orvd::wheel_rail_contact::ProfileTrackRollTransportPolicy;
 using orvd::wheel_rail_contact::WheelRailContactInput;
 using orvd::wheel_rail_contact::WheelRailContactResult;
 using orvd::wheel_rail_contact::WheelRailContactWorkspace;
@@ -113,9 +111,8 @@ void CopyAsset(const fs::path& source_root, const fs::path& destination_root,
     WriteText(destination_root / relative, text);
 }
 
-WheelRailContactInput MakeStaticInput(
-    const IrwWheelRailContact& contact, WheelSide side,
-    const ProfileTrackRollTransport& transport = {}) {
+WheelRailContactInput MakeStaticInput(const IrwWheelRailContact& contact,
+                                      WheelSide side) {
     const auto& constants = contact.pose_constants(side);
     WheelRailPoseInput pose_input;
     pose_input.placement = WheelsetPlacement{
@@ -126,7 +123,7 @@ WheelRailContactInput MakeStaticInput(
     };
 
     WheelRailContactInput input;
-    input.pose = BuildContactPoseScalars(constants, pose_input, transport);
+    input.pose = BuildContactPoseScalars(constants, pose_input);
     input.rail_frame.origin_track_meters = Eigen::Vector3d(
         0.0, constants.rail_lateral_datum_meters,
         constants.rail_vertical_datum_meters);
@@ -138,7 +135,6 @@ WheelRailContactInput MakeStaticInput(
         0.0, constants.wheel_lateral_datum_meters,
         -constants.nominal_rolling_radius_meters);
     input.wheel.rotation_track_from_profile = Eigen::Matrix3d::Identity();
-    input.roll_transport = transport;
     return input;
 }
 
@@ -192,13 +188,8 @@ void CheckPersonality(const IrwWheelRailContact& contact,
 
     const auto& preparation =
         contact.wheel_profile_preprocessing_configuration();
-    Require(preparation.equal_arc_length_rescan_step_meters == 0.0 &&
-                preparation.source_lateral_rediscretisation_step_meters ==
-                    0.0001,
-            "IRW did not select source-lateral wheel rediscretisation");
-    Require(contact.profile_track_roll_transport_strategy().policy() ==
-                ProfileTrackRollTransportPolicy::kApplied,
-            "IRW did not bind the applied profile/track roll transport");
+    Require(preparation.equal_arc_length_rescan_step_meters == 0.0005,
+            "IRW did not select the qualified equal-arc wheel rescan");
     Require(contact.track_gauge_meters() == 1.435 &&
                 contact.gauge_measuring_depth_meters() == 0.016 &&
                 contact.pose_rail_cant_radians() == 0.02499479361892016,
@@ -212,30 +203,51 @@ void CheckPersonality(const IrwWheelRailContact& contact,
                     orvd::configuration::kIrwWheelProfileIdentifier,
             "the installed S1002 asset did not retain its 1000-point identity");
 
-    const auto right_nodes = contact.model(WheelSide::kRight)
-                                 .geometry()
-                                 .wheel_node_lateral_meters();
-    const auto left_nodes = contact.model(WheelSide::kLeft)
-                                .geometry()
-                                .wheel_node_lateral_meters();
-    Require(right_nodes.size() == 1300 && left_nodes.size() == 1300,
-            "the S1002 source-lateral march did not lay 1300 control nodes");
-    if (right_nodes.size() == 1300 && left_nodes.size() == 1300) {
+    const auto& right_geometry =
+        contact.model(WheelSide::kRight).geometry();
+    const auto& left_geometry = contact.model(WheelSide::kLeft).geometry();
+    const auto right_nodes = right_geometry.wheel_node_lateral_meters();
+    const auto left_nodes = left_geometry.wheel_node_lateral_meters();
+    const bool has_expected_equal_arc_nodes =
+        right_nodes.size() == 304 && left_nodes.size() == 304;
+    Require(has_expected_equal_arc_nodes,
+            "the S1002 wheel did not retain the qualified 0.5 mm equal-arc grid");
+    if (has_expected_equal_arc_nodes) {
         Require(right_nodes.front() == -0.069870003 &&
                     right_nodes.back() == 0.059999999 &&
                     left_nodes.front() == -0.059999999 &&
                     left_nodes.back() == 0.069870003,
-                "the source-lateral march lost the authored endpoints");
-        RequireClose(right_nodes.back() - right_nodes[1298], 0.000070002,
-                     1.0e-15,
-                     "the right wheel lost the authored-end remainder");
-        RequireClose(left_nodes[1] - left_nodes.front(), 0.000070002,
-                     1.0e-15,
-                     "the left wheel did not mirror the remainder end");
+                "the equal-arc rescan lost the authored endpoints");
         for (std::size_t index = 0; index < right_nodes.size(); ++index) {
             Require(left_nodes[index] ==
                         -right_nodes[right_nodes.size() - 1 - index],
                     "the prepared left and right S1002 nodes are not mirrors");
+        }
+    }
+
+    const auto right_stations = right_geometry.outline_station_meters();
+    const auto left_stations = left_geometry.outline_station_meters();
+    const auto right_heights = right_geometry.outline_height_meters();
+    const auto left_heights = left_geometry.outline_height_meters();
+    const auto right_slopes = right_geometry.outline_height_slope();
+    const auto left_slopes = left_geometry.outline_height_slope();
+    const bool matching_outline_sizes =
+        right_stations.size() == left_stations.size() &&
+        right_heights.size() == left_heights.size() &&
+        right_slopes.size() == left_slopes.size() &&
+        right_stations.size() == right_heights.size() &&
+        right_stations.size() == right_slopes.size();
+    Require(matching_outline_sizes,
+            "the prepared left and right S1002 outlines have different sizes");
+    if (matching_outline_sizes) {
+        for (std::size_t index = 0; index < right_stations.size(); ++index) {
+            const std::size_t mirror = right_stations.size() - 1 - index;
+            RequireClose(left_stations[index], -right_stations[mirror], 1.0e-14,
+                         "the S1002 outline stations are not mirrors");
+            RequireClose(left_heights[index], right_heights[mirror], 1.0e-14,
+                         "the S1002 outline heights are not mirrors");
+            RequireClose(left_slopes[index], -right_slopes[mirror], 1.0e-12,
+                         "the S1002 outline slopes are not mirrors");
         }
     }
 
@@ -264,7 +276,7 @@ WheelRailContactResult EvaluatePrepared(const IrwWheelRailContact& contact,
     return result;
 }
 
-void CheckRealEvaluationAndTransport(const IrwWheelRailContact& contact) {
+void CheckRealEvaluation(const IrwWheelRailContact& contact) {
     std::size_t allocations = 0;
     const auto right = EvaluatePrepared(
         contact, WheelSide::kRight,
@@ -290,40 +302,6 @@ void CheckRealEvaluationAndTransport(const IrwWheelRailContact& contact) {
                      "the static left/right normal forces are not mirrors");
     }
 
-    const Eigen::Vector3d shared_origin(1000.0, 20.0, 3.0);
-    const Eigen::Matrix3d shared_rotation = Eigen::Matrix3d::Identity();
-    const Eigen::Vector3d body_in_shared(0.03, 0.001, -0.43);
-    const Eigen::Vector3d profile_origin =
-        shared_origin + Eigen::Vector3d(0.03, 0.0, 0.0);
-    const Eigen::Matrix3d profile_rotation =
-        Eigen::AngleAxisd(2.0e-5, Eigen::Vector3d::UnitX())
-            .toRotationMatrix();
-    const ProfileTrackRollTransport correction =
-        contact.profile_track_roll_transport_strategy().Compute(
-            shared_origin, shared_rotation, body_in_shared, profile_origin,
-            profile_rotation);
-    Require(correction.roll_offset_radians != 0.0 &&
-                correction.lateral_offset_meters != 0.0 &&
-                correction.vertical_offset_meters != 0.0,
-            "the bound applied transport produced a degenerate correction");
-
-    allocations = 0;
-    const auto transported = EvaluatePrepared(
-        contact, WheelSide::kRight,
-        MakeStaticInput(contact, WheelSide::kRight, correction), &allocations);
-    Require(allocations == 0,
-            "the applied-transport contact path called ordinary C++ new");
-    Require(transported.count == 1 && right.count == 1,
-            "the small physical roll transport lost the real contact");
-    if (transported.count == 1 && right.count == 1) {
-        Require(transported.patches[0].contact_frame_angle_radians !=
-                    right.patches[0].contact_frame_angle_radians,
-                "the IRW roll transport did not reach the contact frame");
-        Require(transported.patches[0]
-                    .wrench.rail_on_wheel.force_newtons !=
-                    right.patches[0].wrench.rail_on_wheel.force_newtons,
-                "the IRW roll transport did not reach the real contact result");
-    }
 }
 
 void CheckIdentityRefusals(const fs::path& data_root,
@@ -414,7 +392,7 @@ int main(int argc, char* argv[]) {
             data_root, startup.wheel_rail_binding,
             startup.rail_profile_reference_vertical_offset_meters);
         CheckPersonality(*contact, startup, data_root);
-        CheckRealEvaluationAndTransport(*contact);
+        CheckRealEvaluation(*contact);
         CheckIdentityRefusals(data_root, startup, argv[3]);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "IRW contact binding threw: %s\n", error.what());

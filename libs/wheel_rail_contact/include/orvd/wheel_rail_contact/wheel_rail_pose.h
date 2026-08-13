@@ -1,6 +1,7 @@
 #pragma once
 
-#include "orvd/wheel_rail_contact/profile_track_roll_transport.h"
+#include <Eigen/Core>
+
 #include "orvd/wheel_rail_contact/rail_gauge_datum.h"
 
 // Where one wheel sits relative to one rail, reduced to the four numbers the
@@ -47,8 +48,8 @@
 // What this scalar reduction does NOT carry is the rail profile's own rigid
 // transform, the effective station the sample is taken at, or material-point
 // relative velocity. The force plan forms the first two alongside this input;
-// the active GZ18 rigid-profile personality keeps rail material velocity zero
-// and supplies the wheel's genuine rigid-point velocity directly to the contact
+// both production contact personalities keep rail material velocity zero
+// and supply the wheel's genuine rigid-point velocity directly to the contact
 // model rather than re-deriving it from these four scalars.
 
 namespace orvd::wheel_rail_contact {
@@ -163,14 +164,8 @@ struct ContactPoseScalars {
 
 // Reduces the placement to the four scalars.
 //
-// `transport` is the profile/track roll correction from the layer above; under
-// a suppressed policy it is three zeros and the reduction is unaffected, which
-// is checked by comparison rather than asserted. It enters here and at the
-// rail-side contact angle, and nowhere else.
-//
 // Throws nothing and allocates nothing.
 [[nodiscard]] ContactPoseScalars BuildContactPoseScalars(
-    const WheelRailPoseConstants& constants, const WheelRailPoseInput& input,
-    const ProfileTrackRollTransport& transport);
+    const WheelRailPoseConstants& constants, const WheelRailPoseInput& input);
 
 }  // namespace orvd::wheel_rail_contact
