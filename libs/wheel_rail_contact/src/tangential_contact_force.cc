@@ -285,9 +285,11 @@ TangentialContactResult TangentialContactSolver::Solve(
             stress_longitudinal = 0.0;
             stress_lateral = 0.0;
             if (limit > 0.0) {
-                const double trial_magnitude =
-                    std::hypot(trial_longitudinal, trial_lateral);
-                if (trial_magnitude <= limit) {
+                const double trial_squared =
+                    trial_longitudinal * trial_longitudinal +
+                    trial_lateral * trial_lateral;
+                const double limit_squared = limit * limit;
+                if (trial_squared <= limit_squared) {
                     // Still adhering: the surfaces have not yet slipped here.
                     stress_longitudinal = trial_longitudinal;
                     stress_lateral = trial_lateral;
@@ -297,7 +299,12 @@ TangentialContactResult TangentialContactSolver::Solve(
                     // not a per-component clamp — clamping each component
                     // separately would let the magnitude exceed the limit by up
                     // to a factor of the square root of two.
-                    const double scale = limit / trial_magnitude;
+                    // Compare squares first so an adhering cell does not pay
+                    // for a square root. This solver consumes finite
+                    // railway-scale stresses and limits; the overflow handling
+                    // of a general-purpose hypot is not part of this qualified
+                    // path.
+                    const double scale = limit / std::sqrt(trial_squared);
                     stress_longitudinal = trial_longitudinal * scale;
                     stress_lateral = trial_lateral * scale;
                 }
