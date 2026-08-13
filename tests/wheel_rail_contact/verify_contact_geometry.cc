@@ -131,6 +131,45 @@ ContactPoseScalars StraightDown(double lateral, double penetration) {
 
 int main() {
     const WheelProfilePreprocessingConfiguration no_preparation;
+
+    {
+        // The outward root search admits an angular bracket no wider than
+        // 0.25 rad, so its largest bisection half-width is 0.125 rad. Check the
+        // local mathematical contract of the even polynomial used to
+        // normalize the sum of the two endpoint direction vectors. This does
+        // not duplicate the root solver or compare it with a retained old
+        // implementation.
+        constexpr double half_width = 0.125;
+        constexpr double center_angle = 0.37;
+        const double half_width_squared = half_width * half_width;
+        const double approximate_inverse_norm =
+            0.5 *
+            (1.0 +
+             half_width_squared *
+                 (0.5 +
+                  half_width_squared *
+                      (5.0 / 24.0 +
+                       half_width_squared *
+                           (61.0 / 720.0 +
+                            half_width_squared * (1385.0 / 40320.0)))));
+        const double exact_inverse_norm = 1.0 / (2.0 * std::cos(half_width));
+        Require(std::abs(exact_inverse_norm - approximate_inverse_norm) <
+                    6.6e-12,
+                "the midpoint normalization polynomial exceeded its local "
+                "absolute error bound");
+        const double outside_angle = center_angle - half_width;
+        const double inside_angle = center_angle + half_width;
+        const double midpoint_sine =
+            (std::sin(outside_angle) + std::sin(inside_angle)) *
+            approximate_inverse_norm;
+        const double midpoint_cosine =
+            (std::cos(outside_angle) + std::cos(inside_angle)) *
+            approximate_inverse_norm;
+        Require(1.0 - std::hypot(midpoint_sine, midpoint_cosine) < 1.30e-11,
+                "the midpoint direction exceeded its local relative norm "
+                "shortfall bound");
+    }
+
     // A wheel with no profile at all: a plain cylinder. Its silhouette is
     // exactly its own profile, so every projection step can be checked against
     // arithmetic instead of against another interpolant.

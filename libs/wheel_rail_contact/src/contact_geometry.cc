@@ -380,13 +380,21 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
     std::size_t ahead_rail_segment_hint =
         std::numeric_limits<std::size_t>::max();
 
+    struct AngularEvaluation final {
+        double angle{0.0};
+        double sine{0.0};
+        double cosine{1.0};
+        double overlap{0.0};
+    };
+
     // The same vertical measure the envelope produced, but with the wheel's
     // circumferential angle restored as a free variable instead of fixed at the
     // silhouette. Positive means the wheel's surface is inside the rail.
-    const auto overlap_at = [&](double station, double local_radius, double angle,
-                                std::size_t& rail_segment_hint) {
-        const double wheel_x = local_radius * std::sin(angle);
-        const double wheel_z = local_radius * std::cos(angle) - radius;
+    const auto overlap_from_trigonometry =
+        [&](double station, double local_radius, double angle_sine,
+            double angle_cosine, std::size_t& rail_segment_hint) {
+        const double wheel_x = local_radius * angle_sine;
+        const double wheel_z = local_radius * angle_cosine - radius;
         const double yawed_lateral = yaw_sine * wheel_x + yaw_cosine * station;
         const double lateral =
             roll_cosine * yawed_lateral - roll_sine * wheel_z + lateral_offset;
@@ -396,10 +404,23 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
                rail_surface_.EvaluateWithSegmentHint(lateral, rail_segment_hint);
     };
 
+    // Silhouette and outward-search points retain their native angle and
+    // standard-library trigonometry. Only bisection midpoints use the bounded
+    // polynomial normalization below.
+    const auto evaluate_native = [&](double station, double local_radius,
+                                     double angle,
+                                     std::size_t& rail_segment_hint) {
+        AngularEvaluation evaluation{
+            angle, std::sin(angle), std::cos(angle), 0.0};
+        evaluation.overlap = overlap_from_trigonometry(
+            station, local_radius, evaluation.sine, evaluation.cosine,
+            rail_segment_hint);
+        return evaluation;
+    };
+
     struct RootBracket final {
-        double outside_angle{0.0};
-        double inside_angle{0.0};
-        double outside_overlap{0.0};
+        AngularEvaluation outside;
+        AngularEvaluation inside;
         int bisection_count{0};
     };
 
@@ -420,18 +441,43 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
                bracket.bisection_count <
                    kMaximumLongitudinalBisectionCount &&
                projected_local_radius *
-                       std::abs(bracket.inside_angle - bracket.outside_angle) >
+                       std::abs(bracket.inside.angle - bracket.outside.angle) >
                    kThreeDimensionalLongitudinalChordAbsoluteResolutionMeters) {
-            const double middle =
-                0.5 * (bracket.outside_angle + bracket.inside_angle);
-            const double middle_value =
-                overlap_at(station, local_radius, middle, rail_segment_hint);
-            if ((middle_value > 0.0) ==
-                (bracket.outside_overlap > 0.0)) {
-                bracket.outside_angle = middle;
-                bracket.outside_overlap = middle_value;
+            const double sine_sum = bracket.outside.sine + bracket.inside.sine;
+            const double cosine_sum =
+                bracket.outside.cosine + bracket.inside.cosine;
+            const double half_width =
+                0.5 * (bracket.inside.angle - bracket.outside.angle);
+            const double half_width_squared = half_width * half_width;
+            // The endpoint-vector norm is 2*cos(half_width). On
+            // |half_width| <= 0.125 rad, this even polynomial approximates its
+            // reciprocal with absolute error below 6.6e-12; the resulting
+            // midpoint direction has a relative norm shortfall of about
+            // 1.30e-11 at the endpoint. This is only a local analytic bound:
+            // approximate endpoints are used recursively and an overlap near
+            // zero can still change one bisection branch, so this remains a
+            // qualified numerical candidate rather than a bitwise rewrite.
+            const double inverse_norm =
+                0.5 *
+                (1.0 +
+                 half_width_squared *
+                     (0.5 +
+                      half_width_squared *
+                          (5.0 / 24.0 +
+                           half_width_squared *
+                               (61.0 / 720.0 +
+                                half_width_squared * (1385.0 / 40320.0)))));
+            AngularEvaluation middle{
+                0.5 * (bracket.outside.angle + bracket.inside.angle),
+                sine_sum * inverse_norm, cosine_sum * inverse_norm, 0.0};
+            middle.overlap = overlap_from_trigonometry(
+                station, local_radius, middle.sine, middle.cosine,
+                rail_segment_hint);
+            if ((middle.overlap > 0.0) ==
+                (bracket.outside.overlap > 0.0)) {
+                bracket.outside = middle;
             } else {
-                bracket.inside_angle = middle;
+                bracket.inside = middle;
             }
             ++bracket.bisection_count;
         }
@@ -460,9 +506,10 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
         const double silhouette_sine = Clamp(
             -yaw_tangent * wheel_sample.first_derivative, -1.0, 1.0);
         const double silhouette_angle = std::asin(silhouette_sine);
-        const double silhouette_overlap = overlap_at(
+        const AngularEvaluation silhouette = evaluate_native(
             station, local_radius, silhouette_angle,
             silhouette_rail_segment_hint);
+        const double silhouette_overlap = silhouette.overlap;
         // The envelope said this station penetrates; the exact circle can
         // disagree, because the envelope reads a shape-preserving fit of a
         // projection while this reads the surface itself. When it disagrees the
@@ -478,22 +525,20 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
                      std::sqrt(2.0 * silhouette_overlap / local_radius));
         bool bracketed_behind = false;
         bool bracketed_ahead = false;
-        double behind = silhouette_angle;
-        double ahead = silhouette_angle;
-        double behind_overlap = silhouette_overlap;
-        double ahead_overlap = silhouette_overlap;
+        AngularEvaluation behind = silhouette;
+        AngularEvaluation ahead = silhouette;
         while (offset <= kLongitudinalSearchLimit * (1.0 + 1.0e-12)) {
             if (!bracketed_behind) {
-                behind = silhouette_angle - offset;
-                behind_overlap = overlap_at(station, local_radius, behind,
-                                            behind_rail_segment_hint);
-                bracketed_behind = behind_overlap <= 0.0;
+                behind = evaluate_native(station, local_radius,
+                                         silhouette_angle - offset,
+                                         behind_rail_segment_hint);
+                bracketed_behind = behind.overlap <= 0.0;
             }
             if (!bracketed_ahead) {
-                ahead = silhouette_angle + offset;
-                ahead_overlap = overlap_at(station, local_radius, ahead,
-                                           ahead_rail_segment_hint);
-                bracketed_ahead = ahead_overlap <= 0.0;
+                ahead = evaluate_native(station, local_radius,
+                                        silhouette_angle + offset,
+                                        ahead_rail_segment_hint);
+                bracketed_ahead = ahead.overlap <= 0.0;
             }
             if (bracketed_behind && bracketed_ahead) {
                 break;
@@ -507,21 +552,20 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
             continue;
         }
 
-        RootBracket behind_bracket{
-            behind, silhouette_angle, behind_overlap, 0};
-        RootBracket ahead_bracket{ahead, silhouette_angle, ahead_overlap, 0};
+        RootBracket behind_bracket{behind, silhouette, 0};
+        RootBracket ahead_bracket{ahead, silhouette, 0};
 
         const auto chord_upper_bound = [&]() {
             const double lower_angle = std::min(
-                std::min(behind_bracket.outside_angle,
-                         behind_bracket.inside_angle),
-                std::min(ahead_bracket.outside_angle,
-                         ahead_bracket.inside_angle));
+                std::min(behind_bracket.outside.angle,
+                         behind_bracket.inside.angle),
+                std::min(ahead_bracket.outside.angle,
+                         ahead_bracket.inside.angle));
             const double upper_angle = std::max(
-                std::max(behind_bracket.outside_angle,
-                         behind_bracket.inside_angle),
-                std::max(ahead_bracket.outside_angle,
-                         ahead_bracket.inside_angle));
+                std::max(behind_bracket.outside.angle,
+                         behind_bracket.inside.angle),
+                std::max(ahead_bracket.outside.angle,
+                         ahead_bracket.inside.angle));
             // Both true crossings remain inside these brackets. Since sine is
             // 1-Lipschitz, their chord cannot exceed the projected radius
             // times this enclosing angular span. Expand the two ordinary
@@ -561,10 +605,10 @@ double ContactGeometrySolver::ResolveLongitudinalLength(
         refine(station, local_radius, kMaximumLongitudinalBisectionCount,
                ahead_rail_segment_hint, ahead_bracket);
         const double behind_crossing =
-            0.5 * (behind_bracket.outside_angle +
-                   behind_bracket.inside_angle);
+            0.5 * (behind_bracket.outside.angle +
+                   behind_bracket.inside.angle);
         const double ahead_crossing =
-            0.5 * (ahead_bracket.outside_angle + ahead_bracket.inside_angle);
+            0.5 * (ahead_bracket.outside.angle + ahead_bracket.inside.angle);
         // The chord is measured along the track, so the wheel-frame chord is
         // shortened by the yaw.
         const double chord =
