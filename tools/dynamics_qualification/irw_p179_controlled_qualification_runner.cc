@@ -174,18 +174,19 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 
 [[nodiscard]] integrators::ContinuousStateErrorTolerances MakeTolerances(
     const configuration::AssembledVehicleSystem& assembled) {
+    constexpr auto& recipe = internal::kIrwP179ControlledIntegrationRecipe;
     const auto& system = assembled.system();
     Eigen::VectorXd absolute = Eigen::VectorXd::Constant(
         system.continuous_state_size(),
-        internal::kIrwVelocityAbsoluteTolerance);
+        recipe.velocity_absolute_tolerance);
     const auto q = system.generalized_positions_state_range();
     const auto z = system.series_spring_damper_force_state_range();
     absolute.segment(q.start(), q.size())
-        .setConstant(internal::kIrwPositionAbsoluteTolerance);
+        .setConstant(recipe.position_absolute_tolerance);
     absolute.segment(z.start(), z.size())
-        .setConstant(internal::kIrwSeriesForceAbsoluteToleranceNewtons);
+        .setConstant(recipe.series_force_absolute_tolerance_newtons);
     return integrators::ContinuousStateErrorTolerances(
-        internal::kIrwRelativeTolerance, std::move(absolute));
+        recipe.relative_tolerance, std::move(absolute));
 }
 
 void AccumulateStatistics(
@@ -675,6 +676,7 @@ void WriteMetadata(
     const IrwP179ControlledQualificationSummary& summary,
     std::string_view controller_identifier,
     std::string_view conditioner_identifier) {
+    constexpr auto& recipe = internal::kIrwP179ControlledIntegrationRecipe;
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
@@ -753,12 +755,12 @@ void WriteMetadata(
            << ", \"active_torque_body_wrench_count\": "
            << assembled.active_torque_plan()->body_wrench_count() << "},\n"
            << "  \"numerical_tolerances\": {\"relative\": "
-           << internal::kIrwRelativeTolerance << ", \"q_absolute\": "
-           << internal::kIrwPositionAbsoluteTolerance
+           << recipe.relative_tolerance << ", \"q_absolute\": "
+           << recipe.position_absolute_tolerance
            << ", \"v_absolute\": "
-           << internal::kIrwVelocityAbsoluteTolerance
+           << recipe.velocity_absolute_tolerance
            << ", \"z_absolute_newtons\": "
-           << internal::kIrwSeriesForceAbsoluteToleranceNewtons << "},\n"
+           << recipe.series_force_absolute_tolerance_newtons << "},\n"
            << "  \"input_paths\": {\n"
            << "    \"vehicle_definition\": "
            << JsonString(configuration.vehicle_definition_path.string())

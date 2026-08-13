@@ -305,6 +305,22 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                 "\"irw_r300_aar5_reference_irregularity\"") !=
                 std::string::npos,
             "the IRW AAR5 identity did not reach the qualification artifact");
+    Require(aar5_metadata.find(
+                "\"relative_tolerance\": 9.9999999999999995e-08") !=
+                    std::string::npos &&
+                aar5_metadata.find(
+                    "\"generalized_position_absolute_tolerance\": "
+                    "9.9999999999999995e-08") != std::string::npos &&
+                aar5_metadata.find(
+                    "\"generalized_velocity_absolute_tolerance\": "
+                    "9.9999999999999995e-07") != std::string::npos &&
+                aar5_metadata.find(
+                    "\"series_force_absolute_tolerance_newtons\": "
+                    "1.0000000000000001e-05") != std::string::npos &&
+                aar5_metadata.find("\"local_sample_refinement\": null") !=
+                    std::string::npos,
+            "the frozen IRW B-layer tolerance or uniform-clock identity is "
+            "absent");
     configuration.output_directory = root / "empty-irregularity";
     configuration.track_irregularity_identifier = "";
     Require(Throws([&] { (void)RunIrwQualification(configuration); }),

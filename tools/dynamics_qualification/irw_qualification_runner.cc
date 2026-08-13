@@ -9,10 +9,13 @@ namespace {
 constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe{
     "IRW",
     {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwRelativeTolerance,
-    internal::kIrwPositionAbsoluteTolerance,
-    internal::kIrwVelocityAbsoluteTolerance,
-    internal::kIrwSeriesForceAbsoluteToleranceNewtons,
+    internal::kIrwNoIrregularityPassiveIntegrationRecipe.relative_tolerance,
+    internal::kIrwNoIrregularityPassiveIntegrationRecipe
+        .position_absolute_tolerance,
+    internal::kIrwNoIrregularityPassiveIntegrationRecipe
+        .velocity_absolute_tolerance,
+    internal::kIrwNoIrregularityPassiveIntegrationRecipe
+        .series_force_absolute_tolerance_newtons,
     81,
     74,
     2,
@@ -23,10 +26,13 @@ constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe{
 constexpr internal::VehicleQualificationRecipe kAar5Recipe{
     "IRW",
     {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwRelativeTolerance,
-    internal::kIrwPositionAbsoluteTolerance,
-    internal::kIrwVelocityAbsoluteTolerance,
-    internal::kIrwSeriesForceAbsoluteToleranceNewtons,
+    internal::kIrwR300Aar5PassiveIntegrationRecipe.relative_tolerance,
+    internal::kIrwR300Aar5PassiveIntegrationRecipe
+        .position_absolute_tolerance,
+    internal::kIrwR300Aar5PassiveIntegrationRecipe
+        .velocity_absolute_tolerance,
+    internal::kIrwR300Aar5PassiveIntegrationRecipe
+        .series_force_absolute_tolerance_newtons,
     81,
     74,
     2,
@@ -48,7 +54,7 @@ QualificationRunSummary RunIrwQualification(
             input.output_directory,
             input.duration_nanoseconds,
             input.sample_period_nanoseconds,
-            input.local_sample_refinement},
+            std::nullopt},
         input.track_irregularity_identifier.has_value() ? kAar5Recipe
                                                         : kNoIrregularityRecipe);
 }
