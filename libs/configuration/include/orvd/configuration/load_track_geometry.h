@@ -17,7 +17,8 @@ namespace orvd::configuration {
 //
 // Throws std::runtime_error when the file cannot be read. Throws
 // std::invalid_argument for invalid JSON or configuration, including the domain
-// errors reported directly by TrackScalarProfile and TrackGeometry.
+// errors reported directly by TrackScalarProfile, TrackVerticalProfile and
+// TrackGeometry.
 [[nodiscard]] track_geometry::TrackGeometry LoadTrackGeometryFromJsonFile(
     const std::filesystem::path& configuration_path);
 

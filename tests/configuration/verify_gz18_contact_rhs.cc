@@ -50,6 +50,7 @@ using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackScalarSegmentShape;
 using orvd::track_geometry::TrackStationRegion;
+using orvd::track_geometry::TrackVerticalProfile;
 
 int failures = 0;
 
@@ -91,11 +92,20 @@ TrackScalarProfile ConstantProfile(double length_meters, double value) {
         {});
 }
 
+TrackVerticalProfile ConstantVerticalProfile(double length_meters,
+                                             double grade) {
+    return TrackVerticalProfile(
+        0.0,
+        {orvd::track_geometry::ConstantGradeSegment{length_meters, grade}},
+        {});
+}
+
 TrackGeometry MakeConstantGradeLine(double grade) {
     constexpr double kLengthMeters = 2000.0;
     return TrackGeometry(ConstantProfile(kLengthMeters, 0.0),
                          ConstantProfile(kLengthMeters, 0.0),
-                         ConstantProfile(kLengthMeters, grade), 1.5, 0.5);
+                         ConstantVerticalProfile(kLengthMeters, grade), 1.5,
+                         0.5);
 }
 
 bool SameWrenchComponents(const AppliedBodyWrench& actual,

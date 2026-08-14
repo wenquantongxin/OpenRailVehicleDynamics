@@ -53,12 +53,12 @@ void RequireFinitePositive(double value, const char* what) {
 
 TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
                              TrackScalarProfile superelevation_meters,
-                             TrackScalarProfile centerline_upward_grade,
+                             TrackVerticalProfile vertical_profile,
                              double superelevation_reference_baselength_meters,
                              double station_node_spacing_meters)
     : curvature_(std::move(curvature_radians_per_meter)),
       superelevation_(std::move(superelevation_meters)),
-      grade_(std::move(centerline_upward_grade)),
+      grade_(std::move(vertical_profile)),
       superelevation_reference_baselength_meters_(
           superelevation_reference_baselength_meters),
       station_node_spacing_meters_(station_node_spacing_meters) {
@@ -84,7 +84,7 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
             std::numeric_limits<double>::epsilon();
         return normalised_difference <= normalised_bound;
     };
-    const auto same_domain = [this, &agrees](const TrackScalarProfile& other,
+    const auto same_domain = [this, &agrees](const auto& other,
                                              const char* name) {
         const std::size_t additions =
             other.breakpoint_track_stations_meters().size() +
@@ -119,10 +119,19 @@ TrackGeometry::TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
     superelevation_.ShortenDomainEndTo(common_end);
     grade_.ShortenDomainEndTo(common_end);
 
-    // Nodes sit on the curvature profile's breakpoints and subdivide each
-    // stretch between them, so an interval never straddles a change of shape.
-    const std::vector<double>& breakpoints =
+    // Nodes sit on the ordered union of curvature and vertical breakpoints.
+    // Horizontal quadrature only depends on curvature, but projection also
+    // consumes the vertical first derivative and must not search across a
+    // switch of either centerline formula as if it were one smooth interval.
+    std::vector<double> breakpoints =
         curvature_.breakpoint_track_stations_meters();
+    const std::vector<double>& vertical_breakpoints =
+        grade_.breakpoint_track_stations_meters();
+    breakpoints.insert(breakpoints.end(), vertical_breakpoints.begin(),
+                       vertical_breakpoints.end());
+    std::sort(breakpoints.begin(), breakpoints.end());
+    breakpoints.erase(std::unique(breakpoints.begin(), breakpoints.end()),
+                      breakpoints.end());
     // First count the whole line. A per-stretch check is not a total bound: a
     // multi-piece profile could otherwise request the full limit repeatedly,
     // and even one stretch at the old limit acquired one extra terminal node.

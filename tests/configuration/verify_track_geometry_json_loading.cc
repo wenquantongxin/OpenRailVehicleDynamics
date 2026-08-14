@@ -51,21 +51,27 @@ constexpr std::string_view kNondegenerateRecord = R"json({
     ],
     "seam_transitions": []
   },
-  "centerline_upward_grade_profile": {
+  "vertical_profile": {
     "segments": [
       {
-        "shape": "constant",
+        "shape": "constant_grade",
         "length_meters": 10.0,
         "centerline_upward_grade": 0.02
       },
       {
-        "shape": "hermite_cubic_blend",
-        "length_meters": 20.0,
+        "shape": "parabolic_vertical_curve",
+        "length_meters": 10.0,
         "start_centerline_upward_grade": 0.02,
+        "end_centerline_upward_grade": 0.03
+      },
+      {
+        "shape": "circular_vertical_curve",
+        "length_meters": 10.0,
+        "start_centerline_upward_grade": 0.03,
         "end_centerline_upward_grade": 0.04
       },
       {
-        "shape": "constant",
+        "shape": "constant_grade",
         "length_meters": 10.0,
         "centerline_upward_grade": 0.04
       }
@@ -231,14 +237,24 @@ void CheckNondegenerateRecordAndLifetime(
             "record domain was not mapped");
     Require(geometry.superelevation_reference_baselength_meters() == 1.6,
             "record superelevation reference baselength was not mapped");
-    // A Hermite blend has the same value after swapping its ends at the exact
-    // midpoint. Non-midpoint probes make the three field mappings directional.
+    // Non-midpoint probes make the scalar Hermite and vertical PL2 field
+    // mappings directional.
     Require(Near(geometry.CurvatureRadiansPerMeter(22.0), 0.0015625),
             "Hermite curvature segment direction was not mapped");
     Require(Near(geometry.SuperelevationMeters(17.0), 0.0125),
             "Hermite superelevation segment direction was not mapped");
-    Require(Near(geometry.CenterlineUpwardGrade(22.0), 0.023125),
-            "Hermite grade segment direction was not mapped");
+    Require(Near(geometry.CenterlineUpwardGrade(22.0), 0.025),
+            "parabolic vertical-curve direction was not mapped");
+    const double circular_start_angle = std::atan(0.03);
+    const double circular_end_angle = std::atan(0.04);
+    const double circular_radius =
+        10.0 / (std::sin(circular_end_angle) -
+                std::sin(circular_start_angle));
+    const double circular_midpoint_grade = std::tan(std::asin(
+        std::sin(circular_start_angle) + 5.0 / circular_radius));
+    Require(Near(geometry.CenterlineUpwardGrade(32.0),
+                 circular_midpoint_grade),
+            "circular vertical-curve direction was not mapped");
     Require(std::abs(geometry.CurvatureRadiansPerMeter(16.5)) > 1.0e-15,
             "declared seam transition did not enter the profile");
 
@@ -282,6 +298,21 @@ void CheckStrictRejections(const std::filesystem::path& path) {
                      ",\n        \"end_superelevation_meters\": 0.08",
                      ""),
          {"$.superelevation_profile.segments[0].end_superelevation_meters"}},
+        {ReplaceOnce(valid, "\"vertical_profile\": {",
+                     "\"centerline_upward_grade_profile\": {"),
+         {"$.centerline_upward_grade_profile", "unknown key"}},
+        {ReplaceOnce(valid, "\"shape\": \"circular_vertical_curve\"",
+                     "\"shape\": \"vertical_spline\""),
+         {"$.vertical_profile.segments[2].shape",
+          "'circular_vertical_curve'"}},
+        {ReplaceOnce(valid,
+                     "\"end_centerline_upward_grade\": 0.04",
+                     "\"end_centerline_upward_grade\": 0.03"),
+         {"TrackVerticalProfile: segment 2 has equal endpoint grades"}},
+        {ReplaceOnce(valid,
+                     "\"start_centerline_upward_grade\": 0.03",
+                     "\"start_centerline_upward_grade\": 0.031"),
+         {"TrackVerticalProfile: segment 1 ends at grade", "no seam"}},
         {ReplaceOnce(valid, "\"station_node_spacing_meters\": 0.7",
                      "\"station_node_spacing_meters\": \"fine\""),
          {"$.station_node_spacing_meters"}},

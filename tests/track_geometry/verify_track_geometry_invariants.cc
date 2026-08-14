@@ -24,11 +24,13 @@
 namespace {
 
 using orvd::track_geometry::GravitationalAccelerationInInertial;
+using orvd::track_geometry::CircularVerticalCurveSegment;
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackSeamTransition;
 using orvd::track_geometry::TrackStationRegion;
+using orvd::track_geometry::TrackVerticalProfile;
 namespace lines = orvd::track_geometry::test_lines;
 
 int failure_count = 0;
@@ -127,7 +129,8 @@ void CheckLeftHandCurveMirrorsTheRightHandOne() {
                                 lines::Blend(50.0, 0.0, superelevation),
                                 lines::Constant(200.0, superelevation)},
                                {}),
-            TrackScalarProfile(0.0, {lines::Constant(300.0, 0.02)}, {}),
+            TrackVerticalProfile(0.0,
+                                 {lines::ConstantGrade(300.0, 0.02)}, {}),
             lines::kSuperelevationReferenceBaselengthMeters,
             lines::kNodeSpacingMeters);
     };
@@ -213,6 +216,68 @@ void CheckPlanarUnitSpeedAndGradeDerivative() {
     Expect(std::abs(measured + line.CenterlineUpwardGrade(station)) <= budget,
            "the vertical rate recovered from positions by central difference "
            "is the negated grade, within the finite-difference budget");
+}
+
+void CheckCombinedPlanVerticalAndSuperelevationGeometry() {
+    constexpr double kLengthMeters = 120.0;
+    constexpr double kPlanRadiusMeters = 300.0;
+    constexpr double kStartGrade = 0.01;
+    constexpr double kEndGrade = 0.03;
+    constexpr double kStationMeters = 47.0;
+    const TrackGeometry line(
+        TrackScalarProfile(
+            0.0,
+            {lines::Constant(kLengthMeters, 1.0 / kPlanRadiusMeters)}, {}),
+        TrackScalarProfile(
+            0.0,
+            {lines::Constant(kLengthMeters,
+                             lines::kCanonicalSuperelevationMeters)},
+            {}),
+        TrackVerticalProfile(
+            0.0,
+            {CircularVerticalCurveSegment{kLengthMeters, kStartGrade,
+                                           kEndGrade}},
+            {}),
+        lines::kSuperelevationReferenceBaselengthMeters, 20.0);
+
+    const double start_angle = std::atan(kStartGrade);
+    const double end_angle = std::atan(kEndGrade);
+    const double vertical_radius =
+        kLengthMeters / (std::sin(end_angle) - std::sin(start_angle));
+    const double sine_angle =
+        std::sin(start_angle) + kStationMeters / vertical_radius;
+    const double expected_grade = std::tan(std::asin(sine_angle));
+    const double expected_heading = kStationMeters / kPlanRadiusMeters;
+    const Eigen::Vector3d expected_derivative(
+        std::cos(expected_heading), std::sin(expected_heading),
+        -expected_grade);
+    const Eigen::Vector3d derivative =
+        line.CenterlineDerivativeInInertialMetersPerMeter(kStationMeters);
+    Expect((derivative - expected_derivative).norm() <= 32.0 * kMachine,
+           "non-zero plan curvature and a CIR combine through their shared "
+           "projected station without changing either scalar formula");
+
+    const auto frame = line.EvaluateTrackFrame(kStationMeters);
+    const Eigen::Matrix3d& rotation =
+        frame.pose().rotation_inertial_from_track();
+    Expect((rotation.transpose() * rotation - Eigen::Matrix3d::Identity())
+                   .norm() <= 32.0 * kMachine &&
+               NearExact(rotation.determinant(), 1.0, 32.0) &&
+               (rotation.col(0) - expected_derivative.normalized()).norm() <=
+                   32.0 * kMachine,
+           "a simultaneous CIR and centerline superelevation produce one "
+           "right-handed orthonormal track frame on the three-dimensional "
+           "centerline tangent");
+
+    const Eigen::Vector3d nearby_point =
+        frame.pose().origin_in_inertial_meters() + 0.2 * rotation.col(1) -
+        0.1 * rotation.col(2);
+    const auto projected =
+        line.ProjectPointNearSeed(nearby_point, kStationMeters + 0.2, 1.0);
+    Expect(std::abs(projected.track_station_meters() - kStationMeters) <=
+               2.0e-11,
+           "local projection remains on the same branch when plan curvature, "
+           "CIR grade and centerline superelevation are all non-zero");
 }
 
 void CheckTrackFrameLongitudinalAxis() {
@@ -424,8 +489,8 @@ void CheckQuadratureConvergence() {
             {});
         TrackScalarProfile superelevation_profile(
             0.0, {lines::Constant(400.0, 0.0)}, {});
-        TrackScalarProfile grade_profile(0.0, {lines::Constant(400.0, 0.0)},
-                                         {});
+        TrackVerticalProfile grade_profile(
+            0.0, {lines::ConstantGrade(400.0, 0.0)}, {});
         return TrackGeometry(std::move(curvature_profile),
                              std::move(superelevation_profile),
                              std::move(grade_profile),
@@ -470,7 +535,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
     const TrackGeometry line(
         TrackScalarProfile(0.0, {lines::Constant(100.0, 1.0 / 300.0)}, {}),
         TrackScalarProfile(0.0, {lines::Constant(100.0, 0.06)}, {}),
-        TrackScalarProfile(0.0, {lines::Constant(100.0, 0.015)}, {}),
+        TrackVerticalProfile(0.0,
+                             {lines::ConstantGrade(100.0, 0.015)}, {}),
         lines::kSuperelevationReferenceBaselengthMeters, 0.5);
     const auto check_continuation = [&](double boundary, double outside,
                                         TrackStationRegion expected_region,
@@ -555,7 +621,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
                                              {});
         TrackScalarProfile superelevation_profile(
             0.0, {lines::Constant(100.0, 1.6)}, {});
-        TrackScalarProfile grade_profile(0.0, {lines::Constant(100.0, 0.0)}, {});
+        TrackVerticalProfile grade_profile(
+            0.0, {lines::ConstantGrade(100.0, 0.0)}, {});
         const TrackGeometry impossible(
             std::move(curvature_profile), std::move(superelevation_profile),
             std::move(grade_profile),
@@ -576,7 +643,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
             TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}),
             TrackScalarProfile(
                 0.0, {lines::Constant(10.0, superelevation)}, {}),
-            TrackScalarProfile(0.0, {lines::Constant(10.0, 0.0)}, {}),
+            TrackVerticalProfile(0.0,
+                                 {lines::ConstantGrade(10.0, 0.0)}, {}),
             baselength, 1.0);
     };
     bool refused_equal_superelevation = false;
@@ -600,7 +668,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
                 {lines::Blend(1.0, 0.0, 0.9),
                  lines::Blend(1.0, 0.9, 0.0)},
                 {seam}),
-            TrackScalarProfile(0.0, {lines::Constant(2.0, 0.0)}, {}),
+            TrackVerticalProfile(0.0,
+                                 {lines::ConstantGrade(2.0, 0.0)}, {}),
             baselength, 2.0);
     };
     bool refused_internal_overshoot = false;
@@ -628,7 +697,8 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
                                              {});
         TrackScalarProfile superelevation_profile(
             0.0, {lines::Constant(90.0, 0.0)}, {});
-        TrackScalarProfile grade_profile(0.0, {lines::Constant(100.0, 0.0)}, {});
+        TrackVerticalProfile grade_profile(
+            0.0, {lines::ConstantGrade(100.0, 0.0)}, {});
         const TrackGeometry mismatched(
             std::move(curvature_profile), std::move(superelevation_profile),
             std::move(grade_profile),
@@ -657,11 +727,19 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         }
         return TrackScalarProfile(0.0, std::move(segments), {});
     };
+    const auto level_vertical_profile = [](const std::vector<double>& lengths) {
+        std::vector<orvd::track_geometry::TrackVerticalSegment> segments;
+        segments.reserve(lengths.size());
+        for (const double length : lengths) {
+            segments.push_back(lines::ConstantGrade(length, 0.0));
+        }
+        return TrackVerticalProfile(0.0, std::move(segments), {});
+    };
     bool accepted_equivalent_partitions = true;
     try {
         const TrackGeometry line(level_profile(first_partition),
                                  level_profile(second_partition),
-                                 level_profile(first_partition),
+                                 level_vertical_profile(first_partition),
                                  lines::kSuperelevationReferenceBaselengthMeters,
                                  lines::kNodeSpacingMeters);
         const double end = line.end_track_station_meters();
@@ -679,7 +757,7 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
         const TrackGeometry line(
             level_profile({6000.0, 6000.0}),
             level_profile({6000.0, 6000.0}),
-            level_profile({6000.0, 6000.0}),
+            level_vertical_profile({6000.0, 6000.0}),
             lines::kSuperelevationReferenceBaselengthMeters, 0.01);
         (void)line;
     } catch (const std::invalid_argument&) {
@@ -692,7 +770,7 @@ void CheckDefinitionBoundsAndSuperelevationRefusals() {
     try {
         const TrackGeometry line(
             level_profile({100.0}), level_profile({100.0}),
-            level_profile({100.0}),
+            level_vertical_profile({100.0}),
             lines::kSuperelevationReferenceBaselengthMeters,
             0.01);
         (void)line;
@@ -909,6 +987,7 @@ int main() {
     CheckCircularPositionAgainstClosedForm();
     CheckLeftHandCurveMirrorsTheRightHandOne();
     CheckPlanarUnitSpeedAndGradeDerivative();
+    CheckCombinedPlanVerticalAndSuperelevationGeometry();
     CheckTrackFrameLongitudinalAxis();
     CheckTransitionIsHermiteCubic();
     CheckSeamQuinticEntersTheCenterline();

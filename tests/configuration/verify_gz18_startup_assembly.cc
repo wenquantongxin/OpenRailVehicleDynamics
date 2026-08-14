@@ -41,6 +41,7 @@ using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackScalarSegmentShape;
+using orvd::track_geometry::TrackVerticalProfile;
 
 constexpr double kLayoutReferenceStation = 0.0;
 int failures = 0;
@@ -76,6 +77,14 @@ TrackScalarProfile ConstantProfile(double length_meters, double value) {
         0.0,
         {TrackScalarSegment{length_meters, TrackScalarSegmentShape::kConstant,
                             value, value}},
+        {});
+}
+
+TrackVerticalProfile ConstantVerticalProfile(double length_meters,
+                                             double grade) {
+    return TrackVerticalProfile(
+        0.0,
+        {orvd::track_geometry::ConstantGradeSegment{length_meters, grade}},
         {});
 }
 
@@ -580,7 +589,7 @@ int main(int argc, char** argv) {
             const TrackGeometry research_line(
                 ConstantProfile(length, 0.002),
                 ConstantProfile(length, 0.02),
-                ConstantProfile(length, 0.01), 1.5, 0.5);
+                ConstantVerticalProfile(length, 0.01), 1.5, 0.5);
             ResolvedStartupState edited = startup;
             FreeBodyStartupState& carbody = MutableBodyState(edited, "carbody");
             carbody.resolved_track_station_offset_from_mechanical_layout_meters =

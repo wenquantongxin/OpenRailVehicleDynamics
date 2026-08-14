@@ -417,8 +417,8 @@ SIMPACK 的平面、超高和竖向分段彼此独立；`Lsmo/2` 属于“当前
 
 ### 10.1 已具备的能力
 
-`TrackGeometry` 已接收平面曲率、超高和 `centerline_upward_grade` 三条标量剖面，并要求它们
-共享有限定义区间：
+`TrackGeometry` 已接收平面曲率、超高两条 `TrackScalarProfile` 和一条专用
+`TrackVerticalProfile`，并要求它们共享有限定义区间：
 
 - [`track_geometry.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_geometry.h)
 - [`load_track_geometry.cc`](../../../libs/configuration/src/load_track_geometry.cc)
@@ -434,23 +434,22 @@ SIMPACK 的平面、超高和竖向分段彼此独立；`Lsmo/2` 属于“当前
 平面曲率、坡度和超高的合成联合检查。这证明通用三维耦合路径存在，但不等于真实非零坡度车辆
 长窗已经验证。
 
-### 10.2 尚未实现或尚未验证的部分
+### 10.2 能力状态与验证边界
 
 | 建模能力 | 当前状态 |
 |---|---|
-| 恒坡段 | 可由常量坡度表达，但尚无竖向线形专用段类型 |
-| 抛物线竖曲线 | 领域定义已确定，尚未实现；当前埃尔米特坡度过渡不是 PL2 |
-| 圆弧竖曲线 | 领域定义已由直接几何查询确定，尚未实现 |
-| 显式竖曲线端部平滑 | SIMPACK 的 CSL／PL2／CIR 竖向接缝语义已确定；ORVD 尚未形成竖向剖面专用加载合同 |
-| 站位投影分段 | 当前节点只包含平面曲率断点，尚未合并竖向线形断点 |
+| 恒坡段 | `ConstantGradeSegment` 已按解析坡度和高程积分实现 |
+| 抛物线竖曲线 | `ParabolicVerticalCurveSegment` 已按坡度线性、积分二次实现 |
+| 圆弧竖曲线 | `CircularVerticalCurveSegment` 已按严格投影圆弧及稳定解析积分实现 |
+| 显式竖曲线端部平滑 | CSL／PL2／CIR 共用五次坡度接缝核；严格 JSON 字段为 `vertical_profile` |
+| 站位投影分段 | 中心线节点已取平面曲率断点与竖向原始段界／接缝边界的有序并集 |
 | 内轨／外轨超高基准 | 未实现；当前只支持中心线基准 |
 | 非零竖向线形车辆验证 | 尚无 |
 
-当前标量段只提供常量和埃尔米特三次混合，见
-[`track_geometry_segments.cc`](../../../libs/track_geometry/src/track_geometry_segments.cc)。埃尔米特坡度
-过渡可以形成光滑通用坡度剖面，但不得称为抛物线竖曲线，也不能表达非多项式的 CIR。后续实现应
-建立竖向线形专用领域对象，继续向 `TrackGeometry` 提供坡度、坡度导数和解析积分；不得把 CIR
-采样成离散表后塞入现有多项式类型。
+[`track_geometry_segments.cc`](../../../libs/track_geometry/src/track_geometry_segments.cc) 中的通用标量段
+仍只供平面曲率和超高使用。竖向剖面由
+[`track_vertical_profile.cc`](../../../libs/track_geometry/src/track_vertical_profile.cc) 独立提供坡度、
+坡度导数和解析积分；CIR 不经离散采样，也不进入现有多项式段类型。
 
 ## 11. 现有验证证据的边界
 
@@ -529,9 +528,10 @@ SIMPACK 2021x 的帮助定义和直接轨道查询共同支持本文的水平投
 多项式的 `TrackScalarSegmentShape`。
 
 线路 JSON 根字段统一改为 `vertical_profile`，其下仍只有 `segments` 和 `seam_transitions`。旧的
-`centerline_upward_grade_profile` 与新字段不并行解析，也不保留兼容别名；两个现有线路资产、严格
-加载测试和新建的 `chunshen_station.json` 在同一轮修改中迁移。加载器继续拒绝未知字段、
-重复键、非有限值、非正长度、不连续且无接缝的边界，以及端点坡度严格相等的 PL2／CIR；不得增加
+`centerline_upward_grade_profile` 与新字段不并行解析，也不保留兼容别名；两个现有线路资产和严格
+加载测试已经迁移；尚未创建的 `chunshen_station.json` 在新增时必须使用同一唯一格式。
+加载器继续拒绝未知字段、重复键、非有限值、非正长度、不连续且无接缝的边界，以及端点坡度严格
+相等的 PL2／CIR；不得增加
 经验容差把合法的小曲率 CIR 改写为恒坡段。
 
 竖向接缝复用一套私有五次边界核，在窗口两端匹配原始段的 \((g,g',g'')\)；不得为 CIR 复制另一套

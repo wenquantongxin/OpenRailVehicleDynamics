@@ -9,8 +9,10 @@
 #include "orvd/track_geometry/track_frame_pose.h"
 #include "orvd/track_geometry/track_geometry_segments.h"
 #include "orvd/track_geometry/track_station_projection.h"
+#include "orvd/track_geometry/track_vertical_profile.h"
 
-// A line: three scalar profiles plus the frames they induce.
+// A line: scalar curvature and superelevation profiles, one dedicated vertical
+// profile, and the frames they induce.
 //
 // The independent variable is the track station, which is planar projected
 // mileage and not three-dimensional arc length. Two consequences run through
@@ -71,7 +73,7 @@ class TrackGeometry {
     // clamping would turn a modelling mistake into a plausible line.
     TrackGeometry(TrackScalarProfile curvature_radians_per_meter,
                   TrackScalarProfile superelevation_meters,
-                  TrackScalarProfile centerline_upward_grade,
+                  TrackVerticalProfile vertical_profile,
                   double superelevation_reference_baselength_meters,
                   double station_node_spacing_meters);
 
@@ -159,9 +161,9 @@ class TrackGeometry {
         Eigen::Vector3d centerline_position_in_inertial_meters{
             Eigen::Vector3d::Zero()};
         // Properties of the interval that starts at this node. Nodes are laid
-        // on the curvature profile's own breakpoints, so an interval never
-        // straddles a change of shape and either integrates in closed form or
-        // needs the quadrature rule, never both.
+        // on the ordered union of curvature and vertical-profile breakpoints.
+        // An interval therefore straddles neither a horizontal integration
+        // formula nor a centerline-derivative formula change.
         bool interval_has_constant_curvature{false};
         double interval_curvature_radians_per_meter{0.0};
     };
@@ -208,7 +210,7 @@ class TrackGeometry {
 
     TrackScalarProfile curvature_;
     TrackScalarProfile superelevation_;
-    TrackScalarProfile grade_;
+    TrackVerticalProfile grade_;
     double superelevation_reference_baselength_meters_{0.0};
     double station_node_spacing_meters_{0.0};
     std::vector<StationNode> nodes_;

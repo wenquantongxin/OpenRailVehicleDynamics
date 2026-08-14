@@ -22,10 +22,10 @@
     ],
     "seam_transitions": []
   },
-  "centerline_upward_grade_profile": {
+  "vertical_profile": {
     "segments": [
       {
-        "shape": "constant",
+        "shape": "constant_grade",
         "length_meters": 2000.0,
         "centerline_upward_grade": 0.0
       }

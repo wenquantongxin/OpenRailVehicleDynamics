@@ -4,7 +4,9 @@
 #include <optional>
 #include <vector>
 
-// One scalar profile along the line: curvature, superelevation or grade.
+// One scalar profile along the line for planar curvature or superelevation.
+// Vertical grade is a separate physical domain and must use
+// TrackVerticalProfile.
 //
 // A profile is a sequence of segments laid end to end from a start station.
 // Each segment either holds its value constant or blends from one value to

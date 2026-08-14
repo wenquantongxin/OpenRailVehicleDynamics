@@ -150,8 +150,11 @@ void CheckMultipleMinimaAreRefused() {
     // The arch has one minimum on each flank. Keep both inside the window while
     // moving the seed toward the left root: the contract still refuses rather
     // than selecting the nearer candidate.
-    const TrackGeometry line = lines::MakeSymmetricGradeArchLine(1.0);
-    const Eigen::Vector3d point(0.5 * lines::kArchLengthMeters, 0.0, 2.0);
+    // The requested spacing spans the whole line; the declared vertical
+    // boundary at the apex must still split the projection search.
+    const TrackGeometry line =
+        lines::MakeSymmetricGradeArchLine(lines::kArchLengthMeters);
+    const Eigen::Vector3d point(0.5 * lines::kArchLengthMeters, 0.0, 3.0);
     bool refused = false;
     bool misclassified_as_window_miss = false;
     try {

@@ -25,6 +25,7 @@ using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
 using orvd::track_geometry::TrackScalarSegment;
 using orvd::track_geometry::TrackScalarSegmentShape;
+using orvd::track_geometry::TrackVerticalProfile;
 
 bool Near(double measured, double expected) {
     return std::abs(measured - expected) <=
@@ -44,7 +45,12 @@ int RunInstalledLineSmoke() {
     level.end_value = 0.0;
     const TrackGeometry line(TrackScalarProfile(0.0, {level}, {}),
                              TrackScalarProfile(0.0, {level}, {}),
-                             TrackScalarProfile(0.0, {level}, {}), 1.5, 1.0);
+                             TrackVerticalProfile(
+                                 0.0,
+                                 {orvd::track_geometry::ConstantGradeSegment{
+                                     100.0, 0.0}},
+                                 {}),
+                             1.5, 1.0);
     const auto kinematics = line.EvaluateTrackFrame(40.0);
     const Eigen::Vector3d origin = kinematics.pose().origin_in_inertial_meters();
     const Eigen::Matrix3d rotation =

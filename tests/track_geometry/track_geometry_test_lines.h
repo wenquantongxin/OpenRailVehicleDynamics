@@ -49,6 +49,18 @@ inline TrackScalarSegment Blend(double length_meters, double start_value,
     return segment;
 }
 
+inline ConstantGradeSegment ConstantGrade(double length_meters,
+                                           double grade) {
+    return ConstantGradeSegment{length_meters, grade};
+}
+
+inline ParabolicVerticalCurveSegment ParabolicGrade(double length_meters,
+                                                     double start_grade,
+                                                     double end_grade) {
+    return ParabolicVerticalCurveSegment{length_meters, start_grade,
+                                         end_grade};
+}
+
 // Straight, transition, circular, transition, straight; superelevation and
 // grade ramp in over the first transition and stay on. Right-hand curve, so the
 // curvature is positive.
@@ -73,11 +85,12 @@ inline TrackGeometry MakeCanonicalLine() {
                0.0),
          Constant(kCanonicalStraightLengthMeters, 0.0)},
         {});
-    TrackScalarProfile grade_profile(
+    TrackVerticalProfile grade_profile(
         0.0,
-        {Constant(kCanonicalStraightLengthMeters, 0.0),
-         Blend(kCanonicalTransitionLengthMeters, 0.0, kCanonicalGrade),
-         Constant(300.0, kCanonicalGrade)},
+        {ConstantGrade(kCanonicalStraightLengthMeters, 0.0),
+         ParabolicGrade(kCanonicalTransitionLengthMeters, 0.0,
+                        kCanonicalGrade),
+         ConstantGrade(300.0, kCanonicalGrade)},
         {});
     return TrackGeometry(std::move(curvature_profile),
                          std::move(superelevation_profile),
@@ -95,7 +108,8 @@ inline TrackGeometry MakeSteepConstantLine(double grade,
     TrackScalarProfile curvature_profile(0.0, {Constant(300.0, curvature)}, {});
     TrackScalarProfile superelevation_profile(
         0.0, {Constant(300.0, superelevation_meters)}, {});
-    TrackScalarProfile grade_profile(0.0, {Constant(300.0, grade)}, {});
+    TrackVerticalProfile grade_profile(
+        0.0, {ConstantGrade(300.0, grade)}, {});
     return TrackGeometry(std::move(curvature_profile),
                          std::move(superelevation_profile),
                          std::move(grade_profile),
@@ -112,7 +126,7 @@ inline TrackGeometry MakeLevelStraightLine(double length_meters,
     return TrackGeometry(
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
-        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        TrackVerticalProfile(0.0, {ConstantGrade(length_meters, 0.0)}, {}),
         kSuperelevationReferenceBaselengthMeters, node_spacing_meters);
 }
 
@@ -126,7 +140,7 @@ inline TrackGeometry MakeLevelCircularLine(double radius_meters,
         TrackScalarProfile(0.0,
                            {Constant(length_meters, curvature)}, {}),
         TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
-        TrackScalarProfile(0.0, {Constant(length_meters, 0.0)}, {}),
+        TrackVerticalProfile(0.0, {ConstantGrade(length_meters, 0.0)}, {}),
         kSuperelevationReferenceBaselengthMeters, node_spacing_meters);
 }
 
@@ -147,7 +161,8 @@ inline TrackGeometry MakeSeamLine() {
         {seam});
     TrackScalarProfile superelevation_profile(
         0.0, {Constant(300.0, 0.0)}, {});
-    TrackScalarProfile grade_profile(0.0, {Constant(300.0, 0.0)}, {});
+    TrackVerticalProfile grade_profile(
+        0.0, {ConstantGrade(300.0, 0.0)}, {});
     return TrackGeometry(std::move(curvature_profile),
                          std::move(superelevation_profile),
                          std::move(grade_profile),
@@ -164,9 +179,11 @@ inline TrackGeometry MakeSymmetricGradeArchLine(double node_spacing_meters) {
     return TrackGeometry(
         TrackScalarProfile(0.0, {Constant(kArchLengthMeters, 0.0)}, {}),
         TrackScalarProfile(0.0, {Constant(kArchLengthMeters, 0.0)}, {}),
-        TrackScalarProfile(0.0,
-                           {Blend(kArchLengthMeters, kArchGrade, -kArchGrade)},
-                           {}),
+        TrackVerticalProfile(
+            0.0,
+            {ParabolicGrade(0.5 * kArchLengthMeters, kArchGrade, 0.0),
+             ParabolicGrade(0.5 * kArchLengthMeters, 0.0, -kArchGrade)},
+            {}),
         kSuperelevationReferenceBaselengthMeters, node_spacing_meters);
 }
 
