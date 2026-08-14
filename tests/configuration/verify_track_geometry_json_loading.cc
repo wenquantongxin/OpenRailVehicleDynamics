@@ -225,6 +225,82 @@ void CheckGz18R300Asset(const std::filesystem::path& asset_path) {
     }
 }
 
+void CheckChunshenStationAsset(const std::filesystem::path& asset_path) {
+    const auto geometry = LoadTrackGeometryFromJsonFile(asset_path);
+    Require(Near(geometry.start_track_station_meters(), 0.0) &&
+                Near(geometry.end_track_station_meters(), 18676.364),
+            "Chunshen Station asset has the wrong common station interval");
+    Require(geometry.superelevation_reference_baselength_meters() == 1.5,
+            "Chunshen Station asset has the wrong superelevation reference "
+            "baselength");
+
+    const auto first_curved = geometry.first_curved_track_station_meters();
+    const auto first_superelevated =
+        geometry.first_superelevated_track_station_meters();
+    const auto first_graded = geometry.first_graded_track_station_meters();
+    Require(first_curved.has_value() && first_superelevated.has_value() &&
+                first_graded.has_value() && Near(*first_curved, 298.5) &&
+                Near(*first_superelevated, 298.5) &&
+                Near(*first_graded, 4089.864),
+            "Chunshen Station asset does not expose the declared first seam "
+            "supports");
+
+    struct PlanAndCantSample {
+        double station_meters;
+        double curvature_radians_per_meter;
+        double superelevation_meters;
+    };
+    for (const PlanAndCantSample sample : {
+             PlanAndCantSample{350.0, -1.0 / 1500.0, -0.054},
+             PlanAndCantSample{800.0, 1.0 / 650.0, 0.12},
+             PlanAndCantSample{15000.0, 1.0 / 1900.0, 0.14},
+         }) {
+        Require(Near(geometry.CurvatureRadiansPerMeter(sample.station_meters),
+                     sample.curvature_radians_per_meter) &&
+                    Near(geometry.SuperelevationMeters(sample.station_meters),
+                         sample.superelevation_meters),
+                "Chunshen Station plan or superelevation sign changed");
+    }
+
+    struct GradeSample {
+        double station_meters;
+        double centerline_upward_grade;
+    };
+    for (const GradeSample sample : {
+             GradeSample{4089.0, 0.0},
+             GradeSample{4101.364, 0.025},
+             GradeSample{4200.0, 0.05},
+             GradeSample{4271.364, 0.025},
+             GradeSample{4283.0, 0.0},
+             GradeSample{6741.364, 0.015},
+             GradeSample{7000.0, 0.03},
+             GradeSample{7441.364, 0.015},
+             GradeSample{7468.0, 0.0},
+         }) {
+        Require(Near(geometry.CenterlineUpwardGrade(sample.station_meters),
+                     sample.centerline_upward_grade),
+                "Chunshen Station vertical profile changed at a qualified "
+                "station");
+    }
+
+    for (const double station : {4200.0, 7000.0}) {
+        Require(geometry.CurvatureRadiansPerMeter(station) == 0.0 &&
+                    geometry.SuperelevationMeters(station) == 0.0,
+                "a Chunshen Station vertical curve left its declared planar "
+                "straight and zero-superelevation region");
+    }
+
+    const auto centerline =
+        geometry.CenterlinePositionInInertialMeters(7000.0);
+    Require(centerline.allFinite() && centerline.z() < 0.0,
+            "Chunshen Station centerline is not finite and uphill");
+    const auto projection =
+        geometry.ProjectPointNearSeed(centerline, 7000.2, 1.0);
+    Require(Near(projection.track_station_meters(), 7000.0, 2.0e-10),
+            "a Chunshen Station centerline point did not project to its own "
+            "station");
+}
+
 void CheckNondegenerateRecordAndLifetime(
     const std::filesystem::path& configuration_path) {
     Write(configuration_path, kNondegenerateRecord);
@@ -347,12 +423,12 @@ void CheckStrictRejections(const std::filesystem::path& path) {
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 4) {
+        if (argc != 5) {
             throw std::invalid_argument(
-                "expected the straight asset, R300 asset, and a scratch "
-                "directory");
+                "expected the straight, R300 and Chunshen Station assets, "
+                "and a scratch directory");
         }
-        const std::filesystem::path scratch = argv[3];
+        const std::filesystem::path scratch = argv[4];
         std::filesystem::remove_all(scratch);
         std::filesystem::create_directories(scratch);
         const std::filesystem::path temporary_configuration =
@@ -360,6 +436,7 @@ int main(int argc, char* argv[]) {
 
         CheckRealAsset(argv[1]);
         CheckGz18R300Asset(argv[2]);
+        CheckChunshenStationAsset(argv[3]);
         CheckNondegenerateRecordAndLifetime(temporary_configuration);
         CheckStrictRejections(temporary_configuration);
         std::filesystem::remove_all(scratch);

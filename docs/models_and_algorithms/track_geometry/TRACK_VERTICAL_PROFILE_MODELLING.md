@@ -483,7 +483,9 @@ SIMPACK 2021x 的帮助定义和直接轨道查询共同支持本文的水平投
 下一轮 IRW 车辆真值使用
 [参考模型](../../../vehicle_library/irw/reference_models/simpack/main_model/irw_r300_aar5.spck) 中活动的
 `$Trk_VirtualTrack_ChunshenStation`。水平、竖向和超高线形各有自己的分段，但三者总长均为
-`18676.364 m`。其未施加 `Lsmo/2` 接缝的非零竖向原始段为：
+`18676.364 m`；对应的 ORVD 理想线路资产为
+[`chunshen_station.json`](../../../track_library/geometries/chunshen_station.json)。其未施加
+`Lsmo/2` 接缝的非零竖向原始段为：
 
 | 未平滑原始站位范围 / m | 类型 | 坡度 |
 |---:|---|---|
@@ -528,8 +530,8 @@ SIMPACK 2021x 的帮助定义和直接轨道查询共同支持本文的水平投
 多项式的 `TrackScalarSegmentShape`。
 
 线路 JSON 根字段统一改为 `vertical_profile`，其下仍只有 `segments` 和 `seam_transitions`。旧的
-`centerline_upward_grade_profile` 与新字段不并行解析，也不保留兼容别名；两个现有线路资产和严格
-加载测试已经迁移；尚未创建的 `chunshen_station.json` 在新增时必须使用同一唯一格式。
+`centerline_upward_grade_profile` 与新字段不并行解析，也不保留兼容别名；三个随包线路资产和严格
+加载测试均已迁移到同一唯一格式。
 加载器继续拒绝未知字段、重复键、非有限值、非正长度、不连续且无接缝的边界，以及端点坡度严格
 相等的 PL2／CIR；不得增加
 经验容差把合法的小曲率 CIR 改写为恒坡段。

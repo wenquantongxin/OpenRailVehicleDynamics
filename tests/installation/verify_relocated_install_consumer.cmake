@@ -67,6 +67,8 @@ set(installed_track_geometry
     "${installed_track_geometry_directory}/straight_level_2000m.json")
 set(installed_r300_track_geometry
     "${installed_track_geometry_directory}/r300_centerline_superelevation_1150m.json")
+set(installed_chunshen_station_track_geometry
+    "${installed_track_geometry_directory}/chunshen_station.json")
 if(NOT EXISTS "${installed_track_geometry}")
     message(FATAL_ERROR
         "the relocated prefix has no installed track geometry record")
@@ -74,6 +76,11 @@ endif()
 if(NOT EXISTS "${installed_r300_track_geometry}")
     message(FATAL_ERROR
         "the relocated prefix has no installed R300 track geometry record")
+endif()
+if(NOT EXISTS "${installed_chunshen_station_track_geometry}")
+    message(FATAL_ERROR
+        "the relocated prefix has no installed Chunshen Station "
+        "track geometry record")
 endif()
 
 set(installed_vehicle_definition

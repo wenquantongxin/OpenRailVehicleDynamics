@@ -673,6 +673,7 @@ add_test(NAME verify_track_geometry_json_loading
          COMMAND verify_track_geometry_json_loading
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/chunshen_station.json
              ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
 
 # G52a's profile layer: the two interpolants a surface is read through, the
