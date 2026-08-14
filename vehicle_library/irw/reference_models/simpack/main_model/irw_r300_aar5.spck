@@ -245,10 +245,10 @@ slv.integ.sodasrt2.estfac (         $SLV_SolverSettings           ) = 9.99999999
 slv.integ.tout.freq (               $SLV_SolverSettings           ) = { 100 Hz }              ! TIME_INTEG_PAR_OUTPUT_FREQ
 slv.integ.fix.h (                   $SLV_SolverSettings           ) = 6.25000000000000013E-05 ! TIME_INTEG_TIMEPAR_CONSTANT_STEPSIZE
 slv.integ.tend.time (               $SLV_SolverSettings           ) = { 30 s }                ! TIME_INTEG_TIMEPAR_END_TIME
-slv.integ.atol.gen (                $SLV_SolverSettings           ) = 9.99999999999999980E-13 ! TIME_INTEG_PARSTATE_DEFAULT
-slv.integ.atol.vel (                $SLV_SolverSettings           ) = 1.00000000000000004E-10 ! TIME_INTEG_PARSTATE_VEL
-slv.integ.rtol.gen (                $SLV_SolverSettings           ) = 9.99999999999999999E-15 ! TIME_INTEG_PARSTATE_DEFAULT
-slv.integ.rtol.vel (                $SLV_SolverSettings           ) = 1.00000000000000004E-10 ! TIME_INTEG_PARSTATE_VEL
+slv.integ.atol.gen (                $SLV_SolverSettings           ) = 9.99999999999999955E-07 ! TIME_INTEG_PARSTATE_DEFAULT
+slv.integ.atol.vel (                $SLV_SolverSettings           ) = 1.00000000000000005E-04 ! TIME_INTEG_PARSTATE_VEL
+slv.integ.rtol.gen (                $SLV_SolverSettings           ) = 1.00000000000000004E-10 ! TIME_INTEG_PARSTATE_DEFAULT
+slv.integ.rtol.vel (                $SLV_SolverSettings           ) = 1.00000000000000005E-04 ! TIME_INTEG_PARSTATE_VEL
 slv.meas.geo (                      $SLV_SolverSettings           ) = 1                       ! Animation data to result file
 slv.meas.sensor.pos (               $SLV_SolverSettings           ) = 1                       ! Sensor position to result file
 slv.meas.sensor.vel (               $SLV_SolverSettings           ) = 1                       ! Sensor velocity to result file
@@ -1974,6 +1974,842 @@ yout.par (                2 ,       $Y_QVertical_axle04_left      ) = 1.00000000
 yout.type (                         $Y_QVertical_axle04_right     ) = 12                      ! Type
 yout.par (                1 ,       $Y_QVertical_axle04_right     ) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
 yout.par (                2 ,       $Y_QVertical_axle04_right     ) = 1.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_carbody_s                  ) = 13                      ! Type
+yout.par (                1 ,       $Y_carbody_s                  ) = $J_Carbody              ! [-] Connection/Joint
+yout.par (                2 ,       $Y_carbody_s                  ) = 1.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_carbody_z                  ) = 13                      ! Type
+yout.par (                1 ,       $Y_carbody_z                  ) = $J_Carbody              ! [-] Connection/Joint
+yout.par (                2 ,       $Y_carbody_z                  ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_carbody_pitch              ) = 13                      ! Type
+yout.par (                1 ,       $Y_carbody_pitch              ) = $J_Carbody              ! [-] Connection/Joint
+yout.par (                2 ,       $Y_carbody_pitch              ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_frame_front_s              ) = 13                      ! Type
+yout.par (                1 ,       $Y_frame_front_s              ) = $S_IRWBogie_Front.$J_Frame ! [-] Connection/Joint
+yout.par (                2 ,       $Y_frame_front_s              ) = 1.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_frame_front_z              ) = 13                      ! Type
+yout.par (                1 ,       $Y_frame_front_z              ) = $S_IRWBogie_Front.$J_Frame ! [-] Connection/Joint
+yout.par (                2 ,       $Y_frame_front_z              ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_frame_front_pitch          ) = 13                      ! Type
+yout.par (                1 ,       $Y_frame_front_pitch          ) = $S_IRWBogie_Front.$J_Frame ! [-] Connection/Joint
+yout.par (                2 ,       $Y_frame_front_pitch          ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_frame_rear_s               ) = 13                      ! Type
+yout.par (                1 ,       $Y_frame_rear_s               ) = $S_IRWBogie_Rear.$J_Frame ! [-] Connection/Joint
+yout.par (                2 ,       $Y_frame_rear_s               ) = 1.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_frame_rear_z               ) = 13                      ! Type
+yout.par (                1 ,       $Y_frame_rear_z               ) = $S_IRWBogie_Rear.$J_Frame ! [-] Connection/Joint
+yout.par (                2 ,       $Y_frame_rear_z               ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_frame_rear_pitch           ) = 13                      ! Type
+yout.par (                1 ,       $Y_frame_rear_pitch           ) = $S_IRWBogie_Rear.$J_Frame ! [-] Connection/Joint
+yout.par (                2 ,       $Y_frame_rear_pitch           ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle01_z                   ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle01_z                   ) = $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle01_z                   ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle01_pitch               ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle01_pitch               ) = $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle01_pitch               ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle02_z                   ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle02_z                   ) = $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle02_z                   ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle02_pitch               ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle02_pitch               ) = $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle02_pitch               ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle03_z                   ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle03_z                   ) = $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle03_z                   ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle03_pitch               ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle03_pitch               ) = $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle03_pitch               ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle04_z                   ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle04_z                   ) = $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle04_z                   ) = 3.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_axle04_pitch               ) = 13                      ! Type
+yout.par (                1 ,       $Y_axle04_pitch               ) = $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge ! [-] Connection/Joint
+yout.par (                2 ,       $Y_axle04_pitch               ) = 6.00000000000000000E+00 ! [-] State
+
+yout.type (                         $Y_contact_axle01_left_patch01_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch01_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch01_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch01_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch01_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch01_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch02_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch02_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch02_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch02_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch02_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch02_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch03_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch03_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch03_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch03_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch03_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch03_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch04_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch04_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch04_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch04_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch04_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch04_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch05_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch05_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch05_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch05_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch05_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch05_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch06_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch06_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch06_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch06_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch06_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch06_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch07_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch07_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch07_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch07_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch07_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch07_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch08_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch08_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch08_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch08_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_left_patch08_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle01_left_patch08_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_left_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch01_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch01_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch01_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch01_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch01_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch01_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch02_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch02_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch02_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch02_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch02_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch02_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch03_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch03_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch03_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch03_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch03_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch03_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch04_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch04_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch04_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch04_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch04_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch04_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch05_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch05_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch05_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch05_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch05_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch05_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch06_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch06_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch06_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch06_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch06_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch06_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch07_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch07_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch07_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch07_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch07_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch07_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch08_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch08_tx) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch08_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch08_ty) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle01_right_patch08_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle01_right_patch08_normal) = $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle01_right_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch01_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch01_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch01_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch01_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch01_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch01_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch02_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch02_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch02_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch02_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch02_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch02_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch03_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch03_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch03_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch03_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch03_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch03_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch04_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch04_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch04_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch04_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch04_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch04_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch05_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch05_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch05_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch05_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch05_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch05_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch06_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch06_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch06_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch06_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch06_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch06_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch07_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch07_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch07_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch07_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch07_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch07_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch08_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch08_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch08_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch08_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_left_patch08_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle02_left_patch08_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_left_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch01_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch01_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch01_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch01_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch01_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch01_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch02_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch02_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch02_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch02_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch02_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch02_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch03_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch03_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch03_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch03_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch03_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch03_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch04_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch04_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch04_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch04_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch04_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch04_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch05_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch05_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch05_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch05_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch05_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch05_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch06_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch06_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch06_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch06_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch06_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch06_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch07_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch07_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch07_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch07_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch07_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch07_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch08_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch08_tx) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch08_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch08_ty) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle02_right_patch08_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle02_right_patch08_normal) = $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle02_right_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch01_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch01_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch01_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch01_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch01_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch01_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch02_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch02_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch02_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch02_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch02_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch02_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch03_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch03_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch03_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch03_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch03_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch03_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch04_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch04_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch04_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch04_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch04_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch04_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch05_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch05_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch05_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch05_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch05_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch05_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch06_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch06_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch06_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch06_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch06_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch06_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch07_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch07_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch07_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch07_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch07_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch07_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch08_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch08_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch08_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch08_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_left_patch08_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle03_left_patch08_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_left_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch01_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch01_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch01_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch01_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch01_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch01_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch02_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch02_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch02_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch02_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch02_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch02_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch03_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch03_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch03_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch03_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch03_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch03_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch04_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch04_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch04_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch04_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch04_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch04_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch05_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch05_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch05_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch05_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch05_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch05_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch06_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch06_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch06_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch06_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch06_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch06_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch07_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch07_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch07_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch07_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch07_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch07_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch08_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch08_tx) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch08_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch08_ty) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle03_right_patch08_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle03_right_patch08_normal) = $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle03_right_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch01_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch01_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch01_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch01_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch01_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch01_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch02_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch02_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch02_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch02_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch02_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch02_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch03_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch03_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch03_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch03_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch03_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch03_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch04_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch04_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch04_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch04_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch04_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch04_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch05_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch05_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch05_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch05_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch05_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch05_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch06_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch06_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch06_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch06_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch06_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch06_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch07_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch07_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch07_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch07_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch07_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch07_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch08_tx) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch08_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch08_ty) = 12                   ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch08_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_left_patch08_normal) = 12               ! Type
+yout.par (                1 ,       $Y_contact_axle04_left_patch08_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_left_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch01_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch01_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch01_tx) = 9.00000000000000000E+00 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch01_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch01_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch01_ty) = 1.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch01_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch01_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch01_normal) = 1.10000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch02_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch02_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch02_tx) = 1.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch02_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch02_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch02_ty) = 1.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch02_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch02_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch02_normal) = 2.00000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch03_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch03_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch03_tx) = 2.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch03_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch03_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch03_ty) = 2.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch03_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch03_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch03_normal) = 2.90000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch04_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch04_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch04_tx) = 3.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch04_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch04_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch04_ty) = 3.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch04_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch04_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch04_normal) = 3.80000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch05_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch05_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch05_tx) = 4.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch05_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch05_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch05_ty) = 4.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch05_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch05_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch05_normal) = 4.70000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch06_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch06_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch06_tx) = 5.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch06_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch06_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch06_ty) = 5.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch06_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch06_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch06_normal) = 5.60000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch07_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch07_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch07_tx) = 6.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch07_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch07_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch07_ty) = 6.40000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch07_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch07_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch07_normal) = 6.50000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch08_tx) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch08_tx) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch08_tx) = 7.20000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch08_ty) = 12                  ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch08_ty) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch08_ty) = 7.30000000000000000E+01 ! [-] Output Value
+
+yout.type (                         $Y_contact_axle04_right_patch08_normal) = 12              ! Type
+yout.par (                1 ,       $Y_contact_axle04_right_patch08_normal) = $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right ! [-] Force/Control Element
+yout.par (                2 ,       $Y_contact_axle04_right_patch08_normal) = 7.40000000000000000E+01 ! [-] Output Value
 
 !**********************************************************************
 ! Sensors

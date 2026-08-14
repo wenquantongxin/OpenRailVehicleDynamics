@@ -112,6 +112,34 @@ endforeach()
 add_subdirectory(tools/profile_conversion)
 add_subdirectory(tools/dynamics_qualification)
 
+option(ORVD_BUILD_SIMPACK_REALTIME_TOOLS
+       "Build the local SIMPACK Realtime adapter tools" OFF)
+set(ORVD_SIMPACK_ROOT "/opt/Simpack-2021x" CACHE PATH
+    "SIMPACK installation root used by the optional Realtime tools")
+if(ORVD_BUILD_SIMPACK_REALTIME_TOOLS)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR
+            "ORVD_BUILD_SIMPACK_REALTIME_TOOLS is supported only on Linux")
+    endif()
+    set(ORVD_SIMPACK_REALTIME_INCLUDE_DIRECTORY
+        "${ORVD_SIMPACK_ROOT}/run/realtime")
+    set(ORVD_SIMPACK_REALTIME_LIBRARY
+        "${ORVD_SIMPACK_ROOT}/run/realtime/linux64/libspck_rt.a")
+    if(NOT EXISTS
+       "${ORVD_SIMPACK_REALTIME_INCLUDE_DIRECTORY}/spck_rt.h")
+        message(FATAL_ERROR
+            "SIMPACK Realtime header was not found below "
+            "ORVD_SIMPACK_ROOT='${ORVD_SIMPACK_ROOT}'")
+    endif()
+    if(NOT EXISTS "${ORVD_SIMPACK_REALTIME_LIBRARY}")
+        message(FATAL_ERROR
+            "SIMPACK Realtime static library was not found below "
+            "ORVD_SIMPACK_ROOT='${ORVD_SIMPACK_ROOT}'")
+    endif()
+    find_package(Threads REQUIRED)
+    add_subdirectory(tools/simpack_realtime)
+endif()
+
 # --- Installable package ---
 # Eleven first-party targets form the documented surface. The rigid-tree archive
 # is exported only because a static modelling archive must retain its private
