@@ -23,9 +23,11 @@ OpenRailVehicleDynamics/
 ├── cmake/                CMake 辅助模块
 ├── distribution/         离线依赖源码包与超级构建模板
 ├── docs/
+│   ├── models_and_algorithms/ 物理模型、数学关系、算法语义与参考实现比较
 │   ├── planning/         实施路书、决策账本与观察记录
 │   ├── performance/      计算性能路书与专项研究档案
 │   ├── adr/              架构决策记录
+│   ├── design/           软件架构、运行时契约与早期设计输入
 │   └── engineering/      第一方工程约束
 ├── external/
 │   └── drake_mbtree/     vendored 刚性多体树源码、替代实现与许可证
