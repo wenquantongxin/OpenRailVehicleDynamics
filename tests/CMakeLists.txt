@@ -608,8 +608,10 @@ add_test(NAME verify_candidate_runtime_dependencies_exclude_shared_drake
                  -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_candidate_observations>
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake)
 
-# G47's line layer. Three executables, one per group of completion gates, each
-# also compiling the public headers it owns as standalone translation units.
+# G47's original line layer uses three executables, one per group of completion
+# gates, each also compiling the public headers it owns as standalone
+# translation units. The dedicated vertical-profile value object adds one
+# focused executable without widening the older geometry fixtures.
 # The orientation and derivative identities use dedicated non-degenerate
 # fixtures carrying non-zero curvature, superelevation, grade and heading at
 # the same station. Refusal and projection fixtures intentionally vary those
@@ -626,6 +628,15 @@ target_link_libraries(verify_track_geometry_invariants
     PRIVATE orvd_track_geometry)
 add_test(NAME verify_track_geometry_invariants
          COMMAND verify_track_geometry_invariants)
+
+add_executable(verify_track_vertical_profile
+    track_geometry/track_vertical_profile_header_self_containment.cc
+    track_geometry/verify_track_vertical_profile.cc)
+orvd_configure_first_party_target(verify_track_vertical_profile)
+target_link_libraries(verify_track_vertical_profile
+    PRIVATE orvd_track_geometry)
+add_test(NAME verify_track_vertical_profile
+         COMMAND verify_track_vertical_profile)
 
 add_executable(verify_track_frame_orientation
     track_geometry/track_frame_pose_header_self_containment.cc

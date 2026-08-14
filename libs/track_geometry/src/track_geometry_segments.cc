@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "track_profile_quintic.h"
+
 namespace orvd::track_geometry {
 namespace {
 
@@ -184,18 +186,6 @@ void FindPolynomialRootsInClosedInterval(const double* coefficients,
         AddUniqueRoot(std::midpoint(left, right), lower, upper, roots);
     }
 }
-
-// The quintic Hermite basis as coefficients of the normalised window
-// coordinate. The rows are value, first and second derivative at the window
-// start, then the same three at the window end.
-constexpr double kQuinticBasis[6][6] = {
-    {1.0, 0.0, 0.0, -10.0, 15.0, -6.0},
-    {0.0, 1.0, 0.0, -6.0, 8.0, -3.0},
-    {0.0, 0.0, 0.5, -1.5, 1.5, -0.5},
-    {0.0, 0.0, 0.0, 10.0, -15.0, 6.0},
-    {0.0, 0.0, 0.0, -4.0, 7.0, -3.0},
-    {0.0, 0.0, 0.0, 0.5, -1.0, 0.5},
-};
 
 struct RawSegmentPiece {
     double start_track_station_meters{0.0};
@@ -447,32 +437,28 @@ TrackScalarProfile::TrackScalarProfile(
             seam_piece.coefficient_count = 6;
             const double width = window.end_track_station_meters -
                                  window.start_track_station_meters;
-            const double boundary[6] = {
-                raw_derivative(index, window.start_track_station_meters, 0),
-                width * raw_derivative(index, window.start_track_station_meters, 1),
-                width * width *
-                    raw_derivative(index, window.start_track_station_meters, 2),
-                raw_derivative(index + 1, window.end_track_station_meters, 0),
-                width *
-                    raw_derivative(index + 1, window.end_track_station_meters, 1),
-                width * width *
-                    raw_derivative(index + 1, window.end_track_station_meters, 2),
-            };
-            double normalised[6]{};
-            for (std::size_t row = 0; row < 6; ++row) {
-                for (std::size_t order = 0; order < 6; ++order) {
-                    normalised[order] += boundary[row] * kQuinticBasis[row][order];
-                }
-            }
-            double scale = 1.0;
-            for (std::size_t order = 0; order < 6; ++order) {
-                seam_piece.coefficients[order] = normalised[order] / scale;
+            const std::array<double, 6> coefficients =
+                internal::BuildQuinticHermiteCoefficients(
+                    width,
+                    {raw_derivative(index,
+                                    window.start_track_station_meters, 0),
+                     raw_derivative(index,
+                                    window.start_track_station_meters, 1),
+                     raw_derivative(index,
+                                    window.start_track_station_meters, 2)},
+                    {raw_derivative(index + 1,
+                                    window.end_track_station_meters, 0),
+                     raw_derivative(index + 1,
+                                    window.end_track_station_meters, 1),
+                     raw_derivative(index + 1,
+                                    window.end_track_station_meters, 2)});
+            for (std::size_t order = 0; order < coefficients.size(); ++order) {
+                seam_piece.coefficients[order] = coefficients[order];
                 if (!std::isfinite(seam_piece.coefficients[order])) {
                     throw std::invalid_argument(
                         "TrackScalarProfile: a seam polynomial coefficient is "
                         "not finite for the declared window");
                 }
-                scale *= width;
             }
             pieces_.push_back(seam_piece);
             cursor = window.end_track_station_meters;

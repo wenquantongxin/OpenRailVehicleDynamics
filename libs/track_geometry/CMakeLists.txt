@@ -11,6 +11,8 @@
 add_library(orvd_track_geometry STATIC
     src/track_geometry.cc
     src/track_geometry_segments.cc
+    src/track_profile_quintic.cc
+    src/track_vertical_profile.cc
     src/track_inertial_frame.cc)
 
 orvd_configure_first_party_target(orvd_track_geometry)
