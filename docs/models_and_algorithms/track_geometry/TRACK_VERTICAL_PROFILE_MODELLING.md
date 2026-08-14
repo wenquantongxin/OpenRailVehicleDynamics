@@ -581,9 +581,17 @@ SIMPACK 2021x 的帮助定义和直接轨道查询共同支持本文的水平投
 八轮，不建立八个独立轮速环，不使用坡度前馈。存在蠕滑时，\(\bar v_w\) 不冒充车辆站位率；四个
 轴桥的投影站位分别观察，最后一轴的站位决定线路是否已经驶完。
 
-共模 PI 算法归 `libs/control/`，IRW 轮周速度观测和 `100 Hz` 事件接线归 `libs/configuration/`，参数
-归 `controller_library/irw/`；SIMPACK Realtime 适配器归 `tools/simpack_realtime/`，不进入默认安装
-导出。临时探针放 `tmp/`，SPCK 实验副本、长窗结果和日志放仓外归档。这些辅具不得反向侵入
+共模 PI 由
+[`SampledLongitudinalCruiseController`](../../../libs/control/include/orvd/control/sampled_longitudinal_cruise_controller.h)
+提供；IRW 轮周速度观测和 `100 Hz` 原子事件由
+[`IrwLongitudinalCruiseEventSession`](../../../libs/configuration/include/orvd/configuration/irw_longitudinal_cruise_event_session.h)
+接线。参数只存在于
+[`irw_v60_common_wheel_speed_cruise_controller.json`](../../../controller_library/irw/irw_v60_common_wheel_speed_cruise_controller.json)。
+首轮参数沿用既有轮速环的比例增益量级，积分时间取 `10 s`，长于最短 PL2 通过时间，避免巡航环追逐
+竖曲线瞬态；积分限幅对应 `4000 N·m` 的最大积分贡献，最终动态限幅仍由既有转矩调理器统一执行。
+
+SIMPACK Realtime 适配器归 `tools/simpack_realtime/`，不进入默认构建、安装或导出。临时探针放
+`tmp/`，SPCK 实验副本、长窗结果和日志放仓外归档。这些辅具不得反向侵入
 `TrackVerticalProfile`。
 
 正式长窗前只允许一个短的平直起步检查，用于排除轮序、转动副正号、共同转矩和 `100 Hz` 零阶保持

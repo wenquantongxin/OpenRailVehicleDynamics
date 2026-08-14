@@ -12,7 +12,9 @@
 
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
+#include "orvd/configuration/irw_longitudinal_cruise_event_session.h"
 #include "orvd/configuration/load_irw_full_state_wheel_speed_guidance_controller.h"
+#include "orvd/configuration/load_irw_longitudinal_cruise_controller.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/load_track_geometry.h"
@@ -83,11 +85,16 @@ int main(int argc, char* argv[]) {
             orvd::configuration::LoadVehicleDefinitionFromJsonFile(argv[5]);
         const auto irw_startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[6]);
-        const auto irw_torque_conditioner = orvd::configuration::
+        auto irw_torque_conditioner = orvd::configuration::
             LoadWheelDriveTorqueCommandConditionerFromJsonFile(
                 std::filesystem::path(argv[4]) / "vehicle_library" / "irw" /
                 "drive_torque_conditioners" /
                 "irw_reference_wheel_drive_torque_conditioner.json");
+        auto irw_cruise_controller = orvd::configuration::
+            LoadIrwLongitudinalCruiseControllerFromJsonFile(
+                std::filesystem::path(argv[4]) / "controller_library" /
+                "irw" /
+                "irw_v60_common_wheel_speed_cruise_controller.json");
         const auto irw_controller = orvd::configuration::
             LoadIrwFullStateWheelSpeedGuidanceControllerFromJsonFile(
                 std::filesystem::path(argv[4]) / "controller_library" /
@@ -194,6 +201,25 @@ int main(int argc, char* argv[]) {
             std::fprintf(stderr,
                          "installed IRW assets did not assemble their complete "
                          "contact-enabled H3 system\n");
+            return 1;
+        }
+        orvd::configuration::IrwLongitudinalCruiseEventSession
+            irw_cruise_session(
+                irw_system, std::move(irw_cruise_controller.controller),
+                irw_cruise_controller.nominal_rolling_radius_meters,
+                irw_cruise_controller.forward_joint_rate_signs,
+                std::move(irw_torque_conditioner));
+        const auto irw_cruise_u0 =
+            irw_cruise_session.ApplyInitializationUpdate(
+                irw_resolved.context());
+        if (irw_cruise_session.sample_period_seconds() != 0.01 ||
+            irw_cruise_u0.controller_result
+                    .requested_common_wheel_torque_newton_metres >=
+                0.0 ||
+            !irw_cruise_session.synchronization_required()) {
+            std::fprintf(stderr,
+                         "installed IRW longitudinal cruise chain did not "
+                         "load and execute U0\n");
             return 1;
         }
         const std::array<double, 8> installed_active_torques{

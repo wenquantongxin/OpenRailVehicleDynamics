@@ -1,0 +1,14 @@
+{
+  "irw_longitudinal_cruise_controller_identifier": "irw_v60_common_wheel_speed_cruise_controller",
+  "sample_period_seconds": 0.01,
+  "target_speed_meters_per_second": 16.666666666666668,
+  "nominal_rolling_radius_meters": 0.43,
+  "forward_joint_rate_signs": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+  "speed_pi": {
+    "proportional_gain": 20000.0,
+    "integral_time_seconds": 10.0,
+    "output_filter_time_constant_seconds": 0.0,
+    "integral_absolute_limit_meters": 2.0,
+    "raw_output_absolute_limit_newton_metres": 5000.0
+  }
+}

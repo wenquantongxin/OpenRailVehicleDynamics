@@ -887,6 +887,31 @@ add_test(NAME verify_irw_full_state_control_event_session
 set_tests_properties(verify_irw_full_state_control_event_session PROPERTIES
     PROCESSORS 8)
 
+# The longitudinal cruise binding observes one forward circumferential-speed
+# mean from the closed eight-wheel IRW topology and commits one common PI
+# request through the existing conditioner at each 100 Hz event. A 100 ms real
+# assembled consumer checks the two explicit wheel-rate sign conventions,
+# equal requests, atomic U0, backend synchronization and a finite terminal RHS.
+add_executable(verify_irw_longitudinal_cruise_event_session
+    configuration/irw_longitudinal_cruise_event_session_header_self_containment.cc
+    configuration/verify_irw_longitudinal_cruise_event_session.cc)
+orvd_configure_first_party_target(
+    verify_irw_longitudinal_cruise_event_session)
+target_include_directories(verify_irw_longitudinal_cruise_event_session
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_irw_longitudinal_cruise_event_session
+    PRIVATE orvd_configuration orvd_integrators OpenMP::OpenMP_CXX)
+add_test(NAME verify_irw_longitudinal_cruise_event_session
+         COMMAND verify_irw_longitudinal_cruise_event_session
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_SOURCE_DIR}
+             ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_v60_common_wheel_speed_cruise_controller.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json)
+set_tests_properties(verify_irw_longitudinal_cruise_event_session PROPERTIES
+    PROCESSORS 8)
+
 # G53's complete GZ18 direct RHS and G54's accepted-step projection history.
 # The same installed assets drive both: four wheelsets share four local branch
 # hints across eight interfaces, and CVODE advances those hints at its internal
@@ -1060,6 +1085,23 @@ target_link_libraries(
 add_test(NAME verify_irw_full_state_wheel_speed_guidance_controller
          COMMAND verify_irw_full_state_wheel_speed_guidance_controller
              ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json)
+
+# One topology-independent sampled cruise PI and the strict IRW asset carrying
+# its target, nominal radius and raw-joint-rate signs. The scalar test checks
+# target-minus-measurement feedback and caller-owned state without repeating
+# the already-qualified generic PI clamp and filter matrix.
+add_executable(verify_sampled_longitudinal_cruise_controller
+    control/sampled_longitudinal_cruise_controller_header_self_containment.cc
+    configuration/load_irw_longitudinal_cruise_controller_header_self_containment.cc
+    control/verify_sampled_longitudinal_cruise_controller.cc)
+orvd_configure_first_party_target(
+    verify_sampled_longitudinal_cruise_controller)
+target_link_libraries(verify_sampled_longitudinal_cruise_controller
+    PRIVATE orvd_configuration)
+add_test(NAME verify_sampled_longitudinal_cruise_controller
+         COMMAND verify_sampled_longitudinal_cruise_controller
+             ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_v60_common_wheel_speed_cruise_controller.json
+             ${CMAKE_CURRENT_BINARY_DIR}/irw-longitudinal-cruise-controller-fixture.json)
 
 add_executable(verify_gz18_startup_assembly
     configuration/resolved_startup_state_header_self_containment.cc

@@ -9,8 +9,10 @@ add_library(orvd_configuration STATIC
     src/assembled_vehicle_system.cc
     src/gz18_wheel_rail_contact.cc
     src/irw_full_state_control_event_session.cc
+    src/irw_longitudinal_cruise_event_session.cc
     src/irw_wheel_rail_contact.cc
     src/load_irw_full_state_wheel_speed_guidance_controller.cc
+    src/load_irw_longitudinal_cruise_controller.cc
     src/load_profile_points.cc
     src/load_resolved_startup_state.cc
     src/load_track_irregularity_field.cc

@@ -6,7 +6,8 @@
 
 add_library(orvd_control STATIC
     src/irw_full_state_wheel_speed_guidance_controller.cc
-    src/sampled_filtered_pi.cc)
+    src/sampled_filtered_pi.cc
+    src/sampled_longitudinal_cruise_controller.cc)
 
 orvd_configure_first_party_target(orvd_control)
 
