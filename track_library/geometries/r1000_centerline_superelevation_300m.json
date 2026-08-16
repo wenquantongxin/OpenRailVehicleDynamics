@@ -1,0 +1,63 @@
+{
+  "start_track_station_meters": 0.0,
+  "station_node_spacing_meters": 0.5,
+  "superelevation_reference_baselength_meters": 1.5,
+  "curvature_profile": {
+    "segments": [
+      {
+        "shape": "constant",
+        "length_meters": 50.0,
+        "curvature_radians_per_meter": 0.0
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 50.0,
+        "start_curvature_radians_per_meter": 0.0,
+        "end_curvature_radians_per_meter": 0.001
+      },
+      {
+        "shape": "constant",
+        "length_meters": 200.0,
+        "curvature_radians_per_meter": 0.001
+      }
+    ],
+    "seam_transitions": [
+      {"preceding_segment_index": 0, "window_length_meters": 3.0},
+      {"preceding_segment_index": 1, "window_length_meters": 3.0}
+    ]
+  },
+  "superelevation_profile": {
+    "segments": [
+      {
+        "shape": "constant",
+        "length_meters": 50.0,
+        "superelevation_meters": 0.0
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 50.0,
+        "start_superelevation_meters": 0.0,
+        "end_superelevation_meters": 0.12
+      },
+      {
+        "shape": "constant",
+        "length_meters": 200.0,
+        "superelevation_meters": 0.12
+      }
+    ],
+    "seam_transitions": [
+      {"preceding_segment_index": 0, "window_length_meters": 3.0},
+      {"preceding_segment_index": 1, "window_length_meters": 3.0}
+    ]
+  },
+  "vertical_profile": {
+    "segments": [
+      {
+        "shape": "constant_grade",
+        "length_meters": 300.0,
+        "centerline_upward_grade": 0.0
+      }
+    ],
+    "seam_transitions": []
+  }
+}

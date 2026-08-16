@@ -1,0 +1,35 @@
+{
+  "start_track_station_meters": 0.0,
+  "station_node_spacing_meters": 0.5,
+  "superelevation_reference_baselength_meters": 1.5,
+  "curvature_profile": {
+    "segments": [
+      {
+        "shape": "constant",
+        "length_meters": 1100.0,
+        "curvature_radians_per_meter": 0.0
+      }
+    ],
+    "seam_transitions": []
+  },
+  "superelevation_profile": {
+    "segments": [
+      {
+        "shape": "constant",
+        "length_meters": 1100.0,
+        "superelevation_meters": 0.0
+      }
+    ],
+    "seam_transitions": []
+  },
+  "vertical_profile": {
+    "segments": [
+      {
+        "shape": "constant_grade",
+        "length_meters": 1100.0,
+        "centerline_upward_grade": 0.0
+      }
+    ],
+    "seam_transitions": []
+  }
+}

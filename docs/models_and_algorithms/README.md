@@ -23,6 +23,7 @@
 | 分类 | 内容 |
 |---|---|
 | `track_geometry/` | 线路平纵断面、超高、轨道坐标系、站位和轨道不平顺的分层关系 |
+| `track_irregularity_spectra/` | 轨道不平顺 PSD、有限空间频带、随机实现和多方向相关性 |
 | `wheel_rail_contact/` | 接触几何、EEC、Kalker、FASTSIM、多斑接触及 CONTACT 等软件比较 |
 | `vehicle_dynamics/` | 车辆拓扑、悬挂、载荷、刚性轮对和独立旋转轮对模型 |
 | `control_and_estimation/` | 控制器、观测器、状态估计、采样和执行器语义 |
@@ -35,3 +36,5 @@
 
 - [轨道竖向剖面建模及其三维耦合](track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md)：
   定义恒坡段、PL2、CIR、竖向接缝及其与平面线形和超高的三维耦合，并给出首轮产品与整车资格合同。
+- [轨道不平顺谱及其空间随机实现](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)：
+  定义空间频率单位、简化 FRA/AAR 单截止谱、有限频带、随机种子和空间序列资格。

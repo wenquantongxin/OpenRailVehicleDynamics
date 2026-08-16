@@ -66,9 +66,14 @@ set(installed_track_geometry_directory
 set(installed_track_geometry
     "${installed_track_geometry_directory}/straight_level_2000m.json")
 set(installed_r300_track_geometry
-    "${installed_track_geometry_directory}/r300_centerline_superelevation_1150m.json")
+    "${installed_track_geometry_directory}/r300_centerline_superelevation_1100m.json")
 set(installed_chunshen_station_track_geometry
     "${installed_track_geometry_directory}/chunshen_station.json")
+set(installed_additional_track_geometries
+    "${installed_track_geometry_directory}/r600_centerline_superelevation_1100m.json"
+    "${installed_track_geometry_directory}/r800_centerline_superelevation_1100m.json"
+    "${installed_track_geometry_directory}/r1000_centerline_superelevation_300m.json"
+    "${installed_track_geometry_directory}/straight_level_1100m.json")
 if(NOT EXISTS "${installed_track_geometry}")
     message(FATAL_ERROR
         "the relocated prefix has no installed track geometry record")
@@ -82,6 +87,14 @@ if(NOT EXISTS "${installed_chunshen_station_track_geometry}")
         "the relocated prefix has no installed Chunshen Station "
         "track geometry record")
 endif()
+foreach(installed_additional_track_geometry IN LISTS
+        installed_additional_track_geometries)
+    if(NOT EXISTS "${installed_additional_track_geometry}")
+        message(FATAL_ERROR
+            "the relocated prefix has no installed track geometry record "
+            "'${installed_additional_track_geometry}'")
+    endif()
+endforeach()
 
 set(installed_vehicle_definition
     "${relocated_prefix}/${INSTALL_DATADIR}/OpenRailVehicleDynamics/vehicle_library/gz18/vehicle_definition.json")
@@ -128,24 +141,24 @@ set(installed_irw_wheel_profile
     "${installed_data_root}/vehicle_library/irw/wheel_profiles/irw_reference_wheel_profile.json")
 set(installed_rail_profile
     "${installed_data_root}/track_library/rail_profiles/uic60_rail_profile.json")
-set(installed_track_irregularity
-    "${installed_data_root}/track_library/irregularities/gz18_aar6_reference_irregularity.json")
-set(installed_lateral_irregularity
-    "${installed_data_root}/track_library/irregularities/series/gz18_aar6_reference_lateral.json")
-set(installed_vertical_irregularity
-    "${installed_data_root}/track_library/irregularities/series/gz18_aar6_reference_vertical.json")
-set(installed_r300_aar5_irregularity
-    "${installed_data_root}/track_library/irregularities/gz18_r300_aar5_reference_irregularity.json")
-set(installed_r300_aar5_lateral_irregularity
-    "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_lateral.json")
-set(installed_r300_aar5_vertical_irregularity
-    "${installed_data_root}/track_library/irregularities/series/gz18_r300_aar5_reference_vertical.json")
-set(installed_irw_r300_aar5_irregularity
-    "${installed_data_root}/track_library/irregularities/irw_r300_aar5_reference_irregularity.json")
-set(installed_irw_r300_aar5_lateral_irregularity
-    "${installed_data_root}/track_library/irregularities/series/irw_r300_aar5_reference_lateral.json")
-set(installed_irw_r300_aar5_vertical_irregularity
-    "${installed_data_root}/track_library/irregularities/series/irw_r300_aar5_reference_vertical.json")
+set(installed_aar5_irregularity
+    "${installed_data_root}/track_library/irregularities/aar5_irregularity.json")
+set(installed_aar5_lateral_irregularity
+    "${installed_data_root}/track_library/irregularities/series/aar5_lateral.json")
+set(installed_aar5_vertical_irregularity
+    "${installed_data_root}/track_library/irregularities/series/aar5_vertical.json")
+set(installed_aar6_irregularity
+    "${installed_data_root}/track_library/irregularities/aar6_irregularity.json")
+set(installed_aar6_lateral_irregularity
+    "${installed_data_root}/track_library/irregularities/series/aar6_lateral.json")
+set(installed_aar6_vertical_irregularity
+    "${installed_data_root}/track_library/irregularities/series/aar6_vertical.json")
+set(installed_erri_low_irregularity
+    "${installed_data_root}/track_library/irregularities/erri_low_irregularity.json")
+set(installed_erri_low_lateral_irregularity
+    "${installed_data_root}/track_library/irregularities/series/erri_low_lateral.json")
+set(installed_erri_low_vertical_irregularity
+    "${installed_data_root}/track_library/irregularities/series/erri_low_vertical.json")
 foreach(installed_profile IN ITEMS
         "${installed_wheel_profile}" "${installed_irw_wheel_profile}"
         "${installed_rail_profile}")
@@ -155,21 +168,30 @@ foreach(installed_profile IN ITEMS
     endif()
 endforeach()
 foreach(installed_irregularity IN ITEMS
-        "${installed_track_irregularity}"
-        "${installed_lateral_irregularity}"
-        "${installed_vertical_irregularity}"
-        "${installed_r300_aar5_irregularity}"
-        "${installed_r300_aar5_lateral_irregularity}"
-        "${installed_r300_aar5_vertical_irregularity}"
-        "${installed_irw_r300_aar5_irregularity}"
-        "${installed_irw_r300_aar5_lateral_irregularity}"
-        "${installed_irw_r300_aar5_vertical_irregularity}")
+        "${installed_aar5_irregularity}"
+        "${installed_aar5_lateral_irregularity}"
+        "${installed_aar5_vertical_irregularity}"
+        "${installed_aar6_irregularity}"
+        "${installed_aar6_lateral_irregularity}"
+        "${installed_aar6_vertical_irregularity}"
+        "${installed_erri_low_irregularity}"
+        "${installed_erri_low_lateral_irregularity}"
+        "${installed_erri_low_vertical_irregularity}")
     if(NOT EXISTS "${installed_irregularity}")
         message(FATAL_ERROR
             "the relocated prefix has no installed track-irregularity asset "
             "'${installed_irregularity}'")
     endif()
 endforeach()
+file(GLOB_RECURSE installed_irregularity_files LIST_DIRECTORIES FALSE
+     "${installed_data_root}/track_library/irregularities/*.json")
+list(LENGTH installed_irregularity_files installed_irregularity_file_count)
+if(NOT installed_irregularity_file_count EQUAL 9)
+    message(FATAL_ERROR
+        "the relocated prefix contains ${installed_irregularity_file_count} "
+        "track-irregularity JSON files instead of the closed nine-file set: "
+        "${installed_irregularity_files}")
+endif()
 
 file(GLOB_RECURSE package_configs LIST_DIRECTORIES FALSE
      "${relocated_prefix}/*OpenRailVehicleDynamicsConfig.cmake")

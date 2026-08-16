@@ -1,0 +1,6 @@
+{
+  "track_irregularity_identifier": "erri_low_irregularity",
+  "coordinate_frame": "track_lateral_right_vertical_down",
+  "lateral_series_identifier": "erri_low_lateral",
+  "vertical_series_identifier": "erri_low_vertical"
+}

@@ -481,7 +481,7 @@ SIMPACK 2021x 的帮助定义和直接轨道查询共同支持本文的水平投
 替代非零恒坡、PL2 或 CIR 的线路资格。
 
 下一轮 IRW 车辆真值使用
-[参考模型](../../../vehicle_library/irw/reference_models/simpack/main_model/irw_r300_aar5.spck) 中活动的
+[参考模型](../../../vehicle_library/irw/reference_models/simpack/main_model/irw_vehicle.spck) 中活动的
 `$Trk_VirtualTrack_ChunshenStation`。水平、竖向和超高线形各有自己的分段，但三者总长均为
 `18676.364 m`；对应的 ORVD 理想线路资产为
 [`chunshen_station.json`](../../../track_library/geometries/chunshen_station.json)。其未施加

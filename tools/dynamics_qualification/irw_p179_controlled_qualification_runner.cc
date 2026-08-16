@@ -57,7 +57,7 @@ static_assert(kEventPeriodNanoseconds % kObservationPeriodNanoseconds == 0);
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
 constexpr double kProjectionSearchHalfWidthMeters = 0.01;
 constexpr std::string_view kIrregularityIdentifier =
-    "irw_r300_aar5_reference_irregularity";
+    "aar5_irregularity";
 constexpr std::size_t kAxleCount = 4;
 constexpr std::size_t kWheelCount = 8;
 

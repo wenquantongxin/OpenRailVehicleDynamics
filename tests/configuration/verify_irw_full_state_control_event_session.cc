@@ -81,7 +81,7 @@ void Run(const std::filesystem::path& vehicle_path,
     auto irregularity =
         std::make_unique<orvd::wheel_rail_contact::TrackIrregularityField>(
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
-                data_root, "irw_r300_aar5_reference_irregularity"));
+                data_root, "aar5_irregularity"));
     auto scenario = orvd::configuration::AssembleIrwContactScenario(
         vehicle, startup, std::move(line), data_root, 0.0, 0.01,
         std::move(irregularity));

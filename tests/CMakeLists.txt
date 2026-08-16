@@ -671,10 +671,14 @@ target_link_libraries(verify_track_geometry_json_loading
     PRIVATE orvd_configuration)
 add_test(NAME verify_track_geometry_json_loading
          COMMAND verify_track_geometry_json_loading
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/chunshen_station.json
-             ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1100m.json
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/chunshen_station.json
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/r600_centerline_superelevation_1100m.json
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/r800_centerline_superelevation_1100m.json
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/r1000_centerline_superelevation_300m.json
+            ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_1100m.json
+            ${CMAKE_CURRENT_BINARY_DIR}/configuration-fixtures)
 
 # G52a's profile layer: the two interpolants a surface is read through, the
 # qualified equal-arc wheel-profile preparation, and the shared roll-yaw-pitch
@@ -859,7 +863,7 @@ add_test(NAME verify_irw_contact_rhs
          COMMAND verify_irw_contact_rhs
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1100m.json
              ${CMAKE_SOURCE_DIR})
 set_tests_properties(verify_irw_contact_rhs PROPERTIES PROCESSORS 8)
 
@@ -880,7 +884,7 @@ add_test(NAME verify_irw_full_state_control_event_session
          COMMAND verify_irw_full_state_control_event_session
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1100m.json
              ${CMAKE_SOURCE_DIR}
              ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json)
@@ -966,9 +970,9 @@ add_test(NAME verify_gz18_dynamics_qualification
          COMMAND verify_gz18_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_1100m.json
              ${CMAKE_SOURCE_DIR}
-             gz18_aar6_reference_irregularity
+             aar6_irregularity
              ${CMAKE_CURRENT_BINARY_DIR}/g58-dynamics-qualification-fixtures)
 set_tests_properties(verify_gz18_dynamics_qualification PROPERTIES
     PROCESSORS 16)
@@ -982,7 +986,7 @@ add_test(NAME verify_irw_dynamics_qualification
          COMMAND verify_irw_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1100m.json
              ${CMAKE_SOURCE_DIR}
              ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json
@@ -1127,7 +1131,7 @@ add_test(NAME verify_irw_startup_assembly
          COMMAND verify_irw_startup_assembly
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
-             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1150m.json)
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1100m.json)
 
 add_executable(verify_resolved_startup_state_loading
     configuration/verify_resolved_startup_state_loading.cc)

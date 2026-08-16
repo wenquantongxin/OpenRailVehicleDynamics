@@ -90,7 +90,7 @@ bool Near(double measured, double expected, double tolerance = 1.0e-12) {
     return std::abs(measured - expected) <= tolerance;
 }
 
-double RawR300TransitionFraction(double track_station_meters) {
+double RawCurveTransitionFraction(double track_station_meters) {
     const auto hermite = [](double fraction) {
         return 3.0 * fraction * fraction -
                2.0 * fraction * fraction * fraction;
@@ -164,10 +164,10 @@ void CheckRealAsset(const std::filesystem::path& asset_path) {
             "real asset contains an unexpected active profile");
 }
 
-void CheckGz18R300Asset(const std::filesystem::path& asset_path) {
+void CheckR300QualificationAsset(const std::filesystem::path& asset_path) {
     const auto geometry = LoadTrackGeometryFromJsonFile(asset_path);
     Require(geometry.start_track_station_meters() == 0.0 &&
-                geometry.end_track_station_meters() == 1150.0,
+                geometry.end_track_station_meters() == 1100.0,
             "R300 asset has the wrong station interval");
     Require(geometry.superelevation_reference_baselength_meters() == 1.5,
             "R300 asset has the wrong superelevation reference baselength");
@@ -205,7 +205,7 @@ void CheckGz18R300Asset(const std::filesystem::path& asset_path) {
     // constant/Hermite segment value. This checks all four declarations rather
     // than inferring them from the first support station.
     for (const double station : {49.0, 99.0, 599.0, 649.0}) {
-        const double raw_fraction = RawR300TransitionFraction(station);
+        const double raw_fraction = RawCurveTransitionFraction(station);
         Require(std::abs(geometry.CurvatureRadiansPerMeter(station) -
                          raw_fraction * kCircularCurvature) > 1.0e-10 &&
                     std::abs(geometry.SuperelevationMeters(station) -
@@ -223,6 +223,103 @@ void CheckGz18R300Asset(const std::filesystem::path& asset_path) {
         Require(Near(projection.track_station_meters(), station, 2.0e-12),
                 "R300 centerline point did not project to its own station");
     }
+}
+
+void CheckImportedCurveAsset(const std::filesystem::path& asset_path,
+                             double expected_end_station_meters,
+                             double radius_meters,
+                             double superelevation_meters,
+                             bool ends_in_circular_segment) {
+    const auto geometry = LoadTrackGeometryFromJsonFile(asset_path);
+    Require(geometry.start_track_station_meters() == 0.0 &&
+                geometry.end_track_station_meters() ==
+                    expected_end_station_meters,
+            "imported curve asset has the wrong station interval");
+    Require(geometry.superelevation_reference_baselength_meters() == 1.5,
+            "imported curve asset has the wrong superelevation reference "
+            "baselength");
+    Require(geometry.first_curved_track_station_meters() == 48.5 &&
+                geometry.first_superelevated_track_station_meters() == 48.5 &&
+                !geometry.first_graded_track_station_meters().has_value(),
+            "imported curve asset has the wrong first seam support");
+
+    const double circular_curvature = 1.0 / radius_meters;
+    Require(geometry.CurvatureRadiansPerMeter(25.0) == 0.0 &&
+                geometry.SuperelevationMeters(25.0) == 0.0 &&
+                Near(geometry.CurvatureRadiansPerMeter(75.0),
+                     0.5 * circular_curvature) &&
+                Near(geometry.SuperelevationMeters(75.0),
+                     0.5 * superelevation_meters) &&
+                geometry.CurvatureRadiansPerMeter(150.0) ==
+                    circular_curvature &&
+                geometry.SuperelevationMeters(150.0) ==
+                    superelevation_meters,
+            "imported curve asset changed its entry or circular segment");
+    if (ends_in_circular_segment) {
+        Require(geometry.CurvatureRadiansPerMeter(
+                    expected_end_station_meters - 25.0) ==
+                        circular_curvature &&
+                    geometry.SuperelevationMeters(
+                        expected_end_station_meters - 25.0) ==
+                        superelevation_meters &&
+                    geometry.CenterlineUpwardGrade(
+                        expected_end_station_meters - 25.0) == 0.0,
+                "truncated curve asset does not end in its circular segment");
+    } else {
+        Require(Near(geometry.CurvatureRadiansPerMeter(625.0),
+                     0.5 * circular_curvature) &&
+                    Near(geometry.SuperelevationMeters(625.0),
+                         0.5 * superelevation_meters) &&
+                    geometry.CurvatureRadiansPerMeter(
+                        expected_end_station_meters - 100.0) == 0.0 &&
+                    geometry.SuperelevationMeters(
+                        expected_end_station_meters - 100.0) == 0.0 &&
+                    geometry.CenterlineUpwardGrade(
+                        expected_end_station_meters - 100.0) == 0.0,
+                "qualification curve asset does not end straight and level");
+    }
+
+    const auto check_seam = [&](double station) {
+        const double raw_fraction = RawCurveTransitionFraction(station);
+        Require(std::abs(geometry.CurvatureRadiansPerMeter(station) -
+                         raw_fraction * circular_curvature) > 1.0e-10 &&
+                    std::abs(geometry.SuperelevationMeters(station) -
+                             raw_fraction * superelevation_meters) > 1.0e-9,
+                "imported curve asset lost a three-metre seam");
+    };
+    for (const double station : {49.0, 99.0}) {
+        check_seam(station);
+    }
+    if (!ends_in_circular_segment) {
+        for (const double station : {599.0, 649.0}) {
+            check_seam(station);
+        }
+    }
+
+    const auto centerline =
+        geometry.CenterlinePositionInInertialMeters(150.0);
+    Require(centerline.allFinite() && centerline.z() == 0.0,
+            "imported curve centerline is not finite and level");
+    const auto projection =
+        geometry.ProjectPointNearSeed(centerline, 150.2, 1.0);
+    Require(Near(projection.track_station_meters(), 150.0, 2.0e-12),
+            "imported curve centerline did not project to its own station");
+}
+
+void CheckQualificationStraightAsset(const std::filesystem::path& asset_path) {
+    const auto geometry = LoadTrackGeometryFromJsonFile(asset_path);
+    Require(geometry.start_track_station_meters() == 0.0 &&
+                geometry.end_track_station_meters() == 1100.0 &&
+                geometry.superelevation_reference_baselength_meters() == 1.5,
+            "qualification straight asset has the wrong domain or baselength");
+    constexpr double kStation = 1000.0;
+    const auto point =
+        geometry.CenterlinePositionInInertialMeters(kStation);
+    Require(point.x() == kStation && point.y() == 0.0 && point.z() == 0.0 &&
+                geometry.CurvatureRadiansPerMeter(kStation) == 0.0 &&
+                geometry.SuperelevationMeters(kStation) == 0.0 &&
+                geometry.CenterlineUpwardGrade(kStation) == 0.0,
+            "qualification straight asset is not straight and level");
 }
 
 void CheckChunshenStationAsset(const std::filesystem::path& asset_path) {
@@ -423,20 +520,25 @@ void CheckStrictRejections(const std::filesystem::path& path) {
 
 int main(int argc, char* argv[]) {
     try {
-        if (argc != 5) {
+        if (argc != 9) {
             throw std::invalid_argument(
-                "expected the straight, R300 and Chunshen Station assets, "
-                "and a scratch directory");
+                "expected the straight, R300, combined-line, R600, R800, "
+                "R1000 and qualification-straight assets, and a scratch "
+                "directory");
         }
-        const std::filesystem::path scratch = argv[4];
+        const std::filesystem::path scratch = argv[8];
         std::filesystem::remove_all(scratch);
         std::filesystem::create_directories(scratch);
         const std::filesystem::path temporary_configuration =
             scratch / "track_geometry.json";
 
         CheckRealAsset(argv[1]);
-        CheckGz18R300Asset(argv[2]);
+        CheckR300QualificationAsset(argv[2]);
         CheckChunshenStationAsset(argv[3]);
+        CheckImportedCurveAsset(argv[4], 1100.0, 600.0, 0.1, false);
+        CheckImportedCurveAsset(argv[5], 1100.0, 800.0, 0.11, false);
+        CheckImportedCurveAsset(argv[6], 300.0, 1000.0, 0.12, true);
+        CheckQualificationStraightAsset(argv[7]);
         CheckNondegenerateRecordAndLifetime(temporary_configuration);
         CheckStrictRejections(temporary_configuration);
         std::filesystem::remove_all(scratch);

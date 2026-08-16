@@ -250,64 +250,50 @@ void CheckMissingSeriesFailsLoudly(const std::filesystem::path& data_root) {
     throw std::runtime_error("a missing referenced series was accepted");
 }
 
-void CheckGz18R300Aar5Asset(const std::filesystem::path& source_data_root) {
+void CheckPublicIrregularityAsset(
+    const std::filesystem::path& source_data_root,
+    std::string_view identifier, double gate_start_meters,
+    double gate_end_meters, double sample_station_meters,
+    double expected_lateral_meters, double expected_vertical_meters) {
     const auto field = LoadTrackIrregularityFieldFromDataRoot(
-        source_data_root, "gz18_r300_aar5_reference_irregularity");
-    Require(field.LateralDisplacementMeters(59.0) == 0.0 &&
-                field.VerticalDisplacementMeters(59.0) == 0.0 &&
-                field.LateralDisplacementMeters(1001.0) == 0.0 &&
-                field.VerticalDisplacementMeters(1001.0) == 0.0,
-            "GZ18 R300 AAR5 asset remains active outside [60, 1000] m");
-    Require(field.LateralDisplacementMeters(60.0) == 0.0 &&
-                field.VerticalDisplacementMeters(60.0) == 0.0 &&
-                field.LateralDisplacementMeters(1000.0) == 0.0 &&
-                field.VerticalDisplacementMeters(1000.0) == 0.0,
-            "GZ18 R300 AAR5 asset endpoints are not zero");
-    Require(field.LateralDisplacementMeters(100.0) ==
-                    -0.0010418007586758813 &&
-                field.VerticalDisplacementMeters(100.0) ==
-                    -0.0017274249872550945 &&
-                field.LateralDisplacementMeters(960.0) ==
-                    0.0032490507631524118 &&
-                field.VerticalDisplacementMeters(960.0) ==
-                    0.005387298316295291,
-            "GZ18 R300 AAR5 exact fade boundaries drifted");
-    Require(std::isfinite(field.LateralSlopeMetersPerMeter(100.0)) &&
-                std::isfinite(field.VerticalSlopeMetersPerMeter(100.0)) &&
-                std::isfinite(field.LateralSlopeMetersPerMeter(960.0)) &&
-                std::isfinite(field.VerticalSlopeMetersPerMeter(960.0)),
-            "GZ18 R300 AAR5 fade-boundary slopes are not finite");
-}
-
-void CheckIrwR300Aar5Asset(const std::filesystem::path& source_data_root) {
-    const auto field = LoadTrackIrregularityFieldFromDataRoot(
-        source_data_root, "irw_r300_aar5_reference_irregularity");
-    Require(field.LateralDisplacementMeters(-1.0) == 0.0 &&
-                field.VerticalDisplacementMeters(-1.0) == 0.0 &&
-                field.LateralDisplacementMeters(1250.0) == 0.0 &&
-                field.VerticalDisplacementMeters(1250.0) == 0.0,
-            "IRW R300 AAR5 asset remains active outside its frozen point-list domain");
+        source_data_root, identifier);
+    Require(field.LateralDisplacementMeters(-0.1) == 0.0 &&
+                field.VerticalDisplacementMeters(-0.1) == 0.0 &&
+                field.LateralSlopeMetersPerMeter(-0.1) == 0.0 &&
+                field.VerticalSlopeMetersPerMeter(-0.1) == 0.0 &&
+                field.LateralDisplacementMeters(gate_end_meters + 0.1) == 0.0 &&
+                field.VerticalDisplacementMeters(gate_end_meters + 0.1) == 0.0 &&
+                field.LateralSlopeMetersPerMeter(gate_end_meters + 0.1) == 0.0 &&
+                field.VerticalSlopeMetersPerMeter(gate_end_meters + 0.1) == 0.0,
+            "a public irregularity asset remains active outside its domain");
     Require(field.LateralDisplacementMeters(0.0) == 0.0 &&
                 field.VerticalDisplacementMeters(0.0) == 0.0 &&
-                field.LateralDisplacementMeters(1249.83) == 0.0 &&
-                field.VerticalDisplacementMeters(1249.83) == 0.0,
-            "IRW R300 AAR5 point-list endpoints are not zero");
-    Require(field.LateralDisplacementMeters(160.1405) ==
-                    -2.2541299999999999e-09 &&
-                field.VerticalDisplacementMeters(160.1405) ==
-                    -3.7376099999999999e-09 &&
-                field.LateralDisplacementMeters(450.01400000000001) ==
-                    -0.0022578400000000001 &&
-                field.VerticalDisplacementMeters(450.01400000000001) ==
-                    -0.0037437500000000001,
-            "IRW R300 AAR5 frozen point values drifted");
-    Require(std::isfinite(field.LateralSlopeMetersPerMeter(160.1405)) &&
-                std::isfinite(field.VerticalSlopeMetersPerMeter(160.1405)) &&
+                field.LateralDisplacementMeters(gate_start_meters - 0.1) == 0.0 &&
+                field.VerticalDisplacementMeters(gate_start_meters - 0.1) == 0.0 &&
+                field.LateralDisplacementMeters(gate_start_meters) == 0.0 &&
+                field.VerticalDisplacementMeters(gate_start_meters) == 0.0 &&
+                field.LateralDisplacementMeters(gate_end_meters) == 0.0 &&
+                field.VerticalDisplacementMeters(gate_end_meters) == 0.0,
+            "a public irregularity asset does not close at its gate");
+    Require(field.LateralDisplacementMeters(gate_start_meters + 0.1) != 0.0 &&
+                field.VerticalDisplacementMeters(gate_start_meters + 0.1) != 0.0 &&
+                field.LateralDisplacementMeters(gate_end_meters - 0.1) != 0.0 &&
+                field.VerticalDisplacementMeters(gate_end_meters - 0.1) != 0.0,
+            "a public irregularity asset lost a fade window");
+    Require(field.LateralDisplacementMeters(sample_station_meters) ==
+                    expected_lateral_meters &&
+                field.VerticalDisplacementMeters(sample_station_meters) ==
+                    expected_vertical_meters,
+            "a public irregularity asset's frozen point values drifted");
+    Require(std::isfinite(
+                field.LateralSlopeMetersPerMeter(sample_station_meters)) &&
                 std::isfinite(
-                    field.LateralSlopeMetersPerMeter(450.01400000000001)) &&
-                std::isfinite(
-                    field.VerticalSlopeMetersPerMeter(450.01400000000001)),
-            "IRW R300 AAR5 spline slopes are not finite");
+                    field.VerticalSlopeMetersPerMeter(sample_station_meters)) &&
+                std::abs(field.LateralSlopeMetersPerMeter(gate_end_meters)) <=
+                    1.0e-10 &&
+                std::abs(field.VerticalSlopeMetersPerMeter(gate_end_meters)) <=
+                    1.0e-10,
+            "a public irregularity asset's spline endpoint does not close");
 }
 
 }  // namespace
@@ -320,8 +306,15 @@ int main(int argc, char* argv[]) {
         }
         const std::filesystem::path source_data_root = argv[1];
         const std::filesystem::path data_root = argv[2];
-        CheckGz18R300Aar5Asset(source_data_root);
-        CheckIrwR300Aar5Asset(source_data_root);
+        CheckPublicIrregularityAsset(
+            source_data_root, "aar5_irregularity", 160.0, 1100.0, 450.0,
+            -0.0061332119664511799, -0.0039961637977636083);
+        CheckPublicIrregularityAsset(
+            source_data_root, "aar6_irregularity", 50.0, 300.0, 150.0,
+            0.00089248792825941461, 0.0042754527301558376);
+        CheckPublicIrregularityAsset(
+            source_data_root, "erri_low_irregularity", 50.0, 500.0, 250.0,
+            -0.00098561313483934172, -0.00064517544482042041);
         CheckIndependentNonuniformSeriesAndLifetime(data_root);
         CheckStrictRejections(data_root);
         CheckMissingSeriesFailsLoudly(data_root);

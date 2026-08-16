@@ -28,7 +28,7 @@
       },
       {
         "shape": "constant",
-        "length_meters": 500.0,
+        "length_meters": 450.0,
         "curvature_radians_per_meter": 0.0
       }
     ],
@@ -65,7 +65,7 @@
       },
       {
         "shape": "constant",
-        "length_meters": 500.0,
+        "length_meters": 450.0,
         "superelevation_meters": 0.0
       }
     ],
@@ -80,7 +80,7 @@
     "segments": [
       {
         "shape": "constant_grade",
-        "length_meters": 1150.0,
+        "length_meters": 1100.0,
         "centerline_upward_grade": 0.0
       }
     ],

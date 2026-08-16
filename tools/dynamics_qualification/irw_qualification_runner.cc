@@ -1,5 +1,8 @@
 #include "irw_qualification_runner.h"
 
+#include <stdexcept>
+#include <string_view>
+
 #include "irw_integration_recipe.h"
 #include "vehicle_qualification_runner_internal.h"
 
@@ -40,10 +43,26 @@ constexpr internal::VehicleQualificationRecipe kAar5Recipe{
     internal::TrackIrregularityRequirement::kRequired,
     &configuration::AssembleIrwContactScenario};
 
+constexpr std::string_view kAar5IrregularityIdentifier = "aar5_irregularity";
+
+const internal::VehicleQualificationRecipe& ResolveRecipe(
+    const IrwQualificationRunConfiguration& input) {
+    if (!input.track_irregularity_identifier.has_value()) {
+        return kNoIrregularityRecipe;
+    }
+    if (*input.track_irregularity_identifier == kAar5IrregularityIdentifier) {
+        return kAar5Recipe;
+    }
+    throw std::invalid_argument(
+        "IRW qualification accepts only no track irregularity or "
+        "'aar5_irregularity'");
+}
+
 }  // namespace
 
 QualificationRunSummary RunIrwQualification(
     const IrwQualificationRunConfiguration& input) {
+    const internal::VehicleQualificationRecipe& recipe = ResolveRecipe(input);
     return internal::RunVehicleQualification(
         internal::QualificationRunConfiguration{
             input.vehicle_definition_path,
@@ -55,8 +74,7 @@ QualificationRunSummary RunIrwQualification(
             input.duration_nanoseconds,
             input.sample_period_nanoseconds,
             std::nullopt},
-        input.track_irregularity_identifier.has_value() ? kAar5Recipe
-                                                        : kNoIrregularityRecipe);
+        recipe);
 }
 
 }  // namespace orvd::dynamics_qualification

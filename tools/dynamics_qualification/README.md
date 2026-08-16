@@ -20,9 +20,9 @@ The executables are:
 - `orvd_gz18_dynamics_qualification`: passive GZ18 long-window runs with one
   explicitly named track-irregularity asset;
 - `orvd_irw_dynamics_qualification`: passive IRW runs, with either no track
-  irregularity or the explicitly named R300 AAR5 reference field;
+  irregularity or the common AAR5 field in the R300 scenario;
 - `orvd_irw_p179_controlled_qualification`: the closed IRW
-  H3/R300/AAR5/100 Hz controlled scenario.
+  H3/R300/AAR5/100 Hz control and event scenario.
 
 The GZ18 recipe uses relative tolerance `1e-6` and q/v/z absolute tolerances
 `1e-7 / 1e-6 / 0.1 N`. IRW A and the controlled IRW C/P179 runner use J0:

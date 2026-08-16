@@ -1,5 +1,5 @@
 // The closed IRW runner keeps G70/G71 explicitly free of track irregularity
-// and accepts G72's frozen AAR5 asset through the same physical recipe.
+// and accepts the current common AAR5 asset through the closed AAR5 recipe.
 
 #include <algorithm>
 #include <array>
@@ -294,7 +294,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.duration_nanoseconds = 100'000;
     configuration.sample_period_nanoseconds = 100'000;
     configuration.track_irregularity_identifier =
-        "irw_r300_aar5_reference_irregularity";
+        "aar5_irregularity";
     const auto aar5_summary = RunIrwQualification(configuration);
     Require(aar5_summary.sample_count == 2,
             "the short AAR5 loading run did not publish its two clock points");
@@ -302,7 +302,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
         ReadWholeFile(configuration.output_directory / "metadata.json");
     Require(aar5_metadata.find(
                 "\"track_irregularity_identifier\": "
-                "\"irw_r300_aar5_reference_irregularity\"") !=
+                "\"aar5_irregularity\"") !=
                 std::string::npos,
             "the IRW AAR5 identity did not reach the qualification artifact");
     Require(aar5_metadata.find(
@@ -325,6 +325,10 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.track_irregularity_identifier = "";
     Require(Throws([&] { (void)RunIrwQualification(configuration); }),
             "the required IRW AAR5 recipe accepted an empty identity");
+    configuration.output_directory = root / "unsupported-irregularity";
+    configuration.track_irregularity_identifier = "aar6_irregularity";
+    Require(Throws([&] { (void)RunIrwQualification(configuration); }),
+            "the IRW AAR5 recipe accepted a different irregularity field");
 }
 
 void CheckPassiveDenseJacobianThreading(
@@ -340,7 +344,7 @@ void CheckPassiveDenseJacobianThreading(
     configuration.track_geometry_path = std::filesystem::relative(argv[3]);
     configuration.orvd_data_root = std::filesystem::relative(argv[4]);
     configuration.track_irregularity_identifier =
-        "irw_r300_aar5_reference_irregularity";
+        "aar5_irregularity";
     configuration.duration_nanoseconds = 30'000'000;
     configuration.sample_period_nanoseconds = 30'000'000;
 
@@ -577,6 +581,9 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     Require(metadata.find("\"qualification_vehicle_recipe\": "
                           "\"IRW_P179_100HZ_CONTROLLED\"") !=
                     std::string::npos &&
+                metadata.find("\"track_irregularity_identifier\": "
+                              "\"aar5_irregularity\"") !=
+                    std::string::npos &&
                 metadata.find("\"numerical_tolerances\": {\"relative\": "
                               "9.9999999999999995e-07, \"q_absolute\": "
                               "9.9999999999999995e-07, \"v_absolute\": "
@@ -655,6 +662,6 @@ int main(int argc, char** argv) {
                      failures);
         return 1;
     }
-    std::puts("IRW no-irregularity and frozen-AAR5 recipes verified");
+    std::puts("IRW no-irregularity and common-AAR5 recipe wiring verified");
     return 0;
 }

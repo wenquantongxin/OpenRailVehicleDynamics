@@ -552,9 +552,10 @@ void RequireExactNames(const std::vector<std::string>& actual,
              ++patch) {
             const auto& indices = binding.contact_output_indices[wheel][patch];
             ContactPatchForces& forces = result.patches[wheel][patch];
-            // Force Element 78 negates Tx, Ty and N for arrow display.
-            forces.longitudinal_newtons = -outputs[indices[0]];
-            forces.lateral_newtons = -outputs[indices[1]];
+            // The frozen Type-78 ABI already exposes wheel-side Tx/Ty.  Its
+            // raw normal output alone needs negation to become compressive N.
+            forces.longitudinal_newtons = outputs[indices[0]];
+            forces.lateral_newtons = outputs[indices[1]];
             forces.normal_newtons = -outputs[indices[2]];
             if (forces.longitudinal_newtons != 0.0 ||
                 forces.lateral_newtons != 0.0 ||

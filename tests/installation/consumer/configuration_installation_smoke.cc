@@ -43,9 +43,9 @@ int main(int argc, char* argv[]) {
             orvd::configuration::LoadTrackGeometryFromJsonFile(
                 std::filesystem::path(argv[4]) / "track_library" /
                 "geometries" /
-                "r300_centerline_superelevation_1150m.json");
+                "r300_centerline_superelevation_1100m.json");
         if (r300_line.start_track_station_meters() != 0.0 ||
-            r300_line.end_track_station_meters() != 1150.0 ||
+            r300_line.end_track_station_meters() != 1100.0 ||
             r300_line.CurvatureRadiansPerMeter(150.0) != 1.0 / 300.0 ||
             r300_line.SuperelevationMeters(150.0) != 0.12 ||
             r300_line.superelevation_reference_baselength_meters() != 1.5) {
@@ -157,11 +157,11 @@ int main(int argc, char* argv[]) {
             orvd::configuration::LoadTrackGeometryFromJsonFile(
                 std::filesystem::path(argv[4]) / "track_library" /
                 "geometries" /
-                "r300_centerline_superelevation_1150m.json");
+                "r300_centerline_superelevation_1100m.json");
         auto irw_irregularity = std::make_unique<
             orvd::wheel_rail_contact::TrackIrregularityField>(
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
-                argv[4], "irw_r300_aar5_reference_irregularity"));
+                argv[4], "aar5_irregularity"));
         const auto irw_scenario =
             orvd::configuration::AssembleIrwContactScenario(
                 irw_vehicle, irw_startup, std::move(irw_line), argv[4], 0.0,
@@ -277,7 +277,7 @@ int main(int argc, char* argv[]) {
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
         const auto aar6_irregularity =
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
-                argv[4], "gz18_aar6_reference_irregularity");
+                argv[4], "aar6_irregularity");
         for (const double station : {50.0, 100.0, 250.0, 300.0}) {
             if (!std::isfinite(
                     aar6_irregularity.LateralDisplacementMeters(station)) ||
@@ -294,10 +294,29 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         }
+        const auto erri_low_irregularity =
+            orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
+                argv[4], "erri_low_irregularity");
+        for (const double station : {50.0, 100.0, 450.0, 500.0}) {
+            if (!std::isfinite(
+                    erri_low_irregularity.LateralDisplacementMeters(station)) ||
+                !std::isfinite(
+                    erri_low_irregularity.VerticalDisplacementMeters(station)) ||
+                !std::isfinite(
+                    erri_low_irregularity.LateralSlopeMetersPerMeter(station)) ||
+                !std::isfinite(
+                    erri_low_irregularity.VerticalSlopeMetersPerMeter(station))) {
+                std::fprintf(
+                    stderr,
+                    "installed ERRI low asset did not produce finite values "
+                    "and slopes\n");
+                return 1;
+            }
+        }
         auto aar5_irregularity =
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
-                argv[4], "gz18_r300_aar5_reference_irregularity");
-        for (const double station : {60.0, 100.0, 960.0, 1000.0}) {
+                argv[4], "aar5_irregularity");
+        for (const double station : {160.0, 200.0, 1060.0, 1100.0}) {
             if (!std::isfinite(
                     aar5_irregularity.LateralDisplacementMeters(station)) ||
                 !std::isfinite(
@@ -308,7 +327,7 @@ int main(int argc, char* argv[]) {
                     aar5_irregularity.VerticalSlopeMetersPerMeter(station))) {
                 std::fprintf(
                     stderr,
-                    "installed GZ18 R300 AAR5 asset did not produce finite "
+                    "installed AAR5 asset did not produce finite "
                     "values and slopes\n");
                 return 1;
             }
