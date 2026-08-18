@@ -24,6 +24,7 @@
 #include "atomic_qualification_directory.h"
 #include "irw_integration_recipe.h"
 #include "qualification_sample_clock.h"
+#include "vehicle_qualification_runner_internal.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/irw_full_state_control_event_session.h"
@@ -674,6 +675,7 @@ void WriteMetadata(
     const configuration::AssembledVehicleSystem& assembled,
     const configuration::IrwFullStateControlEventSession& session,
     const IrwP179ControlledQualificationSummary& summary,
+    int contact_batch_parallel_team_probe_worker_count,
     std::string_view controller_identifier,
     std::string_view conditioner_identifier) {
     constexpr auto& recipe = internal::kIrwP179ControlledIntegrationRecipe;
@@ -764,7 +766,9 @@ void WriteMetadata(
            << "    \"generalized_velocity_absolute_tolerance\": "
            << recipe.velocity_absolute_tolerance << ",\n"
            << "    \"series_force_absolute_tolerance_newtons\": "
-           << recipe.series_force_absolute_tolerance_newtons << "\n"
+           << recipe.series_force_absolute_tolerance_newtons << ",\n"
+           << "    \"contact_batch_parallel_team_probe_worker_count\": "
+           << contact_batch_parallel_team_probe_worker_count << "\n"
            << "  },\n"
            << "  \"input_paths\": {\n"
            << "    \"vehicle_definition\": "
@@ -873,6 +877,8 @@ void WritePerformance(
 IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
     const IrwP179ControlledQualificationRunConfiguration& input) {
     const ResolvedConfiguration resolved = ResolveConfiguration(input);
+    const int contact_batch_parallel_team_probe_worker_count =
+        internal::RequireRealContactBatchParallelTeam();
     AtomicQualificationDirectory output_directory(
         resolved.output_directory);
     const auto vehicle = configuration::LoadVehicleDefinitionFromJsonFile(
@@ -1099,6 +1105,7 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
         endpoint_diagnostics);
     WriteMetadata(output_directory.working_path() / "metadata.json",
                   resolved, startup, assembled, event_session, summary,
+                  contact_batch_parallel_team_probe_worker_count,
                   controller_identifier, conditioner_identifier);
     const std::filesystem::path complete_path =
         output_directory.working_path() / "COMPLETE";

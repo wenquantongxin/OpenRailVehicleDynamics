@@ -24,23 +24,27 @@ G59 起，构建工具链还必须提供标准 OpenMP C++ 编译与运行时支�
 编译器工具链提供，不作为第五份源码归档捆绑。ORVD 通过 CMake `FindOpenMP` 建立并在安装包中
 恢复该依赖，不手写编译器旗标或运行库路径。
 
-Windows 上可使用 Visual Studio 生成器：
+Windows 支持 MSYS2 的两套 GNU 风格工具链：UCRT64 的 GCC/g++ 与 CLANG64 的 clang/clang++。
+前者使用 libgomp，后者须安装同一 CLANG64 环境的 LLVM libomp；CMake `FindOpenMP` 必须从所选
+环境解析编译参数、头文件与唯一运行时。分别在对应 MSYS2 shell 中配置：
 
-```powershell
-cmake -S . -B build -G "Visual Studio 16 2019" -A x64 `
+```sh
+# UCRT64
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
   -DCMAKE_INSTALL_PREFIX=<orvd-prefix>
-cmake --build build --config Release
+
+# CLANG64
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_INSTALL_PREFIX=<orvd-prefix>
+
+cmake --build build
 ```
 
-也可在 Visual Studio 开发者命令环境中使用较新的独立 clang-cl；C 与 C++ 编译器必须属于同一
-工具链，且仍使用所选 Visual Studio 提供的 Windows SDK 与标准库。Visual Studio 2019 随附的
-Clang 12 不满足本项目的 C++23 编译前沿；其 MSVC 19.29 标准库也不足以构建少数使用较新 C++23
-设施的测试。因此该环境只资格 Release 产品库和独立安装消费者，不应通过降低语言级别来伪造完整
-测试通过。
-
-Visual Studio 2019 的 FileTracker 仍受嵌套工程路径长度约束，即使系统已经启用长路径也可能
-失败。源码包、构建树与安装树应直接放在短的真实物理目录中；不要用目录联接掩盖路径问题，因为
-MSBuild／FileTracker 仍可能解析到较长的实体路径。
+原生 MSVC 和 clang-cl 不属于当前支持面，顶层配置会直接拒绝，不建立缺少真 OpenMP 语义的半支持
+构建。两套受支持工具链都必须通过 `verify_openmp_parallel_execution`；只完成编译或链接而未形成
+真实并行团队不构成通过。源码包、构建树与安装树仍应使用短的真实物理目录。
 
 SUNDIALS 配置只启用 CVODE 软件包，关闭其全部当前不消费的并行后端和第三方线性代数依赖。
 SUNDIALS 7.7.0 上游仍无条件构建一组基础矩阵、线性/非线性求解模块；本项目不维护私有补丁

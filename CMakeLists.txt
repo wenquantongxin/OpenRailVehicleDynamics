@@ -25,6 +25,19 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
+# Windows support is deliberately bound to the GNU-style GCC and Clang
+# frontends, whose libgomp/libomp paths implement the OpenMP semantics used by
+# the product and its executable toolchain gate. Native MSVC and clang-cl use a
+# different OpenMP surface and are not partially supported.
+if(WIN32 AND
+   (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR
+    CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
+    message(FATAL_ERROR
+        "Windows ORVD builds require a GNU-style GCC or Clang frontend "
+        "with libgomp or LLVM libomp; native MSVC and clang-cl are not "
+        "supported")
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Every installed ORVD archive is a supported dependency of shared-module

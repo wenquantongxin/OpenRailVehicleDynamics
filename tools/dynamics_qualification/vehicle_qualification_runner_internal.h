@@ -56,6 +56,12 @@ struct VehicleQualificationRecipe final {
     ScenarioAssembler assemble_scenario{};
 };
 
+// Observes one real OpenMP team at the contact batch's fixed eight-interface
+// request. A multi-worker request that the runtime serializes is rejected;
+// a resolved one-worker request remains a valid serial execution identity.
+// The returned value is the number of distinct workers actually observed.
+[[nodiscard]] int RequireRealContactBatchParallelTeam();
+
 [[nodiscard]] QualificationRunSummary RunVehicleQualification(
     const QualificationRunConfiguration& configuration,
     const VehicleQualificationRecipe& recipe);

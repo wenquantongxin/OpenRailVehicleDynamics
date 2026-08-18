@@ -842,8 +842,10 @@ IRW B 的四轴横移／摇头零时滞最小相关系数为 `0.998963 / 0.99893
   1. 三条代表长窗按现行 SIMPACK 比较口径复跑，README 已展示的宏观结论不被性能工作改写；更新性能
      文档中的现行主线结果，不改历史档案。
   2. 记录推进、观测、写出和完整进程实时系数；重新剖析实际热点，不假定 GZ18 历史热点仍主导 IRW。
-  3. Ubuntu GCC 完整测试通过；Clang、Windows MSVC／clang-cl 的 Release 产品和可重定位安装
-     消费者继续通过。工作区不保留候选开关、临时探针或运行工件。
+  3. Ubuntu GCC 完整测试通过；Clang（clang-20＋LLVM libomp）完整测试与可重定位安装消费者
+     通过。Windows 支持面为 MSYS2 UCRT64 GCC 与 CLANG64 clang，均须通过
+     `verify_openmp_parallel_execution`；原生 MSVC／clang-cl 由顶层配置拒绝。工作区不保留
+     候选开关、临时探针或运行工件。
 
 **已接受的产品输入：统一轮轨型面预处理与输运。** PERF-13 收口前，负责人裁决 GZ18 与 IRW
 共同采用物理右侧 `0.5 mm` 等弧长重扫、左侧精确镜像、第二自然三次样条和抑制型面／轨道侧滚
@@ -894,6 +896,20 @@ Release、8 个 Jacobian worker、固定 `8–15` CPU 亲和性下，两次 `30 
 为 `0.01506–0.01869 mrad`、最大差 `0.09656 mrad`；宏观响应已接近严格参考与 SIMPACK 之间的
 剩余差异量级，不据此单独归因为模型差异。该裁决只改变 IRW B 的具名内部配方，不把五阶 BDF 外推到
 其他车辆或控制实例。
+
+**Clang 门勘误与真并行门。** 复核证明 Clang 18/20 的 `-fopenmp=libgomp` 丢弃全部 OpenMP
+编译语义——不定义 `_OPENMP`、不生成并行区运行时调用、`-Wall -Wextra -Wpedantic` 下零诊断——
+却仍链接 libgomp，`omp_*` 查询照常应答；因该产品物理逐位不依赖线程数，此类构建能通过全部数值
+测试。此前记录的 "Clang 18＋libgomp 承重检查 4/4" 因此只证明串行编译、串行数值一致与安装
+消费者，不证明 OpenMP 路径。整改为：两个产品并行翻译单元与持有探针实现的共享资格 runner 在
+`<omp.h>` 之后编译期强制 `_OPENMP`；被动与 100 Hz 受控 runner 均在推进前调用同一实团队探针，
+拒绝"配置多工作者、交付单线程"的运行，并把实测团队规模写入 `numerical_execution_contract` 的
+`contact_batch_parallel_team_probe_worker_count`；新增 `verify_openmp_parallel_execution`
+以产品两种并行区形状（合并 `parallel for` 静态调度、`parallel` ＋ `for` 动态列调度）验证
+真实多线程。真并行 Clang 门为 clang-20 ＋ LLVM libomp（Ubuntu 24.04 包 `libomp-20-dev`，
+CMake 自动发现 `-fopenmp=libomp`）；GCC 主线继续使用 libgomp，最终进程只加载一个 OpenMP
+运行时。Windows 支持面收口为 MSYS2 UCRT64 GCC/g++ 与 CLANG64 clang/clang++；原生 MSVC 和
+clang-cl 由顶层配置直接拒绝，不建立缺少真 OpenMP 语义的半支持构建。
 
 ## 依赖顺序
 

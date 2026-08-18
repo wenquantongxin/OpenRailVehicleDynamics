@@ -23,6 +23,16 @@
 #include <Eigen/Core>
 #include <omp.h>
 
+// The contact batch and the parallel Jacobian this runner qualifies are
+// load-bearing parallel paths. A toolchain can accept an OpenMP-looking
+// flag, link an OpenMP runtime, and still drop every pragma: Clang's
+// -fopenmp=libgomp does exactly that, with no diagnostic, and the resulting
+// binary answers omp_* queries plausibly while running serial. Refuse that
+// build here instead of qualifying it.
+#ifndef _OPENMP
+#error "OpenMP compile semantics are required: _OPENMP is not defined"
+#endif
+
 #include "atomic_qualification_directory.h"
 #include "qualification_sample_clock.h"
 
@@ -659,6 +669,7 @@ void WriteMetadata(
     const std::filesystem::path& path,
     const QualificationRunConfiguration& configuration,
     const VehicleQualificationRecipe& recipe, int maximum_bdf_order,
+    int contact_batch_parallel_team_probe_worker_count,
     const configuration::ResolvedStartupState& startup,
     const configuration::AssembledVehicleSystem& assembled,
     const QualificationSampleClock& clock, const BoundaryUse& before,
@@ -754,6 +765,9 @@ void WriteMetadata(
            << kMaximumContactWorkerCount << ",\n"
            << "    \"contact_batch_requested_worker_count\": "
            << requested_contact_worker_count
+           << ",\n"
+           << "    \"contact_batch_parallel_team_probe_worker_count\": "
+           << contact_batch_parallel_team_probe_worker_count
            << ",\n"
            << "    \"rhs_contact_projection_half_width_meters\": "
            << kRhsContactProjectionHalfWidthMeters << ",\n"
@@ -915,6 +929,33 @@ void ReportBoundaryWarning(std::string_view side, const BoundaryUse& use) {
 
 }  // namespace
 
+int RequireRealContactBatchParallelTeam() {
+    const int requested =
+        std::min({kMaximumContactWorkerCount,
+                  static_cast<int>(kInterfaceCount), omp_get_max_threads()});
+    if (requested <= 1) {
+        return 1;
+    }
+    std::array<int, kMaximumContactWorkerCount> seen{};
+#pragma omp parallel num_threads(requested)
+    {
+        const int ordinal = omp_get_thread_num();
+        if (ordinal >= 0 && ordinal < static_cast<int>(seen.size())) {
+            seen[static_cast<std::size_t>(ordinal)] = 1;
+        }
+    }
+    int distinct = 0;
+    for (const int flag : seen) {
+        distinct += flag;
+    }
+    if (distinct < 2) {
+        Reject("the OpenMP runtime serialized a requested " +
+               std::to_string(requested) +
+               "-worker contact batch; check the runtime thread limits");
+    }
+    return distinct;
+}
+
 QualificationRunSummary RunVehicleQualification(
     const QualificationRunConfiguration& run_configuration,
     const VehicleQualificationRecipe& recipe) {
@@ -942,6 +983,8 @@ QualificationRunSummary RunVehicleQualification(
             " dynamics qualification: duration and sample period must be "
             "positive integer nanoseconds");
     }
+    const int contact_batch_parallel_team_probe_worker_count =
+        RequireRealContactBatchParallelTeam();
     const QualificationSampleClock sample_clock(
         static_cast<std::uint64_t>(run_configuration.duration_nanoseconds),
         static_cast<std::uint64_t>(
@@ -1295,7 +1338,9 @@ QualificationRunSummary RunVehicleQualification(
 
     WriteMetadata(output_directory.working_path() / "metadata.json",
                   resolved_run_configuration, recipe,
-                  summary.maximum_bdf_order, startup, assembled,
+                  summary.maximum_bdf_order,
+                  contact_batch_parallel_team_probe_worker_count,
+                  startup, assembled,
                   sample_clock, before_definition_interval,
                   after_definition_interval,
                   longest_zero_contact_runs,

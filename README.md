@@ -77,8 +77,9 @@ cmake --install build
 不依赖系统开发包的离线方式见
 [`distribution/dependencies/README.md`](distribution/dependencies/README.md)：开发者先用显式工具
 组装源码包，普通使用者只需 CMake、C/C++ 工具链和构建器即可完成全部依赖与 ORVD 的构建安装。
-构建工具链及其标准库须支持项目使用的 C++23 特性。Windows 源码树、构建树和安装树应使用短的
-真实目录，不依赖目录联接。
+构建工具链及其标准库须支持项目使用的 C++23 特性。Windows 支持 MSYS2 UCRT64 的 GCC/g++ 与
+CLANG64 的 clang/clang++；原生 MSVC 和 clang-cl 不属于当前支持面。Windows 源码树、构建树和
+安装树应使用短的真实目录，不依赖目录联接。
 
 ## 结果口径
 

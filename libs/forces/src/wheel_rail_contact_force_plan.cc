@@ -16,6 +16,15 @@
 #include <Eigen/Geometry>
 #include <omp.h>
 
+// The parallel regions below are load-bearing. A toolchain can accept an
+// OpenMP-looking flag, link an OpenMP runtime, and still drop every pragma:
+// Clang's -fopenmp=libgomp does exactly that, with no diagnostic, and the
+// resulting binary answers omp_* queries plausibly while running serial.
+// Refuse that build here instead of qualifying it.
+#ifndef _OPENMP
+#error "OpenMP compile semantics are required: _OPENMP is not defined"
+#endif
+
 #include "orvd/multibody_model/multibody_frame_spatial_velocity.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
 #include "orvd/wheel_rail_contact/contact_wrench.h"

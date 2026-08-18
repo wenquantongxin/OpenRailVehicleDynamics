@@ -14,6 +14,15 @@
 
 #include <omp.h>
 
+// The parallel regions below are load-bearing. A toolchain can accept an
+// OpenMP-looking flag, link an OpenMP runtime, and still drop every pragma:
+// Clang's -fopenmp=libgomp does exactly that, with no diagnostic, and the
+// resulting binary answers omp_* queries plausibly while running serial.
+// Refuse that build here instead of qualifying it.
+#ifndef _OPENMP
+#error "OpenMP compile semantics are required: _OPENMP is not defined"
+#endif
+
 #include "orvd/integrators/cvode_continuous_state_advancer.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"

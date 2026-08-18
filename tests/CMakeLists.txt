@@ -189,6 +189,19 @@ target_link_libraries(verify_eigen_and_cxx23_toolchain PRIVATE Eigen3::Eigen)
 add_test(NAME verify_eigen_and_cxx23_toolchain
          COMMAND verify_eigen_and_cxx23_toolchain)
 
+# Proves the OpenMP pragmas were compiled into real parallel semantics and the
+# linked runtime forms real teams, using the product's two pragma shapes. A
+# toolchain that drops the pragmas while linking an OpenMP runtime (Clang's
+# -fopenmp=libgomp) passes every numerical test in this suite — the physics is
+# bit-identical across team sizes — and fails only here.
+add_executable(verify_openmp_parallel_execution
+    toolchain/verify_openmp_parallel_execution.cc)
+orvd_configure_first_party_target(verify_openmp_parallel_execution)
+target_link_libraries(verify_openmp_parallel_execution
+    PRIVATE OpenMP::OpenMP_CXX)
+add_test(NAME verify_openmp_parallel_execution
+         COMMAND verify_openmp_parallel_execution)
+
 # The scenario and observation contract both sides of a cross-process comparison
 # are driven from. It is a test contract, not a product library, so it lives here
 # rather than under libs/.
