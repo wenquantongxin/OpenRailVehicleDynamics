@@ -65,10 +65,11 @@ struct WheelRailContactInterfaceDefinition {
 // wrench. The carrier track frame is Track-T evaluated at the interface's
 // projection carrier station; its origin, rather than the effective rail-profile
 // station, is also the point-coordinate origin below. The contact point is the
-// compliant wheel-surface point P. Local Tx/Ty remain attached to their own
-// contact frame; the angle is the pure roll from that frame into the carrier
-// Track-T axes. The patch ordinal is its position in this fixed array for one
-// evaluation, not a persistent identity over time.
+// compliant wheel-surface point P. Local Tx/Ty and dimensionless longitudinal/
+// lateral creepages remain attached to their own contact frame; the angle is
+// the pure roll from that frame into the carrier Track-T axes. The patch ordinal
+// is its position in this fixed array for one evaluation, not a persistent
+// identity over time.
 struct WheelRailContactPatchObservation {
     Eigen::Vector3d contact_point_in_carrier_track_frame_meters{
         Eigen::Vector3d::Zero()};
@@ -77,6 +78,10 @@ struct WheelRailContactPatchObservation {
     double normal_force_newtons{0.0};
     double longitudinal_force_on_wheel_in_contact_frame_newtons{0.0};
     double lateral_force_on_wheel_in_contact_frame_newtons{0.0};
+    // Copied from the contact result that produced this observation; not
+    // recomputed by the force plan.
+    double longitudinal_creepage{0.0};
+    double lateral_creepage{0.0};
     double contact_frame_angle_radians{0.0};
 };
 

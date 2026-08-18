@@ -871,6 +871,10 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                     .lateral_force_on_wheel_in_contact_frame_newtons =
                     result.patches[patch]
                         .tangential.lateral_force_newtons;
+                patch_observation.longitudinal_creepage =
+                    result.patches[patch].creepages.longitudinal;
+                patch_observation.lateral_creepage =
+                    result.patches[patch].creepages.lateral;
                 patch_observation.contact_frame_angle_radians =
                     result.patches[patch].contact_frame_angle_radians;
             }

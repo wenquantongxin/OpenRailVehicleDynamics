@@ -21,4 +21,8 @@ G65 增加 `HalfAngleMidpointRollPitchYawBushing`：以两端姿态构造半角�
 公式，也不额外增加支承矩；四组刚阻常数由不可变 `VehicleForcePlan` 持有，不增加连续状态、
 预载或运行时语义开关。
 
+`WheelRailContactForcePlan` 的公共逐接触斑观测同时给出接触坐标系内的纵/横向力与无量纲纵/横向
+蠕滑率。蠕滑率直接搬运产生该斑力的同一次 `WheelRailContactPatchResult`，不在力计划中重算，也
+不暴露自旋蠕滑率；消费者可按同一 patch 形成 `|Tx * gamma_x| + |Ty * gamma_y|`。
+
 `include/orvd/forces/` 为公开头，`src/` 为实现。

@@ -114,6 +114,8 @@ bool SameObservation(const WheelRailContactInterfaceObservation& actual,
                 right.longitudinal_force_on_wheel_in_contact_frame_newtons ||
             left.lateral_force_on_wheel_in_contact_frame_newtons !=
                 right.lateral_force_on_wheel_in_contact_frame_newtons ||
+            left.longitudinal_creepage != right.longitudinal_creepage ||
+            left.lateral_creepage != right.lateral_creepage ||
             left.contact_frame_angle_radians !=
                 right.contact_frame_angle_radians) {
             return false;
@@ -626,6 +628,15 @@ int main(int argc, char** argv) {
                     !SameObservation(perturbed.observations[0],
                                      baseline.observations[0]),
                 "changing one wheel's joint rate did not reach its contact");
+        const auto& perturbed_patch = perturbed.observations[0].patches[0];
+        const auto& baseline_patch = baseline.observations[0].patches[0];
+        Require(perturbed.observations[0].contact_patch_count > 0 &&
+                    std::isfinite(perturbed_patch.longitudinal_creepage) &&
+                    std::isfinite(baseline_patch.longitudinal_creepage) &&
+                    perturbed_patch.longitudinal_creepage !=
+                        baseline_patch.longitudinal_creepage,
+                "changing one wheel's joint rate did not reach the exposed "
+                "longitudinal creepage");
         for (std::size_t ordinal = 1; ordinal < kInterfaceCount; ++ordinal) {
             Require(SameWrench(perturbed.wrenches[ordinal],
                                baseline.wrenches[ordinal]) &&

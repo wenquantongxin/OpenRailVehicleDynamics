@@ -142,6 +142,8 @@ bool SameObservation(
                 right.longitudinal_force_on_wheel_in_contact_frame_newtons ||
             left.lateral_force_on_wheel_in_contact_frame_newtons !=
                 right.lateral_force_on_wheel_in_contact_frame_newtons ||
+            left.longitudinal_creepage != right.longitudinal_creepage ||
+            left.lateral_creepage != right.lateral_creepage ||
             left.contact_frame_angle_radians !=
                 right.contact_frame_angle_radians) {
             return false;
