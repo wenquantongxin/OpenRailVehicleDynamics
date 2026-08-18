@@ -70,6 +70,9 @@ cmake --install build
 
 外部 CMake 工程使用 `find_package(OpenRailVehicleDynamics CONFIG REQUIRED)`，按所需最高层链接
 例如 `ORVD::integrators`。无需包含源码树、vendored Drake 头或接入层头。
+安装归档统一由位置无关对象构建，因此普通 C++ 程序和进程内共享模块消费同一个安装前缀；决策与
+验收边界见
+[ADR-0008](docs/adr/0008-build-installed-archives-for-shared-module-consumers.md)。
 
 不依赖系统开发包的离线方式见
 [`distribution/dependencies/README.md`](distribution/dependencies/README.md)：开发者先用显式工具

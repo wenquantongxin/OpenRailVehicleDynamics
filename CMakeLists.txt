@@ -27,6 +27,14 @@ endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Every installed ORVD archive is a supported dependency of shared-module
+# consumers such as Python bindings.  Build all targets from position-
+# independent objects so one installed package serves both ordinary C++
+# executables and shared libraries; consumers must not maintain a second ORVD
+# build that differs only in code generation. The decision and its real-link
+# acceptance criterion are recorded in ADR-0008.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Imported targets from find_package are directory-scoped by default, which would
 # leave the product boundary gate below unable to see a dependency that was
 # perfectly visible where it was linked. A boundary check that can only inspect
