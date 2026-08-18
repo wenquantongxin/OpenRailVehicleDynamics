@@ -58,6 +58,17 @@ std::string ReadWholeFile(const std::filesystem::path& path) {
                        std::istreambuf_iterator<char>());
 }
 
+bool NumericalExecutionContractContains(
+    const std::string& metadata, std::string_view field) {
+    constexpr std::string_view kContract =
+        "\"numerical_execution_contract\": {";
+    const std::size_t begin = metadata.find(kContract);
+    const std::size_t end = metadata.find("\n  },", begin);
+    const std::size_t field_position = metadata.find(field, begin);
+    return begin != std::string::npos && end != std::string::npos &&
+           field_position != std::string::npos && field_position < end;
+}
+
 std::vector<std::string> SplitTabs(const std::string& line) {
     std::vector<std::string> fields;
     std::size_t begin = 0;
@@ -230,6 +241,7 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
 
     const auto summary = RunGz18Qualification(configuration);
     Require(summary.sample_count == 2 &&
+                summary.maximum_bdf_order == 2 &&
                 summary.integration_statistics
                         .successful_internal_step_count > 0 &&
                 summary.integration_statistics
@@ -450,6 +462,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     Require(metadata.find(
                 "\"relative_tolerance\": 9.9999999999999995e-07") !=
                 std::string::npos &&
+                NumericalExecutionContractContains(
+                    metadata, "\"maximum_bdf_order\": 2") &&
                 metadata.find(
                     "\"generalized_position_absolute_tolerance\": "
                     "9.9999999999999995e-08") != std::string::npos &&
@@ -510,7 +524,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
             root / ("real-gz18-t" + std::to_string(requested_threads));
         const QualificationRunSummary candidate =
             RunGz18Qualification(comparison);
-        Require(candidate.integration_statistics
+        Require(candidate.maximum_bdf_order == 2 &&
+                    candidate.integration_statistics
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     requested_threads &&
                     SameTrajectoryWork(summary.integration_statistics,

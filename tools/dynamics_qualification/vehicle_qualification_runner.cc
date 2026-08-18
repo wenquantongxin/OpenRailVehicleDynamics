@@ -276,6 +276,28 @@ MakeTolerances(const configuration::AssembledVehicleSystem& assembled,
         recipe.relative_tolerance, std::move(absolute));
 }
 
+[[nodiscard]] std::unique_ptr<integrators::SystemContinuousStateAdvancer>
+MakeAdvancer(const configuration::AssembledVehicleSystem& assembled,
+             system_assembly::SystemRuntimeContext& accepted_context,
+             const VehicleQualificationRecipe& recipe) {
+    auto tolerances = MakeTolerances(assembled, recipe);
+    switch (recipe.maximum_bdf_order) {
+        case integrators::internal::MaximumBdfOrder::kSecond:
+            return std::make_unique<
+                integrators::SystemContinuousStateAdvancer>(
+                assembled.system(), assembled.compiled_plan(),
+                accepted_context, std::move(tolerances),
+                integrators::NoCallTimeAppliedForces{});
+        case integrators::internal::MaximumBdfOrder::kFifth:
+            return integrators::internal::BdfIntegrationAccess::
+                MakeFifthOrderSystemContinuousStateAdvancer(
+                    assembled.system(), assembled.compiled_plan(),
+                    accepted_context, std::move(tolerances),
+                    integrators::NoCallTimeAppliedForces{});
+    }
+    Reject("the qualification recipe has an unsupported maximum BDF order");
+}
+
 [[nodiscard]] double InitialBodyTrackStation(
     const configuration::VehicleDefinition& vehicle,
     const configuration::ResolvedStartupState& startup,
@@ -636,7 +658,7 @@ void WriteBoundaryUse(std::ofstream* output, std::string_view key,
 void WriteMetadata(
     const std::filesystem::path& path,
     const QualificationRunConfiguration& configuration,
-    const VehicleQualificationRecipe& recipe,
+    const VehicleQualificationRecipe& recipe, int maximum_bdf_order,
     const configuration::ResolvedStartupState& startup,
     const configuration::AssembledVehicleSystem& assembled,
     const QualificationSampleClock& clock, const BoundaryUse& before,
@@ -715,6 +737,7 @@ void WriteMetadata(
            << assembled.contact_force_plan()->body_wrench_count() << "\n"
            << "  },\n"
            << "  \"numerical_execution_contract\": {\n"
+           << "    \"maximum_bdf_order\": " << maximum_bdf_order << ",\n"
            << "    \"relative_tolerance\": " << recipe.relative_tolerance
            << ",\n"
            << "    \"generalized_position_absolute_tolerance\": "
@@ -972,16 +995,22 @@ QualificationRunSummary RunVehicleQualification(
                "exactly zero seconds");
     }
 
-    integrators::SystemContinuousStateAdvancer advancer(
-        assembled.system(), assembled.compiled_plan(), accepted,
-        MakeTolerances(assembled, recipe),
-        integrators::NoCallTimeAppliedForces{});
+    auto advancer = MakeAdvancer(assembled, accepted, recipe);
+    const int actual_maximum_bdf_order =
+        integrators::internal::BdfIntegrationAccess::
+            ConfiguredMaximumBdfOrder(*advancer);
+    if (actual_maximum_bdf_order !=
+        integrators::internal::MaximumBdfOrderValue(
+            recipe.maximum_bdf_order)) {
+        Reject("the constructed integrator does not match the qualification "
+               "recipe's maximum BDF order");
+    }
     const Clock::time_point advance_begin = Clock::now();
     const Eigen::MatrixXd dense_states =
-        advancer.AdvanceToWithDenseStateSamples(
+        advancer->AdvanceToWithDenseStateSamples(
             sample_clock.terminal_time_seconds(), sample_times);
     const Clock::time_point advance_end = Clock::now();
-    const auto integration_statistics = advancer.integration_statistics();
+    const auto integration_statistics = advancer->integration_statistics();
     if (dense_states.rows() != assembled.system().continuous_state_size() ||
         dense_states.cols() !=
             static_cast<Eigen::Index>(sample_clock.sample_count()) ||
@@ -1206,6 +1235,7 @@ QualificationRunSummary RunVehicleQualification(
     }
 
     QualificationRunSummary summary;
+    summary.maximum_bdf_order = actual_maximum_bdf_order;
     summary.sample_count = sample_clock.sample_count();
     summary.advance_wall_seconds =
         ElapsedSeconds(advance_begin, advance_end);
@@ -1264,7 +1294,8 @@ QualificationRunSummary RunVehicleQualification(
     CloseChecked(&patch_observation_output, patch_observation_path);
 
     WriteMetadata(output_directory.working_path() / "metadata.json",
-                  resolved_run_configuration, recipe, startup, assembled,
+                  resolved_run_configuration, recipe,
+                  summary.maximum_bdf_order, startup, assembled,
                   sample_clock, before_definition_interval,
                   after_definition_interval,
                   longest_zero_contact_runs,

@@ -55,6 +55,17 @@ std::string ReadWholeFile(const std::filesystem::path& path) {
                        std::istreambuf_iterator<char>());
 }
 
+bool NumericalExecutionContractContains(
+    const std::string& metadata, std::string_view field) {
+    constexpr std::string_view kContract =
+        "\"numerical_execution_contract\": {";
+    const std::size_t begin = metadata.find(kContract);
+    const std::size_t end = metadata.find("\n  },", begin);
+    const std::size_t field_position = metadata.find(field, begin);
+    return begin != std::string::npos && end != std::string::npos &&
+           field_position != std::string::npos && field_position < end;
+}
+
 std::vector<std::string> SplitTabs(const std::string& line) {
     std::vector<std::string> fields;
     std::size_t begin = 0;
@@ -127,7 +138,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.sample_period_nanoseconds = 100'000;
 
     const auto summary = RunIrwQualification(configuration);
-    Require(summary.sample_count == 101,
+    Require(summary.sample_count == 101 && summary.maximum_bdf_order == 2,
             "the 10 ms / 100 us clock did not publish 101 points");
     Require(summary.integration_statistics.successful_internal_step_count > 0 &&
                 summary.integration_statistics.right_hand_side_evaluation_count +
@@ -251,6 +262,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the IRW recipe or explicit no-irregularity identity is wrong");
     Require(metadata.find("\"relative_tolerance\": 9.9999999999999995e-07") !=
                 std::string::npos &&
+                NumericalExecutionContractContains(
+                    metadata, "\"maximum_bdf_order\": 2") &&
                 metadata.find(
                     "\"generalized_position_absolute_tolerance\": 9.9999999999999995e-07") !=
                     std::string::npos &&
@@ -296,7 +309,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.track_irregularity_identifier =
         "aar5_irregularity";
     const auto aar5_summary = RunIrwQualification(configuration);
-    Require(aar5_summary.sample_count == 2,
+    Require(aar5_summary.sample_count == 2 &&
+                aar5_summary.maximum_bdf_order == 5,
             "the short AAR5 loading run did not publish its two clock points");
     const std::string aar5_metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
@@ -306,17 +320,19 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                 std::string::npos,
             "the IRW AAR5 identity did not reach the qualification artifact");
     Require(aar5_metadata.find(
-                "\"relative_tolerance\": 9.9999999999999995e-08") !=
+                "\"relative_tolerance\": 1e-08") !=
                     std::string::npos &&
+                NumericalExecutionContractContains(
+                    aar5_metadata, "\"maximum_bdf_order\": 5") &&
                 aar5_metadata.find(
                     "\"generalized_position_absolute_tolerance\": "
-                    "9.9999999999999995e-08") != std::string::npos &&
+                    "1e-08") != std::string::npos &&
                 aar5_metadata.find(
                     "\"generalized_velocity_absolute_tolerance\": "
-                    "9.9999999999999995e-07") != std::string::npos &&
+                    "9.9999999999999995e-08") != std::string::npos &&
                 aar5_metadata.find(
                     "\"series_force_absolute_tolerance_newtons\": "
-                    "1.0000000000000001e-05") != std::string::npos &&
+                    "9.9999999999999995e-07") != std::string::npos &&
                 aar5_metadata.find("\"local_sample_refinement\": null") !=
                     std::string::npos,
             "the frozen IRW B-layer tolerance or uniform-clock identity is "
@@ -358,7 +374,8 @@ void CheckPassiveDenseJacobianThreading(
             root / ("irw-aar5-jacobian-t" +
                     std::to_string(requested_threads));
         const auto candidate = RunIrwQualification(configuration);
-        Require(candidate.integration_statistics.jacobian_evaluation_count >
+        Require(candidate.maximum_bdf_order == 5 &&
+                    candidate.integration_statistics.jacobian_evaluation_count >
                         1 &&
                     candidate.integration_statistics
                             .requested_dense_finite_difference_jacobian_worker_count ==
@@ -405,6 +422,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
 
     const auto summary = RunIrwP179ControlledQualification(configuration);
     Require(summary.observation_count == 41 &&
+                summary.maximum_bdf_order == 2 &&
                 summary.control_audit_count == 4 &&
                 summary.positive_hold_interval_count == 2 &&
                 summary.backend_synchronization_count == 1 &&
@@ -584,12 +602,22 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                 metadata.find("\"track_irregularity_identifier\": "
                               "\"aar5_irregularity\"") !=
                     std::string::npos &&
-                metadata.find("\"numerical_tolerances\": {\"relative\": "
-                              "9.9999999999999995e-07, \"q_absolute\": "
-                              "9.9999999999999995e-07, \"v_absolute\": "
-                              "1.0000000000000001e-05, "
-                              "\"z_absolute_newtons\": "
-                              "9.9999999999999995e-07}") !=
+                NumericalExecutionContractContains(
+                    metadata, "\"maximum_bdf_order\": 2") &&
+                metadata.find("\"numerical_tolerances\"") ==
+                    std::string::npos &&
+                metadata.find("\"relative_tolerance\": "
+                              "9.9999999999999995e-07") !=
+                    std::string::npos &&
+                metadata.find(
+                    "\"generalized_position_absolute_tolerance\": "
+                    "9.9999999999999995e-07") != std::string::npos &&
+                metadata.find(
+                    "\"generalized_velocity_absolute_tolerance\": "
+                    "1.0000000000000001e-05") != std::string::npos &&
+                metadata.find(
+                    "\"series_force_absolute_tolerance_newtons\": "
+                    "9.9999999999999995e-07") !=
                     std::string::npos &&
                 metadata.find("\"control_audit_count\": 4") !=
                     std::string::npos &&
@@ -611,7 +639,8 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     std::to_string(requested_threads));
         const auto candidate =
             RunIrwP179ControlledQualification(comparison);
-        Require(candidate.integration_statistics
+        Require(candidate.maximum_bdf_order == 2 &&
+                    candidate.integration_statistics
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     requested_threads &&
                     SameTrajectoryWork(summary.integration_statistics,

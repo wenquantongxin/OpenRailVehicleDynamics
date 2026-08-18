@@ -520,13 +520,16 @@ orvd_configure_first_party_target(verify_system_rhs_bridge)
 target_link_libraries(verify_system_rhs_bridge PRIVATE orvd_integrators)
 add_test(NAME verify_system_rhs_bridge COMMAND verify_system_rhs_bridge)
 
-# G44's real CVODE backend. The two analytic systems exercise the fixed BDF +
-# dense numerical-Jacobian configuration; the focused failure case verifies
-# that a C callback never leaks a C++ exception or publishes a partial endpoint.
+# G44's real CVODE backend. Analytic systems exercise the public second-order
+# default and the source-tree-only fifth-order identity, including actual CVODE
+# order and reinitialization; the focused failure case verifies that a C
+# callback never leaks a C++ exception or publishes a partial endpoint.
 add_executable(verify_cvode_continuous_state_advancer
     integrators/cvode_continuous_state_advancer_header_self_containment.cc
     integrators/verify_cvode_continuous_state_advancer.cc)
 orvd_configure_first_party_target(verify_cvode_continuous_state_advancer)
+target_include_directories(verify_cvode_continuous_state_advancer
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_cvode_continuous_state_advancer
     PRIVATE orvd_integrators)
 add_test(NAME verify_cvode_continuous_state_advancer
@@ -562,6 +565,40 @@ if(NOT CMAKE_CROSSCOMPILING)
     endif()
     string(REPLACE ";" "\\;" orvd_installation_dependency_prefix_path
            "${CMAKE_PREFIX_PATH}")
+    set(orvd_installation_openmp_initial_cache_content "")
+    foreach(openmp_string_variable
+            OpenMP_CXX_FLAGS
+            OpenMP_CXX_LIB_NAMES)
+        if(DEFINED ${openmp_string_variable} AND
+           NOT "${${openmp_string_variable}}" STREQUAL "")
+            string(APPEND orvd_installation_openmp_initial_cache_content
+                   "set(${openmp_string_variable} "
+                   "[==[${${openmp_string_variable}}]==] "
+                   "CACHE STRING \"\" FORCE)\n")
+        endif()
+    endforeach()
+    if(DEFINED OpenMP_CXX_INCLUDE_DIR AND
+       NOT "${OpenMP_CXX_INCLUDE_DIR}" STREQUAL "")
+        string(APPEND orvd_installation_openmp_initial_cache_content
+               "set(OpenMP_CXX_INCLUDE_DIR "
+               "[==[${OpenMP_CXX_INCLUDE_DIR}]==] "
+               "CACHE PATH \"\" FORCE)\n")
+    endif()
+    foreach(openmp_library IN LISTS OpenMP_CXX_LIB_NAMES)
+        set(openmp_library_variable "OpenMP_${openmp_library}_LIBRARY")
+        if(DEFINED ${openmp_library_variable} AND
+           NOT "${${openmp_library_variable}}" STREQUAL "")
+            string(APPEND orvd_installation_openmp_initial_cache_content
+                   "set(${openmp_library_variable} "
+                   "[==[${${openmp_library_variable}}]==] "
+                   "CACHE FILEPATH \"\" FORCE)\n")
+        endif()
+    endforeach()
+    set(orvd_installation_openmp_initial_cache
+        "${CMAKE_CURRENT_BINARY_DIR}/installation/openmp-initial-cache.cmake")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/installation")
+    file(WRITE "${orvd_installation_openmp_initial_cache}"
+         "${orvd_installation_openmp_initial_cache_content}")
     add_test(NAME verify_relocated_install_consumer
         COMMAND ${CMAKE_COMMAND}
             -DORVD_BUILD_DIR=${CMAKE_BINARY_DIR}
@@ -581,6 +618,7 @@ if(NOT CMAKE_CROSSCOMPILING)
             -DEIGEN3_CONFIG_DIR=${Eigen3_DIR}
             -DFMT_CONFIG_DIR=${fmt_DIR}
             -DSUNDIALS_CONFIG_DIR=${SUNDIALS_DIR}
+            -DOPENMP_INITIAL_CACHE=${orvd_installation_openmp_initial_cache}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/installation/verify_relocated_install_consumer.cmake)
     set_tests_properties(verify_relocated_install_consumer
         PROPERTIES RUN_SERIAL TRUE)
@@ -965,7 +1003,7 @@ add_executable(verify_gz18_dynamics_qualification
     dynamics_qualification/verify_gz18_dynamics_qualification.cc)
 orvd_configure_first_party_target(verify_gz18_dynamics_qualification)
 target_link_libraries(verify_gz18_dynamics_qualification
-    PRIVATE orvd_dynamics_qualification_support)
+    PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX)
 add_test(NAME verify_gz18_dynamics_qualification
          COMMAND verify_gz18_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
@@ -981,7 +1019,7 @@ add_executable(verify_irw_dynamics_qualification
     dynamics_qualification/verify_irw_dynamics_qualification.cc)
 orvd_configure_first_party_target(verify_irw_dynamics_qualification)
 target_link_libraries(verify_irw_dynamics_qualification
-    PRIVATE orvd_dynamics_qualification_support)
+    PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX)
 add_test(NAME verify_irw_dynamics_qualification
          COMMAND verify_irw_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json

@@ -17,6 +17,7 @@
 #include <sunlinsol/sunlinsol_dense.h>
 #include <sunmatrix/sunmatrix_dense.h>
 
+#include "bdf_integration_access.h"
 #include "dense_finite_difference_jacobian_provider.h"
 #include "integrator_limits.h"
 
@@ -26,10 +27,19 @@ namespace {
 static_assert(std::is_same_v<sunrealtype, double>);
 static_assert(std::is_same_v<sunindextype, std::int32_t>);
 
-constexpr int kMaximumBdfOrder = 2;
 constexpr long int kJacobianEvaluationFrequency = 51;
 constexpr long int kLinearSetupFrequency = 30;
 constexpr double kMinimumDifferenceIncrementMultiplier = 1000.0;
+
+int RequireSupportedMaximumBdfOrder(internal::MaximumBdfOrder order) {
+    switch (order) {
+        case internal::MaximumBdfOrder::kSecond:
+        case internal::MaximumBdfOrder::kFifth:
+            return internal::MaximumBdfOrderValue(order);
+    }
+    throw std::invalid_argument(
+        "CVODE continuous-state advancer: unsupported maximum BDF order");
+}
 
 [[noreturn]] void ThrowSundialsFailure(const char* operation, int flag) {
     throw std::runtime_error(
@@ -109,9 +119,12 @@ class CvodeContinuousStateAdvancer::Implementation final {
     Implementation(ContinuousStateRhs& rhs,
                    double initial_time_seconds,
                    Eigen::VectorXd initial_continuous_state,
-                   ContinuousStateErrorTolerances tolerances)
+                   ContinuousStateErrorTolerances tolerances,
+                   internal::MaximumBdfOrder maximum_bdf_order)
         : rhs_(&rhs),
           state_size_(rhs.continuous_state_size()),
+          maximum_bdf_order_(
+              RequireSupportedMaximumBdfOrder(maximum_bdf_order)),
           public_time_seconds_(initial_time_seconds),
           public_state_(std::move(initial_continuous_state)) {
         ValidateConstruction(tolerances);
@@ -119,6 +132,15 @@ class CvodeContinuousStateAdvancer::Implementation final {
     }
 
     [[nodiscard]] int state_size() const { return state_size_; }
+    [[nodiscard]] int maximum_bdf_order() const {
+        return maximum_bdf_order_;
+    }
+    [[nodiscard]] int last_bdf_order() const {
+        int order{};
+        RequireCvodeSuccess(CVodeGetLastOrder(resources_.memory, &order),
+                            "CVodeGetLastOrder");
+        return order;
+    }
     [[nodiscard]] double public_time_seconds() const {
         return public_time_seconds_;
     }
@@ -615,7 +637,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
                                  resources_.matrix),
             "CVodeSetLinearSolver");
         RequireCvodeSuccess(
-            CVodeSetMaxOrd(resources_.memory, kMaximumBdfOrder),
+            CVodeSetMaxOrd(resources_.memory, maximum_bdf_order_),
             "CVodeSetMaxOrd");
         RequireCvodeSuccess(
             CVodeSetLSetupFrequency(resources_.memory, kLinearSetupFrequency),
@@ -642,6 +664,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
 
     ContinuousStateRhs* rhs_;
     int state_size_;
+    const int maximum_bdf_order_;
     double public_time_seconds_;
     Eigen::VectorXd public_state_;
     CvodeResources resources_;
@@ -660,11 +683,44 @@ CvodeContinuousStateAdvancer::CvodeContinuousStateAdvancer(
     double initial_time_seconds,
     Eigen::VectorXd initial_continuous_state,
     ContinuousStateErrorTolerances tolerances)
+    : CvodeContinuousStateAdvancer(
+          rhs, initial_time_seconds, std::move(initial_continuous_state),
+          std::move(tolerances), internal::MaximumBdfOrder::kSecond) {}
+
+CvodeContinuousStateAdvancer::CvodeContinuousStateAdvancer(
+    ContinuousStateRhs& rhs,
+    double initial_time_seconds,
+    Eigen::VectorXd initial_continuous_state,
+    ContinuousStateErrorTolerances tolerances,
+    internal::MaximumBdfOrder maximum_bdf_order)
     : implementation_(std::make_unique<Implementation>(
           rhs, initial_time_seconds, std::move(initial_continuous_state),
-          std::move(tolerances))) {}
+          std::move(tolerances), maximum_bdf_order)) {}
 
 CvodeContinuousStateAdvancer::~CvodeContinuousStateAdvancer() = default;
+
+std::unique_ptr<CvodeContinuousStateAdvancer>
+internal::BdfIntegrationAccess::
+    MakeFifthOrderCvodeContinuousStateAdvancer(
+        ContinuousStateRhs& rhs,
+        double initial_time_seconds,
+        Eigen::VectorXd initial_continuous_state,
+        ContinuousStateErrorTolerances tolerances) {
+    return std::unique_ptr<CvodeContinuousStateAdvancer>(
+        new CvodeContinuousStateAdvancer(
+            rhs, initial_time_seconds, std::move(initial_continuous_state),
+            std::move(tolerances), MaximumBdfOrder::kFifth));
+}
+
+int internal::BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+    const CvodeContinuousStateAdvancer& advancer) {
+    return advancer.implementation_->maximum_bdf_order();
+}
+
+int internal::BdfIntegrationAccess::LastBdfOrder(
+    const CvodeContinuousStateAdvancer& advancer) {
+    return advancer.implementation_->last_bdf_order();
+}
 
 void internal::DenseFiniteDifferenceJacobianRegistration::Attach(
     CvodeContinuousStateAdvancer& advancer,

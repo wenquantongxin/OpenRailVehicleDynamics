@@ -19,6 +19,11 @@ class SystemRuntimeContext;
 
 namespace orvd::integrators {
 
+namespace internal {
+class BdfIntegrationAccess;
+enum class MaximumBdfOrder : int;
+}
+
 /// Advances one compiled system while keeping trial state out of its accepted
 /// runtime context.
 ///
@@ -111,6 +116,16 @@ class SystemContinuousStateAdvancer final {
     void SynchronizeAfterAcceptedContextChange();
 
    private:
+    friend class internal::BdfIntegrationAccess;
+
+    SystemContinuousStateAdvancer(
+        const system_assembly::SystemInstance& system,
+        const system_assembly::CompiledSystemPlan& plan,
+        system_assembly::SystemRuntimeContext& accepted_context,
+        ContinuousStateErrorTolerances tolerances,
+        NoCallTimeAppliedForces no_call_time_applied_forces,
+        internal::MaximumBdfOrder maximum_bdf_order);
+
     class Implementation;
     std::unique_ptr<Implementation> implementation_;
 };

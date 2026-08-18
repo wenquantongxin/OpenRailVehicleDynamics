@@ -10,6 +10,7 @@
 #include "qualification_run_summary.h"
 #include "qualification_sample_clock.h"
 
+#include "bdf_integration_access.h"
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 
 namespace orvd::dynamics_qualification::internal {
@@ -46,6 +47,7 @@ struct VehicleQualificationRecipe final {
     double generalized_position_absolute_tolerance{};
     double generalized_velocity_absolute_tolerance{};
     double series_force_absolute_tolerance_newtons{};
+    integrators::internal::MaximumBdfOrder maximum_bdf_order{};
     int expected_generalized_position_count{};
     int expected_generalized_velocity_count{};
     int expected_series_force_state_count{};

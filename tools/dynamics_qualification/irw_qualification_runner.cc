@@ -19,6 +19,7 @@ constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe{
         .velocity_absolute_tolerance,
     internal::kIrwNoIrregularityPassiveIntegrationRecipe
         .series_force_absolute_tolerance_newtons,
+    internal::kIrwNoIrregularityPassiveIntegrationRecipe.maximum_bdf_order,
     81,
     74,
     2,
@@ -36,6 +37,7 @@ constexpr internal::VehicleQualificationRecipe kAar5Recipe{
         .velocity_absolute_tolerance,
     internal::kIrwR300Aar5PassiveIntegrationRecipe
         .series_force_absolute_tolerance_newtons,
+    internal::kIrwR300Aar5PassiveIntegrationRecipe.maximum_bdf_order,
     81,
     74,
     2,

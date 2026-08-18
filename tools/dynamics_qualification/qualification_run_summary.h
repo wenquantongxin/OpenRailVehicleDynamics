@@ -11,6 +11,7 @@ namespace orvd::dynamics_qualification {
 // One private migration-run summary. This type is not installed and is not a
 // public vehicle-simulation or observation contract.
 struct QualificationRunSummary final {
+    int maximum_bdf_order{};
     std::size_t sample_count{};
     double advance_wall_seconds{};
     double observation_wall_seconds{};

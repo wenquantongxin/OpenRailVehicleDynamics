@@ -754,13 +754,18 @@ void WriteMetadata(
            << assembled.contact_force_plan()->body_wrench_count()
            << ", \"active_torque_body_wrench_count\": "
            << assembled.active_torque_plan()->body_wrench_count() << "},\n"
-           << "  \"numerical_tolerances\": {\"relative\": "
-           << recipe.relative_tolerance << ", \"q_absolute\": "
-           << recipe.position_absolute_tolerance
-           << ", \"v_absolute\": "
-           << recipe.velocity_absolute_tolerance
-           << ", \"z_absolute_newtons\": "
-           << recipe.series_force_absolute_tolerance_newtons << "},\n"
+           << "  \"numerical_execution_contract\": {\n"
+           << "    \"maximum_bdf_order\": "
+           << summary.maximum_bdf_order << ",\n"
+           << "    \"relative_tolerance\": "
+           << recipe.relative_tolerance << ",\n"
+           << "    \"generalized_position_absolute_tolerance\": "
+           << recipe.position_absolute_tolerance << ",\n"
+           << "    \"generalized_velocity_absolute_tolerance\": "
+           << recipe.velocity_absolute_tolerance << ",\n"
+           << "    \"series_force_absolute_tolerance_newtons\": "
+           << recipe.series_force_absolute_tolerance_newtons << "\n"
+           << "  },\n"
            << "  \"input_paths\": {\n"
            << "    \"vehicle_definition\": "
            << JsonString(configuration.vehicle_definition_path.string())
@@ -955,6 +960,16 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
     integrators::SystemContinuousStateAdvancer advancer(
         assembled.system(), assembled.compiled_plan(), accepted,
         MakeTolerances(assembled), integrators::NoCallTimeAppliedForces{});
+    summary.maximum_bdf_order =
+        integrators::internal::BdfIntegrationAccess::
+            ConfiguredMaximumBdfOrder(advancer);
+    if (summary.maximum_bdf_order !=
+        integrators::internal::MaximumBdfOrderValue(
+            internal::kIrwP179ControlledIntegrationRecipe
+                .maximum_bdf_order)) {
+        Reject("the constructed integrator does not match the controlled "
+               "qualification recipe's maximum BDF order");
+    }
     event_session.ConfirmBackendSynchronized();
 
     auto contact_workspace = assembled.contact_force_plan()->CreateWorkspace();

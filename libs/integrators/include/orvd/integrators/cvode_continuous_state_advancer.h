@@ -12,7 +12,9 @@
 namespace orvd::integrators {
 
 namespace internal {
+class BdfIntegrationAccess;
 class DenseFiniteDifferenceJacobianRegistration;
+enum class MaximumBdfOrder : int;
 }
 
 /// Advances one positive-dimensional continuous state with SUNDIALS CVODE.
@@ -57,7 +59,15 @@ class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
         Eigen::Ref<Eigen::VectorXd> continuous_state) const override;
 
    private:
+    friend class internal::BdfIntegrationAccess;
     friend class internal::DenseFiniteDifferenceJacobianRegistration;
+
+    CvodeContinuousStateAdvancer(
+        ContinuousStateRhs& rhs,
+        double initial_time_seconds,
+        Eigen::VectorXd initial_continuous_state,
+        ContinuousStateErrorTolerances tolerances,
+        internal::MaximumBdfOrder maximum_bdf_order);
 
     class Implementation;
     std::unique_ptr<Implementation> implementation_;

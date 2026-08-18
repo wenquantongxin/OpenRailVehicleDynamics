@@ -41,6 +41,7 @@ struct IrwP179ControlledQualificationRunConfiguration final {
 };
 
 struct IrwP179ControlledQualificationSummary final {
+    int maximum_bdf_order{};
     std::size_t observation_count{};
     std::size_t control_audit_count{};
     std::size_t positive_hold_interval_count{};

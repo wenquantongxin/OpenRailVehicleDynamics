@@ -3,10 +3,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 
 #include <Eigen/Dense>
 
+#include "bdf_integration_access.h"
 #include "orvd/integrators/cvode_continuous_state_advancer.h"
 
 namespace {
@@ -14,6 +16,7 @@ namespace {
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::ContinuousStateRhs;
 using orvd::integrators::CvodeContinuousStateAdvancer;
+using orvd::integrators::internal::BdfIntegrationAccess;
 
 int failure_count = 0;
 
@@ -63,12 +66,18 @@ ContinuousStateErrorTolerances MakeTolerances(int size) {
 }
 
 void AdvanceFully(CvodeContinuousStateAdvancer& advancer,
-                  double stop_time_seconds) {
+                  double stop_time_seconds,
+                  int* maximum_observed_bdf_order = nullptr) {
     Eigen::VectorXd endpoint(advancer.continuous_state_size());
     double expected_step_begin = advancer.current_time_seconds();
     while (expected_step_begin < stop_time_seconds) {
         const auto step = advancer.AdvanceOneInternalStepToward(
             stop_time_seconds, endpoint);
+        if (maximum_observed_bdf_order != nullptr) {
+            *maximum_observed_bdf_order = std::max(
+                *maximum_observed_bdf_order,
+                BdfIntegrationAccess::LastBdfOrder(advancer));
+        }
         Expect(step.start_time_seconds == expected_step_begin,
                "successive CVODE internal endpoints are contiguous");
         Expect(step.end_time_seconds > step.start_time_seconds,
@@ -477,6 +486,77 @@ void CheckLinearOscillator() {
                     "linear-oscillator endpoint matches its analytic solution");
 }
 
+void CheckPerInstanceBdfOrderIdentity() {
+    constexpr double kInitialTime = 0.0;
+    constexpr double kFirstTargetTime = 2.0;
+    constexpr double kSecondTargetTime = 4.0;
+    constexpr double kAngularFrequency = 2.3;
+    const Eigen::Vector2d initial_state(0.8, -0.25);
+
+    LinearOscillatorRhs default_rhs(kAngularFrequency);
+    CvodeContinuousStateAdvancer default_advancer(
+        default_rhs, kInitialTime, initial_state, MakeTolerances(2));
+    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+               default_advancer) == 2,
+           "the public CVODE construction retains the second-order identity");
+    int maximum_default_order = 0;
+    AdvanceFully(default_advancer, kFirstTargetTime, &maximum_default_order);
+    Expect(maximum_default_order > 0 && maximum_default_order <= 2,
+           "the public CVODE instance never exceeds second order");
+    Eigen::VectorXd default_first_endpoint(2);
+    default_advancer.CopyCurrentState(default_first_endpoint);
+    default_advancer.ReinitializeAfterExternalChange(
+        kFirstTargetTime, default_first_endpoint);
+    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+               default_advancer) == 2,
+           "CVODE reinitialization preserves the second-order identity");
+    int maximum_reinitialized_default_order = 0;
+    AdvanceFully(default_advancer, kSecondTargetTime,
+                 &maximum_reinitialized_default_order);
+    Expect(maximum_reinitialized_default_order > 0 &&
+               maximum_reinitialized_default_order <= 2,
+           "the reinitialized public CVODE instance remains second order");
+
+    LinearOscillatorRhs fifth_order_rhs(kAngularFrequency);
+    std::unique_ptr<CvodeContinuousStateAdvancer> fifth_order_advancer =
+        BdfIntegrationAccess::MakeFifthOrderCvodeContinuousStateAdvancer(
+            fifth_order_rhs, kInitialTime, initial_state, MakeTolerances(2));
+    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+               *fifth_order_advancer) == 5,
+           "the private CVODE construction retains the fifth-order identity");
+    int maximum_fifth_order = 0;
+    AdvanceFully(*fifth_order_advancer, kFirstTargetTime,
+                 &maximum_fifth_order);
+    Expect(maximum_fifth_order >= 3 && maximum_fifth_order <= 5,
+           "the fifth-order CVODE instance actually advances above order two");
+
+    Eigen::VectorXd first_endpoint(2);
+    fifth_order_advancer->CopyCurrentState(first_endpoint);
+    ExpectStateNear(first_endpoint,
+                    OscillatorState(kInitialTime, initial_state,
+                                    kAngularFrequency, kFirstTargetTime),
+                    "the fifth-order oscillator endpoint matches its analytic solution");
+
+    fifth_order_advancer->ReinitializeAfterExternalChange(
+        kFirstTargetTime, first_endpoint);
+    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+               *fifth_order_advancer) == 5,
+           "CVODE reinitialization preserves the fifth-order identity");
+    int maximum_reinitialized_order = 0;
+    AdvanceFully(*fifth_order_advancer, kSecondTargetTime,
+                 &maximum_reinitialized_order);
+    Expect(maximum_reinitialized_order >= 3 &&
+               maximum_reinitialized_order <= 5,
+           "the reinitialized fifth-order instance advances above order two again");
+
+    Eigen::VectorXd second_endpoint(2);
+    fifth_order_advancer->CopyCurrentState(second_endpoint);
+    ExpectStateNear(second_endpoint,
+                    OscillatorState(kInitialTime, initial_state,
+                                    kAngularFrequency, kSecondTargetTime),
+                    "the reinitialized fifth-order oscillator remains analytically accurate");
+}
+
 void CheckBackendTimePropagation() {
     constexpr double kInitialTime = 0.4;
     constexpr double kTargetTime = 0.7;
@@ -577,6 +657,7 @@ int main() {
     CheckConstructionAndCallerRefusal();
     CheckFreeFallAndDenseOutput();
     CheckLinearOscillator();
+    CheckPerInstanceBdfOrderIdentity();
     CheckBackendTimePropagation();
     CheckRhsFailureAndRecovery();
 

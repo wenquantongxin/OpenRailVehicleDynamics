@@ -24,12 +24,15 @@ The executables are:
 - `orvd_irw_p179_controlled_qualification`: the closed IRW
   H3/R300/AAR5/100 Hz control and event scenario.
 
-The GZ18 recipe uses relative tolerance `1e-6` and q/v/z absolute tolerances
-`1e-7 / 1e-6 / 0.1 N`. IRW A and the controlled IRW C/P179 runner use J0:
-relative tolerance `1e-6` and q/v/z absolute tolerances
-`1e-6 / 1e-5 / 1e-6 N`. IRW B uses N5: relative tolerance `1e-7` and q/v/z
-absolute tolerances `1e-7 / 1e-6 / 1e-5 N`. These are private execution
-recipes, not a public integrator-policy interface.
+The GZ18 recipe uses maximum BDF order 2, relative tolerance `1e-6`, and
+q/v/z absolute tolerances `1e-7 / 1e-6 / 0.1 N`. IRW A and the controlled
+IRW C/P179 runner also use maximum BDF order 2, with J0: relative tolerance
+`1e-6` and q/v/z absolute tolerances `1e-6 / 1e-5 / 1e-6 N`. IRW B alone
+uses maximum BDF order 5 and t8: relative tolerance `1e-8` and q/v/z absolute
+tolerances `1e-8 / 1e-7 / 1e-6 N`. The runners verify the configured order
+against the selected recipe and publish it in the numerical execution
+contract. These are private execution recipes, not a public integrator-policy
+interface.
 
 All sample times are generated from integer nanosecond identities. Intermediate
 samples use dense output and do not become additional integrator stops. The

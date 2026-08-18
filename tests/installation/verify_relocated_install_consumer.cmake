@@ -9,11 +9,17 @@ foreach(required_variable
         CMAKE_CXX_COMPILER_PATH
         BUILD_CONFIG
         EXECUTABLE_SUFFIX
-        INSTALL_DATADIR)
+        INSTALL_DATADIR
+        OPENMP_INITIAL_CACHE)
     if(NOT DEFINED ${required_variable})
         message(FATAL_ERROR "${required_variable} was not given")
     endif()
 endforeach()
+
+if(NOT EXISTS "${OPENMP_INITIAL_CACHE}")
+    message(FATAL_ERROR
+        "the parent build supplied no OpenMP initial cache")
+endif()
 
 function(run_checked label)
     execute_process(
@@ -253,6 +259,7 @@ string(REPLACE ";" "\\;" prefix_path_argument "${prefix_path_joined}")
 
 set(configure_command
     "${CMAKE_COMMAND}"
+    -C "${OPENMP_INITIAL_CACHE}"
     -S "${consumer_source}"
     -B "${consumer_build}"
     -G "${CMAKE_GENERATOR_NAME}"
@@ -287,6 +294,28 @@ if(NOT DEFINED MULTI_CONFIG OR NOT MULTI_CONFIG)
 endif()
 run_checked("configuring the relocated independent consumer"
             ${configure_command})
+
+include("${OPENMP_INITIAL_CACHE}")
+file(READ "${consumer_build}/CMakeCache.txt" consumer_cache)
+function(require_forwarded_openmp_cache_value variable cache_type)
+    if(DEFINED ${variable} AND NOT "${${variable}}" STREQUAL "")
+        string(FIND "${consumer_cache}"
+               "\n${variable}:${cache_type}=${${variable}}\n"
+               cache_entry_position)
+        if(cache_entry_position EQUAL -1)
+            message(FATAL_ERROR
+                "the relocated consumer did not preserve ${variable}")
+        endif()
+    endif()
+endfunction()
+require_forwarded_openmp_cache_value(OpenMP_CXX_FLAGS STRING)
+require_forwarded_openmp_cache_value(OpenMP_CXX_INCLUDE_DIR PATH)
+require_forwarded_openmp_cache_value(OpenMP_CXX_LIB_NAMES STRING)
+foreach(openmp_library IN LISTS OpenMP_CXX_LIB_NAMES)
+    require_forwarded_openmp_cache_value(
+        "OpenMP_${openmp_library}_LIBRARY" FILEPATH)
+endforeach()
+
 run_checked(
     "building the relocated independent consumer"
     "${CMAKE_COMMAND}" --build "${consumer_build}" --config "${BUILD_CONFIG}")

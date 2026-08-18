@@ -12,6 +12,7 @@ constexpr internal::VehicleQualificationRecipe kRecipe{
     1.0e-7,
     1.0e-6,
     1.0e-1,
+    integrators::internal::MaximumBdfOrder::kSecond,
     57,
     50,
     2,

@@ -13,7 +13,8 @@ add_library(orvd_dynamics_qualification_support STATIC
 orvd_configure_first_party_target(orvd_dynamics_qualification_support)
 
 target_include_directories(orvd_dynamics_qualification_support
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 
 target_link_libraries(orvd_dynamics_qualification_support
     PUBLIC orvd_configuration orvd_integrators

@@ -18,6 +18,7 @@
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
 
+#include "bdf_integration_access.h"
 #include "dense_finite_difference_jacobian_provider.h"
 #include "integrator_limits.h"
 
@@ -209,7 +210,8 @@ class SystemContinuousStateAdvancer::Implementation final {
         const system_assembly::CompiledSystemPlan& plan,
         system_assembly::SystemRuntimeContext& accepted_context,
         ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces)
+        NoCallTimeAppliedForces no_call_time_applied_forces,
+        internal::MaximumBdfOrder maximum_bdf_order)
         : system_(&system),
           accepted_context_(&accepted_context),
           candidate_context_(system.CreateDefaultRuntimeContext(
@@ -231,9 +233,24 @@ class SystemContinuousStateAdvancer::Implementation final {
                     system, plan, *candidate_context_, jacobian_worker_count,
                     no_call_time_applied_forces);
         }
-        backend_ = std::make_unique<CvodeContinuousStateAdvancer>(
-            rhs_, accepted_context_->time_seconds(), candidate_state_,
-            std::move(tolerances));
+        switch (maximum_bdf_order) {
+            case internal::MaximumBdfOrder::kSecond:
+                backend_ = std::make_unique<CvodeContinuousStateAdvancer>(
+                    rhs_, accepted_context_->time_seconds(), candidate_state_,
+                    std::move(tolerances));
+                break;
+            case internal::MaximumBdfOrder::kFifth:
+                backend_ = internal::BdfIntegrationAccess::
+                    MakeFifthOrderCvodeContinuousStateAdvancer(
+                        rhs_, accepted_context_->time_seconds(),
+                        candidate_state_, std::move(tolerances));
+                break;
+        }
+        if (backend_ == nullptr) {
+            throw std::invalid_argument(
+                "system continuous-state advancer: unsupported maximum BDF "
+                "order");
+        }
         if (dense_jacobian_ != nullptr) {
             internal::DenseFiniteDifferenceJacobianRegistration::Attach(
                 *backend_, *dense_jacobian_);
@@ -254,6 +271,15 @@ class SystemContinuousStateAdvancer::Implementation final {
 
     [[nodiscard]] ContinuousStateIntegrationStatistics Statistics() const {
         return backend_->integration_statistics();
+    }
+
+    [[nodiscard]] int ConfiguredMaximumBdfOrder() const {
+        return internal::BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+            *backend_);
+    }
+
+    [[nodiscard]] int LastBdfOrder() const {
+        return internal::BdfIntegrationAccess::LastBdfOrder(*backend_);
     }
 
     void AdvanceToImpl(double target_time_seconds,
@@ -457,11 +483,47 @@ SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
     system_assembly::SystemRuntimeContext& accepted_context,
     ContinuousStateErrorTolerances tolerances,
     NoCallTimeAppliedForces no_call_time_applied_forces)
+    : SystemContinuousStateAdvancer(
+          system, plan, accepted_context, std::move(tolerances),
+          no_call_time_applied_forces,
+          internal::MaximumBdfOrder::kSecond) {}
+
+SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
+    const system_assembly::SystemInstance& system,
+    const system_assembly::CompiledSystemPlan& plan,
+    system_assembly::SystemRuntimeContext& accepted_context,
+    ContinuousStateErrorTolerances tolerances,
+    NoCallTimeAppliedForces no_call_time_applied_forces,
+    internal::MaximumBdfOrder maximum_bdf_order)
     : implementation_(std::make_unique<Implementation>(
           system, plan, accepted_context, std::move(tolerances),
-          no_call_time_applied_forces)) {}
+          no_call_time_applied_forces, maximum_bdf_order)) {}
 
 SystemContinuousStateAdvancer::~SystemContinuousStateAdvancer() = default;
+
+std::unique_ptr<SystemContinuousStateAdvancer>
+internal::BdfIntegrationAccess::
+    MakeFifthOrderSystemContinuousStateAdvancer(
+        const system_assembly::SystemInstance& system,
+        const system_assembly::CompiledSystemPlan& plan,
+        system_assembly::SystemRuntimeContext& accepted_context,
+        ContinuousStateErrorTolerances tolerances,
+        NoCallTimeAppliedForces no_call_time_applied_forces) {
+    return std::unique_ptr<SystemContinuousStateAdvancer>(
+        new SystemContinuousStateAdvancer(
+            system, plan, accepted_context, std::move(tolerances),
+            no_call_time_applied_forces, MaximumBdfOrder::kFifth));
+}
+
+int internal::BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+    const SystemContinuousStateAdvancer& advancer) {
+    return advancer.implementation_->ConfiguredMaximumBdfOrder();
+}
+
+int internal::BdfIntegrationAccess::LastBdfOrder(
+    const SystemContinuousStateAdvancer& advancer) {
+    return advancer.implementation_->LastBdfOrder();
+}
 
 void SystemContinuousStateAdvancer::AdvanceTo(double target_time_seconds) {
     implementation_->AdvanceTo(target_time_seconds);
