@@ -233,7 +233,12 @@ def case_matching_tree_with_crlf_passes(
     landed, clone, ledger, _ = build_case(work, "matching_crlf", git_executable)
     for path in landed.rglob("*"):
         if path.is_file():
-            content = path.read_bytes().replace(b"\n", b"\r\n")
+            # Path.write_text() already uses the host text convention.  First
+            # recover one canonical LF stream so this fixture creates CRLF,
+            # rather than CRCRLF, when the test itself runs on Windows.
+            content = path.read_bytes()
+            content = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            content = content.replace(b"\n", b"\r\n")
             path.write_bytes(content)
     result = run_audit(landed, clone, ledger, git_executable)
     record_failure_unless(

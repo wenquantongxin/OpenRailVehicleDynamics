@@ -7,9 +7,11 @@
 # names the diagnostic it expects.
 cmake_minimum_required(VERSION 3.24)
 
-function(expect_refusal label executable expected_fragment)
+function(expect_refusal label executable runtime_search_directories
+         expected_fragment)
     execute_process(
         COMMAND ${CMAKE_COMMAND} -DCANDIDATE_EXECUTABLE=${executable}
+                "-DRUNTIME_SEARCH_DIRECTORIES=${runtime_search_directories}"
                 -P ${CHECK_SCRIPT}
         RESULT_VARIABLE result
         OUTPUT_VARIABLE output
@@ -35,20 +37,24 @@ endfunction()
 
 # A program that really does load Drake.
 expect_refusal("a Drake-loading program" "${DRAKE_LOADING_EXECUTABLE}"
+               "${DRAKE_RUNTIME_DIRECTORIES}"
                "runtime dependency closure contains shared Drake")
 
 # A program whose dependency cannot be resolved. Behind an unresolved node the
 # closure was never walked, so a Drake there would go unmentioned.
 expect_refusal("an unresolvable dependency" "${UNRESOLVABLE_EXECUTABLE}"
-               "could not all be resolved")
+               "${TOOLCHAIN_RUNTIME_DIRECTORY}"
+               "could not be resolved")
 
 # The same, with a name CMake reads as false. A check that asked whether the list
 # "is true" rather than how long it is would decide there was nothing there.
 expect_refusal("a false-like dependency name" "${FALSE_LIKE_EXECUTABLE}"
-               "could not all be resolved")
+               "${TOOLCHAIN_RUNTIME_DIRECTORY}"
+               "could not be resolved")
 
 # And a file that is not there at all, which must not read as "nothing to see".
 expect_refusal("a missing file" "${CMAKE_CURRENT_LIST_DIR}/no_such_program"
+               "${TOOLCHAIN_RUNTIME_DIRECTORY}"
                "does not exist")
 
 message(STATUS

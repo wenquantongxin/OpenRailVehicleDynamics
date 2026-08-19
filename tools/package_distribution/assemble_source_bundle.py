@@ -35,6 +35,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--nlohmann-json-archive", type=Path, required=True)
     parser.add_argument("--sundials-archive", type=Path, required=True)
     parser.add_argument("--cmake-executable", default="cmake")
+    parser.add_argument("--git-executable", default="git")
     return parser.parse_args()
 
 
@@ -67,17 +68,25 @@ def copy_license_materials(
                 shutil.copyfileobj(extracted, output)
 
 
-def tracked_source_files(source_root: Path) -> list[Path]:
+def tracked_source_files(
+    source_root: Path, git_executable: str
+) -> list[Path]:
     try:
-        top_level = subprocess.run(
-            ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
+        checkout_prefix = subprocess.run(
+            [
+                git_executable,
+                "-C",
+                str(source_root),
+                "rev-parse",
+                "--show-prefix",
+            ],
             check=True,
             capture_output=True,
             text=True,
         ).stdout.strip()
         status = subprocess.run(
             [
-                "git",
+                git_executable,
                 "-C",
                 str(source_root),
                 "status",
@@ -89,7 +98,14 @@ def tracked_source_files(source_root: Path) -> list[Path]:
             text=True,
         ).stdout
         tracked = subprocess.run(
-            ["git", "-C", str(source_root), "ls-files", "-z", "--cached"],
+            [
+                git_executable,
+                "-C",
+                str(source_root),
+                "ls-files",
+                "-z",
+                "--cached",
+            ],
             check=True,
             capture_output=True,
         ).stdout
@@ -99,9 +115,13 @@ def tracked_source_files(source_root: Path) -> list[Path]:
             "working git executable"
         ) from error
 
-    if Path(top_level).resolve() != source_root:
+    # Git implementations on Windows can spell the same root as either
+    # `H:/checkout` or `/h/checkout`.  Ask Git whether -C selected its root
+    # instead of comparing those host-specific path dialects in Python.
+    if checkout_prefix:
         raise ValueError(
-            f"source root {source_root} is not the Git checkout root {top_level}"
+            f"source root {source_root} is inside the Git checkout at prefix "
+            f"{checkout_prefix!r}, not at its root"
         )
     if status:
         raise ValueError(
@@ -118,9 +138,11 @@ def tracked_source_files(source_root: Path) -> list[Path]:
     return relative_paths
 
 
-def copy_tracked_source(source_root: Path, destination: Path) -> None:
+def copy_tracked_source(
+    source_root: Path, destination: Path, git_executable: str
+) -> None:
     destination.mkdir()
-    for relative_path in tracked_source_files(source_root):
+    for relative_path in tracked_source_files(source_root, git_executable):
         source = source_root / relative_path
         output = destination / relative_path
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -193,7 +215,9 @@ def assemble_bundle(arguments: argparse.Namespace) -> None:
             )
 
         copy_tracked_source(
-            source_root, staging / "OpenRailVehicleDynamics"
+            source_root,
+            staging / "OpenRailVehicleDynamics",
+            arguments.git_executable,
         )
         staging.rename(output_directory)
     except BaseException:

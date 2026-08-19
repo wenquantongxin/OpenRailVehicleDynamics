@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <omp.h>
+#include <nlohmann/json.hpp>
 
 #include "atomic_qualification_directory.h"
 #include "gz18_qualification_runner.h"
@@ -209,7 +210,8 @@ void CheckAtomicDirectory(const std::filesystem::path& root) {
     const std::filesystem::path successful = root / "prior-success";
     {
         AtomicQualificationDirectory transaction(successful);
-        std::ofstream sentinel(transaction.working_path() / "sentinel.txt");
+        std::ofstream sentinel(transaction.working_path() / "sentinel.txt",
+                               std::ios::out | std::ios::binary);
         sentinel << "prior success\n";
         sentinel.close();
         transaction.Publish();
@@ -437,6 +439,7 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
 
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
+    const nlohmann::json metadata_document = nlohmann::json::parse(metadata);
     Require(metadata.find("\"before_definition_interval\": {") !=
                 std::string::npos &&
                 metadata.find("\"carrier_name\": \"rear_leading_wheelset\"") !=
@@ -449,16 +452,18 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 "16.666666666666668") != std::string::npos &&
                 metadata.find(
                     "\"vehicle_layout_reference_track_station_meters\": "
-                    "0") != std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[1]).string()) !=
-                    std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[2]).string()) !=
-                    std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[3]).string()) !=
-                    std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[4]).string()) !=
-                    std::string::npos,
+                    "0") != std::string::npos,
             "the successful artifact lacks its physical input identity");
+    const auto& input_paths = metadata_document.at("input_paths");
+    Require(input_paths.at("vehicle_definition").get<std::string>() ==
+                    std::filesystem::canonical(argv[1]).string() &&
+                input_paths.at("resolved_startup_state").get<std::string>() ==
+                    std::filesystem::canonical(argv[2]).string() &&
+                input_paths.at("track_geometry").get<std::string>() ==
+                    std::filesystem::canonical(argv[3]).string() &&
+                input_paths.at("orvd_data_root").get<std::string>() ==
+                    std::filesystem::canonical(argv[4]).string(),
+            "the successful artifact lacks canonical physical input paths");
     Require(metadata.find(
                 "\"relative_tolerance\": 9.9999999999999995e-07") !=
                 std::string::npos &&

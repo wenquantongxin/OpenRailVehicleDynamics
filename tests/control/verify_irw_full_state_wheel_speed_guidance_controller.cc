@@ -248,8 +248,21 @@ std::string Read(const std::filesystem::path& path) {
     if (!input) {
         throw std::runtime_error("could not open the controller test asset");
     }
-    return std::string(std::istreambuf_iterator<char>(input),
-                       std::istreambuf_iterator<char>());
+    const std::string source{std::istreambuf_iterator<char>(input),
+                             std::istreambuf_iterator<char>()};
+    std::string normalized;
+    normalized.reserve(source.size());
+    for (std::size_t index = 0; index < source.size(); ++index) {
+        if (source[index] == '\r') {
+            if (index + 1 < source.size() && source[index + 1] == '\n') {
+                ++index;
+            }
+            normalized.push_back('\n');
+        } else {
+            normalized.push_back(source[index]);
+        }
+    }
+    return normalized;
 }
 
 void Write(const std::filesystem::path& path, std::string_view contents) {

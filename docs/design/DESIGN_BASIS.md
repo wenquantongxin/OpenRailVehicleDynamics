@@ -227,7 +227,7 @@ Stage 1 同时**免除** `systems/framework`(28,747) + `multibody_plant`(11,378)
 | 力元 | 3–5 | 3–5 |
 | 自有 mini-LeafSystem 层（GZ18 + CVODE-only） | 6–10 | 6–10 |
 | 静平衡 re-host（Ceres 外置） | 2–3 | 2–3 |
-| 构建图 + 跨平台（MSVC/flag 面） | 4–8 | 4–8 |
+| 构建图 + 跨平台（Linux／MSYS2 GCC 与 Clang） | 4–8 | 4–8 |
 | Drake 差分 oracle 测试台 | 4–6 | 含在 Stage 1 |
 | **合计（人周）** | **41–66** | **20–35** |
 
@@ -290,7 +290,7 @@ OpenRailVehicleDynamics/
 | **M0** | 建 parity 测试台：同 (q,v,外力) 双跑 Drake 与新核 | 台子本身能对 Drake vs Drake 复跑给出逐位一致；**并测出 Drake 的 RHS/接触求解调用计数基准** |
 | **M1** | mini-LeafSystem 层落地，后端仍挂 Drake plant | 现有 GZ18 算例结果**逐位不变**（此时仍依赖 Drake，纯粹验证组装层无副作用） |
 | **M2** | Stage 1 vendor：tree+topology double-only + 自写 context/cache + facade | `ldd` 不再出现 `libdrake.so`；GZ18 30s 算例对 M1 结果逐位一致；**调用计数与 M0 基准一致** |
-| **M3** | 力元/静平衡/构建图收尾 | 全测试通过；跨平台构建（Linux + MSVC）可跑，回归在工程容差内（按 S2 口径，不要求跨平台逐位） |
+| **M3** | 力元/静平衡/构建图收尾 | 全测试通过；Linux 与 Windows MSYS2 的 GCC／Clang 构建可跑，回归在工程容差内（按 S2 口径，不要求跨平台逐位） |
 | **M4** | （可选）Stage 2 逐 pass 自研化 | 每个 pass 单独以金标向量门控，任一 pass 不达标即回滚该 pass |
 
 **M2 是 C1 达成点。** M4 可无限期推迟。

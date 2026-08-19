@@ -20,6 +20,7 @@ from dependency_sources import DependencySource, load_dependency_sources
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cmake", required=True)
+    parser.add_argument("--git-executable", required=True)
     parser.add_argument("--source-root", type=Path, required=True)
     return parser.parse_args()
 
@@ -205,6 +206,7 @@ def write_test_archive(path: Path, record: DependencySource) -> None:
 def verify_real_source_bundle_assembly(
     source_root: Path,
     cmake: str,
+    git_executable: str,
     records: tuple[DependencySource, ...],
     directory: Path,
 ) -> None:
@@ -232,16 +234,16 @@ def verify_real_source_bundle_assembly(
         encoding="utf-8",
     )
     run_checked(
-        ["git", "init", "--quiet", str(fixture_source)],
+        [git_executable, "init", "--quiet", str(fixture_source)],
         "could not initialise the clean source fixture",
     )
     run_checked(
-        ["git", "-C", str(fixture_source), "add", "."],
+        [git_executable, "-C", str(fixture_source), "add", "."],
         "could not stage the clean source fixture",
     )
     run_checked(
         [
-            "git",
+            git_executable,
             "-C",
             str(fixture_source),
             "-c",
@@ -283,6 +285,8 @@ def verify_real_source_bundle_assembly(
             str(archives["sundials"]),
             "--cmake-executable",
             cmake,
+            "--git-executable",
+            git_executable,
         ],
         "the real source-bundle assembler rejected valid inputs",
     )
@@ -331,6 +335,7 @@ def main() -> int:
         verify_real_source_bundle_assembly(
             source_root,
             arguments.cmake,
+            arguments.git_executable,
             production.records,
             directory,
         )

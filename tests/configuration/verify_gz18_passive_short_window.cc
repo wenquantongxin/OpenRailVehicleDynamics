@@ -83,7 +83,7 @@ struct ShortWindowObservation {
         interfaces{};
 };
 
-std::array<ShortWindowObservation, kSampleCount> BuildObservationBatch(
+std::vector<ShortWindowObservation> BuildObservationBatch(
     const AssembledVehicleContactScenario& scenario,
     const std::array<double, kSampleCount>& sample_times,
     const Eigen::MatrixXd& dense_states) {
@@ -97,7 +97,7 @@ std::array<ShortWindowObservation, kSampleCount> BuildObservationBatch(
     std::vector<AppliedBodyWrench> wrenches(kInterfaceCount);
     std::vector<WheelRailContactInterfaceObservation> interface_observations(
         kInterfaceCount);
-    std::array<ShortWindowObservation, kSampleCount> batch{};
+    std::vector<ShortWindowObservation> batch(kSampleCount);
 
     for (std::size_t sample = 0; sample < sample_times.size(); ++sample) {
         assembled.system().SetTimeAndContinuousState(
@@ -182,7 +182,7 @@ void CheckInitialVerticalAcceleration(
 
 void CheckPhysicalObservationBatch(
     const AssembledVehicleContactScenario& scenario,
-    const std::array<ShortWindowObservation, kSampleCount>& observations) {
+    std::span<const ShortWindowObservation> observations) {
     const auto& placements =
         scenario.initial_context().wheel_pair_placements();
     const auto* contact_plan = scenario.vehicle_system().contact_force_plan();

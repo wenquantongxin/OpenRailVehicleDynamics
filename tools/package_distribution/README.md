@@ -14,12 +14,17 @@
 
 ```sh
 python3 tools/package_distribution/assemble_source_bundle.py \
+  --git-executable /path/to/git \
   --output-directory /tmp/orvd-source-bundle \
   --eigen-archive /path/to/eigen-3.4.0.tar.gz \
   --fmt-archive /path/to/fmt-9.1.0.tar.gz \
   --nlohmann-json-archive /path/to/nlohmann-json-3.12.0.tar.xz \
   --sundials-archive /path/to/sundials-7.7.0.tar.gz
 ```
+
+`--git-executable` 可选，默认为 `git`。它同时用于确认工作树根、查看状态和列出
+跟踪文件。Windows 上若工作树由 Git for Windows 创建，应显式传入该
+`git.exe`，避免另一个 MSYS2 Git 用不同路径或换行规则重新解释同一工作树。
 
 组包是开发者工作，因此使用 Python、Git 与 CMake；生成物的配置与构建只需要 CMake、平台编译工具链
 和构建器，不需要 Python、Git、submodule 或网络。脚本不自行下载归档，避免把网络状态混入

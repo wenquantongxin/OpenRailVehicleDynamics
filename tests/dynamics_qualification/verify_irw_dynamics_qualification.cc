@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <omp.h>
+#include <nlohmann/json.hpp>
 
 #include "irw_qualification_runner.h"
 
@@ -255,6 +256,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
 
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
+    const nlohmann::json metadata_document = nlohmann::json::parse(metadata);
     Require(metadata.find("\"qualification_vehicle_recipe\": \"IRW\"") !=
                     std::string::npos &&
                 metadata.find("\"track_irregularity_identifier\": null") !=
@@ -285,14 +287,15 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                 metadata.find("\"contact_body_wrench_count\": 8") !=
                     std::string::npos,
             "the passive q81/v74/z2 and 96+8 wrench identity is absent");
-    Require(metadata.find(std::filesystem::canonical(argv[1]).string()) !=
-                    std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[2]).string()) !=
-                    std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[3]).string()) !=
-                    std::string::npos &&
-                metadata.find(std::filesystem::canonical(argv[4]).string()) !=
-                    std::string::npos,
+    const auto& input_paths = metadata_document.at("input_paths");
+    Require(input_paths.at("vehicle_definition").get<std::string>() ==
+                    std::filesystem::canonical(argv[1]).string() &&
+                input_paths.at("resolved_startup_state").get<std::string>() ==
+                    std::filesystem::canonical(argv[2]).string() &&
+                input_paths.at("track_geometry").get<std::string>() ==
+                    std::filesystem::canonical(argv[3]).string() &&
+                input_paths.at("orvd_data_root").get<std::string>() ==
+                    std::filesystem::canonical(argv[4]).string(),
             "the IRW artifact lacks canonical physical input paths");
 
     const std::string patches =

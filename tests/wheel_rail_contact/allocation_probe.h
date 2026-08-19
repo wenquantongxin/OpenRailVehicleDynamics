@@ -41,13 +41,27 @@ class AllocationScope {
     std::size_t entry_count_;
 };
 
+// Keep the C allocation pair behind an explicit instrumentation boundary.
+// GCC 16 otherwise propagates a large optimized caller through the replacement
+// new/delete functions and diagnoses the matching malloc/free pair as a
+// mismatched C++ allocation.  These helpers preserve the matching allocation
+// semantics without disabling the diagnostic for the surrounding test code.
+[[gnu::noinline]] inline void* AllocateOrdinaryMemory(std::size_t size) {
+    return std::malloc(size);
+}
+
+[[gnu::noinline]] inline void ReleaseOrdinaryMemory(void* memory) noexcept {
+    std::free(memory);
+}
+
 }  // namespace orvd::test
 
 void* operator new(std::size_t size) {
     orvd::test::allocation_count.fetch_add(1, std::memory_order_relaxed);
     // Zero-sized allocations must still return distinct pointers, and malloc is
     // permitted to return null for them.
-    void* memory = std::malloc(size == 0 ? 1 : size);
+    void* memory =
+        orvd::test::AllocateOrdinaryMemory(size == 0 ? 1 : size);
     if (memory == nullptr) {
         throw std::bad_alloc();
     }
@@ -56,11 +70,15 @@ void* operator new(std::size_t size) {
 
 void* operator new[](std::size_t size) { return operator new(size); }
 
-void operator delete(void* memory) noexcept { std::free(memory); }
-void operator delete[](void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory) noexcept {
+    orvd::test::ReleaseOrdinaryMemory(memory);
+}
+void operator delete[](void* memory) noexcept {
+    orvd::test::ReleaseOrdinaryMemory(memory);
+}
 void operator delete(void* memory, std::size_t) noexcept {
-    std::free(memory);
+    orvd::test::ReleaseOrdinaryMemory(memory);
 }
 void operator delete[](void* memory, std::size_t) noexcept {
-    std::free(memory);
+    orvd::test::ReleaseOrdinaryMemory(memory);
 }

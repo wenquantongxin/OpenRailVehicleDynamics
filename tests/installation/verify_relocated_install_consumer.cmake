@@ -335,6 +335,20 @@ find_single_executable(drake_probe_executable drake_loading_probe
 get_filename_component(smoke_runtime_directory "${smoke_executable}" DIRECTORY)
 get_filename_component(drake_probe_runtime_directory
                        "${drake_probe_executable}" DIRECTORY)
+get_filename_component(toolchain_runtime_directory
+                       "${CMAKE_CXX_COMPILER_PATH}" DIRECTORY)
+set(smoke_runtime_directories
+    "${smoke_runtime_directory};${toolchain_runtime_directory}")
+set(drake_probe_runtime_directories
+    "${drake_probe_runtime_directory};${toolchain_runtime_directory}")
+# These lists cross an execute_process() function boundary below.  Preserve the
+# semicolon inside one -D argument; otherwise CMake expands the toolchain
+# directory into a second command-line argument and the checker only receives
+# the executable directory.
+string(REPLACE ";" "\\;" smoke_runtime_directories_argument
+       "${smoke_runtime_directories}")
+string(REPLACE ";" "\\;" drake_probe_runtime_directories_argument
+       "${drake_probe_runtime_directories}")
 
 run_checked("running the relocated independent consumer" "${smoke_executable}")
 run_checked("running the configuration-only installed consumer"
@@ -354,13 +368,13 @@ run_checked(
     "checking the installed consumer runtime dependency closure"
     "${CMAKE_COMMAND}"
     "-DCHECKED_EXECUTABLE=${smoke_executable}"
-    "-DRUNTIME_SEARCH_DIRECTORIES=${smoke_runtime_directory}"
+    "-DRUNTIME_SEARCH_DIRECTORIES=${smoke_runtime_directories_argument}"
     -P "${INSTALLATION_SOURCE_DIR}/verify_runtime_dependencies.cmake")
 
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
             "-DCHECKED_EXECUTABLE=${drake_probe_executable}"
-            "-DRUNTIME_SEARCH_DIRECTORIES=${drake_probe_runtime_directory}"
+            "-DRUNTIME_SEARCH_DIRECTORIES=${drake_probe_runtime_directories_argument}"
             -P "${INSTALLATION_SOURCE_DIR}/verify_runtime_dependencies.cmake"
     RESULT_VARIABLE positive_control_result
     OUTPUT_VARIABLE positive_control_output

@@ -3,10 +3,13 @@
 # synthetic source trees, so this check needs neither Drake nor a Drake clone.
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 find_package(Git REQUIRED)
+get_filename_component(orvd_test_toolchain_runtime_directory
+                       "${CMAKE_CXX_COMPILER}" DIRECTORY)
 add_test(NAME verify_dependency_source_declaration
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/package_distribution/verify_dependency_sources.py
                  --cmake ${CMAKE_COMMAND}
+                 --git-executable ${GIT_EXECUTABLE}
                  --source-root ${CMAKE_SOURCE_DIR})
 add_test(NAME verify_source_closure_analyzer
          COMMAND ${Python3_EXECUTABLE}
@@ -339,6 +342,8 @@ if(ORVD_BUILD_DRAKE_REFERENCE_TESTS)
              COMMAND ${CMAKE_COMMAND}
                      -DCHECK_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake
                      -DDRAKE_LOADING_EXECUTABLE=$<TARGET_FILE:emit_drake_reference_observations>
+                     "-DDRAKE_RUNTIME_DIRECTORIES=$<TARGET_FILE_DIR:emit_drake_reference_observations>;${orvd_test_toolchain_runtime_directory}"
+                     -DTOOLCHAIN_RUNTIME_DIRECTORY=${orvd_test_toolchain_runtime_directory}
                      -DUNRESOLVABLE_EXECUTABLE=$<TARGET_FILE:orvd_unresolvable_consumer>
                      -DFALSE_LIKE_EXECUTABLE=$<TARGET_FILE:orvd_false_like_consumer>
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependency_check_discriminates.cmake)
@@ -657,6 +662,7 @@ target_link_libraries(emit_orvd_candidate_observations
 add_test(NAME verify_candidate_runtime_dependencies_exclude_shared_drake
          COMMAND ${CMAKE_COMMAND}
                  -DCANDIDATE_EXECUTABLE=$<TARGET_FILE:emit_orvd_candidate_observations>
+                 "-DRUNTIME_SEARCH_DIRECTORIES=$<TARGET_FILE_DIR:emit_orvd_candidate_observations>;${orvd_test_toolchain_runtime_directory}"
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/orvd_candidate/verify_candidate_runtime_dependencies_exclude_shared_drake.cmake)
 
 # G47's original line layer uses three executables, one per group of completion
@@ -1016,7 +1022,8 @@ add_executable(verify_gz18_dynamics_qualification
     dynamics_qualification/verify_gz18_dynamics_qualification.cc)
 orvd_configure_first_party_target(verify_gz18_dynamics_qualification)
 target_link_libraries(verify_gz18_dynamics_qualification
-    PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX)
+    PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX
+            nlohmann_json::nlohmann_json)
 add_test(NAME verify_gz18_dynamics_qualification
          COMMAND verify_gz18_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
@@ -1032,7 +1039,8 @@ add_executable(verify_irw_dynamics_qualification
     dynamics_qualification/verify_irw_dynamics_qualification.cc)
 orvd_configure_first_party_target(verify_irw_dynamics_qualification)
 target_link_libraries(verify_irw_dynamics_qualification
-    PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX)
+    PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX
+            nlohmann_json::nlohmann_json)
 add_test(NAME verify_irw_dynamics_qualification
          COMMAND verify_irw_dynamics_qualification
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
