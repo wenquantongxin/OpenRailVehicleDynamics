@@ -25,6 +25,7 @@ OpenRailVehicleDynamics/
 │   └── drake_mbtree/     vendored 刚性多体树源码、替代实现与许可证
 ├── libs/
 │   ├── track_geometry/    轨道几何、轨道坐标系与站位投影
+│   ├── track_irregularity/ 轨道不平顺 PSD、空间 realization 与可复核元数据
 │   ├── wheel_rail_contact/ 型面、接触几何、法向／切向接触与工作区
 │   ├── configuration/     严格 JSON 加载、车辆与初始状态装配
 │   ├── multibody_runtime/ 多体状态、缓存与求值运行时
@@ -47,7 +48,8 @@ OpenRailVehicleDynamics/
 ```
 
 公共头位于 `libs/<module>/include/orvd/<module>/`，实现位于相邻的 `src/`。安装包导出
-`ORVD::control`、`ORVD::actuation`、`ORVD::track_geometry`、`ORVD::wheel_rail_contact`、`ORVD::configuration`、
+`ORVD::control`、`ORVD::actuation`、`ORVD::track_geometry`、`ORVD::track_irregularity`、
+`ORVD::wheel_rail_contact`、`ORVD::configuration`、
 `ORVD::multibody_runtime`、`ORVD::multibody_model`、`ORVD::forces`、
 `ORVD::system_assembly` 与 `ORVD::integrators`；vendored Drake 类型和开发期工具不安装。
 
