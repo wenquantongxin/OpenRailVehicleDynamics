@@ -1,4 +1,6 @@
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -6,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+#include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/resolve_track_irregularity_field.h"
 #include "orvd/track_irregularity/aar_track_irregularity_generator.h"
 
@@ -13,11 +16,13 @@ namespace {
 
 using orvd::configuration::FrozenTrackIrregularityFieldSource;
 using orvd::configuration::GeneratedAarTrackIrregularityFieldSource;
+using orvd::configuration::LoadTrackIrregularityFieldFromDataRoot;
 using orvd::configuration::ResolveTrackIrregularityField;
 using orvd::configuration::TrackIrregularityFieldSource;
 using orvd::track_irregularity::AarTrackClass;
 using orvd::track_irregularity::AarTrackIrregularityGenerationSpec;
 using orvd::track_irregularity::DeriveAarTrackIrregularityChannelSeeds;
+using orvd::track_irregularity::GenerateAarTrackIrregularity;
 
 int failures = 0;
 
@@ -40,32 +45,41 @@ AarTrackIrregularityGenerationSpec MakeGeneratedSpecification(
 }
 
 void CheckFrozenSource(const std::filesystem::path& data_root) {
-    const auto resolved = ResolveTrackIrregularityField(
-        data_root,
-        TrackIrregularityFieldSource{FrozenTrackIrregularityFieldSource{
-            "aar5_irregularity"}});
-    Require(resolved.field != nullptr,
-            "the frozen source returned no field");
-    Require(!resolved.generated_metadata.has_value(),
-            "the frozen source claimed generated metadata");
-    Require(resolved.field->LateralDisplacementMeters(-1.0) == 0.0 &&
-                resolved.field->VerticalDisplacementMeters(1101.0) == 0.0,
-            "the frozen field lost its existing outside-domain contract");
-    Require(std::isfinite(
-                resolved.field->LateralDisplacementMeters(450.0)) &&
-                std::isfinite(
-                    resolved.field->VerticalDisplacementMeters(450.0)),
-            "the frozen field did not remain evaluable");
+    struct FrozenFixture {
+        std::string_view identifier;
+        std::array<double, 3> comparison_stations_meters;
+    };
+    constexpr std::array<FrozenFixture, 3> fixtures{{
+        {"aar5_irregularity", {160.1, 450.0, 1099.9}},
+        {"aar6_irregularity", {50.1, 150.0, 299.9}},
+        {"erri_low_irregularity", {50.1, 250.0, 499.9}},
+    }};
 
-    for (const std::string_view identifier : {
-             "aar6_irregularity", "erri_low_irregularity"}) {
-        const auto another = ResolveTrackIrregularityField(
+    for (const FrozenFixture& fixture : fixtures) {
+        const auto resolved = ResolveTrackIrregularityField(
             data_root,
             TrackIrregularityFieldSource{FrozenTrackIrregularityFieldSource{
-                std::string(identifier)}});
-        Require(another.field != nullptr &&
-                    !another.generated_metadata.has_value(),
+                std::string(fixture.identifier)}});
+        Require(resolved.field != nullptr &&
+                    !resolved.generated_metadata.has_value(),
                 "an authorized frozen source did not resolve unchanged");
+        if (!resolved.field) {
+            continue;
+        }
+        const auto directly_loaded = LoadTrackIrregularityFieldFromDataRoot(
+            data_root, fixture.identifier);
+        for (const double station : fixture.comparison_stations_meters) {
+            Require(
+                resolved.field->LateralDisplacementMeters(station) ==
+                        directly_loaded.LateralDisplacementMeters(station) &&
+                    resolved.field->VerticalDisplacementMeters(station) ==
+                        directly_loaded.VerticalDisplacementMeters(station) &&
+                    resolved.field->LateralSlopeMetersPerMeter(station) ==
+                        directly_loaded.LateralSlopeMetersPerMeter(station) &&
+                    resolved.field->VerticalSlopeMetersPerMeter(station) ==
+                        directly_loaded.VerticalSlopeMetersPerMeter(station),
+                "a frozen source transformed the strict loader field");
+        }
     }
 
     bool rejected_unknown_identifier = false;
@@ -120,6 +134,22 @@ void CheckGeneratedSource() {
                 resolved.field->LateralDisplacementMeters(90.0) == 0.0 &&
                 resolved.field->VerticalDisplacementMeters(90.0) == 0.0,
             "a generated field was nonzero at a placement endpoint");
+
+    const auto generated = GenerateAarTrackIrregularity(specification);
+    constexpr std::array<std::size_t, 2> kFadeProbeIndices{101, 899};
+    constexpr double kSplineKnotToleranceMeters = 1.0e-15;
+    for (const std::size_t sample_index : kFadeProbeIndices) {
+        const double station =
+            generated.track_station_meters[sample_index];
+        Require(
+            std::abs(resolved.field->LateralDisplacementMeters(station) -
+                     generated.lateral_displacement_meters[sample_index]) <=
+                    kSplineKnotToleranceMeters &&
+                std::abs(resolved.field->VerticalDisplacementMeters(station) -
+                         generated.vertical_displacement_meters[sample_index]) <=
+                    kSplineKnotToleranceMeters,
+            "the generated source did not preserve both placement fades");
+    }
 
     const double lateral_midpoint =
         resolved.field->LateralDisplacementMeters(50.0);
