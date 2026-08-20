@@ -6,6 +6,12 @@
 `nlohmann/json` 仅用于本静态库的实现。公共头和安装导出接口不暴露其类型，配置文件在加载完成后
 也不再参与轨道几何求值。
 
+轨道不平顺来源是一个闭合集合：调用方可按现有标识加载 AAR5／AAR6／ERRI 冻结空间 field，或
+给出完整 AAR5／AAR6 PSD realization 规格和显式 seed。`ResolveTrackIrregularityField` 把两条
+路径都解析为相同的 `TrackIrregularityField`；生成路径另返回算法、频带、placement 及派生通道
+seed 元数据。冻结 point series 和已烘焙门控不经该入口改写或再次施加包络，也不增加任意实测
+点列导入、平移或重里程化路径。
+
 线路几何记录由加载器直接形成不可变的 `TrackGeometry`。三个独立剖面分别描述曲率、超高和
 中心线上坡坡度；常值段与 Hermite 三次混合段使用不同的精确字段集合。
 

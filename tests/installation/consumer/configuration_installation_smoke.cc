@@ -20,6 +20,7 @@
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/configuration/load_wheel_drive_torque_command_conditioner.h"
+#include "orvd/configuration/resolve_track_irregularity_field.h"
 
 int main(int argc, char* argv[]) {
     try {
@@ -158,14 +159,32 @@ int main(int argc, char* argv[]) {
                 std::filesystem::path(argv[4]) / "track_library" /
                 "geometries" /
                 "r300_centerline_superelevation_1100m.json");
-        auto irw_irregularity = std::make_unique<
-            orvd::wheel_rail_contact::TrackIrregularityField>(
-            orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
-                argv[4], "aar5_irregularity"));
+        auto irw_irregularity =
+            orvd::configuration::ResolveTrackIrregularityField(
+                argv[4],
+                orvd::configuration::TrackIrregularityFieldSource{
+                    orvd::configuration::
+                        GeneratedAarTrackIrregularityFieldSource{
+                            orvd::track_irregularity::
+                                AarTrackIrregularityGenerationSpec{
+                                    orvd::track_irregularity::AarTrackClass::
+                                        kAar5,
+                                    {0.024, 0.333, 64},
+                                    {0.0, 1100.0, 0.25},
+                                    {160.0, 1100.0, 40.0, 40.0},
+                                    2026082001ULL}}});
+        if (!irw_irregularity.generated_metadata.has_value() ||
+            irw_irregularity.generated_metadata->specification
+                    .realization_seed != 2026082001ULL) {
+            std::fprintf(stderr,
+                         "installed IRW source resolver lost generated "
+                         "realization identity\n");
+            return 1;
+        }
         const auto irw_scenario =
             orvd::configuration::AssembleIrwContactScenario(
                 irw_vehicle, irw_startup, std::move(irw_line), argv[4], 0.0,
-                0.01, std::move(irw_irregularity));
+                0.01, std::move(irw_irregularity.field));
         const auto& irw_system = irw_scenario->vehicle_system();
         const auto& irw_resolved = irw_scenario->initial_context();
         if (irw_system.model().num_rigid_bodies() != 25 ||
@@ -332,12 +351,32 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         }
+        auto gz18_generated_irregularity =
+            orvd::configuration::ResolveTrackIrregularityField(
+                argv[4],
+                orvd::configuration::TrackIrregularityFieldSource{
+                    orvd::configuration::
+                        GeneratedAarTrackIrregularityFieldSource{
+                            orvd::track_irregularity::
+                                AarTrackIrregularityGenerationSpec{
+                                    orvd::track_irregularity::AarTrackClass::
+                                        kAar6,
+                                    {0.024, 0.333, 64},
+                                    {0.0, 1100.0, 0.25},
+                                    {50.0, 300.0, 50.0, 50.0},
+                                    2026082002ULL}}});
+        if (!gz18_generated_irregularity.generated_metadata.has_value() ||
+            gz18_generated_irregularity.generated_metadata->specification
+                    .realization_seed != 2026082002ULL) {
+            std::fprintf(stderr,
+                         "installed GZ18 source resolver lost generated "
+                         "realization identity\n");
+            return 1;
+        }
         const auto scenario =
             orvd::configuration::AssembleGz18ContactScenario(
                 vehicle, startup, std::move(r300_line), argv[4], 0.0, 2.0,
-                std::make_unique<
-                    orvd::wheel_rail_contact::TrackIrregularityField>(
-                    std::move(aar5_irregularity)));
+                std::move(gz18_generated_irregularity.field));
         const auto& system = scenario->vehicle_system();
         const auto& resolved = scenario->initial_context();
         Eigen::VectorXd derivatives(system.system().continuous_state_size());

@@ -881,6 +881,20 @@ add_test(NAME verify_track_irregularity_field_loading
              ${CMAKE_SOURCE_DIR}
              ${CMAKE_CURRENT_BINARY_DIR}/track-irregularity-fixtures)
 
+# DEC-043's closed source choice: the historical loader remains unchanged,
+# while a generated PSD realization is cropped to its placement boundaries and
+# converted to the same immutable field consumed by both vehicle factories.
+add_executable(verify_track_irregularity_field_source_resolution
+    configuration/resolve_track_irregularity_field_header_self_containment.cc
+    configuration/verify_track_irregularity_field_source_resolution.cc)
+orvd_configure_first_party_target(
+    verify_track_irregularity_field_source_resolution)
+target_link_libraries(verify_track_irregularity_field_source_resolution
+    PRIVATE orvd_configuration)
+add_test(NAME verify_track_irregularity_field_source_resolution
+         COMMAND verify_track_irregularity_field_source_resolution
+             ${CMAKE_SOURCE_DIR})
+
 # G52c's real asset and personality boundary. The test loads the same JSON a
 # relocated consumer receives, checks the closed logical identities and derived
 # gauge geometry, then evaluates both sides after preparing their workspaces.
