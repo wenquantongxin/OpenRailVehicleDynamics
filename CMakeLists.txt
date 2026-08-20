@@ -113,6 +113,7 @@ set(ORVD_PRODUCT_MODULE_DIRECTORIES
     libs/control
     libs/actuation
     libs/track_geometry
+    libs/track_irregularity
     libs/wheel_rail_contact
     libs/multibody_runtime
     libs/multibody_model
@@ -162,13 +163,15 @@ if(ORVD_BUILD_SIMPACK_REALTIME_TOOLS)
 endif()
 
 # --- Installable package ---
-# Eleven first-party targets form the documented surface. The rigid-tree archive
-# is exported only because a static modelling archive must retain its private
-# implementation link edge; no vendored or adapter header is installed.
+# The installable first-party targets form the documented surface. The
+# rigid-tree archive is exported only because a static modelling archive must
+# retain its private implementation link edge; no vendored or adapter header is
+# installed.
 set(ORVD_INSTALL_TARGETS
     orvd_control
     orvd_actuation
     orvd_track_geometry
+    orvd_track_irregularity
     orvd_wheel_rail_contact
     orvd_configuration
     orvd_multibody_runtime
@@ -184,8 +187,9 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 foreach(orvd_public_module
-        control actuation track_geometry wheel_rail_contact configuration
-        multibody_runtime multibody_model forces system_assembly integrators)
+        control actuation track_geometry track_irregularity wheel_rail_contact
+        configuration multibody_runtime multibody_model forces system_assembly
+        integrators)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

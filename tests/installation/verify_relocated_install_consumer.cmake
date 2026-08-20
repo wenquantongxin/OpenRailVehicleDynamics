@@ -326,6 +326,9 @@ find_single_executable(configuration_smoke_executable
                        configuration_installation_smoke "${consumer_build}")
 find_single_executable(track_geometry_smoke_executable
                        track_geometry_installation_smoke "${consumer_build}")
+find_single_executable(track_irregularity_smoke_executable
+                       track_irregularity_installation_smoke
+                       "${consumer_build}")
 find_single_executable(wheel_rail_contact_smoke_executable
                        wheel_rail_contact_installation_smoke "${consumer_build}")
 find_single_executable(forces_smoke_executable forces_installation_smoke
@@ -358,6 +361,8 @@ run_checked("running the configuration-only installed consumer"
             "${installed_irw_startup_state}")
 run_checked("running the track-geometry-only installed consumer"
             "${track_geometry_smoke_executable}")
+run_checked("running the track-irregularity-only installed consumer"
+            "${track_irregularity_smoke_executable}")
 run_checked("running the wheel-rail-contact-only installed consumer"
             "${wheel_rail_contact_smoke_executable}")
 run_checked("running the forces-only installed consumer"

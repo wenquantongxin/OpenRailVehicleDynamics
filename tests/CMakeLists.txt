@@ -761,6 +761,18 @@ target_link_libraries(verify_track_irregularity_field
 add_test(NAME verify_track_irregularity_field
          COMMAND verify_track_irregularity_field)
 
+# The model-neutral AAR generator is checked by formula properties, finite
+# placement invariants and a direct DFT projection of full-amplitude samples.
+# The wheel-rail field edge proves the required crop-before-spline boundary.
+add_executable(verify_aar_track_irregularity_generator
+    track_irregularity/aar_track_irregularity_generator_header_self_containment.cc
+    track_irregularity/verify_aar_track_irregularity_generator.cc)
+orvd_configure_first_party_target(verify_aar_track_irregularity_generator)
+target_link_libraries(verify_aar_track_irregularity_generator
+    PRIVATE orvd_track_irregularity orvd_wheel_rail_contact)
+add_test(NAME verify_aar_track_irregularity_generator
+         COMMAND verify_aar_track_irregularity_generator)
+
 add_executable(verify_wheel_profile_preprocessing
     wheel_rail_contact/profile_points_header_self_containment.cc
     wheel_rail_contact/profile_arc_length_header_self_containment.cc

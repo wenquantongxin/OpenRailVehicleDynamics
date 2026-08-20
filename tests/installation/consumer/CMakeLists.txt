@@ -44,6 +44,16 @@ target_compile_features(track_geometry_installation_smoke PRIVATE cxx_std_23)
 target_link_libraries(track_geometry_installation_smoke
     PRIVATE ORVD::track_geometry)
 
+# Keep the PSD realization generator isolated from configuration and contact
+# targets. This proves its installed public header and archive independently,
+# including the executable generation entry point rather than only the target
+# name in the export set.
+add_executable(track_irregularity_installation_smoke
+    track_irregularity_installation_smoke.cc)
+target_compile_features(track_irregularity_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(track_irregularity_installation_smoke
+    PRIVATE ORVD::track_irregularity)
+
 # Keep the contact library isolated as well: this proves its installed public
 # header and static archive are sufficient without an in-tree include path or
 # another ORVD target incidentally carrying its dependencies.
