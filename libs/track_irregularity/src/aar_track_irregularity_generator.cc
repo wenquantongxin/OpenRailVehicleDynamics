@@ -358,18 +358,32 @@ struct GatedChannelStatistics {
 
 GatedChannelStatistics ApplyPlacementAndMeasure(
     const TrackIrregularityPlacementSpec& placement,
+    const TrackStationGridSpec& station_grid,
     const std::vector<double>& track_station_meters,
     std::vector<double>* displacement_meters) {
+    // These boundaries were validated as grid knots. Use their indices rather
+    // than inferring plateau membership from a floating envelope value.
+    const std::size_t first_full_amplitude_index =
+        static_cast<std::size_t>(std::round(GridCoordinate(
+            station_grid,
+            placement.start_meters + placement.fade_in_length_meters)));
+    const std::size_t last_full_amplitude_index =
+        static_cast<std::size_t>(std::round(GridCoordinate(
+            station_grid,
+            placement.end_meters - placement.fade_out_length_meters)));
     SampleStatisticsAccumulator full_amplitude;
     SampleStatisticsAccumulator complete;
     for (std::size_t station_index = 0;
          station_index < track_station_meters.size(); ++station_index) {
+        const double ungated_displacement =
+            (*displacement_meters)[station_index];
         const double weight = PlacementWeightUnchecked(
             placement, track_station_meters[station_index]);
-        (*displacement_meters)[station_index] *= weight;
+        (*displacement_meters)[station_index] = ungated_displacement * weight;
         complete.Add((*displacement_meters)[station_index]);
-        if (weight == 1.0) {
-            full_amplitude.Add((*displacement_meters)[station_index]);
+        if (station_index >= first_full_amplitude_index &&
+            station_index <= last_full_amplitude_index) {
+            full_amplitude.Add(ungated_displacement);
         }
     }
     return GatedChannelStatistics{full_amplitude.Finish(),
@@ -427,8 +441,16 @@ double Smoothstep5(double unit_interval) noexcept {
     if (unit_interval >= 1.0) {
         return 1.0;
     }
-    return unit_interval * unit_interval * unit_interval *
-           (10.0 + unit_interval * (-15.0 + 6.0 * unit_interval));
+    const auto lower_half = [](double value) noexcept {
+        return value * value * value *
+               (10.0 + value * (-15.0 + 6.0 * value));
+    };
+    if (unit_interval <= 0.5) {
+        return lower_half(unit_interval);
+    }
+    // The symmetric form avoids cancellation in the polynomial near one.
+    const double complement = 1.0 - unit_interval;
+    return 1.0 - lower_half(complement);
 }
 
 double TrackIrregularityPlacementWeight(
@@ -471,10 +493,12 @@ GeneratedTrackIrregularity GenerateAarTrackIrregularity(
 
     const GatedChannelStatistics lateral_statistics =
         ApplyPlacementAndMeasure(specification.placement,
+                                 specification.station_grid,
                                  generated.track_station_meters,
                                  &generated.lateral_displacement_meters);
     const GatedChannelStatistics vertical_statistics =
         ApplyPlacementAndMeasure(specification.placement,
+                                 specification.station_grid,
                                  generated.track_station_meters,
                                  &generated.vertical_displacement_meters);
 

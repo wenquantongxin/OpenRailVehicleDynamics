@@ -385,6 +385,10 @@ void CheckSmoothPlacement() {
                 "smoothstep5 did not clamp below its interval");
     RequireNear(Smoothstep5(2.0), 1.0, 0.0,
                 "smoothstep5 did not clamp above its interval");
+    const double immediately_below_one = std::nextafter(1.0, 0.0);
+    const double near_end_weight = Smoothstep5(immediately_below_one);
+    Require(near_end_weight >= 0.0 && near_end_weight <= 1.0,
+            "smoothstep5 left the unit range near its end");
 
     // Independent five-point one-sided differences check the endpoint
     // derivatives asserted by the fifth-order transition definition.
@@ -435,6 +439,34 @@ void CheckSmoothPlacement() {
                     sample.second, 2.0e-16,
                     "the finite placement window has the wrong shape");
     }
+}
+
+void CheckFullAmplitudeStatisticsAtGridKnots() {
+    const auto ordinary = GenerateAarTrackIrregularity(
+        AarTrackIrregularityGenerationSpec{
+            AarTrackClass::kAar5,
+            SpatialFrequencyGridSpec{0.024, 0.333, 8},
+            TrackStationGridSpec{0.0, 1.1, 0.1},
+            TrackIrregularityPlacementSpec{0.1, 1.0, 0.3, 0.3},
+            42});
+    Require(ordinary.metadata.lateral.full_amplitude_statistics.sample_count ==
+                    4 &&
+                ordinary.metadata.vertical.full_amplitude_statistics
+                        .sample_count == 4,
+            "full-amplitude statistics lost a validated boundary knot");
+
+    const auto touching_fades = GenerateAarTrackIrregularity(
+        AarTrackIrregularityGenerationSpec{
+            AarTrackClass::kAar5,
+            SpatialFrequencyGridSpec{0.024, 0.333, 8},
+            TrackStationGridSpec{0.0, 1.0, 0.1},
+            TrackIrregularityPlacementSpec{0.1, 0.7, 0.3, 0.3},
+            42});
+    Require(touching_fades.metadata.lateral.full_amplitude_statistics
+                        .sample_count == 1 &&
+                touching_fades.metadata.vertical.full_amplitude_statistics
+                        .sample_count == 1,
+            "touching fades did not retain their one full-amplitude knot");
 }
 
 void CheckSeedDerivationAndReplay() {
@@ -864,6 +896,7 @@ void CheckGridPlacementAndSplineClosure() {
 int main() {
     CheckSpectrumParametersAndBandVariance();
     CheckSmoothPlacement();
+    CheckFullAmplitudeStatisticsAtGridKnots();
     CheckSeedDerivationAndReplay();
     CheckIndependentFrequencyDomainInversion();
     CheckProductionBandStatisticalInversionAfterSpline();
