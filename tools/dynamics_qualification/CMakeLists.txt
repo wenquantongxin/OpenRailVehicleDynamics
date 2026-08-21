@@ -18,7 +18,7 @@ target_include_directories(orvd_dynamics_qualification_support
 
 target_link_libraries(orvd_dynamics_qualification_support
     PUBLIC orvd_configuration orvd_integrators
-    PRIVATE OpenMP::OpenMP_CXX)
+    PRIVATE OpenMP::OpenMP_CXX nlohmann_json::nlohmann_json)
 
 add_executable(orvd_gz18_dynamics_qualification
     run_gz18_qualification.cc)

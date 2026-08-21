@@ -1089,6 +1089,28 @@ set_tests_properties(
     PROPERTIES
     PROCESSORS 16)
 
+add_executable(verify_irw_aar5_v80_and_aar6_v120_passive_scenarios
+    dynamics_qualification/verify_irw_aar5_v80_and_aar6_v120_passive_scenarios.cc)
+orvd_configure_first_party_target(
+    verify_irw_aar5_v80_and_aar6_v120_passive_scenarios)
+target_link_libraries(
+    verify_irw_aar5_v80_and_aar6_v120_passive_scenarios
+    PRIVATE orvd_dynamics_qualification_support
+            nlohmann_json::nlohmann_json)
+add_test(NAME verify_irw_aar5_v80_and_aar6_v120_passive_scenarios
+         COMMAND verify_irw_aar5_v80_and_aar6_v120_passive_scenarios
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_1100m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r600_centerline_superelevation_1100m.json
+             ${CMAKE_SOURCE_DIR}/track_library/geometries/r1000_centerline_superelevation_300m.json
+             ${CMAKE_CURRENT_BINARY_DIR}/irw-aar5-v80-and-aar6-v120-passive-scenario-fixtures)
+set_tests_properties(
+    verify_irw_aar5_v80_and_aar6_v120_passive_scenarios
+    PROPERTIES
+    PROCESSORS 16)
+
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc
     configuration/load_vehicle_definition_header_self_containment.cc

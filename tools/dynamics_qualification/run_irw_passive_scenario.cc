@@ -32,8 +32,10 @@ int main(int argc, char** argv) {
             "usage: orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID_OR_NONE OUTPUT_DIRECTORY DURATION_NS "
             "SAMPLE_PERIOD_NS\n"
-            "SCENARIO: irw_r300_no_irregularity_v60_passive or "
-            "irw_r300_aar5_v60_passive\n");
+            "SCENARIO: irw_r300_no_irregularity_v60_passive, "
+            "irw_r300_aar5_v60_passive, irw_straight_aar5_v80_passive, "
+            "irw_r600_aar5_v80_passive, irw_straight_aar6_v120_passive, "
+            "or irw_r1000_aar6_v120_passive\n");
         return 2;
     }
 

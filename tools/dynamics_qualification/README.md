@@ -19,11 +19,11 @@ The executables are:
 
 - `orvd_gz18_dynamics_qualification`: passive GZ18 long-window runs with one
   explicitly named track-irregularity asset;
-- `orvd_irw_passive_scenario`: passive IRW runs selected by a closed physical
-  identity; the current set covers R300/60 km/h with either no irregularity or
-  the AAR5 field. Pass
-  `irw_r300_no_irregularity_v60_passive` or
-  `irw_r300_aar5_v60_passive` as the required scenario identifier;
+- `orvd_irw_passive_scenario`: passive IRW runs selected by a closed scenario
+  identity. The current set is `irw_r300_no_irregularity_v60_passive`,
+  `irw_r300_aar5_v60_passive`, `irw_straight_aar5_v80_passive`,
+  `irw_r600_aar5_v80_passive`, `irw_straight_aar6_v120_passive`, and
+  `irw_r1000_aar6_v120_passive`;
 - `orvd_irw_r300_aar5_v60_100hz_full_state_guidance`: the closed IRW
   R300/AAR5/60 km/h, 100 Hz full-state wheel-speed guidance and control-event
   scenario.
@@ -35,9 +35,16 @@ also use maximum BDF order 2, with relative tolerance `1e-6` and q/v/z
 absolute tolerances `1e-6 / 1e-5 / 1e-6 N`. The passive R300/AAR5/60 km/h
 recipe uses maximum BDF order 5, relative tolerance `1e-8`, and q/v/z absolute
 tolerances `1e-8 / 1e-7 / 1e-6 N`. The runners verify the configured order
-against the selected recipe and publish it in the numerical execution
-contract. These are private execution recipes, not a public integrator-policy
-interface.
+against the selected recipe and publish it in the numerical execution contract.
+These are private execution recipes, not a public integrator-policy interface.
+
+The straight/AAR5 and R600/AAR5 80 km/h identities, and the straight/AAR6 and
+R1000/AAR6 120 km/h identities, each own a separate private maximum-order-5
+recipe. Their relative tolerance is `1e-9`; q/v/z absolute tolerances are
+`1e-9 / 1e-8 / 1e-7 N`. The settings currently match, but the four recipe
+identities remain independent. For each higher-speed start-up, the runner
+requires the longitudinal speed and all eight explicit wheel rates to equal a
+common scaling of the bundled 60 km/h resolved state.
 
 All sample times are generated from integer nanosecond identities. Intermediate
 samples use dense output and do not become additional integrator stops. The
