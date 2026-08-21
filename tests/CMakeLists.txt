@@ -1044,21 +1044,27 @@ add_test(NAME verify_gz18_passive_short_window
 # formal s_ref=0 boundary summary and directory-level publication. The 10/20 s
 # science windows remain explicit local qualifications and never enter the
 # default CTest suite.
-add_executable(verify_gz18_dynamics_qualification
-    dynamics_qualification/verify_gz18_dynamics_qualification.cc)
-orvd_configure_first_party_target(verify_gz18_dynamics_qualification)
-target_link_libraries(verify_gz18_dynamics_qualification
+add_executable(
+    verify_gz18_straight_aar6_v60_passive_dense_output_and_publication
+    dynamics_qualification/verify_gz18_straight_aar6_v60_passive_dense_output_and_publication.cc)
+orvd_configure_first_party_target(
+    verify_gz18_straight_aar6_v60_passive_dense_output_and_publication)
+target_link_libraries(
+    verify_gz18_straight_aar6_v60_passive_dense_output_and_publication
     PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX
             nlohmann_json::nlohmann_json)
-add_test(NAME verify_gz18_dynamics_qualification
-         COMMAND verify_gz18_dynamics_qualification
+add_test(
+    NAME verify_gz18_straight_aar6_v60_passive_dense_output_and_publication
+    COMMAND verify_gz18_straight_aar6_v60_passive_dense_output_and_publication
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_1100m.json
              ${CMAKE_SOURCE_DIR}
              aar6_irregularity
-             ${CMAKE_CURRENT_BINARY_DIR}/g58-dynamics-qualification-fixtures)
-set_tests_properties(verify_gz18_dynamics_qualification PROPERTIES
+             ${CMAKE_CURRENT_BINARY_DIR}/gz18-straight-aar6-v60-passive-artifact-fixtures)
+set_tests_properties(
+    verify_gz18_straight_aar6_v60_passive_dense_output_and_publication
+    PROPERTIES
     PROCESSORS 16)
 
 add_executable(verify_irw_dynamics_qualification

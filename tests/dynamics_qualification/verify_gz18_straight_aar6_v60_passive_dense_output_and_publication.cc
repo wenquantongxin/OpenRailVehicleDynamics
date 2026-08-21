@@ -34,7 +34,7 @@ int failures = 0;
 
 void Require(bool condition, std::string_view what) {
     if (!condition) {
-        std::fprintf(stderr, "G58 qualification: %.*s\n",
+        std::fprintf(stderr, "GZ18 straight/AAR6/V60 passive check: %.*s\n",
                      static_cast<int>(what.size()), what.data());
         ++failures;
     }
@@ -555,13 +555,16 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
 int main(int argc, char** argv) {
     if (argc != 7) {
         std::fprintf(stderr,
-                     "usage: verify_gz18_dynamics_qualification VEHICLE "
+                     "usage: verify_gz18_straight_aar6_v60_passive_"
+                     "dense_output_and_publication VEHICLE "
                      "STARTUP LINE DATA_ROOT IRREGULARITY_ID TEST_ROOT\n");
         return 2;
     }
     const std::filesystem::path root = argv[6];
-    if (root.filename() != "g58-dynamics-qualification-fixtures") {
-        std::fprintf(stderr, "refusing an unexpected G58 fixture directory\n");
+    if (root.filename() !=
+        "gz18-straight-aar6-v60-passive-artifact-fixtures") {
+        std::fprintf(stderr,
+                     "refusing an unexpected GZ18 artifact fixture directory\n");
         return 2;
     }
     std::filesystem::remove_all(root);
@@ -573,15 +576,17 @@ int main(int argc, char** argv) {
         CheckAtomicDirectory(root);
         CheckRealGz18Run(argv, root);
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "G58 qualification threw: %s\n", error.what());
+        std::fprintf(stderr,
+                     "GZ18 straight/AAR6/V60 passive check threw: %s\n",
+                     error.what());
         ++failures;
     }
     std::filesystem::remove_all(root);
     if (failures != 0) {
-        std::fprintf(stderr, "%d G58 qualification assertion(s) failed\n",
+        std::fprintf(stderr, "%d GZ18 artifact assertion(s) failed\n",
                      failures);
         return 1;
     }
-    std::puts("G58 internal long-window qualification runner verified");
+    std::puts("GZ18 straight/AAR6/V60 passive artifacts verified");
     return 0;
 }
