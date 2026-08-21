@@ -29,6 +29,8 @@ CMakeUserPresets.json
 # Results / scratch
 /results/
 /logs/
+__pycache__/
+*.py[cod]
 
 # Numeric archives are never committed: no golden vectors, snapshots or hashes
 # take part in acceptance.
