@@ -170,19 +170,6 @@ nlohmann::json LoadJsonDocument(const std::filesystem::path& path) {
         std::istreambuf_iterator<char>()));
 }
 
-void RequireStartupSpeed(const IrwPassiveScenarioRunConfiguration& input,
-                         double expected_speed_meters_per_second) {
-    const configuration::ResolvedStartupState startup =
-        configuration::LoadResolvedStartupStateFromJsonFile(
-            input.resolved_startup_state_path);
-    if (startup.initial_longitudinal_speed_meters_per_second !=
-        expected_speed_meters_per_second) {
-        throw std::invalid_argument(
-            "IRW passive scenario received a different initial longitudinal "
-            "speed");
-    }
-}
-
 void RequireStartupScaledFromV60(
     const IrwPassiveScenarioRunConfiguration& input,
     double expected_speed_meters_per_second) {
@@ -250,7 +237,7 @@ const internal::VehicleQualificationRecipe& ResolveRecipe(
     if (input.scenario_identifier ==
         kIrwR300NoIrregularityV60PassiveScenarioIdentifier) {
         RequireGeometry(input, kR300GeometryFilename);
-        RequireStartupSpeed(input, 60.0 / 3.6);
+        RequireStartupScaledFromV60(input, 60.0 / 3.6);
         if (input.track_irregularity_identifier.has_value()) {
             throw std::invalid_argument(
                 "IRW R300 no-irregularity passive scenario received an "
@@ -261,7 +248,7 @@ const internal::VehicleQualificationRecipe& ResolveRecipe(
     if (input.scenario_identifier ==
         kIrwR300Aar5V60PassiveScenarioIdentifier) {
         RequireGeometry(input, kR300GeometryFilename);
-        RequireStartupSpeed(input, 60.0 / 3.6);
+        RequireStartupScaledFromV60(input, 60.0 / 3.6);
         RequireIrregularity(input, kAar5IrregularityIdentifier);
         return kAar5Recipe;
     }

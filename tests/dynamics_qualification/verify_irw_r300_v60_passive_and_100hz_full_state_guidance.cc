@@ -71,6 +71,25 @@ std::filesystem::path WriteJsonField(
     return destination;
 }
 
+std::filesystem::path WriteFirstWheelPositionOffset(
+    const std::filesystem::path& source,
+    const std::filesystem::path& destination, double offset_radians) {
+    nlohmann::json document = nlohmann::json::parse(ReadWholeFile(source));
+    auto& wheel_states = document.at("revolute_joint_startup_states");
+    if (!wheel_states.is_array() || wheel_states.size() != 8) {
+        throw std::runtime_error(
+            "IRW startup does not contain the closed eight-wheel set");
+    }
+    auto& position = wheel_states.at(0).at("position_radians");
+    position = position.get<double>() + offset_radians;
+    std::ofstream output(destination, std::ios::out | std::ios::binary);
+    if (!output) {
+        throw std::runtime_error("could not write " + destination.string());
+    }
+    output << document.dump(2) << '\n';
+    return destination;
+}
+
 bool NumericalExecutionContractContains(
     const std::string& metadata, std::string_view field) {
     constexpr std::string_view kContract =
@@ -400,6 +419,20 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.output_directory = root / "wrong-passive-speed";
     Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the 60 km/h passive identity accepted an 80 km/h startup");
+
+    configuration.resolved_startup_state_path = WriteFirstWheelPositionOffset(
+        argv[2], root / "wrong-passive-wheel-phase.json", 0.01);
+    configuration.output_directory = root / "wrong-passive-wheel-phase";
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
+            "the no-irregularity identity accepted a different wheel phase");
+
+    configuration.scenario_identifier =
+        orvd::dynamics_qualification::
+            kIrwR300Aar5V60PassiveScenarioIdentifier;
+    configuration.track_irregularity_identifier = "aar5_irregularity";
+    configuration.output_directory = root / "wrong-aar5-wheel-phase";
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
+            "the AAR5 identity accepted a different wheel phase");
 }
 
 void CheckPassiveDenseJacobianThreading(

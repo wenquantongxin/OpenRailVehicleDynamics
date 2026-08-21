@@ -402,7 +402,7 @@ def plot(run_root: Path, scenario_identifier: str) -> dict[str, object]:
     plots = run_root / "plots"
     plots.mkdir(exist_ok=False)
     title_prefix = f"{scenario.response_plot_title}, {scenario.duration_seconds:g} s"
-    macro_plot = plots / (scenario.response_plot_file_stem + "_wheelset_response.png")
+    macro_plot = plots / (scenario.response_plot_file_stem + "_axlebridge_response.png")
     plot_macro(
         macro_plot,
         title_prefix + " — native time response",
@@ -506,7 +506,7 @@ def plot(run_root: Path, scenario_identifier: str) -> dict[str, object]:
             "diagnostic only at native 100 Hz SIMPACK output"
         ),
         "plots": {
-            "wheelset_response": str(macro_plot),
+            "axlebridge_response": str(macro_plot),
             "wheel_force_response": str(force_plot),
         },
     }

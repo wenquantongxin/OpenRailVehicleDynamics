@@ -105,7 +105,7 @@ S1002/UIC60 接触及八个独立轮轨接口。
 
 #### 八轮零转矩被动
 
-![IRW R300 AAR5 被动 30 s 四轴桥横移与摇头对比](docs/figures/irw/irw_r300_aar5_30s_wheelset_response.png)
+![IRW R300 AAR5 被动 30 s 四轴桥横移与摇头对比](docs/figures/irw/irw_r300_aar5_30s_axlebridge_response.png)
 
 ![IRW R300 AAR5 被动 30 s 八轮三向接触力对比](docs/figures/irw/irw_r300_aar5_30s_wheel_force_response.png)
 
