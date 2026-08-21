@@ -728,8 +728,9 @@
   BDF 最大二阶及 `1e-7 / 1e-9 / 1e-8 / 1e-6` 的 rtol/q/v/z 容差。
 - 裁决：G70 按上述私有分层完成。多斑观察发布统一 Track-T 总力和逐斑局部量；积分器只发布累计
   数值工作快照；每样本悬挂／轮轨功率列退出资格运行器，虚功只在终点接线门计算。
-- 证据入口：真实 H3/R300 `orvd_irw_dynamics_qualification` 10 ms 工件；冻结 WRL A 层 100 µs
-  输出；SIMPACK A 层 0.5 ms Realtime 输出；`verify_irw_dynamics_qualification`。
+- 证据入口：真实 H3/R300 `orvd_irw_passive_scenario` 10 ms 工件；冻结 WRL A 层
+  100 µs 输出；SIMPACK A 层 0.5 ms Realtime 输出；
+  `verify_irw_r300_v60_passive_and_100hz_full_state_guidance`。
 - 收口：一次连续推进得到 101 个 100 µs 观察点，其中 21 个是 SIMPACK 原生 0.5 ms 序号；终点
   广义力、虚功、`qdot` 和两个 Maxwell 导数闭合。四轴横移／摇头在该短窗与 SIMPACK 保持舍入
   量级差，轮轨力差异如实保留给 G71 的完整 30 s 图形与统计。G70 完成，暂停于 G71 开工前。

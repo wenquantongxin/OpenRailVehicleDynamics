@@ -1,4 +1,4 @@
-#include "irw_qualification_runner.h"
+#include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
 
 #include <algorithm>
 #include <array>
@@ -22,7 +22,7 @@
 #include <Eigen/Core>
 
 #include "atomic_qualification_directory.h"
-#include "irw_integration_recipe.h"
+#include "irw_bdf_tolerance_recipes.h"
 #include "qualification_sample_clock.h"
 #include "vehicle_qualification_runner_internal.h"
 
@@ -59,6 +59,12 @@ constexpr double kVehicleReferenceTrackStationMeters = 0.0;
 constexpr double kProjectionSearchHalfWidthMeters = 0.01;
 constexpr std::string_view kIrregularityIdentifier =
     "aar5_irregularity";
+constexpr std::string_view kTrackGeometryFilename =
+    "r300_centerline_superelevation_1100m.json";
+constexpr std::string_view kControllerIdentifier =
+    "irw_r300_v60_full_state_wheel_speed_guidance_controller";
+constexpr std::string_view kTorqueConditionerIdentifier =
+    "irw_reference_wheel_drive_torque_conditioner";
 constexpr std::size_t kAxleCount = 4;
 constexpr std::size_t kWheelCount = 8;
 
@@ -105,7 +111,8 @@ struct ControlledPatchObservation final {
 };
 
 [[noreturn]] void Reject(const std::string& detail) {
-    throw std::runtime_error("IRW P179 controlled qualification: " + detail);
+    throw std::runtime_error(
+        "IRW R300/AAR5/60 km/h 100 Hz full-state guidance run: " + detail);
 }
 
 [[nodiscard]] double ElapsedSeconds(Clock::time_point begin,
@@ -126,12 +133,18 @@ struct ControlledPatchObservation final {
 }
 
 [[nodiscard]] ResolvedConfiguration ResolveConfiguration(
-    const IrwP179ControlledQualificationRunConfiguration& input) {
+    const IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration& input) {
     if (input.duration_nanoseconds <= 0 ||
         input.duration_nanoseconds % kEventPeriodNanoseconds != 0) {
         throw std::invalid_argument(
-            "IRW P179 controlled qualification duration must be a positive "
+            "IRW R300/AAR5/60 km/h 100 Hz guidance duration must be a "
+            "positive "
             "integer multiple of 10,000,000 ns");
+    }
+    if (input.track_geometry_path.filename() != kTrackGeometryFilename) {
+        throw std::invalid_argument(
+            "IRW R300/AAR5/60 km/h 100 Hz guidance requires the closed R300 "
+            "track geometry");
     }
     return ResolvedConfiguration{
         CanonicalExistingInput(input.vehicle_definition_path,
@@ -175,7 +188,9 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 
 [[nodiscard]] integrators::ContinuousStateErrorTolerances MakeTolerances(
     const configuration::AssembledVehicleSystem& assembled) {
-    constexpr auto& recipe = internal::kIrwP179ControlledIntegrationRecipe;
+    constexpr auto& recipe =
+        internal::
+            kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe;
     const auto& system = assembled.system();
     Eigen::VectorXd absolute = Eigen::VectorXd::Constant(
         system.continuous_state_size(),
@@ -674,11 +689,13 @@ void WriteMetadata(
     const configuration::ResolvedStartupState& startup,
     const configuration::AssembledVehicleSystem& assembled,
     const configuration::IrwFullStateControlEventSession& session,
-    const IrwP179ControlledQualificationSummary& summary,
+    const IrwR300Aar5V60At100HzFullStateGuidanceRunSummary& summary,
     int contact_batch_parallel_team_probe_worker_count,
     std::string_view controller_identifier,
     std::string_view conditioner_identifier) {
-    constexpr auto& recipe = internal::kIrwP179ControlledIntegrationRecipe;
+    constexpr auto& recipe =
+        internal::
+            kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe;
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
@@ -687,7 +704,9 @@ void WriteMetadata(
            << "{\n"
            << "  \"completed\": true,\n"
            << "  \"qualification_vehicle_recipe\": "
-           << JsonString("IRW_P179_100HZ_CONTROLLED") << ",\n"
+           << JsonString(
+                  "IRW_R300_AAR5_V60_100HZ_FULL_STATE_WHEEL_SPEED_GUIDANCE")
+           << ",\n"
            << "  \"vehicle_name\": "
            << JsonString(startup.vehicle_binding.vehicle_name) << ",\n"
            << "  \"track_irregularity_identifier\": "
@@ -722,13 +741,14 @@ void WriteMetadata(
            << kProjectionSearchHalfWidthMeters << ",\n"
            << "  \"control_observation_basis\": "
            << JsonString(
-                  "lateral displacement in Track-T; yaw in the frozen P179 "
-                  "source physical axle-bridge body basis")
+                  "lateral displacement in Track-T; yaw in the physical "
+                  "axle-bridge body basis")
            << ",\n"
            << "  \"startup_rule\": "
            << JsonString(
                   "one full-period initialization recurrence followed by U0 "
-                  "at the same accepted H3 state before backend construction")
+                  "at the same accepted startup state before backend "
+                  "construction")
            << ",\n"
            << "  \"terminal_event_rule\": "
            << JsonString("audit and commit without backend reinitialization")
@@ -796,7 +816,7 @@ void WriteMetadata(
 
 void WritePerformance(
     const std::filesystem::path& path,
-    const IrwP179ControlledQualificationSummary& summary,
+    const IrwR300Aar5V60At100HzFullStateGuidanceRunSummary& summary,
     std::int64_t duration_nanoseconds, std::size_t dense_state_peak_bytes,
     std::size_t observation_buffer_bytes,
     std::size_t patch_observation_buffer_bytes,
@@ -874,8 +894,9 @@ void WritePerformance(
 
 }  // namespace
 
-IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
-    const IrwP179ControlledQualificationRunConfiguration& input) {
+IrwR300Aar5V60At100HzFullStateGuidanceRunSummary
+RunIrwR300Aar5V60At100HzFullStateGuidance(
+    const IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration& input) {
     const ResolvedConfiguration resolved = ResolveConfiguration(input);
     const int contact_batch_parallel_team_probe_worker_count =
         internal::RequireRealContactBatchParallelTeam();
@@ -886,6 +907,10 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
     const auto startup =
         configuration::LoadResolvedStartupStateFromJsonFile(
             resolved.resolved_startup_state_path);
+    if (startup.initial_longitudinal_speed_meters_per_second != 60.0 / 3.6) {
+        Reject("the resolved startup state is not the closed 60 km/h "
+               "identity");
+    }
     auto line = configuration::LoadTrackGeometryFromJsonFile(
         resolved.track_geometry_path);
     auto irregularity =
@@ -908,19 +933,27 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
         assembled.active_torque_plan() == nullptr ||
         assembled.active_torque_plan()->body_wrench_count() != 16 ||
         accepted.time_seconds() != 0.0) {
-        Reject("the assembled H3 IRW state or 96+8+16 wrench topology is "
-               "not the frozen controlled recipe");
+        Reject("the assembled IRW startup state or 96+8+16 wrench topology "
+               "does not match the closed guidance recipe");
     }
 
     auto controller = configuration::
         LoadIrwFullStateWheelSpeedGuidanceControllerFromJsonFile(
             resolved.controller_configuration_path);
     const std::string controller_identifier = controller.config().identifier;
+    if (controller_identifier != kControllerIdentifier) {
+        Reject("the loaded controller does not match the closed guidance "
+               "identity");
+    }
     auto conditioner =
         configuration::LoadWheelDriveTorqueCommandConditionerFromJsonFile(
             resolved.torque_conditioner_configuration_path);
     const std::string conditioner_identifier =
         conditioner.config().identifier;
+    if (conditioner_identifier != kTorqueConditionerIdentifier) {
+        Reject("the loaded torque conditioner does not match the closed "
+               "guidance identity");
+    }
     configuration::IrwFullStateControlEventSession event_session(
         assembled, std::move(controller), std::move(conditioner));
 
@@ -957,7 +990,7 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
     endpoint_diagnostics.reserve(
         static_cast<std::size_t>(terminal_event_ordinal + 1));
 
-    IrwP179ControlledQualificationSummary summary;
+    IrwR300Aar5V60At100HzFullStateGuidanceRunSummary summary;
     const Clock::time_point startup_control_begin = Clock::now();
     audits.push_back(event_session.ApplyInitializationUpdate(accepted));
     audits.push_back(event_session.ApplyPeriodicUpdate(accepted));
@@ -971,7 +1004,7 @@ IrwP179ControlledQualificationSummary RunIrwP179ControlledQualification(
             ConfiguredMaximumBdfOrder(advancer);
     if (summary.maximum_bdf_order !=
         integrators::internal::MaximumBdfOrderValue(
-            internal::kIrwP179ControlledIntegrationRecipe
+            internal::kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe
                 .maximum_bdf_order)) {
         Reject("the constructed integrator does not match the controlled "
                "qualification recipe's maximum BDF order");

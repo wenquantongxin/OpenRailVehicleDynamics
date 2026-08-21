@@ -18,8 +18,8 @@ from typing import Iterable
 
 RUNNER_LAYOUTS = {
     "gz18": {8: 5},
-    "irw": {8: 5, 11: 5},
-    "irw-p179-controlled": {8: 6},
+    "irw-passive-scenario": {9: 6},
+    "irw-r300-aar5-v60-100hz-full-state-guidance": {8: 6},
 }
 
 

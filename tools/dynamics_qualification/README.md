@@ -19,16 +19,21 @@ The executables are:
 
 - `orvd_gz18_dynamics_qualification`: passive GZ18 long-window runs with one
   explicitly named track-irregularity asset;
-- `orvd_irw_dynamics_qualification`: passive IRW runs, with either no track
-  irregularity or the common AAR5 field in the R300 scenario;
-- `orvd_irw_p179_controlled_qualification`: the closed IRW
-  H3/R300/AAR5/100 Hz control and event scenario.
+- `orvd_irw_passive_scenario`: passive IRW runs selected by a closed physical
+  identity; the current set covers R300/60 km/h with either no irregularity or
+  the AAR5 field. Pass
+  `irw_r300_no_irregularity_v60_passive` or
+  `irw_r300_aar5_v60_passive` as the required scenario identifier;
+- `orvd_irw_r300_aar5_v60_100hz_full_state_guidance`: the closed IRW
+  R300/AAR5/60 km/h, 100 Hz full-state wheel-speed guidance and control-event
+  scenario.
 
 The GZ18 recipe uses maximum BDF order 2, relative tolerance `1e-6`, and
-q/v/z absolute tolerances `1e-7 / 1e-6 / 0.1 N`. IRW A and the controlled
-IRW C/P179 runner also use maximum BDF order 2, with J0: relative tolerance
-`1e-6` and q/v/z absolute tolerances `1e-6 / 1e-5 / 1e-6 N`. IRW B alone
-uses maximum BDF order 5 and t8: relative tolerance `1e-8` and q/v/z absolute
+q/v/z absolute tolerances `1e-7 / 1e-6 / 0.1 N`. The R300/60 km/h
+no-irregularity passive recipe and the R300/AAR5/60 km/h 100 Hz guidance recipe
+also use maximum BDF order 2, with relative tolerance `1e-6` and q/v/z
+absolute tolerances `1e-6 / 1e-5 / 1e-6 N`. The passive R300/AAR5/60 km/h
+recipe uses maximum BDF order 5, relative tolerance `1e-8`, and q/v/z absolute
 tolerances `1e-8 / 1e-7 / 1e-6 N`. The runners verify the configured order
 against the selected recipe and publish it in the numerical execution
 contract. These are private execution recipes, not a public integrator-policy
@@ -82,9 +87,10 @@ snapshot installs no callback and performs no state or RHS evaluation.
 ## Execution metrics wrapper
 
 `run_qualification_with_metrics.py` is a Linux research wrapper for one runner
-process. Select `--vehicle-recipe irw` for the passive IRW executable or
-`--vehicle-recipe irw-p179-controlled` for the controlled executable. The
-default is the GZ18 runner.
+process. Select `--vehicle-recipe irw-passive-scenario` for the passive IRW
+executable or
+`--vehicle-recipe irw-r300-aar5-v60-100hz-full-state-guidance` for the
+guidance executable. The default is the GZ18 runner.
 
 The wrapper records outer wall time, child CPU time, peak resident memory,
 executable digest, compiler/build identity, inherited OpenMP environment,

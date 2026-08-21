@@ -7,7 +7,7 @@ namespace orvd::dynamics_qualification::internal {
 // Closed numerical identities for the three IRW qualification scenarios.
 // These recipes are private to the uninstalled qualification tools; they are
 // not an integrator policy API.
-struct IrwIntegrationRecipe final {
+struct IrwBdfToleranceRecipe final {
     double relative_tolerance{};
     double position_absolute_tolerance{};
     double velocity_absolute_tolerance{};
@@ -15,8 +15,8 @@ struct IrwIntegrationRecipe final {
     integrators::internal::MaximumBdfOrder maximum_bdf_order{};
 };
 
-inline constexpr IrwIntegrationRecipe
-    kIrwNoIrregularityPassiveIntegrationRecipe{
+inline constexpr IrwBdfToleranceRecipe
+    kIrwR300NoIrregularityV60PassiveBdfToleranceRecipe{
         1.0e-6,
         1.0e-6,
         1.0e-5,
@@ -24,7 +24,7 @@ inline constexpr IrwIntegrationRecipe
         integrators::internal::MaximumBdfOrder::kSecond,
     };
 
-inline constexpr IrwIntegrationRecipe kIrwR300Aar5PassiveIntegrationRecipe{
+inline constexpr IrwBdfToleranceRecipe kIrwR300Aar5V60PassiveBdfToleranceRecipe{
     1.0e-8,
     1.0e-8,
     1.0e-7,
@@ -32,12 +32,13 @@ inline constexpr IrwIntegrationRecipe kIrwR300Aar5PassiveIntegrationRecipe{
     integrators::internal::MaximumBdfOrder::kFifth,
 };
 
-inline constexpr IrwIntegrationRecipe kIrwP179ControlledIntegrationRecipe{
-    1.0e-6,
-    1.0e-6,
-    1.0e-5,
-    1.0e-6,
-    integrators::internal::MaximumBdfOrder::kSecond,
-};
+inline constexpr IrwBdfToleranceRecipe
+    kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe{
+        1.0e-6,
+        1.0e-6,
+        1.0e-5,
+        1.0e-6,
+        integrators::internal::MaximumBdfOrder::kSecond,
+    };
 
 }  // namespace orvd::dynamics_qualification::internal

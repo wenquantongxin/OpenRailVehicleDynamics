@@ -4,7 +4,7 @@
 #include <exception>
 #include <string_view>
 
-#include "irw_qualification_runner.h"
+#include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
 
 namespace {
 
@@ -29,13 +29,13 @@ int main(int argc, char** argv) {
     if (argc != 9) {
         std::fprintf(
             stderr,
-            "usage: orvd_irw_p179_controlled_qualification VEHICLE STARTUP "
-            "LINE DATA_ROOT CONTROLLER CONDITIONER OUTPUT_DIRECTORY "
-            "DURATION_NS\n");
+            "usage: orvd_irw_r300_aar5_v60_100hz_full_state_guidance "
+            "VEHICLE STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER "
+            "OUTPUT_DIRECTORY DURATION_NS\n");
         return 2;
     }
     orvd::dynamics_qualification::
-        IrwP179ControlledQualificationRunConfiguration configuration;
+        IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration configuration;
     configuration.vehicle_definition_path = argv[1];
     configuration.resolved_startup_state_path = argv[2];
     configuration.track_geometry_path = argv[3];
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     try {
         const auto summary =
             orvd::dynamics_qualification::
-                RunIrwP179ControlledQualification(configuration);
+                RunIrwR300Aar5V60At100HzFullStateGuidance(configuration);
         std::printf(
             "published %zu observations and %zu control audits; %zu holds, "
             "%zu backend synchronizations; advance and synchronization "
@@ -62,7 +62,9 @@ int main(int argc, char** argv) {
             summary.advance_and_synchronization_wall_seconds);
         return 0;
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "IRW P179 qualification failed: %s\n",
+        std::fprintf(stderr,
+                     "IRW R300/AAR5/60 km/h 100 Hz full-state guidance run "
+                     "failed: %s\n",
                      error.what());
         return 1;
     }

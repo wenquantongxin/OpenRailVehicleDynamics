@@ -1,5 +1,5 @@
-// The closed IRW runner keeps G70/G71 explicitly free of track irregularity
-// and accepts the current common AAR5 asset through the closed AAR5 recipe.
+// The closed IRW passive runner distinguishes the no-irregularity and
+// R300/AAR5/60 km/h recipes; the guidance runner owns its 100 Hz identity.
 
 #include <algorithm>
 #include <array>
@@ -17,21 +17,22 @@
 #include <omp.h>
 #include <nlohmann/json.hpp>
 
-#include "irw_qualification_runner.h"
+#include "irw_passive_scenario_runs.h"
+#include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
 
 namespace {
 
-using orvd::dynamics_qualification::IrwQualificationRunConfiguration;
+using orvd::dynamics_qualification::IrwPassiveScenarioRunConfiguration;
 using orvd::dynamics_qualification::
-    IrwP179ControlledQualificationRunConfiguration;
-using orvd::dynamics_qualification::RunIrwQualification;
-using orvd::dynamics_qualification::RunIrwP179ControlledQualification;
+    IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration;
+using orvd::dynamics_qualification::RunIrwPassiveScenario;
+using orvd::dynamics_qualification::RunIrwR300Aar5V60At100HzFullStateGuidance;
 
 int failures = 0;
 
 void Require(bool condition, std::string_view what) {
     if (!condition) {
-        std::fprintf(stderr, "IRW qualification: %.*s\n",
+        std::fprintf(stderr, "IRW R300/V60 artifact check: %.*s\n",
                      static_cast<int>(what.size()), what.data());
         ++failures;
     }
@@ -54,6 +55,20 @@ std::string ReadWholeFile(const std::filesystem::path& path) {
     }
     return std::string(std::istreambuf_iterator<char>(input),
                        std::istreambuf_iterator<char>());
+}
+
+std::filesystem::path WriteJsonField(
+    const std::filesystem::path& source,
+    const std::filesystem::path& destination, std::string_view field,
+    const nlohmann::json& value) {
+    nlohmann::json document = nlohmann::json::parse(ReadWholeFile(source));
+    document[std::string(field)] = value;
+    std::ofstream output(destination, std::ios::out | std::ios::binary);
+    if (!output) {
+        throw std::runtime_error("could not write " + destination.string());
+    }
+    output << document.dump(2) << '\n';
+    return destination;
 }
 
 bool NumericalExecutionContractContains(
@@ -128,7 +143,10 @@ std::size_t FindColumn(const std::vector<std::string>& header,
 }
 
 void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
-    IrwQualificationRunConfiguration configuration;
+    IrwPassiveScenarioRunConfiguration configuration;
+    configuration.scenario_identifier =
+        orvd::dynamics_qualification::
+            kIrwR300NoIrregularityV60PassiveScenarioIdentifier;
     configuration.vehicle_definition_path = std::filesystem::relative(argv[1]);
     configuration.resolved_startup_state_path =
         std::filesystem::relative(argv[2]);
@@ -138,7 +156,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.duration_nanoseconds = 10'000'000;
     configuration.sample_period_nanoseconds = 100'000;
 
-    const auto summary = RunIrwQualification(configuration);
+    const auto summary = RunIrwPassiveScenario(configuration);
     Require(summary.sample_count == 101 && summary.maximum_bdf_order == 2,
             "the 10 ms / 100 us clock did not publish 101 points");
     Require(summary.integration_statistics.successful_internal_step_count > 0 &&
@@ -159,7 +177,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the endpoint qdot or two-Maxwell derivative slice is inconsistent");
     Require(summary.used_before_track_definition_interval &&
                 !summary.used_after_track_definition_interval,
-            "the H3 short window did not retain its expected left continuation");
+            "the R300/V60 short window did not retain its expected left "
+            "continuation");
 
     const std::array<std::string_view, 5> files{
         "COMPLETE", "metadata.json", "observations.tsv",
@@ -227,7 +246,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                     kInitialStations[carrier] &&
                     ParseFiniteDouble(rows.back()[station]) >
                         ParseFiniteDouble(rows.front()[station]),
-                "an H3 axle-bridge station is shifted or does not advance");
+                "an R300/V60 axle-bridge station is shifted or does not "
+                "advance");
         (void)ParseFiniteDouble(rows.back()[lateral]);
         (void)ParseFiniteDouble(rows.back()[yaw]);
     }
@@ -257,7 +277,9 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
     const nlohmann::json metadata_document = nlohmann::json::parse(metadata);
-    Require(metadata.find("\"qualification_vehicle_recipe\": \"IRW\"") !=
+    Require(metadata.find(
+                "\"qualification_vehicle_recipe\": "
+                "\"IRW_R300_NO_IRREGULARITY_V60_PASSIVE\"") !=
                     std::string::npos &&
                 metadata.find("\"track_irregularity_identifier\": null") !=
                     std::string::npos,
@@ -303,21 +325,28 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     Require(patches.find("wheel_ff_l") != std::string::npos &&
                 patches.find("wheel_rr_r") != std::string::npos,
             "the per-patch artifact omits a frozen IRW interface");
-    Require(Throws([&] { (void)RunIrwQualification(configuration); }),
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the IRW runner overwrote an existing successful artifact");
 
     configuration.output_directory = root / "real-irw-aar5";
     configuration.duration_nanoseconds = 100'000;
     configuration.sample_period_nanoseconds = 100'000;
+    configuration.scenario_identifier =
+        orvd::dynamics_qualification::
+            kIrwR300Aar5V60PassiveScenarioIdentifier;
     configuration.track_irregularity_identifier =
         "aar5_irregularity";
-    const auto aar5_summary = RunIrwQualification(configuration);
+    const auto aar5_summary = RunIrwPassiveScenario(configuration);
     Require(aar5_summary.sample_count == 2 &&
                 aar5_summary.maximum_bdf_order == 5,
             "the short AAR5 loading run did not publish its two clock points");
     const std::string aar5_metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
     Require(aar5_metadata.find(
+                "\"qualification_vehicle_recipe\": "
+                "\"IRW_R300_AAR5_V60_PASSIVE\"") !=
+                    std::string::npos &&
+                aar5_metadata.find(
                 "\"track_irregularity_identifier\": "
                 "\"aar5_irregularity\"") !=
                 std::string::npos,
@@ -342,12 +371,35 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "absent");
     configuration.output_directory = root / "empty-irregularity";
     configuration.track_irregularity_identifier = "";
-    Require(Throws([&] { (void)RunIrwQualification(configuration); }),
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the required IRW AAR5 recipe accepted an empty identity");
     configuration.output_directory = root / "unsupported-irregularity";
     configuration.track_irregularity_identifier = "aar6_irregularity";
-    Require(Throws([&] { (void)RunIrwQualification(configuration); }),
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the IRW AAR5 recipe accepted a different irregularity field");
+
+    configuration.scenario_identifier =
+        orvd::dynamics_qualification::
+            kIrwR300NoIrregularityV60PassiveScenarioIdentifier;
+    configuration.output_directory = root / "unexpected-irregularity";
+    configuration.track_irregularity_identifier = "aar5_irregularity";
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
+            "the no-irregularity identity accepted AAR5");
+
+    configuration.track_irregularity_identifier.reset();
+    configuration.track_geometry_path = root / "not-r300.json";
+    std::filesystem::copy_file(argv[3], configuration.track_geometry_path);
+    configuration.output_directory = root / "wrong-passive-geometry";
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
+            "the R300 passive identity accepted a differently named line");
+
+    configuration.track_geometry_path = std::filesystem::relative(argv[3]);
+    configuration.resolved_startup_state_path = WriteJsonField(
+        argv[2], root / "wrong-passive-speed.json",
+        "initial_longitudinal_speed_meters_per_second", 80.0 / 3.6);
+    configuration.output_directory = root / "wrong-passive-speed";
+    Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
+            "the 60 km/h passive identity accepted an 80 km/h startup");
 }
 
 void CheckPassiveDenseJacobianThreading(
@@ -356,7 +408,10 @@ void CheckPassiveDenseJacobianThreading(
     const int original_openmp_max_threads = omp_get_max_threads();
     omp_set_dynamic(0);
 
-    IrwQualificationRunConfiguration configuration;
+    IrwPassiveScenarioRunConfiguration configuration;
+    configuration.scenario_identifier =
+        orvd::dynamics_qualification::
+            kIrwR300Aar5V60PassiveScenarioIdentifier;
     configuration.vehicle_definition_path = std::filesystem::relative(argv[1]);
     configuration.resolved_startup_state_path =
         std::filesystem::relative(argv[2]);
@@ -376,7 +431,7 @@ void CheckPassiveDenseJacobianThreading(
         configuration.output_directory =
             root / ("irw-aar5-jacobian-t" +
                     std::to_string(requested_threads));
-        const auto candidate = RunIrwQualification(configuration);
+        const auto candidate = RunIrwPassiveScenario(configuration);
         Require(candidate.maximum_bdf_order == 5 &&
                     candidate.integration_statistics.jacobian_evaluation_count >
                         1 &&
@@ -413,7 +468,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const int original_openmp_max_threads = omp_get_max_threads();
     omp_set_dynamic(0);
     omp_set_num_threads(8);
-    IrwP179ControlledQualificationRunConfiguration configuration;
+    IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration configuration;
     configuration.vehicle_definition_path = argv[1];
     configuration.resolved_startup_state_path = argv[2];
     configuration.track_geometry_path = argv[3];
@@ -423,7 +478,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.output_directory = root / "controlled-irw";
     configuration.duration_nanoseconds = 20'000'000;
 
-    const auto summary = RunIrwP179ControlledQualification(configuration);
+    const auto summary = RunIrwR300Aar5V60At100HzFullStateGuidance(configuration);
     Require(summary.observation_count == 41 &&
                 summary.maximum_bdf_order == 2 &&
                 summary.control_audit_count == 4 &&
@@ -599,8 +654,10 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
 
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
-    Require(metadata.find("\"qualification_vehicle_recipe\": "
-                          "\"IRW_P179_100HZ_CONTROLLED\"") !=
+    Require(metadata.find(
+                "\"qualification_vehicle_recipe\": "
+                "\"IRW_R300_AAR5_V60_100HZ_FULL_STATE_WHEEL_SPEED_"
+                "GUIDANCE\"") !=
                     std::string::npos &&
                 metadata.find("\"track_irregularity_identifier\": "
                               "\"aar5_irregularity\"") !=
@@ -641,7 +698,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
             root / ("controlled-irw-t" +
                     std::to_string(requested_threads));
         const auto candidate =
-            RunIrwP179ControlledQualification(comparison);
+            RunIrwR300Aar5V60At100HzFullStateGuidance(comparison);
         Require(candidate.maximum_bdf_order == 2 &&
                     candidate.integration_statistics
                         .requested_dense_finite_difference_jacobian_worker_count ==
@@ -658,6 +715,45 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     "a physical or control artifact");
         }
     }
+
+    auto invalid = configuration;
+    invalid.track_geometry_path = root / "not-r300.json";
+    invalid.output_directory = root / "wrong-guidance-geometry";
+    Require(Throws([&] {
+                (void)RunIrwR300Aar5V60At100HzFullStateGuidance(invalid);
+            }),
+            "the R300 guidance identity accepted a differently named line");
+
+    invalid = configuration;
+    invalid.resolved_startup_state_path = root / "wrong-passive-speed.json";
+    invalid.output_directory = root / "wrong-guidance-speed";
+    Require(Throws([&] {
+                (void)RunIrwR300Aar5V60At100HzFullStateGuidance(invalid);
+            }),
+            "the 60 km/h guidance identity accepted an 80 km/h startup");
+
+    invalid = configuration;
+    invalid.controller_configuration_path = WriteJsonField(
+        argv[5], root / "wrong-guidance-controller.json",
+        "irw_full_state_wheel_speed_guidance_controller_identifier",
+        "different_controller");
+    invalid.output_directory = root / "wrong-guidance-controller";
+    Require(Throws([&] {
+                (void)RunIrwR300Aar5V60At100HzFullStateGuidance(invalid);
+            }),
+            "the guidance run accepted a different controller identity");
+
+    invalid = configuration;
+    invalid.torque_conditioner_configuration_path = WriteJsonField(
+        argv[6], root / "wrong-guidance-conditioner.json",
+        "wheel_drive_torque_command_conditioner_identifier",
+        "different_conditioner");
+    invalid.output_directory = root / "wrong-guidance-conditioner";
+    Require(Throws([&] {
+                (void)RunIrwR300Aar5V60At100HzFullStateGuidance(invalid);
+            }),
+            "the guidance run accepted a different torque conditioner "
+            "identity");
     omp_set_num_threads(original_openmp_max_threads);
     omp_set_dynamic(original_openmp_dynamic);
 }
@@ -667,13 +763,15 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
 int main(int argc, char** argv) {
     if (argc != 8) {
         std::fprintf(stderr,
-                     "usage: verify_irw_dynamics_qualification VEHICLE "
+                     "usage: verify_irw_r300_v60_passive_and_100hz_full_"
+                     "state_guidance VEHICLE "
                      "STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER "
                      "TEST_ROOT\n");
         return 2;
     }
     const std::filesystem::path root = argv[7];
-    if (root.filename() != "irw-dynamics-qualification-fixtures") {
+    if (root.filename() !=
+        "irw-r300-v60-passive-and-100hz-guidance-fixtures") {
         std::fprintf(stderr, "refusing an unexpected IRW fixture directory\n");
         return 2;
     }
@@ -685,15 +783,18 @@ int main(int argc, char** argv) {
         CheckPassiveDenseJacobianThreading(argv, root);
         CheckControlledIrwRun(argv, root);
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "IRW qualification threw: %s\n", error.what());
+        std::fprintf(stderr,
+                     "IRW R300/V60 passive and 100 Hz guidance check threw: "
+                     "%s\n",
+                     error.what());
         ++failures;
     }
     std::filesystem::remove_all(root);
     if (failures != 0) {
-        std::fprintf(stderr, "%d IRW qualification assertion(s) failed\n",
+        std::fprintf(stderr, "%d IRW artifact assertion(s) failed\n",
                      failures);
         return 1;
     }
-    std::puts("IRW no-irregularity and common-AAR5 recipe wiring verified");
+    std::puts("IRW R300/V60 passive and 100 Hz guidance artifacts verified");
     return 0;
 }

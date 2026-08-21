@@ -929,7 +929,7 @@ add_test(NAME verify_irw_wheel_rail_contact_binding
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_CURRENT_BINARY_DIR}/irw-contact-fixtures)
 
-# G69/G73 connect the real H3 IRW state to four axle-bridge projection
+# G69/G73 connect the resolved IRW startup state to four axle-bridge projection
 # carriers, eight independently rotating wheel bodies and eight held active
 # torque channels. One direct-state gate checks the complete 157-state RHS,
 # fixed wheel targets, per-wheel independence, accepted-to-trial local-data
@@ -951,7 +951,7 @@ add_test(NAME verify_irw_contact_rhs
 set_tests_properties(verify_irw_contact_rhs PROPERTIES PROCESSORS 8)
 
 # G76 binds the same closed IRW topology to the 100 Hz full-state controller
-# and torque conditioner. The real H3/R300/AAR5 gate performs the start-up
+# and torque conditioner. The real R300/AAR5 gate performs the start-up
 # double update before backend construction, then executes one synchronized
 # non-terminal event and one terminal audit without a generic event framework.
 add_executable(verify_irw_full_state_control_event_session
@@ -1067,22 +1067,26 @@ set_tests_properties(
     PROPERTIES
     PROCESSORS 16)
 
-add_executable(verify_irw_dynamics_qualification
-    dynamics_qualification/verify_irw_dynamics_qualification.cc)
-orvd_configure_first_party_target(verify_irw_dynamics_qualification)
-target_link_libraries(verify_irw_dynamics_qualification
+add_executable(verify_irw_r300_v60_passive_and_100hz_full_state_guidance
+    dynamics_qualification/verify_irw_r300_v60_passive_and_100hz_full_state_guidance.cc)
+orvd_configure_first_party_target(
+    verify_irw_r300_v60_passive_and_100hz_full_state_guidance)
+target_link_libraries(
+    verify_irw_r300_v60_passive_and_100hz_full_state_guidance
     PRIVATE orvd_dynamics_qualification_support OpenMP::OpenMP_CXX
             nlohmann_json::nlohmann_json)
-add_test(NAME verify_irw_dynamics_qualification
-         COMMAND verify_irw_dynamics_qualification
+add_test(NAME verify_irw_r300_v60_passive_and_100hz_full_state_guidance
+         COMMAND verify_irw_r300_v60_passive_and_100hz_full_state_guidance
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/r300_centerline_superelevation_1100m.json
              ${CMAKE_SOURCE_DIR}
              ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json
-             ${CMAKE_CURRENT_BINARY_DIR}/irw-dynamics-qualification-fixtures)
-set_tests_properties(verify_irw_dynamics_qualification PROPERTIES
+             ${CMAKE_CURRENT_BINARY_DIR}/irw-r300-v60-passive-and-100hz-guidance-fixtures)
+set_tests_properties(
+    verify_irw_r300_v60_passive_and_100hz_full_state_guidance
+    PROPERTIES
     PROCESSORS 16)
 
 add_executable(verify_vehicle_definition_loading
