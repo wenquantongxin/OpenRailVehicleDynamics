@@ -14,8 +14,8 @@ searchpath (              1                                       ) = '../databa
 gravity (                 1                                       ) = 0.00000000000000000E+00 ! Gravity
 gravity (                 2                                       ) = 0.00000000000000000E+00 ! Gravity
 gravity (                 3                                       ) = 9.81000000000000050E+00 ! Gravity
-vehicle.startvel                                                    = 0.00000000000000000E+00 ! Vehicle initial velocity
-vehicle.applystartvel                                               = 0                       ! Apply vehicle initial velocity at solver start
+vehicle.startvel                                                    = { 60/3.6 }              ! Vehicle initial velocity
+vehicle.applystartvel                                               = 1                       ! Apply vehicle initial velocity at solver start
 glob.compat.flxnodeori                                              = 0                       ! Flexbody Node Orientation Method
 glob.compat.afcf                                                    = 0                       ! References Frame for Joint and Force Element Forces and Torques
 rw.cont.meth                                                        = 2                       ! MISCPAR_RW_CONTACT_METHOD
@@ -1163,7 +1163,7 @@ body.attr.2d.width (                $S_BF_F.$B_FR                 ) = 5.00000000
 body.attr.2d.height (               $S_BF_F.$B_FR                 ) = 3.00000000000000000E+01
 
 joint.st.pos (            1 ,       $S_BF_F.$J_FR                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_F.$J_FR                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_F.$J_FR                 ) = 3.96596891613989868E+01 ! Velocity
 joint.attr.2d.substr (    1 ,       $S_BF_F.$J_FR                 ) = $S_BF_F.$S_WS_F
 joint.attr.2d.pos.x (     1 ,       $S_BF_F.$J_FR                 ) = 160
 joint.attr.2d.pos.y (     1 ,       $S_BF_F.$J_FR                 ) = -130
@@ -1188,7 +1188,7 @@ body.attr.2d.width (                $S_BF_F.$B_FL                 ) = 5.00000000
 body.attr.2d.height (               $S_BF_F.$B_FL                 ) = 3.00000000000000000E+01
 
 joint.st.pos (            1 ,       $S_BF_F.$J_FL                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_F.$J_FL                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_F.$J_FL                 ) = 3.96596891613989868E+01 ! Velocity
 joint.attr.2d.substr (    1 ,       $S_BF_F.$J_FL                 ) = $S_BF_F.$S_WS_F
 joint.attr.2d.pos.x (     1 ,       $S_BF_F.$J_FL                 ) = 120
 joint.attr.2d.pos.y (     1 ,       $S_BF_F.$J_FL                 ) = -20
@@ -1213,7 +1213,7 @@ body.attr.2d.width (                $S_BF_F.$B_RR                 ) = 5.00000000
 body.attr.2d.height (               $S_BF_F.$B_RR                 ) = 3.00000000000000000E+01
 
 joint.st.pos (            1 ,       $S_BF_F.$J_RR                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_F.$J_RR                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_F.$J_RR                 ) = 3.96596891613989868E+01 ! Velocity
 joint.attr.2d.substr (    1 ,       $S_BF_F.$J_RR                 ) = $S_BF_F
 joint.attr.2d.pos.x (     1 ,       $S_BF_F.$J_RR                 ) = 600
 joint.attr.2d.pos.y (     1 ,       $S_BF_F.$J_RR                 ) = 50
@@ -1230,7 +1230,7 @@ body.attr.2d.width (                $S_BF_F.$B_RL                 ) = 5.00000000
 body.attr.2d.height (               $S_BF_F.$B_RL                 ) = 3.00000000000000000E+01
 
 joint.st.pos (            1 ,       $S_BF_F.$J_RL                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_F.$J_RL                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_F.$J_RL                 ) = 3.96596891613989868E+01 ! Velocity
 joint.attr.2d.substr (    1 ,       $S_BF_F.$J_RL                 ) = $S_BF_F
 joint.attr.2d.pos.x (     1 ,       $S_BF_F.$J_RL                 ) = 390
 joint.attr.2d.pos.y (     1 ,       $S_BF_F.$J_RL                 ) = -60
@@ -1319,7 +1319,7 @@ joint.st.vel (            2 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = 0.00000000
 joint.st.vel (            3 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            4 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            5 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
-joint.st.vel (            6 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = -3.96597152908190154E+01 ! Velocity
+joint.st.vel (            6 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = -3.96596891613989868E+01 ! Velocity
 joint.attr.2d.substr (    1 ,       $S_BF_F.$S_WS_F.$J_wheelset   ) = $S_BF_F.$S_WS_F
 joint.attr.2d.paths.from.x (   1 ,   1 ,   1 ,   1 , $S_BF_F.$S_WS_F.$J_wheelset) = 20, 20
 joint.attr.2d.paths.from.y (   1 ,   1 ,   1 ,   1 , $S_BF_F.$S_WS_F.$J_wheelset) = 210, 187
@@ -1424,7 +1424,7 @@ joint.st.vel (            2 ,       $S_BF_F.$S_WS_R.$J_wheelset   ) = 0.00000000
 joint.st.vel (            3 ,       $S_BF_F.$S_WS_R.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            4 ,       $S_BF_F.$S_WS_R.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            5 ,       $S_BF_F.$S_WS_R.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
-joint.st.vel (            6 ,       $S_BF_F.$S_WS_R.$J_wheelset   ) = -3.96597152908190154E+01 ! Velocity
+joint.st.vel (            6 ,       $S_BF_F.$S_WS_R.$J_wheelset   ) = -3.96596891613989868E+01 ! Velocity
 
 
 force.st.desc (           1 ,       $S_BF_F.$S_WS_R.$F_RWContact_RWP_R) = -3.05635763371866760E-04 ! Descriptive states
@@ -1508,19 +1508,19 @@ joint.par (              19 ,       $S_BF_R.$J_BF                 ) = 0.00000000
 
 
 joint.st.pos (            1 ,       $S_BF_R.$J_FR                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_R.$J_FR                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_R.$J_FR                 ) = 3.96596891613989868E+01 ! Velocity
 
 
 joint.st.pos (            1 ,       $S_BF_R.$J_FL                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_R.$J_FL                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_R.$J_FL                 ) = 3.96596891613989868E+01 ! Velocity
 
 
 joint.st.pos (            1 ,       $S_BF_R.$J_RR                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_R.$J_RR                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_R.$J_RR                 ) = 3.96596891613989868E+01 ! Velocity
 
 
 joint.st.pos (            1 ,       $S_BF_R.$J_RL                 ) = 0.00000000000000000E+00 ! Position
-joint.st.vel (            1 ,       $S_BF_R.$J_RL                 ) = 3.96597152908190154E+01 ! Velocity
+joint.st.vel (            1 ,       $S_BF_R.$J_RL                 ) = 3.96596891613989868E+01 ! Velocity
 
 
 joint.from (                        $S_BF_R.$J_DUM                ) = $M_vehicle_R            ! From Marker
@@ -1552,7 +1552,7 @@ joint.st.vel (            2 ,       $S_BF_R.$S_WS_F.$J_wheelset   ) = 0.00000000
 joint.st.vel (            3 ,       $S_BF_R.$S_WS_F.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            4 ,       $S_BF_R.$S_WS_F.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            5 ,       $S_BF_R.$S_WS_F.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
-joint.st.vel (            6 ,       $S_BF_R.$S_WS_F.$J_wheelset   ) = -3.96597152908190154E+01 ! Velocity
+joint.st.vel (            6 ,       $S_BF_R.$S_WS_F.$J_wheelset   ) = -3.96596891613989868E+01 ! Velocity
 
 
 force.st.desc (           1 ,       $S_BF_R.$S_WS_F.$F_RWContact_RWP_R) = -3.05635763371866760E-04 ! Descriptive states
@@ -1624,7 +1624,7 @@ joint.st.vel (            2 ,       $S_BF_R.$S_WS_R.$J_wheelset   ) = 0.00000000
 joint.st.vel (            3 ,       $S_BF_R.$S_WS_R.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            4 ,       $S_BF_R.$S_WS_R.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            5 ,       $S_BF_R.$S_WS_R.$J_wheelset   ) = 0.00000000000000000E+00 ! Velocity
-joint.st.vel (            6 ,       $S_BF_R.$S_WS_R.$J_wheelset   ) = -3.96597152908190154E+01 ! Velocity
+joint.st.vel (            6 ,       $S_BF_R.$S_WS_R.$J_wheelset   ) = -3.96596891613989868E+01 ! Velocity
 
 
 force.st.desc (           1 ,       $S_BF_R.$S_WS_R.$F_RWContact_RWP_R) = -3.05635763371866760E-04 ! Descriptive states
