@@ -310,23 +310,20 @@ WheelDriveTorqueCommandConditioner::Step(
                     WheelDriveTorqueLimitFlag::kMagnitudeLimited);
         }
 
-        const double target_signed_drive_side_torque =
-            static_cast<double>(direction_code) * target_magnitude;
-        double signed_drive_side_torque = target_signed_drive_side_torque;
+        // A source-direction reversal is immediate. Only memory already in
+        // the requested direction contributes to that direction's magnitude
+        // ramp; opposite-direction memory restarts the magnitude from zero.
+        const double previous_magnitude_in_target_direction = std::max(
+            0.0, static_cast<double>(direction_code) *
+                     previous_drive_side_torque_memory_newton_metres[index]);
+        double applied_magnitude = target_magnitude;
         if (dynamic_limit <= 0.0) {
-            signed_drive_side_torque = 0.0;
-            if (std::abs(
-                    previous_drive_side_torque_memory_newton_metres[index]) >
-                1.0e-12) {
+            applied_magnitude = 0.0;
+            if (previous_magnitude_in_target_direction > 1.0e-12) {
                 AddFlag(&flags,
                         WheelDriveTorqueLimitFlag::kSlewLimited);
             }
         } else {
-            const double previous_signed_drive_side_torque =
-                previous_drive_side_torque_memory_newton_metres[index];
-            const double previous_magnitude_in_target_direction = std::max(
-                0.0, static_cast<double>(direction_code) *
-                         previous_signed_drive_side_torque);
             const double magnitude_delta =
                 target_magnitude - previous_magnitude_in_target_direction;
             const double magnitude_rate =
@@ -335,18 +332,19 @@ WheelDriveTorqueCommandConditioner::Step(
                     : row.magnitude_decrease_rate_drive_side_newton_metres_per_second;
             const double maximum_delta =
                 std::max(0.0, magnitude_rate) * config_.sample_period_seconds;
-            const double signed_delta =
-                target_signed_drive_side_torque -
-                previous_signed_drive_side_torque;
             const double limited_delta =
-                std::clamp(signed_delta, -maximum_delta, maximum_delta);
-            signed_drive_side_torque =
-                previous_signed_drive_side_torque + limited_delta;
-            if (std::abs(limited_delta - signed_delta) > 1.0e-9) {
+                std::clamp(magnitude_delta, -maximum_delta, maximum_delta);
+            applied_magnitude = std::max(
+                0.0,
+                previous_magnitude_in_target_direction + limited_delta);
+            if (std::abs(limited_delta - magnitude_delta) > 1.0e-9) {
                 AddFlag(&flags,
                         WheelDriveTorqueLimitFlag::kSlewLimited);
             }
         }
+
+        const double signed_drive_side_torque =
+            static_cast<double>(direction_code) * applied_magnitude;
 
         result.next_drive_side_torque_memory_newton_metres[index] =
             signed_drive_side_torque;

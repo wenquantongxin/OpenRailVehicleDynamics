@@ -170,9 +170,10 @@ void CheckEightDistinctBranches() {
                 WheelDriveTorqueLimitFlag::kSlewLimited),
             "increase-rate limiting was not reported");
 
-    RequireNear(result.actual_wheel_torques_newton_metres[7], -5.0, 0.0,
-                "cross-zero rate limiting did not retain signed memory");
-    RequireNear(result.next_drive_side_torque_memory_newton_metres[7], -5.0,
+    RequireNear(result.actual_wheel_torques_newton_metres[7], -10.0, 0.0,
+                "cross-zero rate limiting did not restart magnitude in the "
+                "new source direction");
+    RequireNear(result.next_drive_side_torque_memory_newton_metres[7], -10.0,
                 0.0, "cross-zero next memory has the wrong source sign");
     Require(Has(result.limit_flags[7],
                 WheelDriveTorqueLimitFlag::kSlewLimited),
@@ -210,6 +211,44 @@ void CheckDecreaseRateAndUnavailableEndpoint() {
                 Has(result.limit_flags[1],
                     WheelDriveTorqueLimitFlag::kSlewLimited),
             "an unavailable endpoint did not preserve its active diagnostics");
+}
+
+void CheckImmediateDirectionReversal() {
+    auto config = MakeConfig();
+    config.traction
+        .magnitude_increase_rate_drive_side_newton_metres_per_second
+        .fill(700.0);
+    config.regeneration
+        .magnitude_increase_rate_drive_side_newton_metres_per_second
+        .fill(300.0);
+    const WheelDriveTorqueCommandConditioner conditioner(std::move(config));
+    WheelDriveTorqueChannelValues requested{};
+    WheelDriveTorqueChannelValues speeds{};
+    WheelDriveTorqueChannelValues previous{};
+    requested[0] = -80.0;
+    previous[0] = 75.0;
+    requested[1] = 80.0;
+    previous[1] = -75.0;
+    speeds.fill(WheelSpeedForDriveRpm(250.0));
+
+    const auto result = conditioner.Step(requested, speeds, previous);
+    RequireNear(result.actual_wheel_torques_newton_metres[0], -3.0, 0.0,
+                "positive-to-negative reversal did not adopt the requested "
+                "direction immediately and restart its magnitude from zero");
+    RequireNear(result.next_drive_side_torque_memory_newton_metres[0], -3.0,
+                0.0,
+                "positive-to-negative reversal stored the wrong direction");
+    RequireNear(result.actual_wheel_torques_newton_metres[1], 7.0, 0.0,
+                "negative-to-positive reversal did not adopt the requested "
+                "direction immediately and restart its magnitude from zero");
+    RequireNear(result.next_drive_side_torque_memory_newton_metres[1], 7.0,
+                0.0,
+                "negative-to-positive reversal stored the wrong direction");
+    Require(Has(result.limit_flags[0],
+                WheelDriveTorqueLimitFlag::kSlewLimited) &&
+                Has(result.limit_flags[1],
+                    WheelDriveTorqueLimitFlag::kSlewLimited),
+            "direction reversals did not report magnitude slew limiting");
 }
 
 std::string Read(const std::filesystem::path& path) {
@@ -404,6 +443,7 @@ int main(int argc, char* argv[]) {
         }
         CheckEightDistinctBranches();
         CheckDecreaseRateAndUnavailableEndpoint();
+        CheckImmediateDirectionReversal();
         CheckStrictAssetAndLoader(argv[1], argv[2]);
         CheckDirectConfigValidation();
         CheckWarmStepDoesNotUseOrdinaryCppAllocation();
