@@ -1,0 +1,141 @@
+{
+  "start_track_station_meters": 0.0,
+  "station_node_spacing_meters": 0.5,
+  "superelevation_reference_baselength_meters": 1.5,
+  "curvature_profile": {
+    "segments": [
+      {
+        "shape": "constant",
+        "length_meters": 50.0,
+        "curvature_radians_per_meter": 0.0
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 50.0,
+        "start_curvature_radians_per_meter": 0.0,
+        "end_curvature_radians_per_meter": 0.0033333333333333335
+      },
+      {
+        "shape": "constant",
+        "length_meters": 500.0,
+        "curvature_radians_per_meter": 0.0033333333333333335
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 108.0,
+        "start_curvature_radians_per_meter": 0.0033333333333333335,
+        "end_curvature_radians_per_meter": 0.0016666666666666668
+      },
+      {
+        "shape": "constant",
+        "length_meters": 500.0,
+        "curvature_radians_per_meter": 0.0016666666666666668
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 138.9,
+        "start_curvature_radians_per_meter": 0.0016666666666666668,
+        "end_curvature_radians_per_meter": 0.00125
+      },
+      {
+        "shape": "constant",
+        "length_meters": 200.0,
+        "curvature_radians_per_meter": 0.00125
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 50.0,
+        "start_curvature_radians_per_meter": 0.00125,
+        "end_curvature_radians_per_meter": 0.0
+      },
+      {
+        "shape": "constant",
+        "length_meters": 800.0,
+        "curvature_radians_per_meter": 0.0
+      }
+    ],
+    "seam_transitions": [
+      {"preceding_segment_index": 0, "window_length_meters": 3.0},
+      {"preceding_segment_index": 1, "window_length_meters": 3.0},
+      {"preceding_segment_index": 2, "window_length_meters": 3.0},
+      {"preceding_segment_index": 3, "window_length_meters": 3.0},
+      {"preceding_segment_index": 4, "window_length_meters": 3.0},
+      {"preceding_segment_index": 5, "window_length_meters": 3.0},
+      {"preceding_segment_index": 6, "window_length_meters": 3.0},
+      {"preceding_segment_index": 7, "window_length_meters": 3.0}
+    ]
+  },
+  "superelevation_profile": {
+    "segments": [
+      {
+        "shape": "constant",
+        "length_meters": 50.0,
+        "superelevation_meters": 0.0
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 50.0,
+        "start_superelevation_meters": 0.0,
+        "end_superelevation_meters": 0.12
+      },
+      {
+        "shape": "constant",
+        "length_meters": 500.0,
+        "superelevation_meters": 0.12
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 108.0,
+        "start_superelevation_meters": 0.12,
+        "end_superelevation_meters": 0.1
+      },
+      {
+        "shape": "constant",
+        "length_meters": 500.0,
+        "superelevation_meters": 0.1
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 138.9,
+        "start_superelevation_meters": 0.1,
+        "end_superelevation_meters": 0.11
+      },
+      {
+        "shape": "constant",
+        "length_meters": 200.0,
+        "superelevation_meters": 0.11
+      },
+      {
+        "shape": "hermite_cubic_blend",
+        "length_meters": 50.0,
+        "start_superelevation_meters": 0.11,
+        "end_superelevation_meters": 0.0
+      },
+      {
+        "shape": "constant",
+        "length_meters": 800.0,
+        "superelevation_meters": 0.0
+      }
+    ],
+    "seam_transitions": [
+      {"preceding_segment_index": 0, "window_length_meters": 3.0},
+      {"preceding_segment_index": 1, "window_length_meters": 3.0},
+      {"preceding_segment_index": 2, "window_length_meters": 3.0},
+      {"preceding_segment_index": 3, "window_length_meters": 3.0},
+      {"preceding_segment_index": 4, "window_length_meters": 3.0},
+      {"preceding_segment_index": 5, "window_length_meters": 3.0},
+      {"preceding_segment_index": 6, "window_length_meters": 3.0},
+      {"preceding_segment_index": 7, "window_length_meters": 3.0}
+    ]
+  },
+  "vertical_profile": {
+    "segments": [
+      {
+        "shape": "constant_grade",
+        "length_meters": 2396.9,
+        "centerline_upward_grade": 0.0
+      }
+    ],
+    "seam_transitions": []
+  }
+}
