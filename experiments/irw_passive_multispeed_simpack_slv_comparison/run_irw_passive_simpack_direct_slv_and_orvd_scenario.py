@@ -233,6 +233,9 @@ def prepare_spck(source: str, scenario: Scenario) -> str:
     speed = format(scenario.initial_speed_kilometres_per_hour, ".17g")
     result = replace_assignment(result, "vehicle.startvel", f"{{ {speed}/3.6 }}")
     result = replace_assignment(result, "vehicle.applystartvel", "1")
+    result = replace_assignment(
+        result, "slv.integ.meetop", "1" if scenario.meet_output_points else "0"
+    )
     duration = format(scenario.duration_seconds, ".17g")
     frequency = format(scenario.output_frequency_hertz, ".17g")
     result = replace_assignment(result, "slv.integ.tend.time", f"{{ {duration} s }}")
@@ -439,6 +442,7 @@ def run_simpack(
             ),
             "duration_seconds": scenario.duration_seconds,
             "output_frequency_hertz": scenario.output_frequency_hertz,
+            "meet_output_points": scenario.meet_output_points,
             "command": command,
         }
         write_json(simpack_root / "manifest.json", manifest)

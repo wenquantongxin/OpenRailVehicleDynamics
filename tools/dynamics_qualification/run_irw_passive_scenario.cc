@@ -34,8 +34,11 @@ int main(int argc, char** argv) {
             "SAMPLE_PERIOD_NS\n"
             "SCENARIO: irw_r300_no_irregularity_v60_passive, "
             "irw_r300_aar5_v60_passive, irw_straight_aar5_v80_passive, "
-            "irw_r600_aar5_v80_passive, irw_straight_aar6_v120_passive, "
-            "or irw_r1000_aar6_v120_passive\n");
+            "irw_r600_aar5_v80_passive, irw_r800_aar5_v100_passive, "
+            "irw_straight_aar6_v120_passive, "
+            "irw_r1000_aar6_v120_passive, "
+            "irw_straight_aar6_v160_passive, or "
+            "irw_straight_erri_low_v200_passive\n");
         return 2;
     }
 

@@ -22,8 +22,10 @@ The executables are:
 - `orvd_irw_passive_scenario`: passive IRW runs selected by a closed scenario
   identity. The current set is `irw_r300_no_irregularity_v60_passive`,
   `irw_r300_aar5_v60_passive`, `irw_straight_aar5_v80_passive`,
-  `irw_r600_aar5_v80_passive`, `irw_straight_aar6_v120_passive`, and
-  `irw_r1000_aar6_v120_passive`;
+  `irw_r600_aar5_v80_passive`, `irw_r800_aar5_v100_passive`,
+  `irw_straight_aar6_v120_passive`, `irw_r1000_aar6_v120_passive`,
+  `irw_straight_aar6_v160_passive`, and
+  `irw_straight_erri_low_v200_passive`;
 - `orvd_irw_r300_aar5_v60_100hz_full_state_guidance`: the closed IRW
   R300/AAR5/60 km/h, 100 Hz full-state wheel-speed guidance and control-event
   scenario.
@@ -38,13 +40,15 @@ tolerances `1e-8 / 1e-7 / 1e-6 N`. The runners verify the configured order
 against the selected recipe and publish it in the numerical execution contract.
 These are private execution recipes, not a public integrator-policy interface.
 
-The straight/AAR5 and R600/AAR5 80 km/h identities, and the straight/AAR6 and
-R1000/AAR6 120 km/h identities, each own a separate private maximum-order-5
-recipe. Their relative tolerance is `1e-9`; q/v/z absolute tolerances are
-`1e-9 / 1e-8 / 1e-7 N`. The settings currently match, but the four recipe
-identities remain independent. For each higher-speed start-up, the runner
-requires the longitudinal speed and all eight explicit wheel rates to equal a
-common scaling of the bundled 60 km/h resolved state.
+The straight/AAR5 and R600/AAR5 80 km/h identities, the R800/AAR5 100 km/h
+identity, the straight/AAR6 and R1000/AAR6 120 km/h identities, the
+straight/AAR6 160 km/h identity, and the straight/ERRI-low 200 km/h identity
+each own a separate private maximum-order-5 recipe. Their relative tolerance
+is `1e-9`; q/v/z absolute tolerances are `1e-9 / 1e-8 / 1e-7 N`. The settings
+currently match, but the seven recipe identities remain independent. For each
+higher-speed start-up, the runner requires the longitudinal speed and all eight
+explicit wheel rates to equal a common scaling of the bundled 60 km/h resolved
+state.
 
 All sample times are generated from integer nanosecond identities. Intermediate
 samples use dense output and do not become additional integrator stops. The

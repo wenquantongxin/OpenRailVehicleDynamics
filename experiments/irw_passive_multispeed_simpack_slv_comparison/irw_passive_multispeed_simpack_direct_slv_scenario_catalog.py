@@ -14,6 +14,7 @@ class Scenario:
     initial_speed_kilometres_per_hour: float
     duration_seconds: float
     output_frequency_hertz: float
+    meet_output_points: bool
     maximum_comparison_track_station_meters: float
     orvd_qualification_scenario_identifier: str | None
     response_plot_title: str
@@ -31,6 +32,7 @@ SCENARIOS = {
             60.0,
             30.0,
             100.0,
+            False,
             1100.0,
             "irw_r300_aar5_v60_passive",
             "IRW R300 + frozen AAR5 passive at 60 km/h",
@@ -44,6 +46,7 @@ SCENARIOS = {
             80.0,
             30.0,
             100.0,
+            False,
             1100.0,
             "irw_straight_aar5_v80_passive",
             "IRW straight + frozen AAR5 passive at 80 km/h",
@@ -57,6 +60,7 @@ SCENARIOS = {
             80.0,
             30.0,
             100.0,
+            False,
             1100.0,
             "irw_r600_aar5_v80_passive",
             "IRW R600 + frozen AAR5 passive at 80 km/h",
@@ -70,6 +74,7 @@ SCENARIOS = {
             120.0,
             8.0,
             100.0,
+            False,
             300.0,
             "irw_straight_aar6_v120_passive",
             "IRW straight + frozen AAR6 passive at 120 km/h",
@@ -83,6 +88,7 @@ SCENARIOS = {
             120.0,
             8.0,
             100.0,
+            True,
             300.0,
             "irw_r1000_aar6_v120_passive",
             "IRW R1000 + frozen AAR6 passive at 120 km/h",
@@ -96,8 +102,9 @@ SCENARIOS = {
             100.0,
             30.0,
             100.0,
+            True,
             1100.0,
-            None,
+            "irw_r800_aar5_v100_passive",
             "IRW R800 + frozen AAR5 passive at 100 km/h",
             "irw_r800_frozen_aar5_100kmph_30s",
         ),
@@ -109,8 +116,9 @@ SCENARIOS = {
             160.0,
             6.0,
             100.0,
+            True,
             300.0,
-            None,
+            "irw_straight_aar6_v160_passive",
             "IRW straight + frozen AAR6 passive at 160 km/h",
             "irw_straight_frozen_aar6_160kmph_6s",
         ),
@@ -122,8 +130,9 @@ SCENARIOS = {
             200.0,
             8.0,
             100.0,
+            True,
             500.0,
-            None,
+            "irw_straight_erri_low_v200_passive",
             "IRW straight + frozen ERRI low passive at 200 km/h",
             "irw_straight_frozen_erri_low_200kmph_8s",
         ),

@@ -41,9 +41,9 @@ inline constexpr IrwBdfToleranceRecipe
         integrators::internal::MaximumBdfOrder::kSecond,
     };
 
-// These four passive identities deliberately own separate recipes. Their
-// decade-valued settings currently match, but one physical scenario cannot
-// silently change another's numerical contract.
+// These higher-speed passive identities deliberately own separate recipes.
+// Their decade-valued settings currently match, but one physical scenario
+// cannot silently change another's numerical contract.
 inline constexpr IrwBdfToleranceRecipe
     kIrwStraightAar5V80PassiveBdfToleranceRecipe{
         1.0e-9,
@@ -63,6 +63,15 @@ inline constexpr IrwBdfToleranceRecipe
     };
 
 inline constexpr IrwBdfToleranceRecipe
+    kIrwR800Aar5V100PassiveBdfToleranceRecipe{
+        1.0e-9,
+        1.0e-9,
+        1.0e-8,
+        1.0e-7,
+        integrators::internal::MaximumBdfOrder::kFifth,
+    };
+
+inline constexpr IrwBdfToleranceRecipe
     kIrwStraightAar6V120PassiveBdfToleranceRecipe{
         1.0e-9,
         1.0e-9,
@@ -73,6 +82,24 @@ inline constexpr IrwBdfToleranceRecipe
 
 inline constexpr IrwBdfToleranceRecipe
     kIrwR1000Aar6V120PassiveBdfToleranceRecipe{
+        1.0e-9,
+        1.0e-9,
+        1.0e-8,
+        1.0e-7,
+        integrators::internal::MaximumBdfOrder::kFifth,
+    };
+
+inline constexpr IrwBdfToleranceRecipe
+    kIrwStraightAar6V160PassiveBdfToleranceRecipe{
+        1.0e-9,
+        1.0e-9,
+        1.0e-8,
+        1.0e-7,
+        integrators::internal::MaximumBdfOrder::kFifth,
+    };
+
+inline constexpr IrwBdfToleranceRecipe
+    kIrwStraightErriLowV200PassiveBdfToleranceRecipe{
         1.0e-9,
         1.0e-9,
         1.0e-8,

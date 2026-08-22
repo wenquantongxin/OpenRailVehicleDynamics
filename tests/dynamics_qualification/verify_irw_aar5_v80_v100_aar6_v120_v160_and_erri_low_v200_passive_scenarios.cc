@@ -1,5 +1,6 @@
-// The 80 and 120 km/h passive IRW identities bind line, irregularity, a
-// physically scaled eight-wheel start-up, and one private numerical recipe.
+// The 80, 100, 120, 160 and 200 km/h passive IRW identities bind line,
+// irregularity, a physically scaled eight-wheel start-up, and one private
+// numerical recipe.
 
 #include <algorithm>
 #include <array>
@@ -24,13 +25,18 @@ using orvd::dynamics_qualification::RunIrwPassiveScenario;
 
 constexpr double kV60MetersPerSecond = 60.0 / 3.6;
 constexpr double kV80MetersPerSecond = 80.0 / 3.6;
+constexpr double kV100MetersPerSecond = 100.0 / 3.6;
 constexpr double kV120MetersPerSecond = 120.0 / 3.6;
+constexpr double kV160MetersPerSecond = 160.0 / 3.6;
+constexpr double kV200MetersPerSecond = 200.0 / 3.6;
 
 int failures = 0;
 
 void Require(bool condition, std::string_view what) {
     if (!condition) {
-        std::fprintf(stderr, "IRW 80/120 km/h passive scenario check: %.*s\n",
+        std::fprintf(
+            stderr,
+            "IRW 80/100/120/160/200 km/h passive scenario check: %.*s\n",
                      static_cast<int>(what.size()), what.data());
         ++failures;
     }
@@ -289,17 +295,19 @@ void CheckScenario(const ScenarioExpectation& expected,
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 8) {
+    if (argc != 9) {
         std::fprintf(
             stderr,
-            "usage: verify_irw_aar5_v80_and_aar6_v120_passive_scenarios "
+            "usage: verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_"
+            "v200_passive_scenarios "
             "VEHICLE V60_STARTUP DATA_ROOT STRAIGHT_LINE R600_LINE "
-            "R1000_LINE TEST_ROOT\n");
+            "R800_LINE R1000_LINE TEST_ROOT\n");
         return 2;
     }
-    const std::filesystem::path test_root = argv[7];
+    const std::filesystem::path test_root = argv[8];
     if (test_root.filename() !=
-        "irw-aar5-v80-and-aar6-v120-passive-scenario-fixtures") {
+        "irw-aar5-v80-v100-aar6-v120-v160-and-erri-low-v200-passive-"
+        "scenario-fixtures") {
         std::fprintf(stderr, "refusing an unexpected IRW fixture directory\n");
         return 2;
     }
@@ -315,6 +323,18 @@ int main(int argc, char** argv) {
             WriteIrwStartupScaledFromV60(
                 argv[2], test_root / "startup-scaled-v60-to-v120.json",
                 kV120MetersPerSecond);
+        const std::filesystem::path startup_v100 =
+            WriteIrwStartupScaledFromV60(
+                argv[2], test_root / "startup-scaled-v60-to-v100.json",
+                kV100MetersPerSecond);
+        const std::filesystem::path startup_v160 =
+            WriteIrwStartupScaledFromV60(
+                argv[2], test_root / "startup-scaled-v60-to-v160.json",
+                kV160MetersPerSecond);
+        const std::filesystem::path startup_v200 =
+            WriteIrwStartupScaledFromV60(
+                argv[2], test_root / "startup-scaled-v60-to-v200.json",
+                kV200MetersPerSecond);
         const std::filesystem::path modified_non_wheel_v80 =
             WriteIrwStartupWithModifiedNonWheelField(
                 startup_v80,
@@ -323,12 +343,33 @@ int main(int argc, char** argv) {
             WriteIrwStartupWithModifiedNonWheelField(
                 startup_v120,
                 test_root / "startup-v120-with-modified-rail-offset.json");
+        const std::filesystem::path modified_non_wheel_v100 =
+            WriteIrwStartupWithModifiedNonWheelField(
+                startup_v100,
+                test_root / "startup-v100-with-modified-rail-offset.json");
+        const std::filesystem::path modified_non_wheel_v160 =
+            WriteIrwStartupWithModifiedNonWheelField(
+                startup_v160,
+                test_root / "startup-v160-with-modified-rail-offset.json");
+        const std::filesystem::path modified_non_wheel_v200 =
+            WriteIrwStartupWithModifiedNonWheelField(
+                startup_v200,
+                test_root / "startup-v200-with-modified-rail-offset.json");
         const std::vector<std::filesystem::path> wrong_wheels_v80 =
             WriteIrwStartupsWithOneMismatchedWheelRate(
                 startup_v80, test_root, "v80");
         const std::vector<std::filesystem::path> wrong_wheels_v120 =
             WriteIrwStartupsWithOneMismatchedWheelRate(
                 startup_v120, test_root, "v120");
+        const std::vector<std::filesystem::path> wrong_wheels_v100 =
+            WriteIrwStartupsWithOneMismatchedWheelRate(
+                startup_v100, test_root, "v100");
+        const std::vector<std::filesystem::path> wrong_wheels_v160 =
+            WriteIrwStartupsWithOneMismatchedWheelRate(
+                startup_v160, test_root, "v160");
+        const std::vector<std::filesystem::path> wrong_wheels_v200 =
+            WriteIrwStartupsWithOneMismatchedWheelRate(
+                startup_v200, test_root, "v200");
 
         const std::vector<ScenarioExpectation> scenarios{
             {orvd::dynamics_qualification::
@@ -343,6 +384,12 @@ int main(int argc, char** argv) {
              startup_v120, modified_non_wheel_v80, {}, "aar5_irregularity",
              "aar6_irregularity", kV80MetersPerSecond, "r600-aar5-v80"},
             {orvd::dynamics_qualification::
+                 kIrwR800Aar5V100PassiveScenarioIdentifier,
+             "IRW_R800_AAR5_V100_PASSIVE", argv[6], argv[4], startup_v100,
+             startup_v120, modified_non_wheel_v100, wrong_wheels_v100,
+             "aar5_irregularity", "aar6_irregularity", kV100MetersPerSecond,
+             "r800-aar5-v100"},
+            {orvd::dynamics_qualification::
                  kIrwStraightAar6V120PassiveScenarioIdentifier,
              "IRW_STRAIGHT_AAR6_V120_PASSIVE", argv[4], argv[5], startup_v120,
              startup_v80, modified_non_wheel_v120, wrong_wheels_v120,
@@ -350,9 +397,21 @@ int main(int argc, char** argv) {
              "straight-aar6-v120"},
             {orvd::dynamics_qualification::
                  kIrwR1000Aar6V120PassiveScenarioIdentifier,
-             "IRW_R1000_AAR6_V120_PASSIVE", argv[6], argv[4], startup_v120,
+             "IRW_R1000_AAR6_V120_PASSIVE", argv[7], argv[4], startup_v120,
              startup_v80, modified_non_wheel_v120, {}, "aar6_irregularity",
              "aar5_irregularity", kV120MetersPerSecond, "r1000-aar6-v120"},
+            {orvd::dynamics_qualification::
+                 kIrwStraightAar6V160PassiveScenarioIdentifier,
+             "IRW_STRAIGHT_AAR6_V160_PASSIVE", argv[4], argv[5], startup_v160,
+             startup_v120, modified_non_wheel_v160, wrong_wheels_v160,
+             "aar6_irregularity", "aar5_irregularity", kV160MetersPerSecond,
+             "straight-aar6-v160"},
+            {orvd::dynamics_qualification::
+                 kIrwStraightErriLowV200PassiveScenarioIdentifier,
+             "IRW_STRAIGHT_ERRI_LOW_V200_PASSIVE", argv[4], argv[5],
+             startup_v200, startup_v160, modified_non_wheel_v200,
+             wrong_wheels_v200, "erri_low_irregularity", "aar6_irregularity",
+             kV200MetersPerSecond, "straight-erri-low-v200"},
         };
         for (const ScenarioExpectation& scenario : scenarios) {
             CheckScenario(scenario, argv[1], argv[3], test_root);
@@ -369,6 +428,8 @@ int main(int argc, char** argv) {
                      failures);
         return 1;
     }
-    std::puts("IRW AAR5/V80 and AAR6/V120 passive scenarios verified");
+    std::puts(
+        "IRW AAR5/V80/V100, AAR6/V120/V160, and ERRI-low/V200 passive "
+        "scenarios verified");
     return 0;
 }

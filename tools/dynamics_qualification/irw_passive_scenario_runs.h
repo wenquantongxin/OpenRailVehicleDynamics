@@ -25,18 +25,27 @@ inline constexpr std::string_view
     kIrwR600Aar5V80PassiveScenarioIdentifier =
         "irw_r600_aar5_v80_passive";
 inline constexpr std::string_view
+    kIrwR800Aar5V100PassiveScenarioIdentifier =
+        "irw_r800_aar5_v100_passive";
+inline constexpr std::string_view
     kIrwStraightAar6V120PassiveScenarioIdentifier =
         "irw_straight_aar6_v120_passive";
 inline constexpr std::string_view
     kIrwR1000Aar6V120PassiveScenarioIdentifier =
         "irw_r1000_aar6_v120_passive";
+inline constexpr std::string_view
+    kIrwStraightAar6V160PassiveScenarioIdentifier =
+        "irw_straight_aar6_v160_passive";
+inline constexpr std::string_view
+    kIrwStraightErriLowV200PassiveScenarioIdentifier =
+        "irw_straight_erri_low_v200_passive";
 
 // One internal passive IRW run configuration. The scenario identity binds the
 // line, irregularity requirement, initial speed and private numerical recipe.
-// The 80 and 120 km/h identities additionally bind eight explicit wheel rates
-// derived by scaling the bundled 60 km/h resolved state. The runner does not
-// infer an identity from an irregularity name. This type is not installed or
-// exported.
+// The 80, 100, 120, 160 and 200 km/h identities additionally bind eight
+// explicit wheel rates derived by scaling the bundled 60 km/h resolved state.
+// The runner does not infer an identity from an irregularity name. This type
+// is not installed or exported.
 struct IrwPassiveScenarioRunConfiguration final {
     std::string scenario_identifier;
     std::filesystem::path vehicle_definition_path;

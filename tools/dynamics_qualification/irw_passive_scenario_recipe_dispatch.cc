@@ -93,6 +93,26 @@ constexpr internal::VehicleQualificationRecipe kR600Aar5V80Recipe{
     internal::TrackIrregularityRequirement::kRequired,
     &configuration::AssembleIrwContactScenario};
 
+constexpr internal::VehicleQualificationRecipe kR800Aar5V100Recipe{
+    "IRW_R800_AAR5_V100_PASSIVE",
+    {"carbody", "frame_front", "frame_rear"},
+    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
+        .relative_tolerance,
+    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
+        .position_absolute_tolerance,
+    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
+        .velocity_absolute_tolerance,
+    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
+        .series_force_absolute_tolerance_newtons,
+    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
+        .maximum_bdf_order,
+    81,
+    74,
+    2,
+    96,
+    internal::TrackIrregularityRequirement::kRequired,
+    &configuration::AssembleIrwContactScenario};
+
 constexpr internal::VehicleQualificationRecipe kStraightAar6V120Recipe{
     "IRW_STRAIGHT_AAR6_V120_PASSIVE",
     {"carbody", "frame_front", "frame_rear"},
@@ -133,14 +153,58 @@ constexpr internal::VehicleQualificationRecipe kR1000Aar6V120Recipe{
     internal::TrackIrregularityRequirement::kRequired,
     &configuration::AssembleIrwContactScenario};
 
+constexpr internal::VehicleQualificationRecipe kStraightAar6V160Recipe{
+    "IRW_STRAIGHT_AAR6_V160_PASSIVE",
+    {"carbody", "frame_front", "frame_rear"},
+    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
+        .relative_tolerance,
+    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
+        .position_absolute_tolerance,
+    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
+        .velocity_absolute_tolerance,
+    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
+        .series_force_absolute_tolerance_newtons,
+    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
+        .maximum_bdf_order,
+    81,
+    74,
+    2,
+    96,
+    internal::TrackIrregularityRequirement::kRequired,
+    &configuration::AssembleIrwContactScenario};
+
+constexpr internal::VehicleQualificationRecipe kStraightErriLowV200Recipe{
+    "IRW_STRAIGHT_ERRI_LOW_V200_PASSIVE",
+    {"carbody", "frame_front", "frame_rear"},
+    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
+        .relative_tolerance,
+    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
+        .position_absolute_tolerance,
+    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
+        .velocity_absolute_tolerance,
+    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
+        .series_force_absolute_tolerance_newtons,
+    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
+        .maximum_bdf_order,
+    81,
+    74,
+    2,
+    96,
+    internal::TrackIrregularityRequirement::kRequired,
+    &configuration::AssembleIrwContactScenario};
+
 constexpr std::string_view kAar5IrregularityIdentifier = "aar5_irregularity";
 constexpr std::string_view kAar6IrregularityIdentifier = "aar6_irregularity";
+constexpr std::string_view kErriLowIrregularityIdentifier =
+    "erri_low_irregularity";
 constexpr std::string_view kR300GeometryFilename =
     "r300_centerline_superelevation_1100m.json";
 constexpr std::string_view kStraightGeometryFilename =
     "straight_level_1100m.json";
 constexpr std::string_view kR600GeometryFilename =
     "r600_centerline_superelevation_1100m.json";
+constexpr std::string_view kR800GeometryFilename =
+    "r800_centerline_superelevation_1100m.json";
 constexpr std::string_view kR1000GeometryFilename =
     "r1000_centerline_superelevation_300m.json";
 constexpr std::string_view kIrwV60StartupRelativePath =
@@ -267,6 +331,13 @@ const internal::VehicleQualificationRecipe& ResolveRecipe(
         return kR600Aar5V80Recipe;
     }
     if (input.scenario_identifier ==
+        kIrwR800Aar5V100PassiveScenarioIdentifier) {
+        RequireGeometry(input, kR800GeometryFilename);
+        RequireStartupScaledFromV60(input, 100.0 / 3.6);
+        RequireIrregularity(input, kAar5IrregularityIdentifier);
+        return kR800Aar5V100Recipe;
+    }
+    if (input.scenario_identifier ==
         kIrwStraightAar6V120PassiveScenarioIdentifier) {
         RequireGeometry(input, kStraightGeometryFilename);
         RequireStartupScaledFromV60(input, 120.0 / 3.6);
@@ -279,6 +350,20 @@ const internal::VehicleQualificationRecipe& ResolveRecipe(
         RequireStartupScaledFromV60(input, 120.0 / 3.6);
         RequireIrregularity(input, kAar6IrregularityIdentifier);
         return kR1000Aar6V120Recipe;
+    }
+    if (input.scenario_identifier ==
+        kIrwStraightAar6V160PassiveScenarioIdentifier) {
+        RequireGeometry(input, kStraightGeometryFilename);
+        RequireStartupScaledFromV60(input, 160.0 / 3.6);
+        RequireIrregularity(input, kAar6IrregularityIdentifier);
+        return kStraightAar6V160Recipe;
+    }
+    if (input.scenario_identifier ==
+        kIrwStraightErriLowV200PassiveScenarioIdentifier) {
+        RequireGeometry(input, kStraightGeometryFilename);
+        RequireStartupScaledFromV60(input, 200.0 / 3.6);
+        RequireIrregularity(input, kErriLowIrregularityIdentifier);
+        return kStraightErriLowV200Recipe;
     }
     throw std::invalid_argument("unknown IRW passive scenario identity");
 }
