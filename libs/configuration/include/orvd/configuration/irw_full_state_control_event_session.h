@@ -1,16 +1,14 @@
 #pragma once
 
 /// @file
-/// Frozen IRW 100 Hz control observation binding and event transaction.
+/// Frozen IRW 100 Hz full-state control event transaction.
 
-#include <array>
 #include <cstdint>
 
 #include "orvd/actuation/wheel_drive_torque_command_conditioner.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
+#include "orvd/configuration/irw_full_state_control_observation_binding.h"
 #include "orvd/control/irw_full_state_wheel_speed_guidance_controller.h"
-#include "orvd/multibody_model/multibody_coordinate_ranges.h"
-#include "orvd/multibody_model/multibody_model_handles.h"
 
 namespace orvd::configuration {
 
@@ -38,7 +36,7 @@ struct IrwFullStateControlEventAudit final {
     actuation::WheelDriveTorqueConditioningResult conditioning_result;
 };
 
-/// Caller-owned finite event session for the frozen P179 IRW personality.
+/// Caller-owned finite event session for the frozen IRW control personality.
 ///
 /// Construction resolves the four axle-bridge bodies and eight independent-
 /// wheel velocity ranges from the same closed table used by contact and active
@@ -48,7 +46,9 @@ struct IrwFullStateControlEventAudit final {
 ///
 /// The session owns the controller and conditioner memories. The accepted
 /// `SystemRuntimeContext` remains the sole owner of the eight held torques. The
-/// assembled system and every context passed to this object must outlive it.
+/// assembled system must outlive the session. A context passed to a member
+/// call only needs to remain valid for that call and must belong to the same
+/// assembled system.
 class IrwFullStateControlEventSession final {
    public:
     IrwFullStateControlEventSession(
@@ -83,7 +83,7 @@ class IrwFullStateControlEventSession final {
         return conditioner_memory_newton_metres_;
     }
 
-    /// Observes the frozen P179 controller input from one compatible context.
+    /// Observes the frozen controller input from one compatible context.
     ///
     /// This is a read-only observation: it performs no projection, contact
     /// solve, controller recurrence or state commit. The caller must first
@@ -129,38 +129,15 @@ class IrwFullStateControlEventSession final {
         kReadyToAdvance,
     };
 
-    struct ResolvedBinding final {
-        std::array<multibody_model::RigidBodyHandle,
-                   control::kIrwGuidanceAxleCount>
-            carrier_bodies;
-        std::array<multibody_model::GeneralizedVelocityRange,
-                   control::kIrwGuidanceWheelCount>
-            wheel_velocity_ranges;
-    };
-
-    static ResolvedBinding ResolveBinding(
-        const AssembledVehicleSystem& assembled);
-
-    IrwFullStateControlEventSession(
-        const AssembledVehicleSystem& assembled,
-        control::IrwFullStateWheelSpeedGuidanceController controller,
-        actuation::WheelDriveTorqueCommandConditioner conditioner,
-        ResolvedBinding binding);
-
     [[nodiscard]] IrwFullStateControlEventAudit ComputeCandidate(
         IrwFullStateControlEventKind kind, std::uint64_t ordinal,
         double event_time_seconds,
         system_assembly::SystemRuntimeContext& accepted_context) const;
 
     const AssembledVehicleSystem* assembled_;
+    IrwFullStateControlObservationBinding observation_binding_;
     control::IrwFullStateWheelSpeedGuidanceController controller_;
     actuation::WheelDriveTorqueCommandConditioner conditioner_;
-    std::array<multibody_model::RigidBodyHandle,
-               control::kIrwGuidanceAxleCount>
-        carrier_bodies_;
-    std::array<multibody_model::GeneralizedVelocityRange,
-               control::kIrwGuidanceWheelCount>
-        wheel_velocity_ranges_;
     double sample_period_seconds_{};
     control::IrwFullStateWheelSpeedGuidanceControllerState controller_state_;
     actuation::WheelDriveTorqueChannelValues

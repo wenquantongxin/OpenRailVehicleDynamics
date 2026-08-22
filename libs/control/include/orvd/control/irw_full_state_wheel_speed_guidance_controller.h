@@ -54,6 +54,44 @@ struct IrwFullStateWheelSpeedGuidanceControllerConfig {
     IrwGuidanceWheelValues wheel_speed_pi_wheel_signs{};
 };
 
+/// Line- and scenario-independent constants of the guidance recurrence.
+///
+/// A caller that supplies time-varying operating points can construct this
+/// recurrence directly, without inventing a frozen controller personality.
+struct IrwFullStateWheelSpeedGuidanceRecurrenceConfig {
+    double sample_period_seconds{0.0};
+    double rolling_radius_meters{0.0};
+    IrwGuidanceAxleValues guidance_axle_signs{};
+    IrwGuidanceWheelValues guidance_wheel_signs{};
+    double lateral_integral_absolute_limit_meter_seconds{0.0};
+    SampledFilteredPiConfig wheel_speed_pi;
+    IrwGuidanceWheelValues wheel_speed_pi_wheel_signs{};
+};
+
+/// One already-evaluated operating point for a single guidance sample.
+///
+/// This type deliberately has no station, curvature, interpolation or route
+/// semantics. Those belong to the caller that computes the operating point.
+struct IrwFullStateWheelSpeedGuidanceOperatingPoint {
+    IrwGuidanceWheelValues base_wheel_speed_references_meters_per_second{};
+    IrwGuidanceAxleValues feedforward_gains{};
+    IrwGuidanceAxleValues yaw_rate_feedback_gains{};
+    IrwGuidanceAxleValues yaw_feedback_gains{};
+    IrwGuidanceAxleValues lateral_velocity_feedback_gains{};
+    IrwGuidanceAxleValues lateral_displacement_feedback_gains{};
+    IrwGuidanceAxleValues lateral_integral_feedback_gains{};
+    IrwGuidanceAxleValues wheel_speed_difference_feedback_gains{};
+    IrwGuidanceAxleValues yaw_rate_filter_time_constants_seconds{};
+    IrwGuidanceAxleValues lateral_velocity_filter_time_constants_seconds{};
+    IrwGuidanceAxleValues
+        wheel_speed_difference_outer_filter_time_constants_seconds{};
+    IrwGuidanceAxleValues
+        wheel_speed_difference_reference_absolute_limits_radians_per_second{};
+    IrwGuidanceAxleValues equilibrium_yaw_angles_radians{};
+    IrwGuidanceAxleValues equilibrium_lateral_displacements_meters{};
+    std::array<bool, kIrwGuidanceAxleCount> guidance_active{};
+};
+
 /// Caller-owned controller memory: one initialization flag and 40 numeric
 /// values. It is intentionally not packed into a 41-double transport vector.
 struct IrwFullStateWheelSpeedGuidanceControllerState {
@@ -68,6 +106,14 @@ struct IrwFullStateWheelSpeedGuidanceControllerState {
     IrwGuidanceWheelValues wheel_speed_pi_integrals_meters{};
     IrwGuidanceWheelValues
         wheel_speed_pi_filtered_torques_newton_metres{};
+};
+
+/// Mechanical observations consumed by the line-independent recurrence.
+struct IrwFullStateWheelSpeedGuidanceMechanicalInput {
+    IrwGuidanceAxleValues axle_lateral_displacements_meters{};
+    IrwGuidanceAxleValues axle_yaw_angles_radians{};
+    IrwGuidanceWheelValues
+        wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second{};
 };
 
 /// Current mechanical observations in the controller's frozen scalar order.
@@ -104,6 +150,28 @@ struct IrwFullStateWheelSpeedGuidanceControllerResult {
     IrwFullStateWheelSpeedGuidanceControllerState next_state;
 };
 
+/// Pure state recurrence for one already-evaluated guidance operating point.
+class IrwFullStateWheelSpeedGuidanceRecurrence {
+   public:
+    explicit IrwFullStateWheelSpeedGuidanceRecurrence(
+        IrwFullStateWheelSpeedGuidanceRecurrenceConfig config);
+
+    [[nodiscard]] const IrwFullStateWheelSpeedGuidanceRecurrenceConfig& config()
+        const noexcept {
+        return config_;
+    }
+
+    [[nodiscard]] IrwFullStateWheelSpeedGuidanceControllerResult Step(
+        const IrwFullStateWheelSpeedGuidanceMechanicalInput& input,
+        const IrwFullStateWheelSpeedGuidanceOperatingPoint& operating_point,
+        const IrwFullStateWheelSpeedGuidanceControllerState& previous_state)
+        const;
+
+   private:
+    IrwFullStateWheelSpeedGuidanceRecurrenceConfig config_;
+    SampledFilteredPi wheel_speed_pi_;
+};
+
 /// Immutable frozen 100 Hz IRW full-state wheel-speed guidance controller.
 class IrwFullStateWheelSpeedGuidanceController {
    public:
@@ -122,7 +190,7 @@ class IrwFullStateWheelSpeedGuidanceController {
 
    private:
     IrwFullStateWheelSpeedGuidanceControllerConfig config_;
-    SampledFilteredPi wheel_speed_pi_;
+    IrwFullStateWheelSpeedGuidanceRecurrence recurrence_;
 };
 
 }  // namespace orvd::control

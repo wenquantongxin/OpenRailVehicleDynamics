@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -21,6 +22,10 @@ using orvd::control::IrwFullStateWheelSpeedGuidanceController;
 using orvd::control::IrwFullStateWheelSpeedGuidanceControllerConfig;
 using orvd::control::IrwFullStateWheelSpeedGuidanceControllerInput;
 using orvd::control::IrwFullStateWheelSpeedGuidanceControllerState;
+using orvd::control::IrwFullStateWheelSpeedGuidanceMechanicalInput;
+using orvd::control::IrwFullStateWheelSpeedGuidanceOperatingPoint;
+using orvd::control::IrwFullStateWheelSpeedGuidanceRecurrence;
+using orvd::control::IrwFullStateWheelSpeedGuidanceRecurrenceConfig;
 using orvd::control::SampledFilteredPi;
 using orvd::control::SampledFilteredPiConfig;
 using orvd::control::SampledFilteredPiState;
@@ -155,6 +160,143 @@ void CheckFirstAndSubsequentDifferenceFiltering() {
     }
 }
 
+IrwFullStateWheelSpeedGuidanceRecurrenceConfig MakeRecurrenceConfig(
+    const IrwFullStateWheelSpeedGuidanceControllerConfig& config) {
+    return IrwFullStateWheelSpeedGuidanceRecurrenceConfig{
+        .sample_period_seconds = config.sample_period_seconds,
+        .rolling_radius_meters = config.rolling_radius_meters,
+        .guidance_axle_signs = config.guidance_axle_signs,
+        .guidance_wheel_signs = config.guidance_wheel_signs,
+        .lateral_integral_absolute_limit_meter_seconds =
+            config.lateral_integral_absolute_limit_meter_seconds,
+        .wheel_speed_pi = config.wheel_speed_pi,
+        .wheel_speed_pi_wheel_signs = config.wheel_speed_pi_wheel_signs,
+    };
+}
+
+IrwFullStateWheelSpeedGuidanceOperatingPoint MakeOperatingPoint(
+    const IrwFullStateWheelSpeedGuidanceControllerConfig& config,
+    const IrwFullStateWheelSpeedGuidanceControllerInput& input) {
+    IrwFullStateWheelSpeedGuidanceOperatingPoint operating_point;
+    for (std::size_t axle = 0; axle < 4; ++axle) {
+        const double ramp_fraction = std::clamp(
+            (input.axle_track_stations_meters[axle] -
+             config.speed_reference_ramp_start_track_station_meters) /
+                (config.speed_reference_ramp_end_track_station_meters -
+                 config.speed_reference_ramp_start_track_station_meters),
+            0.0, 1.0);
+        for (std::size_t side = 0; side < 2; ++side) {
+            const std::size_t wheel = 2 * axle + side;
+            const double straight =
+                config.base_speed_reference_meters_per_second;
+            const double curved =
+                config.base_speed_reference_meters_per_second *
+                (config.curve_radius_meters +
+                 config.speed_reference_wheel_side_signs[wheel] *
+                     config.controller_calibration_lateral_half_span_meters) /
+                config.curve_radius_meters;
+            operating_point
+                .base_wheel_speed_references_meters_per_second[wheel] =
+                (1.0 - ramp_fraction) * straight + ramp_fraction * curved;
+        }
+        operating_point.guidance_active[axle] =
+            std::isfinite(input.axle_track_stations_meters[axle]) &&
+            input.axle_track_stations_meters[axle] >=
+                config.guidance_start_track_station_meters &&
+            input.axle_track_stations_meters[axle] <=
+                config.guidance_end_track_station_meters;
+    }
+    operating_point.feedforward_gains = config.feedforward_gains;
+    operating_point.yaw_rate_feedback_gains =
+        config.yaw_rate_feedback_gains;
+    operating_point.yaw_feedback_gains = config.yaw_feedback_gains;
+    operating_point.lateral_velocity_feedback_gains =
+        config.lateral_velocity_feedback_gains;
+    operating_point.lateral_displacement_feedback_gains =
+        config.lateral_displacement_feedback_gains;
+    operating_point.lateral_integral_feedback_gains =
+        config.lateral_integral_feedback_gains;
+    operating_point.wheel_speed_difference_feedback_gains =
+        config.wheel_speed_difference_feedback_gains;
+    operating_point.yaw_rate_filter_time_constants_seconds.fill(
+        config.yaw_rate_filter_time_constant_seconds);
+    operating_point.lateral_velocity_filter_time_constants_seconds.fill(
+        config.lateral_velocity_filter_time_constant_seconds);
+    operating_point
+        .wheel_speed_difference_outer_filter_time_constants_seconds.fill(
+            config
+                .wheel_speed_difference_outer_filter_time_constant_seconds);
+    operating_point
+        .wheel_speed_difference_reference_absolute_limits_radians_per_second
+        .fill(
+            config
+                .wheel_speed_difference_reference_absolute_limit_radians_per_second);
+    operating_point.equilibrium_yaw_angles_radians =
+        config.equilibrium_yaw_angles_radians;
+    operating_point.equilibrium_lateral_displacements_meters =
+        config.equilibrium_lateral_displacements_meters;
+    return operating_point;
+}
+
+void RequireSameResult(
+    const orvd::control::IrwFullStateWheelSpeedGuidanceControllerResult& first,
+    const orvd::control::IrwFullStateWheelSpeedGuidanceControllerResult& second) {
+    const auto& first_observations = first.observations;
+    const auto& second_observations = second.observations;
+    const auto& first_state = first.next_state;
+    const auto& second_state = second.next_state;
+    Require(
+        first.requested_wheel_torques_newton_metres ==
+                second.requested_wheel_torques_newton_metres &&
+            first_observations
+                    .base_wheel_speed_references_meters_per_second ==
+                second_observations
+                    .base_wheel_speed_references_meters_per_second &&
+            first_observations.wheel_speed_references_meters_per_second ==
+                second_observations.wheel_speed_references_meters_per_second &&
+            first_observations
+                    .wheel_speed_difference_references_radians_per_second ==
+                second_observations
+                    .wheel_speed_difference_references_radians_per_second &&
+            first_observations
+                    .measured_wheel_speed_differences_radians_per_second ==
+                second_observations
+                    .measured_wheel_speed_differences_radians_per_second &&
+            first_observations
+                    .equilibrium_wheel_speed_differences_radians_per_second ==
+                second_observations
+                    .equilibrium_wheel_speed_differences_radians_per_second &&
+            first_observations
+                    .filtered_lateral_velocities_meters_per_second ==
+                second_observations
+                    .filtered_lateral_velocities_meters_per_second &&
+            first_observations.filtered_yaw_rates_radians_per_second ==
+                second_observations.filtered_yaw_rates_radians_per_second &&
+            first_observations.guidance_active ==
+                second_observations.guidance_active &&
+            first_state.initialized == second_state.initialized &&
+            first_state.previous_lateral_displacements_meters ==
+                second_state.previous_lateral_displacements_meters &&
+            first_state.previous_yaw_angles_radians ==
+                second_state.previous_yaw_angles_radians &&
+            first_state.filtered_lateral_velocities_meters_per_second ==
+                second_state
+                    .filtered_lateral_velocities_meters_per_second &&
+            first_state.filtered_yaw_rates_radians_per_second ==
+                second_state.filtered_yaw_rates_radians_per_second &&
+            first_state.lateral_error_integrals_meter_seconds ==
+                second_state.lateral_error_integrals_meter_seconds &&
+            first_state
+                    .filtered_wheel_speed_difference_commands_radians_per_second ==
+                second_state
+                    .filtered_wheel_speed_difference_commands_radians_per_second &&
+            first_state.wheel_speed_pi_integrals_meters ==
+                second_state.wheel_speed_pi_integrals_meters &&
+            first_state.wheel_speed_pi_filtered_torques_newton_metres ==
+                second_state.wheel_speed_pi_filtered_torques_newton_metres,
+        "the fixed controller and explicit operating-point recurrence differ");
+}
+
 void CheckGuidanceBoundariesFeedbackAndPiChannels() {
     const auto config = MakeAnalyticConfig();
     const IrwFullStateWheelSpeedGuidanceController controller(config);
@@ -179,6 +321,19 @@ void CheckGuidanceBoundariesFeedbackAndPiChannels() {
         .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second
         .fill(0.0);
     const auto result = controller.Step(input, previous);
+    const IrwFullStateWheelSpeedGuidanceRecurrence recurrence(
+        MakeRecurrenceConfig(config));
+    const auto recurrence_result = recurrence.Step(
+        IrwFullStateWheelSpeedGuidanceMechanicalInput{
+            .axle_lateral_displacements_meters =
+                input.axle_lateral_displacements_meters,
+            .axle_yaw_angles_radians = input.axle_yaw_angles_radians,
+            .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second =
+                input
+                    .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second,
+        },
+        MakeOperatingPoint(config, input), previous);
+    RequireSameResult(result, recurrence_result);
 
     Require(result.observations.guidance_active ==
                 std::array<bool, 4>{true, true, true, false},

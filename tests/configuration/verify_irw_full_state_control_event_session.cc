@@ -13,6 +13,7 @@
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/irw_full_state_control_event_session.h"
+#include "orvd/configuration/irw_full_state_control_observation_binding.h"
 #include "orvd/configuration/load_irw_full_state_wheel_speed_guidance_controller.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
@@ -27,6 +28,7 @@ namespace {
 
 using orvd::configuration::IrwFullStateControlEventKind;
 using orvd::configuration::IrwFullStateControlEventSession;
+using orvd::configuration::IrwFullStateControlObservationBinding;
 
 int failures = 0;
 
@@ -117,16 +119,8 @@ void Run(const std::filesystem::path& vehicle_path,
     yaw_state.segment<4>(front_positions.start()) << yawed_quaternion.w(),
         yawed_quaternion.x(), yawed_quaternion.y(), yawed_quaternion.z();
     assembled.system().SetContinuousState(accepted, yaw_state);
-    IrwFullStateControlEventSession yaw_binding_session(
-        assembled,
-        orvd::configuration::
-            LoadIrwFullStateWheelSpeedGuidanceControllerFromJsonFile(
-                controller_path),
-        orvd::configuration::
-            LoadWheelDriveTorqueCommandConditionerFromJsonFile(
-                conditioner_path));
-    const auto yaw_binding =
-        yaw_binding_session.ApplyInitializationUpdate(accepted);
+    const IrwFullStateControlObservationBinding yaw_binding(assembled);
+    const auto yaw_observation = yaw_binding.Observe(accepted);
     yaw_component = assembled.system().GetMultibodyComponentView(
         accepted, assembled.system().multibody_component());
     const Eigen::Matrix3d rotation_track_from_orvd_body =
@@ -141,7 +135,8 @@ void Run(const std::filesystem::path& vehicle_path,
             rotation_track_from_orvd_body * body_basis_half_turn)
             .yaw_radians;
     Require(std::abs(expected_source_yaw) > 0.002 &&
-                yaw_binding.mechanical_input.axle_yaw_angles_radians.front() ==
+                yaw_observation.mechanical_input.axle_yaw_angles_radians
+                        .front() ==
                     expected_source_yaw,
             "the nonzero axle-bridge yaw was not restored to the frozen "
             "source body basis");
@@ -155,6 +150,22 @@ void Run(const std::filesystem::path& vehicle_path,
         orvd::configuration::
             LoadWheelDriveTorqueCommandConditionerFromJsonFile(
                 conditioner_path));
+    const auto direct_observation = yaw_binding.Observe(accepted);
+    const auto adapted_observation = session.ObserveMechanicalInput(accepted);
+    Require(
+        direct_observation.axle_track_stations_meters ==
+                adapted_observation.axle_track_stations_meters &&
+            direct_observation.mechanical_input
+                    .axle_lateral_displacements_meters ==
+                adapted_observation.axle_lateral_displacements_meters &&
+            direct_observation.mechanical_input.axle_yaw_angles_radians ==
+                adapted_observation.axle_yaw_angles_radians &&
+            direct_observation.mechanical_input
+                    .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second ==
+                adapted_observation
+                    .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second,
+        "the frozen session did not delegate to the public mechanical "
+        "observation binding");
     Require(session.sample_period_seconds() == 0.01 &&
                 session.next_periodic_event_ordinal() == 0 &&
                 session.next_periodic_event_time_seconds() == 0.0,
