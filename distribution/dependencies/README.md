@@ -112,8 +112,8 @@ OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
 和 `clang-test-install` 目录；依赖超级构建使用 `clang` 与 `clang++`，ORVD
 产品与测试构建只需指定 `CMAKE_CXX_COMPILER=clang++`。ORVD 顶层项目只启用
 C++，不向其传入无效的 C 编译器选项。不在两套工具链之间复用 CMake 构建树或
-安装前缀。Windows 不构建 POSIX 专用的 Drake 差分测试，因此完整 Windows 集合
-为 `76/76`，不应再有平台性跳过。
+安装前缀。Windows 不注册两个只服务开发期 GNU 命令行的源码工具自检；其余当前测试全部进入
+Windows 集合，因此完整测试为 `79/79`，不应再有平台性跳过。
 
 每套工具链都要额外查看真实并行门：
 

@@ -31,7 +31,8 @@ Type-108 功率谱密度设置生成；AAR5 与 AAR6 使用当前公共谱、随
 必须确保 SIMPACK 型面搜索路径能提供这两个文件。不要把 ORVD 的 JSON 型面反向转换成 SIMPACK
 型面来替换它们。
 
-复现时仍须使用 `--continuation-run`，使求解器直接消费模型内已保存的状态。普通启动会重新执行
-初始化，可能覆盖这份冻结移动初态。
+当前 `vehicle.applystartvel=1` 启动态须使用普通的 `simpack-slv --integration` 求解，让求解器按
+`vehicle.startvel` 建立相容的车辆与轮系速度；不得使用 `--continuation-run` 绕过这一步。运行日志
+必须出现 `Set vehicle velocities.`，否则本次求解不能作为当前 60 km/h 启动合同的复现结果。
 
 本目录不保存 `.sbr`、`.sir`、后处理工程、日志或其他运行结果，也不随 ORVD 二进制安装包安装。
