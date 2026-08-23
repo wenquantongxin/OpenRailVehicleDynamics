@@ -3,13 +3,10 @@
 /// @file
 /// Strongly typed operating-point schedule for the IRW cross-line experiment.
 
-#include "orvd/control/irw_full_state_wheel_speed_guidance_controller.h"
+#include "irw_curvature_differential_wheel_speed_control.h"
 
 namespace orvd::experiments::irw_crossline_full_state_guidance {
 
-inline constexpr double kControlSamplePeriodSeconds = 0.01;
-inline constexpr double kRollingRadiusMeters = 0.43;
-inline constexpr double kControllerCalibrationLateralHalfSpanMeters = 0.75;
 inline constexpr double kGuidanceStartTrackStationMeters = 50.0;
 inline constexpr double kGuidanceEndTrackStationMeters = 2396.9;
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot the native response of the IRW cross-line guidance experiment."""
+"""Plot the native response of an IRW guidance experiment run."""
 
 from __future__ import annotations
 
@@ -148,6 +148,7 @@ def plot_axle_response(
     output_path: Path,
     observations: pd.DataFrame,
     wear: np.ndarray,
+    title: str,
 ) -> None:
     time = observations["time_seconds"].to_numpy(np.float64)
     figure, axes = plt.subplots(2, 2, figsize=(13.2, 7.4), sharex=True)
@@ -194,14 +195,14 @@ def plot_axle_response(
     style_axis(axes[1, 1], "Instantaneous wear number [N]")
     axes[1, 0].legend(loc="best", frameon=False)
     axes[1, 1].legend(loc="best", frameon=False)
-    figure.suptitle("IRW cross-line full-state guidance response")
+    figure.suptitle(f"{title}: axle response")
     figure.tight_layout()
     figure.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(figure)
 
 
 def plot_longitudinal_speed(
-    output_path: Path, observations: pd.DataFrame
+    output_path: Path, observations: pd.DataFrame, title: str
 ) -> None:
     time = observations["time_seconds"].to_numpy(np.float64)
     figure, axis = plt.subplots(figsize=(12.6, 4.4))
@@ -221,7 +222,7 @@ def plot_longitudinal_speed(
         )
     style_axis(axis, "Longitudinal speed [km/h]")
     axis.legend(loc="best", frameon=False)
-    axis.set_title("IRW cross-line longitudinal speed")
+    axis.set_title(f"{title}: longitudinal speed")
     figure.tight_layout()
     figure.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(figure)
@@ -231,6 +232,7 @@ def plot_whole_vehicle_wear(
     output_path: Path,
     observations: pd.DataFrame,
     wear: np.ndarray,
+    title: str,
 ) -> None:
     time = observations["time_seconds"].to_numpy(np.float64)
     total = np.sum(wear, axis=1)
@@ -262,7 +264,7 @@ def plot_whole_vehicle_wear(
         loc="best",
         frameon=False,
     )
-    left_axis.set_title("IRW cross-line whole-vehicle wear number")
+    left_axis.set_title(f"{title}: whole-vehicle wear number")
     figure.tight_layout()
     figure.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(figure)
@@ -272,6 +274,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_directory", type=Path)
     parser.add_argument("--output-directory", type=Path)
+    parser.add_argument(
+        "--title", default="IRW cross-line full-state guidance"
+    )
+    parser.add_argument("--file-prefix", default="irw_crossline")
     arguments = parser.parse_args()
 
     run_directory = arguments.run_directory.resolve()
@@ -289,12 +295,19 @@ def main() -> None:
 
     observations = read_observations(run_directory)
     wear = accumulate_wear_number(run_directory, observations.shape[0])
-    response_path = output_directory / "irw_crossline_axle_1_and_3_response.png"
-    speed_path = output_directory / "irw_crossline_longitudinal_speed.png"
-    wear_path = output_directory / "irw_crossline_whole_vehicle_wear.png"
-    plot_axle_response(response_path, observations, wear)
-    plot_longitudinal_speed(speed_path, observations)
-    plot_whole_vehicle_wear(wear_path, observations, wear)
+    response_path = (
+        output_directory
+        / f"{arguments.file_prefix}_axle_1_and_3_response.png"
+    )
+    speed_path = (
+        output_directory / f"{arguments.file_prefix}_longitudinal_speed.png"
+    )
+    wear_path = (
+        output_directory / f"{arguments.file_prefix}_whole_vehicle_wear.png"
+    )
+    plot_axle_response(response_path, observations, wear, arguments.title)
+    plot_longitudinal_speed(speed_path, observations, arguments.title)
+    plot_whole_vehicle_wear(wear_path, observations, wear, arguments.title)
     for path in (response_path, speed_path, wear_path):
         print(path)
 

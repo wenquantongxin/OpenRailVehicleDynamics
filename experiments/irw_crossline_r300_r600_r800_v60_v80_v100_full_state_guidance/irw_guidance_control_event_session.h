@@ -1,11 +1,12 @@
 #pragma once
 
 /// @file
-/// Atomic 100 Hz control transaction for the IRW cross-line experiment.
+/// Atomic 100 Hz control transaction shared by the IRW guidance experiments.
 
 #include <cstdint>
+#include <functional>
 
-#include "irw_crossline_operating_point_schedule.h"
+#include "irw_curvature_differential_wheel_speed_control.h"
 #include "orvd/actuation/wheel_drive_torque_command_conditioner.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/configuration/irw_full_state_control_observation_binding.h"
@@ -13,7 +14,11 @@
 
 namespace orvd::experiments::irw_crossline_full_state_guidance {
 
-enum class IrwCrosslineControlEventKind {
+using IrwOperatingPointEvaluator = std::function<
+    control::IrwFullStateWheelSpeedGuidanceOperatingPoint(
+        const control::IrwGuidanceAxleValues&)>;
+
+enum class IrwGuidanceControlEventKind {
     kInitialization,
     kPeriodic,
     kTerminal,
@@ -25,9 +30,9 @@ enum class IrwCrosslineControlEventKind {
 /// never committed.  `prioritized_wheel_torque_requests_newton_metres` is the
 /// sole request passed through the final conditioner step, whose output and
 /// memory are committed together with the controller recurrence.
-struct IrwCrosslineControlEventAudit final {
-    IrwCrosslineControlEventKind kind{
-        IrwCrosslineControlEventKind::kInitialization};
+struct IrwGuidanceControlEventAudit final {
+    IrwGuidanceControlEventKind kind{
+        IrwGuidanceControlEventKind::kInitialization};
     std::uint64_t periodic_event_ordinal{};
     double event_time_seconds{};
     configuration::IrwFullStateControlMechanicalObservation
@@ -47,7 +52,7 @@ struct IrwCrosslineControlEventAudit final {
     actuation::WheelDriveTorqueConditioningResult conditioning_result;
 };
 
-/// Owns the finite control memory of the cross-line experiment.
+/// Owns the finite control memory of one IRW guidance experiment.
 ///
 /// Route scheduling and longitudinal-common-mode allocation remain local to
 /// this experiment.  The public controller recurrence, mechanical binding and
@@ -57,21 +62,28 @@ struct IrwCrosslineControlEventAudit final {
 /// commits its audit, held torque and both memories but deliberately requires
 /// no subsequent numerical-backend synchronization because no further state
 /// advance is permitted.
-class IrwCrosslineControlEventSession final {
+class IrwGuidanceControlEventSession final {
    public:
-    IrwCrosslineControlEventSession(
+    /// Constructs a session from a line-independent recurrence and a
+    /// value-owned experiment-specific operating-point evaluator.
+    ///
+    /// The evaluator must be non-empty. It is called once per accepted control
+    /// event with the four axle projection stations observed at that event.
+    IrwGuidanceControlEventSession(
         const configuration::AssembledVehicleSystem& assembled,
-        IrwCrosslineOperatingPointSchedule schedule,
+        control::IrwFullStateWheelSpeedGuidanceRecurrenceConfig
+            recurrence_config,
+        IrwOperatingPointEvaluator operating_point_evaluator,
         actuation::WheelDriveTorqueCommandConditioner conditioner);
 
-    IrwCrosslineControlEventSession(
-        const IrwCrosslineControlEventSession&) = delete;
-    IrwCrosslineControlEventSession& operator=(
-        const IrwCrosslineControlEventSession&) = delete;
-    IrwCrosslineControlEventSession(IrwCrosslineControlEventSession&&) =
+    IrwGuidanceControlEventSession(
+        const IrwGuidanceControlEventSession&) = delete;
+    IrwGuidanceControlEventSession& operator=(
+        const IrwGuidanceControlEventSession&) = delete;
+    IrwGuidanceControlEventSession(IrwGuidanceControlEventSession&&) =
         delete;
-    IrwCrosslineControlEventSession& operator=(
-        IrwCrosslineControlEventSession&&) = delete;
+    IrwGuidanceControlEventSession& operator=(
+        IrwGuidanceControlEventSession&&) = delete;
 
     [[nodiscard]] double sample_period_seconds() const noexcept {
         return sample_period_seconds_;
@@ -98,16 +110,16 @@ class IrwCrosslineControlEventSession final {
         system_assembly::SystemRuntimeContext& context) const;
 
     /// Computes and publishes U0 at the accepted time-zero state.
-    [[nodiscard]] IrwCrosslineControlEventAudit ApplyInitializationUpdate(
+    [[nodiscard]] IrwGuidanceControlEventAudit ApplyInitializationUpdate(
         system_assembly::SystemRuntimeContext& accepted_context);
 
     /// Computes and commits the next positive-time integer-grid event.
-    [[nodiscard]] IrwCrosslineControlEventAudit ApplyPeriodicUpdate(
+    [[nodiscard]] IrwGuidanceControlEventAudit ApplyPeriodicUpdate(
         system_assembly::SystemRuntimeContext& accepted_context);
 
     /// Commits the final integer-grid event without requesting a backend
     /// restart.  No subsequent event or vehicle advance is valid.
-    [[nodiscard]] IrwCrosslineControlEventAudit ApplyTerminalUpdate(
+    [[nodiscard]] IrwGuidanceControlEventAudit ApplyTerminalUpdate(
         system_assembly::SystemRuntimeContext& accepted_context);
 
     [[nodiscard]] bool synchronization_required() const noexcept;
@@ -124,19 +136,19 @@ class IrwCrosslineControlEventSession final {
         kTerminalEventCommitted,
     };
 
-    [[nodiscard]] IrwCrosslineControlEventAudit ComputeCandidate(
-        IrwCrosslineControlEventKind kind, std::uint64_t ordinal,
+    [[nodiscard]] IrwGuidanceControlEventAudit ComputeCandidate(
+        IrwGuidanceControlEventKind kind, std::uint64_t ordinal,
         double event_time_seconds,
         system_assembly::SystemRuntimeContext& accepted_context) const;
 
-    [[nodiscard]] IrwCrosslineControlEventAudit ApplyScheduledUpdate(
-        IrwCrosslineControlEventKind kind,
+    [[nodiscard]] IrwGuidanceControlEventAudit ApplyScheduledUpdate(
+        IrwGuidanceControlEventKind kind,
         system_assembly::SystemRuntimeContext& accepted_context);
 
     const configuration::AssembledVehicleSystem* assembled_;
     configuration::IrwFullStateControlObservationBinding observation_binding_;
-    IrwCrosslineOperatingPointSchedule schedule_;
     control::IrwFullStateWheelSpeedGuidanceRecurrence recurrence_;
+    IrwOperatingPointEvaluator operating_point_evaluator_;
     actuation::WheelDriveTorqueCommandConditioner conditioner_;
     double sample_period_seconds_{};
     control::IrwFullStateWheelSpeedGuidanceControllerState controller_state_;

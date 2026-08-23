@@ -1,4 +1,4 @@
-#include "irw_crossline_full_state_guidance_run.h"
+#include "irw_guidance_experiment_run.h"
 
 #include <algorithm>
 #include <array>
@@ -8,8 +8,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <memory>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -17,12 +19,15 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Eigen/Core>
 
-#include "irw_crossline_control_event_session.h"
+#include "irw_guidance_control_event_session.h"
 #include "irw_crossline_operating_point_schedule.h"
+#include "irw_single_curve_full_state_guidance_schedule.h"
+#include "irw_single_curve_normal_differential_wheel_speed_schedule.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/irw_full_state_control_observation_binding.h"
@@ -44,14 +49,15 @@ using Clock = std::chrono::steady_clock;
 using forces::WheelRailContactInterfaceObservation;
 using multibody_model::AppliedBodyWrench;
 
-constexpr std::uint64_t kDurationNanoseconds = 100'000'000'000ULL;
+constexpr std::uint64_t kCrosslineDurationNanoseconds =
+    100'000'000'000ULL;
+constexpr std::uint64_t kSingleCurveSafetyDurationNanoseconds =
+    45'000'000'000ULL;
 constexpr std::uint64_t kControlPeriodNanoseconds = 10'000'000ULL;
 constexpr std::uint64_t kObservationPeriodNanoseconds = 500'000ULL;
 constexpr std::size_t kSamplesPerControlInterval =
     static_cast<std::size_t>(kControlPeriodNanoseconds /
                              kObservationPeriodNanoseconds);
-constexpr std::uint64_t kTerminalControlEventOrdinal =
-    kDurationNanoseconds / kControlPeriodNanoseconds;
 constexpr std::size_t kAxleCount = control::kIrwGuidanceAxleCount;
 constexpr std::size_t kWheelCount = control::kIrwGuidanceWheelCount;
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
@@ -72,7 +78,10 @@ constexpr std::array<std::string_view, kWheelCount> kWheelNames{
     "wheel_1", "wheel_2", "wheel_3", "wheel_4",
     "wheel_5", "wheel_6", "wheel_7", "wheel_8"};
 
-static_assert(kDurationNanoseconds % kControlPeriodNanoseconds == 0);
+static_assert(kCrosslineDurationNanoseconds % kControlPeriodNanoseconds == 0);
+static_assert(kSingleCurveSafetyDurationNanoseconds %
+                  kControlPeriodNanoseconds ==
+              0);
 static_assert(kControlPeriodNanoseconds % kObservationPeriodNanoseconds == 0);
 static_assert(kProjectionSearchHalfWidthMeters == 0.30);
 
@@ -83,6 +92,19 @@ struct ResolvedInputs final {
     std::filesystem::path track_geometry;
     std::filesystem::path torque_conditioner;
     std::filesystem::path output_directory;
+};
+
+struct IrwGuidanceExperimentDefinition final {
+    std::string_view experiment_name;
+    std::string_view control_profile_identity;
+    double initial_longitudinal_speed_meters_per_second{};
+    std::string_view track_geometry_relative_path;
+    std::string_view track_geometry_label;
+    std::string_view schedule_scope;
+    std::uint64_t maximum_duration_nanoseconds{};
+    std::optional<double> terminal_minimum_axle_station_meters;
+    control::IrwFullStateWheelSpeedGuidanceRecurrenceConfig recurrence_config;
+    IrwOperatingPointEvaluator operating_point_evaluator;
 };
 
 struct EndpointDiagnostics final {
@@ -102,32 +124,32 @@ class AtomicOutputDirectory final {
             final_path_.filename() == "." ||
             final_path_.filename() == "..") {
             throw std::invalid_argument(
-                "cross-line output directory must have a file name");
+                "IRW guidance output directory must have a file name");
         }
         std::error_code error;
         if (std::filesystem::exists(final_path_, error) || error) {
             throw std::invalid_argument(
-                "cross-line output directory already exists or cannot be "
+                "IRW guidance output directory already exists or cannot be "
                 "examined: " +
                 final_path_.string());
         }
         const auto parent = final_path_.parent_path();
         if (!std::filesystem::is_directory(parent, error) || error) {
             throw std::invalid_argument(
-                "cross-line output parent is not an existing directory: " +
+                "IRW guidance output parent is not an existing directory: " +
                 parent.string());
         }
         working_path_ =
             parent / (final_path_.filename().string() + ".partial");
         if (std::filesystem::exists(working_path_, error) || error) {
             throw std::invalid_argument(
-                "cross-line partial output already exists or cannot be "
+                "IRW guidance partial output already exists or cannot be "
                 "examined: " +
                 working_path_.string());
         }
         if (!std::filesystem::create_directory(working_path_, error) || error) {
             throw std::runtime_error(
-                "could not create cross-line partial output directory: " +
+                "could not create IRW guidance partial output directory: " +
                 error.message());
         }
         owns_working_path_ = true;
@@ -150,13 +172,13 @@ class AtomicOutputDirectory final {
     void Publish() {
         if (published_ || !owns_working_path_) {
             throw std::logic_error(
-                "cross-line output directory was already published");
+                "IRW guidance output directory was already published");
         }
         std::error_code error;
         std::filesystem::rename(working_path_, final_path_, error);
         if (error) {
             throw std::runtime_error(
-                "could not atomically publish cross-line output: " +
+                "could not atomically publish IRW guidance output: " +
                 error.message());
         }
         owns_working_path_ = false;
@@ -171,7 +193,7 @@ class AtomicOutputDirectory final {
 };
 
 [[noreturn]] void Reject(const std::string& detail) {
-    throw std::runtime_error("IRW cross-line experiment: " + detail);
+    throw std::runtime_error("IRW guidance experiment: " + detail);
 }
 
 [[nodiscard]] double ElapsedSeconds(Clock::time_point begin,
@@ -192,7 +214,8 @@ class AtomicOutputDirectory final {
 
 [[nodiscard]] ResolvedInputs ResolveInputs(
     const std::filesystem::path& data_root,
-    const std::filesystem::path& output_directory) {
+    const std::filesystem::path& output_directory,
+    const IrwGuidanceExperimentDefinition& definition) {
     const auto root = CanonicalExisting(data_root, "ORVD data root");
     if (!std::filesystem::is_directory(root)) {
         Reject("ORVD data root is not a directory");
@@ -207,10 +230,8 @@ class AtomicOutputDirectory final {
                 "vehicle_library/irw/startup_states/moving_startup_60kmh.json",
             "IRW 60 km/h startup state"),
         .track_geometry = CanonicalExisting(
-            root /
-                "track_library/geometries/"
-                "crossline_r300_r600_r800_superelevation_2396p9m.json",
-            "cross-line geometry"),
+            root / definition.track_geometry_relative_path,
+            definition.track_geometry_label),
         .torque_conditioner = CanonicalExisting(
             root /
                 "vehicle_library/irw/drive_torque_conditioners/"
@@ -252,6 +273,19 @@ void FlushAndClose(std::ofstream* stream,
     }
     output << '"';
     return output.str();
+}
+
+template <typename Value, std::size_t Size>
+void WriteJsonArray(std::ofstream* output,
+                    const std::array<Value, Size>& values) {
+    *output << '[';
+    for (std::size_t index = 0; index < Size; ++index) {
+        if (index != 0) {
+            *output << ", ";
+        }
+        *output << values[index];
+    }
+    *output << ']';
 }
 
 template <std::size_t Size>
@@ -432,16 +466,16 @@ void WriteControlEventHeader(std::ofstream* output) {
 }
 
 void WriteControlEvent(std::ofstream* output,
-                       const IrwCrosslineControlEventAudit& audit) {
+                       const IrwGuidanceControlEventAudit& audit) {
     std::string_view event_kind;
     switch (audit.kind) {
-        case IrwCrosslineControlEventKind::kInitialization:
+        case IrwGuidanceControlEventKind::kInitialization:
             event_kind = "initialization";
             break;
-        case IrwCrosslineControlEventKind::kPeriodic:
+        case IrwGuidanceControlEventKind::kPeriodic:
             event_kind = "periodic";
             break;
-        case IrwCrosslineControlEventKind::kTerminal:
+        case IrwGuidanceControlEventKind::kTerminal:
             event_kind = "terminal";
             break;
     }
@@ -840,14 +874,12 @@ void ObserveAndWrite(
 
 void WritePerformance(
     const std::filesystem::path& path,
-    const IrwCrosslineFullStateGuidanceRunSummary& summary,
+    const IrwGuidanceExperimentRunSummary& summary,
     const integrators::ContinuousStateIntegrationStatistics& statistics,
     std::size_t dense_state_peak_bytes,
     double maximum_generalized_force_residual_inf_norm,
     double maximum_absolute_virtual_power_residual_watts) {
     auto output = OpenOutput(path);
-    constexpr double kDurationSeconds =
-        static_cast<double>(kDurationNanoseconds) * 1.0e-9;
     const double integrated_wall_seconds =
         summary.advance_and_synchronization_wall_seconds +
         summary.control_wall_seconds;
@@ -855,7 +887,8 @@ void WritePerformance(
         integrated_wall_seconds +
         summary.observation_and_streaming_wall_seconds;
     output << "{\n"
-           << "  \"simulated_duration_seconds\": " << kDurationSeconds
+           << "  \"simulated_duration_seconds\": "
+           << summary.simulated_duration_seconds
            << ",\n"
            << "  \"advance_and_synchronization_wall_seconds\": "
            << summary.advance_and_synchronization_wall_seconds << ",\n"
@@ -866,9 +899,11 @@ void WritePerformance(
            << "  \"finalization_wall_seconds\": "
            << summary.finalization_wall_seconds << ",\n"
            << "  \"integrated_dynamics_realtime_factor\": "
-           << kDurationSeconds / integrated_wall_seconds << ",\n"
+           << summary.simulated_duration_seconds / integrated_wall_seconds
+           << ",\n"
            << "  \"complete_compute_realtime_factor\": "
-           << kDurationSeconds / total_compute_wall_seconds << ",\n"
+           << summary.simulated_duration_seconds / total_compute_wall_seconds
+           << ",\n"
            << "  \"dense_state_peak_bytes\": " << dense_state_peak_bytes
            << ",\n"
            << "  \"maximum_generalized_force_residual_inf_norm\": "
@@ -905,18 +940,28 @@ void WriteMetadata(
     const std::filesystem::path& path,
     const configuration::ResolvedStartupState& startup,
     const configuration::AssembledVehicleSystem& assembled,
-    const IrwCrosslineFullStateGuidanceRunSummary& summary) {
+    const IrwGuidanceExperimentDefinition& definition,
+    const IrwGuidanceExperimentRunSummary& summary) {
     auto output = OpenOutput(path);
     output
         << "{\n"
         << "  \"completed\": true,\n"
         << "  \"experiment\": "
-        << JsonString(
-               "IRW cross-line R300/R600/R800 V60/V80/V100 full-state guidance")
+        << JsonString(definition.experiment_name)
+        << ",\n"
+        << "  \"control_profile_identity\": "
+        << JsonString(definition.control_profile_identity)
         << ",\n"
         << "  \"vehicle_name\": "
         << JsonString(startup.vehicle_binding.vehicle_name) << ",\n"
-        << "  \"duration_seconds\": 100,\n"
+        << "  \"initial_longitudinal_speed_meters_per_second\": "
+        << startup.initial_longitudinal_speed_meters_per_second << ",\n"
+        << "  \"startup_derivation\": "
+        << JsonString(
+               "bundled resolved V60 state with only longitudinal speed and eight explicit independent-wheel rates scaled by their common speed ratio")
+        << ",\n"
+        << "  \"duration_seconds\": " << summary.simulated_duration_seconds
+        << ",\n"
         << "  \"control_period_nanoseconds\": "
         << kControlPeriodNanoseconds << ",\n"
         << "  \"mechanical_observation_period_nanoseconds\": "
@@ -932,9 +977,62 @@ void WriteMetadata(
                "current public ORVD AAR5 contract; not the historical random field of the source cross-line project")
         << ",\n"
         << "  \"schedule_scope\": "
-        << JsonString(
-               "track geometry and control schedule transcribed from the source cross-line project")
+        << JsonString(definition.schedule_scope)
         << ",\n"
+        << "  \"termination_contract\": {\n"
+        << "    \"maximum_duration_seconds\": "
+        << static_cast<double>(definition.maximum_duration_nanoseconds) *
+               1.0e-9
+        << ",\n"
+        << "    \"terminal_condition\": "
+        << JsonString(definition.terminal_minimum_axle_station_meters
+                          ? "first control boundary at which every axle has reached the minimum station"
+                          : "fixed maximum duration")
+        << ",\n"
+        << "    \"minimum_all_axle_station_meters\": ";
+    if (definition.terminal_minimum_axle_station_meters) {
+        output << *definition.terminal_minimum_axle_station_meters;
+    } else {
+        output << "null";
+    }
+    output
+        << "\n  },\n"
+        << "  \"wheel_speed_recurrence\": {\n"
+        << "    \"sample_period_seconds\": "
+        << definition.recurrence_config.sample_period_seconds << ",\n"
+        << "    \"rolling_radius_meters\": "
+        << definition.recurrence_config.rolling_radius_meters << ",\n"
+        << "    \"proportional_gain\": "
+        << definition.recurrence_config.wheel_speed_pi.proportional_gain
+        << ",\n"
+        << "    \"integral_time_seconds\": "
+        << definition.recurrence_config.wheel_speed_pi.integral_time_seconds
+        << ",\n"
+        << "    \"output_filter_time_constant_seconds\": "
+        << definition.recurrence_config.wheel_speed_pi
+               .output_filter_time_constant_seconds
+        << ",\n"
+        << "    \"integral_absolute_limit\": "
+        << definition.recurrence_config.wheel_speed_pi
+               .integral_absolute_limit
+        << ",\n"
+        << "    \"raw_output_absolute_limit\": "
+        << definition.recurrence_config.wheel_speed_pi
+               .raw_output_absolute_limit
+        << ",\n"
+        << "    \"lateral_integral_absolute_limit_meter_seconds\": "
+        << definition.recurrence_config
+               .lateral_integral_absolute_limit_meter_seconds
+        << ",\n"
+        << "    \"guidance_axle_signs\": ";
+    WriteJsonArray(&output, definition.recurrence_config.guidance_axle_signs);
+    output << ",\n    \"guidance_wheel_signs\": ";
+    WriteJsonArray(&output, definition.recurrence_config.guidance_wheel_signs);
+    output << ",\n    \"wheel_speed_pi_wheel_signs\": ";
+    WriteJsonArray(&output,
+                   definition.recurrence_config.wheel_speed_pi_wheel_signs);
+    output
+        << "\n  },\n"
         << "  \"contact_interface_ordinal_base\": 0,\n"
         << "  \"longitudinal_velocity_observation\": "
         << JsonString(
@@ -948,6 +1046,11 @@ void WriteMetadata(
         << ",\n"
         << "    \"backend_synchronizations\": "
         << summary.backend_synchronization_count << "\n  },\n"
+        << "  \"final_axle_track_stations_meters\": ["
+        << summary.final_axle_track_stations_meters[0] << ", "
+        << summary.final_axle_track_stations_meters[1] << ", "
+        << summary.final_axle_track_stations_meters[2] << ", "
+        << summary.final_axle_track_stations_meters[3] << "],\n"
         << "  \"assembled_topology\": {\n"
         << "    \"generalized_positions\": "
         << assembled.model().num_generalized_positions() << ",\n"
@@ -977,8 +1080,7 @@ void WriteMetadata(
                "vehicle_library/irw/startup_states/moving_startup_60kmh.json")
         << ",\n"
         << "    \"track_geometry\": "
-        << JsonString(
-               "track_library/geometries/crossline_r300_r600_r800_superelevation_2396p9m.json")
+        << JsonString(definition.track_geometry_relative_path)
         << ",\n"
         << "    \"torque_conditioner\": "
         << JsonString(
@@ -989,21 +1091,55 @@ void WriteMetadata(
 
 }  // namespace
 
-IrwCrosslineFullStateGuidanceRunSummary
-RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
+namespace {
+
+IrwGuidanceExperimentRunSummary RunIrwGuidanceExperiment(
     const std::filesystem::path& orvd_data_root,
-    const std::filesystem::path& output_directory) {
+    const std::filesystem::path& output_directory,
+    const IrwGuidanceExperimentDefinition& definition) {
+    if (definition.maximum_duration_nanoseconds == 0 ||
+        definition.maximum_duration_nanoseconds %
+                kControlPeriodNanoseconds !=
+            0 ||
+        !std::isfinite(
+            definition.initial_longitudinal_speed_meters_per_second) ||
+        !(definition.initial_longitudinal_speed_meters_per_second > 0.0) ||
+        definition.control_profile_identity.empty() ||
+        !definition.operating_point_evaluator) {
+        Reject("the run definition has an invalid duration or empty "
+               "operating-point evaluator");
+    }
     const ResolvedInputs inputs =
-        ResolveInputs(orvd_data_root, output_directory);
+        ResolveInputs(orvd_data_root, output_directory, definition);
     AtomicOutputDirectory output(inputs.output_directory);
 
     const auto vehicle = configuration::LoadVehicleDefinitionFromJsonFile(
         inputs.vehicle_definition);
-    const auto startup = configuration::LoadResolvedStartupStateFromJsonFile(
+    auto startup = configuration::LoadResolvedStartupStateFromJsonFile(
         inputs.startup_state);
-    if (startup.initial_longitudinal_speed_meters_per_second != 60.0 / 3.6) {
+    constexpr double kSourceSpeedMetersPerSecond = 60.0 / 3.6;
+    if (startup.initial_longitudinal_speed_meters_per_second !=
+            kSourceSpeedMetersPerSecond ||
+        startup.common_wheel_spin_generation.has_value() ||
+        startup.revolute_joint_startup_states.size() != kWheelCount) {
         Reject("resolved startup state is not the frozen 60 km/h identity");
     }
+    const double startup_speed_scale =
+        definition.initial_longitudinal_speed_meters_per_second /
+        kSourceSpeedMetersPerSecond;
+    for (auto& joint_state : startup.revolute_joint_startup_states) {
+        auto* explicit_rate =
+            std::get_if<configuration::ExplicitRevoluteJointRate>(
+                &joint_state.rate);
+        if (explicit_rate == nullptr ||
+            !std::isfinite(explicit_rate->angular_rate_radians_per_second)) {
+            Reject("resolved IRW startup does not contain eight finite "
+                   "explicit independent-wheel rates");
+        }
+        explicit_rate->angular_rate_radians_per_second *= startup_speed_scale;
+    }
+    startup.initial_longitudinal_speed_meters_per_second =
+        definition.initial_longitudinal_speed_meters_per_second;
     auto line = configuration::LoadTrackGeometryFromJsonFile(
         inputs.track_geometry);
     auto irregularity =
@@ -1037,8 +1173,9 @@ RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
     if (conditioner.config().identifier != kConditionerIdentifier) {
         Reject("loaded torque conditioner has the wrong identity");
     }
-    IrwCrosslineControlEventSession event_session(
-        assembled, IrwCrosslineOperatingPointSchedule{},
+    IrwGuidanceControlEventSession event_session(
+        assembled, definition.recurrence_config,
+        definition.operating_point_evaluator,
         std::move(conditioner));
     configuration::IrwFullStateControlObservationBinding observation_binding(
         assembled);
@@ -1057,7 +1194,7 @@ RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
     WriteControlEventHeader(&event_stream);
     WriteEndpointHeader(&diagnostics_stream);
 
-    IrwCrosslineFullStateGuidanceRunSummary summary;
+    IrwGuidanceExperimentRunSummary summary;
     const Clock::time_point initialization_begin = Clock::now();
     const auto initialization_audit =
         event_session.ApplyInitializationUpdate(accepted);
@@ -1118,8 +1255,10 @@ RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
     integrators::ContinuousStateIntegrationStatistics integration_statistics;
     std::size_t dense_state_peak_bytes = 0;
     std::array<double, kSamplesPerControlInterval + 1U> sample_times{};
+    const std::uint64_t maximum_control_event_ordinal =
+        definition.maximum_duration_nanoseconds / kControlPeriodNanoseconds;
     for (std::uint64_t ordinal = 1;
-         ordinal <= kTerminalControlEventOrdinal; ++ordinal) {
+         ordinal <= maximum_control_event_ordinal; ++ordinal) {
         event_session.RequireReadyToAdvance();
         sample_times.front() = accepted.time_seconds();
         for (std::size_t local_sample = 1;
@@ -1180,24 +1319,49 @@ RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
         summary.observation_and_streaming_wall_seconds +=
             ElapsedSeconds(observation_begin, Clock::now());
 
+        const auto terminal_observation =
+            event_session.ObserveMechanicalInput(accepted);
+        const bool terminal_station_reached =
+            definition.terminal_minimum_axle_station_meters.has_value() &&
+            std::all_of(
+                terminal_observation.axle_track_stations_meters.begin(),
+                terminal_observation.axle_track_stations_meters.end(),
+                [&](double station) {
+                    return station >=
+                           *definition.terminal_minimum_axle_station_meters;
+                });
+        const bool maximum_duration_reached =
+            ordinal == maximum_control_event_ordinal;
+        if (maximum_duration_reached &&
+            definition.terminal_minimum_axle_station_meters.has_value() &&
+            !terminal_station_reached) {
+            Reject("the safety duration elapsed before every axle reached "
+                   "the terminal station");
+        }
+        const bool terminal_event = terminal_station_reached ||
+                                    maximum_duration_reached;
         const Clock::time_point control_begin = Clock::now();
-        const auto audit =
-            ordinal < kTerminalControlEventOrdinal
-                ? event_session.ApplyPeriodicUpdate(accepted)
-                : event_session.ApplyTerminalUpdate(accepted);
+        const auto audit = terminal_event
+                               ? event_session.ApplyTerminalUpdate(accepted)
+                               : event_session.ApplyPeriodicUpdate(accepted);
         WriteControlEvent(&event_stream, audit);
         ++summary.control_event_count;
         assembled.system().CopyContextLocalData(accepted,
                                                 *observation_context);
         summary.control_wall_seconds +=
             ElapsedSeconds(control_begin, Clock::now());
-        if (ordinal < kTerminalControlEventOrdinal) {
+        if (!terminal_event) {
             const Clock::time_point synchronization_begin = Clock::now();
             advancer.SynchronizeAfterAcceptedContextChange();
             summary.advance_and_synchronization_wall_seconds +=
                 ElapsedSeconds(synchronization_begin, Clock::now());
             event_session.ConfirmBackendSynchronized();
             ++summary.backend_synchronization_count;
+        } else {
+            summary.simulated_duration_seconds = audit.event_time_seconds;
+            summary.final_axle_track_stations_meters =
+                audit.mechanical_observation.axle_track_stations_meters;
+            break;
         }
     }
     if (!event_session.terminal_event_committed()) {
@@ -1212,7 +1376,7 @@ RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
     FlushAndClose(&event_stream, events_path);
     FlushAndClose(&diagnostics_stream, diagnostics_path);
     WriteMetadata(output.working_path() / "metadata.json", startup, assembled,
-                  summary);
+                  definition, summary);
     summary.finalization_wall_seconds =
         ElapsedSeconds(finalization_begin, Clock::now());
     WritePerformance(output.working_path() / "performance.json", summary,
@@ -1228,6 +1392,251 @@ RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
     FlushAndClose(&complete, complete_path);
     output.Publish();
     return summary;
+}
+
+IrwGuidanceExperimentDefinition MakeCrosslineDefinition() {
+    const IrwCrosslineOperatingPointSchedule schedule;
+    return IrwGuidanceExperimentDefinition{
+        .experiment_name =
+            "IRW cross-line R300/R600/R800 V60/V80/V100 full-state guidance",
+        .control_profile_identity = "better2_crossline_schedule",
+        .initial_longitudinal_speed_meters_per_second = 60.0 / 3.6,
+        .track_geometry_relative_path =
+            "track_library/geometries/"
+            "crossline_r300_r600_r800_superelevation_2396p9m.json",
+        .track_geometry_label = "cross-line geometry",
+        .schedule_scope =
+            "track geometry and control schedule transcribed from the source cross-line project",
+        .maximum_duration_nanoseconds = kCrosslineDurationNanoseconds,
+        .terminal_minimum_axle_station_meters = std::nullopt,
+        .recurrence_config = schedule.MakeRecurrenceConfig(),
+        .operating_point_evaluator =
+            [schedule](const control::IrwGuidanceAxleValues& stations) {
+                return schedule.EvaluateOperatingPoint(stations);
+            },
+    };
+}
+
+IrwGuidanceExperimentDefinition MakeSingleCurveNormalDefinition(
+    std::string_view experiment_name,
+    std::string_view track_geometry_relative_path,
+    std::string_view track_geometry_label,
+    double initial_speed_meters_per_second,
+    double curve_radius_meters) {
+    const IrwSingleCurveNormalDifferentialWheelSpeedSchedule schedule({
+        .base_speed_meters_per_second = initial_speed_meters_per_second,
+        .curve_radius_meters = curve_radius_meters,
+    });
+    return IrwGuidanceExperimentDefinition{
+        .experiment_name = experiment_name,
+        .control_profile_identity =
+            "normal_curvature_differential_wheel_speed",
+        .initial_longitudinal_speed_meters_per_second =
+            initial_speed_meters_per_second,
+        .track_geometry_relative_path = track_geometry_relative_path,
+        .track_geometry_label = track_geometry_label,
+        .schedule_scope =
+            "historical normal baseline: per-axle planned-curvature wheel-speed references and eight wheel-speed PI recurrences; all outer guidance gains are zero",
+        .maximum_duration_nanoseconds =
+            kSingleCurveSafetyDurationNanoseconds,
+        .terminal_minimum_axle_station_meters = 600.0,
+        .recurrence_config = schedule.MakeRecurrenceConfig(),
+        .operating_point_evaluator =
+            [schedule](const control::IrwGuidanceAxleValues& stations) {
+                return schedule.EvaluateOperatingPoint(stations);
+            },
+    };
+}
+
+IrwGuidanceExperimentDefinition MakeR300NormalDefinition() {
+    return MakeSingleCurveNormalDefinition(
+        "IRW R300 V60 normal curvature-differential wheel-speed baseline",
+        "track_library/geometries/"
+        "r300_centerline_superelevation_1100m.json",
+        "R300 centerline-superelevation geometry", 60.0 / 3.6, 300.0);
+}
+
+IrwGuidanceExperimentDefinition MakeR600NormalDefinition() {
+    return MakeSingleCurveNormalDefinition(
+        "IRW R600 V80 normal curvature-differential wheel-speed baseline",
+        "track_library/geometries/"
+        "r600_centerline_superelevation_1100m.json",
+        "R600 centerline-superelevation geometry", 80.0 / 3.6, 600.0);
+}
+
+IrwGuidanceExperimentDefinition MakeR800NormalDefinition() {
+    return MakeSingleCurveNormalDefinition(
+        "IRW R800 V100 normal curvature-differential wheel-speed baseline",
+        "track_library/geometries/"
+        "r800_centerline_superelevation_1100m.json",
+        "R800 centerline-superelevation geometry", 100.0 / 3.6, 800.0);
+}
+
+IrwGuidanceExperimentDefinition MakeSingleCurveFullStateGuidanceDefinition(
+    std::string_view experiment_name,
+    std::string_view track_geometry_relative_path,
+    std::string_view track_geometry_label,
+    double initial_speed_meters_per_second,
+    double curve_radius_meters,
+    IrwCurveFullStateGuidanceProfile profile) {
+    const IrwSingleCurveFullStateGuidanceSchedule schedule({
+        .base_speed_meters_per_second = initial_speed_meters_per_second,
+        .curve_radius_meters = curve_radius_meters,
+        .profile = profile,
+    });
+    return IrwGuidanceExperimentDefinition{
+        .experiment_name = experiment_name,
+        .control_profile_identity = profile.identity,
+        .initial_longitudinal_speed_meters_per_second =
+            initial_speed_meters_per_second,
+        .track_geometry_relative_path = track_geometry_relative_path,
+        .track_geometry_label = track_geometry_label,
+        .schedule_scope =
+            "isolated-curve full-state guidance profile: per-axle planned-curvature reference and gains ramp from zero over 50--100 m, then remain at the selected curve operating point",
+        .maximum_duration_nanoseconds = kSingleCurveSafetyDurationNanoseconds,
+        .terminal_minimum_axle_station_meters = 600.0,
+        .recurrence_config = schedule.MakeRecurrenceConfig(),
+        .operating_point_evaluator =
+            [schedule](const control::IrwGuidanceAxleValues& stations) {
+                return schedule.EvaluateOperatingPoint(stations);
+            },
+    };
+}
+
+IrwGuidanceExperimentDefinition MakeR300Better2Definition() {
+    return MakeSingleCurveFullStateGuidanceDefinition(
+        "IRW R300 V60 better2 full-state guidance",
+        "track_library/geometries/"
+        "r300_centerline_superelevation_1100m.json",
+        "R300 centerline-superelevation geometry", 60.0 / 3.6, 300.0,
+        kBetter2R300Profile);
+}
+
+IrwGuidanceExperimentDefinition MakeR600Better2Definition() {
+    return MakeSingleCurveFullStateGuidanceDefinition(
+        "IRW R600 V80 better2 full-state guidance",
+        "track_library/geometries/"
+        "r600_centerline_superelevation_1100m.json",
+        "R600 centerline-superelevation geometry", 80.0 / 3.6, 600.0,
+        kBetter2R600Profile);
+}
+
+IrwGuidanceExperimentDefinition MakeR800Better2Definition() {
+    return MakeSingleCurveFullStateGuidanceDefinition(
+        "IRW R800 V100 better2 full-state guidance",
+        "track_library/geometries/"
+        "r800_centerline_superelevation_1100m.json",
+        "R800 centerline-superelevation geometry", 100.0 / 3.6, 800.0,
+        kBetter2R800Profile);
+}
+
+IrwGuidanceExperimentDefinition MakeR300ScbpDefinition() {
+    return MakeSingleCurveFullStateGuidanceDefinition(
+        "IRW R300 V60 SCBP recorded wear champion full-state guidance",
+        "track_library/geometries/"
+        "r300_centerline_superelevation_1100m.json",
+        "R300 centerline-superelevation geometry", 60.0 / 3.6, 300.0,
+        kScbpR300Profile);
+}
+
+IrwGuidanceExperimentDefinition MakeR600ScbpDefinition() {
+    return MakeSingleCurveFullStateGuidanceDefinition(
+        "IRW R600 V80 SCBP recorded wear champion full-state guidance",
+        "track_library/geometries/"
+        "r600_centerline_superelevation_1100m.json",
+        "R600 centerline-superelevation geometry", 80.0 / 3.6, 600.0,
+        kScbpR600Profile);
+}
+
+IrwGuidanceExperimentDefinition MakeR800ScbpDefinition() {
+    return MakeSingleCurveFullStateGuidanceDefinition(
+        "IRW R800 V100 SCBP recorded wear champion full-state guidance",
+        "track_library/geometries/"
+        "r800_centerline_superelevation_1100m.json",
+        "R800 centerline-superelevation geometry", 100.0 / 3.6, 800.0,
+        kScbpR800Profile);
+}
+
+}  // namespace
+
+IrwGuidanceExperimentRunSummary
+RunIrwCrosslineR300R600R800V60V80V100FullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeCrosslineDefinition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR300Aar5V60NormalDifferentialWheelSpeed(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR300NormalDefinition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR600Aar5V80NormalDifferentialWheelSpeed(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR600NormalDefinition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR800Aar5V100NormalDifferentialWheelSpeed(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR800NormalDefinition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR300Aar5V60Better2FullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR300Better2Definition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR600Aar5V80Better2FullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR600Better2Definition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR800Aar5V100Better2FullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR800Better2Definition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR300Aar5V60ScbpRecordedWearChampionFullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR300ScbpDefinition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR600Aar5V80ScbpRecordedWearChampionFullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR600ScbpDefinition());
+}
+
+IrwGuidanceExperimentRunSummary
+RunIrwR800Aar5V100ScbpRecordedWearChampionFullStateGuidance(
+    const std::filesystem::path& orvd_data_root,
+    const std::filesystem::path& output_directory) {
+    return RunIrwGuidanceExperiment(orvd_data_root, output_directory,
+                                    MakeR800ScbpDefinition());
 }
 
 }  // namespace orvd::experiments::irw_crossline_full_state_guidance

@@ -1,5 +1,7 @@
 #include "irw_crossline_operating_point_schedule.h"
 
+#include "irw_curve_full_state_guidance_profiles.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -40,183 +42,188 @@ constexpr std::array<double, kGuidanceScheduleNodeCount>
         1208.0, 1346.9, 1546.9, 1596.9, 2396.9};
 
 constexpr GuidanceAxleTable kFeedforwardGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {2.2, 0.1, -1.45, 1.6},
-    {2.2, 0.1, -1.45, 1.6},
-    {2.2, 0.1, -1.45, 1.6},
-    {3.85, 0.0, -1.0, 1.5},
-    {3.85, 0.0, -1.0, 1.5},
-    {3.4, 0.1, -1.05, 1.5},
-    {3.4, 0.1, -1.05, 1.5},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.feedforward_gains,
+    kBetter2R300Profile.feedforward_gains,
+    kBetter2R300Profile.feedforward_gains,
+    kBetter2R600Profile.feedforward_gains,
+    kBetter2R600Profile.feedforward_gains,
+    kBetter2R800Profile.feedforward_gains,
+    kBetter2R800Profile.feedforward_gains,
+    {}, {},
 }};
 
 constexpr GuidanceAxleTable kYawRateFeedbackGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {-6.0, 0.0, 0.0, 0.0},
-    {-6.0, 0.0, 0.0, 0.0},
-    {-6.0, 0.0, 0.0, 0.0},
-    {0.02, 0.0, -0.04, 0.0},
-    {0.02, 0.0, -0.04, 0.0},
-    {0.05, 0.0, 0.0, -0.1},
-    {0.05, 0.0, 0.0, -0.1},
+    {}, {},
+    kBetter2R300Profile.yaw_rate_feedback_gains,
+    kBetter2R300Profile.yaw_rate_feedback_gains,
+    kBetter2R300Profile.yaw_rate_feedback_gains,
+    kBetter2R600Profile.yaw_rate_feedback_gains,
+    kBetter2R600Profile.yaw_rate_feedback_gains,
+    kBetter2R800Profile.yaw_rate_feedback_gains,
+    kBetter2R800Profile.yaw_rate_feedback_gains,
     {-0.5, -0.5, -0.5, -0.5},
     {-0.5, -0.5, -0.5, -0.5},
 }};
 
 constexpr GuidanceAxleTable kYawFeedbackGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {-30.0, 0.0, 0.0, 1.3},
-    {-30.0, 0.0, 0.0, 1.3},
-    {-30.0, 0.0, 0.0, 1.3},
-    {0.0, 0.0, 0.0, 0.9},
-    {0.0, 0.0, 0.0, 0.9},
-    {0.1, 0.0, 0.0, 0.7},
-    {0.1, 0.0, 0.0, 0.7},
+    {}, {},
+    kBetter2R300Profile.yaw_feedback_gains,
+    kBetter2R300Profile.yaw_feedback_gains,
+    kBetter2R300Profile.yaw_feedback_gains,
+    kBetter2R600Profile.yaw_feedback_gains,
+    kBetter2R600Profile.yaw_feedback_gains,
+    kBetter2R800Profile.yaw_feedback_gains,
+    kBetter2R800Profile.yaw_feedback_gains,
     {-700.0, -300.0, -600.0, -500.0},
     {-700.0, -300.0, -600.0, -500.0},
 }};
 
 constexpr GuidanceAxleTable kLateralVelocityFeedbackGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.lateral_velocity_feedback_gains,
+    kBetter2R300Profile.lateral_velocity_feedback_gains,
+    kBetter2R300Profile.lateral_velocity_feedback_gains,
+    kBetter2R600Profile.lateral_velocity_feedback_gains,
+    kBetter2R600Profile.lateral_velocity_feedback_gains,
+    kBetter2R800Profile.lateral_velocity_feedback_gains,
+    kBetter2R800Profile.lateral_velocity_feedback_gains,
     {-1.0, -1.0, -1.0, -1.0},
     {-1.0, -1.0, -1.0, -1.0},
 }};
 
 constexpr GuidanceAxleTable kLateralDisplacementFeedbackGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.lateral_displacement_feedback_gains,
+    kBetter2R300Profile.lateral_displacement_feedback_gains,
+    kBetter2R300Profile.lateral_displacement_feedback_gains,
+    kBetter2R600Profile.lateral_displacement_feedback_gains,
+    kBetter2R600Profile.lateral_displacement_feedback_gains,
+    kBetter2R800Profile.lateral_displacement_feedback_gains,
+    kBetter2R800Profile.lateral_displacement_feedback_gains,
     {-200.0, -200.0, -200.0, -200.0},
     {-200.0, -200.0, -200.0, -200.0},
 }};
 
 constexpr GuidanceAxleTable kLateralIntegralFeedbackGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.15, 0.15, 0.15, 0.15},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.lateral_integral_feedback_gains,
+    kBetter2R300Profile.lateral_integral_feedback_gains,
+    kBetter2R300Profile.lateral_integral_feedback_gains,
+    kBetter2R600Profile.lateral_integral_feedback_gains,
+    kBetter2R600Profile.lateral_integral_feedback_gains,
+    kBetter2R800Profile.lateral_integral_feedback_gains,
+    kBetter2R800Profile.lateral_integral_feedback_gains,
+    {}, {},
 }};
 
 constexpr GuidanceAxleTable kWheelSpeedDifferenceFeedbackGains{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.3, 0.3, 0.3, 0.81},
-    {0.3, 0.3, 0.3, 0.81},
-    {0.3, 0.3, 0.3, 0.81},
-    {0.3, 0.3, 0.3, 0.45},
-    {0.3, 0.3, 0.3, 0.45},
-    {0.45, 0.15, 0.21, 0.18},
-    {0.45, 0.15, 0.21, 0.18},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.wheel_speed_difference_feedback_gains,
+    kBetter2R300Profile.wheel_speed_difference_feedback_gains,
+    kBetter2R300Profile.wheel_speed_difference_feedback_gains,
+    kBetter2R600Profile.wheel_speed_difference_feedback_gains,
+    kBetter2R600Profile.wheel_speed_difference_feedback_gains,
+    kBetter2R800Profile.wheel_speed_difference_feedback_gains,
+    kBetter2R800Profile.wheel_speed_difference_feedback_gains,
+    {}, {},
 }};
 
 constexpr GuidanceAxleTable kYawRateFilterTimeConstantsSeconds{{
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
+    kBetter2R300Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R300Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R300Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R300Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R300Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R600Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R600Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R800Profile.yaw_rate_filter_time_constants_seconds,
+    kBetter2R800Profile.yaw_rate_filter_time_constants_seconds,
     {0.01, 0.01, 0.01, 0.01},
     {0.01, 0.01, 0.01, 0.01},
 }};
 
 constexpr GuidanceAxleTable kLateralVelocityFilterTimeConstantsSeconds{{
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
-    {0.002, 0.002, 0.002, 0.002},
+    kBetter2R300Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R300Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R300Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R300Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R300Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R600Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R600Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R800Profile.lateral_velocity_filter_time_constants_seconds,
+    kBetter2R800Profile.lateral_velocity_filter_time_constants_seconds,
     {0.01, 0.01, 0.01, 0.01},
     {0.01, 0.01, 0.01, 0.01},
 }};
 
 constexpr GuidanceAxleTable kEquilibriumYawAnglesRadians{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.00284688},
-    {0.0, 0.0, 0.0, 0.00284688},
-    {0.0, 0.0, 0.0, 0.00284688},
-    {0.0, 0.0, 0.0, 0.004},
-    {0.0, 0.0, 0.0, 0.004},
-    {0.0, 0.0, 0.0, 0.004},
-    {0.0, 0.0, 0.0, 0.004},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.equilibrium_yaw_angles_radians,
+    kBetter2R300Profile.equilibrium_yaw_angles_radians,
+    kBetter2R300Profile.equilibrium_yaw_angles_radians,
+    kBetter2R600Profile.equilibrium_yaw_angles_radians,
+    kBetter2R600Profile.equilibrium_yaw_angles_radians,
+    kBetter2R800Profile.equilibrium_yaw_angles_radians,
+    kBetter2R800Profile.equilibrium_yaw_angles_radians,
+    {}, {},
 }};
 
 constexpr GuidanceAxleTable kEquilibriumLateralDisplacementsMeters{{
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.01337, -0.01175, 0.00854, 0.01316},
-    {0.0, 0.0, 0.0, 0.0},
-    {0.0, 0.0, 0.0, 0.0},
+    {}, {},
+    kBetter2R300Profile.equilibrium_lateral_displacements_meters,
+    kBetter2R300Profile.equilibrium_lateral_displacements_meters,
+    kBetter2R300Profile.equilibrium_lateral_displacements_meters,
+    kBetter2R600Profile.equilibrium_lateral_displacements_meters,
+    kBetter2R600Profile.equilibrium_lateral_displacements_meters,
+    kBetter2R800Profile.equilibrium_lateral_displacements_meters,
+    kBetter2R800Profile.equilibrium_lateral_displacements_meters,
+    {}, {},
 }};
 
 constexpr std::array<double, kGuidanceScheduleNodeCount>
     kWheelSpeedDifferenceReferenceAbsoluteLimitsRadiansPerSecond{
-        1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5};
+        kBetter2R300Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R300Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R300Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R300Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R300Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R600Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R600Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R800Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        kBetter2R800Profile
+            .wheel_speed_difference_reference_absolute_limit_radians_per_second,
+        0.5, 0.5};
 
 constexpr std::array<double, kGuidanceScheduleNodeCount>
     kWheelSpeedDifferenceOuterFilterTimeConstantsSeconds{
-        0.02, 0.02, 0.026, 0.026, 0.026, 0.03,
-        0.03, 0.03, 0.03, 0.03, 0.03};
+        0.02, 0.02,
+        kBetter2R300Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        kBetter2R300Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        kBetter2R300Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        kBetter2R600Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        kBetter2R600Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        kBetter2R800Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        kBetter2R800Profile
+            .wheel_speed_difference_outer_filter_time_constant_seconds,
+        0.03, 0.03};
 
 constexpr IrwGuidanceWheelValues kSpeedReferenceWheelSideSigns{
     1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0};
-constexpr IrwGuidanceAxleValues kGuidanceAxleSigns{1.0, 1.0, 1.0, 1.0};
-constexpr IrwGuidanceWheelValues kGuidanceWheelSigns{
-    -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
-constexpr IrwGuidanceWheelValues kWheelSpeedPiWheelSigns{
-    -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
-
-constexpr double kLateralIntegralAbsoluteLimitMeterSeconds = 0.5;
-constexpr double kWheelSpeedPiProportionalGain = 20000.0;
-constexpr double kWheelSpeedPiIntegralTimeSeconds = 5000.0;
-constexpr double kWheelSpeedPiOutputFilterTimeConstantSeconds = 0.0001;
-constexpr double kWheelSpeedPiIntegralAbsoluteLimitMeters = 1000000.0;
-constexpr double kWheelSpeedPiRawOutputAbsoluteLimitNewtonMetres = 1000000.0;
-
 constexpr bool IsFinite(double value) {
     return value >= -std::numeric_limits<double>::max() &&
            value <= std::numeric_limits<double>::max();
@@ -398,26 +405,7 @@ IrwCrosslineOperatingPointSchedule::EvaluateSpeedAndCurvature(
 
 control::IrwFullStateWheelSpeedGuidanceRecurrenceConfig
 IrwCrosslineOperatingPointSchedule::MakeRecurrenceConfig() const {
-    return control::IrwFullStateWheelSpeedGuidanceRecurrenceConfig{
-        .sample_period_seconds = kControlSamplePeriodSeconds,
-        .rolling_radius_meters = kRollingRadiusMeters,
-        .guidance_axle_signs = kGuidanceAxleSigns,
-        .guidance_wheel_signs = kGuidanceWheelSigns,
-        .lateral_integral_absolute_limit_meter_seconds =
-            kLateralIntegralAbsoluteLimitMeterSeconds,
-        .wheel_speed_pi =
-            control::SampledFilteredPiConfig{
-                .proportional_gain = kWheelSpeedPiProportionalGain,
-                .integral_time_seconds = kWheelSpeedPiIntegralTimeSeconds,
-                .output_filter_time_constant_seconds =
-                    kWheelSpeedPiOutputFilterTimeConstantSeconds,
-                .integral_absolute_limit =
-                    kWheelSpeedPiIntegralAbsoluteLimitMeters,
-                .raw_output_absolute_limit =
-                    kWheelSpeedPiRawOutputAbsoluteLimitNewtonMetres,
-            },
-        .wheel_speed_pi_wheel_signs = kWheelSpeedPiWheelSigns,
-    };
+    return MakeCurvatureDifferentialWheelSpeedRecurrenceConfig();
 }
 
 control::IrwFullStateWheelSpeedGuidanceOperatingPoint
