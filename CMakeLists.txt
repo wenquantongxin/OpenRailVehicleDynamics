@@ -58,6 +58,9 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(OrvdFirstPartyTargetPolicy)
 include(OrvdProductBoundaryGate)
+include(OrvdStrictFloatingPointQualification)
+orvd_require_strict_floating_point_qualification()
+orvd_enable_strict_floating_point_compile_launcher()
 
 # --- External dependencies ---
 # Eigen is required outright: every multibody pass is Eigen arithmetic, so a

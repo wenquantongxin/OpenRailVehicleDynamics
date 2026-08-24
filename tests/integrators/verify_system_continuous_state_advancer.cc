@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -16,17 +17,94 @@
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 
+#include "system_continuous_state_backend.h"
+#include "system_continuous_state_integration_access.h"
+
 namespace {
 
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
+using orvd::integrators::internal::SystemContinuousStateBackend;
+using orvd::integrators::internal::SystemContinuousStateIntegrationAccess;
+using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
 using orvd::multibody_model::JointHandle;
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
 using orvd::system_assembly::CompiledSystemPlan;
 using orvd::system_assembly::SystemAssemblyDescription;
 using orvd::system_assembly::SystemInstance;
+using orvd::system_assembly::SystemRuntimeContext;
+
+template <typename SystemArgument, typename PlanArgument>
+concept CanMakeSystemContinuousStateAdvancer = requires(
+    SystemRuntimeContext& accepted_context,
+    ContinuousStateErrorTolerances tolerances) {
+    SystemContinuousStateIntegrationAccess::Make(
+        SystemContinuousStateIntegrationRecipe::kRadau5,
+        std::declval<SystemArgument>(), std::declval<PlanArgument>(),
+        accepted_context, std::move(tolerances),
+        NoCallTimeAppliedForces{});
+};
+
+static_assert(CanMakeSystemContinuousStateAdvancer<
+              const SystemInstance&, const CompiledSystemPlan&>);
+static_assert(CanMakeSystemContinuousStateAdvancer<
+              SystemInstance&, CompiledSystemPlan&>);
+static_assert(!CanMakeSystemContinuousStateAdvancer<
+              SystemInstance&&, const CompiledSystemPlan&>);
+static_assert(!CanMakeSystemContinuousStateAdvancer<
+              const SystemInstance&&, const CompiledSystemPlan&>);
+static_assert(!CanMakeSystemContinuousStateAdvancer<
+              const SystemInstance&, CompiledSystemPlan&&>);
+static_assert(!CanMakeSystemContinuousStateAdvancer<
+              const SystemInstance&, const CompiledSystemPlan&&>);
+
+template <typename SystemArgument, typename PlanArgument>
+concept CanConstructSystemContinuousStateBackend = requires(
+    SystemRuntimeContext& candidate_context,
+    const SystemRuntimeContext& accepted_context,
+    const Eigen::VectorXd& initial_continuous_state,
+    ContinuousStateErrorTolerances tolerances) {
+    SystemContinuousStateBackend(
+        SystemContinuousStateIntegrationRecipe::kRadau5,
+        std::declval<SystemArgument>(), std::declval<PlanArgument>(),
+        candidate_context, accepted_context, initial_continuous_state,
+        std::move(tolerances), NoCallTimeAppliedForces{});
+};
+
+static_assert(CanConstructSystemContinuousStateBackend<
+              SystemInstance&, CompiledSystemPlan&>);
+static_assert(CanConstructSystemContinuousStateBackend<
+              SystemInstance&, const CompiledSystemPlan&>);
+static_assert(CanConstructSystemContinuousStateBackend<
+              const SystemInstance&, CompiledSystemPlan&>);
+static_assert(CanConstructSystemContinuousStateBackend<
+              const SystemInstance&, const CompiledSystemPlan&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              SystemInstance&&, CompiledSystemPlan&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              SystemInstance&&, const CompiledSystemPlan&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              const SystemInstance&&, CompiledSystemPlan&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              const SystemInstance&&, const CompiledSystemPlan&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              SystemInstance&, CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              SystemInstance&, const CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              const SystemInstance&, CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              const SystemInstance&, const CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              SystemInstance&&, CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              SystemInstance&&, const CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              const SystemInstance&&, CompiledSystemPlan&&>);
+static_assert(!CanConstructSystemContinuousStateBackend<
+              const SystemInstance&&, const CompiledSystemPlan&&>);
 
 int failure_count = 0;
 
@@ -96,6 +174,17 @@ ContinuousStateErrorTolerances MakeTolerances(int state_size) {
         1.0e-12, Eigen::VectorXd::Constant(state_size, 1.0e-14));
 }
 
+std::unique_ptr<SystemContinuousStateAdvancer> MakeSystemAdvancer(
+    SystemContinuousStateIntegrationRecipe recipe,
+    const SystemInstance& system,
+    const CompiledSystemPlan& plan,
+    orvd::system_assembly::SystemRuntimeContext& accepted_context,
+    ContinuousStateErrorTolerances tolerances) {
+    return SystemContinuousStateIntegrationAccess::Make(
+        recipe, system, plan, accepted_context, std::move(tolerances),
+        NoCallTimeAppliedForces{});
+}
+
 struct DampedRotorFixture {
     static constexpr double kMass = 2.0;
     static constexpr double kUnitIzz = 0.5;
@@ -114,6 +203,82 @@ struct DampedRotorFixture {
         model.Finalize();
     }
 };
+
+void CheckSystemIntegrationRecipeIdentity() {
+    DampedRotorFixture fixture;
+    const SystemAssemblyDescription description(fixture.model);
+    const SystemInstance system(description);
+    const CompiledSystemPlan plan(system);
+
+    auto public_context = system.CreateDefaultRuntimeContext(0.0);
+    auto fifth_order_context = system.CreateDefaultRuntimeContext(0.0);
+    auto radau5_context = system.CreateDefaultRuntimeContext(0.0);
+    const Eigen::Vector2d initial_state(0.2, 1.4);
+    system.SetContinuousState(*public_context, initial_state);
+    system.SetContinuousState(*fifth_order_context, initial_state);
+    system.SetContinuousState(*radau5_context, initial_state);
+
+    SystemContinuousStateAdvancer public_advancer(
+        system, plan, *public_context, MakeTolerances(2),
+        NoCallTimeAppliedForces{});
+    std::unique_ptr<SystemContinuousStateAdvancer> fifth_order_advancer =
+        SystemContinuousStateIntegrationAccess::Make(
+            SystemContinuousStateIntegrationRecipe::kCvodeBdf5, system,
+            plan, *fifth_order_context, MakeTolerances(2),
+            NoCallTimeAppliedForces{});
+    std::unique_ptr<SystemContinuousStateAdvancer> radau5_advancer =
+        SystemContinuousStateIntegrationAccess::Make(
+            SystemContinuousStateIntegrationRecipe::kRadau5, system, plan,
+            *radau5_context, MakeTolerances(2),
+            NoCallTimeAppliedForces{});
+    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
+               public_advancer) ==
+               SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
+           "the public system recipe constructs the CVODE BDF2 default");
+    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
+               *fifth_order_advancer) ==
+               SystemContinuousStateIntegrationRecipe::kCvodeBdf5,
+           "the private system recipe constructs the CVODE BDF5 backend");
+    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
+               *radau5_advancer) ==
+               SystemContinuousStateIntegrationRecipe::kRadau5,
+           "the private system recipe constructs the Radau5 backend");
+
+    constexpr double kTargetTime = 4.0;
+    public_advancer.AdvanceTo(kTargetTime);
+    fifth_order_advancer->AdvanceTo(kTargetTime);
+    radau5_advancer->AdvanceTo(kTargetTime);
+    Eigen::VectorXd public_state(2);
+    Eigen::VectorXd fifth_order_state(2);
+    Eigen::VectorXd radau5_state(2);
+    system.CopyContinuousState(*public_context, public_state);
+    system.CopyContinuousState(*fifth_order_context, fifth_order_state);
+    system.CopyContinuousState(*radau5_context, radau5_state);
+    constexpr double kInertia =
+        DampedRotorFixture::kMass * DampedRotorFixture::kUnitIzz;
+    const double rate = DampedRotorFixture::kInitialDamping / kInertia;
+    const double expected_velocity =
+        initial_state[1] * std::exp(-rate * kTargetTime);
+    const double expected_position =
+        initial_state[0] +
+        initial_state[1] * (1.0 - std::exp(-rate * kTargetTime)) / rate;
+    Expect(public_context->time_seconds() == kTargetTime &&
+               fifth_order_context->time_seconds() == kTargetTime &&
+               radau5_context->time_seconds() == kTargetTime &&
+               Near(public_state[0], expected_position) &&
+               Near(public_state[1], expected_velocity) &&
+               Near(fifth_order_state[0], expected_position) &&
+               Near(fifth_order_state[1], expected_velocity) &&
+               Near(radau5_state[0], expected_position) &&
+               Near(radau5_state[1], expected_velocity),
+           "the real CVODE and Radau5 system recipes commit the analytic "
+           "damped-rotor endpoint");
+    Expect(radau5_advancer->integration_statistics()
+                   .requested_dense_finite_difference_jacobian_worker_count ==
+               1,
+           "the first Radau5 system recipe uses the admitted serial dense "
+           "Jacobian");
+}
 
 void CheckAtomicAcceptedTimeAndState() {
     MultibodyModel model;
@@ -177,7 +342,8 @@ void CheckAtomicAcceptedTimeAndState() {
         "a runtime context requires a finite initial time");
 }
 
-void CheckRealCvodeCommitAndDampingSynchronization() {
+void CheckCommitAndDampingSynchronization(
+    SystemContinuousStateIntegrationRecipe recipe) {
     DampedRotorFixture fixture;
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
@@ -197,13 +363,13 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
         &accepted_component.context(), fixture.joint,
         kInitialAcceptedDamping);
 
-    SystemContinuousStateAdvancer advancer(
-        system, plan, *accepted, MakeTolerances(2),
-        NoCallTimeAppliedForces{});
-    Expect(advancer.integration_statistics().successful_internal_step_count ==
+    auto advancer =
+        MakeSystemAdvancer(recipe, system, plan, *accepted,
+                           MakeTolerances(2));
+    Expect(advancer->integration_statistics().successful_internal_step_count ==
                0,
            "a new system advancer reports no successful internal work");
-    advancer.AdvanceTo(kInitialTime);
+    advancer->AdvanceTo(kInitialTime);
     Eigen::VectorXd observed(2);
     system.CopyContinuousState(*accepted, observed);
     Expect(accepted->time_seconds() == kInitialTime && observed == initial,
@@ -218,7 +384,7 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
     const double expected_q1 =
         initial[0] + initial[1] * (1.0 - std::exp(-first_rate * first_dt)) /
                          first_rate;
-    advancer.AdvanceTo(kFirstTarget);
+    advancer->AdvanceTo(kFirstTarget);
     system.CopyContinuousState(*accepted, observed);
     Expect(accepted->time_seconds() == kFirstTarget,
            "a successful public advance commits the target time");
@@ -231,7 +397,7 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
     system.SetContinuousState(*accepted, externally_stated);
     fixture.model.SetRevoluteJointDampingCoefficient(
         &accepted_component.context(), fixture.joint, kNewDamping);
-    advancer.SynchronizeAfterAcceptedContextChange();
+    advancer->SynchronizeAfterAcceptedContextChange();
 
     constexpr double kSecondTarget = 0.8;
     const double second_rate = kNewDamping / kInertia;
@@ -242,7 +408,7 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
         externally_stated[0] +
         externally_stated[1] *
             (1.0 - std::exp(-second_rate * second_dt)) / second_rate;
-    advancer.AdvanceTo(kSecondTarget);
+    advancer->AdvanceTo(kSecondTarget);
     system.CopyContinuousState(*accepted, observed);
     const bool synchronized_damping_applied =
         accepted->time_seconds() == kSecondTarget &&
@@ -271,7 +437,8 @@ void CheckRealCvodeCommitAndDampingSynchronization() {
            "the other context retains its original damping parameter");
 }
 
-void CheckDenseStateSamplingTransaction() {
+void CheckDenseStateSamplingTransaction(
+    SystemContinuousStateIntegrationRecipe recipe) {
     DampedRotorFixture fixture;
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
@@ -282,13 +449,13 @@ void CheckDenseStateSamplingTransaction() {
     Eigen::Vector2d initial;
     initial << 0.2, 1.4;
     system.SetContinuousState(*accepted, initial);
-    SystemContinuousStateAdvancer advancer(
-        system, plan, *accepted, MakeTolerances(2),
-        NoCallTimeAppliedForces{});
+    auto advancer =
+        MakeSystemAdvancer(recipe, system, plan, *accepted,
+                           MakeTolerances(2));
 
     const std::array same_time{kInitialTime};
     const Eigen::MatrixXd same_time_samples =
-        advancer.AdvanceToWithDenseStateSamples(kInitialTime, same_time);
+        advancer->AdvanceToWithDenseStateSamples(kInitialTime, same_time);
     Expect(same_time_samples.rows() == 2 && same_time_samples.cols() == 1 &&
                same_time_samples.col(0) == initial,
            "a one-column same-time sample copies the accepted state exactly");
@@ -298,31 +465,31 @@ void CheckDenseStateSamplingTransaction() {
     const std::array<double, 2> wrong_last{kInitialTime, 0.54};
     ExpectInvalidArgument(
         [&] {
-            (void)advancer.AdvanceToWithDenseStateSamples(
+            (void)advancer->AdvanceToWithDenseStateSamples(
                 0.55, std::span<const double>{});
         },
         "a dense request requires at least one sample time");
     ExpectInvalidArgument(
         [&] {
-            (void)advancer.AdvanceToWithDenseStateSamples(0.55, wrong_first);
+            (void)advancer->AdvanceToWithDenseStateSamples(0.55, wrong_first);
         },
         "the first dense sample must identify the accepted time");
     ExpectInvalidArgument(
         [&] {
-            (void)advancer.AdvanceToWithDenseStateSamples(0.55, repeated);
+            (void)advancer->AdvanceToWithDenseStateSamples(0.55, repeated);
         },
         "dense sample times must be strictly increasing");
     ExpectInvalidArgument(
         [&] {
-            (void)advancer.AdvanceToWithDenseStateSamples(0.55, wrong_last);
+            (void)advancer->AdvanceToWithDenseStateSamples(0.55, wrong_last);
         },
         "the last dense sample must identify the target time");
 
     const std::array<double, 5> times{kInitialTime, 0.35, 0.4, 0.475,
                                       0.55};
     const Eigen::MatrixXd samples =
-        advancer.AdvanceToWithDenseStateSamples(times.back(), times);
-    const auto integration_statistics = advancer.integration_statistics();
+        advancer->AdvanceToWithDenseStateSamples(times.back(), times);
+    const auto integration_statistics = advancer->integration_statistics();
     Expect(integration_statistics.successful_internal_step_count > 0 &&
                integration_statistics.right_hand_side_evaluation_count > 0,
            "the system advancer exposes its backend work after one public advance");
@@ -348,7 +515,8 @@ void CheckDenseStateSamplingTransaction() {
     }
 }
 
-void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
+void CheckRealForcePlanAndNominalForceSynchronization(
+    SystemContinuousStateIntegrationRecipe recipe) {
     constexpr double kSliderMass = 2.0;
     constexpr double kSeriesStiffness = 8.0;
     constexpr double kSeriesDamping = 2.0;
@@ -406,10 +574,9 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
 
     Eigen::VectorXd absolute_tolerances(3);
     absolute_tolerances << 1.0e-12, 1.0e-12, 1.0e-7;
-    SystemContinuousStateAdvancer advancer(
-        system, plan, *accepted,
-        ContinuousStateErrorTolerances(1.0e-11, absolute_tolerances),
-        NoCallTimeAppliedForces{});
+    auto advancer = MakeSystemAdvancer(
+        recipe, system, plan, *accepted,
+        ContinuousStateErrorTolerances(1.0e-11, absolute_tolerances));
 
     constexpr double kFirstTarget = 0.2;
     const double first_acceleration = -kFirstNominalForce / kSliderMass;
@@ -420,7 +587,7 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     const double expected_z1 =
         kInitialSeriesForce *
         std::exp(-(kSeriesStiffness / kSeriesDamping) * kFirstTarget);
-    advancer.AdvanceTo(kFirstTarget);
+    advancer->AdvanceTo(kFirstTarget);
     Eigen::VectorXd observed(3);
     system.CopyContinuousState(*accepted, observed);
     const bool first_segment_matches =
@@ -428,13 +595,13 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
         std::abs(observed[series_range.start()] - expected_z1) <=
             1.0e-5 * std::max(1.0, std::abs(expected_z1));
     if (!first_segment_matches) {
-        std::printf("force-plan CVODE first segment measured [% .17g, % .17g, "
+        std::printf("force-plan first segment measured [% .17g, % .17g, "
                     "% .17g], expected [% .17g, % .17g, % .17g]\n",
                     observed[0], observed[1], observed[series_range.start()],
                     expected_q1, expected_v1, expected_z1);
     }
     Expect(first_segment_matches,
-           "the real force plan, RHS bridge and CVODE reproduce constant "
+           "the real force plan and RHS bridge reproduce constant "
            "nominal-force acceleration and the Maxwell exponential state");
 
     constexpr double kRestartedSeriesForce = -75.0;
@@ -445,7 +612,7 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     system.SetNominalForce(
         *accepted, nominal_slot,
         Eigen::Vector3d(kSecondNominalForce, 0.0, 0.0));
-    advancer.SynchronizeAfterAcceptedContextChange();
+    advancer->SynchronizeAfterAcceptedContextChange();
     constexpr double kSecondTarget = 0.35;
     const double second_dt = kSecondTarget - kFirstTarget;
     const double second_acceleration = -kSecondNominalForce / kSliderMass;
@@ -457,24 +624,25 @@ void CheckRealForcePlanCvodeAndNominalForceSynchronization() {
     const double expected_z2 =
         kRestartedSeriesForce *
         std::exp(-(kSeriesStiffness / kSeriesDamping) * second_dt);
-    advancer.AdvanceTo(kSecondTarget);
+    advancer->AdvanceTo(kSecondTarget);
     system.CopyContinuousState(*accepted, observed);
     const bool second_segment_matches =
         Near(observed[0], expected_q2) && Near(observed[1], expected_v2) &&
         std::abs(observed[series_range.start()] - expected_z2) <=
             1.0e-5 * std::max(1.0, std::abs(expected_z2));
     if (!second_segment_matches) {
-        std::printf("force-plan CVODE second segment measured [% .17g, % .17g, "
+        std::printf("force-plan second segment measured [% .17g, % .17g, "
                     "% .17g], expected [% .17g, % .17g, % .17g]\n",
                     observed[0], observed[1], observed[series_range.start()],
                     expected_q2, expected_v2, expected_z2);
     }
     Expect(second_segment_matches,
            "explicit accepted-context synchronization updates nominal force "
-           "and restarts CVODE from the externally replaced Maxwell state");
+           "and restarts from the externally replaced Maxwell state");
 }
 
-void CheckRealRhsFailureRequiresSynchronization() {
+void CheckRealRhsFailureRequiresSynchronization(
+    SystemContinuousStateIntegrationRecipe recipe) {
     MultibodyModel model;
     const auto massless = model.AddRigidBody("massless", MakeInertia(0.0, 0.0));
     model.AddRevoluteJoint("singular", model.world_frame(),
@@ -489,11 +657,11 @@ void CheckRealRhsFailureRequiresSynchronization() {
     Eigen::VectorXd before(2);
     system.CopyContinuousState(*accepted, before);
 
-    SystemContinuousStateAdvancer advancer(
-        system, plan, *accepted, MakeTolerances(2),
-        NoCallTimeAppliedForces{});
+    auto advancer =
+        MakeSystemAdvancer(recipe, system, plan, *accepted,
+                           MakeTolerances(2));
     ExpectExceptionContaining(
-        [&] { advancer.AdvanceTo(0.1); }, "positive-definite",
+        [&] { advancer->AdvanceTo(0.1); }, "positive-definite",
         "a singular articulated inertia fails after the real RHS is entered");
     Eigen::VectorXd after(2);
     system.CopyContinuousState(*accepted, after);
@@ -501,11 +669,15 @@ void CheckRealRhsFailureRequiresSynchronization() {
            "an RHS failure cannot publish trial time or state");
 
     ExpectLogicErrorContaining(
-        [&] { advancer.AdvanceTo(0.1); }, "synchronize",
+        [&] { advancer->AdvanceTo(0.1); }, "synchronize",
         "a failed system advance blocks reuse before explicit synchronization");
-    advancer.SynchronizeAfterAcceptedContextChange();
+    ExpectLogicErrorContaining(
+        [&] { advancer->AdvanceTo(0.0); }, "synchronize",
+        "a failed system advance also blocks a same-time request before "
+        "explicit synchronization");
+    advancer->SynchronizeAfterAcceptedContextChange();
     ExpectExceptionContaining(
-        [&] { advancer.AdvanceTo(0.1); }, "positive-definite",
+        [&] { advancer->AdvanceTo(0.1); }, "positive-definite",
         "synchronization reopens the backend even when the model remains "
         "singular");
     system.CopyContinuousState(*accepted, after);
@@ -536,10 +708,15 @@ void CheckForeignAcceptedContextIsRejected() {
 
 int main() {
     CheckAtomicAcceptedTimeAndState();
-    CheckRealCvodeCommitAndDampingSynchronization();
-    CheckDenseStateSamplingTransaction();
-    CheckRealForcePlanCvodeAndNominalForceSynchronization();
-    CheckRealRhsFailureRequiresSynchronization();
+    CheckSystemIntegrationRecipeIdentity();
+    for (const auto recipe :
+         {SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
+          SystemContinuousStateIntegrationRecipe::kRadau5}) {
+        CheckCommitAndDampingSynchronization(recipe);
+        CheckDenseStateSamplingTransaction(recipe);
+        CheckRealForcePlanAndNominalForceSynchronization(recipe);
+        CheckRealRhsFailureRequiresSynchronization(recipe);
+    }
     CheckForeignAcceptedContextIsRejected();
     if (failure_count != 0) {
         std::printf("%d system continuous-state assertion(s) failed\n",

@@ -5,6 +5,12 @@ find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 find_package(Git REQUIRED)
 get_filename_component(orvd_test_toolchain_runtime_directory
                        "${CMAKE_CXX_COMPILER}" DIRECTORY)
+add_test(NAME verify_strict_floating_point_qualification
+         COMMAND ${Python3_EXECUTABLE}
+                 ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/verify_strict_floating_point_qualification.py
+                 --cmake ${CMAKE_COMMAND}
+                 --cxx-compiler ${CMAKE_CXX_COMPILER}
+                 --source-root ${CMAKE_SOURCE_DIR})
 add_test(NAME verify_dependency_source_declaration
          COMMAND ${Python3_EXECUTABLE}
                  ${CMAKE_SOURCE_DIR}/tools/package_distribution/verify_dependency_sources.py
@@ -538,20 +544,29 @@ orvd_configure_first_party_target(verify_system_rhs_bridge)
 target_link_libraries(verify_system_rhs_bridge PRIVATE orvd_integrators)
 add_test(NAME verify_system_rhs_bridge COMMAND verify_system_rhs_bridge)
 
-# G44's real CVODE backend. Analytic systems exercise the public second-order
-# default and the source-tree-only fifth-order identity, including actual CVODE
-# order and reinitialization; the focused failure case verifies that a C
-# callback never leaks a C++ exception or publishes a partial endpoint.
+# The backend-neutral ContinuousStateAdvancer contract, instantiated here with
+# the real public CVODE factory. The shared suite is intentionally unable to
+# reach CVODE or BDF diagnostics so the Radau5 adapter can run it unchanged.
 add_executable(verify_cvode_continuous_state_advancer
+    integrators/continuous_state_advancer_contract.cc
     integrators/cvode_continuous_state_advancer_header_self_containment.cc
     integrators/verify_cvode_continuous_state_advancer.cc)
 orvd_configure_first_party_target(verify_cvode_continuous_state_advancer)
-target_include_directories(verify_cvode_continuous_state_advancer
-    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_cvode_continuous_state_advancer
     PRIVATE orvd_integrators)
 add_test(NAME verify_cvode_continuous_state_advancer
          COMMAND verify_cvode_continuous_state_advancer)
+
+# CVODE's BDF execution identity is deliberately outside the backend-neutral
+# contract: public construction is maximum order two and the source-tree-only
+# qualification recipe is maximum order five, including after reinitialization.
+add_executable(verify_cvode_bdf_identity
+    integrators/verify_cvode_bdf_identity.cc)
+orvd_configure_first_party_target(verify_cvode_bdf_identity)
+target_include_directories(verify_cvode_bdf_identity
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+target_link_libraries(verify_cvode_bdf_identity PRIVATE orvd_integrators)
+add_test(NAME verify_cvode_bdf_identity COMMAND verify_cvode_bdf_identity)
 
 # INT-03's build-only Radau5 numerical core. The executable consumes the same
 # object target embedded in orvd_integrators; it verifies the narrowed M=I,
@@ -565,6 +580,21 @@ target_include_directories(verify_radau5_core
 target_link_libraries(verify_radau5_core PRIVATE Eigen3::Eigen)
 add_test(NAME verify_radau5_core COMMAND verify_radau5_core)
 
+# The same backend-neutral contract used by CVODE, instantiated with the real
+# source-private Radau5 adapter. Radau-specific method tests remain in the core
+# executable above instead of leaking backend diagnostics into this suite.
+add_executable(verify_radau5_continuous_state_advancer
+    integrators/continuous_state_advancer_contract.cc
+    integrators/verify_radau5_continuous_state_advancer.cc)
+orvd_configure_first_party_target(
+    verify_radau5_continuous_state_advancer)
+target_include_directories(verify_radau5_continuous_state_advancer
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+target_link_libraries(verify_radau5_continuous_state_advancer
+    PRIVATE orvd_integrators)
+add_test(NAME verify_radau5_continuous_state_advancer
+         COMMAND verify_radau5_continuous_state_advancer)
+
 # G45's accepted/trial transaction boundary.  A real damped multibody system
 # runs through CVODE, a singular articulated inertia exercises post-RHS failure,
 # and the system-level atomic setter covers an invalid final acceptance without
@@ -573,6 +603,8 @@ add_executable(verify_system_continuous_state_advancer
     integrators/system_continuous_state_advancer_header_self_containment.cc
     integrators/verify_system_continuous_state_advancer.cc)
 orvd_configure_first_party_target(verify_system_continuous_state_advancer)
+target_include_directories(verify_system_continuous_state_advancer
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_system_continuous_state_advancer
     PRIVATE orvd_integrators)
 add_test(NAME verify_system_continuous_state_advancer
@@ -972,7 +1004,9 @@ add_executable(verify_irw_full_state_control_event_session
 orvd_configure_first_party_target(
     verify_irw_full_state_control_event_session)
 target_include_directories(verify_irw_full_state_control_event_session
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_irw_full_state_control_event_session
     PRIVATE orvd_configuration orvd_integrators OpenMP::OpenMP_CXX)
 add_test(NAME verify_irw_full_state_control_event_session
@@ -1013,8 +1047,8 @@ set_tests_properties(verify_irw_longitudinal_cruise_event_session PROPERTIES
 
 # G53's complete GZ18 direct RHS and G54's accepted-step projection history.
 # The same installed assets drive both: four wheelsets share four local branch
-# hints across eight interfaces, and CVODE advances those hints at its internal
-# accepted endpoints without a second synthetic vehicle.
+# hints across eight interfaces, and the Radau5 research recipe advances those
+# hints at its internal accepted endpoints without a second synthetic vehicle.
 add_executable(verify_gz18_contact_rhs
     configuration/assembled_vehicle_contact_scenario_header_self_containment.cc
     forces/wheel_rail_contact_force_plan_header_self_containment.cc
@@ -1022,7 +1056,9 @@ add_executable(verify_gz18_contact_rhs
     configuration/verify_gz18_contact_rhs.cc)
 orvd_configure_first_party_target(verify_gz18_contact_rhs)
 target_include_directories(verify_gz18_contact_rhs
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_gz18_contact_rhs
     PRIVATE orvd_configuration orvd_integrators OpenMP::OpenMP_CXX)
 add_test(NAME verify_gz18_contact_rhs
@@ -1033,14 +1069,16 @@ add_test(NAME verify_gz18_contact_rhs
              ${CMAKE_SOURCE_DIR})
 set_tests_properties(verify_gz18_contact_rhs PROPERTIES PROCESSORS 8)
 
-# G55's first complete passive longitudinal slice. One public CVODE advance
+# G55's first complete passive longitudinal slice. One private Radau5 advance
 # returns the P035-aligned 101-state batch; a private observation context then
 # replays those states through the same real eight-interface contact plan.
 add_executable(verify_gz18_passive_short_window
     configuration/verify_gz18_passive_short_window.cc)
 orvd_configure_first_party_target(verify_gz18_passive_short_window)
 target_include_directories(verify_gz18_passive_short_window
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_gz18_passive_short_window
     PRIVATE orvd_configuration orvd_integrators)
 add_test(NAME verify_gz18_passive_short_window

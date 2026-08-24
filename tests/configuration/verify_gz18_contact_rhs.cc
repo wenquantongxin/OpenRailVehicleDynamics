@@ -1,5 +1,5 @@
 // G53/G54: the installed GZ18 contact personality enters the vehicle RHS, and
-// the same real scenario advances its local projection branches at CVODE's
+// the same real scenario advances its local projection branches at Radau5's
 // accepted internal endpoints.
 
 #include <algorithm>
@@ -31,6 +31,7 @@
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/wheel_rail_contact/contact_wrench.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
+#include "system_continuous_state_integration_access.h"
 #include "wheel_rail_contact/allocation_probe.h"
 
 namespace {
@@ -44,6 +45,8 @@ using orvd::configuration::ResolvedWheelPairPlacement;
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
+using orvd::integrators::internal::SystemContinuousStateIntegrationAccess;
+using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
 using orvd::multibody_model::AppliedBodyWrench;
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
@@ -951,21 +954,46 @@ int main(int argc, char** argv) {
             "assembly");
 
     // The real 60 km/h GZ18 advances farther than the deliberately narrow
-    // local window. Some ordinary CVODE trial steps also reach beyond the
-    // latest accepted 1 cm branch window. Those trial states are recoverable:
-    // CVODE reduces the step, while every successful endpoint advances the
+    // local window. Some ordinary Radau5 trial steps also reach beyond the
+    // latest accepted 1 cm branch window. The source-private diagnostic below
+    // observes the production bridge classifying that exact exception type;
+    // Radau5 reduces the step, while every successful endpoint advances the
     // accepted projection history. Static G53 anchors cannot do either job.
     std::vector<double> initial_hints(
         runtime_context.wheel_rail_projection_station_hints_meters().begin(),
         runtime_context.wheel_rail_projection_station_hints_meters().end());
-    SystemContinuousStateAdvancer advancer(
+    auto advancer = SystemContinuousStateIntegrationAccess::Make(
+        SystemContinuousStateIntegrationRecipe::kRadau5,
         assembled.system(), assembled.compiled_plan(), runtime_context,
         MakeGz18Tolerances(), NoCallTimeAppliedForces{});
+    Require(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
+                *advancer) ==
+                SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                SystemContinuousStateIntegrationAccess::
+                        RecoverableProjectionWindowMissClassificationCount(
+                            *advancer) == 0 &&
+                advancer->integration_statistics()
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    1,
+            "the projection qualification did not construct serial Radau5");
     constexpr double kRecoverableProjectionTargetSeconds = 3.0e-2;
-    advancer.AdvanceTo(kRecoverableProjectionTargetSeconds);
-    Require(runtime_context.time_seconds() ==
-                kRecoverableProjectionTargetSeconds,
-            "the contact-enabled public advance did not reach its target");
+    advancer->AdvanceTo(kRecoverableProjectionTargetSeconds);
+    const auto projection_run_statistics =
+        advancer->integration_statistics();
+    Require(
+        runtime_context.time_seconds() ==
+                kRecoverableProjectionTargetSeconds &&
+            SystemContinuousStateIntegrationAccess::
+                    RecoverableProjectionWindowMissClassificationCount(
+                        *advancer) > 0,
+        "the real GZ18 Radau5 run did not recover from a classified "
+        "projection-window miss and reach its target");
+    Require(
+        projection_run_statistics.successful_internal_step_count > 1 &&
+            projection_run_statistics.jacobian_evaluation_count >=
+                projection_run_statistics.successful_internal_step_count,
+        "accepted projection-history updates did not invalidate Radau5's "
+        "retained linearization before the next internal step");
     const auto advanced_hints =
         runtime_context.wheel_rail_projection_station_hints_meters();
     for (std::size_t ordinal = 0; ordinal < initial_hints.size(); ++ordinal) {

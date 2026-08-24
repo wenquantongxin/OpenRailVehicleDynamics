@@ -23,6 +23,7 @@
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
+#include "system_continuous_state_integration_access.h"
 
 namespace {
 
@@ -224,14 +225,27 @@ void Run(const std::filesystem::path& vehicle_path,
 
     // The backend is constructed only after U0 is in the accepted context, so
     // no artificial t=0 reinitialization is introduced.
-    orvd::integrators::SystemContinuousStateAdvancer advancer(
-        assembled.system(), assembled.compiled_plan(), accepted,
-        MakeTolerances(assembled),
-        orvd::integrators::NoCallTimeAppliedForces{});
+    auto advancer = orvd::integrators::internal::
+        SystemContinuousStateIntegrationAccess::Make(
+            orvd::integrators::internal::
+                SystemContinuousStateIntegrationRecipe::kRadau5,
+            assembled.system(), assembled.compiled_plan(), accepted,
+            MakeTolerances(assembled),
+            orvd::integrators::NoCallTimeAppliedForces{});
+    Require(orvd::integrators::internal::
+                    SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
+                        *advancer) ==
+                orvd::integrators::internal::
+                    SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                advancer->integration_statistics()
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    1,
+            "the 100 Hz event qualification did not construct serial "
+            "Radau5");
     session.ConfirmBackendSynchronized();
     session.RequireReadyToAdvance();
 
-    advancer.AdvanceTo(session.next_periodic_event_time_seconds());
+    advancer->AdvanceTo(session.next_periodic_event_time_seconds());
     const auto u1 = session.ApplyPeriodicUpdate(accepted);
     Require(u1.periodic_event_ordinal == 1 &&
                 u1.event_time_seconds == 0.01 &&
@@ -239,11 +253,11 @@ void Run(const std::filesystem::path& vehicle_path,
             "U1 is not the first positive-time integer-grid event");
     Require(Throws([&] { session.RequireReadyToAdvance(); }),
             "advance was admitted before U1 backend synchronization");
-    advancer.SynchronizeAfterAcceptedContextChange();
+    advancer->SynchronizeAfterAcceptedContextChange();
     session.ConfirmBackendSynchronized();
     session.RequireReadyToAdvance();
 
-    advancer.AdvanceTo(session.next_periodic_event_time_seconds());
+    advancer->AdvanceTo(session.next_periodic_event_time_seconds());
     const auto u2 = session.ApplyPeriodicUpdate(accepted);
     Require(u2.periodic_event_ordinal == 2 &&
                 u2.event_time_seconds == 0.02 &&

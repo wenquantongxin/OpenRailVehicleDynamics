@@ -12,7 +12,8 @@ constexpr internal::VehicleQualificationRecipe kRecipe{
     1.0e-7,
     1.0e-6,
     1.0e-1,
-    integrators::internal::MaximumBdfOrder::kSecond,
+    integrators::internal::SystemContinuousStateIntegrationRecipe::
+        kCvodeBdf2,
     57,
     50,
     2,
@@ -34,7 +35,8 @@ QualificationRunSummary RunGz18Qualification(
             input.output_directory,
             input.duration_nanoseconds,
             input.sample_period_nanoseconds,
-            std::nullopt},
+            std::nullopt,
+            input.time_integrator_qualification_case},
         kRecipe);
 }
 

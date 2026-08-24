@@ -3,10 +3,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 
 #include <Eigen/Core>
 
 #include "orvd/integrators/continuous_state_advancer.h"
+#include "time_integrator_qualification_case.h"
 
 namespace orvd::dynamics_qualification {
 
@@ -22,10 +24,22 @@ struct IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration final {
     std::filesystem::path torque_conditioner_configuration_path;
     std::filesystem::path output_directory;
     std::int64_t duration_nanoseconds{};
+    std::optional<TimeIntegratorQualificationCase>
+        time_integrator_qualification_case;
 };
 
 struct IrwR300Aar5V60At100HzFullStateGuidanceRunSummary final {
-    int maximum_bdf_order{};
+    explicit IrwR300Aar5V60At100HzFullStateGuidanceRunSummary(
+        integrators::internal::SystemContinuousStateIntegrationRecipe
+            integration_recipe_value)
+        : integration_recipe(integration_recipe_value) {}
+    IrwR300Aar5V60At100HzFullStateGuidanceRunSummary() = delete;
+
+    integrators::internal::SystemContinuousStateIntegrationRecipe
+        integration_recipe;
+    std::optional<TimeIntegratorQualificationCase>
+        time_integrator_qualification_case;
+    std::optional<int> maximum_bdf_order;
     std::size_t observation_count{};
     std::size_t control_audit_count{};
     std::size_t positive_hold_interval_count{};

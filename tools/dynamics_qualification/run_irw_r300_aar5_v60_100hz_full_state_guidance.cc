@@ -26,12 +26,13 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 9) {
+    if (argc != 9 && argc != 10) {
         std::fprintf(
             stderr,
             "usage: orvd_irw_r300_aar5_v60_100hz_full_state_guidance "
             "VEHICLE STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER "
-            "OUTPUT_DIRECTORY DURATION_NS\n");
+            "OUTPUT_DIRECTORY DURATION_NS "
+            "[TIME_INTEGRATOR_QUALIFICATION_CASE]\n");
         return 2;
     }
     orvd::dynamics_qualification::
@@ -47,6 +48,17 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "duration must be positive integer nanoseconds\n");
         return 2;
+    }
+    if (argc == 10) {
+        configuration.time_integrator_qualification_case =
+            orvd::dynamics_qualification::
+                ParseTimeIntegratorQualificationCase(argv[9]);
+        if (!configuration.time_integrator_qualification_case.has_value()) {
+            std::fprintf(stderr,
+                         "unknown time-integrator qualification case: %s\n",
+                         argv[9]);
+            return 2;
+        }
     }
     try {
         const auto summary =

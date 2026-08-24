@@ -22,8 +22,9 @@
 #include <Eigen/Core>
 
 #include "atomic_qualification_directory.h"
-#include "irw_bdf_tolerance_recipes.h"
+#include "irw_integration_recipes.h"
 #include "qualification_sample_clock.h"
+#include "strict_floating_point_qualification.h"
 #include "vehicle_qualification_runner_internal.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
@@ -39,6 +40,7 @@
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_model.h"
+#include "system_continuous_state_integration_access.h"
 
 namespace orvd::dynamics_qualification {
 namespace {
@@ -187,22 +189,20 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 }
 
 [[nodiscard]] integrators::ContinuousStateErrorTolerances MakeTolerances(
-    const configuration::AssembledVehicleSystem& assembled) {
-    constexpr auto& recipe =
-        internal::
-            kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe;
+    const configuration::AssembledVehicleSystem& assembled,
+    const ResolvedTimeIntegratorQualificationNumerics& numerics) {
     const auto& system = assembled.system();
     Eigen::VectorXd absolute = Eigen::VectorXd::Constant(
         system.continuous_state_size(),
-        recipe.velocity_absolute_tolerance);
+        numerics.generalized_velocity_absolute_tolerance);
     const auto q = system.generalized_positions_state_range();
     const auto z = system.series_spring_damper_force_state_range();
     absolute.segment(q.start(), q.size())
-        .setConstant(recipe.position_absolute_tolerance);
+        .setConstant(numerics.generalized_position_absolute_tolerance);
     absolute.segment(z.start(), z.size())
-        .setConstant(recipe.series_force_absolute_tolerance_newtons);
+        .setConstant(numerics.series_force_absolute_tolerance_newtons);
     return integrators::ContinuousStateErrorTolerances(
-        recipe.relative_tolerance, std::move(absolute));
+        numerics.relative_tolerance, std::move(absolute));
 }
 
 void AccumulateStatistics(
@@ -690,12 +690,10 @@ void WriteMetadata(
     const configuration::AssembledVehicleSystem& assembled,
     const configuration::IrwFullStateControlEventSession& session,
     const IrwR300Aar5V60At100HzFullStateGuidanceRunSummary& summary,
+    const ResolvedTimeIntegratorQualificationNumerics& numerics,
     int contact_batch_parallel_team_probe_worker_count,
     std::string_view controller_identifier,
     std::string_view conditioner_identifier) {
-    constexpr auto& recipe =
-        internal::
-            kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe;
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
@@ -777,16 +775,54 @@ void WriteMetadata(
            << ", \"active_torque_body_wrench_count\": "
            << assembled.active_torque_plan()->body_wrench_count() << "},\n"
            << "  \"numerical_execution_contract\": {\n"
-           << "    \"maximum_bdf_order\": "
-           << summary.maximum_bdf_order << ",\n"
+           << "    \"qualification_case_identifier\": ";
+    if (numerics.qualification_case.has_value()) {
+        output << JsonString(numerics.qualification_case_identifier);
+    } else {
+        output << "null";
+    }
+    output << ",\n"
+           << "    \"tolerance_tier_identifier\": "
+           << JsonString(numerics.tolerance_tier_identifier) << ",\n"
+           << "    \"tolerance_scale_from_scenario_recipe\": "
+           << numerics.tolerance_scale_from_scenario_recipe << ",\n"
+           << "    \"integrator_recipe_identifier\": "
+           << JsonString(std::string(
+                  integrators::internal::IntegrationRecipeIdentifier(
+                      summary.integration_recipe)))
+           << ",\n"
+           << "    \"maximum_bdf_order\": ";
+    if (summary.maximum_bdf_order.has_value()) {
+        output << *summary.maximum_bdf_order;
+    } else {
+        output << "null";
+    }
+    output << ",\n"
            << "    \"relative_tolerance\": "
-           << recipe.relative_tolerance << ",\n"
+           << numerics.relative_tolerance << ",\n"
            << "    \"generalized_position_absolute_tolerance\": "
-           << recipe.position_absolute_tolerance << ",\n"
+           << numerics.generalized_position_absolute_tolerance << ",\n"
            << "    \"generalized_velocity_absolute_tolerance\": "
-           << recipe.velocity_absolute_tolerance << ",\n"
+           << numerics.generalized_velocity_absolute_tolerance << ",\n"
            << "    \"series_force_absolute_tolerance_newtons\": "
-           << recipe.series_force_absolute_tolerance_newtons << ",\n"
+           << numerics.series_force_absolute_tolerance_newtons << ",\n"
+           << "    \"floating_point_compilation_contract\": {\n"
+           << "      \"identifier\": "
+           << JsonString(
+                  internal::kStrictFloatingPointSemanticsIdentifier)
+           << ",\n"
+           << "      \"cmake_external_flag_audit_passed\": true,\n"
+           << "      \"compile_command_audit_enabled\": true,\n"
+           << "      \"fast_math_macro_defined\": false,\n"
+           << "      \"finite_math_only_enabled\": false,\n"
+           << "      \"build_type\": "
+           << JsonString(internal::kQualificationBuildType) << ",\n"
+           << "      \"compiler_id\": "
+           << JsonString(internal::kQualificationCxxCompilerId) << ",\n"
+           << "      \"compiler_version\": "
+           << JsonString(internal::kQualificationCxxCompilerVersion)
+           << "\n"
+           << "    },\n"
            << "    \"contact_batch_parallel_team_probe_worker_count\": "
            << contact_batch_parallel_team_probe_worker_count << "\n"
            << "  },\n"
@@ -835,6 +871,19 @@ void WritePerformance(
     }
     output << std::setprecision(17)
            << "{\n"
+           << "  \"integrator_recipe_identifier\": "
+           << JsonString(std::string(
+                  integrators::internal::IntegrationRecipeIdentifier(
+                      summary.integration_recipe)))
+           << ",\n"
+           << "  \"qualification_case_identifier\": ";
+    if (summary.time_integrator_qualification_case.has_value()) {
+        output << JsonString(TimeIntegratorQualificationCaseIdentifier(
+            *summary.time_integrator_qualification_case));
+    } else {
+        output << "null";
+    }
+    output << ",\n"
            << "  \"advance_and_synchronization_wall_seconds\": "
            << summary.advance_and_synchronization_wall_seconds << ",\n"
            << "  \"control_wall_seconds\": "
@@ -990,25 +1039,44 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     endpoint_diagnostics.reserve(
         static_cast<std::size_t>(terminal_event_ordinal + 1));
 
-    IrwR300Aar5V60At100HzFullStateGuidanceRunSummary summary;
     const Clock::time_point startup_control_begin = Clock::now();
     audits.push_back(event_session.ApplyInitializationUpdate(accepted));
     audits.push_back(event_session.ApplyPeriodicUpdate(accepted));
-    summary.control_wall_seconds +=
+    const double startup_control_wall_seconds =
         ElapsedSeconds(startup_control_begin, Clock::now());
-    integrators::SystemContinuousStateAdvancer advancer(
-        assembled.system(), assembled.compiled_plan(), accepted,
-        MakeTolerances(assembled), integrators::NoCallTimeAppliedForces{});
-    summary.maximum_bdf_order =
-        integrators::internal::BdfIntegrationAccess::
-            ConfiguredMaximumBdfOrder(advancer);
-    if (summary.maximum_bdf_order !=
-        integrators::internal::MaximumBdfOrderValue(
-            internal::kIrwR300Aar5V60At100HzFullStateGuidanceBdfToleranceRecipe
-                .maximum_bdf_order)) {
+    constexpr auto& numerical_recipe =
+        internal::
+            kIrwR300Aar5V60At100HzFullStateGuidanceIntegrationRecipe;
+    const ResolvedTimeIntegratorQualificationNumerics numerics =
+        ResolveTimeIntegratorQualificationNumerics(
+            input.time_integrator_qualification_case,
+            numerical_recipe.default_integration_recipe,
+            numerical_recipe.relative_tolerance,
+            numerical_recipe.position_absolute_tolerance,
+            numerical_recipe.velocity_absolute_tolerance,
+            numerical_recipe.series_force_absolute_tolerance_newtons);
+    const auto requested_integration_recipe = numerics.integration_recipe;
+    auto advancer =
+        integrators::internal::SystemContinuousStateIntegrationAccess::Make(
+            requested_integration_recipe, assembled.system(),
+            assembled.compiled_plan(), accepted,
+            MakeTolerances(assembled, numerics),
+            integrators::NoCallTimeAppliedForces{});
+    const auto actual_integration_recipe =
+        integrators::internal::SystemContinuousStateIntegrationAccess::
+            ConfiguredRecipe(*advancer);
+    if (actual_integration_recipe != requested_integration_recipe) {
         Reject("the constructed integrator does not match the controlled "
-               "qualification recipe's maximum BDF order");
+               "qualification integration recipe");
     }
+    IrwR300Aar5V60At100HzFullStateGuidanceRunSummary summary(
+        actual_integration_recipe);
+    summary.control_wall_seconds = startup_control_wall_seconds;
+    summary.time_integrator_qualification_case =
+        numerics.qualification_case;
+    summary.maximum_bdf_order =
+        integrators::internal::MaximumBdfOrderForRecipe(
+            summary.integration_recipe);
     event_session.ConfirmBackendSynchronized();
 
     auto contact_workspace = assembled.contact_force_plan()->CreateWorkspace();
@@ -1054,7 +1122,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
             static_cast<std::size_t>(kObservationsPerEventPeriod + 1U));
         const Clock::time_point advance_begin = Clock::now();
         const Eigen::MatrixXd dense_states =
-            advancer.AdvanceToWithDenseStateSamples(
+            advancer->AdvanceToWithDenseStateSamples(
                 event_session.next_periodic_event_time_seconds(),
                 interval_sample_times);
         summary.advance_and_synchronization_wall_seconds +=
@@ -1062,7 +1130,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         dense_state_peak_bytes = std::max(
             dense_state_peak_bytes,
             static_cast<std::size_t>(dense_states.size()) * sizeof(double));
-        AccumulateStatistics(advancer.integration_statistics(),
+        AccumulateStatistics(advancer->integration_statistics(),
                              &summary.integration_statistics);
         const Clock::time_point observation_begin = Clock::now();
         for (std::uint64_t local_sample = 1;
@@ -1099,7 +1167,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
             ElapsedSeconds(control_begin, Clock::now());
         if (ordinal < terminal_event_ordinal) {
             const Clock::time_point synchronization_begin = Clock::now();
-            advancer.SynchronizeAfterAcceptedContextChange();
+            advancer->SynchronizeAfterAcceptedContextChange();
             summary.advance_and_synchronization_wall_seconds +=
                 ElapsedSeconds(synchronization_begin, Clock::now());
             event_session.ConfirmBackendSynchronized();
@@ -1138,6 +1206,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         endpoint_diagnostics);
     WriteMetadata(output_directory.working_path() / "metadata.json",
                   resolved, startup, assembled, event_session, summary,
+                  numerics,
                   contact_batch_parallel_team_probe_worker_count,
                   controller_identifier, conditioner_identifier);
     const std::filesystem::path complete_path =

@@ -66,10 +66,10 @@ bool SystemRhsBridge::IsRecoverableFailure(
         std::rethrow_exception(failure);
     } catch (const track_geometry::TrackStationProjectionWindowMiss&) {
         // The accepted projection hint still selects one local branch. A
-        // CVODE trial can move beyond that finite window before the accepted
-        // endpoint history advances; shrinking the trial step is the stated
-        // recovery. Ambiguous projections and invalid line domains retain
-        // their original fatal exception types.
+        // numerical-backend trial can move beyond that finite window before
+        // the accepted endpoint history advances; shrinking the trial step is
+        // the stated recovery. Ambiguous projections and invalid line domains
+        // retain their original fatal exception types.
         return true;
     } catch (...) {
         return false;

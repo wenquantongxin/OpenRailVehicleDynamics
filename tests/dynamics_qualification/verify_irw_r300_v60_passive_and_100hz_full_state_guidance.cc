@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -19,6 +20,7 @@
 
 #include "irw_passive_scenario_runs.h"
 #include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
+#include "time_integrator_qualification_case.h"
 
 namespace {
 
@@ -27,14 +29,194 @@ using orvd::dynamics_qualification::
     IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration;
 using orvd::dynamics_qualification::RunIrwPassiveScenario;
 using orvd::dynamics_qualification::RunIrwR300Aar5V60At100HzFullStateGuidance;
+using orvd::dynamics_qualification::TimeIntegratorQualificationBackend;
+using orvd::dynamics_qualification::TimeIntegratorQualificationCase;
+using orvd::dynamics_qualification::
+    TimeIntegratorQualificationToleranceTier;
+using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
+
+struct QualificationCaseIdentity final {
+    TimeIntegratorQualificationCase qualification_case;
+    std::string_view identifier;
+};
+
+constexpr std::array<QualificationCaseIdentity, 8>
+    kQualificationCaseIdentities{{
+        {{TimeIntegratorQualificationBackend::kScenarioDefaultCvode,
+          TimeIntegratorQualificationToleranceTier::kCoarse},
+         "scenario_default_cvode_coarse"},
+        {{TimeIntegratorQualificationBackend::kScenarioDefaultCvode,
+          TimeIntegratorQualificationToleranceTier::kNominal},
+         "scenario_default_cvode_nominal"},
+        {{TimeIntegratorQualificationBackend::kScenarioDefaultCvode,
+          TimeIntegratorQualificationToleranceTier::kFine},
+         "scenario_default_cvode_fine"},
+        {{TimeIntegratorQualificationBackend::kScenarioDefaultCvode,
+          TimeIntegratorQualificationToleranceTier::kReference},
+         "scenario_default_cvode_reference"},
+        {{TimeIntegratorQualificationBackend::kRadau5,
+          TimeIntegratorQualificationToleranceTier::kCoarse},
+         "radau5_coarse"},
+        {{TimeIntegratorQualificationBackend::kRadau5,
+          TimeIntegratorQualificationToleranceTier::kNominal},
+         "radau5_nominal"},
+        {{TimeIntegratorQualificationBackend::kRadau5,
+          TimeIntegratorQualificationToleranceTier::kFine},
+         "radau5_fine"},
+        {{TimeIntegratorQualificationBackend::kRadau5,
+          TimeIntegratorQualificationToleranceTier::kReference},
+         "radau5_reference"},
+    }};
+
+constexpr bool QualificationCasesRoundTrip() {
+    for (const QualificationCaseIdentity& identity :
+         kQualificationCaseIdentities) {
+        if (orvd::dynamics_qualification::
+                TimeIntegratorQualificationCaseIdentifier(
+                    identity.qualification_case) != identity.identifier ||
+            orvd::dynamics_qualification::
+                ParseTimeIntegratorQualificationCase(identity.identifier) !=
+                identity.qualification_case) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(QualificationCasesRoundTrip());
+static_assert(orvd::dynamics_qualification::
+                  TimeIntegratorQualificationToleranceScale(
+                      TimeIntegratorQualificationToleranceTier::kCoarse) ==
+              10.0);
+static_assert(orvd::dynamics_qualification::
+                  TimeIntegratorQualificationToleranceScale(
+                      TimeIntegratorQualificationToleranceTier::kNominal) ==
+              1.0);
+static_assert(orvd::dynamics_qualification::
+                  TimeIntegratorQualificationToleranceScale(
+                      TimeIntegratorQualificationToleranceTier::kFine) ==
+              0.1);
+static_assert(orvd::dynamics_qualification::
+                  TimeIntegratorQualificationToleranceScale(
+                      TimeIntegratorQualificationToleranceTier::kReference) ==
+              0.01);
+static_assert(
+    !orvd::dynamics_qualification::ParseTimeIntegratorQualificationCase(
+         "radau5_future_placeholder")
+         .has_value());
 
 int failures = 0;
+
+bool Near(double actual, double expected) {
+    return std::abs(actual - expected) <=
+           4.0 * std::numeric_limits<double>::epsilon() *
+               std::max({1.0, std::abs(actual), std::abs(expected)});
+}
 
 void Require(bool condition, std::string_view what) {
     if (!condition) {
         std::fprintf(stderr, "IRW R300/V60 artifact check: %.*s\n",
                      static_cast<int>(what.size()), what.data());
         ++failures;
+    }
+}
+
+void CheckTimeIntegratorQualificationNumerics() {
+    constexpr double kRelativeTolerance = 1.0e-6;
+    constexpr double kPositionTolerance = 2.0e-5;
+    constexpr double kVelocityTolerance = 3.0e-4;
+    constexpr double kSeriesForceTolerance = 4.0e-3;
+    constexpr std::array kScenarioDefaultRecipes{
+        SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
+        SystemContinuousStateIntegrationRecipe::kCvodeBdf5};
+    constexpr std::array kTiers{
+        TimeIntegratorQualificationToleranceTier::kCoarse,
+        TimeIntegratorQualificationToleranceTier::kNominal,
+        TimeIntegratorQualificationToleranceTier::kFine,
+        TimeIntegratorQualificationToleranceTier::kReference};
+
+    for (const SystemContinuousStateIntegrationRecipe default_recipe :
+         kScenarioDefaultRecipes) {
+        const auto unqualified = orvd::dynamics_qualification::
+            ResolveTimeIntegratorQualificationNumerics(
+                std::nullopt, default_recipe, kRelativeTolerance,
+                kPositionTolerance, kVelocityTolerance,
+                kSeriesForceTolerance);
+        Require(unqualified.integration_recipe == default_recipe &&
+                    !unqualified.qualification_case.has_value() &&
+                    unqualified.qualification_case_identifier.empty() &&
+                    unqualified.tolerance_tier_identifier ==
+                        "scenario_default" &&
+                    Near(unqualified.tolerance_scale_from_scenario_recipe,
+                         1.0) &&
+                    Near(unqualified.relative_tolerance,
+                         kRelativeTolerance) &&
+                    Near(unqualified.generalized_position_absolute_tolerance,
+                         kPositionTolerance) &&
+                    Near(unqualified.generalized_velocity_absolute_tolerance,
+                         kVelocityTolerance) &&
+                    Near(unqualified.series_force_absolute_tolerance_newtons,
+                         kSeriesForceTolerance),
+                "an unqualified run did not preserve its scenario-default "
+                "CVODE recipe and tolerances");
+
+        for (const TimeIntegratorQualificationToleranceTier tier : kTiers) {
+            const double scale = orvd::dynamics_qualification::
+                TimeIntegratorQualificationToleranceScale(tier);
+            const TimeIntegratorQualificationCase cvode_case{
+                TimeIntegratorQualificationBackend::kScenarioDefaultCvode,
+                tier};
+            const auto cvode = orvd::dynamics_qualification::
+                ResolveTimeIntegratorQualificationNumerics(
+                    cvode_case, default_recipe, kRelativeTolerance,
+                    kPositionTolerance, kVelocityTolerance,
+                    kSeriesForceTolerance);
+            Require(cvode.integration_recipe == default_recipe &&
+                        cvode.qualification_case == cvode_case &&
+                        cvode.qualification_case_identifier ==
+                            orvd::dynamics_qualification::
+                                TimeIntegratorQualificationCaseIdentifier(
+                                    cvode_case) &&
+                        Near(cvode.tolerance_scale_from_scenario_recipe,
+                             scale) &&
+                        Near(cvode.relative_tolerance,
+                             kRelativeTolerance * scale) &&
+                        Near(cvode.generalized_position_absolute_tolerance,
+                             kPositionTolerance * scale) &&
+                        Near(cvode.generalized_velocity_absolute_tolerance,
+                             kVelocityTolerance * scale) &&
+                        Near(cvode.series_force_absolute_tolerance_newtons,
+                             kSeriesForceTolerance * scale),
+                    "a closed CVODE qualification case did not resolve its "
+                    "actual recipe and scaled tolerances");
+
+            const TimeIntegratorQualificationCase radau5_case{
+                TimeIntegratorQualificationBackend::kRadau5, tier};
+            const auto radau5 = orvd::dynamics_qualification::
+                ResolveTimeIntegratorQualificationNumerics(
+                    radau5_case, default_recipe, kRelativeTolerance,
+                    kPositionTolerance, kVelocityTolerance,
+                    kSeriesForceTolerance);
+            Require(radau5.integration_recipe ==
+                            SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                        radau5.qualification_case == radau5_case &&
+                        radau5.qualification_case_identifier ==
+                            orvd::dynamics_qualification::
+                                TimeIntegratorQualificationCaseIdentifier(
+                                    radau5_case) &&
+                        Near(radau5.tolerance_scale_from_scenario_recipe,
+                             scale) &&
+                        Near(radau5.relative_tolerance,
+                             kRelativeTolerance * scale) &&
+                        Near(radau5.generalized_position_absolute_tolerance,
+                             kPositionTolerance * scale) &&
+                        Near(radau5.generalized_velocity_absolute_tolerance,
+                             kVelocityTolerance * scale) &&
+                        Near(radau5.series_force_absolute_tolerance_newtons,
+                             kSeriesForceTolerance * scale),
+                    "a closed Radau5 qualification case did not resolve its "
+                    "actual recipe and scaled tolerances");
+        }
     }
 }
 
@@ -176,7 +358,9 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     configuration.sample_period_nanoseconds = 100'000;
 
     const auto summary = RunIrwPassiveScenario(configuration);
-    Require(summary.sample_count == 101 && summary.maximum_bdf_order == 2,
+    Require(summary.sample_count == 101 && summary.maximum_bdf_order == 2 &&
+                summary.integration_recipe ==
+                    SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
             "the 10 ms / 100 us clock did not publish 101 points");
     Require(summary.integration_statistics.successful_internal_step_count > 0 &&
                 summary.integration_statistics.right_hand_side_evaluation_count +
@@ -199,9 +383,9 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the R300/V60 short window did not retain its expected left "
             "continuation");
 
-    const std::array<std::string_view, 5> files{
-        "COMPLETE", "metadata.json", "observations.tsv",
-        "contact_patches.tsv", "performance.json"};
+    const std::array<std::string_view, 6> files{
+        "COMPLETE", "metadata.json", "continuous_states.tsv",
+        "observations.tsv", "contact_patches.tsv", "performance.json"};
     for (const std::string_view file : files) {
         Require(std::filesystem::is_regular_file(
                     configuration.output_directory / file),
@@ -210,8 +394,51 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     Require(!std::filesystem::exists(root / "real-irw.partial"),
             "the successful IRW publication left a partial directory");
 
-    std::ifstream input(configuration.output_directory / "observations.tsv");
     std::string line;
+    std::ifstream continuous_state_input(
+        configuration.output_directory / "continuous_states.tsv");
+    std::getline(continuous_state_input, line);
+    const std::vector<std::string> continuous_state_header = SplitTabs(line);
+    std::vector<std::vector<std::string>> continuous_state_rows;
+    while (std::getline(continuous_state_input, line)) {
+        continuous_state_rows.push_back(SplitTabs(line));
+    }
+    Require(continuous_state_header.size() == 3 + 81 + 74 + 2 &&
+                continuous_state_header[3] == "q.0" &&
+                continuous_state_header[3 + 80] == "q.80" &&
+                continuous_state_header[3 + 81] == "v.0" &&
+                continuous_state_header[3 + 81 + 73] == "v.73" &&
+                continuous_state_header[3 + 81 + 74] == "z.0" &&
+                continuous_state_header.back() == "z.1" &&
+                continuous_state_rows.size() == 101,
+            "the IRW continuous-state artifact has the wrong [q;v;z] "
+            "layout or sample count");
+    const bool continuous_state_rows_are_keyed =
+        continuous_state_rows.size() == 101 &&
+        continuous_state_rows.front().size() ==
+            continuous_state_header.size() &&
+        continuous_state_rows.back().size() ==
+            continuous_state_header.size() &&
+        continuous_state_rows.front()[0] == "0" &&
+        continuous_state_rows.front()[1] == "0" &&
+        continuous_state_rows.back()[0] == "100" &&
+        continuous_state_rows.back()[1] == "10000000";
+    Require(continuous_state_rows_are_keyed,
+            "the IRW continuous-state artifact is not keyed by the integer "
+            "qualification clock");
+    if (continuous_state_rows_are_keyed) {
+        for (Eigen::Index state = 0;
+             state < summary.terminal_continuous_state.size(); ++state) {
+            Require(ParseFiniteDouble(continuous_state_rows.back()[
+                        static_cast<std::size_t>(state) + 3]) ==
+                        summary.terminal_continuous_state[state],
+                    "the IRW published terminal state differs from the "
+                    "accepted endpoint");
+        }
+    }
+
+    std::ifstream input(configuration.output_directory / "observations.tsv");
+    line.clear();
     std::getline(input, line);
     const std::vector<std::string> header = SplitTabs(line);
     std::vector<std::vector<std::string>> rows;
@@ -296,6 +523,20 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
     const nlohmann::json metadata_document = nlohmann::json::parse(metadata);
+    Require(metadata_document.at("artifact_schema_identifier") ==
+                    "orvd.passive_vehicle_qualification.v2" &&
+                metadata_document.at("continuous_state_observation_contract")
+                        .at("file") == "continuous_states.tsv" &&
+                metadata_document.at("continuous_state_observation_contract")
+                        .at("row_join_key") ==
+                    nlohmann::json::array(
+                        {"sample_index", "time_nanoseconds"}) &&
+                metadata_document.at("continuous_state_observation_contract")
+                        .at("time_seconds_role") == "audit_only" &&
+                metadata_document.at("continuous_state_observation_contract")
+                        .at("state_layout") == "[q;v;z]",
+            "the IRW artifact does not publish its lossless continuous-state "
+            "comparison contract");
     Require(metadata.find(
                 "\"qualification_vehicle_recipe\": "
                 "\"IRW_R300_NO_IRREGULARITY_V60_PASSIVE\"") !=
@@ -305,6 +546,18 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the IRW recipe or explicit no-irregularity identity is wrong");
     Require(metadata.find("\"relative_tolerance\": 9.9999999999999995e-07") !=
                 std::string::npos &&
+                NumericalExecutionContractContains(
+                    metadata,
+                    "\"integrator_recipe_identifier\": \"cvode_bdf2\"") &&
+                NumericalExecutionContractContains(
+                    metadata, "\"qualification_case_identifier\": null") &&
+                NumericalExecutionContractContains(
+                    metadata,
+                    "\"tolerance_tier_identifier\": "
+                    "\"scenario_default\"") &&
+                NumericalExecutionContractContains(
+                    metadata,
+                    "\"tolerance_scale_from_scenario_recipe\": 1") &&
                 NumericalExecutionContractContains(
                     metadata, "\"maximum_bdf_order\": 2") &&
                 metadata.find(
@@ -347,6 +600,88 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the IRW runner overwrote an existing successful artifact");
 
+    IrwPassiveScenarioRunConfiguration radau5 = configuration;
+    radau5.output_directory = root / "real-irw-radau5-coarse";
+    radau5.duration_nanoseconds = 1'000'000;
+    radau5.sample_period_nanoseconds = 1'000'000;
+    radau5.time_integrator_qualification_case =
+        TimeIntegratorQualificationCase{
+            TimeIntegratorQualificationBackend::kRadau5,
+            TimeIntegratorQualificationToleranceTier::kCoarse};
+    const auto radau5_summary = RunIrwPassiveScenario(radau5);
+    Require(radau5_summary.integration_recipe ==
+                    SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                radau5_summary.time_integrator_qualification_case ==
+                    radau5.time_integrator_qualification_case &&
+                !radau5_summary.maximum_bdf_order.has_value() &&
+                radau5_summary.sample_count == 2 &&
+                radau5_summary.integration_statistics
+                        .successful_internal_step_count > 0 &&
+                radau5_summary.integration_statistics
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    1,
+            "the closed coarse-tier passive IRW Radau5 artifact did not run");
+    const nlohmann::json radau5_metadata = nlohmann::json::parse(
+        ReadWholeFile(radau5.output_directory / "metadata.json"));
+    const auto& radau5_contract =
+        radau5_metadata.at("numerical_execution_contract");
+    const auto& radau5_floating_point_contract =
+        radau5_contract.at("floating_point_compilation_contract");
+    Require(radau5_contract.at("qualification_case_identifier") ==
+                    "radau5_coarse" &&
+                radau5_contract.at("tolerance_tier_identifier") == "coarse" &&
+                Near(radau5_contract
+                         .at("tolerance_scale_from_scenario_recipe")
+                         .get<double>(),
+                     10.0) &&
+                radau5_contract.at("integrator_recipe_identifier") ==
+                    "radau5" &&
+                radau5_contract.at("maximum_bdf_order").is_null() &&
+                Near(radau5_contract.at("relative_tolerance").get<double>(),
+                     1.0e-5) &&
+                Near(radau5_contract
+                         .at("generalized_position_absolute_tolerance")
+                         .get<double>(),
+                     1.0e-5) &&
+                Near(radau5_contract
+                         .at("generalized_velocity_absolute_tolerance")
+                         .get<double>(),
+                     1.0e-4) &&
+                Near(radau5_contract
+                         .at("series_force_absolute_tolerance_newtons")
+                         .get<double>(),
+                     1.0e-5),
+            "the coarse-tier passive IRW Radau5 artifact misreported its "
+            "numerical case");
+    Require(radau5_floating_point_contract.at("identifier") ==
+                    "orvd.strict_ieee_no_fast_math.v1" &&
+                radau5_floating_point_contract
+                    .at("cmake_external_flag_audit_passed") == true &&
+                radau5_floating_point_contract
+                    .at("compile_command_audit_enabled") == true &&
+                radau5_floating_point_contract
+                    .at("fast_math_macro_defined") == false &&
+                radau5_floating_point_contract
+                    .at("finite_math_only_enabled") == false &&
+                radau5_floating_point_contract.at("build_type") ==
+                    "Release" &&
+                !radau5_floating_point_contract.at("compiler_id")
+                     .get<std::string>()
+                     .empty() &&
+                !radau5_floating_point_contract.at("compiler_version")
+                     .get<std::string>()
+                     .empty(),
+            "the passive IRW artifact did not publish its compiled strict "
+            "floating-point identity");
+    const nlohmann::json radau5_performance = nlohmann::json::parse(
+        ReadWholeFile(radau5.output_directory / "performance.json"));
+    Require(radau5_performance.at("integrator_recipe_identifier") ==
+                    "radau5" &&
+                radau5_performance.at("qualification_case_identifier") ==
+                    "radau5_coarse",
+            "the coarse-tier passive IRW performance record lost its case "
+            "identity");
+
     configuration.output_directory = root / "real-irw-aar5";
     configuration.duration_nanoseconds = 100'000;
     configuration.sample_period_nanoseconds = 100'000;
@@ -373,6 +708,9 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     Require(aar5_metadata.find(
                 "\"relative_tolerance\": 1e-08") !=
                     std::string::npos &&
+                NumericalExecutionContractContains(
+                    aar5_metadata,
+                    "\"integrator_recipe_identifier\": \"cvode_bdf5\"") &&
                 NumericalExecutionContractContains(
                     aar5_metadata, "\"maximum_bdf_order\": 5") &&
                 aar5_metadata.find(
@@ -457,6 +795,7 @@ void CheckPassiveDenseJacobianThreading(
 
     std::optional<orvd::dynamics_qualification::QualificationRunSummary>
         reference;
+    std::string reference_states;
     std::string reference_observations;
     std::string reference_patches;
     for (const int requested_threads : {1, 4, 8, 16}) {
@@ -478,14 +817,18 @@ void CheckPassiveDenseJacobianThreading(
             configuration.output_directory / "observations.tsv");
         const std::string patches = ReadWholeFile(
             configuration.output_directory / "contact_patches.tsv");
+        const std::string states = ReadWholeFile(
+            configuration.output_directory / "continuous_states.tsv");
         if (!reference.has_value()) {
             reference = candidate;
+            reference_states = states;
             reference_observations = observations;
             reference_patches = patches;
         } else {
             Require(SameTrajectoryWork(reference->integration_statistics,
                                        candidate.integration_statistics) &&
                         SameTerminalState(*reference, candidate) &&
+                        states == reference_states &&
                         observations == reference_observations &&
                         patches == reference_patches,
                     "the passive IRW 1/4/8/16-thread dense Jacobian changed "
@@ -500,7 +843,9 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const int original_openmp_dynamic = omp_get_dynamic();
     const int original_openmp_max_threads = omp_get_max_threads();
     omp_set_dynamic(0);
-    omp_set_num_threads(8);
+    // Keep one all-serial correctness oracle. The 4/8/16-worker runs below
+    // must preserve it exactly; their timing is not part of this CTest.
+    omp_set_num_threads(1);
     IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration configuration;
     configuration.vehicle_definition_path = argv[1];
     configuration.resolved_startup_state_path = argv[2];
@@ -513,6 +858,8 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
 
     const auto summary = RunIrwR300Aar5V60At100HzFullStateGuidance(configuration);
     Require(summary.observation_count == 41 &&
+                summary.integration_recipe ==
+                    SystemContinuousStateIntegrationRecipe::kCvodeBdf2 &&
                 summary.maximum_bdf_order == 2 &&
                 summary.control_audit_count == 4 &&
                 summary.positive_hold_interval_count == 2 &&
@@ -520,7 +867,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                 summary.integration_statistics.jacobian_evaluation_count > 1 &&
                 summary.integration_statistics
                         .requested_dense_finite_difference_jacobian_worker_count ==
-                    8 &&
+                    1 &&
                 summary.terminal_continuous_state.size() == 157,
             "the 20 ms control recipe did not produce initialization, "
             "U0..U2, two holds and one nonterminal synchronization");
@@ -696,6 +1043,9 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                               "\"aar5_irregularity\"") !=
                     std::string::npos &&
                 NumericalExecutionContractContains(
+                    metadata,
+                    "\"integrator_recipe_identifier\": \"cvode_bdf2\"") &&
+                NumericalExecutionContractContains(
                     metadata, "\"maximum_bdf_order\": 2") &&
                 metadata.find("\"numerical_tolerances\"") ==
                     std::string::npos &&
@@ -724,7 +1074,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const std::array<std::string_view, 4> physical_files{
         "observations.tsv", "contact_patches.tsv", "control_events.tsv",
         "endpoint_diagnostics.tsv"};
-    for (const int requested_threads : {1, 4, 16}) {
+    for (const int requested_threads : {4, 8, 16}) {
         omp_set_num_threads(requested_threads);
         auto comparison = configuration;
         comparison.output_directory =
@@ -748,6 +1098,71 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     "a physical or control artifact");
         }
     }
+
+    auto radau5 = configuration;
+    radau5.output_directory = root / "controlled-irw-radau5";
+    radau5.time_integrator_qualification_case =
+        TimeIntegratorQualificationCase{
+            TimeIntegratorQualificationBackend::kRadau5,
+            TimeIntegratorQualificationToleranceTier::kNominal};
+    const auto radau5_summary =
+        RunIrwR300Aar5V60At100HzFullStateGuidance(radau5);
+    Require(radau5_summary.integration_recipe ==
+                    SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                !radau5_summary.maximum_bdf_order.has_value() &&
+                radau5_summary.observation_count == 41 &&
+                radau5_summary.control_audit_count == 4 &&
+                radau5_summary.positive_hold_interval_count == 2 &&
+                radau5_summary.backend_synchronization_count == 1 &&
+                radau5_summary.integration_statistics
+                        .successful_internal_step_count > 0 &&
+                radau5_summary.integration_statistics
+                        .requested_dense_finite_difference_jacobian_worker_count ==
+                    1 &&
+                radau5_summary.terminal_continuous_state.size() == 157 &&
+                radau5_summary.terminal_continuous_state.allFinite(),
+            "the Radau5 qualification recipe did not preserve the 100 Hz "
+            "event and explicit-reinitialization contract");
+    const std::string radau5_metadata =
+        ReadWholeFile(radau5.output_directory / "metadata.json");
+    const nlohmann::json radau5_metadata_document =
+        nlohmann::json::parse(radau5_metadata);
+    const auto& controlled_floating_point_contract =
+        radau5_metadata_document.at("numerical_execution_contract")
+            .at("floating_point_compilation_contract");
+    Require(NumericalExecutionContractContains(
+                radau5_metadata,
+                "\"integrator_recipe_identifier\": \"radau5\"") &&
+                NumericalExecutionContractContains(
+                    radau5_metadata, "\"maximum_bdf_order\": null") &&
+                NumericalExecutionContractContains(
+                    radau5_metadata,
+                    "\"qualification_case_identifier\": "
+                    "\"radau5_nominal\"") &&
+                NumericalExecutionContractContains(
+                    radau5_metadata,
+                    "\"tolerance_tier_identifier\": \"nominal\""),
+            "the Radau5 controlled artifact misreports a BDF identity");
+    Require(controlled_floating_point_contract.at("identifier") ==
+                    "orvd.strict_ieee_no_fast_math.v1" &&
+                controlled_floating_point_contract
+                    .at("cmake_external_flag_audit_passed") == true &&
+                controlled_floating_point_contract
+                    .at("compile_command_audit_enabled") == true &&
+                controlled_floating_point_contract
+                    .at("fast_math_macro_defined") == false &&
+                controlled_floating_point_contract
+                    .at("finite_math_only_enabled") == false &&
+                controlled_floating_point_contract.at("build_type") ==
+                    "Release" &&
+                !controlled_floating_point_contract.at("compiler_id")
+                     .get<std::string>()
+                     .empty() &&
+                !controlled_floating_point_contract.at("compiler_version")
+                     .get<std::string>()
+                     .empty(),
+            "the controlled IRW artifact did not publish its compiled strict "
+            "floating-point identity");
 
     auto invalid = configuration;
     invalid.track_geometry_path = root / "not-r300.json";
@@ -812,6 +1227,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(root);
 
     try {
+        CheckTimeIntegratorQualificationNumerics();
         CheckRealIrwRun(argv, root);
         CheckPassiveDenseJacobianThreading(argv, root);
         CheckControlledIrwRun(argv, root);

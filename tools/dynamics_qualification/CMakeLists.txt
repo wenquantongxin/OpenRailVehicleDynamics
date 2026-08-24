@@ -12,9 +12,25 @@ add_library(orvd_dynamics_qualification_support STATIC
 
 orvd_configure_first_party_target(orvd_dynamics_qualification_support)
 
+if(NOT ORVD_STRICT_FLOATING_POINT_FLAG_AUDIT_PASSED)
+    message(FATAL_ERROR
+        "Dynamics qualification requires the strict floating-point flag audit")
+endif()
+if(NOT ORVD_STRICT_FLOATING_POINT_COMPILE_COMMAND_AUDIT_ENABLED)
+    message(FATAL_ERROR
+        "Dynamics qualification requires the final compile-command audit")
+endif()
+
+target_compile_definitions(orvd_dynamics_qualification_support PRIVATE
+    ORVD_STRICT_FLOATING_POINT_FLAG_AUDIT_PASSED=1
+    ORVD_QUALIFICATION_CXX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    ORVD_QUALIFICATION_CXX_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+    ORVD_QUALIFICATION_BUILD_TYPE="$<CONFIG>")
+
 target_include_directories(orvd_dynamics_qualification_support
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/libs/integrators/src>)
 
 target_link_libraries(orvd_dynamics_qualification_support
     PUBLIC orvd_configuration orvd_integrators

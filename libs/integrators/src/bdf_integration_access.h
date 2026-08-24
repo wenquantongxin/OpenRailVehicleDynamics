@@ -6,7 +6,6 @@
 #include <memory>
 
 #include "orvd/integrators/cvode_continuous_state_advancer.h"
-#include "orvd/integrators/system_continuous_state_advancer.h"
 
 namespace orvd::integrators::internal {
 
@@ -33,22 +32,10 @@ class BdfIntegrationAccess final {
         Eigen::VectorXd initial_continuous_state,
         ContinuousStateErrorTolerances tolerances);
 
-    [[nodiscard]] static std::unique_ptr<SystemContinuousStateAdvancer>
-    MakeFifthOrderSystemContinuousStateAdvancer(
-        const system_assembly::SystemInstance& system,
-        const system_assembly::CompiledSystemPlan& plan,
-        system_assembly::SystemRuntimeContext& accepted_context,
-        ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces);
-
     [[nodiscard]] static int ConfiguredMaximumBdfOrder(
         const CvodeContinuousStateAdvancer& advancer);
-    [[nodiscard]] static int ConfiguredMaximumBdfOrder(
-        const SystemContinuousStateAdvancer& advancer);
     [[nodiscard]] static int LastBdfOrder(
         const CvodeContinuousStateAdvancer& advancer);
-    [[nodiscard]] static int LastBdfOrder(
-        const SystemContinuousStateAdvancer& advancer);
 };
 
 }  // namespace orvd::integrators::internal

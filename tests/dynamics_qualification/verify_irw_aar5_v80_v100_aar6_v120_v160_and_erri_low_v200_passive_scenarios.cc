@@ -201,7 +201,10 @@ void CheckScenario(const ScenarioExpectation& expected,
     configuration.sample_period_nanoseconds = 100'000;
 
     const auto summary = RunIrwPassiveScenario(configuration);
-    Require(summary.sample_count == 2 && summary.maximum_bdf_order == 5,
+    Require(summary.sample_count == 2 && summary.maximum_bdf_order == 5 &&
+                summary.integration_recipe ==
+                    orvd::integrators::internal::
+                        SystemContinuousStateIntegrationRecipe::kCvodeBdf5,
             "a declared scenario did not run with its fifth-order recipe");
 
     const nlohmann::json metadata = nlohmann::json::parse(
@@ -214,6 +217,8 @@ void CheckScenario(const ScenarioExpectation& expected,
                     expected.speed_meters_per_second &&
                 metadata.at("track_irregularity_identifier") ==
                     expected.irregularity &&
+                contract.at("integrator_recipe_identifier") ==
+                    "cvode_bdf5" &&
                 contract.at("maximum_bdf_order") == 5 &&
                 contract.at("relative_tolerance") == 1.0e-9 &&
                 contract.at("generalized_position_absolute_tolerance") ==

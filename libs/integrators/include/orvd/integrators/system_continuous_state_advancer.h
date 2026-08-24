@@ -20,15 +20,16 @@ class SystemRuntimeContext;
 namespace orvd::integrators {
 
 namespace internal {
-class BdfIntegrationAccess;
-enum class MaximumBdfOrder : int;
+class SystemContinuousStateIntegrationAccess;
+enum class SystemContinuousStateIntegrationRecipe;
 }
 
 /// Advances one compiled system while keeping trial state out of its accepted
 /// runtime context.
 ///
 /// `system`, `plan` and `accepted_context` are borrowed and must outlive this
-/// object.  The dedicated RHS context and CVODE backend are private.  A
+/// object. The dedicated RHS context and numerical backend are private. The
+/// public constructor continues to select CVODE BDF2. A
 /// successful public advance accepts time and the complete continuous state
 /// exactly once; a failed advance requires explicit synchronization from the
 /// still-valid accepted context before another attempt.
@@ -86,7 +87,7 @@ class SystemContinuousStateAdvancer final {
     /// increasing. Its first entry must equal the accepted time and its last
     /// entry must equal `target_time_seconds`. The first and last columns equal
     /// the entry and accepted endpoint states, respectively. Intermediate
-    /// sample times do not become CVODE stops.
+    /// sample times do not become numerical-backend stops.
     ///
     /// The returned matrix and the accepted endpoint are one transaction. Any
     /// failure after entering the backend returns no matrix, leaves the
@@ -116,7 +117,7 @@ class SystemContinuousStateAdvancer final {
     void SynchronizeAfterAcceptedContextChange();
 
    private:
-    friend class internal::BdfIntegrationAccess;
+    friend class internal::SystemContinuousStateIntegrationAccess;
 
     SystemContinuousStateAdvancer(
         const system_assembly::SystemInstance& system,
@@ -124,7 +125,7 @@ class SystemContinuousStateAdvancer final {
         system_assembly::SystemRuntimeContext& accepted_context,
         ContinuousStateErrorTolerances tolerances,
         NoCallTimeAppliedForces no_call_time_applied_forces,
-        internal::MaximumBdfOrder maximum_bdf_order);
+        internal::SystemContinuousStateIntegrationRecipe integration_recipe);
 
     class Implementation;
     std::unique_ptr<Implementation> implementation_;

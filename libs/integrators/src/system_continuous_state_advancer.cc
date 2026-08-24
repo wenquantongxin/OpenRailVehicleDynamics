@@ -4,32 +4,18 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
-#include <exception>
 #include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <vector>
 
-#include <omp.h>
-
-// The parallel regions below are load-bearing. A toolchain can accept an
-// OpenMP-looking flag, link an OpenMP runtime, and still drop every pragma:
-// Clang's -fopenmp=libgomp does exactly that, with no diagnostic, and the
-// resulting binary answers omp_* queries plausibly while running serial.
-// Refuse that build here instead of qualifying it.
-#ifndef _OPENMP
-#error "OpenMP compile semantics are required: _OPENMP is not defined"
-#endif
-
-#include "orvd/integrators/cvode_continuous_state_advancer.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
 
-#include "bdf_integration_access.h"
-#include "dense_finite_difference_jacobian_provider.h"
 #include "integrator_limits.h"
+#include "system_continuous_state_backend.h"
+#include "system_continuous_state_integration_access.h"
 
 namespace orvd::integrators {
 namespace {
@@ -38,177 +24,6 @@ bool SameDoubleBits(double left, double right) {
     return std::bit_cast<std::uint64_t>(left) ==
            std::bit_cast<std::uint64_t>(right);
 }
-
-constexpr int kMinimumParallelJacobianWorkerCount = 4;
-constexpr int kIntermediateParallelJacobianWorkerCount = 8;
-constexpr int kMaximumParallelJacobianWorkerCount = 16;
-
-int ResolveParallelJacobianWorkerCount(
-    const system_assembly::SystemInstance& system) {
-    if (system.contact_force_plan() == nullptr || omp_get_dynamic() != 0) {
-        return 0;
-    }
-    const int maximum_threads = omp_get_max_threads();
-    if (maximum_threads >= kMaximumParallelJacobianWorkerCount) {
-        return kMaximumParallelJacobianWorkerCount;
-    }
-    if (maximum_threads >= kIntermediateParallelJacobianWorkerCount) {
-        return kIntermediateParallelJacobianWorkerCount;
-    }
-    if (maximum_threads >= kMinimumParallelJacobianWorkerCount) {
-        return kMinimumParallelJacobianWorkerCount;
-    }
-    return 0;
-}
-
-class SystemDenseFiniteDifferenceJacobian final
-    : public internal::DenseFiniteDifferenceJacobianProvider {
-   public:
-    SystemDenseFiniteDifferenceJacobian(
-        const system_assembly::SystemInstance& system,
-        const system_assembly::CompiledSystemPlan& plan,
-        system_assembly::SystemRuntimeContext& source_context,
-        int worker_count,
-        NoCallTimeAppliedForces no_call_time_applied_forces)
-        : system_(&system),
-          source_context_(&source_context),
-          state_size_(system.continuous_state_size()),
-          worker_count_(worker_count),
-          failures_(static_cast<std::size_t>(state_size_)),
-          attempted_(static_cast<std::size_t>(state_size_)) {
-        if (worker_count_ != kMinimumParallelJacobianWorkerCount &&
-            worker_count_ != kIntermediateParallelJacobianWorkerCount &&
-            worker_count_ != kMaximumParallelJacobianWorkerCount) {
-            throw std::invalid_argument(
-                "system dense Jacobian: worker count must be four, eight, or "
-                "sixteen");
-        }
-
-        Eigen::VectorXd initial_state(state_size_);
-        system_->CopyContinuousState(*source_context_, initial_state);
-        workers_.reserve(static_cast<std::size_t>(worker_count_));
-        for (int ordinal = 0; ordinal < worker_count_; ++ordinal) {
-            auto worker = std::make_unique<Worker>();
-            worker->context = system_->CreateDefaultRuntimeContext(
-                source_context_->time_seconds());
-            system_->SetTimeContinuousStateAndWheelRailProjectionHints(
-                *worker->context, source_context_->time_seconds(),
-                initial_state,
-                source_context_
-                    ->wheel_rail_projection_station_hints_meters());
-            worker->rhs = std::make_unique<SystemRhsBridge>(
-                *system_, plan, *worker->context,
-                no_call_time_applied_forces);
-            worker->rhs->SynchronizeContextLocalDataFrom(*source_context_);
-            worker->state.resize(state_size_);
-            worker->derivatives.resize(state_size_);
-            workers_.push_back(std::move(worker));
-        }
-    }
-
-    [[nodiscard]] int continuous_state_size() const noexcept override {
-        return state_size_;
-    }
-
-    [[nodiscard]] int requested_worker_count() const noexcept override {
-        return worker_count_;
-    }
-
-    [[nodiscard]] internal::DenseFiniteDifferenceJacobianBatchResult
-    CalcPerturbedDerivatives(
-        double time_seconds,
-        const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
-        const Eigen::Ref<const Eigen::VectorXd>& increments,
-        Eigen::MatrixXd& perturbed_derivatives) override {
-        if (continuous_state.size() != state_size_ ||
-            increments.size() != state_size_ ||
-            perturbed_derivatives.rows() != state_size_ ||
-            perturbed_derivatives.cols() != state_size_) {
-            throw std::invalid_argument(
-                "system dense Jacobian: callback storage has the wrong "
-                "shape");
-        }
-
-        const auto projection_hints =
-            source_context_
-                ->wheel_rail_projection_station_hints_meters();
-        for (const auto& worker : workers_) {
-            system_->SetTimeContinuousStateAndWheelRailProjectionHints(
-                *worker->context, time_seconds, continuous_state,
-                projection_hints);
-        }
-        std::fill(failures_.begin(), failures_.end(), nullptr);
-        std::fill(attempted_.begin(), attempted_.end(), 0U);
-
-#pragma omp parallel num_threads(worker_count_)
-        {
-            Worker& worker = *workers_[static_cast<std::size_t>(
-                omp_get_thread_num())];
-#pragma omp for schedule(dynamic, 1)
-            for (int column = 0; column < state_size_; ++column) {
-                try {
-                    worker.state = continuous_state;
-                    worker.state[column] += increments[column];
-                    // Dynamic scheduling can reuse this worker for unrelated
-                    // columns. Restore the exact base-state contact result
-                    // after preparing every perturbed state and before the
-                    // RHS may replace the worker's cache.
-                    system_assembly::internal::
-                        SeedExactWheelRailContactEvaluationCaches(
-                            *source_context_, *worker.context);
-                    attempted_[static_cast<std::size_t>(column)] = 1U;
-                    worker.rhs->CalcTimeDerivatives(
-                        time_seconds, worker.state, worker.derivatives);
-                    perturbed_derivatives.col(column) = worker.derivatives;
-                } catch (...) {
-                    failures_[static_cast<std::size_t>(column)] =
-                        std::current_exception();
-                }
-            }
-        }
-
-        internal::DenseFiniteDifferenceJacobianBatchResult result;
-        for (int column = 0; column < state_size_; ++column) {
-            result.attempted_right_hand_side_evaluation_count +=
-                attempted_[static_cast<std::size_t>(column)] != 0U ? 1 : 0;
-            if (result.lowest_column_failure == nullptr &&
-                failures_[static_cast<std::size_t>(column)] != nullptr) {
-                result.lowest_column_failure =
-                    failures_[static_cast<std::size_t>(column)];
-            }
-        }
-        return result;
-    }
-
-    [[nodiscard]] bool IsRecoverableFailure(
-        const std::exception_ptr& failure) const noexcept override {
-        return workers_.front()->rhs->IsRecoverableFailure(failure);
-    }
-
-    void SynchronizeContextLocalDataFrom(
-        const system_assembly::SystemRuntimeContext& source_context) {
-        for (const auto& worker : workers_) {
-            worker->rhs->SynchronizeContextLocalDataFrom(source_context);
-        }
-    }
-
-   private:
-    struct Worker final {
-        // Declared before rhs because the bridge borrows this context.
-        std::unique_ptr<system_assembly::SystemRuntimeContext> context;
-        std::unique_ptr<SystemRhsBridge> rhs;
-        Eigen::VectorXd state;
-        Eigen::VectorXd derivatives;
-    };
-
-    const system_assembly::SystemInstance* system_;
-    system_assembly::SystemRuntimeContext* source_context_;
-    int state_size_;
-    int worker_count_;
-    std::vector<std::unique_ptr<Worker>> workers_;
-    std::vector<std::exception_ptr> failures_;
-    std::vector<unsigned char> attempted_;
-};
 
 }  // namespace
 
@@ -220,50 +35,22 @@ class SystemContinuousStateAdvancer::Implementation final {
         system_assembly::SystemRuntimeContext& accepted_context,
         ContinuousStateErrorTolerances tolerances,
         NoCallTimeAppliedForces no_call_time_applied_forces,
-        internal::MaximumBdfOrder maximum_bdf_order)
+        internal::SystemContinuousStateIntegrationRecipe integration_recipe)
         : system_(&system),
           accepted_context_(&accepted_context),
           candidate_context_(system.CreateDefaultRuntimeContext(
               accepted_context.time_seconds())),
-          candidate_state_(system.continuous_state_size()),
-          rhs_(system, plan, *candidate_context_,
-               no_call_time_applied_forces) {
+          candidate_state_(system.continuous_state_size()) {
         system_->CopyContinuousState(*accepted_context_, candidate_state_);
         system_->SetTimeContinuousStateAndWheelRailProjectionHints(
             *candidate_context_, accepted_context_->time_seconds(),
             candidate_state_,
             accepted_context_->wheel_rail_projection_station_hints_meters());
-        rhs_.SynchronizeContextLocalDataFrom(*accepted_context_);
-        const int jacobian_worker_count =
-            ResolveParallelJacobianWorkerCount(system);
-        if (jacobian_worker_count != 0) {
-            dense_jacobian_ =
-                std::make_unique<SystemDenseFiniteDifferenceJacobian>(
-                    system, plan, *candidate_context_, jacobian_worker_count,
-                    no_call_time_applied_forces);
-        }
-        switch (maximum_bdf_order) {
-            case internal::MaximumBdfOrder::kSecond:
-                backend_ = std::make_unique<CvodeContinuousStateAdvancer>(
-                    rhs_, accepted_context_->time_seconds(), candidate_state_,
-                    std::move(tolerances));
-                break;
-            case internal::MaximumBdfOrder::kFifth:
-                backend_ = internal::BdfIntegrationAccess::
-                    MakeFifthOrderCvodeContinuousStateAdvancer(
-                        rhs_, accepted_context_->time_seconds(),
-                        candidate_state_, std::move(tolerances));
-                break;
-        }
-        if (backend_ == nullptr) {
-            throw std::invalid_argument(
-                "system continuous-state advancer: unsupported maximum BDF "
-                "order");
-        }
-        if (dense_jacobian_ != nullptr) {
-            internal::DenseFiniteDifferenceJacobianRegistration::Attach(
-                *backend_, *dense_jacobian_);
-        }
+        backend_ =
+            std::make_unique<internal::SystemContinuousStateBackend>(
+                integration_recipe, system, plan, *candidate_context_,
+                *accepted_context_, candidate_state_, std::move(tolerances),
+                no_call_time_applied_forces);
     }
 
     void AdvanceTo(double target_time_seconds) {
@@ -279,16 +66,18 @@ class SystemContinuousStateAdvancer::Implementation final {
     }
 
     [[nodiscard]] ContinuousStateIntegrationStatistics Statistics() const {
-        return backend_->integration_statistics();
+        return Backend().integration_statistics();
     }
 
-    [[nodiscard]] int ConfiguredMaximumBdfOrder() const {
-        return internal::BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
-            *backend_);
+    [[nodiscard]] internal::SystemContinuousStateIntegrationRecipe
+    ConfiguredRecipe() const noexcept {
+        return backend_->configured_recipe();
     }
 
-    [[nodiscard]] int LastBdfOrder() const {
-        return internal::BdfIntegrationAccess::LastBdfOrder(*backend_);
+    [[nodiscard]] std::uint64_t
+    RecoverableProjectionWindowMissClassificationCount() const noexcept {
+        return backend_
+            ->recoverable_projection_window_miss_classification_count();
     }
 
     void AdvanceToImpl(double target_time_seconds,
@@ -383,7 +172,7 @@ class SystemContinuousStateAdvancer::Implementation final {
                         " successful internal steps");
                 }
                 const ContinuousStateInternalStep step =
-                    backend_->AdvanceOneInternalStepToward(
+                    Backend().AdvanceOneInternalStepToward(
                         target_time_seconds, candidate_state_);
                 ++successful_internal_step_count;
                 // The last RHS trial need not be at the accepted backend
@@ -397,8 +186,16 @@ class SystemContinuousStateAdvancer::Implementation final {
                         "system continuous-state advancer: the backend "
                         "returned a non-contiguous internal endpoint");
                 }
+                if (step.end_time_seconds > target_time_seconds ||
+                    step.reached_stop !=
+                        (step.end_time_seconds == target_time_seconds)) {
+                    throw std::runtime_error(
+                        "system continuous-state advancer: the backend "
+                        "returned endpoint metadata inconsistent with the "
+                        "requested stop");
+                }
                 if (samples != nullptr) {
-                    const auto interval = backend_->dense_output_interval();
+                    const auto interval = Backend().dense_output_interval();
                     if (!interval.has_value() ||
                         !(interval->end_time_seconds >
                           interval->start_time_seconds) ||
@@ -421,7 +218,7 @@ class SystemContinuousStateAdvancer::Implementation final {
                                 "sample was not covered by the backend's "
                                 "successful dense-output intervals");
                         }
-                        backend_->CopyDenseState(
+                        Backend().CopyDenseState(
                             sample_times_seconds[next_sample],
                             samples->col(
                                 static_cast<Eigen::Index>(next_sample)));
@@ -433,6 +230,12 @@ class SystemContinuousStateAdvancer::Implementation final {
                     candidate_state_);
                 system_->UpdateWheelRailProjectionStationHints(
                     *candidate_context_);
+                if (!candidate_context_
+                         ->wheel_rail_projection_station_hints_meters()
+                         .empty()) {
+                    BackendBundle()
+                        .NotifyAcceptedProjectionHistoryChange();
+                }
                 expected_step_begin_time_seconds = step.end_time_seconds;
                 reached_target = step.reached_stop;
             }
@@ -462,27 +265,46 @@ class SystemContinuousStateAdvancer::Implementation final {
             *candidate_context_, accepted_context_->time_seconds(),
             candidate_state_,
             accepted_context_->wheel_rail_projection_station_hints_meters());
-        rhs_.SynchronizeContextLocalDataFrom(*accepted_context_);
-        if (dense_jacobian_ != nullptr) {
-            dense_jacobian_->SynchronizeContextLocalDataFrom(
-                *accepted_context_);
-        }
-        backend_->ReinitializeAfterExternalChange(
+        backend_->SynchronizeContextLocalDataFrom(*accepted_context_);
+        Backend().ReinitializeAfterExternalChange(
             accepted_context_->time_seconds(), candidate_state_);
         requires_synchronization_ = false;
     }
 
    private:
+    [[nodiscard]] internal::SystemContinuousStateBackend& BackendBundle() {
+        if (backend_ == nullptr) {
+            throw std::logic_error(
+                "system continuous-state advancer: backend bundle is not "
+                "initialized");
+        }
+        return *backend_;
+    }
+
+    [[nodiscard]] const internal::SystemContinuousStateBackend& BackendBundle()
+        const {
+        if (backend_ == nullptr) {
+            throw std::logic_error(
+                "system continuous-state advancer: backend bundle is not "
+                "initialized");
+        }
+        return *backend_;
+    }
+
+    [[nodiscard]] ContinuousStateAdvancer& Backend() {
+        return BackendBundle().advancer();
+    }
+
+    [[nodiscard]] const ContinuousStateAdvancer& Backend() const {
+        return BackendBundle().advancer();
+    }
+
     const system_assembly::SystemInstance* system_;
     system_assembly::SystemRuntimeContext* accepted_context_;
-    // Declared before rhs_ because the RHS borrows this context.
+    // Declared before backend_ because its RHS borrows this context.
     std::unique_ptr<system_assembly::SystemRuntimeContext> candidate_context_;
     Eigen::VectorXd candidate_state_;
-    SystemRhsBridge rhs_;
-    // Declared before backend_ because CVODE borrows this provider.
-    std::unique_ptr<SystemDenseFiniteDifferenceJacobian> dense_jacobian_;
-    // Declared after every borrowed object so CVODE is destroyed first.
-    std::unique_ptr<CvodeContinuousStateAdvancer> backend_;
+    std::unique_ptr<internal::SystemContinuousStateBackend> backend_;
     bool requires_synchronization_{false};
 };
 
@@ -495,7 +317,7 @@ SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
     : SystemContinuousStateAdvancer(
           system, plan, accepted_context, std::move(tolerances),
           no_call_time_applied_forces,
-          internal::MaximumBdfOrder::kSecond) {}
+          internal::SystemContinuousStateIntegrationRecipe::kCvodeBdf2) {}
 
 SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
     const system_assembly::SystemInstance& system,
@@ -503,35 +325,38 @@ SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
     system_assembly::SystemRuntimeContext& accepted_context,
     ContinuousStateErrorTolerances tolerances,
     NoCallTimeAppliedForces no_call_time_applied_forces,
-    internal::MaximumBdfOrder maximum_bdf_order)
+    internal::SystemContinuousStateIntegrationRecipe integration_recipe)
     : implementation_(std::make_unique<Implementation>(
           system, plan, accepted_context, std::move(tolerances),
-          no_call_time_applied_forces, maximum_bdf_order)) {}
+          no_call_time_applied_forces, integration_recipe)) {}
 
 SystemContinuousStateAdvancer::~SystemContinuousStateAdvancer() = default;
 
 std::unique_ptr<SystemContinuousStateAdvancer>
-internal::BdfIntegrationAccess::
-    MakeFifthOrderSystemContinuousStateAdvancer(
-        const system_assembly::SystemInstance& system,
-        const system_assembly::CompiledSystemPlan& plan,
-        system_assembly::SystemRuntimeContext& accepted_context,
-        ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces) {
+internal::SystemContinuousStateIntegrationAccess::Make(
+    SystemContinuousStateIntegrationRecipe recipe,
+    const system_assembly::SystemInstance& system,
+    const system_assembly::CompiledSystemPlan& plan,
+    system_assembly::SystemRuntimeContext& accepted_context,
+    ContinuousStateErrorTolerances tolerances,
+    NoCallTimeAppliedForces no_call_time_applied_forces) {
     return std::unique_ptr<SystemContinuousStateAdvancer>(
         new SystemContinuousStateAdvancer(
             system, plan, accepted_context, std::move(tolerances),
-            no_call_time_applied_forces, MaximumBdfOrder::kFifth));
+            no_call_time_applied_forces, recipe));
 }
 
-int internal::BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
+internal::SystemContinuousStateIntegrationRecipe
+internal::SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
     const SystemContinuousStateAdvancer& advancer) {
-    return advancer.implementation_->ConfiguredMaximumBdfOrder();
+    return advancer.implementation_->ConfiguredRecipe();
 }
 
-int internal::BdfIntegrationAccess::LastBdfOrder(
-    const SystemContinuousStateAdvancer& advancer) {
-    return advancer.implementation_->LastBdfOrder();
+std::uint64_t internal::SystemContinuousStateIntegrationAccess::
+    RecoverableProjectionWindowMissClassificationCount(
+        const SystemContinuousStateAdvancer& advancer) {
+    return advancer.implementation_
+        ->RecoverableProjectionWindowMissClassificationCount();
 }
 
 void SystemContinuousStateAdvancer::AdvanceTo(double target_time_seconds) {

@@ -26,12 +26,12 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 9) {
+    if (argc != 9 && argc != 10) {
         std::fprintf(
             stderr,
             "usage: orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS\n");
+            "SAMPLE_PERIOD_NS [TIME_INTEGRATOR_QUALIFICATION_CASE]\n");
         return 2;
     }
 
@@ -48,6 +48,17 @@ int main(int argc, char** argv) {
                      "duration and sample period must be positive integer "
                      "nanoseconds\n");
         return 2;
+    }
+    if (argc == 10) {
+        config.time_integrator_qualification_case =
+            orvd::dynamics_qualification::
+                ParseTimeIntegratorQualificationCase(argv[9]);
+        if (!config.time_integrator_qualification_case.has_value()) {
+            std::fprintf(stderr,
+                         "unknown time-integrator qualification case: %s\n",
+                         argv[9]);
+            return 2;
+        }
     }
 
     try {

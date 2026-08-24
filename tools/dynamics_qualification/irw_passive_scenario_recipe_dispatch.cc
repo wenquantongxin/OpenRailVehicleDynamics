@@ -8,190 +8,77 @@
 
 #include <nlohmann/json.hpp>
 
-#include "irw_bdf_tolerance_recipes.h"
+#include "irw_integration_recipes.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "vehicle_qualification_runner_internal.h"
 
 namespace orvd::dynamics_qualification {
 namespace {
 
-constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe{
-    "IRW_R300_NO_IRREGULARITY_V60_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwR300NoIrregularityV60PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwR300NoIrregularityV60PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwR300NoIrregularityV60PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwR300NoIrregularityV60PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwR300NoIrregularityV60PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kForbidden,
-    &configuration::AssembleIrwContactScenario};
+constexpr internal::VehicleQualificationRecipe MakeIrwRecipe(
+    std::string_view label,
+    const internal::IrwIntegrationRecipe& integration,
+    internal::TrackIrregularityRequirement irregularity_requirement) {
+    return internal::VehicleQualificationRecipe{
+        label,
+        {"carbody", "frame_front", "frame_rear"},
+        integration.relative_tolerance,
+        integration.position_absolute_tolerance,
+        integration.velocity_absolute_tolerance,
+        integration.series_force_absolute_tolerance_newtons,
+        integration.default_integration_recipe,
+        81,
+        74,
+        2,
+        96,
+        irregularity_requirement,
+        &configuration::AssembleIrwContactScenario};
+}
 
-constexpr internal::VehicleQualificationRecipe kAar5Recipe{
+constexpr internal::VehicleQualificationRecipe kNoIrregularityRecipe =
+    MakeIrwRecipe(
+        "IRW_R300_NO_IRREGULARITY_V60_PASSIVE",
+        internal::kIrwR300NoIrregularityV60PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kForbidden);
+constexpr internal::VehicleQualificationRecipe kAar5Recipe = MakeIrwRecipe(
     "IRW_R300_AAR5_V60_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwR300Aar5V60PassiveBdfToleranceRecipe.relative_tolerance,
-    internal::kIrwR300Aar5V60PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwR300Aar5V60PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwR300Aar5V60PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwR300Aar5V60PassiveBdfToleranceRecipe.maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kStraightAar5V80Recipe{
-    "IRW_STRAIGHT_AAR5_V80_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwStraightAar5V80PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwStraightAar5V80PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwStraightAar5V80PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwStraightAar5V80PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwStraightAar5V80PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kR600Aar5V80Recipe{
-    "IRW_R600_AAR5_V80_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwR600Aar5V80PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwR600Aar5V80PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwR600Aar5V80PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwR600Aar5V80PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwR600Aar5V80PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kR800Aar5V100Recipe{
-    "IRW_R800_AAR5_V100_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwR800Aar5V100PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kStraightAar6V120Recipe{
-    "IRW_STRAIGHT_AAR6_V120_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwStraightAar6V120PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwStraightAar6V120PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwStraightAar6V120PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwStraightAar6V120PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwStraightAar6V120PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kR1000Aar6V120Recipe{
-    "IRW_R1000_AAR6_V120_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwR1000Aar6V120PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwR1000Aar6V120PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwR1000Aar6V120PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwR1000Aar6V120PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwR1000Aar6V120PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kStraightAar6V160Recipe{
-    "IRW_STRAIGHT_AAR6_V160_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwStraightAar6V160PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
-
-constexpr internal::VehicleQualificationRecipe kStraightErriLowV200Recipe{
-    "IRW_STRAIGHT_ERRI_LOW_V200_PASSIVE",
-    {"carbody", "frame_front", "frame_rear"},
-    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
-        .relative_tolerance,
-    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
-        .position_absolute_tolerance,
-    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
-        .velocity_absolute_tolerance,
-    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
-        .series_force_absolute_tolerance_newtons,
-    internal::kIrwStraightErriLowV200PassiveBdfToleranceRecipe
-        .maximum_bdf_order,
-    81,
-    74,
-    2,
-    96,
-    internal::TrackIrregularityRequirement::kRequired,
-    &configuration::AssembleIrwContactScenario};
+    internal::kIrwR300Aar5V60PassiveIntegrationRecipe,
+    internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kStraightAar5V80Recipe =
+    MakeIrwRecipe(
+        "IRW_STRAIGHT_AAR5_V80_PASSIVE",
+        internal::kIrwStraightAar5V80PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kR600Aar5V80Recipe =
+    MakeIrwRecipe(
+        "IRW_R600_AAR5_V80_PASSIVE",
+        internal::kIrwR600Aar5V80PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kR800Aar5V100Recipe =
+    MakeIrwRecipe(
+        "IRW_R800_AAR5_V100_PASSIVE",
+        internal::kIrwR800Aar5V100PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kStraightAar6V120Recipe =
+    MakeIrwRecipe(
+        "IRW_STRAIGHT_AAR6_V120_PASSIVE",
+        internal::kIrwStraightAar6V120PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kR1000Aar6V120Recipe =
+    MakeIrwRecipe(
+        "IRW_R1000_AAR6_V120_PASSIVE",
+        internal::kIrwR1000Aar6V120PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kStraightAar6V160Recipe =
+    MakeIrwRecipe(
+        "IRW_STRAIGHT_AAR6_V160_PASSIVE",
+        internal::kIrwStraightAar6V160PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
+constexpr internal::VehicleQualificationRecipe kStraightErriLowV200Recipe =
+    MakeIrwRecipe(
+        "IRW_STRAIGHT_ERRI_LOW_V200_PASSIVE",
+        internal::kIrwStraightErriLowV200PassiveIntegrationRecipe,
+        internal::TrackIrregularityRequirement::kRequired);
 
 constexpr std::string_view kAar5IrregularityIdentifier = "aar5_irregularity";
 constexpr std::string_view kAar6IrregularityIdentifier = "aar6_irregularity";
@@ -383,7 +270,8 @@ QualificationRunSummary RunIrwPassiveScenario(
             input.output_directory,
             input.duration_nanoseconds,
             input.sample_period_nanoseconds,
-            std::nullopt},
+            std::nullopt,
+            input.time_integrator_qualification_case},
         recipe);
 }
 

@@ -1,15 +1,20 @@
 add_library(orvd_integrators STATIC
     src/continuous_state_advancer.cc
     src/cvode_continuous_state_advancer.cc
+    src/radau5_continuous_state_advancer.cc
+    src/system_continuous_state_backend.cc
     src/system_continuous_state_advancer.cc
-    src/system_rhs_bridge.cc)
+    src/system_rhs_bridge.cc
+    $<TARGET_OBJECTS:orvd_radau5_core_objects>)
 
 orvd_configure_first_party_target(orvd_integrators)
 
 target_include_directories(orvd_integrators
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/external/radau5/include)
 
 target_link_libraries(orvd_integrators
     PUBLIC Eigen3::Eigen orvd_system_assembly)

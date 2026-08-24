@@ -26,12 +26,12 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 10) {
+    if (argc != 10 && argc != 11) {
         std::fprintf(
             stderr,
             "usage: orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID_OR_NONE OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS\n"
+            "SAMPLE_PERIOD_NS [TIME_INTEGRATOR_QUALIFICATION_CASE]\n"
             "SCENARIO: irw_r300_no_irregularity_v60_passive, "
             "irw_r300_aar5_v60_passive, irw_straight_aar5_v80_passive, "
             "irw_r600_aar5_v80_passive, irw_r800_aar5_v100_passive, "
@@ -58,6 +58,17 @@ int main(int argc, char** argv) {
                      "duration and sample period must be positive integer "
                      "nanoseconds\n");
         return 2;
+    }
+    if (argc == 11) {
+        config.time_integrator_qualification_case =
+            orvd::dynamics_qualification::
+                ParseTimeIntegratorQualificationCase(argv[10]);
+        if (!config.time_integrator_qualification_case.has_value()) {
+            std::fprintf(stderr,
+                         "unknown time-integrator qualification case: %s\n",
+                         argv[10]);
+            return 2;
+        }
     }
     try {
         const auto summary =
