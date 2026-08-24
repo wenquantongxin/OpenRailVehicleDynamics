@@ -716,8 +716,8 @@ WRL 的墙钟、Jacobian/RHS 计数或末位轨迹差异会被错误归因给车
 - WRL 冻结 A 层运行脚本与运行元数据：CVODE／SPGMR 配置和原生统计。
 - ORVD `cvode_continuous_state_advancer.cc`：逐实例 BDF 最大阶数、稠密矩阵／线性求解器和只读统计查询。
 - ORVD `continuous_state_advancer.h`、`system_continuous_state_advancer.h`：后端中立统计值与系统层转发。
-- ORVD `irw_bdf_tolerance_recipes.h`：IRW 被动与 100 Hz 全状态轮速导向的闭合内部
-  BDF／容差配方。
+- ORVD `irw_integration_recipes.h`：IRW 被动与 100 Hz 全状态轮速导向的闭合内部
+  默认积分器／容差配方；研究 override 与物理场景身份分离。
 
 ### MD-015 — IRW 100 Hz 控制事件的机械观察龄与启动更新时相
 

@@ -1,0 +1,246 @@
+{
+  "schema_version": 2,
+  "manifest_identifier": "int07a_serial_baseline_v2",
+  "purpose": "protocol_and_serial_baseline_only",
+  "performance_decision_eligible": false,
+  "required_execution": {
+    "build_type": "Release",
+    "floating_point_semantics_identifier": "orvd.strict_ieee_no_fast_math.v1",
+    "jacobian_worker_count": 1,
+    "omp_num_threads": 1,
+    "omp_dynamic": false,
+    "omp_max_active_levels": 1,
+    "omp_nested": false,
+    "cpu_affinity_core_count": 1
+  },
+  "qualification_cases": [
+    {
+      "identifier": "scenario_default_cvode_coarse",
+      "backend": "scenario_default_cvode",
+      "tier": "coarse",
+      "scale": 10.0
+    },
+    {
+      "identifier": "scenario_default_cvode_nominal",
+      "backend": "scenario_default_cvode",
+      "tier": "nominal",
+      "scale": 1.0
+    },
+    {
+      "identifier": "scenario_default_cvode_fine",
+      "backend": "scenario_default_cvode",
+      "tier": "fine",
+      "scale": 0.1
+    },
+    {
+      "identifier": "scenario_default_cvode_reference",
+      "backend": "scenario_default_cvode",
+      "tier": "reference",
+      "scale": 0.01
+    },
+    {
+      "identifier": "radau5_coarse",
+      "backend": "radau5",
+      "tier": "coarse",
+      "scale": 10.0
+    },
+    {
+      "identifier": "radau5_nominal",
+      "backend": "radau5",
+      "tier": "nominal",
+      "scale": 1.0
+    },
+    {
+      "identifier": "radau5_fine",
+      "backend": "radau5",
+      "tier": "fine",
+      "scale": 0.1
+    },
+    {
+      "identifier": "radau5_reference",
+      "backend": "radau5",
+      "tier": "reference",
+      "scale": 0.01
+    }
+  ],
+  "scenarios": [
+    {
+      "identifier": "gz18_straight_aar6_v60_passive_20s",
+      "runner_layout": "gz18",
+      "runner_scenario_identifier": null,
+      "inputs": {
+        "vehicle_definition": "vehicle_library/gz18/vehicle_definition.json",
+        "resolved_startup_state": "vehicle_library/gz18/startup_states/moving_startup_60kmh.json",
+        "track_geometry": "track_library/geometries/straight_level_1100m.json",
+        "orvd_data_root": ".",
+        "track_irregularity_identifier": "aar6_irregularity"
+      },
+      "clock": {
+        "start_time_nanoseconds": 0,
+        "duration_nanoseconds": 20000000000,
+        "sample_period_nanoseconds": 500000,
+        "external_event_period_nanoseconds": null
+      },
+      "smooth_state_window": {
+        "begin_time_nanoseconds": 0,
+        "end_time_nanoseconds": 10000000,
+        "require_constant_contact_patch_counts": true
+      },
+      "state_layout": {
+        "generalized_position_count": 57,
+        "generalized_velocity_count": 50,
+        "series_force_state_count": 2
+      },
+      "scenario_default_numerics": {
+        "integrator_recipe_identifier": "cvode_bdf2",
+        "relative_tolerance": 1e-6,
+        "generalized_position_absolute_tolerance": 1e-7,
+        "generalized_velocity_absolute_tolerance": 1e-6,
+        "series_force_absolute_tolerance_newtons": 0.1
+      },
+      "comparison_budgets": {
+        "carrier_lateral_global_max_meters": 2.5e-7,
+        "carrier_yaw_global_max_radians": 2.5e-7,
+        "contact_force_rms_newtons": 5.0,
+        "contact_force_max_newtons": 50.0,
+        "endpoint_generalized_force_residual_inf_norm": 1e-7,
+        "endpoint_absolute_virtual_power_residual_watts": 1e-7,
+        "endpoint_position_derivative_slice_inf_norm": 1e-14,
+        "endpoint_series_force_derivative_slice_inf_norm": 1e-14
+      },
+      "reference_pair": [
+        "scenario_default_cvode_reference",
+        "radau5_reference"
+      ]
+    },
+    {
+      "identifier": "irw_r300_aar5_v60_passive_30s",
+      "runner_layout": "irw-passive-scenario",
+      "runner_scenario_identifier": "irw_r300_aar5_v60_passive",
+      "inputs": {
+        "vehicle_definition": "vehicle_library/irw/vehicle_definition.json",
+        "resolved_startup_state": "vehicle_library/irw/startup_states/moving_startup_60kmh.json",
+        "track_geometry": "track_library/geometries/r300_centerline_superelevation_1100m.json",
+        "orvd_data_root": ".",
+        "track_irregularity_identifier": "aar5_irregularity"
+      },
+      "clock": {
+        "start_time_nanoseconds": 0,
+        "duration_nanoseconds": 30000000000,
+        "sample_period_nanoseconds": 500000,
+        "external_event_period_nanoseconds": null
+      },
+      "smooth_state_window": {
+        "begin_time_nanoseconds": 0,
+        "end_time_nanoseconds": 10000000,
+        "require_constant_contact_patch_counts": true
+      },
+      "state_layout": {
+        "generalized_position_count": 81,
+        "generalized_velocity_count": 74,
+        "series_force_state_count": 2
+      },
+      "scenario_default_numerics": {
+        "integrator_recipe_identifier": "cvode_bdf5",
+        "relative_tolerance": 1e-8,
+        "generalized_position_absolute_tolerance": 1e-8,
+        "generalized_velocity_absolute_tolerance": 1e-7,
+        "series_force_absolute_tolerance_newtons": 1e-6
+      },
+      "comparison_budgets": {
+        "carrier_lateral_global_max_meters": 2e-6,
+        "carrier_yaw_global_max_radians": 2e-6,
+        "contact_force_rms_newtons": 25.0,
+        "contact_force_max_newtons": 250.0,
+        "endpoint_generalized_force_residual_inf_norm": 1e-7,
+        "endpoint_absolute_virtual_power_residual_watts": 1e-7,
+        "endpoint_position_derivative_slice_inf_norm": 1e-14,
+        "endpoint_series_force_derivative_slice_inf_norm": 1e-14
+      },
+      "reference_pair": [
+        "scenario_default_cvode_reference",
+        "radau5_reference"
+      ]
+    }
+  ],
+  "comparison_contract": {
+    "time_join_columns": [
+      "sample_index",
+      "time_nanoseconds"
+    ],
+    "continuous_state_artifact_filename": "continuous_states.tsv",
+    "continuous_state_layout_order": [
+      "q",
+      "v",
+      "z"
+    ],
+    "continuous_state_metrics": [
+      "dimensionless_rms",
+      "dimensionless_inf_norm",
+      "quaternion_norm_defect_inf_norm"
+    ],
+    "configuration_error_rule": "free_body_rotation_log_plus_quaternion_norm_difference_plus_translation;ball_rpy_rotation_log;remaining_joint_positions_direct",
+    "orientation_reconstruction_rule": "normalize_each_finite_nonzero_quaternion_before_rotation;zero_or_nonfinite_fails",
+    "smooth_state_pairwise_metric_scope": "smooth_state_window_only;full_window_state_error_diagnostic_only",
+    "smooth_contact_patch_count_rule": "per_named_interface_positive_integer_and_constant_within_each_run_and_identical_across_reference_pair_and_eligible_candidate_trajectories",
+    "quaternion_norm_defect_scope": "full_continuous_state_artifact",
+    "normalization_scale_source": "scenario_default_nominal_tolerances_and_reference_pair_magnitudes",
+    "candidate_values_in_normalization_denominator": false,
+    "smooth_state_error_reduction_rule": "per_common_sample_scale_i_k_then_rms_and_global_max_within_each_q_v_z_group",
+    "reference_band_metric_reduction_rule": "for_state_force_and_carrier_reduce_candidate_to_each_reference_separately_then_take_larger_scalar_for_each_metric",
+    "backend_refinement_pairing_rule": "cvode_nominal_to_cvode_fine_to_cvode_reference;radau5_nominal_to_radau5_fine_to_radau5_reference",
+    "reference_smooth_rms_limit": 0.1,
+    "reference_smooth_inf_norm_limit": 1.0,
+    "eligible_candidate_smooth_rms_limit": 1.0,
+    "eligible_candidate_smooth_inf_norm_limit": 10.0,
+    "reference_quaternion_norm_defect_inf_norm_limit": 1e-06,
+    "eligible_candidate_quaternion_norm_defect_inf_norm_limit": 0.0001,
+    "reference_band_candidate_distance_rule": "maximum_distance_to_either_reference",
+    "kinematic_entity_group": "all_contact_carriers",
+    "physical_metric_scope": "full_qualification_clock_including_both_endpoints",
+    "carrier_error_reduction_rule": "same_time_absolute_error_global_max_over_all_contact_carriers_and_full_clock",
+    "contact_interface_set_rule": "exact_identical_named_interface_set",
+    "contact_event_detection_rule": "sampled_patch_count_on_off;event_time_is_first_sample_of_new_state;include_t0_initial_state",
+    "contact_event_matching_rule": "fail_closed;initial_on_off_vector_must_match;per_interface_and_polarity_event_counts_must_match;unmatched_event_fails;match_by_interface_polarity_and_ordinal;single_off_sample_duration_is_one_tick;terminal_off_interval_is_right_censored",
+    "contact_event_time_unit": "integer_nanoseconds",
+    "contact_event_tolerance_samples": 1,
+    "contact_event_guard_samples": 1,
+    "allow_unaligned_contact_pointwise_absolute_difference": false,
+    "force_channels": [
+      "vertical_support_force_on_wheel_newtons",
+      "normal_force_newtons",
+      "total_force_on_wheel_in_carrier_track_frame_x_newtons",
+      "total_force_on_wheel_in_carrier_track_frame_y_newtons",
+      "total_force_on_wheel_in_carrier_track_frame_z_newtons"
+    ],
+    "diagnostic_force_channels": [
+      "longitudinal_force_on_wheel_newtons",
+      "lateral_force_on_wheel_newtons"
+    ],
+    "diagnostic_force_channel_rule": "maximum_normal_force_primary_patch_selector_dependent_not_eligibility_gate",
+    "force_bin_period_nanoseconds": 10000000,
+    "force_bin_quadrature_rule": "composite_trapezoid_including_both_endpoints;adjacent_bins_share_boundary_sample",
+    "force_bin_outputs": [
+      "impulse_equivalent_mean",
+      "sample_minimum",
+      "sample_maximum"
+    ],
+    "force_error_reduction_rule": "rms_and_global_max_over_interface_channel_bin_output",
+    "primary_timing_metric": "performance_json.advance_wall_seconds",
+    "end_to_end_timing_guard_metric": "execution_identity.process_wall_seconds",
+    "end_to_end_timing_guard_rule": "radau5_candidate_mean_must_not_exceed_cvode_baseline_mean;report_each_arm_min_max_separately",
+    "statistics_fields": [
+      "successful_internal_step_count",
+      "right_hand_side_evaluation_count",
+      "linear_solver_right_hand_side_evaluation_count",
+      "error_test_failure_count",
+      "nonlinear_solver_iteration_count",
+      "nonlinear_solver_convergence_failure_count",
+      "linear_solver_setup_count",
+      "jacobian_evaluation_count",
+      "requested_dense_finite_difference_jacobian_worker_count"
+    ],
+    "combine_failure_counters": false,
+    "performance_ranking_enabled": false
+  }
+}

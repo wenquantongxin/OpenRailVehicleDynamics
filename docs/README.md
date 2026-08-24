@@ -6,6 +6,7 @@
 |---|---|
 | [models_and_algorithms/README.md](models_and_algorithms/README.md) | **模型与算法入口**：轨道几何、轮轨接触、车辆动力学、控制与估计、数值方法的物理和数学说明。 |
 | [models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md](models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md) | **轨道竖向剖面建模**：恒坡段、竖曲线、平面线形和超高的三维耦合，以及首轮产品与整车资格合同。 |
+| [models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md](models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md) | **时间积分方法**：BDF、Radau5、Newmark 与 Zhai 的计算公式、误差稳定性及 ORVD 状态适用边界。 |
 
 ## 当前权威文件
 
@@ -16,6 +17,7 @@
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md](planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md) | **车辆迁移协作观察簿**：Codex、Claude 等共同维护的源码事实、规划初期五组只读清单快照、假设和开放问题。 |
 | [planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md](planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md) | **参考模型差异观察表**：登记 GZ18／IRW 的 SIMPACK 参考模型与 ORVD 动力学模型之间可能被宏观闭合掩盖的差异及其筛查结论。 |
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **已完成车辆迁移路书**：覆盖 GZ18 首次短窗与不平顺长窗、IRW 被动、IRW 100 Hz 全状态控制与转矩指令调理，以及 G82 现有库跨平台构建与可重定位安装验证；现已封存。 |
+| [planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md](planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md) | **时间积分器迁移路书**：保留 CVODE BDF 默认，优先搬运并资格化 Radau5；Newmark 与 Zhai 仅登记为后续待做。 |
 | [performance/README.md](performance/README.md) | **计算性能文档入口**：统一计时术语、证据存放方式和直接替换纪律。 |
 | [performance/PERFORMANCE_MIGRATION_ROADMAP.md](performance/PERFORMANCE_MIGRATION_ROADMAP.md) | **现行计算性能路书**：把 GZ18 专项分支中可复用的轮轨接触、Jacobian 和观测优化重新落位到现行主线，按候选性质分层资格并以一个 GZ18、两个 IRW 代表长窗收口。 |
 | [performance/GZ18_PERFORMANCE_BRANCH_ARCHIVE.md](performance/GZ18_PERFORMANCE_BRANCH_ARCHIVE.md) | **GZ18 专项性能分支档案**：压缩记录历史最快组合、热点、已接受／否决方向及向 IRW 迁移的边界；不代表现行主线速度。 |

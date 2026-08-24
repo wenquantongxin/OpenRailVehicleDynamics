@@ -1139,6 +1139,25 @@ set_tests_properties(
     PROPERTIES
     PROCESSORS 16)
 
+add_test(
+    NAME verify_time_integrator_qualification_cli
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/dynamics_qualification/verify_time_integrator_qualification_cli.py
+            --metrics-wrapper
+            ${CMAKE_SOURCE_DIR}/tools/dynamics_qualification/run_qualification_with_metrics.py
+            --gz18 $<TARGET_FILE:orvd_gz18_dynamics_qualification>
+            --irw-passive $<TARGET_FILE:orvd_irw_passive_scenario>
+            --irw-guidance
+            $<TARGET_FILE:orvd_irw_r300_aar5_v60_100hz_full_state_guidance>)
+
+# INT-07A's machine-readable protocol remains a planning/validation surface:
+# this test validates its closed schema and all 16 runner argv expansions, but
+# deliberately starts no long-window vehicle run and produces no timing rank.
+add_test(
+    NAME verify_int07a_comparison_manifest
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/dynamics_qualification/verify_int07a_comparison_manifest.py)
+
 add_executable(verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios
     dynamics_qualification/verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios.cc)
 orvd_configure_first_party_target(

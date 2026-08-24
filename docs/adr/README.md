@@ -17,6 +17,7 @@
 | [0006](0006-deterministic-wheel-contact-openmp-batch.md) | 八接口轮轨接触采用每接口独占工作区的确定性 OpenMP 批求值 | Accepted |
 | [0007](0007-finite-typed-vehicle-control-event-session.md) | 车辆周期控制采用有限类型化事件会话，不建立通用事件总线 | Accepted |
 | [0008](0008-build-installed-archives-for-shared-module-consumers.md) | 安装归档统一支持普通 C++ 与进程内共享模块消费者 | Accepted |
+| [0009](0009-cvode-default-radau5-research-backend.md) | 保持 CVODE BDF 默认，增加纯 C++ Radau5 研究后端 | Accepted |
 
 早期调研背景见 [../design/DESIGN_BASIS.md](../design/DESIGN_BASIS.md)；它不是现行证据，
 其中承重事实使用前必须按当前源码重新验证。

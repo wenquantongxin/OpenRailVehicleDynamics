@@ -38,3 +38,6 @@
   定义恒坡段、PL2、CIR、竖向接缝及其与平面线形和超高的三维耦合，并给出首轮产品与整车资格合同。
 - [轨道不平顺谱及其空间随机实现](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)：
   定义空间频率单位、简化 FRA/AAR 单截止谱、有限频带、随机种子和空间序列资格。
+- [BDF、Radau5、Newmark 与 Zhai 时间积分方法](numerical_methods/TIME_INTEGRATION_METHODS.md)：
+  说明四类方法的离散公式、单步计算、误差与稳定性，并区分完整一阶后端和二阶机械方法在
+  ORVD `[q;v;z]` 状态上的适用边界。
