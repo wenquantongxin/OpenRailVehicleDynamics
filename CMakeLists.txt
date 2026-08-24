@@ -110,6 +110,7 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # are supposed to link Drake.
 set(ORVD_PRODUCT_MODULE_DIRECTORIES
     external/drake_mbtree
+    external/radau5
     libs/control
     libs/actuation
     libs/track_geometry
@@ -250,6 +251,9 @@ install(FILES
         external/drake_mbtree/LICENSE.TXT
         external/drake_mbtree/LICENSE.Apache-2.0.txt
         external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md
+        external/radau5/LICENSE.UNIGE.txt
+        external/radau5/SOURCE_DISPOSITION.txt
+        external/radau5/RADAU5_SOURCE_MODIFICATIONS.md
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/doc/OpenRailVehicleDynamics")
 
 # include(CTest) defines BUILD_TESTING (default ON) and configures CTest.

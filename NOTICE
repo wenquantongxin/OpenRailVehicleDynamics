@@ -51,6 +51,24 @@ Drake — a subset of the rigid multibody tree and topology sources.
   copyright is claimed. tools/drake_source_boundary/verify_landed_drake_source_provenance.py
   checks this obligation against the pinned upstream.
 
+Radau5 — a narrowed pure-C++ derivative of the RADAU5 stiff ODE solver.
+
+    Licence   UNIGE permissive licence
+    Text      external/radau5/LICENSE.UNIGE.txt
+    Copyright 2004 UNIGE
+
+  The algorithm is by E. Hairer and G. Wanner; the audited C++ donor was
+  written by Blake Ashby. The official source URLs, donor archive identity and
+  per-file disposition are recorded only in
+  external/radau5/SOURCE_DISPOSITION.txt. ORVD redistributes neither the
+  Fortran oracle nor its test drivers.
+
+  ORVD retains only the explicit first-order M=I, three-stage Radau IIA order-
+  five path and replaces the donor program structure with instance-owned C++
+  state, a non-throwing borrowed callback boundary and dense Eigen linear
+  algebra. The detailed changes and deliberately omitted branches are recorded
+  in external/radau5/RADAU5_SOURCE_MODIFICATIONS.md.
+
 
 Build and link dependencies
 ---------------------------

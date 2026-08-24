@@ -553,6 +553,18 @@ target_link_libraries(verify_cvode_continuous_state_advancer
 add_test(NAME verify_cvode_continuous_state_advancer
          COMMAND verify_cvode_continuous_state_advancer)
 
+# INT-03's build-only Radau5 numerical core. The executable consumes the same
+# object target embedded in orvd_integrators; it verifies the narrowed M=I,
+# full-dense implementation without reaching the ORVD backend adapter.
+add_executable(verify_radau5_core
+    integrators/verify_radau5_core.cc
+    $<TARGET_OBJECTS:orvd_radau5_core_objects>)
+orvd_configure_first_party_target(verify_radau5_core)
+target_include_directories(verify_radau5_core
+    PRIVATE ${PROJECT_SOURCE_DIR}/external/radau5/include)
+target_link_libraries(verify_radau5_core PRIVATE Eigen3::Eigen)
+add_test(NAME verify_radau5_core COMMAND verify_radau5_core)
+
 # G45's accepted/trial transaction boundary.  A real damped multibody system
 # runs through CVODE, a singular articulated inertia exercises post-RHS failure,
 # and the system-level atomic setter covers an invalid final acceptance without

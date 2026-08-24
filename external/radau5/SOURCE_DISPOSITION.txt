@@ -1,0 +1,77 @@
+# Sole authority for the upstream identity and source disposition of the ORVD
+# Radau5 research backend. Other repository documents describe policy and
+# numerical behaviour but do not restate mutable source identity.
+#
+# Dispositions:
+#   donor_derive   not copied verbatim at INT-01; selected logic may be carried
+#                  into the narrowed C++ core at INT-03 with attribution and a
+#                  corresponding modification record.
+#   oracle_url     not copied, compiled by ORVD, installed or redistributed;
+#                  the official URL may be fetched into a temporary directory
+#                  for a one-off comparison with the pure-C++ core.
+#   reference_only not copied or compiled; useful only for source audit.
+#   discard        outside the admitted first-version boundary.
+#
+# The project owner explicitly chose URL-only identity for every Fortran oracle
+# source. No Fortran source or Fortran digest belongs in this repository. A
+# future fetch therefore establishes only that it came from the recorded URL at
+# that time; it must not be described as byte-identical to an earlier fetch.
+
+acquisition_date 2026-08-23
+software_catalog_url https://www.unige.ch/~hairer/software.html
+
+# Actual C++ donor archive. The archive is not committed; its digest identifies
+# the bytes audited before any derived C++ source is admitted.
+cpp_donor_archive_url https://www.unige.ch/~hairer/prog/IntegratorT.tgz
+cpp_donor_archive_sha256 4b479b5fa4388565f08f8c693e089a67ec1642a46798f5bafe95a0a773a344cd
+cpp_donor_archive_last_modified 2003-01-31T09:14:30Z
+cpp_port_author Blake_Ashby
+original_fortran_authors E_Hairer G_Wanner
+
+# The site-level licence is the sole grant relied upon for the donor archive.
+# The upstream bytes are Windows-1252. LICENSE.UNIGE.txt is a wording-preserving
+# UTF-8 transcription with leading/trailing blank lines and trailing spaces
+# normalised; the upstream digest below deliberately identifies the original,
+# not the normalised local file.
+license_url https://www.unige.ch/~hairer/prog/licence.txt
+license_upstream_sha256 49bcfad0e3bbe5c3a0428624254567f32786948332a3204fc1e35b8b2a02b0fd
+license_upstream_encoding Windows-1252
+license_local_file LICENSE.UNIGE.txt
+license_local_encoding UTF-8
+license_copyright UNIGE_2004
+
+# C++ archive members.
+reference_only IntegratorT/README
+reference_only IntegratorT/makefile
+reference_only IntegratorT/main.cpp
+reference_only IntegratorT/IntegratorT.h
+reference_only IntegratorT/IntegratorT.cpp
+donor_derive IntegratorT/StiffIntegratorT.h
+donor_derive IntegratorT/StiffIntegratorT.cpp
+donor_derive IntegratorT/decsol.h
+donor_derive IntegratorT/decsol.cpp
+discard IntegratorT/NonStiffIntegratorT.h
+discard IntegratorT/NonStiffIntegratorT.cpp
+reference_only IntegratorT/TESTSETS/amplifier.cpp
+reference_only IntegratorT/TESTSETS/beam.cpp
+reference_only IntegratorT/TESTSETS/bruss.cpp
+reference_only IntegratorT/TESTSETS/cusp.cpp
+reference_only IntegratorT/TESTSETS/e5.cpp
+reference_only IntegratorT/TESTSETS/hires.cpp
+reference_only IntegratorT/TESTSETS/oregon.cpp
+reference_only IntegratorT/TESTSETS/rober.cpp
+reference_only IntegratorT/TESTSETS/vdpol.cpp
+
+# Official Fortran oracle: URL-only by project-owner decision. These sources
+# never enter the product CMake graph, installation, offline product bundle or
+# repository. radau5.f requires dc_decsol.f and decsol.f for the admitted dense
+# DECSOL path; dr1 is the M=I stiff Van der Pol driver used for a smoke check.
+oracle_url radau5.f https://www.unige.ch/~hairer/prog/stiff/radau5.f
+oracle_url dc_decsol.f https://www.unige.ch/~hairer/prog/stiff/dc_decsol.f
+oracle_url decsol.f https://www.unige.ch/~hairer/prog/stiff/decsol.f
+oracle_url dr1_radau5.f https://www.unige.ch/~hairer/prog/stiff/dr1_radau5.f
+
+# The amplifier driver exercises a mass matrix and banded storage excluded from
+# the first version. Its URL is retained only to explain why it is not an oracle
+# qualification case.
+reference_only_url dr2_radau5.f https://www.unige.ch/~hairer/prog/stiff/dr2_radau5.f
