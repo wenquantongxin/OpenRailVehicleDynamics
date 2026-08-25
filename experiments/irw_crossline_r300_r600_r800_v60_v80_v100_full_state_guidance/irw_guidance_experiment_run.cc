@@ -61,9 +61,6 @@ constexpr std::size_t kSamplesPerControlInterval =
 constexpr std::size_t kAxleCount = control::kIrwGuidanceAxleCount;
 constexpr std::size_t kWheelCount = control::kIrwGuidanceWheelCount;
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
-constexpr double kMaximumScheduledSpeedMetersPerSecond = 30.0;
-constexpr double kProjectionSearchHalfWidthMeters =
-    kMaximumScheduledSpeedMetersPerSecond * kControlSamplePeriodSeconds;
 constexpr double kRelativeTolerance = 1.0e-6;
 constexpr double kPositionAbsoluteTolerance = 1.0e-6;
 constexpr double kVelocityAbsoluteTolerance = 1.0e-5;
@@ -83,8 +80,6 @@ static_assert(kSingleCurveSafetyDurationNanoseconds %
                   kControlPeriodNanoseconds ==
               0);
 static_assert(kControlPeriodNanoseconds % kObservationPeriodNanoseconds == 0);
-static_assert(kProjectionSearchHalfWidthMeters == 0.30);
-
 struct ResolvedInputs final {
     std::filesystem::path data_root;
     std::filesystem::path vehicle_definition;
@@ -966,10 +961,6 @@ void WriteMetadata(
         << kControlPeriodNanoseconds << ",\n"
         << "  \"mechanical_observation_period_nanoseconds\": "
         << kObservationPeriodNanoseconds << ",\n"
-        << "  \"projection_search_half_width_meters\": "
-        << kProjectionSearchHalfWidthMeters << ",\n"
-        << "  \"projection_search_half_width_derivation\": "
-        << JsonString("30 m/s * 0.01 s") << ",\n"
         << "  \"track_irregularity_identifier\": "
         << JsonString(kIrregularityIdentifier) << ",\n"
         << "  \"track_irregularity_scope\": "
@@ -1149,7 +1140,7 @@ IrwGuidanceExperimentRunSummary RunIrwGuidanceExperiment(
     auto scenario = configuration::AssembleIrwContactScenario(
         vehicle, startup, std::move(line), inputs.data_root,
         kVehicleReferenceTrackStationMeters,
-        kProjectionSearchHalfWidthMeters, std::move(irregularity));
+        std::move(irregularity));
     const auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
     if (assembled.model().num_generalized_positions() != 81 ||

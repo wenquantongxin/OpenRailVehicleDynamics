@@ -5,7 +5,6 @@
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
-#include "orvd/track_geometry/track_station_projection.h"
 
 namespace orvd::integrators {
 
@@ -55,25 +54,6 @@ void SystemRhsBridge::CalcTimeDerivatives(
                                        continuous_state);
     plan_->CalcStateTimeDerivatives(*trial_context_, derivative_buffer_);
     state_time_derivatives = derivative_buffer_;
-}
-
-bool SystemRhsBridge::IsRecoverableFailure(
-    const std::exception_ptr& failure) const noexcept {
-    if (failure == nullptr) {
-        return false;
-    }
-    try {
-        std::rethrow_exception(failure);
-    } catch (const track_geometry::TrackStationProjectionWindowMiss&) {
-        // The accepted projection hint still selects one local branch. A
-        // numerical-backend trial can move beyond that finite window before
-        // the accepted endpoint history advances; shrinking the trial step is
-        // the stated recovery. Ambiguous projections and invalid line domains
-        // retain their original fatal exception types.
-        return true;
-    } catch (...) {
-        return false;
-    }
 }
 
 }  // namespace orvd::integrators

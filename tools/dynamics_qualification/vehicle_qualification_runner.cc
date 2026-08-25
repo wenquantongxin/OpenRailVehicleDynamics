@@ -61,10 +61,6 @@ using multibody_model::AppliedBodyWrench;
 using track_geometry::TrackStationRegion;
 
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
-constexpr double kRhsContactProjectionHalfWidthMeters = 0.01;
-constexpr double kCarrierObservationProjectionBaseHalfWidthMeters = 0.01;
-constexpr double kRepresentativeBodyObservationProjectionBaseHalfWidthMeters =
-    0.02;
 constexpr std::size_t kCarrierCount = 4;
 constexpr std::size_t kInterfaceCount = 8;
 constexpr int kMaximumContactWorkerCount = 8;
@@ -165,11 +161,6 @@ struct EndpointDiagnostics final {
 
 struct ProjectionHistory final {
     double station_seed_meters{};
-    double base_half_width_meters{};
-    double maximum_half_width_meters{};
-    Eigen::Vector3d previous_body_origin_in_inertial_meters{
-        Eigen::Vector3d::Zero()};
-    bool has_previous_body_origin{false};
 };
 
 [[nodiscard]] double ElapsedSeconds(Clock::time_point begin,
@@ -356,26 +347,12 @@ MakeAdvancer(const configuration::AssembledVehicleSystem& assembled,
     const configuration::AssembledVehicleSystem& assembled,
     const Eigen::Vector3d& body_origin_in_inertial_meters,
     ProjectionHistory* history) {
-    double half_width_meters = history->base_half_width_meters;
-    if (history->has_previous_body_origin) {
-        half_width_meters +=
-            (body_origin_in_inertial_meters -
-             history->previous_body_origin_in_inertial_meters)
-                .norm();
-    }
-    RequireFinite(half_width_meters, "observation projection half width");
     const auto projection = assembled.contact_force_plan()
                                 ->track_geometry()
-                                .ProjectPointNearSeed(
+                                .ProjectPointOntoSeededBranch(
                                     body_origin_in_inertial_meters,
-                                    history->station_seed_meters,
-                                    half_width_meters);
+                                    history->station_seed_meters);
     history->station_seed_meters = projection.track_station_meters();
-    history->previous_body_origin_in_inertial_meters =
-        body_origin_in_inertial_meters;
-    history->has_previous_body_origin = true;
-    history->maximum_half_width_meters =
-        std::max(history->maximum_half_width_meters, half_width_meters);
     return history->station_seed_meters;
 }
 
@@ -724,8 +701,6 @@ void WriteMetadata(
     const QualificationSampleClock& clock, const BoundaryUse& before,
     const BoundaryUse& after,
     const std::array<std::size_t, kInterfaceCount>& longest_zero_contact_runs,
-    double maximum_carrier_observation_projection_half_width_meters,
-    double maximum_representative_body_observation_projection_half_width_meters,
     const EndpointDiagnostics& diagnostics) {
     const int requested_contact_worker_count =
         std::min({kMaximumContactWorkerCount,
@@ -862,24 +837,6 @@ void WriteMetadata(
            << ",\n"
            << "    \"contact_batch_parallel_team_probe_worker_count\": "
            << contact_batch_parallel_team_probe_worker_count
-           << ",\n"
-           << "    \"rhs_contact_projection_half_width_meters\": "
-           << kRhsContactProjectionHalfWidthMeters << ",\n"
-           << "    \"observation_projection_rule\": "
-           << JsonString(
-                  "base half width plus previous-to-current body-origin "
-                  "chord")
-           << ",\n"
-           << "    \"carrier_observation_projection_base_half_width_meters\": "
-           << kCarrierObservationProjectionBaseHalfWidthMeters << ",\n"
-           << "    \"representative_body_observation_projection_base_half_width_meters\": "
-           << kRepresentativeBodyObservationProjectionBaseHalfWidthMeters
-           << ",\n"
-           << "    \"maximum_carrier_observation_projection_half_width_meters\": "
-           << maximum_carrier_observation_projection_half_width_meters
-           << ",\n"
-           << "    \"maximum_representative_body_observation_projection_half_width_meters\": "
-           << maximum_representative_body_observation_projection_half_width_meters
            << "\n"
            << "  },\n"
            << "  \"sample_period_nanoseconds\": "
@@ -1125,7 +1082,7 @@ QualificationRunSummary RunVehicleQualification(
             vehicle, startup, std::move(line),
             resolved_run_configuration.orvd_data_root,
             kVehicleReferenceTrackStationMeters,
-            kRhsContactProjectionHalfWidthMeters, std::move(irregularity));
+            std::move(irregularity));
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
     if (assembled.model().num_generalized_positions() !=
@@ -1228,8 +1185,6 @@ QualificationRunSummary RunVehicleQualification(
         carrier_projection_histories[index].station_seed_meters =
             assembled.contact_force_plan()->initial_projection_station_meters(
                 static_cast<int>(index));
-        carrier_projection_histories[index].base_half_width_meters =
-            kCarrierObservationProjectionBaseHalfWidthMeters;
     }
 
     const std::array<multibody_model::RigidBodyHandle,
@@ -1248,9 +1203,6 @@ QualificationRunSummary RunVehicleQualification(
         representative_body_projection_histories[index].station_seed_meters =
             InitialBodyTrackStation(vehicle, startup,
                                     recipe.representative_body_names[index]);
-        representative_body_projection_histories[index]
-            .base_half_width_meters =
-            kRepresentativeBodyObservationProjectionBaseHalfWidthMeters;
     }
 
     std::vector<QualificationObservation> observations;
@@ -1390,20 +1342,6 @@ QualificationRunSummary RunVehicleQualification(
         assembled, *observation_context, all_wrenches, series_derivatives);
     const Clock::time_point endpoint_diagnostics_end = Clock::now();
 
-    double maximum_carrier_projection_half_width_meters = 0.0;
-    for (const ProjectionHistory& history : carrier_projection_histories) {
-        maximum_carrier_projection_half_width_meters =
-            std::max(maximum_carrier_projection_half_width_meters,
-                     history.maximum_half_width_meters);
-    }
-    double maximum_representative_body_projection_half_width_meters = 0.0;
-    for (const ProjectionHistory& history :
-         representative_body_projection_histories) {
-        maximum_representative_body_projection_half_width_meters = std::max(
-            maximum_representative_body_projection_half_width_meters,
-            history.maximum_half_width_meters);
-    }
-
     QualificationRunSummary summary(actual_integration_recipe);
     summary.time_integrator_qualification_case =
         numerics.qualification_case;
@@ -1483,8 +1421,6 @@ QualificationRunSummary RunVehicleQualification(
                   sample_clock, before_definition_interval,
                   after_definition_interval,
                   longest_zero_contact_runs,
-                  maximum_carrier_projection_half_width_meters,
-                  maximum_representative_body_projection_half_width_meters,
                   endpoint_diagnostics);
     const Clock::time_point write_end = Clock::now();
     summary.data_and_metadata_write_wall_seconds =

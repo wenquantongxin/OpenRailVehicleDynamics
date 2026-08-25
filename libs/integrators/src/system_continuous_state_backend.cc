@@ -1,9 +1,7 @@
 #include "system_continuous_state_backend.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <exception>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -23,7 +21,6 @@
 #include "orvd/integrators/cvode_continuous_state_advancer.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
-#include "orvd/track_geometry/track_station_projection.h"
 
 #include "bdf_integration_access.h"
 #include "dense_finite_difference_jacobian_provider.h"
@@ -35,59 +32,6 @@ namespace {
 constexpr int kMinimumParallelJacobianWorkerCount = 4;
 constexpr int kIntermediateParallelJacobianWorkerCount = 8;
 constexpr int kMaximumParallelJacobianWorkerCount = 16;
-
-// Observes only the production bridge's formal recoverability decision. The
-// count is kept behind the source-private system access seam so a real vehicle
-// qualification can prove that a projection-window miss occurred without
-// adding a test hook to either numerical backend or the installed API.
-class RecoverableFailureObservingRhs final : public ContinuousStateRhs {
-   public:
-    explicit RecoverableFailureObservingRhs(SystemRhsBridge& bridge)
-        : bridge_(&bridge) {}
-
-    [[nodiscard]] int continuous_state_size() const override {
-        return bridge_->continuous_state_size();
-    }
-
-    void CalcTimeDerivatives(
-        double time_seconds,
-        const Eigen::Ref<const Eigen::VectorXd>& continuous_state,
-        Eigen::Ref<Eigen::VectorXd> state_time_derivatives) override {
-        bridge_->CalcTimeDerivatives(time_seconds, continuous_state,
-                                     state_time_derivatives);
-    }
-
-    [[nodiscard]] bool IsRecoverableFailure(
-        const std::exception_ptr& failure) const noexcept override {
-        const bool recoverable = bridge_->IsRecoverableFailure(failure);
-        if (!recoverable) {
-            return false;
-        }
-        try {
-            std::rethrow_exception(failure);
-        } catch (const track_geometry::TrackStationProjectionWindowMiss&) {
-            if (recoverable_projection_window_miss_classification_count_ !=
-                std::numeric_limits<std::uint64_t>::max()) {
-                ++recoverable_projection_window_miss_classification_count_;
-            }
-        } catch (...) {
-            // The bridge owns the recoverability policy. A future recoverable
-            // exception remains recoverable without being mislabeled as a
-            // projection-window miss by this narrow diagnostic.
-        }
-        return true;
-    }
-
-    [[nodiscard]] std::uint64_t
-    recoverable_projection_window_miss_classification_count() const noexcept {
-        return recoverable_projection_window_miss_classification_count_;
-    }
-
-   private:
-    SystemRhsBridge* bridge_;
-    mutable std::uint64_t
-        recoverable_projection_window_miss_classification_count_{};
-};
 
 [[nodiscard]] bool UsesCvode(
     SystemContinuousStateIntegrationRecipe recipe) {
@@ -330,8 +274,7 @@ class SystemContinuousStateBackend::Implementation final {
         ContinuousStateErrorTolerances tolerances,
         NoCallTimeAppliedForces no_call_time_applied_forces)
         : rhs_bridge_(system, plan, candidate_context,
-                      no_call_time_applied_forces),
-          radau_rhs_observer_(rhs_bridge_) {
+                      no_call_time_applied_forces) {
         rhs_bridge_.SynchronizeContextLocalDataFrom(accepted_context);
         if (UsesCvode(recipe)) {
             const int worker_count =
@@ -359,12 +302,6 @@ class SystemContinuousStateBackend::Implementation final {
     [[nodiscard]] SystemContinuousStateIntegrationRecipe configured_recipe()
         const noexcept {
         return RuntimeRecipe(*runtime_);
-    }
-
-    [[nodiscard]] std::uint64_t
-    recoverable_projection_window_miss_classification_count() const noexcept {
-        return radau_rhs_observer_
-            .recoverable_projection_window_miss_classification_count();
     }
 
     void SynchronizeContextLocalDataFrom(
@@ -421,7 +358,7 @@ class SystemContinuousStateBackend::Implementation final {
                 }
                 return Radau5Runtime{
                     std::make_unique<Radau5ContinuousStateAdvancer>(
-                        radau_rhs_observer_, initial_time_seconds,
+                        rhs_bridge_, initial_time_seconds,
                         initial_continuous_state,
                         std::move(tolerances))};
         }
@@ -460,10 +397,9 @@ class SystemContinuousStateBackend::Implementation final {
     }
 
     // Declaration order is intentional: the concrete advancer is destroyed
-    // before the optional Jacobian provider, observing RHS and production
-    // bridge it may borrow.
+    // before the optional Jacobian provider and production bridge it may
+    // borrow.
     SystemRhsBridge rhs_bridge_;
-    RecoverableFailureObservingRhs radau_rhs_observer_;
     std::unique_ptr<SystemDenseFiniteDifferenceJacobian> dense_jacobian_;
     std::optional<ConcreteRuntime> runtime_;
 };
@@ -496,12 +432,6 @@ const ContinuousStateAdvancer& SystemContinuousStateBackend::advancer()
 SystemContinuousStateIntegrationRecipe
 SystemContinuousStateBackend::configured_recipe() const noexcept {
     return implementation_->configured_recipe();
-}
-
-std::uint64_t SystemContinuousStateBackend::
-    recoverable_projection_window_miss_classification_count() const noexcept {
-    return implementation_
-        ->recoverable_projection_window_miss_classification_count();
 }
 
 void SystemContinuousStateBackend::SynchronizeContextLocalDataFrom(

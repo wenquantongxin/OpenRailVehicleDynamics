@@ -1,6 +1,6 @@
 // G53/G54: the installed GZ18 contact personality enters the vehicle RHS, and
-// the same real scenario advances its local projection branches at Radau5's
-// accepted internal endpoints.
+// the same real scenario advances its local projection branches at accepted
+// endpoints.
 
 #include <algorithm>
 #include <array>
@@ -31,7 +31,6 @@
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/wheel_rail_contact/contact_wrench.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
-#include "system_continuous_state_integration_access.h"
 #include "wheel_rail_contact/allocation_probe.h"
 
 namespace {
@@ -45,8 +44,6 @@ using orvd::configuration::ResolvedWheelPairPlacement;
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
-using orvd::integrators::internal::SystemContinuousStateIntegrationAccess;
-using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
 using orvd::multibody_model::AppliedBodyWrench;
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackScalarProfile;
@@ -221,11 +218,10 @@ int main(int argc, char** argv) {
     const auto startup = LoadResolvedStartupStateFromJsonFile(argv[2]);
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
     constexpr double kReferenceStationMeters = 0.0;
-    constexpr double kProjectionHalfWidthMeters = 0.01;
     std::unique_ptr<AssembledVehicleContactScenario> scenario =
         AssembleGz18ContactScenario(
             vehicle, startup, std::move(line), std::filesystem::path(argv[4]),
-            kReferenceStationMeters, kProjectionHalfWidthMeters);
+            kReferenceStationMeters);
 
     const auto& assembled = scenario->vehicle_system();
     const auto* contact_plan = assembled.contact_force_plan();
@@ -641,11 +637,10 @@ int main(int argc, char** argv) {
     const auto yawed_scenario = AssembleGz18ContactScenario(
         vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
         std::filesystem::path(argv[4]), kReferenceStationMeters,
-        kProjectionHalfWidthMeters, std::move(fixture_irregularity));
+        std::move(fixture_irregularity));
     const auto yawed_zero_field_scenario = AssembleGz18ContactScenario(
         vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
-        std::filesystem::path(argv[4]), kReferenceStationMeters,
-        kProjectionHalfWidthMeters);
+        std::filesystem::path(argv[4]), kReferenceStationMeters);
     const auto* yawed_plan =
         yawed_scenario->vehicle_system().contact_force_plan();
     auto yawed_workspace = yawed_plan->CreateWorkspace();
@@ -953,61 +948,6 @@ int main(int argc, char** argv) {
             "a contact-enabled system accepted a second line for start-up "
             "assembly");
 
-    // The real 60 km/h GZ18 advances farther than the deliberately narrow
-    // local window. Some ordinary Radau5 trial steps also reach beyond the
-    // latest accepted 1 cm branch window. The source-private diagnostic below
-    // observes the production bridge classifying that exact exception type;
-    // Radau5 reduces the step, while every successful endpoint advances the
-    // accepted projection history. Static G53 anchors cannot do either job.
-    std::vector<double> initial_hints(
-        runtime_context.wheel_rail_projection_station_hints_meters().begin(),
-        runtime_context.wheel_rail_projection_station_hints_meters().end());
-    auto advancer = SystemContinuousStateIntegrationAccess::Make(
-        SystemContinuousStateIntegrationRecipe::kRadau5,
-        assembled.system(), assembled.compiled_plan(), runtime_context,
-        MakeGz18Tolerances(), NoCallTimeAppliedForces{});
-    Require(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-                *advancer) ==
-                SystemContinuousStateIntegrationRecipe::kRadau5 &&
-                SystemContinuousStateIntegrationAccess::
-                        RecoverableProjectionWindowMissClassificationCount(
-                            *advancer) == 0 &&
-                advancer->integration_statistics()
-                        .requested_dense_finite_difference_jacobian_worker_count ==
-                    1,
-            "the projection qualification did not construct serial Radau5");
-    constexpr double kRecoverableProjectionTargetSeconds = 3.0e-2;
-    advancer->AdvanceTo(kRecoverableProjectionTargetSeconds);
-    const auto projection_run_statistics =
-        advancer->integration_statistics();
-    Require(
-        runtime_context.time_seconds() ==
-                kRecoverableProjectionTargetSeconds &&
-            SystemContinuousStateIntegrationAccess::
-                    RecoverableProjectionWindowMissClassificationCount(
-                        *advancer) > 0,
-        "the real GZ18 Radau5 run did not recover from a classified "
-        "projection-window miss and reach its target");
-    Require(
-        projection_run_statistics.successful_internal_step_count > 1 &&
-            projection_run_statistics.jacobian_evaluation_count >=
-                projection_run_statistics.successful_internal_step_count,
-        "accepted projection-history updates did not invalidate Radau5's "
-        "retained linearization before the next internal step");
-    const auto advanced_hints =
-        runtime_context.wheel_rail_projection_station_hints_meters();
-    for (std::size_t ordinal = 0; ordinal < initial_hints.size(); ++ordinal) {
-        Require(advanced_hints[ordinal] > initial_hints[ordinal] +
-                    kProjectionHalfWidthMeters,
-                "a GZ18 projection branch did not advance beyond the static "
-                "G53 window");
-    }
-    Eigen::VectorXd advanced_rhs(109);
-    assembled.compiled_plan().CalcStateTimeDerivatives(runtime_context,
-                                                       advanced_rhs);
-    Require(advanced_rhs.allFinite(),
-            "the accepted GZ18 projection history does not feed a finite RHS");
-
     // Put the same real vehicle just inside the base track's right definition
     // boundary.
     // The accepted vehicle then crosses onto TrackGeometry's native straight
@@ -1023,18 +963,15 @@ int main(int argc, char** argv) {
             std::max(foremost_offset,
                      placement.track_station_meters - kReferenceStationMeters);
     }
+    constexpr double kBoundaryInitialInsetMeters = 0.035;
     const double boundary_reference_station =
         boundary_line.end_track_station_meters() - foremost_offset -
-        3.5 * kProjectionHalfWidthMeters;
+        kBoundaryInitialInsetMeters;
     auto boundary_scenario = AssembleGz18ContactScenario(
         vehicle, startup, std::move(boundary_line),
-        std::filesystem::path(argv[4]), boundary_reference_station,
-        kProjectionHalfWidthMeters);
+        std::filesystem::path(argv[4]), boundary_reference_station);
     const auto& boundary_system = boundary_scenario->vehicle_system();
     auto& boundary_context = boundary_scenario->initial_context().context();
-    const std::vector<double> initial_boundary_hints(
-        boundary_context.wheel_rail_projection_station_hints_meters().begin(),
-        boundary_context.wheel_rail_projection_station_hints_meters().end());
     SystemContinuousStateAdvancer boundary_advancer(
         boundary_system.system(), boundary_system.compiled_plan(),
         boundary_context, MakeGz18Tolerances(), NoCallTimeAppliedForces{});
@@ -1042,17 +979,6 @@ int main(int argc, char** argv) {
     boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
     Require(boundary_context.time_seconds() == kAcceptedHistoryTargetSeconds,
             "the boundary scenario did not establish an accepted history");
-    const std::vector<double> accepted_boundary_hints(
-        boundary_context.wheel_rail_projection_station_hints_meters().begin(),
-        boundary_context.wheel_rail_projection_station_hints_meters().end());
-    for (std::size_t ordinal = 0; ordinal < initial_boundary_hints.size();
-         ++ordinal) {
-        Require(accepted_boundary_hints[ordinal] >
-                    initial_boundary_hints[ordinal] +
-                        kProjectionHalfWidthMeters,
-                "the boundary scenario did not move its accepted projection "
-                "history beyond the construction anchors");
-    }
     const std::array<double, 5> boundary_sample_times{
         kAcceptedHistoryTargetSeconds, 1.5e-3, 2.0e-3, 2.5e-3, 3.0e-3};
     const Eigen::MatrixXd boundary_samples =

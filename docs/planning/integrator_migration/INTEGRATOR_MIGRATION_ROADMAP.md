@@ -89,7 +89,6 @@ SystemContinuousStateAdvancer
 └── unique_ptr<SystemContinuousStateBackend>  ← owning backend bundle
     └── unique_ptr<Implementation>
         ├── SystemRhsBridge
-        ├── RecoverableFailureObservingRhs
         ├── unique_ptr<SystemDenseFiniteDifferenceJacobian>  ← nullable，仅 CVODE
         └── optional<ConcreteRuntime>
             └── variant<CvodeBdf2Runtime, CvodeBdf5Runtime, Radau5Runtime>
@@ -100,7 +99,7 @@ SystemContinuousStateAdvancer
 
 `SystemContinuousStateIntegrationRecipe` 只进入唯一私有工厂；构造后的 recipe 身份由
 `ConcreteRuntime` 的真实 alternative 反向导出，不另存一个可与对象漂移的标签。销毁顺序
-保证 concrete advancer 早于它借用的 Jacobian provider、observer 和 RHS bridge 销毁。
+保证 concrete advancer 早于它借用的 Jacobian provider 和 RHS bridge 销毁。
 
 派生自上游的 Radau5 数值核心与 ORVD 适配层分开：
 
@@ -378,7 +377,7 @@ INT-07A manifest、串行工件协议和测试保留。实／复近奇异资格�
 2. 每个 Radau5 接受端点严格经过“安装 candidate 时间与状态 → 更新轮轨站位 → 下一内部步”。
 3. 公开推进成功才一次提交时间、`[q;v;z]` 和站位；后端、插值或端点投影失败保持 accepted Context
    不变并要求显式同步。
-4. 通过阻尼／Maxwell 解析系统、外部参数同步、真实 GZ18 投影窗可恢复失败、GZ18 稠密短窗和
+4. 通过阻尼／Maxwell 解析系统、外部参数同步、真实 GZ18 局部分支推进、GZ18 稠密短窗和
    IRW 100 Hz 重初始化语义。
 5. 初次整车接入允许串行数值 Jacobian；如果成本很高，记录统计而不是在同一 Goal 扩张并行设计。
 
@@ -390,7 +389,8 @@ INT-07A manifest、串行工件协议和测试保留。实／复近奇异资格�
 - 系统事务测试对 CVODE BDF2 与 Radau5 共用阻尼、外部参数、稠密输出、Maxwell／标称力和 fatal RHS
   原子性断言；源码树私有诊断还证明真实 GZ18 Radau5 运行至少分类过一次可恢复的
   `TrackStationProjectionWindowMiss`，并完成 30 ms／1 cm 站位推进。Radau5 另通过 10 ms／101 点
-  稠密短窗，以及 IRW 20 ms 的 U0→U1→同步→U2 事件序列；
+  稠密短窗，以及 IRW 20 ms 的 U0→U1→同步→U2 事件序列；该有限窗口资格路径随后由无窗口局部
+  分支投影合同取代；
 - 资格 runner 将物理场景默认 recipe 与源码树私有闭集 qualification case 分离。摘要和 metadata 以
   `cvode_bdf2`／`cvode_bdf5`／`radau5` 为主身份，CVODE 的 `maximum_bdf_order` 兼容字段在 Radau5
   上明确为 `null`；Radau5 串行数值 Jacobian worker identity 为 `1`；
@@ -404,6 +404,7 @@ INT-07A manifest、串行工件协议和测试保留。实／复近奇异资格�
   控制器、阶段外推或稠密区间；
 - 真实 GZ18 的 `30 ms / 1 cm` 局部投影窗运行实际分类可恢复窗口失败、推进提示并到达目标，同时
   断言下一内步不复用更新前线性化；IRW 被动与 100 Hz 受控短窗也通过；
+- 上述有限窗口与可恢复分类是当时实现的完成记录，后续无窗口局部分支投影删除了该生产路径；
 - 该轮 Release 完整 CTest 为 86 项全绿。该正确性闭合不构成性能资格，轮轨场景下每个 accepted
   内步保守重建 Radau5 线性化的成本留到 INT-07 以后裁决。
 

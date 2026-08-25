@@ -58,7 +58,6 @@ constexpr std::uint64_t kObservationsPerEventPeriod =
                                kObservationPeriodNanoseconds);
 static_assert(kEventPeriodNanoseconds % kObservationPeriodNanoseconds == 0);
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
-constexpr double kProjectionSearchHalfWidthMeters = 0.01;
 constexpr std::string_view kIrregularityIdentifier =
     "aar5_irregularity";
 constexpr std::string_view kTrackGeometryFilename =
@@ -735,8 +734,6 @@ void WriteMetadata(
            << JsonString(
                   "integer event ordinal multiplied by control event period")
            << ",\n"
-           << "  \"contact_projection_search_half_width_meters\": "
-           << kProjectionSearchHalfWidthMeters << ",\n"
            << "  \"control_observation_basis\": "
            << JsonString(
                   "lateral displacement in Track-T; yaw in the physical "
@@ -970,7 +967,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     auto scenario = configuration::AssembleIrwContactScenario(
         vehicle, startup, std::move(line), resolved.orvd_data_root,
         kVehicleReferenceTrackStationMeters,
-        kProjectionSearchHalfWidthMeters, std::move(irregularity));
+        std::move(irregularity));
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
     if (assembled.model().num_generalized_positions() != 81 ||

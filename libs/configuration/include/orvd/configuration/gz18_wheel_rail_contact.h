@@ -80,7 +80,6 @@ class Gz18WheelRailContact {
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double,
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     explicit Gz18WheelRailContact(

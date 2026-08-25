@@ -3,7 +3,6 @@
 /// @file
 /// Single source-tree-only construction seam for system integration recipes.
 
-#include <cstdint>
 #include <memory>
 
 #include "orvd/integrators/system_continuous_state_advancer.h"
@@ -49,11 +48,6 @@ class SystemContinuousStateIntegrationAccess final {
     [[nodiscard]] static SystemContinuousStateIntegrationRecipe
     ConfiguredRecipe(const SystemContinuousStateAdvancer& advancer);
 
-    // Source-tree qualification diagnostic. This is deliberately not part of
-    // the installed advancer or generic numerical-statistics contracts.
-    [[nodiscard]] static std::uint64_t
-    RecoverableProjectionWindowMissClassificationCount(
-        const SystemContinuousStateAdvancer& advancer);
 };
 
 }  // namespace orvd::integrators::internal

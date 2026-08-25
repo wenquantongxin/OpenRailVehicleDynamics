@@ -1089,8 +1089,8 @@ add_test(NAME verify_gz18_passive_short_window
              ${CMAKE_SOURCE_DIR})
 
 # G58's non-installed qualification leaf. A 30 ms real GZ18 run with only its
-# two endpoints exercises multiple dense Jacobians, observation projection across a
-# sample displacement larger than the RHS's one-centimetre local window, the
+# two endpoints exercises multiple dense Jacobians, sequential observation
+# projection across the dense-state batch, the
 # formal s_ref=0 boundary summary and directory-level publication. The 10/20 s
 # science windows remain explicit local qualifications and never enter the
 # default CTest suite.

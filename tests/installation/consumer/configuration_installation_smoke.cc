@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
         const auto irw_scenario =
             orvd::configuration::AssembleIrwContactScenario(
                 irw_vehicle, irw_startup, std::move(irw_line), argv[4], 0.0,
-                0.01, std::move(irw_irregularity.field));
+                std::move(irw_irregularity.field));
         const auto& irw_system = irw_scenario->vehicle_system();
         const auto& irw_resolved = irw_scenario->initial_context();
         if (irw_system.model().num_rigid_bodies() != 25 ||
@@ -375,7 +375,7 @@ int main(int argc, char* argv[]) {
         }
         const auto scenario =
             orvd::configuration::AssembleGz18ContactScenario(
-                vehicle, startup, std::move(r300_line), argv[4], 0.0, 2.0,
+                vehicle, startup, std::move(r300_line), argv[4], 0.0,
                 std::move(gz18_generated_irregularity.field));
         const auto& system = scenario->vehicle_system();
         const auto& resolved = scenario->initial_context();

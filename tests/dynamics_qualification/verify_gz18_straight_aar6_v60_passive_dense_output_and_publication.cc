@@ -575,12 +575,6 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                     "\"contact_batch_requested_worker_count\": ") !=
                     std::string::npos &&
                 metadata.find(
-                    "\"rhs_contact_projection_half_width_meters\": 0.01") !=
-                    std::string::npos &&
-                metadata.find(
-                    "\"maximum_carrier_observation_projection_half_width_meters\": ") !=
-                    std::string::npos &&
-                metadata.find(
                     "\"endpoint_assembly_and_state_slice_diagnostics\": {") !=
                     std::string::npos &&
                 metadata.find("\"contact_observation_contract\": {") !=

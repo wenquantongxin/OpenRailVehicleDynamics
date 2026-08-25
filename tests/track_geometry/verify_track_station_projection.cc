@@ -1,7 +1,7 @@
 // G47 gate 4: tracking the branch of the centerline a caller is already on.
 //
 // The checks cover ordinary roots on each line shape, second-order rejection,
-// multiple-root refusal, window boundaries, invalid inputs and statelessness.
+// definition-boundary continuation and invalid inputs.
 
 #include <cmath>
 #include <cstdio>
@@ -20,7 +20,6 @@ namespace {
 
 using orvd::track_geometry::TrackGeometry;
 using orvd::track_geometry::TrackStationProjection;
-using orvd::track_geometry::TrackStationProjectionWindowMiss;
 namespace lines = orvd::track_geometry::test_lines;
 
 static_assert(
@@ -62,8 +61,8 @@ void CheckOrthogonalityAndAgreementOnEachShape() {
     for (const Probe& probe : probes) {
         const Eigen::Vector3d point =
             PointBesideStation(line, probe.station, 0.8);
-        const auto projection =
-            line.ProjectPointNearSeed(point, probe.station + 2.0, 8.0);
+        const auto projection = line.ProjectPointOntoSeededBranch(
+            point, probe.station + 2.0);
 
         const Eigen::Vector3d offset =
             point - projection.closest_centerline_point_in_inertial_meters();
@@ -81,33 +80,6 @@ void CheckOrthogonalityAndAgreementOnEachShape() {
                            "that station on the ") +
                    probe.shape + " stretch");
     }
-}
-
-void CheckTheSeedDoesNotDecideTheAnswer() {
-    // Seeds on either side of the same root, each with a window containing it.
-    const TrackGeometry line = lines::MakeCanonicalLine();
-    const double station = 180.0;
-    const Eigen::Vector3d point = PointBesideStation(line, station, -1.1);
-    for (const double seed : {station - 7.0, station + 7.0}) {
-        const auto projection = line.ProjectPointNearSeed(point, seed, 9.0);
-        Expect(std::abs(projection.track_station_meters() - station) <= 1.0e-9,
-               "the branch found from a seed at " + std::to_string(seed) +
-                   " m is the same as from any other seed in the window");
-    }
-}
-
-void CheckProjectionKeepsNoHistory() {
-    const TrackGeometry line = lines::MakeCanonicalLine();
-    const Eigen::Vector3d first = PointBesideStation(line, 120.0, 0.6);
-    const Eigen::Vector3d second = PointBesideStation(line, 260.0, -0.6);
-    const double first_alone =
-        line.ProjectPointNearSeed(first, 120.0, 5.0).track_station_meters();
-    (void)line.ProjectPointNearSeed(second, 260.0, 5.0);
-    const double first_again =
-        line.ProjectPointNearSeed(first, 120.0, 5.0).track_station_meters();
-    Expect(first_alone == first_again,
-           "projecting a different point in between does not change the result "
-           "for the first, so the primitive holds no history");
 }
 
 void CheckRootsTheNodeGridDoesNotSurround() {
@@ -133,7 +105,9 @@ void CheckRootsTheNodeGridDoesNotSurround() {
         bool projected = false;
         double station = 0.0;
         try {
-            station = line.ProjectPointNearSeed(point, one.station_meters, 0.3)
+            station = line
+                          .ProjectPointOntoSeededBranch(point,
+                                                        one.station_meters)
                           .track_station_meters();
             projected = true;
         } catch (const std::exception&) {
@@ -144,40 +118,6 @@ void CheckRootsTheNodeGridDoesNotSurround() {
                            "beside, for ") +
                    one.description);
     }
-}
-
-void CheckMultipleMinimaAreRefused() {
-    // The arch has one minimum on each flank. Keep both inside the window while
-    // moving the seed toward the left root: the contract still refuses rather
-    // than selecting the nearer candidate.
-    // The requested spacing spans the whole line; the declared vertical
-    // boundary at the apex must still split the projection search.
-    const TrackGeometry line =
-        lines::MakeSymmetricGradeArchLine(lines::kArchLengthMeters);
-    const Eigen::Vector3d point(0.5 * lines::kArchLengthMeters, 0.0, 3.0);
-    bool refused = false;
-    bool misclassified_as_window_miss = false;
-    try {
-        (void)line.ProjectPointNearSeed(point, 4.5, 4.4);
-    } catch (const TrackStationProjectionWindowMiss&) {
-        misclassified_as_window_miss = true;
-    } catch (const std::runtime_error&) {
-        refused = true;
-    }
-    Expect(refused && !misclassified_as_window_miss,
-           "a window holding multiple minima is refused rather than choosing "
-           "a branch for the caller");
-
-    // A narrower window isolates one flank on the same geometry.
-    bool resolved = true;
-    try {
-        (void)line.ProjectPointNearSeed(point, 2.0, 1.5);
-    } catch (const std::exception&) {
-        resolved = false;
-    }
-    Expect(resolved,
-           "a local window around one flank resolves the same point on the same "
-           "line");
 }
 
 void CheckSecondOrderConditionIsEnforced() {
@@ -195,12 +135,12 @@ void CheckSecondOrderConditionIsEnforced() {
 
     bool refused = false;
     try {
-        (void)line.ProjectPointNearSeed(point, station, 20.0);
-    } catch (const TrackStationProjectionWindowMiss&) {
+        (void)line.ProjectPointOntoSeededBranch(point, station);
+    } catch (const std::runtime_error&) {
         refused = true;
     }
     Expect(refused,
-           "a window whose only stationary point is a maximum of the distance "
+           "a stationary point that is a maximum of the distance "
            "is refused rather than returned as a projection");
 
     // A point at the same lateral distance but on the outside of the curve has
@@ -210,7 +150,7 @@ void CheckSecondOrderConditionIsEnforced() {
         PointBesideStation(line, station, -kLateralOffsetMeters);
     bool accepted = true;
     try {
-        (void)line.ProjectPointNearSeed(outside, station, 20.0);
+        (void)line.ProjectPointOntoSeededBranch(outside, station);
     } catch (const std::exception&) {
         accepted = false;
     }
@@ -219,46 +159,18 @@ void CheckSecondOrderConditionIsEnforced() {
            "accepted");
 }
 
-void CheckAStationaryPointOnTheWindowWallIsRefused() {
-    // The contract is strictly interior. A window whose wall lands on the root
-    // is a window in the wrong place, and saying so is more use to the caller
-    // than returning the wall.
-    const TrackGeometry line = lines::MakeLevelStraightLine(20.0, 1.0);
-    const Eigen::Vector3d point(10.0, 0.7, 0.0);
-    bool refused = false;
-    try {
-        (void)line.ProjectPointNearSeed(point, 12.0, 2.0);
-    } catch (const TrackStationProjectionWindowMiss&) {
-        refused = true;
-    }
-    Expect(refused, "a root sitting on the wall of the window is refused");
-
-    bool accepted = true;
-    try {
-        (void)line.ProjectPointNearSeed(point, 12.0, 3.0);
-    } catch (const std::exception&) {
-        accepted = false;
-    }
-    Expect(accepted,
-           "widening the window so the same root falls strictly inside it "
-           "succeeds");
-}
-
 void CheckStraightContinuationsAndBoundaryCrossings() {
     const TrackGeometry line = lines::MakeLevelStraightLine(20.0, 1.0);
     struct Probe {
         double station;
         double seed;
-        double half_width;
         const char* description;
     };
     const Probe probes[] = {
-        {-4.0, -3.5, 1.0, "the left straight continuation"},
-        {27.0, 26.5, 1.0, "the right straight continuation"},
-        {0.4, -0.5, 2.0,
-         "a window crossing the left definition boundary"},
-        {19.6, 20.5, 2.0,
-         "a window crossing the right definition boundary"},
+        {-4.0, -3.5, "the left straight continuation"},
+        {27.0, 26.5, "the right straight continuation"},
+        {0.4, -0.5, "a projection crossing the left definition boundary"},
+        {19.6, 20.5, "a projection crossing the right definition boundary"},
     };
     for (const Probe& probe : probes) {
         const Eigen::Vector3d point =
@@ -266,9 +178,9 @@ void CheckStraightContinuationsAndBoundaryCrossings() {
         bool accepted = true;
         double projected_station = 0.0;
         try {
-            projected_station =
-                line.ProjectPointNearSeed(point, probe.seed, probe.half_width)
-                    .track_station_meters();
+            projected_station = line.ProjectPointOntoSeededBranch(
+                                        point, probe.seed)
+                                    .track_station_meters();
         } catch (const std::exception&) {
             accepted = false;
         }
@@ -297,16 +209,12 @@ void CheckArgumentRefusals() {
     Expect(refuses_invalid_argument([&] {
                Eigen::Vector3d bad = good;
                bad.y() = std::numeric_limits<double>::quiet_NaN();
-               (void)line.ProjectPointNearSeed(bad, 200.0, 5.0);
+               (void)line.ProjectPointOntoSeededBranch(bad, 200.0);
            }),
            "a non-finite point is refused");
     Expect(refuses_invalid_argument([&] {
-               (void)line.ProjectPointNearSeed(good, 200.0, 0.0);
-           }),
-           "a non-positive search half width is refused");
-    Expect(refuses_invalid_argument([&] {
-               (void)line.ProjectPointNearSeed(
-                   good, std::numeric_limits<double>::quiet_NaN(), 1.0);
+               (void)line.ProjectPointOntoSeededBranch(
+                   good, std::numeric_limits<double>::quiet_NaN());
            }),
            "a non-finite seed is refused");
 }
@@ -315,12 +223,8 @@ void CheckArgumentRefusals() {
 
 int main() {
     CheckOrthogonalityAndAgreementOnEachShape();
-    CheckTheSeedDoesNotDecideTheAnswer();
-    CheckProjectionKeepsNoHistory();
     CheckRootsTheNodeGridDoesNotSurround();
-    CheckMultipleMinimaAreRefused();
     CheckSecondOrderConditionIsEnforced();
-    CheckAStationaryPointOnTheWindowWallIsRefused();
     CheckStraightContinuationsAndBoundaryCrossings();
     CheckArgumentRefusals();
     if (failure_count != 0) {

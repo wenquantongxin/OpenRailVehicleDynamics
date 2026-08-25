@@ -100,13 +100,11 @@ class AssembledVehicleSystem {
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double,
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
     friend std::unique_ptr<AssembledVehicleContactScenario>
     AssembleIrwContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double,
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     AssembledVehicleSystem(
@@ -131,8 +129,7 @@ class AssembledVehicleSystem {
         std::vector<forces::WheelRailContactCarrierDefinition> carriers,
         std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
         std::vector<forces::IndependentWheelActiveTorqueCoupleDefinition>
-            active_torque_couples,
-        double projection_search_half_width_meters);
+            active_torque_couples);
 
     // Declaration order is construction order; destruction runs in reverse, so
     // each object outlives the ones that borrow it.

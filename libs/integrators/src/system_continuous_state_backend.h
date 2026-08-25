@@ -102,9 +102,6 @@ class SystemContinuousStateBackend final {
     [[nodiscard]] const ContinuousStateAdvancer& advancer() const;
     [[nodiscard]] SystemContinuousStateIntegrationRecipe configured_recipe()
         const noexcept;
-    [[nodiscard]] std::uint64_t
-    recoverable_projection_window_miss_classification_count() const noexcept;
-
     void SynchronizeContextLocalDataFrom(
         const system_assembly::SystemRuntimeContext& accepted_context);
 

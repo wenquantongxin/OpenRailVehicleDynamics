@@ -186,24 +186,17 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
         personality,
     std::unique_ptr<TrackIrregularityField> track_irregularity,
     std::vector<WheelRailContactCarrierDefinition> carriers,
-    std::vector<WheelRailContactInterfaceDefinition> interfaces,
-    double projection_search_half_width_meters)
+    std::vector<WheelRailContactInterfaceDefinition> interfaces)
     : model_(&model),
       line_(std::move(line)),
       personality_(std::move(personality)),
-      track_irregularity_(std::move(track_irregularity)),
-      projection_search_half_width_meters_(
-          projection_search_half_width_meters) {
+      track_irregularity_(std::move(track_irregularity)) {
     if (!model.is_finalized()) {
         throw std::logic_error(
             "WheelRailContactForcePlan requires a finalized multibody model");
     }
     if (personality_ == nullptr) {
         Reject("the runtime personality is null");
-    }
-    if (!std::isfinite(projection_search_half_width_meters_) ||
-        !(projection_search_half_width_meters_ > 0.0)) {
-        Reject("the projection search half width must be finite and positive");
     }
     if (carriers.empty()) {
         Reject("at least one contact carrier is required");
@@ -398,10 +391,9 @@ void WheelRailContactForcePlan::EvaluateCarrierProjections(
         scratch.body_origin_in_inertial_meters = body_pose.translation();
         scratch.rotation_inertial_from_body = body_pose.rotation();
 
-        const auto projection = line_.ProjectPointNearSeed(
+        const auto projection = line_.ProjectPointOntoSeededBranch(
             scratch.body_origin_in_inertial_meters,
-            projection_station_hints_meters[ordinal],
-            projection_search_half_width_meters_);
+            projection_station_hints_meters[ordinal]);
         scratch.track_station_meters = projection.track_station_meters();
     }
 }

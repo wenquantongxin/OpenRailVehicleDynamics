@@ -7,24 +7,19 @@
 
 // The result of projecting a point in space onto the line centerline.
 //
-// The projection primitive keeps no history. A seeded query searches a stated
-// interval around a seed the caller supplies; there is deliberately no
-// whole-line cold-start query. Nothing an integrator rejects can therefore leak
-// into the next evaluation through this object. A consumer that wants a
-// predicted seed computes the prediction itself and passes the predicted
-// station in; the line layer does not take a station rate or a step length,
-// because it has no way to tell an accepted step from a trial one.
+// The projection primitive keeps no history. A seeded query makes at most two
+// Newton corrections from the branch-identifying station supplied by its
+// caller; there is deliberately no whole-line cold-start query. Nothing an
+// integrator rejects can therefore leak into the next evaluation through this
+// object.
 
 namespace orvd::track_geometry {
 
 class TrackGeometry;
 
-/// A valid local projection window does not contain an admissible minimum.
-///
-/// This is distinct from an ambiguous window or invalid search input. An ODE
-/// trial state may temporarily produce this condition even though a smaller
-/// trial step remains on the same local branch.
-class TrackStationProjectionWindowMiss final : public std::runtime_error {
+/// The supplied station does not identify a regular local projection within
+/// the admitted two-Newton-correction contract.
+class TrackStationLocalProjectionFailure final : public std::runtime_error {
    public:
     using std::runtime_error::runtime_error;
 };

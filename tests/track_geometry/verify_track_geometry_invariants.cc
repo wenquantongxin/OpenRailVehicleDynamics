@@ -272,8 +272,8 @@ void CheckCombinedPlanVerticalAndSuperelevationGeometry() {
     const Eigen::Vector3d nearby_point =
         frame.pose().origin_in_inertial_meters() + 0.2 * rotation.col(1) -
         0.1 * rotation.col(2);
-    const auto projected =
-        line.ProjectPointNearSeed(nearby_point, kStationMeters + 0.2, 1.0);
+    const auto projected = line.ProjectPointOntoSeededBranch(
+        nearby_point, kStationMeters + 0.2);
     Expect(std::abs(projected.track_station_meters() - kStationMeters) <=
                2.0e-11,
            "local projection remains on the same branch when plan curvature, "
@@ -392,8 +392,8 @@ void CheckSeamQuinticEntersTheCenterline() {
         window_start + horizontal_x, horizontal_y, 0.0);
     const Eigen::Vector3d expected_right(-std::sin(measured_heading),
                                          std::cos(measured_heading), 0.0);
-    const auto projection = line.ProjectPointNearSeed(
-        expected_centerline + 0.2 * expected_right, window_end, 0.5);
+    const auto projection = line.ProjectPointOntoSeededBranch(
+        expected_centerline + 0.2 * expected_right, window_end);
     Expect(std::abs(projection.track_station_meters() - window_end) <= 1.0e-10,
            "the seam centerline also reaches the local projection path");
 }

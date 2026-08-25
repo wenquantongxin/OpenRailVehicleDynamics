@@ -215,15 +215,14 @@ class WheelRailContactForcePlan {
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
             track_irregularity,
         std::vector<WheelRailContactCarrierDefinition> carriers,
-        std::vector<WheelRailContactInterfaceDefinition> interfaces,
-        double projection_search_half_width_meters);
+        std::vector<WheelRailContactInterfaceDefinition> interfaces);
     WheelRailContactForcePlan(
         multibody_model::MultibodyModel&&, track_geometry::TrackGeometry,
         std::unique_ptr<
             wheel_rail_contact::WheelRailContactRuntimePersonality>,
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>,
         std::vector<WheelRailContactCarrierDefinition>,
-        std::vector<WheelRailContactInterfaceDefinition>, double) = delete;
+        std::vector<WheelRailContactInterfaceDefinition>) = delete;
     WheelRailContactForcePlan(const WheelRailContactForcePlan&) = delete;
     WheelRailContactForcePlan& operator=(const WheelRailContactForcePlan&) =
         delete;
@@ -331,7 +330,6 @@ class WheelRailContactForcePlan {
         track_irregularity_;
     std::vector<CarrierBinding> carriers_;
     std::vector<InterfaceBinding> interfaces_;
-    double projection_search_half_width_meters_{0.0};
 };
 
 }  // namespace orvd::forces

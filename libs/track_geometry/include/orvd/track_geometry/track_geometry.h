@@ -131,28 +131,20 @@ class TrackGeometry {
         return grade_.support_start_track_station_meters();
     }
 
-    // Tracks the branch of the centerline already isolated by the caller's seed
-    // and local window; this is not a whole-line search. The window must contain
-    // exactly one admissible minimum at the declared node resolution. A station
-    // is admissible only when the objective's first derivative meets the
-    // residual bound and its second derivative is strictly positive:
+    // Tracks the branch of the centerline identified by the caller's station
+    // seed; this is not a whole-line search. The current point must remain
+    // inside the regular root's two-Newton-correction attraction domain. A
+    // station is admissible only when the objective's first derivative meets
+    // the residual bound and its second derivative is strictly positive:
     //
     //     objective'' = |centerline'|^2 - (point - centerline) . centerline'',
     //
-    // Multiple stationary points hidden inside one node interval remain outside
-    // the completeness contract.
-    //
-    // The finite search window may lie inside the definition interval, outside
-    // it on either straight continuation, or cross either definition boundary.
-    // It is never clipped to the finite asset interval. Throws
-    // std::invalid_argument for a
-    // non-finite point or seed, a non-positive half width, or non-finite window
-    // bounds. Throws TrackStationProjectionWindowMiss if no admissible minimum
-    // lies strictly inside the window, and std::runtime_error if more than one
-    // does.
-    [[nodiscard]] TrackStationProjection ProjectPointNearSeed(
+    // Throws std::invalid_argument for a non-finite point or seed, and
+    // TrackStationLocalProjectionFailure if the seed or either Newton
+    // correction does not identify an admissible local minimum.
+    [[nodiscard]] TrackStationProjection ProjectPointOntoSeededBranch(
         const Eigen::Vector3d& point_in_inertial_meters,
-        double seed_track_station_meters, double search_half_width_meters) const;
+        double branch_seed_track_station_meters) const;
 
    private:
     struct StationNode {
@@ -166,11 +158,6 @@ class TrackGeometry {
         // formula nor a centerline-derivative formula change.
         bool interval_has_constant_curvature{false};
         double interval_curvature_radians_per_meter{0.0};
-    };
-
-    struct ProjectionCandidate {
-        double track_station_meters{0.0};
-        bool found{false};
     };
 
     void RequireFiniteTrackStation(double track_station_meters,
@@ -197,17 +184,11 @@ class TrackGeometry {
     struct ObjectiveDerivatives {
         double gradient{0.0};
         double hessian{0.0};
+        double gradient_bound{0.0};
     };
     [[nodiscard]] ObjectiveDerivatives EvaluateObjectiveDerivatives(
         const Eigen::Vector3d& point_in_inertial_meters,
         double track_station_meters) const;
-    // Accepts a qualified endpoint root or refines an interior root bracketed
-    // by a non-positive-to-non-negative gradient change. Newton steps remain
-    // inside a bracket that bisection always shrinks.
-    [[nodiscard]] ProjectionCandidate RefineBracketedMinimum(
-        const Eigen::Vector3d& point_in_inertial_meters,
-        double lower_bound_station, double upper_bound_station) const;
-
     TrackScalarProfile curvature_;
     TrackScalarProfile superelevation_;
     TrackVerticalProfile grade_;

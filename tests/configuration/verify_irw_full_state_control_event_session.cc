@@ -86,7 +86,7 @@ void Run(const std::filesystem::path& vehicle_path,
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
                 data_root, "aar5_irregularity"));
     auto scenario = orvd::configuration::AssembleIrwContactScenario(
-        vehicle, startup, std::move(line), data_root, 0.0, 0.01,
+        vehicle, startup, std::move(line), data_root, 0.0,
         std::move(irregularity));
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();

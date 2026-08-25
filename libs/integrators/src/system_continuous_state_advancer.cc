@@ -74,12 +74,6 @@ class SystemContinuousStateAdvancer::Implementation final {
         return backend_->configured_recipe();
     }
 
-    [[nodiscard]] std::uint64_t
-    RecoverableProjectionWindowMissClassificationCount() const noexcept {
-        return backend_
-            ->recoverable_projection_window_miss_classification_count();
-    }
-
     void AdvanceToImpl(double target_time_seconds,
                        std::span<const double> sample_times_seconds,
                        Eigen::MatrixXd* samples) {
@@ -350,13 +344,6 @@ internal::SystemContinuousStateIntegrationRecipe
 internal::SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
     const SystemContinuousStateAdvancer& advancer) {
     return advancer.implementation_->ConfiguredRecipe();
-}
-
-std::uint64_t internal::SystemContinuousStateIntegrationAccess::
-    RecoverableProjectionWindowMissClassificationCount(
-        const SystemContinuousStateAdvancer& advancer) {
-    return advancer.implementation_
-        ->RecoverableProjectionWindowMissClassificationCount();
 }
 
 void SystemContinuousStateAdvancer::AdvanceTo(double target_time_seconds) {

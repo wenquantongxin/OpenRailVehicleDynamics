@@ -350,11 +350,10 @@ int main(int argc, char** argv) {
     const auto startup = LoadResolvedStartupStateFromJsonFile(argv[2]);
     auto line = LoadTrackGeometryFromJsonFile(argv[3]);
     constexpr double kReferenceStationMeters = 0.0;
-    constexpr double kProjectionHalfWidthMeters = 0.01;
     std::unique_ptr<AssembledVehicleContactScenario> scenario =
         AssembleGz18ContactScenario(
             vehicle, startup, std::move(line), std::filesystem::path(argv[4]),
-            kReferenceStationMeters, kProjectionHalfWidthMeters);
+            kReferenceStationMeters);
 
     CheckInitialVerticalAcceleration(*scenario, startup);
     auto& accepted = scenario->initial_context().context();

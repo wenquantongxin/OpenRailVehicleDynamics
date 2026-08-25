@@ -218,8 +218,8 @@ void CheckR300QualificationAsset(const std::filesystem::path& asset_path) {
             geometry.CenterlinePositionInInertialMeters(station);
         Require(point.allFinite() && point.z() == 0.0,
                 "R300 centerline is not finite and level");
-        const auto projection = geometry.ProjectPointNearSeed(
-            point, station + 0.2, 1.0);
+        const auto projection =
+            geometry.ProjectPointOntoSeededBranch(point, station + 0.2);
         Require(Near(projection.track_station_meters(), station, 2.0e-12),
                 "R300 centerline point did not project to its own station");
     }
@@ -301,7 +301,7 @@ void CheckImportedCurveAsset(const std::filesystem::path& asset_path,
     Require(centerline.allFinite() && centerline.z() == 0.0,
             "imported curve centerline is not finite and level");
     const auto projection =
-        geometry.ProjectPointNearSeed(centerline, 150.2, 1.0);
+        geometry.ProjectPointOntoSeededBranch(centerline, 150.2);
     Require(Near(projection.track_station_meters(), 150.0, 2.0e-12),
             "imported curve centerline did not project to its own station");
 }
@@ -392,7 +392,7 @@ void CheckChunshenStationAsset(const std::filesystem::path& asset_path) {
     Require(centerline.allFinite() && centerline.z() < 0.0,
             "Chunshen Station centerline is not finite and uphill");
     const auto projection =
-        geometry.ProjectPointNearSeed(centerline, 7000.2, 1.0);
+        geometry.ProjectPointOntoSeededBranch(centerline, 7000.2);
     Require(Near(projection.track_station_meters(), 7000.0, 2.0e-10),
             "a Chunshen Station centerline point did not project to its own "
             "station");

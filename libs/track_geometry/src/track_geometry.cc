@@ -34,9 +34,6 @@ constexpr double kQuadratureWeights[kQuadraturePointCount] = {
 // or allocation begins.
 constexpr std::size_t kMaximumStationNodeCount = 1u << 20;
 
-constexpr int kMaximumRefinementIterations = 64;
-// Stop once the bracket reaches the representable resolution of its endpoints.
-constexpr double kBracketUlpCount = 4.0;
 // The first derivative of the squared-distance objective has units of metres
 // times metres per metre, so its residual bound scales with the distance.
 constexpr double kObjectiveGradientRelativeTolerance = 1.0e-10;
@@ -523,179 +520,54 @@ TrackGeometry::ObjectiveDerivatives TrackGeometry::EvaluateObjectiveDerivatives(
     ObjectiveDerivatives derivatives;
     derivatives.gradient = -offset.dot(first);
     derivatives.hessian = first.squaredNorm() - offset.dot(second);
+    derivatives.gradient_bound = kObjectiveGradientRelativeTolerance *
+                                 (offset.norm() * first.norm() + 1.0);
     return derivatives;
 }
 
-TrackGeometry::ProjectionCandidate TrackGeometry::RefineBracketedMinimum(
-    const Eigen::Vector3d& point_in_inertial_meters, double lower_bound_station,
-    double upper_bound_station) const {
-    ProjectionCandidate candidate;
-    if (!(upper_bound_station > lower_bound_station)) {
-        return candidate;
-    }
-    double low = lower_bound_station;
-    double high = upper_bound_station;
-    const ObjectiveDerivatives at_low =
-        EvaluateObjectiveDerivatives(point_in_inertial_meters, low);
-    const ObjectiveDerivatives at_high =
-        EvaluateObjectiveDerivatives(point_in_inertial_meters, high);
-
-    // An exact root on a shared node belongs to both adjacent closed intervals.
-    // Return the node itself so the caller can remove that duplicate by exact
-    // station identity. A non-zero computed gradient belongs to one side only.
-    if (at_low.gradient == 0.0 && at_low.hessian > 0.0) {
-        candidate.found = true;
-        candidate.track_station_meters = low;
-        return candidate;
-    }
-    if (at_high.gradient == 0.0 && at_high.hessian > 0.0) {
-        candidate.found = true;
-        candidate.track_station_meters = high;
-        return candidate;
-    }
-
-    // Walking downhill from the start of the interval and uphill at its end is
-    // exactly the condition for a minimum to lie between them. Anything else is
-    // reported as "not here" rather than searched anyway.
-    if (at_low.gradient > 0.0 || at_high.gradient < 0.0) {
-        return candidate;
-    }
-
-    double station = 0.5 * (low + high);
-    for (int iteration = 0; iteration < kMaximumRefinementIterations;
-         ++iteration) {
-        const ObjectiveDerivatives derivatives =
-            EvaluateObjectiveDerivatives(point_in_inertial_meters, station);
-        if (derivatives.gradient <= 0.0) {
-            low = station;
-        } else {
-            high = station;
-        }
-        double next = derivatives.hessian > 0.0
-                          ? station - derivatives.gradient / derivatives.hessian
-                          : 0.5 * (low + high);
-        // A Newton step that leaves the bracket is discarded for a bisection
-        // step, so the bracket shrinks every iteration whatever the geometry
-        // does and the loop cannot stall or wander off. The bounds are closed:
-        // once a Newton step has landed on the root the bracket end moves onto
-        // it, and rejecting the very same value for failing a strict inequality
-        // would throw the iterate back into the interior and leave nothing but
-        // bisection to finish the job.
-        if (!(next >= low && next <= high)) {
-            next = 0.5 * (low + high);
-        }
-        const double motion = std::abs(next - station);
-        station = next;
-        const double bracket_tolerance =
-            kBracketUlpCount * std::numeric_limits<double>::epsilon() *
-            std::max({1.0, std::abs(low), std::abs(high)});
-        if (motion == 0.0 || high - low <= bracket_tolerance) {
-            break;
-        }
-    }
-
-    const ObjectiveDerivatives derivatives =
-        EvaluateObjectiveDerivatives(point_in_inertial_meters, station);
-    const Eigen::Vector3d offset =
-        point_in_inertial_meters - CenterlinePositionUnchecked(station);
-    const Eigen::Vector3d first = CenterlineDerivativeUnchecked(station);
-    const double gradient_bound = kObjectiveGradientRelativeTolerance *
-                                  (offset.norm() * first.norm() + 1.0);
-    if (!(derivatives.hessian > 0.0) ||
-        std::abs(derivatives.gradient) > gradient_bound) {
-        return candidate;
-    }
-    candidate.found = true;
-    candidate.track_station_meters = station;
-    return candidate;
-}
-
-TrackStationProjection TrackGeometry::ProjectPointNearSeed(
+TrackStationProjection TrackGeometry::ProjectPointOntoSeededBranch(
     const Eigen::Vector3d& point_in_inertial_meters,
-    double seed_track_station_meters, double search_half_width_meters) const {
+    double branch_seed_track_station_meters) const {
     if (!point_in_inertial_meters.allFinite()) {
         throw std::invalid_argument(
-            "TrackGeometry::ProjectPointNearSeed: the point must be finite");
+            "TrackGeometry::ProjectPointOntoSeededBranch: the point must be "
+            "finite");
     }
-    RequireFiniteTrackStation(seed_track_station_meters,
-                              "the seed track station");
-    RequireFinitePositive(search_half_width_meters, "the search half width");
-    const double lower = seed_track_station_meters - search_half_width_meters;
-    const double upper = seed_track_station_meters + search_half_width_meters;
-    if (!std::isfinite(lower) || !std::isfinite(upper)) {
-        throw std::invalid_argument(
-            "TrackGeometry::ProjectPointNearSeed: the search interval bounds "
-            "must be finite");
-    }
+    RequireFiniteTrackStation(branch_seed_track_station_meters,
+                              "the branch seed track station");
 
-    // The declared interval is searched by its node sub-intervals rather than
-    // walked from the seed, so the answer depends on what the interval contains
-    // and not on where the caller happened to start. The two straight
-    // continuations are each one additional interval; nothing is clipped to
-    // the finite definition interval of the base-track asset.
-    ProjectionCandidate unique_minimum;
-    const auto consider_interval = [&](double from, double to) {
-        const ProjectionCandidate refined =
-            RefineBracketedMinimum(point_in_inertial_meters, from, to);
-        if (!refined.found) {
-            return;
+    double station = branch_seed_track_station_meters;
+    for (int correction_count = 0; correction_count <= 2;
+         ++correction_count) {
+        const ObjectiveDerivatives derivatives =
+            EvaluateObjectiveDerivatives(point_in_inertial_meters, station);
+        const bool finite = std::isfinite(derivatives.gradient) &&
+                            std::isfinite(derivatives.hessian) &&
+                            std::isfinite(derivatives.gradient_bound);
+        if (finite && derivatives.hessian > 0.0 &&
+            std::abs(derivatives.gradient) <= derivatives.gradient_bound) {
+            return TrackStationProjection(
+                station, CenterlinePositionUnchecked(station));
         }
-        // An exact root on a shared node is returned by both neighbouring
-        // sub-intervals; remove the duplicate by exact station identity.
-        if (unique_minimum.found &&
-            unique_minimum.track_station_meters ==
-                refined.track_station_meters) {
-            return;
+        if (!finite || !(derivatives.hessian > 0.0) ||
+            correction_count == 2) {
+            throw TrackStationLocalProjectionFailure(
+                "TrackGeometry::ProjectPointOntoSeededBranch: the supplied "
+                "station does not identify a regular local projection within "
+                "two Newton corrections");
         }
-        // The contract is strictly interior: a stationary point sitting on the
-        // wall of the declared window says the window is in the wrong place,
-        // not that the branch has been found.
-        if (refined.track_station_meters <= lower ||
-            refined.track_station_meters >= upper) {
-            return;
+        const double next_station =
+            station - derivatives.gradient / derivatives.hessian;
+        if (!std::isfinite(next_station) || next_station == station) {
+            throw TrackStationLocalProjectionFailure(
+                "TrackGeometry::ProjectPointOntoSeededBranch: Newton "
+                "correction made no finite representable progress");
         }
-        if (unique_minimum.found) {
-            throw std::runtime_error(
-                "TrackGeometry::ProjectPointNearSeed: more than one "
-                "admissible minimum lies strictly inside the search window; "
-                "shrink the window or correct the seed");
-        }
-        unique_minimum = refined;
-    };
-
-    if (lower < start_track_station_meters()) {
-        consider_interval(lower,
-                          std::min(upper, start_track_station_meters()));
+        station = next_station;
     }
-
-    const double definition_lower =
-        std::max(lower, start_track_station_meters());
-    const double definition_upper =
-        std::min(upper, end_track_station_meters());
-    if (definition_upper > definition_lower) {
-        for (std::size_t index = NodeIndexAtOrBefore(definition_lower);
-             index + 1 < nodes_.size() &&
-             nodes_[index].track_station_meters < definition_upper;
-             ++index) {
-            consider_interval(
-                std::max(nodes_[index].track_station_meters, definition_lower),
-                std::min(nodes_[index + 1].track_station_meters,
-                         definition_upper));
-        }
-    }
-
-    if (upper > end_track_station_meters()) {
-        consider_interval(std::max(lower, end_track_station_meters()), upper);
-    }
-    if (!unique_minimum.found) {
-        throw TrackStationProjectionWindowMiss(
-            "TrackGeometry::ProjectPointNearSeed: no admissible minimum lies "
-            "strictly inside the search interval [" +
-            Describe(lower) + ", " + Describe(upper) + "] m");
-    }
-    return TrackStationProjection(
-        unique_minimum.track_station_meters,
-        CenterlinePositionUnchecked(unique_minimum.track_station_meters));
+    throw std::logic_error(
+        "TrackGeometry::ProjectPointOntoSeededBranch: unreachable solver "
+        "state");
 }
 
 }  // namespace orvd::track_geometry

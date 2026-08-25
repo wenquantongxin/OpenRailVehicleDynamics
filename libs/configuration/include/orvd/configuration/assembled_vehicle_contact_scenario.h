@@ -45,13 +45,11 @@ class AssembledVehicleContactScenario {
     AssembleGz18ContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double,
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
     friend std::unique_ptr<AssembledVehicleContactScenario>
     AssembleIrwContactScenario(
         const VehicleDefinition&, const ResolvedStartupState&,
         track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        double,
         std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
 
     AssembledVehicleContactScenario(
@@ -75,7 +73,6 @@ AssembleGz18ContactScenario(
     track_geometry::TrackGeometry line,
     const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    double projection_search_half_width_meters,
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
         track_irregularity = nullptr);
 
@@ -93,14 +90,12 @@ AssembleIrwContactScenario(
     track_geometry::TrackGeometry line,
     const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    double projection_search_half_width_meters,
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
         track_irregularity = nullptr);
 
 // The layout reference station is a scene property, not a start-up JSON field.
-// The projection half width isolates the local line branch; it is not a
-// physical response limit. A non-null irregularity field is moved into the
-// immutable force plan, while null selects the explicit zero-irregularity
-// scenario. Neither factory reads files during right-hand-side evaluation.
+// A non-null irregularity field is moved into the immutable force plan, while
+// null selects the explicit zero-irregularity scenario. Neither factory reads
+// files during right-hand-side evaluation.
 
 }  // namespace orvd::configuration

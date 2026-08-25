@@ -126,8 +126,7 @@ AssembledVehicleSystem::AssembleWithWheelRailContact(
     std::vector<forces::WheelRailContactCarrierDefinition> carriers,
     std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
     std::vector<forces::IndependentWheelActiveTorqueCoupleDefinition>
-        active_torque_couples,
-    double projection_search_half_width_meters) {
+        active_torque_couples) {
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
         vehicle, "vehicle definition");
     VehicleBinding binding = CaptureBinding(vehicle);
@@ -140,8 +139,7 @@ AssembledVehicleSystem::AssembleWithWheelRailContact(
         std::make_unique<forces::WheelRailContactForcePlan>(
             *model, std::move(line), std::move(personality),
             std::move(track_irregularity),
-            std::move(carriers), std::move(interfaces),
-            projection_search_half_width_meters);
+            std::move(carriers), std::move(interfaces));
     std::unique_ptr<forces::IndependentWheelActiveTorquePlan>
         active_torque_plan;
     if (!active_torque_couples.empty()) {

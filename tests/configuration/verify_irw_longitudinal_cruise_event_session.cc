@@ -100,7 +100,7 @@ void Run(const std::filesystem::path& vehicle_path,
             startup_path);
     auto line = orvd::configuration::LoadTrackGeometryFromJsonFile(line_path);
     auto scenario = orvd::configuration::AssembleIrwContactScenario(
-        vehicle, startup, std::move(line), data_root, 0.0, 0.01, nullptr);
+        vehicle, startup, std::move(line), data_root, 0.0, nullptr);
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
     auto cruise_asset = orvd::configuration::

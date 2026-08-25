@@ -299,7 +299,6 @@ AssembleGz18ContactScenario(
     track_geometry::TrackGeometry line,
     const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    double projection_search_half_width_meters,
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
         track_irregularity) {
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
@@ -321,8 +320,7 @@ AssembleGz18ContactScenario(
             std::move(line), contact->ReleaseRuntimePersonality(),
             std::move(track_irregularity), std::move(topology.carriers),
             std::move(topology.interfaces),
-            std::move(topology.active_torque_couples),
-            projection_search_half_width_meters);
+            std::move(topology.active_torque_couples));
     ResolvedInitialContext initial_context = AssembleResolvedInitialContext(
         *vehicle_system, startup_state,
         vehicle_layout_reference_track_station_meters);
@@ -341,7 +339,6 @@ AssembleIrwContactScenario(
     track_geometry::TrackGeometry line,
     const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    double projection_search_half_width_meters,
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
         track_irregularity) {
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
@@ -363,8 +360,7 @@ AssembleIrwContactScenario(
             std::move(line), contact->ReleaseRuntimePersonality(),
             std::move(track_irregularity), std::move(topology.carriers),
             std::move(topology.interfaces),
-            std::move(topology.active_torque_couples),
-            projection_search_half_width_meters);
+            std::move(topology.active_torque_couples));
     ResolvedInitialContext initial_context = AssembleResolvedInitialContext(
         *vehicle_system, startup_state,
         vehicle_layout_reference_track_station_meters);

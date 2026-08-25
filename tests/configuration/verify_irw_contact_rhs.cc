@@ -159,10 +159,9 @@ int main(int argc, char** argv) {
         const auto startup = LoadResolvedStartupStateFromJsonFile(argv[2]);
         auto line = LoadTrackGeometryFromJsonFile(argv[3]);
         constexpr double kReferenceStationMeters = 0.0;
-        constexpr double kProjectionHalfWidthMeters = 0.01;
         const auto scenario = AssembleIrwContactScenario(
             vehicle, startup, std::move(line), std::filesystem::path(argv[4]),
-            kReferenceStationMeters, kProjectionHalfWidthMeters);
+            kReferenceStationMeters);
         const auto& assembled = scenario->vehicle_system();
         const auto* contact_plan = assembled.contact_force_plan();
         const auto* active_torque_plan = assembled.active_torque_plan();
