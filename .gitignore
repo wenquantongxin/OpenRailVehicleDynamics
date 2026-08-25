@@ -29,6 +29,7 @@ CMakeUserPresets.json
 # Results / scratch
 /results/
 /logs/
+/tmp/
 __pycache__/
 *.py[cod]
 
