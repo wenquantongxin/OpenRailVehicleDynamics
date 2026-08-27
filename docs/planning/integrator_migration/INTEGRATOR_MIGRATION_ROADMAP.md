@@ -466,7 +466,7 @@ INT-07A 完成记录（2026-08-23）：
   `(sample_index,time_nanoseconds)` 为 join key 无损保存 `[q;v;z]`，不增加积分 stop 或 RHS；协议将
   自由体 q 冻结为 rotation-log、quaternion norm difference 与平移误差，Ball-RPY 也按 rotation-log
   比较，并为 reference／候选分别冻结 quaternion norm-defect 门，避免 raw 坐标假差与共同范数漂移；
-- GZ18 与 IRW 被动真实短窗以全串行运行作 correctness oracle，并要求 4/8/16-worker 的完整状态、
+- GZ18 与 IRW 被动真实短窗以全串行运行作 correctness oracle，并在该阶段要求 4/8/16-worker 的完整状态、
   物理 TSV、终态与可比统计一致；Radau5 四维核心基线冻结逐列求值、中间列 recoverable 重试、fatal
   截止和端点原子性；
 - 执行 identity 补记 `OMP_MAX_ACTIVE_LEVELS`／`OMP_NESTED`。本阶段未运行正式 `20/30 s` 矩阵、未
@@ -488,6 +488,12 @@ INT-07B”的时序被撤销。独立正确性审查后的修复不追溯生成�
 Release 构建并通过 87/87 项 CTest；真实 OpenMP 团队、重定位安装消费者、Radau5 核心与适配层、
 GZ18／IRW 真实短窗及资格 metadata 均在两套构建中通过，第一方新增编译告警为零。该记录只签收
 上述正确性前置，不改变 `INT-07B` 的暂停状态。
+
+macOS 源码支持补充记录（2026-08-26）：GCC 15.2 默认 Release 与 AppleClang 21 generic Release
+分别通过 87/87 项 CTest；随后 CVODE dense-Jacobian 合法 worker 集扩为 `4/8/12/16/32`，自动解析
+按 `<4→串行、4–7→4、8–11→8、12–15→12、16–31→16、≥32→32` 冻结。GZ18、IRW 被动与
+IRW 100 Hz 控制真实短窗在两套工具链下均通过 `1/4/8/12/16/32` 固定槽工件逐位一致性门。本机
+只有 16 个 CPU 核，故 32-worker 仅构成超额订阅的正确性／容量探针，不形成性能排名或默认值结论。
 
 ### INT-08 — 双车型、跨平台与交付收口
 

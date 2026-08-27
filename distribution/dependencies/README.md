@@ -1,13 +1,23 @@
 # 离线依赖超级构建
 
+面向使用者的 Linux、Windows 与 macOS 完整安装命令以仓库中的 `docs/build_and_install/` 为入口；
+生成 bundle 后，同一手册位于 `OpenRailVehicleDynamics/docs/build_and_install/`。本页会原样复制到
+bundle 根，因此不使用只在其中一个位置成立的相对链接。本页维护离线源码包内部合同和 Windows
+历史背景；若出现平台操作重复，以分平台手册为准。
+
 本目录是 ORVD 离线源码包根 `CMakeLists.txt`、严格依赖声明及其共享校验器的源模板。它不直接作为仓库根构建入口；
-开发者使用 `tools/package_distribution/assemble_source_bundle.py` 生成完整源码包后，普通用户在
-该包根运行：
+开发者使用 `tools/package_distribution/assemble_source_bundle.py` 生成完整源码包。选择了对应平台
+工具链后，下列命令是共同最小入口：
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
+
+原生 macOS bundle 会在启用编译器前设置 arm64 目标架构，并按显式 sysroot、`SDKROOT`、`xcrun`
+的顺序选择 macOS SDK；AppleClang 产品配置会自动
+解析已安装的 Homebrew libomp 公式。显式 toolchain、sysroot、architecture 和 prefix 仍优先，完整
+工具链选择与排障命令见 bundle 内的 `OpenRailVehicleDynamics/docs/build_and_install/MACOS.md`。
 
 默认安装到 `build/install`；也可在配置时显式设置 `CMAKE_INSTALL_PREFIX`。生成后的包已携带
 Eigen 3.4.0、fmt 9.1.0、nlohmann/json 3.12.0 与 SUNDIALS 7.7.0 的具名源码归档和许可证，
@@ -113,7 +123,8 @@ OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
 产品与测试构建只需指定 `CMAKE_CXX_COMPILER=clang++`。ORVD 顶层项目只启用
 C++，不向其传入无效的 C 编译器选项。不在两套工具链之间复用 CMake 构建树或
 安装前缀。Windows 不注册两个只服务开发期 GNU 命令行的源码工具自检；其余当前测试全部进入
-Windows 集合，因此完整测试为 `79/79`，不应再有平台性跳过。
+Windows 集合。当前源码默认注册 85 项；本次 macOS 收口后尚未在 Windows 复验，因此不能把该
+注册数写成已实测的 `85/85`，也不应继续沿用历史的 `79/79`。
 
 每套工具链都要额外查看真实并行门：
 

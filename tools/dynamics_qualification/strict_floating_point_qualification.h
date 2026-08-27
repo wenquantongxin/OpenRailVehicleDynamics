@@ -2,7 +2,8 @@
 
 // Source-private compile-time half of the qualification floating-point gate.
 // CMake rejects known unsafe external tokens; these checks verify the final
-// compiler semantics seen by each artifact writer.
+// compiler semantics seen by each artifact writer. They enforce a safety
+// category; they neither pin contraction nor claim cross-build bit identity.
 
 #include <limits>
 #include <string_view>

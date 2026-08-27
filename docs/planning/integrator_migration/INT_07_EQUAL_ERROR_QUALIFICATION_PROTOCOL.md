@@ -180,6 +180,13 @@ correctness oracle：
 CVODE 与 Radau5 的 Jacobian worker identity 都必须为 `1`，接触批也为 `1`。它用于回退、工件一致性
 和 reference 诊断，`performance_decision_eligible=false`，不能代表目标多核吞吐。
 
+`orvd.strict_ieee_no_fast_math.v1` 是浮点安全语义类别，不是跨构建逐位复现身份。它拒绝 fast-math、
+finite-only 及其已知等价假设，但不钉死 contraction；编译器默认 contraction、显式
+`-ffp-contract=fast/off` 与融合乘加计算均可进入该类别。因此不同编译器、版本、目标 ISA 或
+contraction 选择仍是不同资格身份，证据继续绑定编译器与可执行文件身份，并按本协议数值
+预算比较，不能仅因同属 v1 就要求工件跨构建逐位相同。同一二进制在不同固定槽 worker 数下的逐位
+一致性仍是独立的并行确定性合同，不因该政策而放宽。
+
 “当前 Radau5 Jacobian 串行”只表示 Jacobian worker identity 为 `1`，不等于整个 runner 串行。在未来
 目标线程预算 N 下，现有 Radau5 可保持 Jacobian=1 而接触 RHS 消费相同 OpenMP 预算；该运行可以作为
 INT-07C 候选前 provisional baseline，但 reference 门完成前仍不能排名。全局 OMP 值同时影响接触批和
@@ -208,7 +215,7 @@ INT-07A 完成要求：
   非空编译器名称／版本；
 - 16 个场景/case runner argv 可确定性展开，但测试不启动完整车辆长窗；
 - GZ18 与 IRW 被动工件无损发布完整 `[q;v;z]`，并由真实短窗测试核对布局、整数时钟、初／末态与
-  1/4/8/16-worker 工件一致性；
+  1/4/8/12/16/32-worker 工件一致性；
 - Radau5 核心以多列测试冻结串行列顺序、逐列 recoverable 缩扰动、fatal 截止、RHS 分类和端点原子性；
 - 不修改公共默认、安装 API、根 README、轮轨物理或 GPT Pro 正在审查的八份生产源码。
 

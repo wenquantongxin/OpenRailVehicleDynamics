@@ -80,6 +80,15 @@ mismatched contract, including a compiler identity different from the binary's
 self-report, after the child exits. The full state, quaternion-aware error,
 dual-reference, contact-event and timing rules are frozen in the
 [INT-07 equal-error protocol](../../docs/planning/integrator_migration/INT_07_EQUAL_ERROR_QUALIFICATION_PROTOCOL.md).
+The v1 name denotes this floating-point safety category, not a cross-build
+bit-reproduction identity. It deliberately permits compiler-default
+contraction, explicit `-ffp-contract=fast/off`, and fused multiply-add
+evaluation. Results from different compilers, compiler versions, targets, or
+contraction choices therefore remain distinct qualification identities even
+when they share the v1 category; their possible last-bit differences are
+handled by the protocol's numerical budgets. Evidence remains bound to its
+compiler and executable identities, while fixed-slot bitwise equality
+continues to apply to different worker counts of the same binary.
 Both long passive plans use a `0.5 ms` sampled-contact clock; q/v/z qualification
 norms use only the preregistered `[0,10 ms]` window whose named-interface patch
 counts are positive, constant within each run, and identical across the compared

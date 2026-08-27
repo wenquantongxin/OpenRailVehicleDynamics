@@ -35,7 +35,7 @@ G16 删除。明确排除 geometry、FEM、plant、contact、solver 与 deformab
 
 | 第三方 | 处置 | 依据 |
 |---|---|---|
-| Eigen | 准入 | 每一趟多体运算都是 Eigen 算术；已由顶层 `find_package(Eigen3 3.4 CONFIG REQUIRED)` 落地 |
+| Eigen | 准入 | 每一趟多体运算都是 Eigen 算术；已由顶层 `find_package(Eigen3 3.4.0 EXACT CONFIG REQUIRED)` 落地 |
 | fmt | 准入 | 准入源码直接 include `fmt/format.h` 与 `fmt/ranges.h`，并用 `DRAKE_FORMATTER_AS` 特化 `fmt::formatter`；G11 探针在不提供 fmt 时链接失败 |
 | Abseil | 不查找、不构建 | 当前准入源码不直接 include 或使用它 |
 | Highway | **不准入首版产品** | 声明头作为 vendored 文件保留；上游 Highway `.cc` 裁为 `first_party`，由 G15 的 ORVD 实现按数学定义提供四个函数，不复制上游 portable 分支 |

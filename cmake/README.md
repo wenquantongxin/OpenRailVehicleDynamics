@@ -3,8 +3,11 @@
 | 模块 | 内容 |
 |---|---|
 | `OrvdFirstPartyTargetPolicy.cmake` | `orvd_configure_first_party_target(<target>)`：按目标声明 C++23、关闭语言扩展并设置第一方告警 |
+| `OrvdPlatformToolchainBootstrap.cmake` | 原生 macOS 在 `project()` 前初始化 macOS SDK 与 arm64 目标架构，配置后检查支持边界，并为 AppleClang 自动定位 Homebrew libomp；同一模块随安装包导出 |
 | `OrvdProductBoundaryGate.cmake` | 递归纳管已列产品模块的目标；配置期拒绝产品对 `libdrake` 的链接依赖 |
-| `OpenRailVehicleDynamicsConfig.cmake.in` | 安装包入口：先恢复 Eigen、fmt、SUNDIALS 依赖，再载入导出的 ORVD 目标 |
+| `OrvdStrictFloatingPointQualification.cmake` | 配置期审计严格浮点资格选项、生成器和 launcher 所有权，并为受资格化目标接入最终命令检查 |
+| `OrvdStrictFloatingPointCompileLauncher.cmake` | 编译期检查完全展开的编译命令；拒绝 fast／finite-math 和不透明 forwarding，只窄允许 AppleClang 的 OpenMP 参数对 |
+| `OpenRailVehicleDynamicsConfig.cmake.in` | 安装包入口：恢复精确 Eigen、fmt、SUNDIALS 与 OpenMP 依赖，再载入导出的 ORVD 目标 |
 
 ## 为什么按目标而不是全局
 

@@ -1,6 +1,7 @@
 #include "system_continuous_state_backend.h"
 
 #include <algorithm>
+#include <array>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -29,9 +30,32 @@
 namespace orvd::integrators::internal {
 namespace {
 
-constexpr int kMinimumParallelJacobianWorkerCount = 4;
-constexpr int kIntermediateParallelJacobianWorkerCount = 8;
-constexpr int kMaximumParallelJacobianWorkerCount = 16;
+constexpr std::array<int, 5> kSupportedParallelJacobianWorkerCounts{
+    4, 8, 12, 16, 32};
+
+[[nodiscard]] constexpr int SelectParallelJacobianWorkerCount(
+    int maximum_threads) noexcept {
+    for (auto index = kSupportedParallelJacobianWorkerCounts.size(); index > 0;
+         --index) {
+        const int supported =
+            kSupportedParallelJacobianWorkerCounts[index - 1];
+        if (maximum_threads >= supported) {
+            return supported;
+        }
+    }
+    return 0;
+}
+
+static_assert(SelectParallelJacobianWorkerCount(3) == 0);
+static_assert(SelectParallelJacobianWorkerCount(4) == 4);
+static_assert(SelectParallelJacobianWorkerCount(7) == 4);
+static_assert(SelectParallelJacobianWorkerCount(8) == 8);
+static_assert(SelectParallelJacobianWorkerCount(11) == 8);
+static_assert(SelectParallelJacobianWorkerCount(12) == 12);
+static_assert(SelectParallelJacobianWorkerCount(15) == 12);
+static_assert(SelectParallelJacobianWorkerCount(16) == 16);
+static_assert(SelectParallelJacobianWorkerCount(31) == 16);
+static_assert(SelectParallelJacobianWorkerCount(32) == 32);
 
 [[nodiscard]] bool UsesCvode(
     SystemContinuousStateIntegrationRecipe recipe) {
@@ -51,17 +75,7 @@ constexpr int kMaximumParallelJacobianWorkerCount = 16;
     if (system.contact_force_plan() == nullptr || omp_get_dynamic() != 0) {
         return 0;
     }
-    const int maximum_threads = omp_get_max_threads();
-    if (maximum_threads >= kMaximumParallelJacobianWorkerCount) {
-        return kMaximumParallelJacobianWorkerCount;
-    }
-    if (maximum_threads >= kIntermediateParallelJacobianWorkerCount) {
-        return kIntermediateParallelJacobianWorkerCount;
-    }
-    if (maximum_threads >= kMinimumParallelJacobianWorkerCount) {
-        return kMinimumParallelJacobianWorkerCount;
-    }
-    return 0;
+    return SelectParallelJacobianWorkerCount(omp_get_max_threads());
 }
 
 class SystemDenseFiniteDifferenceJacobian final
@@ -79,12 +93,13 @@ class SystemDenseFiniteDifferenceJacobian final
           worker_count_(worker_count),
           failures_(static_cast<std::size_t>(state_size_)),
           attempted_(static_cast<std::size_t>(state_size_)) {
-        if (worker_count_ != kMinimumParallelJacobianWorkerCount &&
-            worker_count_ != kIntermediateParallelJacobianWorkerCount &&
-            worker_count_ != kMaximumParallelJacobianWorkerCount) {
+        if (std::find(kSupportedParallelJacobianWorkerCounts.cbegin(),
+                      kSupportedParallelJacobianWorkerCounts.cend(),
+                      worker_count_) ==
+            kSupportedParallelJacobianWorkerCounts.cend()) {
             throw std::invalid_argument(
                 "system dense Jacobian: worker count must be four, eight, "
-                "or sixteen");
+                "twelve, sixteen, or thirty-two");
         }
 
         Eigen::VectorXd initial_state(state_size_);

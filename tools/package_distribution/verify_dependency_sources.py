@@ -194,6 +194,17 @@ def run_checked(command: list[str], failure: str) -> None:
 def write_test_archive(path: Path, record: DependencySource) -> None:
     mode = "w:xz" if path.name.endswith(".tar.xz") else "w:gz"
     with tarfile.open(path, mode=mode) as archive:
+        cmake_project = (
+            "cmake_minimum_required(VERSION 3.24)\n"
+            f"project(orvd_{record.key}_fixture LANGUAGES NONE)\n"
+            "install(FILES CMakeLists.txt "
+            f"DESTINATION share/orvd-fixture/{record.key})\n"
+        ).encode()
+        cmake_member = tarfile.TarInfo(
+            f"{record.source_directory}/CMakeLists.txt"
+        )
+        cmake_member.size = len(cmake_project)
+        archive.addfile(cmake_member, io.BytesIO(cmake_project))
         for relative_path in record.license_paths:
             payload = f"licence fixture for {record.key}: {relative_path}\n".encode()
             member = tarfile.TarInfo(
@@ -214,8 +225,10 @@ def verify_real_source_bundle_assembly(
     fixture_source = directory / "source-checkout"
     fixture_template = fixture_source / "distribution" / "dependencies"
     fixture_tools = fixture_source / "tools" / "package_distribution"
+    fixture_cmake = fixture_source / "cmake"
     fixture_template.mkdir(parents=True)
     fixture_tools.mkdir(parents=True)
+    fixture_cmake.mkdir(parents=True)
     for name in (
         "CMakeLists.txt",
         "README.md",
@@ -229,8 +242,15 @@ def verify_real_source_bundle_assembly(
             source_root / "tools" / "package_distribution" / name,
             fixture_tools / name,
         )
+    shutil.copy2(
+        source_root / "cmake" / "OrvdPlatformToolchainBootstrap.cmake",
+        fixture_cmake / "OrvdPlatformToolchainBootstrap.cmake",
+    )
     (fixture_source / "CMakeLists.txt").write_text(
-        "cmake_minimum_required(VERSION 3.24)\nproject(placeholder LANGUAGES NONE)\n",
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(placeholder LANGUAGES NONE)\n"
+        "install(FILES CMakeLists.txt "
+        "DESTINATION share/orvd-fixture/product)\n",
         encoding="utf-8",
     )
     run_checked(
@@ -304,10 +324,87 @@ def verify_real_source_bundle_assembly(
                 raise AssertionError(
                     f"the assembled bundle omitted licence {installed_license}"
                 )
+    synthetic_sysroot = directory / "synthetic-macos-sdk"
+    synthetic_sysroot.mkdir()
+    synthetic_prefixes = (
+        directory / "synthetic-toolchain-prefix-one",
+        directory / "synthetic-toolchain-prefix-two",
+    )
+    for synthetic_prefix in synthetic_prefixes:
+        synthetic_prefix.mkdir()
+    synthetic_sysroot_text = synthetic_sysroot.as_posix()
+    synthetic_prefix_path = ";".join(
+        synthetic_prefix.as_posix() for synthetic_prefix in synthetic_prefixes
+    )
+    bundle_build = directory / "bundle-build"
     run_checked(
-        [cmake, "-S", str(bundle), "-B", str(directory / "bundle-build")],
+        [
+            cmake,
+            "-S",
+            str(bundle),
+            "-B",
+            str(bundle_build),
+            f"-DCMAKE_OSX_SYSROOT={synthetic_sysroot_text}",
+            f"-DCMAKE_PREFIX_PATH={synthetic_prefix_path}",
+        ],
         "the generated offline superbuild rejected its shared declaration",
     )
+    run_checked(
+        [cmake, "--build", str(bundle_build), "--target", "orvd_product"],
+        "the generated offline superbuild could not execute its nested "
+        "configure steps",
+    )
+
+    external_project_targets = (
+        "orvd_dependency_eigen",
+        "orvd_dependency_fmt",
+        "orvd_dependency_nlohmann_json",
+        "orvd_dependency_sundials",
+        "orvd_product",
+    )
+
+    def cache_value(cache: Path, variable: str) -> str | None:
+        prefix = f"{variable}:"
+        for line in cache.read_text(encoding="utf-8").splitlines():
+            if line.startswith(prefix) and "=" in line:
+                return line.split("=", 1)[1]
+        return None
+
+    for target in external_project_targets:
+        nested_cache = (
+            bundle_build
+            / f"{target}-prefix"
+            / "src"
+            / f"{target}-build"
+            / "CMakeCache.txt"
+        )
+        if not nested_cache.is_file():
+            raise AssertionError(
+                "the generated offline superbuild did not configure "
+                f"{target}: {nested_cache}"
+            )
+        actual_sysroot = cache_value(nested_cache, "CMAKE_OSX_SYSROOT")
+        if actual_sysroot != synthetic_sysroot_text:
+            raise AssertionError(
+                f"the generated {target} configure step did not receive "
+                "the macOS sysroot: "
+                f"expected {synthetic_sysroot_text!r}, got {actual_sysroot!r}"
+            )
+        actual_prefix_path = cache_value(nested_cache, "CMAKE_PREFIX_PATH")
+        if target == "orvd_product":
+            if actual_prefix_path != synthetic_prefix_path:
+                raise AssertionError(
+                    "the generated product configure step did not restore "
+                    "the complete semicolon-separated toolchain prefix list: "
+                    f"expected {synthetic_prefix_path!r}, "
+                    f"got {actual_prefix_path!r}"
+                )
+        elif actual_prefix_path not in (None, ""):
+            raise AssertionError(
+                f"the generated {target} configure step unexpectedly "
+                "received the product-only toolchain prefix list: "
+                f"{actual_prefix_path!r}"
+            )
 
 
 def main() -> int:

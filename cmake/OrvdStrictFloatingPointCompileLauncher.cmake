@@ -3,6 +3,10 @@
 # installed as the sole compiler launcher for every target in the source build.
 # After a successful audit it injects the proof macro itself, so a qualification
 # artifact cannot claim that the launcher ran when its generator ignored it.
+# This launcher enforces the v1 safety category, not cross-build bit identity:
+# it deliberately permits compiler-default contraction, -ffp-contract=fast/off,
+# and explicit fused multiply-add evaluation while rejecting broader unsafe
+# fast/finite-only semantics.
 
 function(orvd_check_strict_floating_point_token argument)
     if(argument MATCHES "^@")
@@ -24,8 +28,8 @@ function(orvd_check_strict_floating_point_token argument)
                     "ORVD strict floating-point compile command rejected "
                     "nested response token '${response_token}'")
             endif()
-            orvd_check_strict_floating_point_token("${response_token}")
         endforeach()
+        orvd_check_strict_floating_point_tokens(${response_tokens})
         return()
     endif()
 
@@ -68,6 +72,31 @@ function(orvd_check_strict_floating_point_token argument)
     endif()
 endfunction()
 
+function(orvd_check_strict_floating_point_tokens)
+    set(tokens ${ARGN})
+    list(LENGTH tokens token_count)
+    set(index 0)
+    while(index LESS token_count)
+        list(GET tokens ${index} token)
+        if(token STREQUAL "-Xclang")
+            math(EXPR forwarded_index "${index} + 1")
+            if(NOT ORVD_STRICT_FLOATING_POINT_CXX_COMPILER_ID STREQUAL
+                   "AppleClang" OR
+               forwarded_index GREATER_EQUAL token_count)
+                orvd_check_strict_floating_point_token("${token}")
+            endif()
+            list(GET tokens ${forwarded_index} forwarded_token)
+            if(NOT forwarded_token STREQUAL "-fopenmp")
+                orvd_check_strict_floating_point_token("${token}")
+            endif()
+            math(EXPR index "${index} + 2")
+        else()
+            orvd_check_strict_floating_point_token("${token}")
+            math(EXPR index "${index} + 1")
+        endif()
+    endwhile()
+endfunction()
+
 set(command)
 set(found_separator FALSE)
 set(last_argument -1)
@@ -84,7 +113,6 @@ foreach(index RANGE 0 ${last_argument})
         continue()
     endif()
 
-    orvd_check_strict_floating_point_token("${argument}")
     list(APPEND command "${argument}")
 endforeach()
 
@@ -92,6 +120,8 @@ if(NOT found_separator OR NOT command)
     message(FATAL_ERROR
         "ORVD strict floating-point compile launcher received no command")
 endif()
+
+orvd_check_strict_floating_point_tokens(${command})
 
 list(APPEND command
      "-DORVD_STRICT_FLOATING_POINT_COMPILE_COMMAND_AUDIT_PASSED=1")

@@ -8,6 +8,7 @@ G01–G82 迁移路书分开：车辆能力是否存在由迁移路书回答，�
 
 | 文档 | 职责 |
 |---|---|
+| [platform_evaluations/MACOS_APPLE_SILICON.md](platform_evaluations/MACOS_APPLE_SILICON.md) | macOS Apple silicon 计算评价：AppleClang／GCC、多 worker、四工况计时、资源与固定槽确定性。 |
 | [PERFORMANCE_MIGRATION_ROADMAP.md](PERFORMANCE_MIGRATION_ROADMAP.md) | 当前唯一性能实施路书；定义从专项分支重新落位到现行 `main` 的顺序、允许修改面和双车完成门。 |
 | [GZ18_PERFORMANCE_BRANCH_ARCHIVE.md](GZ18_PERFORMANCE_BRANCH_ARCHIVE.md) | `codex/gz18-performance` 的压缩研究档案；保存已接受、已否决和待双车复核的结论，不是当前产品速度声明。 |
 

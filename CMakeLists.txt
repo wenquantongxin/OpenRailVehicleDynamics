@@ -12,10 +12,15 @@
 
 cmake_minimum_required(VERSION 3.24)
 
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/OrvdPlatformToolchainBootstrap.cmake")
+orvd_initialize_native_macos_toolchain()
+
 project(OpenRailVehicleDynamics
     VERSION 0.0.0
     DESCRIPTION "Model-neutral, double-only C++ multibody runtime with no Drake runtime dependency"
     LANGUAGES CXX)
+
+orvd_require_supported_macos_target()
 
 # The C++ standard and extension mode are declared per target by
 # orvd_configure_first_party_target. Global CMAKE_CXX_* defaults would also
@@ -73,14 +78,33 @@ orvd_enable_strict_floating_point_compile_launcher()
 # that advertises an advancer it cannot construct. Its installation prefix is
 # supplied by the build environment and is never recorded in the source tree.
 # Ceres still has no consumer and is therefore not searched or given a target.
-find_package(Eigen3 3.4 CONFIG REQUIRED)
+find_package(Eigen3 3.4.0 EXACT CONFIG REQUIRED)
 find_package(SUNDIALS 7.7.0 EXACT CONFIG REQUIRED
     COMPONENTS cvode nvecserial sunmatrixdense sunlinsoldense core)
 # G59 admits deterministic parallel evaluation of the eight independent GZ18
 # wheel-rail interfaces. OpenMP is a required product dependency: silently
 # compiling a different serial product would make the numerical execution
 # identity depend on an accidental configure-time discovery.
+if(DEFINED CMAKE_PREFIX_PATH)
+    set(_orvd_cmake_prefix_path_was_defined TRUE)
+else()
+    set(_orvd_cmake_prefix_path_was_defined FALSE)
+endif()
+set(_orvd_saved_cmake_prefix_path "${CMAKE_PREFIX_PATH}")
+orvd_resolve_appleclang_openmp_prefix(_orvd_appleclang_openmp_prefix)
+if(NOT "${_orvd_appleclang_openmp_prefix}" STREQUAL "")
+    list(APPEND CMAKE_PREFIX_PATH "${_orvd_appleclang_openmp_prefix}")
+    list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)
+endif()
 find_package(OpenMP REQUIRED COMPONENTS CXX)
+if(_orvd_cmake_prefix_path_was_defined)
+    set(CMAKE_PREFIX_PATH "${_orvd_saved_cmake_prefix_path}")
+else()
+    unset(CMAKE_PREFIX_PATH)
+endif()
+unset(_orvd_appleclang_openmp_prefix)
+unset(_orvd_saved_cmake_prefix_path)
+unset(_orvd_cmake_prefix_path_was_defined)
 
 # fmt is required by the vendored Drake source: its public headers include
 # fmt/format.h and specialise fmt::formatter. G46 pins 9.1.0 to the version
@@ -92,7 +116,7 @@ find_package(OpenMP REQUIRED COMPONENTS CXX)
 # directory lands in every consumer's RUNPATH and takes the C++ runtime with it.
 # The result is an executable that links cleanly and cannot start, which is worse
 # than a build failure because it survives every check that stops at linking.
-find_package(fmt 9.1.0 CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
+find_package(fmt 9.1.0 EXACT CONFIG REQUIRED NO_SYSTEM_ENVIRONMENT_PATH)
 find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
     NO_SYSTEM_ENVIRONMENT_PATH)
 
@@ -248,6 +272,7 @@ install(EXPORT OpenRailVehicleDynamicsTargets
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfigVersion.cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OrvdPlatformToolchainBootstrap.cmake"
         DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
 install(FILES
         NOTICE

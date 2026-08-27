@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -46,6 +47,20 @@ void RequireNear(double actual, double expected, double tolerance,
                      expected);
         ++failures;
     }
+}
+
+constexpr double kDerivedArithmeticRoundoffMultiplier = 16.0;
+
+double DerivedArithmeticTolerance(double expected) {
+    return kDerivedArithmeticRoundoffMultiplier *
+           std::numeric_limits<double>::epsilon() *
+           std::max(1.0, std::abs(expected));
+}
+
+void RequireRoundoffClose(double actual, double expected,
+                          std::string_view message) {
+    RequireNear(actual, expected, DerivedArithmeticTolerance(expected),
+                message);
 }
 
 WheelDriveTorqueDirectionTable MakeDirectionTable(double limit_offset) {
@@ -118,17 +133,17 @@ void CheckEightDistinctBranches() {
                 previous == previous_before,
             "Step modified one of its three input arrays");
 
-    RequireNear(result.wheel_dynamic_torque_limits_newton_metres[0], 115.0,
-                2.0e-14,
-                "traction interpolation did not use its source table");
+    RequireRoundoffClose(
+        result.wheel_dynamic_torque_limits_newton_metres[0], 115.0,
+        "traction interpolation did not use its source table");
     RequireNear(result.actual_wheel_torques_newton_metres[0], 50.0, 0.0,
                 "traction interpolation changed an unconstrained request");
     Require(result.limit_flags[0] == WheelDriveTorqueLimitFlag::kNone,
             "unconstrained traction reported a limit");
 
-    RequireNear(result.wheel_dynamic_torque_limits_newton_metres[1], 215.0,
-                0.0,
-                "regeneration interpolation did not use its source table");
+    RequireRoundoffClose(
+        result.wheel_dynamic_torque_limits_newton_metres[1], 215.0,
+        "regeneration interpolation did not use its source table");
     RequireNear(result.actual_wheel_torques_newton_metres[1], -50.0, 0.0,
                 "regeneration changed an unconstrained request");
 
@@ -156,25 +171,30 @@ void CheckEightDistinctBranches() {
                 result.limit_flags[4] == WheelDriveTorqueLimitFlag::kNone,
             "the inclusive request deadband did not clear output and memory");
 
-    RequireNear(result.actual_wheel_torques_newton_metres[5], 115.0, 2.0e-14,
-                "magnitude limit did not cap the wheel-side output");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[5], 115.0,
+        "magnitude limit did not cap the wheel-side output");
     Require(Has(result.limit_flags[5],
                 WheelDriveTorqueLimitFlag::kMagnitudeLimited),
             "magnitude limiting was not reported");
 
-    RequireNear(result.actual_wheel_torques_newton_metres[6], 10.0, 0.0,
-                "increase-rate limit did not use one sample period");
-    RequireNear(result.next_drive_side_torque_memory_newton_metres[6], 10.0,
-                0.0, "increase-rate result did not become the next memory");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[6], 10.0,
+        "increase-rate limit did not use one sample period");
+    RequireRoundoffClose(
+        result.next_drive_side_torque_memory_newton_metres[6], 10.0,
+        "increase-rate result did not become the next memory");
     Require(Has(result.limit_flags[6],
                 WheelDriveTorqueLimitFlag::kSlewLimited),
             "increase-rate limiting was not reported");
 
-    RequireNear(result.actual_wheel_torques_newton_metres[7], -10.0, 0.0,
-                "cross-zero rate limiting did not restart magnitude in the "
-                "new source direction");
-    RequireNear(result.next_drive_side_torque_memory_newton_metres[7], -10.0,
-                0.0, "cross-zero next memory has the wrong source sign");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[7], -10.0,
+        "cross-zero rate limiting did not restart magnitude in the new "
+        "source direction");
+    RequireRoundoffClose(
+        result.next_drive_side_torque_memory_newton_metres[7], -10.0,
+        "cross-zero next memory has the wrong source sign");
     Require(Has(result.limit_flags[7],
                 WheelDriveTorqueLimitFlag::kSlewLimited),
             "cross-zero rate limiting was not reported");
@@ -194,8 +214,9 @@ void CheckDecreaseRateAndUnavailableEndpoint() {
     previous[1] = 10.0;
     const auto result = conditioner.Step(requested, speeds, previous);
 
-    RequireNear(result.actual_wheel_torques_newton_metres[0], 60.0, 0.0,
-                "decrease-rate branch did not use its own rate table");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[0], 60.0,
+        "decrease-rate branch did not use its own rate table");
     Require(Has(result.limit_flags[0],
                 WheelDriveTorqueLimitFlag::kSlewLimited),
             "decrease-rate limiting was not reported");
@@ -232,18 +253,20 @@ void CheckImmediateDirectionReversal() {
     speeds.fill(WheelSpeedForDriveRpm(250.0));
 
     const auto result = conditioner.Step(requested, speeds, previous);
-    RequireNear(result.actual_wheel_torques_newton_metres[0], -3.0, 0.0,
-                "positive-to-negative reversal did not adopt the requested "
-                "direction immediately and restart its magnitude from zero");
-    RequireNear(result.next_drive_side_torque_memory_newton_metres[0], -3.0,
-                0.0,
-                "positive-to-negative reversal stored the wrong direction");
-    RequireNear(result.actual_wheel_torques_newton_metres[1], 7.0, 0.0,
-                "negative-to-positive reversal did not adopt the requested "
-                "direction immediately and restart its magnitude from zero");
-    RequireNear(result.next_drive_side_torque_memory_newton_metres[1], 7.0,
-                0.0,
-                "negative-to-positive reversal stored the wrong direction");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[0], -3.0,
+        "positive-to-negative reversal did not adopt the requested direction "
+        "immediately and restart its magnitude from zero");
+    RequireRoundoffClose(
+        result.next_drive_side_torque_memory_newton_metres[0], -3.0,
+        "positive-to-negative reversal stored the wrong direction");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[1], 7.0,
+        "negative-to-positive reversal did not adopt the requested direction "
+        "immediately and restart its magnitude from zero");
+    RequireRoundoffClose(
+        result.next_drive_side_torque_memory_newton_metres[1], 7.0,
+        "negative-to-positive reversal stored the wrong direction");
     Require(Has(result.limit_flags[0],
                 WheelDriveTorqueLimitFlag::kSlewLimited) &&
                 Has(result.limit_flags[1],
@@ -429,8 +452,9 @@ void CheckWarmStepDoesNotUseOrdinaryCppAllocation() {
     const auto result = conditioner.Step(requested, speeds, previous);
     Require(allocations.allocations() == 0,
             "a warmed valid Step used ordinary C++ operator new/new[]");
-    Require(result.actual_wheel_torques_newton_metres[0] == 10.0,
-            "the allocation probe did not consume the real result");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[0], 10.0,
+        "the allocation probe did not consume the real result");
 }
 
 }  // namespace

@@ -10,15 +10,15 @@ foreach(required_variable
         BUILD_CONFIG
         EXECUTABLE_SUFFIX
         INSTALL_DATADIR
-        OPENMP_INITIAL_CACHE)
+        OPENMP_REFERENCE_CACHE)
     if(NOT DEFINED ${required_variable})
         message(FATAL_ERROR "${required_variable} was not given")
     endif()
 endforeach()
 
-if(NOT EXISTS "${OPENMP_INITIAL_CACHE}")
+if(NOT EXISTS "${OPENMP_REFERENCE_CACHE}")
     message(FATAL_ERROR
-        "the parent build supplied no OpenMP initial cache")
+        "the parent build supplied no OpenMP reference cache")
 endif()
 
 function(run_checked label)
@@ -209,13 +209,35 @@ if(NOT package_config_count EQUAL 1)
 endif()
 list(GET package_configs 0 installed_package_config)
 file(READ "${installed_package_config}" installed_package_config_text)
+get_filename_component(installed_package_config_directory
+                       "${installed_package_config}" DIRECTORY)
+set(installed_platform_toolchain_module
+    "${installed_package_config_directory}/OrvdPlatformToolchainBootstrap.cmake")
+if(NOT EXISTS "${installed_platform_toolchain_module}")
+    message(FATAL_ERROR
+        "the installed package omitted its platform toolchain module")
+endif()
 string(FIND "${installed_package_config_text}"
-       "find_dependency(fmt 9.1.0 CONFIG NO_SYSTEM_ENVIRONMENT_PATH)"
+       "OrvdPlatformToolchainBootstrap.cmake"
+       platform_toolchain_include_position)
+if(platform_toolchain_include_position EQUAL -1)
+    message(FATAL_ERROR
+        "the installed package does not load its platform toolchain module")
+endif()
+string(FIND "${installed_package_config_text}"
+       "find_dependency(Eigen3 3.4.0 EXACT CONFIG)"
+       exact_eigen_dependency_position)
+if(exact_eigen_dependency_position EQUAL -1)
+    message(FATAL_ERROR
+        "the installed package does not preserve the exact Eigen dependency")
+endif()
+string(FIND "${installed_package_config_text}"
+       "find_dependency(fmt 9.1.0 EXACT CONFIG NO_SYSTEM_ENVIRONMENT_PATH)"
        isolated_fmt_dependency_position)
 if(isolated_fmt_dependency_position EQUAL -1)
     message(FATAL_ERROR
-        "the installed package does not isolate fmt lookup from PATH-provided "
-        "toolchains")
+        "the installed package does not preserve and isolate the exact fmt "
+        "dependency from PATH-provided toolchains")
 endif()
 string(FIND "${installed_package_config_text}"
        "find_dependency(OpenMP COMPONENTS CXX)"
@@ -255,18 +277,25 @@ if(DEFINED DEPENDENCY_PREFIX_PATH AND NOT DEPENDENCY_PREFIX_PATH STREQUAL "")
     list(APPEND prefix_path ${DEPENDENCY_PREFIX_PATH})
 endif()
 list(JOIN prefix_path ";" prefix_path_joined)
-string(REPLACE ";" "\\;" prefix_path_argument "${prefix_path_joined}")
+set(consumer_prefix_cache "${WORK_ROOT}/consumer-prefix-cache.cmake")
+file(WRITE "${consumer_prefix_cache}"
+    "set(CMAKE_PREFIX_PATH [==[${prefix_path_joined}]==] "
+    "CACHE STRING \"\" FORCE)\n")
 
 set(configure_command
     "${CMAKE_COMMAND}"
-    -C "${OPENMP_INITIAL_CACHE}"
+    -C "${consumer_prefix_cache}"
     -S "${consumer_source}"
     -B "${consumer_build}"
     -G "${CMAKE_GENERATOR_NAME}"
     "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER_PATH}"
-    "-DCMAKE_PREFIX_PATH=${prefix_path_argument}"
     -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
     -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF)
+if(DEFINED CMAKE_OSX_SYSROOT_VALUE AND
+   NOT CMAKE_OSX_SYSROOT_VALUE STREQUAL "")
+    list(APPEND configure_command
+         "-DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT_VALUE}")
+endif()
 if(DEFINED CMAKE_GENERATOR_PLATFORM_NAME AND
    NOT CMAKE_GENERATOR_PLATFORM_NAME STREQUAL "")
     list(APPEND configure_command -A "${CMAKE_GENERATOR_PLATFORM_NAME}")
@@ -295,8 +324,16 @@ endif()
 run_checked("configuring the relocated independent consumer"
             ${configure_command})
 
-include("${OPENMP_INITIAL_CACHE}")
+include("${OPENMP_REFERENCE_CACHE}")
 file(READ "${consumer_build}/CMakeCache.txt" consumer_cache)
+string(FIND "${consumer_cache}"
+       "\nCMAKE_PREFIX_PATH:STRING=${prefix_path_joined}\n"
+       prefix_path_cache_position)
+if(prefix_path_cache_position EQUAL -1)
+    message(FATAL_ERROR
+        "the relocated consumer did not preserve the complete prefix list "
+        "'${prefix_path_joined}'")
+endif()
 function(require_forwarded_openmp_cache_value variable cache_type)
     if(DEFINED ${variable} AND NOT "${${variable}}" STREQUAL "")
         string(FIND "${consumer_cache}"

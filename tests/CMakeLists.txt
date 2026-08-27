@@ -10,6 +10,7 @@ add_test(NAME verify_strict_floating_point_qualification
                  ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/verify_strict_floating_point_qualification.py
                  --cmake ${CMAKE_COMMAND}
                  --cxx-compiler ${CMAKE_CXX_COMPILER}
+                 --osx-sysroot=${CMAKE_OSX_SYSROOT}
                  --source-root ${CMAKE_SOURCE_DIR})
 add_test(NAME verify_dependency_source_declaration
          COMMAND ${Python3_EXECUTABLE}
@@ -31,6 +32,34 @@ if(UNIX AND NOT CMAKE_CROSSCOMPILING AND
              COMMAND ${Python3_EXECUTABLE}
                      ${CMAKE_SOURCE_DIR}/tools/drake_source_boundary/verify_admitted_translation_unit_compile_probe.py
                      --compiler ${CMAKE_CXX_COMPILER})
+    # CMake resolves a named Darwin SDK such as "macosx" before it constructs
+    # compiler commands. This probe invokes the compiler directly, so preserve
+    # that resolved SDK identity explicitly instead of relying on the shell that
+    # launched CTest to retain SDKROOT. Homebrew GCC otherwise compiles objects
+    # but cannot link libSystem.
+    if(APPLE AND NOT "${CMAKE_OSX_SYSROOT}" STREQUAL "")
+        set(orvd_direct_compiler_probe_sdkroot "${CMAKE_OSX_SYSROOT}")
+        if(NOT IS_ABSOLUTE "${orvd_direct_compiler_probe_sdkroot}")
+            find_program(orvd_xcrun_executable NAMES xcrun REQUIRED)
+            execute_process(
+                COMMAND "${orvd_xcrun_executable}"
+                        --sdk "${orvd_direct_compiler_probe_sdkroot}"
+                        --show-sdk-path
+                RESULT_VARIABLE orvd_xcrun_result
+                OUTPUT_VARIABLE orvd_direct_compiler_probe_sdkroot
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+            if(NOT orvd_xcrun_result EQUAL 0 OR
+               NOT IS_DIRECTORY "${orvd_direct_compiler_probe_sdkroot}")
+                message(FATAL_ERROR
+                    "could not resolve CMAKE_OSX_SYSROOT='${CMAKE_OSX_SYSROOT}' "
+                    "for the direct compiler probe")
+            endif()
+        endif()
+        set_tests_properties(
+            verify_admitted_translation_unit_compile_probe
+            PROPERTIES
+            ENVIRONMENT "SDKROOT=${orvd_direct_compiler_probe_sdkroot}")
+    endif()
 endif()
 
 # The architectural boundary: no product source is a forbidden Drake file, and
@@ -627,13 +656,13 @@ if(NOT CMAKE_CROSSCOMPILING)
     endif()
     string(REPLACE ";" "\\;" orvd_installation_dependency_prefix_path
            "${CMAKE_PREFIX_PATH}")
-    set(orvd_installation_openmp_initial_cache_content "")
+    set(orvd_installation_openmp_reference_cache_content "")
     foreach(openmp_string_variable
             OpenMP_CXX_FLAGS
             OpenMP_CXX_LIB_NAMES)
         if(DEFINED ${openmp_string_variable} AND
            NOT "${${openmp_string_variable}}" STREQUAL "")
-            string(APPEND orvd_installation_openmp_initial_cache_content
+            string(APPEND orvd_installation_openmp_reference_cache_content
                    "set(${openmp_string_variable} "
                    "[==[${${openmp_string_variable}}]==] "
                    "CACHE STRING \"\" FORCE)\n")
@@ -641,7 +670,7 @@ if(NOT CMAKE_CROSSCOMPILING)
     endforeach()
     if(DEFINED OpenMP_CXX_INCLUDE_DIR AND
        NOT "${OpenMP_CXX_INCLUDE_DIR}" STREQUAL "")
-        string(APPEND orvd_installation_openmp_initial_cache_content
+        string(APPEND orvd_installation_openmp_reference_cache_content
                "set(OpenMP_CXX_INCLUDE_DIR "
                "[==[${OpenMP_CXX_INCLUDE_DIR}]==] "
                "CACHE PATH \"\" FORCE)\n")
@@ -650,17 +679,17 @@ if(NOT CMAKE_CROSSCOMPILING)
         set(openmp_library_variable "OpenMP_${openmp_library}_LIBRARY")
         if(DEFINED ${openmp_library_variable} AND
            NOT "${${openmp_library_variable}}" STREQUAL "")
-            string(APPEND orvd_installation_openmp_initial_cache_content
+            string(APPEND orvd_installation_openmp_reference_cache_content
                    "set(${openmp_library_variable} "
                    "[==[${${openmp_library_variable}}]==] "
                    "CACHE FILEPATH \"\" FORCE)\n")
         endif()
     endforeach()
-    set(orvd_installation_openmp_initial_cache
-        "${CMAKE_CURRENT_BINARY_DIR}/installation/openmp-initial-cache.cmake")
+    set(orvd_installation_openmp_reference_cache
+        "${CMAKE_CURRENT_BINARY_DIR}/installation/openmp-reference-cache.cmake")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/installation")
-    file(WRITE "${orvd_installation_openmp_initial_cache}"
-         "${orvd_installation_openmp_initial_cache_content}")
+    file(WRITE "${orvd_installation_openmp_reference_cache}"
+         "${orvd_installation_openmp_reference_cache_content}")
     add_test(NAME verify_relocated_install_consumer
         COMMAND ${CMAKE_COMMAND}
             -DORVD_BUILD_DIR=${CMAKE_BINARY_DIR}
@@ -671,6 +700,7 @@ if(NOT CMAKE_CROSSCOMPILING)
             -DCMAKE_GENERATOR_PLATFORM_NAME=${CMAKE_GENERATOR_PLATFORM}
             -DCMAKE_GENERATOR_TOOLSET_NAME=${CMAKE_GENERATOR_TOOLSET}
             -DCMAKE_CXX_COMPILER_PATH=${CMAKE_CXX_COMPILER}
+            -DCMAKE_OSX_SYSROOT_VALUE=${CMAKE_OSX_SYSROOT}
             -DCMAKE_MAKE_PROGRAM_PATH=${CMAKE_MAKE_PROGRAM}
             -DBUILD_CONFIG=${orvd_installation_build_config}
             -DEXECUTABLE_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}
@@ -680,7 +710,7 @@ if(NOT CMAKE_CROSSCOMPILING)
             -DEIGEN3_CONFIG_DIR=${Eigen3_DIR}
             -DFMT_CONFIG_DIR=${fmt_DIR}
             -DSUNDIALS_CONFIG_DIR=${SUNDIALS_DIR}
-            -DOPENMP_INITIAL_CACHE=${orvd_installation_openmp_initial_cache}
+            -DOPENMP_REFERENCE_CACHE=${orvd_installation_openmp_reference_cache}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/installation/verify_relocated_install_consumer.cmake)
     set_tests_properties(verify_relocated_install_consumer
         PROPERTIES RUN_SERIAL TRUE)
@@ -1043,7 +1073,7 @@ add_test(NAME verify_irw_longitudinal_cruise_event_session
              ${CMAKE_SOURCE_DIR}/controller_library/irw/irw_v60_common_wheel_speed_cruise_controller.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json)
 set_tests_properties(verify_irw_longitudinal_cruise_event_session PROPERTIES
-    PROCESSORS 8)
+    PROCESSORS 32)
 
 # G53's complete GZ18 direct RHS and G54's accepted-step projection history.
 # The same installed assets drive both: four wheelsets share four local branch
@@ -1067,7 +1097,7 @@ add_test(NAME verify_gz18_contact_rhs
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
-set_tests_properties(verify_gz18_contact_rhs PROPERTIES PROCESSORS 8)
+set_tests_properties(verify_gz18_contact_rhs PROPERTIES PROCESSORS 32)
 
 # G55's first complete passive longitudinal slice. One private Radau5 advance
 # returns the P035-aligned 101-state batch; a private observation context then
@@ -1087,6 +1117,8 @@ add_test(NAME verify_gz18_passive_short_window
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/track_library/geometries/straight_level_2000m.json
              ${CMAKE_SOURCE_DIR})
+set_tests_properties(verify_gz18_passive_short_window
+    PROPERTIES PROCESSORS 8)
 
 # G58's non-installed qualification leaf. A 30 ms real GZ18 run with only its
 # two endpoints exercises multiple dense Jacobians, sequential observation
@@ -1115,7 +1147,7 @@ add_test(
 set_tests_properties(
     verify_gz18_straight_aar6_v60_passive_dense_output_and_publication
     PROPERTIES
-    PROCESSORS 16)
+    PROCESSORS 32)
 
 add_executable(verify_irw_r300_v60_passive_and_100hz_full_state_guidance
     dynamics_qualification/verify_irw_r300_v60_passive_and_100hz_full_state_guidance.cc)
@@ -1137,7 +1169,7 @@ add_test(NAME verify_irw_r300_v60_passive_and_100hz_full_state_guidance
 set_tests_properties(
     verify_irw_r300_v60_passive_and_100hz_full_state_guidance
     PROPERTIES
-    PROCESSORS 16)
+    PROCESSORS 32)
 
 add_test(
     NAME verify_time_integrator_qualification_cli
@@ -1150,13 +1182,13 @@ add_test(
             --irw-guidance
             $<TARGET_FILE:orvd_irw_r300_aar5_v60_100hz_full_state_guidance>)
 
-# INT-07A's machine-readable protocol remains a planning/validation surface:
-# this test validates its closed schema and all 16 runner argv expansions, but
+# The serial qualification-comparison contract covers the frozen manifest,
+# all 16 runner argv expansions, wrapper preflight and artifact postflight. It
 # deliberately starts no long-window vehicle run and produces no timing rank.
 add_test(
-    NAME verify_int07a_comparison_manifest
+    NAME verify_serial_qualification_comparison_contract
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/dynamics_qualification/verify_int07a_comparison_manifest.py)
+            ${CMAKE_CURRENT_SOURCE_DIR}/dynamics_qualification/verify_serial_qualification_comparison_contract.py)
 
 add_executable(verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios
     dynamics_qualification/verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios.cc)
@@ -1179,7 +1211,7 @@ add_test(NAME verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_
 set_tests_properties(
     verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios
     PROPERTIES
-    PROCESSORS 16)
+    PROCESSORS 32)
 
 add_executable(verify_vehicle_definition_loading
     configuration/vehicle_definition_header_self_containment.cc

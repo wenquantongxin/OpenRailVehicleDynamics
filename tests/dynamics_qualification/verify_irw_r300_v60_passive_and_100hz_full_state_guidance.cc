@@ -798,7 +798,7 @@ void CheckPassiveDenseJacobianThreading(
     std::string reference_states;
     std::string reference_observations;
     std::string reference_patches;
-    for (const int requested_threads : {1, 4, 8, 16}) {
+    for (const int requested_threads : {1, 4, 8, 12, 16, 32}) {
         omp_set_num_threads(requested_threads);
         configuration.output_directory =
             root / ("irw-aar5-jacobian-t" +
@@ -811,8 +811,8 @@ void CheckPassiveDenseJacobianThreading(
                             .requested_dense_finite_difference_jacobian_worker_count ==
                         requested_threads &&
                     candidate.terminal_continuous_state.size() == 157,
-                "the passive IRW 1/4/8/16-thread run did not exercise the "
-                "requested 157-state dense Jacobian");
+                "the passive IRW 1/4/8/12/16/32-thread run did not exercise "
+                "the requested 157-state dense Jacobian");
         const std::string observations = ReadWholeFile(
             configuration.output_directory / "observations.tsv");
         const std::string patches = ReadWholeFile(
@@ -831,8 +831,9 @@ void CheckPassiveDenseJacobianThreading(
                         states == reference_states &&
                         observations == reference_observations &&
                         patches == reference_patches,
-                    "the passive IRW 1/4/8/16-thread dense Jacobian changed "
-                    "the trajectory, numerical work or contact artifacts");
+                    "the passive IRW 1/4/8/12/16/32-thread dense Jacobian "
+                    "changed the trajectory, numerical work or contact "
+                    "artifacts");
         }
     }
     omp_set_num_threads(original_openmp_max_threads);
@@ -843,8 +844,8 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const int original_openmp_dynamic = omp_get_dynamic();
     const int original_openmp_max_threads = omp_get_max_threads();
     omp_set_dynamic(0);
-    // Keep one all-serial correctness oracle. The 4/8/16-worker runs below
-    // must preserve it exactly; their timing is not part of this CTest.
+    // Keep one all-serial correctness oracle. The 4/8/12/16/32-worker runs
+    // below must preserve it exactly; their timing is not part of this CTest.
     omp_set_num_threads(1);
     IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration configuration;
     configuration.vehicle_definition_path = argv[1];
@@ -1074,7 +1075,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const std::array<std::string_view, 4> physical_files{
         "observations.tsv", "contact_patches.tsv", "control_events.tsv",
         "endpoint_diagnostics.tsv"};
-    for (const int requested_threads : {4, 8, 16}) {
+    for (const int requested_threads : {4, 8, 12, 16, 32}) {
         omp_set_num_threads(requested_threads);
         auto comparison = configuration;
         comparison.output_directory =
@@ -1089,13 +1090,14 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     SameTrajectoryWork(summary.integration_statistics,
                                        candidate.integration_statistics) &&
                     SameTerminalState(summary, candidate),
-                "the controlled IRW 1/4/8/16-thread dense Jacobian changed "
-                "the complete state, event history or numerical work");
+                "the controlled IRW 1/4/8/12/16/32-thread dense Jacobian "
+                "changed the complete state, event history or numerical "
+                "work");
         for (const std::string_view file : physical_files) {
             Require(ReadWholeFile(configuration.output_directory / file) ==
                         ReadWholeFile(comparison.output_directory / file),
-                    "the controlled IRW 1/4/8/16-thread dense Jacobian changed "
-                    "a physical or control artifact");
+                    "the controlled IRW 1/4/8/12/16/32-thread dense Jacobian "
+                    "changed a physical or control artifact");
         }
     }
 

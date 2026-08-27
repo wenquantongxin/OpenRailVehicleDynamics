@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the frozen INT-07A serial manifest and argv materialization."""
+"""Verify the serial qualification-comparison execution contract."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 
 sys.dont_write_bytecode = True
@@ -43,7 +43,7 @@ EXPECTED_CASES = (
 
 def load_comparison_module(path: Path = COMPARISON_MODULE) -> ModuleType:
     specification = importlib.util.spec_from_file_location(
-        "orvd_int07a_qualification_module", path
+        "orvd_serial_qualification_comparison_module", path
     )
     if specification is None or specification.loader is None:
         raise RuntimeError(f"could not load {path}")
@@ -148,7 +148,7 @@ def check_runner_arguments(module: ModuleType, manifest: dict[str, object]) -> N
         for case_identifier in EXPECTED_CASES:
             output = (
                 SOURCE_ROOT
-                / "tmp/int07a-unexecuted"
+                / "tmp/serial-qualification-comparison-unexecuted"
                 / scenario_identifier
                 / case_identifier
             ).resolve()
@@ -183,7 +183,10 @@ def check_runner_arguments(module: ModuleType, manifest: dict[str, object]) -> N
         scenario_identifier="gz18_straight_aar6_v60_passive_20s",
         qualification_case_identifier="radau5_reference",
         source_root=SOURCE_ROOT,
-        output_directory=SOURCE_ROOT / "tmp/int07a-unexecuted/gz18-reference",
+        output_directory=(
+            SOURCE_ROOT
+            / "tmp/serial-qualification-comparison-unexecuted/gz18-reference"
+        ),
     )
     require(
         gz18_arguments[4] == "aar6_irregularity"
@@ -195,7 +198,10 @@ def check_runner_arguments(module: ModuleType, manifest: dict[str, object]) -> N
         scenario_identifier="irw_r300_aar5_v60_passive_30s",
         qualification_case_identifier="scenario_default_cvode_reference",
         source_root=SOURCE_ROOT,
-        output_directory=SOURCE_ROOT / "tmp/int07a-unexecuted/irw-reference",
+        output_directory=(
+            SOURCE_ROOT
+            / "tmp/serial-qualification-comparison-unexecuted/irw-reference"
+        ),
     )
     require(
         irw_arguments[0] == "irw_r300_aar5_v60_passive"
@@ -268,7 +274,7 @@ def check_strict_rejections(module: ModuleType, manifest: dict[str, object]) -> 
         1,
     )
     with tempfile.TemporaryDirectory(
-        prefix="orvd-int07a-duplicate-manifest-"
+        prefix="orvd-serial-comparison-duplicate-manifest-"
     ) as temporary:
         duplicate_path = Path(temporary) / "duplicate.json"
         duplicate_path.write_text(duplicate_manifest_text, encoding="utf-8")
@@ -289,7 +295,9 @@ def wrapper_arguments(
     scenario_identifier: str,
     case_identifier: str,
     cpu_affinity: str = "0",
-    identity_output: Path = Path("/tmp/orvd-unused-int07a-identity.json"),
+    identity_output: Path = Path(
+        "/tmp/orvd-unused-serial-comparison-identity.json"
+    ),
     executable: Path | None = None,
 ) -> list[str]:
     vehicle_recipe = (
@@ -493,10 +501,18 @@ def check_wrapper_main_execution(
     scenario_identifier: str,
     case_identifier: str,
 ) -> None:
-    original_run = wrapper.subprocess.run
+    real_os = wrapper.os
+    real_posix_resource = wrapper.posix_resource
+    real_subprocess = wrapper.subprocess
+    isolated_os = ModuleType("orvd_serial_comparison_test_os")
+    isolated_os.__dict__.update(vars(real_os))
+    isolated_posix_resource = ModuleType(
+        "orvd_serial_comparison_test_posix_resource"
+    )
+    isolated_posix_resource.RUSAGE_CHILDREN = 1
+    isolated_subprocess = ModuleType("orvd_serial_comparison_test_subprocess")
+    isolated_subprocess.__dict__.update(vars(real_subprocess))
     original_validate = wrapper.validate_manifest_bound_artifact
-    original_setaffinity = wrapper.os.sched_setaffinity
-    original_getaffinity = wrapper.os.sched_getaffinity
     original_processor_identity = wrapper.processor_identity
     original_sha256_file = wrapper.sha256_file
     captured_environments: list[dict[str, str]] = []
@@ -504,6 +520,13 @@ def check_wrapper_main_execution(
 
     def set_affinity(process: int, affinity: set[int]) -> None:
         captured_affinities.append((process, set(affinity)))
+
+    def getrusage(scope: int) -> SimpleNamespace:
+        require(
+            scope == isolated_posix_resource.RUSAGE_CHILDREN,
+            "main() requested an unexpected resource-accounting scope",
+        )
+        return SimpleNamespace(ru_utime=0.0, ru_stime=0.0, ru_maxrss=0)
 
     def successful_run(command: list[str], *, check: bool, env: dict[str, str]):
         require(check is False, "the wrapper unexpectedly enabled check=True")
@@ -515,12 +538,16 @@ def check_wrapper_main_execution(
         return wrapper.subprocess.CompletedProcess(command, 0)
 
     try:
+        wrapper.os = isolated_os
+        wrapper.posix_resource = isolated_posix_resource
+        wrapper.subprocess = isolated_subprocess
         wrapper.os.sched_setaffinity = set_affinity
         wrapper.os.sched_getaffinity = lambda process: {0}
+        wrapper.posix_resource.getrusage = getrusage
         wrapper.subprocess.run = successful_run
         wrapper.validate_manifest_bound_artifact = lambda artifact, binding: []
         with tempfile.TemporaryDirectory(
-            prefix="orvd-int07a-wrapper-main-"
+            prefix="orvd-serial-comparison-wrapper-main-"
         ) as temporary:
             temporary_path = Path(temporary)
             executable_name = (
@@ -531,6 +558,11 @@ def check_wrapper_main_execution(
             fake_executable = temporary_path / executable_name
             fake_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             fake_executable.chmod(0o700)
+            resolved_fake_executable = fake_executable.resolve(strict=True)
+            wrapper.os.access = lambda path, mode: (
+                Path(path) == resolved_fake_executable
+                and mode == wrapper.os.X_OK
+            )
 
             def main_arguments(identity_output: Path) -> list[str]:
                 return wrapper_arguments(
@@ -644,10 +676,10 @@ def check_wrapper_main_execution(
                 "an OSError launch did not publish a controlled failed identity",
             )
     finally:
-        wrapper.subprocess.run = original_run
+        wrapper.os = real_os
+        wrapper.posix_resource = real_posix_resource
+        wrapper.subprocess = real_subprocess
         wrapper.validate_manifest_bound_artifact = original_validate
-        wrapper.os.sched_setaffinity = original_setaffinity
-        wrapper.os.sched_getaffinity = original_getaffinity
         wrapper.processor_identity = original_processor_identity
         wrapper.sha256_file = original_sha256_file
 
@@ -658,7 +690,10 @@ def check_manifest_bound_wrapper(
     wrapper = load_comparison_module(METRICS_WRAPPER)
     scenario_identifier = "gz18_straight_aar6_v60_passive_20s"
     case_identifier = "radau5_reference"
-    output = SOURCE_ROOT / "tmp/int07a-unexecuted/wrapper-bound-gz18"
+    output = (
+        SOURCE_ROOT
+        / "tmp/serial-qualification-comparison-unexecuted/wrapper-bound-gz18"
+    )
     runner_arguments = comparison.materialize_runner_arguments(
         manifest,
         scenario_identifier=scenario_identifier,
@@ -733,7 +768,9 @@ def check_manifest_bound_wrapper(
         else:
             raise AssertionError("the wrapper accepted a partial manifest binding")
 
-    with tempfile.TemporaryDirectory(prefix="orvd-int07a-wrapper-") as temporary:
+    with tempfile.TemporaryDirectory(
+        prefix="orvd-serial-comparison-wrapper-"
+    ) as temporary:
         artifact = Path(temporary)
         synthetic_binding = copy.deepcopy(binding)
         synthetic_clock = synthetic_binding["scenario"]["clock"]

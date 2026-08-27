@@ -62,13 +62,22 @@ ExpectedSample EvaluateIndependentCircular(double length, double start_grade,
     const long double sine = std::sin(start_angle) + long_local / radius;
     const long double angle = std::asin(sine);
     const long double cosine = std::cos(angle);
+    // Avoid cancellation between nearby cosines without duplicating the
+    // product implementation's rationalized integral. This remains stable on
+    // platforms where long double has no more precision than double.
+    const long double half_angle_sum = 0.5L * (angle + start_angle);
+    const long double half_angle_difference =
+        0.5L * (angle - start_angle);
+    const long double integral =
+        2.0L * radius * std::sin(half_angle_sum) *
+        std::sin(half_angle_difference);
     return {static_cast<double>(std::tan(angle)),
             static_cast<double>(1.0 /
                                 (radius * cosine * cosine * cosine)),
             static_cast<double>(
                 3.0L * sine /
                 (radius * radius * cosine * cosine * cosine * cosine * cosine)),
-            static_cast<double>(radius * (std::cos(start_angle) - cosine))};
+            static_cast<double>(integral)};
 }
 
 void CheckNamedSegmentFormulas() {

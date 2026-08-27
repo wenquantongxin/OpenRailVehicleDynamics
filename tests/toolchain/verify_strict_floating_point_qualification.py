@@ -36,6 +36,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cmake", type=Path, required=True)
     parser.add_argument("--cxx-compiler", type=Path, required=True)
+    parser.add_argument("--osx-sysroot", default="")
     parser.add_argument("--source-root", type=Path, required=True)
     arguments = parser.parse_args()
 
@@ -53,7 +54,12 @@ def main() -> int:
             encoding="utf-8",
         )
 
-        for flags in ("", "-O3 -fno-fast-math"):
+        for flags in (
+            "",
+            "-O3 -fno-fast-math",
+            "-ffp-contract=fast",
+            "-ffp-contract=off",
+        ):
             result = run_probe(
                 arguments.cmake, probe, release_flags=flags
             )
@@ -123,6 +129,10 @@ def main() -> int:
             "elseif(PROBE_MODE STREQUAL \"unsafe-forced-include\")\n"
             "  file(WRITE \"${CMAKE_BINARY_DIR}/forced.h\" \"#undef __FAST_MATH__\\n\")\n"
             "  target_compile_options(target_option_probe PRIVATE \"-include${CMAKE_BINARY_DIR}/forced.h\")\n"
+            "elseif(PROBE_MODE STREQUAL \"safe-contract-fast\")\n"
+            "  target_compile_options(target_option_probe PRIVATE -ffp-contract=fast)\n"
+            "elseif(PROBE_MODE STREQUAL \"safe-contract-off\")\n"
+            "  target_compile_options(target_option_probe PRIVATE -ffp-contract=off)\n"
             "endif()\n",
             encoding="utf-8",
         )
@@ -131,16 +141,21 @@ def main() -> int:
             mode: str,
         ) -> tuple[Path, subprocess.CompletedProcess[str]]:
             build_directory = Path(temporary) / f"target-option-{mode}"
+            configure_command = [
+                str(arguments.cmake),
+                "-S",
+                str(target_probe_source),
+                "-B",
+                str(build_directory),
+                f"-DCMAKE_CXX_COMPILER={arguments.cxx_compiler}",
+                f"-DPROBE_MODE={mode}",
+            ]
+            if arguments.osx_sysroot:
+                configure_command.append(
+                    f"-DCMAKE_OSX_SYSROOT={arguments.osx_sysroot}"
+                )
             result = subprocess.run(
-                [
-                    str(arguments.cmake),
-                    "-S",
-                    str(target_probe_source),
-                    "-B",
-                    str(build_directory),
-                    f"-DCMAKE_CXX_COMPILER={arguments.cxx_compiler}",
-                    f"-DPROBE_MODE={mode}",
-                ],
+                configure_command,
                 check=False,
                 text=True,
                 stdout=subprocess.PIPE,
@@ -193,6 +208,19 @@ def main() -> int:
                 "readable safe response file was rejected\n" + build.stdout
             )
 
+        for mode in ("safe-contract-fast", "safe-contract-off"):
+            contraction_build, configure = configure_target_probe(mode)
+            if configure.returncode != 0:
+                raise RuntimeError(
+                    f"{mode} probe did not configure\n{configure.stdout}"
+                )
+            build = build_target_probe(contraction_build)
+            if build.returncode != 0:
+                raise RuntimeError(
+                    "an admissible floating-point contraction policy was "
+                    f"rejected by {mode}\n{build.stdout}"
+                )
+
         for mode, token in (
             ("unsafe-response", "-ffast-math"),
             ("opaque-response", "@missing.rsp"),
@@ -225,6 +253,121 @@ def main() -> int:
                 raise RuntimeError(
                     f"{mode} bypassed its exact rejection\n{build.stdout}"
                 )
+
+        compile_launcher = (
+            module_directory / "OrvdStrictFloatingPointCompileLauncher.cmake"
+        )
+
+        def run_compile_launcher(
+            compiler_id: str, forwarded_tokens: tuple[str, ...]
+        ) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [
+                    str(arguments.cmake),
+                    "-DORVD_STRICT_FLOATING_POINT_CXX_COMPILER_ID:STRING="
+                    + compiler_id,
+                    "-P",
+                    str(compile_launcher),
+                    "--",
+                    str(arguments.cmake),
+                    "-E",
+                    "echo",
+                    *forwarded_tokens,
+                ],
+                check=False,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=temporary,
+            )
+
+        safe_apple_openmp = run_compile_launcher(
+            "AppleClang", ("-Xclang", "-fopenmp")
+        )
+        if safe_apple_openmp.returncode != 0:
+            raise RuntimeError(
+                "the exact AppleClang OpenMP forwarding pair was rejected\n"
+                + safe_apple_openmp.stdout
+            )
+
+        safe_apple_openmp_response = Path(temporary) / "apple-openmp.rsp"
+        safe_apple_openmp_response.write_text(
+            "-Xclang -fopenmp", encoding="utf-8"
+        )
+        safe_response = run_compile_launcher(
+            "AppleClang", ("@apple-openmp.rsp",)
+        )
+        if safe_response.returncode != 0:
+            raise RuntimeError(
+                "the exact AppleClang OpenMP pair in a readable response "
+                "file was rejected\n" + safe_response.stdout
+            )
+
+        for compiler_id, forwarded_tokens in (
+            ("GNU", ("-Xclang", "-fopenmp")),
+            ("Clang", ("-Xclang", "-fopenmp")),
+            ("AppleClang", ("-Xclang",)),
+            ("AppleClang", ("-Xclang", "-ffast-math")),
+            ("AppleClang", ("-Xclang=-fopenmp",)),
+        ):
+            rejected = run_compile_launcher(compiler_id, forwarded_tokens)
+            expected = (
+                "ORVD strict floating-point compile command rejected token "
+                f"'{forwarded_tokens[0]}'"
+            )
+            normalized_output = " ".join(rejected.stdout.split())
+            if rejected.returncode == 0 or expected not in normalized_output:
+                raise RuntimeError(
+                    "an unapproved compiler forwarding form bypassed the "
+                    "compile-command audit\n" + rejected.stdout
+                )
+
+        for response_contents in (
+            "-Xclang",
+            "-Xclang -ffast-math",
+        ):
+            unsafe_apple_response = Path(temporary) / "unsafe-apple-openmp.rsp"
+            unsafe_apple_response.write_text(
+                response_contents, encoding="utf-8"
+            )
+            rejected = run_compile_launcher(
+                "AppleClang", ("@unsafe-apple-openmp.rsp",)
+            )
+            expected = (
+                "ORVD strict floating-point compile command rejected token "
+                "'-Xclang'"
+            )
+            normalized_output = " ".join(rejected.stdout.split())
+            if rejected.returncode == 0 or expected not in normalized_output:
+                raise RuntimeError(
+                    "an unsafe AppleClang response-file forwarding form "
+                    "bypassed the compile-command audit\n" + rejected.stdout
+                )
+
+        rejected = run_compile_launcher("GNU", ("@apple-openmp.rsp",))
+        expected = (
+            "ORVD strict floating-point compile command rejected token "
+            "'-Xclang'"
+        )
+        normalized_output = " ".join(rejected.stdout.split())
+        if rejected.returncode == 0 or expected not in normalized_output:
+            raise RuntimeError(
+                "an AppleClang-only OpenMP response pair was admitted for "
+                "GNU\n" + rejected.stdout
+            )
+
+        split_apple_response = Path(temporary) / "split-apple-openmp.rsp"
+        split_apple_response.write_text("-Xclang", encoding="utf-8")
+        rejected = run_compile_launcher(
+            "AppleClang", ("@split-apple-openmp.rsp", "-fopenmp")
+        )
+        normalized_output = " ".join(rejected.stdout.split())
+        if rejected.returncode == 0 or expected not in normalized_output:
+            raise RuntimeError(
+                "an AppleClang OpenMP pair split across a response-file "
+                "boundary bypassed the compile-command audit\n"
+                + rejected.stdout
+            )
 
         _, configure = configure_target_probe("existing-launcher")
         expected = (

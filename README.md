@@ -1,6 +1,6 @@
 # OpenRailVehicleDynamics (ORVD)
 
-> 首款面向完整轨道车辆的端到端开放源码 C++23 动力学平台：贯通线路、轮轨、多体与控制，原生运行于 Linux／Windows，并在整车对标中验证了实时级吞吐。
+> 首款面向完整轨道车辆的端到端开放源码 C++23 动力学平台：贯通线路、轮轨、多体与控制，原生运行于 Linux／Windows／macOS，并在整车对标中验证了实时级吞吐。
 
 OpenRailVehicleDynamics 把三维线路、轨道不平顺、轮轨接触、车辆多体系统、悬挂与作动、
 采样控制和时间积分连接为一条透明的计算链。研究者可以从严格 JSON 资产装配完整车辆，计算
@@ -9,7 +9,7 @@ OpenRailVehicleDynamics 把三维线路、轨道不平顺、轮轨接触、车�
 
 ORVD 随包提供刚性轮对 GZ18 与独立旋转车轮 IRW 两类车辆模型，并在直线、曲线、随机不平顺、
 被动运行和闭环控制长窗中与 SIMPACK 逐时序比较。项目同时具备可重定位安装、离线依赖
-构建、确定性轮轨并行，以及 Linux／Windows 的 GCC 与 Clang 双工具链验证。
+构建、确定性轮轨并行，以及 Linux／Windows／macOS 的 GCC 与 Clang 系工具链验证。
 
 ## 从线路输入到闭环车辆响应
 
@@ -174,12 +174,13 @@ ORVD 以三层相互独立的证据建立模型与实现资格：
 | 多体算子参照 | 通过跨进程 Drake 参考程序核对位置、速度、微分运动学、质量矩阵、逆／前向动力学和外力 |
 | 整车时序参照 | 通过 SIMPACK 核对刚性轮对、独立车轮、被动运行和 100 Hz 闭环控制的原生车辆响应 |
 
-当前完整测试集合为：
+当前默认测试集合及最近证据为：
 
-| 平台 | 工具链 | 完整测试 |
-|---|---|---:|
-| Ubuntu | GCC 13；Clang 20＋LLVM libomp | `87/87` |
-| Windows 10 | MSYS2 UCRT64 GCC；CLANG64 Clang＋LLVM libomp | `79/79` |
+| 平台 | 工具链 | 默认注册 | 最近完整实测与当前状态 |
+|---|---|---:|---|
+| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 87 | 最近两套工具链均为 `87/87`；本轮 macOS/CMake 收口后待复验 |
+| Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；CLANG64 Clang＋LLVM libomp | 85 | 当前注册数为 85；本次 macOS 收口后待在 Windows 复验 |
+| macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 87 | 两套工具链均为 `87/87` |
 
 平台测试包含真实 OpenMP 团队探针、可重定位安装消费者、普通依赖闭包和共享 Drake 排除门。
 八轮接触的固定槽结果不随工作者数量变化；并行执行仍必须实际形成多线程团队。
@@ -210,8 +211,9 @@ target_link_libraries(my_vehicle_simulation PRIVATE ORVD::integrators)
 `track_irregularity`、`wheel_rail_contact`、`configuration`、`multibody_runtime`、
 `multibody_model`、`forces`、`system_assembly` 与 `integrators`，使用时添加 `ORVD::` 命名空间。
 
-无需系统开发包的离线依赖构建、Windows 工具链和完整测试命令见
-[依赖与安装说明](distribution/dependencies/README.md)。架构决策与共享模块消费边界见
+Linux、Windows 与 macOS 的依赖安装、离线构建、测试及消费命令见
+[分平台构建与安装说明](docs/build_and_install/README.md)；离线源码包的内部结构见
+[依赖超级构建说明](distribution/dependencies/README.md)。架构决策与共享模块消费边界见
 [安装归档决策](docs/adr/0008-build-installed-archives-for-shared-module-consumers.md)。
 
 ## 仓库导航
@@ -225,10 +227,12 @@ target_link_libraries(my_vehicle_simulation PRIVATE ORVD::integrators)
 | [`experiments/`](experiments/) | 可复用的实验编排、结果提取与绘图示例 |
 | [`tools/`](tools/) | 动力学资格、型面转换、打包和源码边界工具 |
 | [`tests/`](tests/) | 解析、性质、跨实现、安装和平台测试 |
-| [`docs/`](docs/) | 模型算法、架构决策、工程规则和性能说明 |
+| [`docs/`](docs/) | 构建安装、模型算法、架构决策、工程规则和性能说明 |
 
 ## 文档入口
 
+- [分平台构建与安装](docs/build_and_install/README.md)：共同 CMake 机制、固定依赖和
+  Linux／Windows／macOS 独立操作手册。
 - [模型与算法](docs/models_and_algorithms/README.md)：轨道几何、不平顺、轮轨接触、车辆动力学、
   控制与数值方法。
 - [轨道竖向剖面与三维耦合](docs/models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md)：

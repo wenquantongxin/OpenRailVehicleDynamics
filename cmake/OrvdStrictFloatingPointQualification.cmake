@@ -2,6 +2,12 @@
 # qualification.  The compiler-macro guards in the Radau5 core and artifact
 # writers remain the final check; this layer also catches Clang options such as
 # -ffp-model=fast that do not expose a complete predefined-macro signal.
+#
+# The v1 identifier is a floating-point safety category, not a cross-build
+# bit-reproduction identity. It excludes fast/finite-only assumptions but does
+# not freeze contraction: compiler defaults, -ffp-contract=fast/off, and
+# explicit fused multiply-add evaluation remain admissible. A qualification
+# artifact must therefore record its compiler/build identity separately.
 
 set(ORVD_STRICT_FLOATING_POINT_SEMANTICS_IDENTIFIER
     "orvd.strict_ieee_no_fast_math.v1")
@@ -79,6 +85,7 @@ function(orvd_enable_strict_floating_point_compile_launcher)
 
     set(launcher
         "${CMAKE_COMMAND}"
+        "-DORVD_STRICT_FLOATING_POINT_CXX_COMPILER_ID:STRING=${CMAKE_CXX_COMPILER_ID}"
         "-P"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/OrvdStrictFloatingPointCompileLauncher.cmake"
         "--")

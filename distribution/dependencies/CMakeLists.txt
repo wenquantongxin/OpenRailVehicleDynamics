@@ -1,6 +1,19 @@
 cmake_minimum_required(VERSION 3.24)
 
+set(_orvd_product_source
+    "${CMAKE_CURRENT_LIST_DIR}/OpenRailVehicleDynamics")
+set(_orvd_platform_toolchain_module
+    "${_orvd_product_source}/cmake/OrvdPlatformToolchainBootstrap.cmake")
+if(NOT EXISTS "${_orvd_platform_toolchain_module}")
+    message(FATAL_ERROR
+        "the offline source bundle is missing its platform toolchain module")
+endif()
+include("${_orvd_platform_toolchain_module}")
+orvd_initialize_native_macos_toolchain()
+
 project(ORVDSourceBundle LANGUAGES NONE)
+
+orvd_require_supported_macos_target()
 
 include(ExternalProject)
 
@@ -12,7 +25,6 @@ endif()
 set(_orvd_bundle_root "${CMAKE_CURRENT_LIST_DIR}")
 set(_orvd_archives "${_orvd_bundle_root}/dependencies")
 set(_orvd_licenses "${_orvd_bundle_root}/dependency-licenses")
-set(_orvd_product_source "${_orvd_bundle_root}/OpenRailVehicleDynamics")
 set(_orvd_dependency_source_module
     "${_orvd_bundle_root}/OrvdDependencySources.cmake")
 set(_orvd_dependency_source_manifest
@@ -58,7 +70,8 @@ foreach(variable IN ITEMS
         CMAKE_TOOLCHAIN_FILE
         CMAKE_MSVC_RUNTIME_LIBRARY
         CMAKE_OSX_ARCHITECTURES
-        CMAKE_OSX_DEPLOYMENT_TARGET)
+        CMAKE_OSX_DEPLOYMENT_TARGET
+        CMAKE_OSX_SYSROOT)
     if(DEFINED ${variable} AND NOT "${${variable}}" STREQUAL "")
         list(APPEND _orvd_common_cache_args
             "-D${variable}:STRING=${${variable}}")
@@ -75,6 +88,18 @@ set(_orvd_cxx_cache_args ${_orvd_common_cache_args})
 if(DEFINED CMAKE_CXX_COMPILER AND NOT "${CMAKE_CXX_COMPILER}" STREQUAL "")
     list(APPEND _orvd_cxx_cache_args
         "-DCMAKE_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}")
+endif()
+
+# The caller may provide product-only package prefixes, for example a custom
+# toolchain or a non-default LLVM installation. The four bundled dependencies
+# must remain isolated from unrelated packages installed in those prefixes.
+# Native AppleClang resolves Homebrew libomp inside the nested product itself.
+set(_orvd_product_cache_args ${_orvd_cxx_cache_args})
+if(DEFINED CMAKE_PREFIX_PATH AND NOT "${CMAKE_PREFIX_PATH}" STREQUAL "")
+    string(REPLACE ";" "|" _orvd_product_prefix_path
+           "${CMAKE_PREFIX_PATH}")
+    list(APPEND _orvd_product_cache_args
+        "-DCMAKE_PREFIX_PATH:STRING=${_orvd_product_prefix_path}")
 endif()
 
 ExternalProject_Add(orvd_dependency_eigen
@@ -164,6 +189,7 @@ add_custom_target(orvd_dependency_licenses ALL
     DEPENDS "${CMAKE_BINARY_DIR}/dependency-licenses.stamp")
 
 ExternalProject_Add(orvd_product
+    LIST_SEPARATOR "|"
     SOURCE_DIR "${_orvd_product_source}"
     DOWNLOAD_COMMAND ""
     UPDATE_COMMAND ""
@@ -175,7 +201,7 @@ ExternalProject_Add(orvd_product
         orvd_dependency_sundials
         orvd_dependency_licenses
     CMAKE_ARGS
-        ${_orvd_cxx_cache_args}
+        ${_orvd_product_cache_args}
         -DBUILD_TESTING:BOOL=OFF
         -DORVD_BUILD_DRAKE_REFERENCE_TESTS:BOOL=OFF
         "-DEigen3_DIR:PATH=${CMAKE_INSTALL_PREFIX}/share/eigen3/cmake"

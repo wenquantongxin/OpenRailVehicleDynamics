@@ -200,7 +200,8 @@ void CheckAChainOfStatedRelations() {
     model.SetGeneralizedPositions(context.get(), positions);
 
     const Eigen::Matrix3d R_W_arm = RotationAboutZ(kFirstAngle);
-    ExpectPoseIs(model.CalcPoseInWorld(*context, arm), R_W_arm,
+    const RigidPose arm_pose = model.CalcPoseInWorld(*context, arm);
+    ExpectPoseIs(arm_pose, R_W_arm,
                  Eigen::Vector3d::Zero(), "the arm turns about the world's z");
 
     const Eigen::Vector3d p_W_elbow = R_W_arm * elbow_pose.p_PoFo_P;
@@ -213,7 +214,8 @@ void CheckAChainOfStatedRelations() {
 
     const Eigen::Vector3d p_W_slider =
         p_W_elbow + R_W_fore * Eigen::Vector3d(kSlide, 0.0, 0.0);
-    ExpectPoseIs(model.CalcPoseInWorld(*context, slider), R_W_fore, p_W_slider,
+    const RigidPose slider_pose = model.CalcPoseInWorld(*context, slider);
+    ExpectPoseIs(slider_pose, R_W_fore, p_W_slider,
                  "the slider slides along its parent's x, not the world's");
 
     ExpectPoseIs(model.CalcPoseInWorld(*context, tip), R_W_fore, p_W_slider,
@@ -224,16 +226,17 @@ void CheckAChainOfStatedRelations() {
                  Eigen::Matrix3d::Identity(), Eigen::Vector3d::Zero(),
                  "the world frame's own pose");
 
-    // Reading straight off the returned temporary, which is how a caller will
-    // most often write it. The value has to survive the end of the statement.
-    const Eigen::Matrix3d rotation_from_temporary =
-        model.CalcPoseInWorld(*context, arm).rotation();
-    const Eigen::Vector3d translation_from_temporary =
-        model.CalcPoseInWorld(*context, slider).translation();
-    ExpectTrue(rotation_from_temporary == R_W_arm,
-               "a rotation read off the returned temporary is the rotation");
-    ExpectTrue(translation_from_temporary == p_W_slider,
-               "and a translation read off one is the translation");
+    // Each copied pose temporary contains exactly the held pose's stored bits.
+    // The rvalue accessor returns a self-contained value; binding that value to
+    // a const reference extends its lifetime beyond destruction of the pose
+    // temporary at the end of the statement.
+    const auto& rotation_from_temporary = RigidPose(arm_pose).rotation();
+    const auto& translation_from_temporary =
+        RigidPose(slider_pose).translation();
+    ExpectTrue(rotation_from_temporary == arm_pose.rotation(),
+               "a rotation read off a temporary preserves its stored value");
+    ExpectTrue(translation_from_temporary == slider_pose.translation(),
+               "a translation read off a temporary preserves its stored value");
 }
 
 void CheckANonIdentityFixedFrameRotationEntersTheChain() {

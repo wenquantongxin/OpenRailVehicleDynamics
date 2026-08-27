@@ -1,5 +1,14 @@
 # ORVD 文档索引
 
+## 构建与安装
+
+| 文档 | 内容 |
+|---|---|
+| [build_and_install/README.md](build_and_install/README.md) | **共同构建入口**：支持矩阵、固定依赖、CMake 平台机制、离线 bundle 和跨平台构建树纪律。 |
+| [build_and_install/LINUX.md](build_and_install/LINUX.md) | **Linux 手册**：Ubuntu 的 GCC／Clang 安装、构建、测试、消费和 CPU／NUMA 控制。 |
+| [build_and_install/WINDOWS.md](build_and_install/WINDOWS.md) | **Windows 手册**：MSYS2 UCRT64／CLANG64 的环境、路径、构建和运行期规则。 |
+| [build_and_install/MACOS.md](build_and_install/MACOS.md) | **macOS 手册**：Apple silicon 上 AppleClang／Homebrew GCC 的 SDK、OpenMP、构建、测试与本机优化。 |
+
 ## 模型与算法
 
 | 文档 | 内容 |
@@ -19,6 +28,7 @@
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **已完成车辆迁移路书**：覆盖 GZ18 首次短窗与不平顺长窗、IRW 被动、IRW 100 Hz 全状态控制与转矩指令调理，以及 G82 现有库跨平台构建与可重定位安装验证；现已封存。 |
 | [planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md](planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md) | **时间积分器迁移路书**：保留 CVODE BDF 默认，优先搬运并资格化 Radau5；Newmark 与 Zhai 仅登记为后续待做。 |
 | [performance/README.md](performance/README.md) | **计算性能文档入口**：统一计时术语、证据存放方式和直接替换纪律。 |
+| [performance/platform_evaluations/MACOS_APPLE_SILICON.md](performance/platform_evaluations/MACOS_APPLE_SILICON.md) | **macOS Apple silicon 计算评价**：工具链、多 worker、四工况计时、资源与固定槽确定性。 |
 | [performance/PERFORMANCE_MIGRATION_ROADMAP.md](performance/PERFORMANCE_MIGRATION_ROADMAP.md) | **现行计算性能路书**：把 GZ18 专项分支中可复用的轮轨接触、Jacobian 和观测优化重新落位到现行主线，按候选性质分层资格并以一个 GZ18、两个 IRW 代表长窗收口。 |
 | [performance/GZ18_PERFORMANCE_BRANCH_ARCHIVE.md](performance/GZ18_PERFORMANCE_BRANCH_ARCHIVE.md) | **GZ18 专项性能分支档案**：压缩记录历史最快组合、热点、已接受／否决方向及向 IRW 迁移的边界；不代表现行主线速度。 |
 | [engineering/FIRST_PARTY_ENGINEERING_RULES.md](engineering/FIRST_PARTY_ENGINEERING_RULES.md) | **第一方工程约束**：命名、兼容层、输入解析、检查深度、热路径与验收依据；即刻生效。 |
@@ -34,19 +44,24 @@
 
 ## 阅读顺序
 
-1. 理解某项物理模型或算法时先读 `models_and_algorithms/`；其中会区分 ORVD 当前合同、外部参考
+1. 构建、安装或排查平台问题时先读 `build_and_install/README.md`，再进入对应操作系统手册；不要
+   从另一平台复制 compiler、SDK、OpenMP prefix 或构建树。
+2. 理解某项物理模型或算法时先读 `models_and_algorithms/`；其中会区分 ORVD 当前合同、外部参考
    语义和待验证问题。
-2. 再读已完成底座路书，确认 ORVD 已有能力及 G46 的边界。
-3. 追查车辆迁移裁决时依次读裁决账本和协作观察簿；不得把其中的假设当作实施命令。
-4. 车辆能力与既有实施边界从两份已完成路书查阅；计算加速只按现行性能路书推进，不能把新范围
+3. 再读已完成底座路书，确认 ORVD 已有能力及 G46 的边界。
+4. 追查车辆迁移裁决时依次读裁决账本和协作观察簿；不得把其中的假设当作实施命令。
+5. 车辆能力与既有实施边界从两份已完成路书查阅；计算加速只按现行性能路书推进，不能把新范围
    回填到已封存 Goal。
-5. 追查性能候选的历史证据时读专项分支档案；不得把历史单次最快数字写成现行产品能力。
-6. 写第一方代码前读第一方工程约束；它即刻生效，不随 Goal 变化。
-7. 遇到长期架构取舍时读对应 ADR。
-8. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
+6. 查看 macOS 编译器、worker、墙钟和内存结果时读 Apple silicon 计算评价。
+7. 追查性能候选的历史证据时读专项分支档案；不得把历史单次最快数字写成现行产品能力。
+8. 写第一方代码前读第一方工程约束；它即刻生效，不随 Goal 变化。
+9. 遇到长期架构取舍时读对应 ADR。
+10. 只有追查某个 Drake 源码事实时才回看旧设计基线，并重新以当前源码验证承重事实。
 
 ## 文档纪律
 
+- 共同构建机制只在 `build_and_install/README.md` 维护，平台专属命令只进入对应系统手册；机器绝对
+  路径和本机构建产物不得成为仓库配置。
 - 模型与算法文档维护当前物理、数学和参考语义，不记录 Goal 流水；外部软件观察必须标明来源，
   未裁决内容不得写成 ORVD 产品合同。
 - G01–G46 与 G47–G82 的历史状态分别由两份已完成路书维护；本索引不重复逐 Goal 完成记录。
