@@ -156,14 +156,13 @@ foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
     endif()
 endforeach()
 
-# Development-time tooling. Not a product module: nothing here is installed or
-# exported, and no product target links it, so it is deliberately absent from
-# the list above and from the boundary gate that list drives.
+# Development-time tooling. These two directories are not product modules:
+# nothing in them is installed or exported, and no product target links them.
 add_subdirectory(tools/profile_conversion)
 add_subdirectory(tools/dynamics_qualification)
 
 option(ORVD_BUILD_SIMPACK_REALTIME_TOOLS
-       "Build the local SIMPACK Realtime adapter tools" OFF)
+       "Build the optional SIMPACK Realtime component and tools" OFF)
 set(ORVD_SIMPACK_ROOT "/opt/Simpack-2021x" CACHE PATH
     "SIMPACK installation root used by the optional Realtime tools")
 if(ORVD_BUILD_SIMPACK_REALTIME_TOOLS)
@@ -187,14 +186,22 @@ if(ORVD_BUILD_SIMPACK_REALTIME_TOOLS)
             "ORVD_SIMPACK_ROOT='${ORVD_SIMPACK_ROOT}'")
     endif()
     find_package(Threads REQUIRED)
+    add_library(SIMPACKRealtime::spck_rt STATIC IMPORTED GLOBAL)
+    set_target_properties(SIMPACKRealtime::spck_rt PROPERTIES
+        IMPORTED_LOCATION "${ORVD_SIMPACK_REALTIME_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES
+            "${ORVD_SIMPACK_REALTIME_INCLUDE_DIRECTORY}")
     add_subdirectory(tools/simpack_realtime)
+    # The high-level runner is an optional installed product component. Keep it
+    # inside the same dependency-boundary audit as the always-built modules.
+    list(APPEND ORVD_PRODUCT_MODULE_DIRECTORIES tools/simpack_realtime)
 endif()
 
 # --- Installable package ---
 # The installable first-party targets form the documented surface. The
 # rigid-tree archive is exported only because a static modelling archive must
-# retain its private implementation link edge; no vendored or adapter header is
-# installed.
+# retain its private implementation link edge; no vendored or proprietary
+# SIMPACK ABI header is installed.
 set(ORVD_INSTALL_TARGETS
     orvd_control
     orvd_actuation
@@ -257,6 +264,11 @@ install(DIRECTORY
 
 set(ORVD_INSTALL_CMAKEDIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/OpenRailVehicleDynamics")
+if(TARGET orvd_irw_simpack_realtime_runner)
+    set(ORVD_SIMPACK_REALTIME_COMPONENT_BUILT TRUE)
+else()
+    set(ORVD_SIMPACK_REALTIME_COMPONENT_BUILT FALSE)
+endif()
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OpenRailVehicleDynamicsConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfig.cmake"
@@ -269,6 +281,21 @@ install(EXPORT OpenRailVehicleDynamicsTargets
         FILE OpenRailVehicleDynamicsTargets.cmake
         NAMESPACE ORVD::
         DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+if(TARGET orvd_irw_simpack_realtime_runner)
+    install(TARGETS orvd_irw_simpack_realtime_runner
+            EXPORT OpenRailVehicleDynamicsSimpackRealtimeTargets
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(DIRECTORY
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/simpack_realtime/include/"
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+            FILES_MATCHING PATTERN "*.h")
+    install(EXPORT OpenRailVehicleDynamicsSimpackRealtimeTargets
+            FILE OpenRailVehicleDynamicsSimpackRealtimeTargets.cmake
+            NAMESPACE ORVD::
+            DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+endif()
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfigVersion.cmake"

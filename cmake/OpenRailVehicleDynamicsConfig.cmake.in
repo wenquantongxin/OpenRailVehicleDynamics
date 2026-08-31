@@ -34,4 +34,42 @@ if(NOT OpenMP_FOUND)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/OpenRailVehicleDynamicsTargets.cmake")
+
+foreach(_orvd_component IN LISTS OpenRailVehicleDynamics_FIND_COMPONENTS)
+    if(NOT _orvd_component STREQUAL "simpack_realtime")
+        set(OpenRailVehicleDynamics_${_orvd_component}_FOUND FALSE)
+    endif()
+endforeach()
+
+if("simpack_realtime" IN_LIST OpenRailVehicleDynamics_FIND_COMPONENTS)
+    set(OpenRailVehicleDynamics_SIMPACK_ROOT "" CACHE PATH
+        "SIMPACK root for the optional ORVD Realtime component")
+    set(_orvd_simpack_realtime_header
+        "${OpenRailVehicleDynamics_SIMPACK_ROOT}/run/realtime/spck_rt.h")
+    set(_orvd_simpack_realtime_library
+        "${OpenRailVehicleDynamics_SIMPACK_ROOT}/run/realtime/linux64/libspck_rt.a")
+    if(@ORVD_SIMPACK_REALTIME_COMPONENT_BUILT@
+       AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/OpenRailVehicleDynamicsSimpackRealtimeTargets.cmake"
+       AND EXISTS "${_orvd_simpack_realtime_header}"
+       AND EXISTS "${_orvd_simpack_realtime_library}")
+        find_package(Threads QUIET)
+        if(Threads_FOUND)
+            if(NOT TARGET SIMPACKRealtime::spck_rt)
+                add_library(SIMPACKRealtime::spck_rt STATIC IMPORTED)
+                set_target_properties(SIMPACKRealtime::spck_rt PROPERTIES
+                    IMPORTED_LOCATION "${_orvd_simpack_realtime_library}"
+                    INTERFACE_INCLUDE_DIRECTORIES
+                        "${OpenRailVehicleDynamics_SIMPACK_ROOT}/run/realtime")
+            endif()
+            include(
+                "${CMAKE_CURRENT_LIST_DIR}/OpenRailVehicleDynamicsSimpackRealtimeTargets.cmake")
+            set(OpenRailVehicleDynamics_simpack_realtime_FOUND TRUE)
+        else()
+            set(OpenRailVehicleDynamics_simpack_realtime_FOUND FALSE)
+        endif()
+    else()
+        set(OpenRailVehicleDynamics_simpack_realtime_FOUND FALSE)
+    endif()
+endif()
+
 check_required_components(OpenRailVehicleDynamics)

@@ -8,7 +8,7 @@
 
 | 平台 | 当前支持的工具链 | 默认注册测试 | 最近完整实测与当前状态 |
 |---|---|---:|---|
-| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 87 | 最近两套工具链均为 `87/87`；本轮 macOS/CMake 收口后待复验 |
+| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 87 | 两套工具链均为 `87/87` |
 | Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | 85 | 当前注册数为 85；本次 macOS 收口后仍需在 Windows 复验 |
 | macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 87 | 两套工具链均为 `87/87` |
 

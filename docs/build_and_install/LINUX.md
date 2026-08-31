@@ -209,20 +209,34 @@ env OMP_NUM_THREADS=12 \
 `tools/dynamics_qualification/run_qualification_with_metrics.py` 是 Linux research wrapper，会使用
 POSIX child resource accounting 和 `sched_setaffinity`。它不代表 Windows/macOS 的功能构建入口。
 
-## 可选 SIMPACK Realtime adapter
+## 可选 SIMPACK Realtime 组件
 
-该工具默认关闭，只在确有本机 SIMPACK 2021x Realtime SDK 时启用：
+该组件默认关闭，只在确有本机 SIMPACK 2021x Realtime SDK 时启用。低层直调 ABI 留在实现内部，
+安装面只导出高层 IRW 机械观测、四轴差动转矩回调和运行汇总：
 
 ```sh
 cmake -S "$ORVD_SOURCE_ROOT" -B /absolute/path/to/simpack-build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_COMPILER=g++-13 \
   -DCMAKE_PREFIX_PATH="$ORVD_GCC_PREFIX" \
+  -DCMAKE_INSTALL_PREFIX=/absolute/path/to/simpack-enabled-orvd \
   -DBUILD_TESTING=OFF \
   -DORVD_BUILD_SIMPACK_REALTIME_TOOLS=ON \
   -DORVD_SIMPACK_ROOT=/absolute/path/to/Simpack-2021x
 
 cmake --build /absolute/path/to/simpack-build
+cmake --install /absolute/path/to/simpack-build
 ```
 
-CMake 在非 Linux 宿主会直接拒绝这一选项。默认 ORVD 产品、安装包和 87 项测试不依赖 SIMPACK。
+下游工程显式请求该组件，并提供同一台机器上的 SIMPACK 安装根目录：
+
+```cmake
+set(OpenRailVehicleDynamics_SIMPACK_ROOT "/absolute/path/to/Simpack-2021x")
+find_package(OpenRailVehicleDynamics CONFIG REQUIRED
+             COMPONENTS simpack_realtime)
+target_link_libraries(my_closed_loop PRIVATE ORVD::simpack_realtime)
+```
+
+只有构建 ORVD 时启用了该组件、安装包包含对应目标、且消费端能找到 `spck_rt.h` 和
+`linux64/libspck_rt.a` 时，请求才会成功。CMake 在非 Linux 宿主会直接拒绝构建选项。默认 ORVD
+产品、安装包和 87 项测试不依赖 SIMPACK。

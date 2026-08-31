@@ -43,11 +43,6 @@ constexpr double kFrozenSamplePeriodSeconds = 0.01;
 constexpr double kFailureDataFlushIntervalSeconds = 1.0;
 constexpr int kSimpackFixedStepIntegratorType = 5;
 
-constexpr std::array<std::string_view, kWheelCount> kWheelNames{
-    "wheel_ff_l", "wheel_ff_r", "wheel_fr_l", "wheel_fr_r",
-    "wheel_rf_l", "wheel_rf_r", "wheel_rr_l", "wheel_rr_r"};
-constexpr std::array<std::string_view, kAxleCount> kAxleNames{
-    "axlebridge_ff", "axlebridge_fr", "axlebridge_rf", "axlebridge_rr"};
 constexpr std::array<std::string_view, kWheelCount> kSimpackWheelNames{
     "axle01_left", "axle01_right", "axle02_left", "axle02_right",
     "axle03_left", "axle03_right", "axle04_left", "axle04_right"};
@@ -86,6 +81,9 @@ struct WheelSpeedObservation final {
 
 struct DecodedObservation final {
     std::vector<double> body_signals;
+    std::array<double, kAxleCount> axle_track_stations_meters{};
+    std::array<double, kAxleCount> axle_lateral_displacements_meters{};
+    std::array<double, kAxleCount> axle_yaw_angles_radians{};
     WheelSpeedObservation wheel_speeds;
     WheelDriveTorqueChannelValues q_vertical_newtons{};
     std::array<std::array<ContactPatchForces, kMaximumContactPatchCount>,
@@ -103,6 +101,7 @@ struct EventCandidate final {
     control::SampledLongitudinalCruiseControllerState controller_state_before;
     WheelDriveTorqueChannelValues conditioner_memory_before_newton_metres{};
     control::SampledLongitudinalCruiseControllerResult controller_result;
+    std::array<double, kAxleCount> differential_torques_newton_metres{};
     WheelDriveTorqueChannelValues requested_torques_newton_metres{};
     actuation::WheelDriveTorqueConditioningResult conditioning_result;
 };
@@ -116,6 +115,9 @@ struct AbiBinding final {
                kWheelCount>
         contact_output_indices{};
     std::vector<BoundSignalColumn> body_signal_columns;
+    std::array<std::size_t, kAxleCount> axle_station_output_indices{};
+    std::array<std::size_t, kAxleCount> axle_lateral_output_indices{};
+    std::array<std::size_t, kAxleCount> axle_yaw_output_indices{};
     std::size_t last_axle_station_output_index{};
 };
 
@@ -365,19 +367,29 @@ void CloseChecked(std::ofstream* output,
         std::ostringstream source;
         source << "$Y_axle" << std::setw(2) << std::setfill('0') << axle + 1;
         result.push_back(
-            {std::string(kAxleNames[axle]) + ".track_station_meters",
+            {"axlebridge_" +
+                 std::string(kIrwSimpackRealtimeAxleIdentifiers[axle]) +
+                 ".track_station_meters",
              source.str() + "_s"});
         result.push_back(
-            {std::string(kAxleNames[axle]) + ".lateral_meters",
+            {"axlebridge_" +
+                 std::string(kIrwSimpackRealtimeAxleIdentifiers[axle]) +
+                 ".lateral_meters",
              source.str() + "_y"});
         result.push_back(
-            {std::string(kAxleNames[axle]) + ".vertical_meters",
+            {"axlebridge_" +
+                 std::string(kIrwSimpackRealtimeAxleIdentifiers[axle]) +
+                 ".vertical_meters",
              source.str() + "_z"});
         result.push_back(
-            {std::string(kAxleNames[axle]) + ".yaw_radians",
+            {"axlebridge_" +
+                 std::string(kIrwSimpackRealtimeAxleIdentifiers[axle]) +
+                 ".yaw_radians",
              source.str() + "_yaw"});
         result.push_back(
-            {std::string(kAxleNames[axle]) + ".pitch_radians",
+            {"axlebridge_" +
+                 std::string(kIrwSimpackRealtimeAxleIdentifiers[axle]) +
+                 ".pitch_radians",
              source.str() + "_pitch"});
     }
     return result;
@@ -510,6 +522,16 @@ void RequireExactNames(const std::vector<std::string>& actual,
         result.body_signal_columns.push_back(
             {signal.heading, RequireIndex(output_indices, signal.output_name)});
     }
+    for (std::size_t axle = 0; axle < kAxleCount; ++axle) {
+        std::ostringstream prefix;
+        prefix << "$Y_axle" << std::setw(2) << std::setfill('0') << axle + 1;
+        result.axle_station_output_indices[axle] =
+            RequireIndex(output_indices, prefix.str() + "_s");
+        result.axle_lateral_output_indices[axle] =
+            RequireIndex(output_indices, prefix.str() + "_y");
+        result.axle_yaw_output_indices[axle] =
+            RequireIndex(output_indices, prefix.str() + "_yaw");
+    }
     result.last_axle_station_output_index =
         RequireIndex(output_indices, "$Y_axle04_s");
     return result;
@@ -544,6 +566,17 @@ void RequireExactNames(const std::vector<std::string>& actual,
     for (const BoundSignalColumn& signal : binding.body_signal_columns) {
         result.body_signals.push_back(outputs[signal.output_index]);
     }
+    for (std::size_t axle = 0; axle < kAxleCount; ++axle) {
+        // The Type-25 outputs are already the source axle-bridge quantities
+        // used by the accepted SIMPACK--ORVD response comparison.  Do not
+        // infer or introduce a second sign conversion here.
+        result.axle_track_stations_meters[axle] =
+            outputs[binding.axle_station_output_indices[axle]];
+        result.axle_lateral_displacements_meters[axle] =
+            outputs[binding.axle_lateral_output_indices[axle]];
+        result.axle_yaw_angles_radians[axle] =
+            outputs[binding.axle_yaw_output_indices[axle]];
+    }
     result.wheel_speeds = ObserveWheelSpeeds(outputs, binding, asset);
     for (std::size_t wheel = 0; wheel < kWheelCount; ++wheel) {
         result.q_vertical_newtons[wheel] =
@@ -574,11 +607,15 @@ void RequireExactNames(const std::vector<std::string>& actual,
 }
 
 [[nodiscard]] EventCandidate ComputeEvent(
+    std::uint64_t ordinal, double time_seconds,
     const DecodedObservation& observation,
     const control::SampledLongitudinalCruiseController& controller,
     const actuation::WheelDriveTorqueCommandConditioner& conditioner,
     const control::SampledLongitudinalCruiseControllerState& controller_state,
-    const WheelDriveTorqueChannelValues& conditioner_memory) {
+    const WheelDriveTorqueChannelValues& conditioner_memory,
+    const WheelDriveTorqueChannelValues& previous_actual_wheel_torques,
+    const IrwSimpackRealtimeDifferentialTorqueCallback&
+        differential_torque_callback) {
     EventCandidate result;
     result.wheel_speeds = observation.wheel_speeds;
     result.controller_state_before = controller_state;
@@ -587,8 +624,31 @@ void RequireExactNames(const std::vector<std::string>& actual,
         observation.wheel_speeds
             .common_forward_circumferential_speed_meters_per_second,
         controller_state);
-    result.requested_torques_newton_metres.fill(
-        result.controller_result.requested_common_wheel_torque_newton_metres);
+    if (differential_torque_callback) {
+        const IrwSimpackRealtimeControlObservation control_observation{
+            ordinal,
+            time_seconds,
+            observation.axle_track_stations_meters,
+            observation.axle_lateral_displacements_meters,
+            observation.axle_yaw_angles_radians,
+            observation.wheel_speeds.raw_simpack_rates_radians_per_second,
+            previous_actual_wheel_torques};
+        result.differential_torques_newton_metres =
+            differential_torque_callback(control_observation);
+    }
+    for (std::size_t axle = 0; axle < kAxleCount; ++axle) {
+        const double differential =
+            result.differential_torques_newton_metres[axle];
+        if (!std::isfinite(differential)) {
+            Reject("differential-torque callback returned a non-finite value");
+        }
+        result.requested_torques_newton_metres[2 * axle] =
+            result.controller_result.requested_common_wheel_torque_newton_metres +
+            differential;
+        result.requested_torques_newton_metres[2 * axle + 1] =
+            result.controller_result.requested_common_wheel_torque_newton_metres -
+            differential;
+    }
     result.conditioning_result = conditioner.Step(
         result.requested_torques_newton_metres,
         observation.wheel_speeds.raw_simpack_rates_radians_per_second,
@@ -618,18 +678,21 @@ void WriteObservationHeader(std::ofstream* output,
     for (const BoundSignalColumn& signal : binding.body_signal_columns) {
         *output << '\t' << signal.heading;
     }
-    for (const std::string_view wheel : kWheelNames) {
-        *output << '\t' << wheel << ".raw_simpack_rate_radians_per_second"
-                << '\t' << wheel
+    for (const std::string_view wheel :
+         kIrwSimpackRealtimeWheelIdentifiers) {
+        *output << '\t' << "wheel_" << wheel
+                << ".raw_simpack_rate_radians_per_second"
+                << '\t' << "wheel_" << wheel
                 << ".forward_circumferential_speed_meters_per_second"
-                << '\t' << wheel << ".contact_patch_count"
-                << '\t' << wheel << ".q_vertical_newtons"
-                << '\t' << wheel << ".normal_force_newtons"
-                << '\t' << wheel << ".longitudinal_force_newtons"
-                << '\t' << wheel << ".lateral_force_newtons"
-                << '\t' << wheel
+                << '\t' << "wheel_" << wheel << ".contact_patch_count"
+                << '\t' << "wheel_" << wheel << ".q_vertical_newtons"
+                << '\t' << "wheel_" << wheel << ".normal_force_newtons"
+                << '\t' << "wheel_" << wheel
+                << ".longitudinal_force_newtons"
+                << '\t' << "wheel_" << wheel << ".lateral_force_newtons"
+                << '\t' << "wheel_" << wheel
                 << ".held_orvd_wheel_torque_newton_metres"
-                << '\t' << wheel
+                << '\t' << "wheel_" << wheel
                 << ".applied_simpack_input_torque_newton_metres";
     }
     *output << '\n';
@@ -687,7 +750,8 @@ std::size_t WritePatches(std::ofstream* output,
                 continue;
             }
             *output << control_grid_ordinal << '\t' << time_seconds << '\t'
-                    << kWheelNames[wheel] << '\t' << patch << '\t'
+                    << "wheel_" << kIrwSimpackRealtimeWheelIdentifiers[wheel]
+                    << '\t' << patch << '\t'
                     << value.normal_newtons << '\t'
                     << value.longitudinal_newtons << '\t'
                     << value.lateral_newtons << '\n';
@@ -706,14 +770,23 @@ void WriteControlHeader(std::ofstream* output) {
             << "\trequested_common_wheel_torque_newton_metres"
             << "\tcontroller_integral_after_meters"
             << "\tcontroller_filtered_output_after_newton_metres";
-    for (const std::string_view wheel : kWheelNames) {
-        *output << '\t' << wheel << ".actual_orvd_wheel_torque_newton_metres"
-                << '\t' << wheel
+    for (const std::string_view axle :
+         kIrwSimpackRealtimeAxleIdentifiers) {
+        *output << '\t' << "axlebridge_" << axle
+                << ".requested_differential_torque_newton_metres";
+    }
+    for (const std::string_view wheel :
+         kIrwSimpackRealtimeWheelIdentifiers) {
+        *output << '\t' << "wheel_" << wheel
+                << ".actual_orvd_wheel_torque_newton_metres"
+                << '\t' << "wheel_" << wheel
                 << ".applied_simpack_input_torque_newton_metres"
-                << '\t' << wheel << ".dynamic_limit_newton_metres"
-                << '\t' << wheel << ".limit_flags"
-                << '\t' << wheel << ".conditioner_memory_before_newton_metres"
-                << '\t' << wheel << ".conditioner_memory_after_newton_metres";
+                << '\t' << "wheel_" << wheel << ".dynamic_limit_newton_metres"
+                << '\t' << "wheel_" << wheel << ".limit_flags"
+                << '\t' << "wheel_" << wheel
+                << ".conditioner_memory_before_newton_metres"
+                << '\t' << "wheel_" << wheel
+                << ".conditioner_memory_after_newton_metres";
     }
     *output << '\n';
 }
@@ -732,6 +805,10 @@ void WriteControlEvent(std::ofstream* output, std::uint64_t event_ordinal,
         << event.controller_result.requested_common_wheel_torque_newton_metres
         << '\t' << event.controller_result.next_state.speed_pi.integral << '\t'
         << event.controller_result.next_state.speed_pi.filtered_output;
+    for (const double differential :
+         event.differential_torques_newton_metres) {
+        *output << '\t' << differential;
+    }
     for (std::size_t wheel = 0; wheel < kWheelCount; ++wheel) {
         *output
             << '\t'
@@ -784,6 +861,9 @@ void WriteMetadata(
            << JsonString(run_configuration.cpu_assignment) << ",\n"
            << "  \"observation_decimation\": "
            << run_configuration.observation_decimation << ",\n"
+           << "  \"differential_torque_callback_configured\": "
+           << (run_configuration.differential_torque_callback ? "true" : "false")
+           << ",\n"
            << "  \"nominal_observation_period_seconds\": "
            << static_cast<double>(run_configuration.observation_decimation) *
                   kFrozenSamplePeriodSeconds
@@ -884,12 +964,14 @@ void ValidateControllerContract(
 
     control::SampledLongitudinalCruiseControllerState controller_state;
     WheelDriveTorqueChannelValues conditioner_memory{};
+    WheelDriveTorqueChannelValues previous_actual_torques{};
     std::vector<double> outputs = instance.ReadOutputs();
     DecodedObservation decoded =
         DecodeObservation(outputs, binding, controller_asset);
     EventCandidate event = ComputeEvent(
-        decoded, controller_asset.controller, conditioner, controller_state,
-        conditioner_memory);
+        0, 0.0, decoded, controller_asset.controller, conditioner,
+        controller_state, conditioner_memory, previous_actual_torques,
+        run_configuration.differential_torque_callback);
     WheelDriveTorqueChannelValues held_torques =
         event.conditioning_result.actual_wheel_torques_newton_metres;
     const std::vector<double> initial_inputs =
@@ -964,13 +1046,13 @@ void ValidateControllerContract(
                 WritePatches(&patches, ordinal, target_time, decoded);
             ++summary.observation_count;
         }
+        event = ComputeEvent(
+            ordinal, target_time, decoded, controller_asset.controller,
+            conditioner, controller_state, conditioner_memory, held_torques,
+            run_configuration.differential_torque_callback);
+        WriteControlEvent(&controls, ordinal, "periodic", target_time, event);
+        ++summary.control_event_count;
         if (!complete && !at_simulation_time_cap) {
-            event = ComputeEvent(decoded, controller_asset.controller,
-                                 conditioner, controller_state,
-                                 conditioner_memory);
-            WriteControlEvent(&controls, ordinal, "periodic", target_time,
-                              event);
-            ++summary.control_event_count;
             held_torques =
                 event.conditioning_result.actual_wheel_torques_newton_metres;
             controller_state = event.controller_result.next_state;

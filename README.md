@@ -178,7 +178,7 @@ ORVD 以三层相互独立的证据建立模型与实现资格：
 
 | 平台 | 工具链 | 默认注册 | 最近完整实测与当前状态 |
 |---|---|---:|---|
-| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 87 | 最近两套工具链均为 `87/87`；本轮 macOS/CMake 收口后待复验 |
+| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 87 | 两套工具链均为 `87/87` |
 | Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；CLANG64 Clang＋LLVM libomp | 85 | 当前注册数为 85；本次 macOS 收口后待在 Windows 复验 |
 | macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 87 | 两套工具链均为 `87/87` |
 
@@ -207,9 +207,13 @@ find_package(OpenRailVehicleDynamics CONFIG REQUIRED)
 target_link_libraries(my_vehicle_simulation PRIVATE ORVD::integrators)
 ```
 
-安装包导出 11 个按依赖层级组织的目标：`control`、`actuation`、`track_geometry`、
+安装包默认导出 11 个按依赖层级组织的目标：`control`、`actuation`、`track_geometry`、
 `track_irregularity`、`wheel_rail_contact`、`configuration`、`multibody_runtime`、
 `multibody_model`、`forces`、`system_assembly` 与 `integrators`，使用时添加 `ORVD::` 命名空间。
+
+Linux 可显式构建并安装 `ORVD::simpack_realtime` 可选组件，以机械观测和四轴差动转矩回调驱动
+本机 SIMPACK Realtime 模型；默认产品及普通安装消费者不依赖 SIMPACK 或其专有 ABI。完整命令见
+[Linux 构建说明](docs/build_and_install/LINUX.md#可选-simpack-realtime-组件)。
 
 Linux、Windows 与 macOS 的依赖安装、离线构建、测试及消费命令见
 [分平台构建与安装说明](docs/build_and_install/README.md)；离线源码包的内部结构见
