@@ -618,7 +618,9 @@ add_executable(verify_radau5_continuous_state_advancer
 orvd_configure_first_party_target(
     verify_radau5_continuous_state_advancer)
 target_include_directories(verify_radau5_continuous_state_advancer
-    PRIVATE ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/external/radau5/include
+        ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_radau5_continuous_state_advancer
     PRIVATE orvd_integrators)
 add_test(NAME verify_radau5_continuous_state_advancer

@@ -2,12 +2,39 @@
 
 #include <cmath>
 #include <exception>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "orvd/radau5/radau5_core.h"
 
 namespace orvd::integrators {
+namespace {
+
+[[nodiscard]] std::optional<ContinuousStateNumericalFailure::Reason>
+ClassifyRadau5AdvanceFailure(radau5::Failure::Reason reason) noexcept {
+    using PublicReason = ContinuousStateNumericalFailure::Reason;
+    switch (reason) {
+        case radau5::Failure::Reason::kNonFiniteRhs:
+            return PublicReason::kNonFiniteRightHandSide;
+        case radau5::Failure::Reason::kTrialBudgetExceeded:
+            return PublicReason::kAdvanceWorkBudgetExhausted;
+        case radau5::Failure::Reason::kStepTooSmall:
+            return PublicReason::kStepSizeUnderflow;
+        case radau5::Failure::Reason::kRepeatedlySingular:
+            return PublicReason::kRepeatedSingularLinearSystem;
+        case radau5::Failure::Reason::kNonFiniteLinearSystem:
+            return PublicReason::kNonFiniteLinearSystem;
+        case radau5::Failure::Reason::kFatalRhs:
+        case radau5::Failure::Reason::kRecoverableRhsExhausted:
+        case radau5::Failure::Reason::kNonFiniteInternalState:
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
 
 class Radau5ContinuousStateAdvancer::Implementation final {
    public:
@@ -103,13 +130,9 @@ class Radau5ContinuousStateAdvancer::Implementation final {
                 "wrong size; nothing was written");
         }
 
+        radau5::InternalStep step;
         try {
-            const radau5::InternalStep step =
-                core_.AdvanceOneAcceptedStepToward(stop_time_seconds);
-            core_.CopyCurrentState(endpoint_continuous_state);
-            return ContinuousStateInternalStep{
-                step.start_time_seconds, step.end_time_seconds,
-                step.reached_stop};
+            step = core_.AdvanceOneAcceptedStepToward(stop_time_seconds);
         } catch (const radau5::Failure& failure) {
             const bool rhs_failure =
                 failure.reason() == radau5::Failure::Reason::kFatalRhs ||
@@ -118,8 +141,18 @@ class Radau5ContinuousStateAdvancer::Implementation final {
             if (rhs_failure && callback_.exception() != nullptr) {
                 std::rethrow_exception(callback_.exception());
             }
-            throw;
+            const auto reason =
+                ClassifyRadau5AdvanceFailure(failure.reason());
+            if (!reason.has_value()) throw;
+            throw ContinuousStateNumericalFailure(
+                *reason, static_cast<int>(failure.reason()),
+                std::string("Radau5 continuous-state advancer: ") +
+                    failure.what());
         }
+        core_.CopyCurrentState(endpoint_continuous_state);
+        return ContinuousStateInternalStep{
+            step.start_time_seconds, step.end_time_seconds,
+            step.reached_stop};
     }
 
     void Reinitialize(

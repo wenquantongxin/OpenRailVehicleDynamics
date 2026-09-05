@@ -47,6 +47,31 @@ int RequireSupportedMaximumBdfOrder(internal::MaximumBdfOrder order) {
         " failed with SUNDIALS flag " + std::to_string(flag));
 }
 
+[[noreturn]] void ThrowCvodeAdvanceFailure(int flag) {
+    using Reason = ContinuousStateNumericalFailure::Reason;
+    Reason reason;
+    switch (flag) {
+        case CV_TOO_MUCH_WORK:
+            reason = Reason::kAdvanceWorkBudgetExhausted;
+            break;
+        case CV_TOO_MUCH_ACC:
+            reason = Reason::kRequestedAccuracyUnattainable;
+            break;
+        case CV_ERR_FAILURE:
+            reason = Reason::kRepeatedErrorTestFailure;
+            break;
+        case CV_CONV_FAILURE:
+            reason = Reason::kRepeatedNonlinearConvergenceFailure;
+            break;
+        default:
+            ThrowSundialsFailure("CVode", flag);
+    }
+    throw ContinuousStateNumericalFailure(
+        reason, flag,
+        "CVODE continuous-state advancer: CVode failed with SUNDIALS flag " +
+            std::to_string(flag));
+}
+
 void RequireCvodeSuccess(int flag, const char* operation) {
     if (flag != CV_SUCCESS) {
         ThrowSundialsFailure(operation, flag);
@@ -283,7 +308,7 @@ class CvodeContinuousStateAdvancer::Implementation final {
             if (exception != nullptr) {
                 std::rethrow_exception(exception);
             }
-            ThrowSundialsFailure("CVode", advance_flag);
+            ThrowCvodeAdvanceFailure(advance_flag);
         }
         // A recoverable RHS refusal may have preceded this successful step.
         // Do not let that rejected trial escape after CVODE has reduced its

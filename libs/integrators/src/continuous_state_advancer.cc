@@ -7,6 +7,12 @@
 
 namespace orvd::integrators {
 
+ContinuousStateNumericalFailure::ContinuousStateNumericalFailure(
+    Reason reason, int backend_code, std::string diagnostic)
+    : std::runtime_error(std::move(diagnostic)),
+      reason_(reason),
+      backend_code_(backend_code) {}
+
 ContinuousStateErrorTolerances::ContinuousStateErrorTolerances(
     double relative_tolerance,
     Eigen::VectorXd component_absolute_tolerances)

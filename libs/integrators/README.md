@@ -8,6 +8,16 @@ CVODE 是已选定的首个且当前唯一准入后端。Radau5 已有源码树�
 资格期，不构成公开支持承诺。事务语义是这一层的核心义务：失败的公开推进不得
 污染已接受的状态，成功到达边界后恰好提交一次；CVODE 内部的自适应拒步不等同于公开推进失败。
 
+真实正长度推进中，只有后端明确列举的纯数值失败会以
+`ContinuousStateNumericalFailure` 暴露。调用方按稳定的 `reason()` 分类；`backend_code()` 只保留当前
+后端的原始诊断值，不能脱离后端身份解释。RHS 抛出的原始异常始终优先传播，重初始化、同步及辅助 API
+失败也不经该类型改写；未知返回码继续作为普通错误响亮失败。
+
+当前 CVODE 适配器用 `CV_ONE_STEP` 逐个接受内部步，因此 `CV_TOO_MUCH_WORK` 对应的
+`kAdvanceWorkBudgetExhausted` 在现有调用模式下不会触发；该映射保留给后端语义完整性及未来可能的
+`CV_NORMAL` 调用。系统层单次公开推进的 1,000,000 内部步上限仍是防止无界推进的普通致命护栏，不能据此
+改写为可恢复数值结局。
+
 ## C++ 中的并列后端抽象
 
 `SystemContinuousStateAdvancer` 只负责 accepted/candidate 事务，并且只调用后端中立的

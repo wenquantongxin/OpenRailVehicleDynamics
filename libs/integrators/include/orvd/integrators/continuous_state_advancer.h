@@ -7,10 +7,43 @@
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <stdexcept>
+#include <string>
 
 #include <Eigen/Dense>
 
 namespace orvd::integrators {
+
+/// A known numerical failure from a positive-length backend advance.
+///
+/// `reason()` is the backend-neutral classification intended for caller
+/// decisions. `backend_code()` preserves the backend's original diagnostic
+/// value; its integer namespace is backend-specific and must not be interpreted
+/// without the backend identity recorded by the caller.
+class ContinuousStateNumericalFailure final : public std::runtime_error {
+   public:
+    enum class Reason {
+        kAdvanceWorkBudgetExhausted,
+        kRequestedAccuracyUnattainable,
+        kRepeatedErrorTestFailure,
+        kRepeatedNonlinearConvergenceFailure,
+        kNonFiniteRightHandSide,
+        kStepSizeUnderflow,
+        kRepeatedSingularLinearSystem,
+        kNonFiniteLinearSystem,
+    };
+
+    ContinuousStateNumericalFailure(Reason reason,
+                                    int backend_code,
+                                    std::string diagnostic);
+
+    [[nodiscard]] Reason reason() const noexcept { return reason_; }
+    [[nodiscard]] int backend_code() const noexcept { return backend_code_; }
+
+   private:
+    Reason reason_;
+    int backend_code_;
+};
 
 /// Numerical error tolerances for one dynamically sized continuous state.
 class ContinuousStateErrorTolerances {
@@ -130,6 +163,8 @@ class ContinuousStateAdvancer {
     /// reinitialization before another step.
     /// @throws std::invalid_argument if the stop is non-finite or earlier than
     /// `current_time_seconds()`, or if the endpoint output has the wrong size.
+    /// @throws ContinuousStateNumericalFailure if a known numerical condition
+    /// prevents the backend from completing the requested internal advance.
     /// @throws std::logic_error if a prior backend failure requires
     /// reinitialization.
     [[nodiscard]] virtual ContinuousStateInternalStep

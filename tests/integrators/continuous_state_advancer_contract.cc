@@ -250,6 +250,68 @@ class ToggleFailureRhs final : public ContinuousStateRhs {
     int evaluation_count_{0};
 };
 
+class NonFiniteToggleRhs final : public ContinuousStateRhs {
+   public:
+    [[nodiscard]] int continuous_state_size() const override { return 1; }
+
+    void CalcTimeDerivatives(
+        double, const Eigen::Ref<const Eigen::VectorXd>& state,
+        Eigen::Ref<Eigen::VectorXd> derivatives) override {
+        derivatives[0] = return_nonfinite_
+                             ? std::numeric_limits<double>::quiet_NaN()
+                             : -state[0];
+    }
+
+    void set_return_nonfinite(bool value) noexcept {
+        return_nonfinite_ = value;
+    }
+
+   private:
+    bool return_nonfinite_{false};
+};
+
+class DeliberateRecoverableStageFailure final : public std::runtime_error {
+   public:
+    DeliberateRecoverableStageFailure()
+        : std::runtime_error("deliberate recoverable stage failure") {}
+};
+
+class PersistentRecoverableStageRhs final : public ContinuousStateRhs {
+   public:
+    [[nodiscard]] int continuous_state_size() const override { return 1; }
+
+    void CalcTimeDerivatives(
+        double time_seconds,
+        const Eigen::Ref<const Eigen::VectorXd>& state,
+        Eigen::Ref<Eigen::VectorXd> derivatives) override {
+        if (enabled_ && time_seconds > accepted_time_seconds_) {
+            throw DeliberateRecoverableStageFailure();
+        }
+        derivatives[0] = -state[0];
+    }
+
+    [[nodiscard]] bool IsRecoverableFailure(
+        const std::exception_ptr& failure) const noexcept override {
+        if (failure == nullptr) return false;
+        try {
+            std::rethrow_exception(failure);
+        } catch (const DeliberateRecoverableStageFailure&) {
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    void DisableAndMoveAcceptedTime(double accepted_time_seconds) noexcept {
+        enabled_ = false;
+        accepted_time_seconds_ = accepted_time_seconds;
+    }
+
+   private:
+    bool enabled_{true};
+    double accepted_time_seconds_{};
+};
+
 Eigen::Vector2d ConstantAccelerationState(double initial_time,
                                           const Eigen::Vector2d& initial,
                                           double acceleration, double time) {
@@ -678,6 +740,127 @@ void CheckFatalFailurePoisonAndReinitialization(
                "a reinitialized backend advances from the committed state");
 }
 
+void CheckNumericalFailureClassification(
+    ContinuousStateAdvancerFactory factory,
+    ContinuousStateNumericalFailure::Reason expected_reason,
+    int expected_backend_code) {
+    NonFiniteToggleRhs rhs;
+    Eigen::VectorXd initial(1);
+    initial[0] = 1.0;
+    auto advancer = factory(rhs, 0.0, initial, MakeTolerances(1));
+    Eigen::VectorXd output(1);
+    const auto accepted_step =
+        advancer->AdvanceOneInternalStepToward(0.1, output);
+    const double accepted_time = accepted_step.end_time_seconds;
+    Eigen::VectorXd accepted_state(1);
+    advancer->CopyCurrentState(accepted_state);
+    const auto statistics_before_failure = advancer->integration_statistics();
+    Expect(accepted_time > 0.0 &&
+               advancer->dense_output_interval().has_value(),
+           "a control advance establishes an endpoint before a named "
+           "numerical failure");
+
+    rhs.set_return_nonfinite(true);
+    output[0] = 91.0;
+    bool classified = false;
+    try {
+        static_cast<void>(advancer->AdvanceOneInternalStepToward(
+            accepted_time + 0.1, output));
+    } catch (const ContinuousStateNumericalFailure& failure) {
+        classified = failure.reason() == expected_reason &&
+                     failure.backend_code() == expected_backend_code;
+    } catch (...) {
+    }
+    Expect(classified,
+           "a normal-return non-finite RHS receives the named numerical "
+           "classification and original backend code");
+    Eigen::VectorXd observed_state(1);
+    advancer->CopyCurrentState(observed_state);
+    const auto statistics_after_failure = advancer->integration_statistics();
+    Expect(output[0] == 91.0 &&
+               advancer->current_time_seconds() == accepted_time &&
+               observed_state[0] == accepted_state[0] &&
+               !advancer->dense_output_interval().has_value() &&
+               statistics_after_failure.successful_internal_step_count ==
+                   statistics_before_failure.successful_internal_step_count &&
+               statistics_after_failure.right_hand_side_evaluation_count >
+                   statistics_before_failure.right_hand_side_evaluation_count,
+           "a named numerical failure preserves the accepted endpoint and "
+           "caller output while invalidating dense output");
+
+    output[0] = 92.0;
+    ExpectLogicError(
+        [&] {
+            static_cast<void>(advancer->AdvanceOneInternalStepToward(
+                accepted_time + 0.1, output));
+        },
+        "a named numerical failure poisons reuse until reinitialization");
+    Expect(output[0] == 92.0,
+           "a poisoned post-failure call preserves caller storage");
+
+    rhs.set_return_nonfinite(false);
+    advancer->ReinitializeAfterExternalChange(accepted_time, accepted_state);
+    const auto recovered = advancer->AdvanceOneInternalStepToward(
+        accepted_time + 1.0e-6, output);
+    Expect(recovered.start_time_seconds == accepted_time &&
+               recovered.end_time_seconds > accepted_time &&
+               recovered.end_time_seconds <= accepted_time + 1.0e-6 &&
+               advancer->current_time_seconds() == recovered.end_time_seconds,
+           "successful reinitialization reopens advancement after a named "
+           "numerical failure");
+}
+
+void CheckRecoverableExceptionCausality(
+    ContinuousStateAdvancerFactory factory) {
+    PersistentRecoverableStageRhs rhs;
+    Eigen::VectorXd initial(1);
+    initial[0] = 1.0;
+    auto advancer = factory(rhs, 0.0, initial, MakeTolerances(1));
+    Eigen::VectorXd output = Eigen::VectorXd::Constant(1, 93.0);
+    bool original_type_rethrown = false;
+    try {
+        static_cast<void>(
+            advancer->AdvanceOneInternalStepToward(0.1, output));
+    } catch (const DeliberateRecoverableStageFailure&) {
+        original_type_rethrown = true;
+    } catch (...) {
+    }
+    Eigen::VectorXd observed_state(1);
+    advancer->CopyCurrentState(observed_state);
+    Expect(original_type_rethrown,
+           "persistent recoverable RHS refusal retains its original C++ "
+           "exception type");
+    Expect(output[0] == 93.0 && advancer->current_time_seconds() == 0.0 &&
+               observed_state[0] == initial[0] &&
+               !advancer->dense_output_interval().has_value() &&
+               advancer->integration_statistics()
+                       .successful_internal_step_count == 0,
+           "recoverable RHS exhaustion preserves endpoint, output and dense "
+           "state atomically");
+
+    output[0] = 94.0;
+    ExpectLogicError(
+        [&] {
+            static_cast<void>(
+                advancer->AdvanceOneInternalStepToward(0.1, output));
+        },
+        "recoverable RHS exhaustion poisons reuse until reinitialization");
+    Expect(output[0] == 94.0,
+           "a poisoned post-exhaustion call preserves caller storage");
+
+    rhs.DisableAndMoveAcceptedTime(0.0);
+    advancer->ReinitializeAfterExternalChange(0.0, initial);
+    const auto recovered =
+        advancer->AdvanceOneInternalStepToward(1.0e-6, output);
+    Expect(recovered.start_time_seconds == 0.0 &&
+               recovered.end_time_seconds > 0.0 &&
+               recovered.end_time_seconds <= 1.0e-6 &&
+               advancer->current_time_seconds() ==
+                   recovered.end_time_seconds,
+           "successful reinitialization reopens advancement after recoverable "
+           "RHS exhaustion");
+}
+
 }  // namespace
 
 int RunContinuousStateAdvancerContract(
@@ -688,6 +871,17 @@ int RunContinuousStateAdvancerContract(
     CheckLinearOscillator(factory);
     CheckBackendTimePropagation(factory);
     CheckFatalFailurePoisonAndReinitialization(factory);
+    return failure_count;
+}
+
+int RunContinuousStateFailureContract(
+    ContinuousStateAdvancerFactory factory,
+    ContinuousStateNumericalFailure::Reason expected_nonfinite_rhs_reason,
+    int expected_backend_code) {
+    failure_count = 0;
+    CheckNumericalFailureClassification(
+        factory, expected_nonfinite_rhs_reason, expected_backend_code);
+    CheckRecoverableExceptionCausality(factory);
     return failure_count;
 }
 

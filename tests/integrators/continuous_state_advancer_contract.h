@@ -22,4 +22,11 @@ using ContinuousStateAdvancerFactory =
 [[nodiscard]] int RunContinuousStateAdvancerContract(
     ContinuousStateAdvancerFactory factory);
 
+/// Runs failure semantics shared by every backend while allowing the concrete
+/// adapter to supply its expected non-finite-RHS classification and raw code.
+[[nodiscard]] int RunContinuousStateFailureContract(
+    ContinuousStateAdvancerFactory factory,
+    ContinuousStateNumericalFailure::Reason expected_nonfinite_rhs_reason,
+    int expected_backend_code);
+
 }  // namespace orvd::integrators::test

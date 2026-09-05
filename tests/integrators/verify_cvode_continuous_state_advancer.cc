@@ -25,9 +25,17 @@ MakePublicCvodeAdvancer(
 }  // namespace
 
 int main() {
+    // SUNDIALS 7.7.0 reports a normal-return, non-finite RHS through
+    // CV_CONV_FAILURE.
+    constexpr int kCvodeConvergenceFailureCode = -4;
     const int failure_count =
         orvd::integrators::test::RunContinuousStateAdvancerContract(
-            &MakePublicCvodeAdvancer);
+            &MakePublicCvodeAdvancer) +
+        orvd::integrators::test::RunContinuousStateFailureContract(
+            &MakePublicCvodeAdvancer,
+            orvd::integrators::ContinuousStateNumericalFailure::Reason::
+                kRepeatedNonlinearConvergenceFailure,
+            kCvodeConvergenceFailureCode);
     if (failure_count != 0) {
         std::printf(
             "CVODE continuous-state advancer contract checks failed: %d\n",
