@@ -235,6 +235,13 @@ class WheelRailContactForcePlan {
     [[nodiscard]] const track_geometry::TrackGeometry& track_geometry() const {
         return line_;
     }
+    // The immutable field owned by this plan, or null for a zero-irregularity
+    // scenario. The borrowed pointer remains valid only for this plan's
+    // lifetime.
+    [[nodiscard]] const wheel_rail_contact::TrackIrregularityField*
+    track_irregularity_field() const noexcept {
+        return track_irregularity_.get();
+    }
     [[nodiscard]] int carrier_count() const {
         return static_cast<int>(carriers_.size());
     }

@@ -633,6 +633,8 @@ int main(int argc, char** argv) {
         orvd::wheel_rail_contact::TrackIrregularityField>(
         fixture_stations, fixture_lateral, fixture_stations,
         fixture_vertical);
+    const auto* const fixture_irregularity_address =
+        fixture_irregularity.get();
     constexpr double kFixtureGrade = 0.02;
     const auto yawed_scenario = AssembleGz18ContactScenario(
         vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
@@ -643,15 +645,20 @@ int main(int argc, char** argv) {
         std::filesystem::path(argv[4]), kReferenceStationMeters);
     const auto* yawed_plan =
         yawed_scenario->vehicle_system().contact_force_plan();
+    const auto* yawed_zero_field_plan =
+        yawed_zero_field_scenario->vehicle_system().contact_force_plan();
+    Require(yawed_plan->track_irregularity_field() ==
+                fixture_irregularity_address,
+            "the contact plan did not expose its owned irregularity field");
+    Require(yawed_zero_field_plan->track_irregularity_field() == nullptr,
+            "the zero-irregularity contact plan exposed a field");
     auto yawed_workspace = yawed_plan->CreateWorkspace();
     const auto yawed_wrenches =
         EvaluateContactForces(*yawed_scenario, *yawed_workspace);
     const auto yawed_observations =
         EvaluateContactObservations(*yawed_scenario, *yawed_workspace);
     auto yawed_zero_field_workspace =
-        yawed_zero_field_scenario->vehicle_system()
-            .contact_force_plan()
-            ->CreateWorkspace();
+        yawed_zero_field_plan->CreateWorkspace();
     const auto yawed_zero_field_wrenches = EvaluateContactForces(
         *yawed_zero_field_scenario, *yawed_zero_field_workspace);
 
