@@ -13,8 +13,12 @@
 
 | 文档 | 内容 |
 |---|---|
-| [models_and_algorithms/README.md](models_and_algorithms/README.md) | **模型与算法入口**：轨道几何、轮轨接触、车辆动力学、控制与估计、数值方法的物理和数学说明。 |
-| [models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md](models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md) | **轨道竖向剖面建模**：恒坡段、竖曲线、平面线形和超高的三维耦合，以及首轮产品与整车资格合同。 |
+| [models_and_algorithms/README.md](models_and_algorithms/README.md) | **理论模型与计算算法入口**：轨道几何、轮轨接触、车辆动力学、控制与估计、数值方法的物理和数学说明；含理论文档边界、形式约定与中英双语索引。 |
+| [models_and_algorithms/CONVENTIONS_AND_NOTATION.md](models_and_algorithms/CONVENTIONS_AND_NOTATION.md) | **坐标与记号约定**：轨道惯性系与轨型系、正号、站位与弧长、位姿记号、`[q;v;z]` 状态块、单位后缀与中英术语表。 |
+| [models_and_algorithms/track_geometry/TRACK_GEOMETRY_AND_FRAMES.md](models_and_algorithms/track_geometry/TRACK_GEOMETRY_AND_FRAMES.md) | **线路几何与轨道坐标系**：标量剖面与缓和段、五次接缝、平面积分、轨型系与站位导数恒等式、切线延长、种子式局部投影。 |
+| [models_and_algorithms/wheel_rail_contact/](models_and_algorithms/wheel_rail_contact/) | **轮轨接触链八篇**：型面与插值、位姿归约、接触几何、法向力、蠕滑与接触系、Kalker 系数、FASTSIM、单轮模型组装与成对扳手。 |
+| [models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md](models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md) | **轨道竖向剖面建模**：恒坡段、竖曲线以及平面线形、纵坡和超高的三维耦合。 |
+| [models_and_algorithms/track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md](models_and_algorithms/track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md) | **轨道不平顺谱**：空间频率、FRA/AAR 谱、有限频带、随机实现和多方向关系。 |
 | [models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md](models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md) | **时间积分方法**：BDF、Radau5、Newmark 与 Zhai 的计算公式、误差稳定性及 ORVD 状态适用边界。 |
 
 ## 当前权威文件
@@ -46,8 +50,8 @@
 
 1. 构建、安装或排查平台问题时先读 `build_and_install/README.md`，再进入对应操作系统手册；不要
    从另一平台复制 compiler、SDK、OpenMP prefix 或构建树。
-2. 理解某项物理模型或算法时先读 `models_and_algorithms/`；其中会区分 ORVD 当前合同、外部参考
-   语义和待验证问题。
+2. 理解某项物理模型或计算算法时先读 `models_and_algorithms/`；其中说明理论、离散算法、适用条件
+   及其与 ORVD 源码的对应关系。接口、配置、测试、实验和性能资料分别进入相应技术目录。
 3. 再读已完成底座路书，确认 ORVD 已有能力及 G46 的边界。
 4. 追查车辆迁移裁决时依次读裁决账本和协作观察簿；不得把其中的假设当作实施命令。
 5. 车辆能力与既有实施边界从两份已完成路书查阅；计算加速只按现行性能路书推进，不能把新范围
@@ -62,8 +66,9 @@
 
 - 共同构建机制只在 `build_and_install/README.md` 维护，平台专属命令只进入对应系统手册；机器绝对
   路径和本机构建产物不得成为仓库配置。
-- 模型与算法文档维护当前物理、数学和参考语义，不记录 Goal 流水；外部软件观察必须标明来源，
-  未裁决内容不得写成 ORVD 产品合同。
+- 模型与算法文档只维护物理模型、数学推导、数值算法、理论近似及简洁的源码映射，不承载 API、
+  配置、异常、测试证据、实验结果、性能实测或 Goal 流水；尚未实现的算法标为“仅理论”。
+- 理论出处确有必要时在相关正文就地给出简短链接；现阶段不建立集中或逐篇文献表。
 - G01–G46 与 G47–G82 的历史状态分别由两份已完成路书维护；本索引不重复逐 Goal 完成记录。
 - 计算性能实施状态、顺序和完成门只进入性能路书；历史研究结论进入性能档案，不建立平行规划。
 - 车辆讨论裁决与技术观察分别进入账本和观察簿；新的车辆功能须另立权威路书，不重新打开旧 Goal。
