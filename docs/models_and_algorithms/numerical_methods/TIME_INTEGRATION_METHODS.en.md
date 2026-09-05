@@ -1,12 +1,14 @@
 [中文](TIME_INTEGRATION_METHODS.md)
 
-# BDF, Radau5, Newmark, and Zhai time-integration methods
+# BDF, Radau5, Newmark and Zhai time-integration methods
 
-This chapter explains how BDF, the three-stage fifth-order Radau IIA method, Newmark methods, and Zhai's simple explicit method advance continuous equations of motion to discrete states. It also discusses their error, stability, and compatibility with ORVD's state structure. ORVD currently uses CVODE BDF2 as its default backend and also retains source-tree BDF5 and Radau5 implementations; Newmark and Zhai have not been implemented and are marked **theory only** here.
+This chapter explains how BDF, the three-stage fifth-order Radau IIA method, Newmark methods and Zhai's simple explicit method advance continuous equations of motion to discrete states. It also discusses their error, stability and compatibility with ORVD's state structure. The ORVD production system currently uses CVODE BDF with maximum order 2, while the source tree also contains CVODE BDF with maximum order 5 and a Radau5 implementation. Newmark and Zhai have not been implemented and are marked **theory only** here.
 
 ## 1. Equation forms and common notation
 
 ### 1.1 First-order state equation
+
+This chapter follows [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md) with a single substitution: the continuous state written there as $x$ is written here as $y$, following the usual notation for a first-order initial-value problem, and its dimension is written $n_x$, in the same family as that chapter's $n_q$ and $n_v$. The capital letter $N$ is reserved here for the position-derivative map $N(q)$.
 
 BDF and Radau5 act directly on the first-order initial-value problem
 
@@ -15,7 +17,7 @@ $$
 \qquad
 y(t_0)=y_0,
 \qquad
-y\in\mathbb R^N.
+y\in\mathbb R^{n_x}.
 $$
 
 ORVD writes its continuous state as
@@ -32,23 +34,29 @@ N(q)v\\a(t,q,v,z)\\g(t,q,v,z)
 \end{bmatrix}.
 $$
 
-Here $q$ is generalized position, $v$ is generalized velocity, and $z$ contains first-order internal variables of force elements such as Maxwell spring-damper series elements. When a free body's orientation is represented by a quaternion, $q$ and $v$ have different dimensions and the configuration kinematics are $\dot q=N(q)v$; the complete state therefore cannot be reduced to $\dot q=v$. The state-to-derivative mapping is defined in [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h). For example, a Maxwell force state satisfies
+Here $q$ is generalized position, $v$ is generalized velocity and $z$ contains the first-order internal variables of force elements such as series spring-viscous-damper (Maxwell-type) elements. When a free body's orientation is represented by a quaternion, $q$ and $v$ have different dimensions and the configuration kinematics are $\dot q=N(q)v$; the complete state therefore cannot be reduced to $\dot q=v$.
+
+Different parts of this right-hand side live in different modules. The multibody map $[q;v]\mapsto[N(q)v;\dot v]$ is expressed by `MultibodyModel::CalcStateTimeDerivatives` in [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h). The complete $[q;v;z]$ derivative is assembled by `CompiledSystemPlan::CalcStateTimeDerivatives` in [`compiled_system_plan.cc`](../../../libs/system_assembly/src/compiled_system_plan.cc); `SystemRhsBridge::CalcTimeDerivatives` in [`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) installs the integrator's $(t,y)$ in the trial context and delegates to that assembly. The series spring-viscous-damper element and its force-state equation are defined by `SeriesSpringViscousDamper` in [`vehicle_force_elements.h`](../../../libs/forces/include/orvd/forces/vehicle_force_elements.h), and the derivative of that force state is formed by `VehicleForcePlan::CalcAppliedForces` in [`vehicle_force_plan.cc`](../../../libs/forces/src/vehicle_force_plan.cc):
 
 $$
-\dot F=K v_{\mathrm{rel}}-\frac{K}{C}F.
+\dot F=k\,v_{\mathrm{rel}}-\frac{k}{c}F.
 $$
+
+A spring in series with a viscous damper makes the force itself a state, because the two share one force while their deflections differ. Here $k$ and $c$ are the scalar series stiffness and series damping of that element, and $v_{\mathrm{rel}}$ is the relative velocity of its two ends along the acting axis. The time constant is $c/k$. Lower-case $k$ and $c$ denote element-level scalars throughout this chapter, while capital $M$, $C$ and $K$ denote system-level matrices only.
 
 ### 1.2 Second-order mechanical equation
 
 Classical Newmark and Zhai methods are usually formulated from the second-order mechanical equation
 
 $$
-M(q)a+C(q,v)v+f_{\mathrm{int}}(q,v,z)=p(t),
+M(u)a+C(u,v)v+f_{\mathrm{int}}(u,v,z)=p(t),
 \qquad
-\dot q=v.
+\dot u=v.
 $$
 
-This form is natural for Euclidean coordinates in which displacement, velocity, and acceleration have equal dimensions. A general multibody system must instead update its configuration through a tangent-space increment and a retraction, while first-order internal variables $z$ require their own discrete equations. Without these extensions, directly applying a first-order integration formula to $[q;v;z]$ produces a different first-order state method rather than the classical Newmark or Zhai method.
+Here $u$ is Euclidean displacement, used as in sections 4 and 5 and distinct from the generalized position $q$ of section 1.1; $a$ is acceleration and $p$ is the external load. $M$ is the system mass matrix. The product $C(u,v)v$ collects velocity-dependent inertial terms such as Coriolis and centrifugal effects together with viscous damping. $f_{\mathrm{int}}$ holds the remaining internal forces, including elastic restoring forces and element forces that depend on the internal variables $z$.
+
+This form is natural for Euclidean coordinates in which displacement, velocity and acceleration have equal dimensions. A general multibody system must instead update its configuration through a tangent-space increment and a retraction, while first-order internal variables $z$ require their own discrete equations. Without these extensions, directly applying a first-order integration formula to $[q;v;z]$ produces a different first-order state method rather than the classical Newmark or Zhai method.
 
 ### 1.3 Error scaling
 
@@ -58,7 +66,7 @@ $$
 w_i=\frac{1}{\operatorname{rtol}|y_i|+\operatorname{atol}_i},
 \qquad
 \lVert e\rVert_{\mathrm{WRMS}}
-=\sqrt{\frac{1}{N}\sum_{i=1}^{N}(w_i e_i)^2}.
+=\sqrt{\frac{1}{n_x}\sum_{i=1}^{n_x}(w_i e_i)^2}.
 $$
 
 A local error estimate in such a weighted norm determines step-size adaptation. Different methods use different error estimators and controllers, so equal `rtol` and `atol` values do not imply equal global errors.
@@ -98,20 +106,23 @@ These coefficients apply only to a fixed uniform step size. Variable-step BDF mu
 After collecting the historical terms, the new endpoint can be represented by the nonlinear residual
 
 $$
-R(y_{n+1})=y_{n+1}-\gamma f(t_{n+1},y_{n+1})-a_n=0,
+\mathcal F_{\mathrm{BDF}}(y_{n+1})
+=y_{n+1}-\gamma_{\mathrm{BDF}}f(t_{n+1},y_{n+1})
+-y_{n+1}^{\mathrm{hist}}=0,
 $$
 
-where $a_n$ is determined by accepted history and $\gamma$ by the current step size and BDF coefficients. Newton or modified Newton iteration solves
+where the history vector $y_{n+1}^{\mathrm{hist}}$ is determined by accepted states and $\gamma_{\mathrm{BDF}}$ by the current step size and BDF coefficients. Newton or modified Newton iteration solves
 
 $$
-\left(I-\gamma J\right)\delta=-R,
+\left(I_{n_x}-\gamma_{\mathrm{BDF}}J\right)\delta
+=-\mathcal F_{\mathrm{BDF}},
 \qquad
 J=\frac{\partial f}{\partial y},
 \qquad
 y^{(m+1)}=y^{(m)}+\delta.
 $$
 
-An adaptive BDF step performs historical extrapolation, nonlinear solution, local-error estimation, and selection of the next step size and order. The method history advances only after the new endpoint is accepted. When the state equation or an externally held quantity changes, the old history no longer represents the same initial-value problem and must be reconstructed from the current endpoint.
+An adaptive BDF step performs historical extrapolation, nonlinear solution, local-error estimation and selection of the next step size and order. The method history advances only after the new endpoint is accepted. When the state equation or an externally held quantity changes, the old history no longer represents the same initial-value problem and must be reconstructed from the current endpoint.
 
 ### 2.3 Accuracy and stability
 
@@ -122,7 +133,7 @@ An adaptive BDF step performs historical extrapolation, nonlinear solution, loca
 
 ### 2.4 Implementation in ORVD
 
-[`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) constructs the CVODE backend with `CV_BDF` and fixes the maximum order to either 2 or 5. The public system advancer selects BDF2, while BDF5 is a named source-tree implementation. [`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) maps the complete $[q;v;z]$ state to the multibody-dynamics right-hand side, and [`continuous_state_advancer.h`](../../../libs/integrators/include/orvd/integrators/continuous_state_advancer.h) carries the common mathematical results for an accepted internal step and dense output over the latest step.
+`CvodeContinuousStateAdvancer` in [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) constructs the CVODE backend with `CV_BDF` and fixes the maximum order to either 2 or 5. The production system currently uses the maximum-order-two form, while the source tree also retains the maximum-order-five form. The map from the complete $[q;v;z]$ state to the system right-hand side is `SystemRhsBridge::CalcTimeDerivatives`, cited in section 1.1. Dense output is supplied by CVODE's history polynomial over the most recent internal step.
 
 ## 3. Radau5: three-stage fifth-order Radau IIA
 
@@ -173,17 +184,18 @@ $$
 
 ### 3.2 Coupled Newton solution
 
-Because $A$ is not lower triangular, the three stages form a coupled nonlinear system. The unreduced simplified-Newton linearization is
+Because $A$ is not lower triangular, the three stages form a coupled nonlinear system. Stack the three stage residuals as $\mathcal F_{\mathrm{stage}}$. The unreduced simplified-Newton linearization is
 
 $$
-\left(I_3\otimes I_N-hA\otimes J\right)\Delta=-R.
+\left(I_3\otimes I_{n_x}-hA\otimes J\right)\Delta
+=-\mathcal F_{\mathrm{stage}}.
 $$
 
-It is unnecessary to factor this full $3N\times3N$ system. The one real eigenvalue and one complex-conjugate pair of $A^{-1}$ transform it into one real $N\times N$ system and one complex $N\times N$ system. The right-hand side is still evaluated at each stage state, while the Jacobian and linear factorizations can be reused across several Newton iterations or neighboring steps.
+It is unnecessary to factor this full $3n_x\times3n_x$ system. The one real eigenvalue and one complex-conjugate pair of $A^{-1}$ transform it into one real $n_x\times n_x$ system and one complex $n_x\times n_x$ system. The right-hand side is still evaluated at each stage state, while the Jacobian and linear factorizations can be reused across several Newton iterations or neighboring steps.
 
 ### 3.3 Error control and dense output
 
-The principal Radau5 formula has order five and stage order three. A complete solver must also define stage initial guesses, a local-error estimator, step-size control, and collocation-polynomial dense output. Together these algorithms define an actual Radau5 advance; the Butcher tableau alone does not. The high-order result assumes a sufficiently smooth solution and cannot be presumed at contact-state transitions.
+The principal Radau5 formula has order five and stage order three. A complete solver must also define stage initial guesses, a local-error estimator, step-size control and collocation-polynomial dense output. Together these algorithms define an actual Radau5 advance; the Butcher tableau alone does not. The high-order result assumes a sufficiently smooth solution and cannot be presumed at contact-state transitions.
 
 ### 3.4 Stability
 
@@ -199,11 +211,11 @@ The method is A-stable, and $\mathcal R(\zeta)\to0$ as $|\zeta|\to\infty$ in the
 
 ### 3.5 Implementation in ORVD
 
-[`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) implements forward first-order ordinary differential equations with $M=I$, a dense Jacobian, three-stage fifth-order Radau IIA, adaptive error control, and collocation dense output over the latest successful step. It performs simplified Newton iteration through one real and one complex linear system. [`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) connects that core to the same complete first-order state right-hand side used by BDF. Radau5 therefore has a source-tree implementation, but it is not the public default backend.
+`radau5::Core::AdvanceOneAcceptedStepToward` in [`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) implements only the ordinary-differential form $y'=f(t,y)$: the ODE mass matrix of the classical RADAU5 interface is the identity, the source carries no such term, and a general mass-matrix form is not supported. This is unrelated to the mechanical mass matrix $M(u)$ of section 1.2. The core uses a dense Jacobian, three-stage fifth-order Radau IIA, adaptive error control and collocation dense output over the latest successful step, and it performs simplified Newton iteration through one real and one complex linear system. `Radau5ContinuousStateAdvancer` in [`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) connects that core to the same complete first-order state right-hand side used by BDF. Radau5 is implemented in the source tree, while the production system currently remains on CVODE BDF with maximum order 2.
 
 ## 4. Newmark: a family of one-step methods for second-order mechanical systems (theory only)
 
-The [Newmark method](https://doi.org/10.1061/JMCEA3.0000098) parameterizes displacement and velocity updates by endpoint acceleration. Given $u_n$, $v_n$, and $a_n$, its basic formulas are
+The [Newmark method](https://doi.org/10.1061/JMCEA3.0000098) parameterizes displacement and velocity updates by endpoint acceleration. Given $u_n$, $v_n$, $a_n$ and the two dimensionless parameters $\beta$ and $\gamma$, its basic formulas are
 
 $$
 u_{n+1}=u_n+h v_n+h^2\left[\left(\frac12-\beta\right)a_n+\beta a_{n+1}\right],
@@ -218,7 +230,9 @@ $$
 Implicit Newmark also requires equilibrium at the new endpoint:
 
 $$
-R_{n+1}=p_{n+1}-M a_{n+1}-C v_{n+1}-f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0.
+\mathbf r^{\mathrm{eq}}_{n+1}
+=p_{n+1}-M a_{n+1}-C v_{n+1}
+-f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0.
 $$
 
 The initial acceleration follows from the initial dynamic equilibrium, for example
@@ -229,12 +243,12 @@ $$
 
 ### 4.2 Effective stiffness for a linear system
 
-For constant $M,C,K$, $f_{\mathrm{int}}=Ku$, and $\beta>0$, define
+For constant $M,C,K$, $f_{\mathrm{int}}=Ku$ and $\beta>0$, define
 
 $$
 \kappa_0=\frac{1}{\beta h^2},
 \qquad
-\kappa_1=\frac{\gamma}{\beta h},
+\kappa_1=\frac{\gamma}{\beta h}.
 $$
 
 With $u_{n+1}$ as the unknown, the effective stiffness is
@@ -243,9 +257,9 @@ $$
 K_{\mathrm{eff}}=K+\kappa_1C+\kappa_0M.
 $$
 
-A nonlinear system iterates on the endpoint equilibrium residual. If $M$, $C$, or the load depends on state, a consistent tangent also contains the derivatives of those terms with respect to $u_{n+1}$. The case $\beta=0$ belongs to the explicit Newmark branch and cannot use an effective-stiffness expression containing $1/\beta$.
+A nonlinear system iterates on the endpoint equilibrium residual. If $M$, $C$ or the load depends on state, a consistent tangent also contains the derivatives of those terms with respect to $u_{n+1}$. The case $\beta=0$ belongs to the explicit Newmark branch and cannot use an effective-stiffness expression containing $1/\beta$.
 
-### 4.3 Parameters, accuracy, and stability
+### 4.3 Parameters, accuracy and stability
 
 - The standard Newmark family is second order when $\gamma=1/2$; $\gamma>1/2$ introduces algorithmic dissipation and is generally first order.
 - For a linear undamped system, $2\beta\ge\gamma\ge1/2$ is a commonly used unconditional-stability condition.
@@ -254,11 +268,11 @@ A nonlinear system iterates on the endpoint equilibrium residual. If $M$, $C$, o
 
 ### 4.4 Relation to ORVD's state
 
-The classical formulas assume equal-dimensional $u$, $v$, and $a$ with $\dot u=v$. Applying Newmark to a complete ORVD vehicle would require forming configuration increments from tangent-space velocity and acceleration, retracting them to a $q$ that contains quaternion and Ball-RPY coordinates, and defining a discrete equation for $z$ coupled to endpoint equilibrium. The effective-stiffness formula for a Euclidean linear structure therefore cannot directly serve as the discrete equation for the complete ORVD multibody model.
+The classical formulas assume equal-dimensional $u$, $v$ and $a$ with $\dot u=v$. Applying Newmark to a complete ORVD vehicle would require forming configuration increments from tangent-space velocity and acceleration, retracting them to a $q$ that contains quaternion and Ball-RPY coordinates, then defining a discrete equation for $z$ coupled to endpoint equilibrium. The effective-stiffness formula for a Euclidean linear structure therefore cannot directly serve as the discrete equation for the complete ORVD multibody model.
 
 ## 5. Zhai's simple explicit two-step method (theory only)
 
-Zhai's simple explicit method, introduced in 1996, uses the current and previous endpoint accelerations:
+[Zhai's simple explicit method](https://doi.org/10.1002/(SICI)1097-0207(19961230)39:24%3C4199::AID-NME39%3E3.0.CO;2-Y) uses the current and previous endpoint accelerations and introduces two dimensionless parameters $\phi$ and $\psi$:
 
 $$
 u_{n+1}=u_n+h v_n+\left(\frac12+\psi\right)h^2a_n-\psi h^2a_{n-1},
@@ -273,6 +287,8 @@ The new acceleration is then obtained explicitly from the equation of motion:
 $$
 a_{n+1}=M^{-1}\left[p_{n+1}-C v_{n+1}-f_{\mathrm{int}}(u_{n+1},v_{n+1})\right].
 $$
+
+Here “explicit” means that $u_{n+1}$ and $v_{n+1}$ are already determined from history before $a_{n+1}$ is evaluated. Retaining the original method's computational form without solving simultaneous algebraic equations additionally requires a diagonal mass matrix $M$.
 
 ### 5.1 Startup and history
 
@@ -290,19 +306,19 @@ where $a_0$ follows from initial dynamic equilibrium. Normal steps commonly use 
 
 - The common choice $\phi=\psi=1/2$ is second order and has no numerical dissipation in linear undamped analysis, although it has phase error.
 - For an undamped linear oscillator, this parameter choice is stable when $h\omega<2$, equivalently $h<T_{\min}/\pi$.
-- The highest resolved frequency limits the explicit step size. Wheel-rail contact stiffness, suspension stiffness, and first-order internal variables can all contribute high-frequency time scales.
-- The original formula is a fixed-uniform-step method. Variable steps, a shortened terminal step, and dense output each require separately defined mathematical formulas.
+- The highest resolved frequency limits the explicit step size. Wheel-rail contact stiffness, suspension stiffness and first-order internal variables can all contribute high-frequency time scales.
+- The original formula is a fixed-uniform-step method. Variable steps, a shortened terminal step and dense output each require separately defined mathematical formulas.
 
 ### 5.3 Relation to ORVD's state
 
-For a complete ORVD vehicle, the Zhai method would likewise need to construct a configuration increment in the tangent space and retract it to the new $q$, while specifying a discrete method for Maxwell and other internal variables $z$. Applying AB2 directly to the complete $[q;v;z]$ state produces an ordinary first-order multistep method and should not be called Zhai's simple explicit method.
+For a complete ORVD vehicle, the Zhai method would likewise need to construct a configuration increment in the tangent space and retract it to the new $q$, while specifying a discrete method for Maxwell and other internal variables $z$. Applying AB2 directly to the complete $[q;v;z]$ state produces an ordinary first-order multistep method; it is not Zhai's simple explicit method.
 
 ## 6. Comparison of the methods
 
 | Method | Governing form | Principal order | Implicitness | Stability point | History structure | ORVD implementation status |
 |---|---|---:|---|---|---|---|
-| CVODE BDF | Complete first-order $\dot y=f(t,y)$ | 1–5 | Implicit | BDF1–2 are A-stable | Multistep history | BDF2 default; source-tree BDF5 implementation |
-| Radau5 | Complete first-order $\dot y=f(t,y)$ | 5 | Three-stage fully implicit | A-stable and L-stable | One-step stages and linearization history | Source-tree implementation, not default |
+| CVODE BDF | Complete first-order $\dot y=f(t,y)$ | 1–5 | Implicit | BDF1–2 are A-stable | Multistep history | Production maximum order is 2; a maximum-order-five implementation also exists in the source tree |
+| Radau5 | Complete first-order $\dot y=f(t,y)$ | 5 | Three-stage fully implicit | A-stable and L-stable | One-step stages and linearization history | Implemented in the source tree; not currently used by the production system |
 | Newmark | Second-order mechanical equilibrium | Usually 2 | Common forms are implicit | Depends on $\beta,\gamma$ | One-step endpoint quantities | **Theory only** |
 | Zhai simple explicit method | Second-order mechanical acceleration | 2 | Explicit | Limited by the highest frequency | Two-step acceleration history | **Theory only** |
 

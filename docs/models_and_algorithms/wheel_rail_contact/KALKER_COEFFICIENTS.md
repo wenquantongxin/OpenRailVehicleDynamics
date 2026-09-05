@@ -12,7 +12,7 @@ $$
 \kappa=\frac{a}{b},\qquad \kappa>0,
 $$
 
-其中当前数值模型以正的有限半轴比为定义域。本篇局部用 $\kappa$ 表示接触椭圆半轴比；它与线路几何文档中表示平面曲率的同形符号无关。材料参数为杨氏模量 $E$ 与泊松比 $\nu$，剪切模量为
+下文只讨论正有限半轴比；系数函数对表域外正有限数是否有定义，由第 3 节的表外规则决定。本篇局部用 $\kappa$ 表示接触椭圆半轴比；它与线路几何文档中表示平面曲率的同形符号无关。材料参数为杨氏模量 $E$ 与泊松比 $\nu$，剪切模量为
 
 $$
 G=\frac{E}{2(1+\nu)}.
@@ -23,21 +23,21 @@ $$
 $$
 L_x=\frac{8a}{3C_{11}G},\qquad
 L_y=\frac{8a}{3C_{22}G},\qquad
-L_\varphi=\frac{\pi a\sqrt{\kappa}}{4C_{23}G}.
+L_{sp}=\frac{\pi a\sqrt{\kappa}}{4C_{23}G}.
 $$
 
 $C_{11}$ 和 $C_{22}$ 分别控制平动蠕滑引起的纵向、横向应力积累；$C_{23}$ 控制自旋与两方向应力积累之间的耦合。此实现不使用 $C_{33}$：自旋效应通过斑内条带推进处理，并且结果不包含接触斑绕法向的直接自旋力矩。
 
-在连续、全黏着的小蠕滑极限下，相应线性合力为
+$\xi_x$、$\xi_y$ 与 $\xi_{sp}$ 分别为纵向、横向与自旋蠕滑率，其中自旋蠕滑率的单位为 $\mathrm{m}^{-1}$，三者的定义见[蠕滑率与接触坐标系](CREEPAGE_AND_CONTACT_FRAME.md)。在连续、全黏着的小蠕滑极限下，相应线性合力为
 
 $$
 F_x=-G\,a\,b\,C_{11}\xi_x,
 \qquad
 F_y=-G\,a\,b\,C_{22}\xi_y
--G\,(ab)^{3/2}C_{23}\varphi,
+-G\,(ab)^{3/2}C_{23}\xi_{sp},
 $$
 
-纵向合力中的自旋项因接触斑关于横轴对称而积分为零；横向合力保留 $C_{23}$ 控制的自旋耦合。`FASTSIM` 的离散条带求积会在有限分辨率下引入其自身的求积因子；无自旋离散表达见相邻文档。
+纵向应力积累率中的自旋项对斑内横向坐标 $y$ 为奇函数，接触斑又关于纵轴（滚动方向轴）镜像对称，因此该项在纵向合力中积分为零；横向合力保留 $C_{23}$ 控制的自旋耦合。`FASTSIM` 的离散条带求积会在有限分辨率下引入其自身的求积因子；无自旋离散表达见 [FASTSIM 条带推进的 §4.3](TANGENTIAL_CONTACT_FASTSIM.md#43-小蠕滑极限)。
 
 ## 2. 有限表与双轴插值
 
@@ -92,7 +92,7 @@ $$
 
 ## 3. 细长椭圆渐近式
 
-有限表覆盖闭区间 $0.1\le\kappa\le10$。当前轮轨接触模型对表外、仍为正有限数的半轴比采用细长椭圆渐近式。先定义
+有限表覆盖闭区间 $0.1\le\kappa\le10$。系数表在构造时选定一种表外规则，此后各接触斑查询沿用同一选择：一种规则把仍为正有限数的半轴比续延到下面的细长椭圆渐近式，另一种规则把系数函数的定义域限定在有限表本身。下面给出渐近续延生效时的表达式。先定义
 
 $$
 \sigma=\min\left(\kappa,\frac{1}{\kappa}\right),
@@ -139,13 +139,13 @@ $$
 
 ### 3.3 拼接与适用性
 
-有限表与渐近表达在 $\kappa=0.1$ 和 $\kappa=10$ 处硬切换，没有混合区。因此当前系数函数在表内节点处通常只有分段光滑性，在两个表域端点还可能有函数值跳跃。这个跳跃属于有限表与渐近近似的算法拼接，不应解释成真实接触力学在该椭圆形状处发生物理突变。
+在渐近续延规则下，有限表与渐近表达在 $\kappa=0.1$ 和 $\kappa=10$ 处硬切换，没有混合区。因此所得系数函数在表内节点处通常只有分段光滑性，在两个表域端点还可能有函数值跳跃。这个跳跃属于有限表与渐近近似的算法拼接，不应解释成真实接触力学在该椭圆形状处发生物理突变。
 
 渐近式用于有限表无法描述的细长椭圆。随着 $\sigma\to0$，对数项和幂次项体现了细长极限的奇异尺度；该表达不应外推为退化线接触或零面积接触的模型。
 
 ## 4. 数值算法
 
-构造阶段先计算三个 $\ell_j(\nu)$，再逐列形成三张一维坍缩表。每次斑求解只计算一次 $\kappa=a/b$：表域内用有序节点定位相邻列并共享同一个插值分数，表域外进入第 3 节的渐近表达。
+构造阶段先计算三个 $\ell_j(\nu)$，再逐列形成三张一维坍缩表。每次斑求解只计算一次 $\kappa=a/b$：表域内用有序节点定位相邻列并共享同一个插值分数；表域外按系数表的既定规则，或续延到第 3 节的渐近表达，或让系数函数在有限表之外不再有定义。
 
 两个端点 $\kappa=0.1$ 与 $\kappa=10$ 直接返回首、末节点值。对严格内点 $0.1<\kappa<10$，算法可写为
 
@@ -162,9 +162,9 @@ C = C_collapsed[low] + (C_collapsed[high] - C_collapsed[low]) * t
 
 | 理论对象 | 主要实现 |
 |---|---|
-| 三个系数与表对象 | `KalkerCoefficients`、`KalkerCoefficientTable`，见 [`kalker_coefficient_table.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/kalker_coefficient_table.h) |
-| 有限表与节点 | `kLongitudinal`、`kLateral`、`kLateralSpin`、`kSemiAxisRatioNodes`，见 [`kalker_coefficient_table.cc`](../../../libs/wheel_rail_contact/src/kalker_coefficient_table.cc) |
-| 泊松比坍缩 | `PoissonInterpolationWeights`、`CollapsePoissonAxis` |
+| 三个系数、表对象与表外规则 | `KalkerCoefficients`、`KalkerCoefficientTable`、`OutsideTableRule`，见 [`kalker_coefficient_table.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/kalker_coefficient_table.h) |
+| 有限表与节点 | `kLongitudinal`、`kLateral`、`kLateralSpin`、`kPoissonNodes`、`kSemiAxisRatioNodes`，见 [`kalker_coefficient_table.cc`](../../../libs/wheel_rail_contact/src/kalker_coefficient_table.cc) |
+| 泊松比坍缩 | `KalkerCoefficientTable::ForPoissonRatio`，内部用 `PoissonInterpolationWeights` 与 `CollapsePoissonAxis` |
 | 半轴比查询 | `KalkerCoefficientTable::At` |
-| 细长椭圆表达 | `AsymptoticCoefficients` |
+| 细长椭圆表达 | `AsymptoticCoefficients`，在渐近续延规则下由 `KalkerCoefficientTable::At` 调用 |
 | 柔度消费者 | `TangentialContactSolver::Solve`，见 [`tangential_contact_force.cc`](../../../libs/wheel_rail_contact/src/tangential_contact_force.cc) |

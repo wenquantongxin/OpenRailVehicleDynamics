@@ -8,13 +8,13 @@
 
 本篇覆盖 `orvd::wheel_rail_contact` 中承载上述数学对象的六个实现单元：`ProfilePoints` 与 `SideResolvedProfile`、`NaturalCubicSpline`、`MonotoneCubicInterpolant`、型面弧长算法、`WheelProfilePreprocessing` 和 `ComputeRailGaugeDatum`。讨论终止于接触几何所消费的三类量：车轮控制节点、建在节点上的曲线表示和每根钢轨的轨距基准；不展开文件格式、配置项或接口清单。
 
-本篇明确不做以下内容。接触几何如何把两条曲面投影、分箱、取上包络、切接触岛与接触斑，属于 [`CONTACT_GEOMETRY.md`](CONTACT_GEOMETRY.md)；轮对相对钢轨的位姿归约与 `WheelRailPoseConstants` 如何消费轨距基准，属于 [`WHEEL_RAIL_POSE_REDUCTION.md`](WHEEL_RAIL_POSE_REDUCTION.md)；法向力、蠕滑率、Kalker 系数与 FASTSIM 各有自己的文档。轨道不平顺序列的插值也不属于型面，见 [`TRACK_IRREGULARITY_SPECTRA.md`](../track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)。
+本篇明确不做以下内容。接触几何如何把两条曲面投影、分箱、取上包络、切接触岛与接触斑，属于 [`CONTACT_GEOMETRY.md`](CONTACT_GEOMETRY.md)；轮对相对钢轨的位姿归约如何消费轨距基准，属于 [`WHEEL_RAIL_POSE_REDUCTION.md`](WHEEL_RAIL_POSE_REDUCTION.md)；法向力、蠕滑率、Kalker 系数与 FASTSIM 各有自己的文档。轨道不平顺序列的插值也不属于型面，见 [`TRACK_IRREGULARITY_SPECTRA.md`](../track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)。
 
 实现中的理论数据流是：作者点列先解析到物理侧；车轮点列可沿第一条自然样条按等弧长重扫，钢轨点列则直接侧解析；两组节点各形成一条 `NaturalCubicSpline`，并以该样条的节点斜率形成一条 `MonotoneCubicInterpolant`。钢轨作者点列另经滚转和规定深度截线得到 `RailGaugeDatum`。接触几何此后消费这些派生表示，而不再直接查询作者点列。
 
 ## 2. 记号
 
-坐标系、左右侧与正号沿用[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)第 2.5 节：型面坐标是型面自身坐标系中的米，横向跨越轨道，竖向向下为正；`WheelSide::kRight` 保留资产书写的符号，`WheelSide::kLeft` 是镜像。本篇新增的记号如下。
+坐标系、左右侧与正号沿用[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)第 2.3 节：型面坐标是型面自身坐标系中的米，横向跨越轨道，竖向向下为正；`WheelSide::kRight` 保留资产书写的符号，`WheelSide::kLeft` 是镜像。侧号 $\varsigma$、轨底坡幅值 $\phi_c$ 与按侧带符号的轨底坡滚转 $\phi_r$ 也在该节登记，本篇沿用不另立。下表列出本篇所用记号。
 
 | 记号 | 含义 | 代码对应 |
 |---|---|---|
@@ -23,12 +23,13 @@
 | $h_i=y_{i+1}-y_i$ | 第 $i$ 个节点区间的宽度 | `spacings` |
 | $\delta_i=(z_{i+1}-z_i)/h_i$ | 第 $i$ 个区间的割线斜率 | `secants` |
 | $m_i$ | 节点一阶导，即节点斜率 | `nodal_slopes` |
-| $M_i$ | 节点二阶导，即矩 | `moments` |
+| $\mu_i$ | 节点二阶导，即矩 | `moments` |
 | $t=(y-y_i)/h_i$ | 段内局部参数 | `local_parameter` |
 | $\varsigma$ | 侧号，右侧 $+1$、左侧 $-1$ | `ResolveForSide` 中的 `sign` |
 | $\sigma(a,b)$、$\Sigma_j$、$L$ | 区间弧长、各节点处的累积弧长、总弧长 | `IntegrateProfileArcLength`、`cumulative`、`total` |
 | $\Delta\sigma$ | 等弧长重扫步长 | `equal_arc_length_rescan_step_meters` |
-| $G$、$d$、$\gamma$、$\rho$ | 轨距、轨距测量深度、轨底坡幅值、按侧带符号的钢轨滚转 | `track_gauge_meters`、`gauge_measuring_depth_meters`、`rail_cant_radians`、`roll_radians` |
+| $G$、$d_g$、$\phi_c$、$\phi_r$ | 轨距、轨距测量深度、轨底坡幅值、按侧带符号的轨底坡滚转 | `track_gauge_meters`、`gauge_measuring_depth_meters`、`rail_cant_radians`、`roll_radians` |
+| $\tilde y_i$、$\tilde z_i$ | 滚转后的型面坐标 | `rolled_lateral`、`rolled_vertical` |
 
 ## 3. 模型
 
@@ -36,7 +37,7 @@
 
 型面就是点列。`ProfilePoints` 持有作者写下的点列，顺序与符号完全保留，连同角色 `ProfileRole`（`kWheel` 或 `kRail`）和标识符。角色决定可施加的几何运算：等弧长预处理定义在车轮型面上，轨距基准定义在钢轨型面上，接触几何也区分轮面与轨面。型面本身不携带站位、左右侧或车辆信息。
 
-可用点列满足：两列长度相同、至少有两个有限点、标识符非空，并且横坐标沿作者顺序严格朝一个方向单调，升序或降序均可。不能先把折返点列排序后再解释，因为排序会把原来不同的几何折线改造成另一条曲面；重复横坐标也使 $z(y)$ 不再单值。这一前提意味着模型不能表达横向有倒扣的形状（见第 6 节）。
+点列的数学前提是两列长度相同、点数不少于两个且每个坐标都有限，并且横坐标沿作者顺序严格朝一个方向单调，升序或降序均可。不能先把折返点列排序后再解释，因为排序会把原来不同的几何折线改造成另一条曲面；重复横坐标也使 $z(y)$ 不再单值。这一前提意味着模型不能表达横向有倒扣的形状（见第 6 节）。
 
 `ResolveForSide(side)` 产生 `SideResolvedProfile`：按有符号横坐标升序排列的同一组点。以 $\pi$ 记按 $\varsigma\,y$ 升序的排列，
 
@@ -44,7 +45,7 @@ $$
 y^{(\varsigma)}_i=\varsigma\,y_{\pi(i)},\qquad z^{(\varsigma)}_i=z_{\pi(i)},\qquad \varsigma=\begin{cases}+1,&\texttt{kRight}\\ -1,&\texttt{kLeft}\end{cases}
 $$
 
-对应 `ResolveForSide` 中 `sign * lateral_meters_[order[index]]`。右侧只可能改变顺序，不改变任何符号；左侧把横坐标取反后再升序。轨型系横轴指向右侧是这一约定的依据。本模块的每一个插值器都建在侧解析点列上，从不建在作者点列上，因为插值器需要严格递增的横坐标，而作者点列不被要求具备。
+对应 `ResolveForSide` 中 `sign * lateral_meters_[order[index]]`。右侧只可能改变顺序，不改变任何符号；左侧把横坐标取反后再升序。轨型系横轴指向右侧是这一约定的依据。本篇型面数据流中的插值器都建在侧解析点列上，从不直接建在作者点列上，因为插值器需要严格递增的横坐标，而作者点列不被要求具备。
 
 车轮预处理只在物理右侧重扫，再把结果镜像到左侧（第 3.5 节）。原因是网格相位：等弧长重扫从点列第一点起步、以整数倍步长布点，不能整除步长的余量落在最后一个区间；若对已镜像的左侧点列独立重扫，余量区间会移到左型面的另一端，左右两侧就不再共享同一网格相位。
 
@@ -95,14 +96,14 @@ $n=2$ 时两端斜率都取割线。系统的对角元不依赖间距，避免�
 一般路径（`SolveNodalSlopesGeneral`）解经典的内点矩系统，两端矩不进入系统而直接为零，这使自然边界条件精确成立而不是近似成立：
 
 $$
-h_{i-1}M_{i-1}+2\,(h_{i-1}+h_i)\,M_i+h_iM_{i+1}=6\,(\delta_i-\delta_{i-1}),\qquad 1\le i\le n-2,\qquad M_0=M_{n-1}=0
+h_{i-1}\mu_{i-1}+2\,(h_{i-1}+h_i)\,\mu_i+h_i\mu_{i+1}=6\,(\delta_i-\delta_{i-1}),\qquad 1\le i\le n-2,\qquad \mu_0=\mu_{n-1}=0
 $$
 
 再由矩得到段形式需要的斜率：
 
 $$
-m_i=\delta_i-\frac{h_i}{6}\,(2M_i+M_{i+1}),\quad 0\le i\le n-2,\qquad
-m_{n-1}=\delta_{n-2}+\frac{h_{n-2}}{6}\,(M_{n-2}+2M_{n-1})
+m_i=\delta_i-\frac{h_i}{6}\,(2\mu_i+\mu_{i+1}),\quad 0\le i\le n-2,\qquad
+m_{n-1}=\delta_{n-2}+\frac{h_{n-2}}{6}\,(\mu_{n-2}+2\mu_{n-1})
 $$
 
 节点范围之外的行为是刻意选择的，不是多项式延拓。型面在最后一个测量点之外没有意义，把三次多项式延伸过轮缘根部会产生一个看似合理、实际不存在的曲面。因此：
@@ -180,16 +181,16 @@ $$
 
 轨距在两条钢轨的轨距面之间、在轨顶以下规定深度处测量，不在轨顶之间测量。因此钢轨型面原点的横向位置不是简单的半轨距，而是半轨距加上轨距面到型面原点的距离；该距离由钢轨型面、测量深度与轨底坡共同决定。
 
-按侧带符号的滚转是 $\rho=-\varsigma\,\gamma$：正轨底坡下右轨向轨道中心倾斜，在横轴向右、竖轴向下的系中这是绕前进轴的负滚转，左轨是其镜像。作者点列先绕原点滚转：
+按侧带符号的滚转是 $\phi_r=-\varsigma\,\phi_c$：正轨底坡下右轨向轨道中心倾斜，在横轴向右、竖轴向下的系中这是绕前进轴的负滚转，左轨是其镜像。作者点列先绕原点滚转：
 
 $$
-\begin{bmatrix}y'_i\\ z'_i\end{bmatrix}=\begin{bmatrix}\cos\rho&-\sin\rho\\ \sin\rho&\cos\rho\end{bmatrix}\begin{bmatrix}y_i\\ z_i\end{bmatrix}
+\begin{bmatrix}\tilde y_i\\ \tilde z_i\end{bmatrix}=\begin{bmatrix}\cos\phi_r&-\sin\phi_r\\ \sin\phi_r&\cos\phi_r\end{bmatrix}\begin{bmatrix}y_i\\ z_i\end{bmatrix}
 $$
 
-对应 `rolled_lateral` 与 `rolled_vertical`。轨顶是滚转后竖坐标的最小值（竖轴向下），测量水平线是 $z_{\mathrm{level}}=\min_i z'_i+d$。构造刻意是型面折线上的分段线性，而不建在任何插值器上：轨距面是施加于测量点的测量约定，若经插值，答案会依赖于恰好选了哪种插值器。把点按滚转后横坐标排序，对相邻两点 $(a,b)$，当 $(z'_a-z_{\mathrm{level}})(z'_b-z_{\mathrm{level}})\le 0$ 时记录一个交点：
+对应 `rolled_lateral` 与 `rolled_vertical`。轨顶是滚转后竖坐标的最小值（竖轴向下），测量水平线是 $z_{\mathrm{level}}=\min_i \tilde z_i+d_g$。构造刻意是型面折线上的分段线性，而不建在任何插值器上：轨距面是施加于测量点的测量约定，若经插值，答案会依赖于恰好选了哪种插值器。把点按滚转后横坐标排序，对相邻两点 $(a,b)$，当 $(\tilde z_a-z_{\mathrm{level}})(\tilde z_b-z_{\mathrm{level}})\le 0$ 时记录一个交点：
 
 $$
-y_\times=\begin{cases}\dfrac{y'_a+y'_b}{2},&z'_a=z'_b\\ y'_a+\dfrac{(z_{\mathrm{level}}-z'_a)\,(y'_b-y'_a)}{z'_b-z'_a},&\text{otherwise}\end{cases}
+y_\times=\begin{cases}\dfrac{\tilde y_a+\tilde y_b}{2},&\tilde z_a=\tilde z_b\\ \tilde y_a+\dfrac{(z_{\mathrm{level}}-\tilde z_a)\,(\tilde y_b-\tilde y_a)}{\tilde z_b-\tilde z_a},&\text{otherwise}\end{cases}
 $$
 
 恰好落在测量水平线上的线段贡献其中点。轨距面是面向轨道中心的那个交点：右轨取交点横坐标的最小值，左轨取最大值。三个输出为
@@ -197,10 +198,10 @@ $$
 $$
 \text{offset}=-\varsigma\,y_{\mathrm{face}},\qquad
 y_{\mathrm{datum}}=\varsigma\left(\frac{G}{2}+\text{offset}\right),\qquad
-\rho=-\varsigma\,\gamma
+\phi_r=-\varsigma\,\phi_c
 $$
 
-依次是 `gauge_face_offset_meters`、`lateral_datum_meters`、`roll_radians`。该构造要求 $G>0$、$d>0$，并要求滚转后的折线与测量水平线至少相交一次。左右滚转总满足 $\rho_{\mathrm L}=-\rho_{\mathrm R}$；但左右偏移相等、横向基准互为相反数并不是任意作者轨型的不变量。只有当作者轨型关于 $y=0$ 镜像对称（更一般地，两次相反滚转后的选定轨距面交点满足相应镜像关系）时，才有
+依次是 `gauge_face_offset_meters`、`lateral_datum_meters`、`roll_radians`。该构造要求 $G>0$、$d_g>0$，并要求滚转后的折线与测量水平线至少相交一次。左右滚转按构造满足 $\phi_{r,\mathrm L}=-\phi_{r,\mathrm R}$；但左右偏移相等、横向基准互为相反数并不是任意作者轨型的不变量。只有当作者轨型关于 $y=0$ 镜像对称（更一般地，两次相反滚转后的选定轨距面交点满足相应镜像关系）时，才有
 
 $$
 \operatorname{offset}_{\mathrm L}=\operatorname{offset}_{\mathrm R},\qquad
@@ -211,15 +212,15 @@ $$
 
 ### 4.1 侧解析
 
-作者点列的数学前提是两列等长、至少含两个有限点，且横坐标沿作者顺序严格单调。`ResolveForSide` 建一个索引数组，以 $\varsigma y$ 为键排序后按序取出；横坐标两两不同，因此结果唯一。该过程复杂度为 $O(n\log n)$，输出横坐标严格递增，供后续所有插值器使用。
+作者点列的数学前提是两列等长、点数不少于两个且每个坐标都有限，且横坐标沿作者顺序严格单调。`ResolveForSide` 建一个索引数组，以 $\varsigma y$ 为键排序后按序取出；横坐标两两不同，因此结果唯一。该过程复杂度为 $O(n\log n)$，输出横坐标严格递增，供后续所有插值器使用。
 
 ### 4.2 样条构造与求值
 
-样条构造先形成正间距 $h_i$，再检测等距、求节点斜率并形成每段系数。一般路径的 `SolveTridiagonal` 使用不选主元的 Thomas 消去，并以固定主元阈值排除数值奇异的消元。这个阈值是绝对量，因此极小间距的一般网格可能受其影响，而等距路径的无量纲主对角系统不受同样缩放影响。等距路径的系统规模为 $n$，一般矩路径为 $n-2$；$n=2$ 时无需解系统。两条构造路径均为 $O(n)$。
+样条构造先形成正间距 $h_i$，再检测等距、求节点斜率并形成每段系数。两条构造路径共用的 `SolveTridiagonal` 使用不选主元的 Thomas 消去，并以固定主元阈值排除数值奇异的消元。这个阈值是绝对量，因此极小间距的一般网格可能受其影响，而等距路径的无量纲主对角系统不受同样缩放影响。等距路径的系统规模为 $n$，一般矩路径为 $n-2$；$n=2$ 时无需解系统。两条构造路径均为 $O(n)$。
 
 `Locate` 把横坐标映射到段号与局部参数。等距路径对 $(y-y_0)/h_0$ 取 `std::floor`，为 $O(1)$；一般路径用 `std::upper_bound` 在节点中二分，为 $O(\log n)$。随后对局部参数作吸附：$t\le$ `kLocalParameterSnap` 归到本段起点 $t=0$，$t\ge 1-$ `kLocalParameterSnap` 归到下一段起点（最后一段取 $t=1$）。一般路径由此在节点处稳定返回表值；等距路径的定位基于理想化网格，只有真实节点相对理想节点的局部偏差不超过吸附阈值时才有同一结论。值在端外平延；一阶导在严格端外为零而在边界取内侧单侧斜率；二阶导在边界及端外为零。
 
-端外平延可能在两个边界节点引入非光滑点：当内侧单侧斜率非零时，一阶导在相应边界跳到端外的零；若该斜率为零，则一阶导连续。二阶导在边界返回零与自然边界条件一致；一般路径直接令 $M_0=M_{n-1}=0$，等距路径的两条边界方程在精确算术下等价。两条构造路径在严格等距数据上解析等价，但定位表达式和舍入序列不同，有限精度结果仍可能不同。
+端外平延可能在两个边界节点引入非光滑点：当内侧单侧斜率非零时，一阶导在相应边界跳到端外的零；若该斜率为零，则一阶导连续。二阶导在边界返回零与自然边界条件一致；一般路径直接令 $\mu_0=\mu_{n-1}=0$，等距路径的两条边界方程在精确算术下等价。两条构造路径在严格等距数据上解析等价，但定位表达式和舍入序列不同，有限精度结果仍可能不同。
 
 ### 4.3 保形斜率与段定位
 
@@ -256,7 +257,7 @@ $$
 
 令重扫步长 $\Delta\sigma\ge0$。当 $\Delta\sigma=0$ 时，接触几何直接采用侧解析的作者节点；当 $\Delta\sigma>0$ 时，`LayControlNodes` 执行以下流程：
 
-```
+```text
 physical = authored.ResolveForSide(kRight)
 first_pass = NaturalCubicSpline(physical.y, physical.z)
 cumulative = AccumulateProfileArcLength(first_pass, physical.y)
@@ -276,7 +277,7 @@ if side == kLeft: nodes = reverse(nodes) with y -> -y
 
 ### 4.6 轨距基准的构造
 
-`ComputeRailGaugeDatum` 先按侧形成 $\rho$，滚转作者点列，并按滚转后的横坐标排序；再以最小竖坐标加 $d$ 形成测量水平线，扫描相邻点对的交点，最后按侧选取面向轨道中心的极值交点。水平线与一段重合时取该段中点，避免零分母。排序占 $O(n\log n)$，随后扫描为 $O(n)$。这里得到的是滚转后、按横坐标重排的折线截面；若滚转使原作者邻接关系改变，它并不等同于原折线整体刚性旋转后的拓扑连接。
+`ComputeRailGaugeDatum` 先按侧形成 $\phi_r$，滚转作者点列，并按滚转后的横坐标排序；再以最小竖坐标加 $d_g$ 形成测量水平线，扫描相邻点对的交点，最后按侧选取面向轨道中心的极值交点。水平线与一段重合时取该段中点，避免零分母。排序占 $O(n\log n)$，随后扫描为 $O(n)$。这里得到的是滚转后、按横坐标重排的折线截面；若滚转使原作者邻接关系改变，它并不等同于原折线整体刚性旋转后的拓扑连接。
 
 ## 5. 实现映射
 
@@ -301,4 +302,4 @@ if side == kLeft: nodes = reverse(nodes) with y -> -y
 - 借用自然样条节点斜率时，相同节点、值和区间宽度只保证精确算术中的分段多项式相同。节点吸附、局部参数夹制、右端求值顺序以及等距网格理想化都可能使公开求值结果不逐位相同。
 - 弧长由每个样条段上的固定 16 点 Gauss–Legendre 规则近似，反查由固定 64 次二分近似。由于被积函数严格为正，弧长映射严格递增，反问题在给定节点区间内唯一；这并没有把求积结果变成解析弧长。
 - 等弧长重扫沿第一条样条选节点，再由这些节点构造第二条样条；第二条样条一般不通过作者中间点，也不与第一条样条完全相同。
-- 轨距基准以滚转后按横坐标排序的测量折线和规定深度截线定义，不以自然样条或保形插值定义。左右滚转角必然反号；左右偏移相等和基准互为相反数还需要作者轨型的镜像对称或等价的交点对称条件。
+- 轨距基准以滚转后按横坐标排序的测量折线和规定深度截线定义，不以自然样条或保形插值定义。左右滚转角按构造反号；左右偏移相等和基准互为相反数还需要作者轨型的镜像对称或等价的交点对称条件。

@@ -1,8 +1,8 @@
 [中文](CONTACT_GEOMETRY.md)
 
-# Contact Geometry
+# Contact geometry
 
-This document describes the geometric part of ORVD wheel–rail contact. Given the four pose scalars produced by pose reduction, `ContactGeometrySolver::Solve` returns a set of contact patches. Each patch contains position, penetration, transverse width, three-dimensional longitudinal length, local angles, wheel and rail curvatures, and a rail material reference point. Forces, materials, and loads are handled by subsequent models. The core implementation is in [`contact_geometry.cc`](../../../libs/wheel_rail_contact/src/contact_geometry.cc).
+This document describes the geometric part of ORVD wheel-rail contact. Given the four pose scalars produced by pose reduction, `ContactGeometrySolver::Solve` returns a set of contact patches. Each patch contains position, penetration, transverse width, three-dimensional longitudinal length, local angles, wheel and rail curvatures and a rail material reference point. Forces, materials and loads are handled by subsequent models. The core implementation is in [`contact_geometry.cc`](../../../libs/wheel_rail_contact/src/contact_geometry.cc).
 
 ## 1. Scope
 
@@ -10,47 +10,47 @@ The model answers three questions in sequence:
 
 1. What visible outline does a surface-of-revolution wheel present to the rail cross-section at the given yaw?
 2. Where does that projected outline interpenetrate the rail, and how is the interpenetrating region partitioned into contact islands?
-3. What are the geometric dimensions, centroid, normal, curvatures, and longitudinal chord of each island?
+3. What are the geometric dimensions, centroid, normal, curvatures and longitudinal chord of each island?
 
-The model does not compute pressure distributions, normal force, or tangential force. Irregularities have already entered the relative placement through pose reduction. See [Wheel–Rail Pose Reduction and Irregularity Inputs](WHEEL_RAIL_POSE_REDUCTION.en.md) for the input pose, [Normal Contact Force](NORMAL_CONTACT_FORCE.en.md) for normal loading, and [Creepages and the Contact Frame](CREEPAGE_AND_CONTACT_FRAME.en.md) for the contact frame and creepages.
+The model does not compute pressure distributions, normal force or tangential force. Irregularities have already entered the relative placement through pose reduction. See [Wheel-rail pose reduction and irregularity inputs](WHEEL_RAIL_POSE_REDUCTION.en.md) for the input pose, [Normal contact force](NORMAL_CONTACT_FORCE.en.md) for normal loading and [Creepages and the contact frame](CREEPAGE_AND_CONTACT_FRAME.en.md) for the contact frame and creepages.
 
 ## 2. Notation
 
-The profile transverse coordinate is $Y$, and the vertical direction is positive downward. To avoid confusion with track attitude, pose roll is denoted by $\varphi$ and pose yaw by $\beta$.
+The profile transverse coordinate is $Y$, and the vertical direction is positive downward. Pose roll $\varphi$, pose yaw $\beta$, pose lateral offset $d_y$ and upward-positive vertical raise $d_z^{\uparrow}$ are the shared pose-scalar symbols and are not repeated in the table below. The decoded planar translation is written $t_y,t_z$ here, and it is not the same pair of quantities as the pose scalars $d_y,d_z^{\uparrow}$. The table below gives the remaining symbols used in this document.
 
 | Symbol | Meaning | Implementation quantity |
 |---|---|---|
-| $\eta$ | Side-resolved transverse wheel-profile station | wheel_station_meters |
-| $h(\eta)$ | Wheel height represented by a natural cubic spline | wheel_spline_ |
-| $\hat h(\eta)$ | Hermite wheel surface built from node values and natural-spline nodal slopes | wheel_surface_ |
-| $R_0$ | Nominal rolling radius | nominal_rolling_radius_meters |
-| $r(\eta)$ | Local wheel radius $R_0+h(\eta)$ | local_radius |
-| $\tau$ | Circumferential angle measured from directly below the axle | angle |
-| $\tau_s(\eta)$ | Circumferential angle of the visible outline | silhouette_angle |
-| $u_y,u_z^\uparrow$ | Pose lateral offset and upward-positive vertical raise | ContactPoseScalars |
-| $d_y,d_z$ | Planar translation of the wheel datum relative to the rail datum | lateral_offset, vertical_offset |
-| $z_r(Y)$ | Rail cross-section height | rail_surface_ |
-| $H(Y)$ | Single-valued upper envelope of the projected wheel outline | envelope cubic segments |
-| $\eta(Y)$ | Piecewise-linear map from envelope coordinate to wheel station | envelope_station_ |
-| $g(Y)$ | Vertical interpenetration: wheel envelope minus rail surface | union_gap_ |
-| $\epsilon$ | Gap threshold defining contact | contact_gap_epsilon_meters |
-| $\delta_m$ | Valley-depth threshold for merging islands | island_merge_gap_tolerance_meters |
-| $\delta_v,\delta_n$ | Vertical and normal penetration | patch penetration fields |
-| $Y_c,Z_c$ | Area centroid of the overlap region | centroid fields |
-| $\alpha_r,\alpha_s,\gamma$ | Rail-surface angle, canted contact-frame angle, and common-normal angle | patch angle fields |
-| $\varsigma$ | Side sign, $+1$ on the right and $-1$ on the left | mathematical encoding of `WheelSide` |
-| $L$ | Longest three-dimensional longitudinal chord | longitudinal_length_meters |
+| $\eta$ | Side-resolved transverse wheel-profile station | `wheel_station_meters` |
+| $h(\eta)$ | Wheel height represented by a natural cubic spline | `wheel_spline_` |
+| $\hat h(\eta)$ | Hermite wheel surface built from node values and natural-spline nodal slopes | `wheel_surface_` |
+| $r_0$ | Nominal rolling radius | `nominal_rolling_radius_meters` |
+| $r(\eta)$ | Local rolling radius $r_0+h(\eta)$ | `local_radius` |
+| $\tau$ | Circumferential angle measured from directly below the axle | `angle` |
+| $\tau_s(\eta)$ | Circumferential angle of the visible outline | `silhouette_angle` |
+| $t_y,t_z$ | Decoded transverse and vertical translation of the wheel-profile datum relative to the rail-profile datum, in $T_c$ | `lateral_offset`, `vertical_offset` |
+| $z_r(Y)$ | Rail cross-section height | `rail_surface_` |
+| $H(Y)$ | Single-valued upper envelope of the projected wheel outline | cubic segments fixed by `envelope_vertical` and `envelope_vertical_slopes` |
+| $\eta(Y)$ | Piecewise-linear map from envelope coordinate to wheel station | `envelope_station_` |
+| $g(Y)$ | Vertical interpenetration: wheel envelope minus rail surface | `union_gap_` |
+| $\epsilon$ | Gap threshold defining contact | `contact_gap_epsilon_meters` |
+| $\delta_m$ | Valley-depth threshold for merging islands | `island_merge_gap_tolerance_meters` |
+| $\delta_v,\delta_n$ | Vertical and normal penetration | `vertical_penetration_meters`, `normal_penetration_meters` |
+| $Y_c,Z_c$ | Area centroid of the overlap region | `centroid_lateral_meters`, `centroid_vertical_meters` |
+| $\alpha_r,\alpha,\gamma$ | Rail-surface angle, canted contact-frame angle and common-normal angle | $\alpha_r$ is internal to contact geometry; `rail_slope_angle_radians`, `common_normal_angle_radians` |
+| $c_r$ | Cant magnitude carried by contact geometry itself | `rail_cant_radians` |
+| $\varsigma$ | Side sign, $+1$ on the right and $-1$ on the left | mathematical encoding of `WheelSide`, opposite in sign to the internal `side_sign_` |
+| $L$ | Longest three-dimensional longitudinal chord | `longitudinal_length_meters` |
 
 ## 3. Model
 
-### 3.1 Surface interpolation, pose, and projection
+### 3.1 Surface interpolation, pose and projection
 
-Wheel-profile points are first resolved for the selected side and ordered by transverse station. Optional equal-arc-length resampling changes only the node set used thereafter. Two related wheel representations with different responsibilities are built from these nodes:
+The authored wheel-profile point list is laid into a node set along one of two paths. When equal-arc-length rescanning is disabled, the authored points are resolved directly for the requested side: the abscissae take the side sign and are reordered. When rescanning is enabled, the authored points are first resolved to the physical right-hand side and the equal-arc-length stations are laid on that right-hand ordering. A right-side request retains those nodes directly; only a left-side request mirrors them by negating the abscissae and reversing the order. Anchoring the station phase on the physical right-hand ordering makes the two sides share one grid phase. The construction is given in [Profiles and interpolants](PROFILES_AND_INTERPOLANTS.en.md), section 3.5. Either path yields a node set ascending in that side's transverse station. Two related wheel representations with different responsibilities are built from these nodes:
 
 - `wheel_spline_` is a natural cubic spline used for outline height and slope and for the three-dimensional longitudinal resolution.
-- `wheel_surface_` is constructed through `FromNodalSlopes` with the same node values and the natural spline's nodal slopes. It supplies the shared surface-value, derivative, and curvature interface. `FromNodalSlopes` uses the supplied slopes directly and performs no shape-preserving slope limiting.
+- `wheel_surface_` is constructed through `FromNodalSlopes` with the same node values and the natural spline's nodal slopes. It supplies the shared surface-value, derivative and curvature interface. `FromNodalSlopes` uses the supplied slopes directly and performs no shape-preserving slope limiting.
 
-Both representations hold the endpoint value constant outside the knot interval and return zero first and second derivatives strictly outside. Their coexistence is therefore due to consumer and interface separation, not different extrapolation rules. If the natural spline has not replaced an approximately uniform point list by an ideal grid, so that the two representations actually use the same knot abscissae and interval lengths, their within-range Hermite cubic segments are identical because they share values and slopes. The natural spline can use an idealized grid $x_0+ih$ for a nearly uniform input grid, while `wheel_surface_` receives the authored knots; on that path the two representations are not guaranteed to agree point for point. The rail surface $z_r(Y)$ is built through the same `FromNodalSlopes` path from natural-spline nodal slopes and is not a shape-limited curve either.
+Both representations hold the endpoint value constant outside the knot interval. The first derivative is zero strictly outside only, the interior one-sided slope being returned at a boundary knot, while the second derivative is zero at the boundary knots and outside them. That strict-versus-nonstrict asymmetry is a contract both share, and their coexistence is due to consumer and interface separation, not different extrapolation rules. If the natural spline has not replaced an approximately uniform point list by an ideal grid, so that the two representations actually use the same knot abscissae and interval lengths, their within-range Hermite cubic segments are identical because they share values and slopes. The natural spline can use an idealized grid $x_0+ih$ for a nearly uniform input node set, while `wheel_surface_` still receives the actual control nodes supplied to the solver; on that path the two representations are not guaranteed to agree point for point. The rail surface $z_r(Y)$ is built through the same `FromNodalSlopes` path from natural-spline nodal slopes and is not a shape-limited curve either.
 
 In the wheel-profile datum frame, the surface of revolution is
 
@@ -59,30 +59,30 @@ $$
 \begin{bmatrix}
 r(\eta)\sin\tau\\
 \eta\\
-r(\eta)\cos\tau-R_0
+r(\eta)\cos\tau-r_0
 \end{bmatrix},
 \qquad
-r(\eta)=R_0+h(\eta).
+r(\eta)=r_0+h(\eta).
 $$
 
 The encoded pose offsets are first decoded into planar translation:
 
 $$
-d_y=u_y\cos\varphi+u_z^\uparrow\sin\varphi,
+t_y=d_y\cos\varphi+d_z^{\uparrow}\sin\varphi,
 \qquad
-d_z=u_y\sin\varphi-u_z^\uparrow\cos\varphi.
+t_z=d_y\sin\varphi-d_z^{\uparrow}\cos\varphi.
 $$
 
-This two-dimensional map is a self-inverse reflection with determinant $-1$. Let $x_w=r\sin\tau$ and $z_w=r\cos\tau-R_0$. Yaw and roll project the point into the rail-profile cross-section as
+Here $t_y,t_z$ are the transverse and vertical translation of the wheel-profile datum relative to the rail-profile datum, expressed in the rail-cant frame $T_c$. They are not the pose scalars: at $\varphi=0$ one has $t_y=d_y$ and $t_z=-d_z^{\uparrow}$, at a general pose $t_y$ and $d_y$ also differ, and this document does not interchange them. The two-dimensional map is a self-inverse reflection with determinant $-1$. Let $x_w=r\sin\tau$ and $z_w=r\cos\tau-r_0$. Yaw and roll project the point into the cross-section of $T_c$ as
 
 $$
 \widetilde y=\sin\beta\,x_w+\cos\beta\,\eta,
 $$
 
 $$
-Y=\cos\varphi\,\widetilde y-\sin\varphi\,z_w+d_y,
+Y=\cos\varphi\,\widetilde y-\sin\varphi\,z_w+t_y,
 \qquad
-Z=\sin\varphi\,\widetilde y+\cos\varphi\,z_w+d_z.
+Z=\sin\varphi\,\widetilde y+\cos\varphi\,z_w+t_z.
 $$
 
 ### 3.2 Visible outline
@@ -118,9 +118,9 @@ n_b-1
 \right).
 $$
 
-Each bin retains only the point with greatest $Z$, namely the outermost branch capable of contacting the rail. The retained coordinates are the sample's own $(Y_i,Z_i,\eta_i)$, not the bin centre. Thus $w_b$ is a competition scale for folded branches rather than a resampling step.
+Each bin retains only the point with greatest $Z$, namely the outermost branch capable of contacting the rail. The retained coordinates are the sample's own $(Y_i,Z_i,\eta_i)$, not the bin center. Thus $w_b$ is a competition scale for folded branches rather than a resampling step.
 
-Shape-preserving cubic slopes are computed for the envelope nodes. Shape limiting applies only to this projected upper envelope $H(Y)$, not to wheel_surface_ or rail_surface_ from the preceding section. Adjacent envelope nodes are joined by a Hermite cubic. With
+Shape-preserving cubic slopes are computed for the envelope nodes. Shape limiting applies only to this projected upper envelope $H(Y)$, not to `wheel_surface_` or `rail_surface_` from the preceding section. Adjacent envelope nodes are joined by a Hermite cubic. With
 
 $$
 t=\frac{Y-Y_j}{\Delta_j},\qquad \Delta_j=Y_{j+1}-Y_j,
@@ -159,14 +159,14 @@ $$
 v_k=\min_{e_k\leq i\leq s_{k+1}}g_i.
 $$
 
-The islands merge when $v_k>-\delta_m$. This criterion measures vertical valley depth rather than transverse distance. A merged island edge is obtained by one secant interpolation between adjacent grid values of opposite classification:
+The islands merge when $v_k>-\delta_m$. This criterion measures vertical valley depth rather than transverse distance. An island edge in the interior of the common support is obtained by one secant interpolation between adjacent grid points of opposite classification, that is, by the secant root of $g-\epsilon$:
 
 $$
 Y_e=Y_a+
 \frac{(\epsilon-g_a)(Y_b-Y_a)}{g_b-g_a}.
 $$
 
-The midpoint is used when the denominator vanishes. This single interpolation is consistent with the piecewise-linear sign model used while discovering islands.
+Since the root sought is that of $g=\epsilon$, the values $g_a,g_b$ on either side of an edge need not be of opposite sign when $\epsilon\neq0$. This single interpolation is consistent with the piecewise-linear sign model used while discovering islands. If an island reaches an endpoint of the common support, that endpoint itself is the corresponding edge and no secant interpolation is applied there.
 
 ### 3.5 Per-island quadrature
 
@@ -187,25 +187,27 @@ $$
 $$
 A_a=\int_{Y_L}^{Y_R}o\sqrt{1+H'^2}\,dY,
 \qquad
-M_y=\int_{Y_L}^{Y_R}Yo\,dY,
+S_y=\int_{Y_L}^{Y_R}Yo\,dY,
 $$
 
 $$
-M_z=\int_{Y_L}^{Y_R}
+S_z=\int_{Y_L}^{Y_R}
 \frac{(z_r+o)^2-z_r^2}{2}\,dY.
 $$
 
 Hence
 
 $$
-Y_c=\frac{M_y}{A},
+Y_c=\frac{S_y}{A},
 \qquad
-Z_c=\frac{M_z}{A}.
+Z_c=\frac{S_z}{A}.
 $$
 
-Here $A$ is cross-sectional overlap area, $W_a$ is wheel-envelope arc width, $A_a$ is arc-weighted overlap area, and $(Y_c,Z_c)$ is the overlap region's area centroid. The island-discovery grid and the per-island quadrature grid discretize different questions, so the deepest quadrature point need not coincide with the maximum interpenetration on the union grid.
+Here $A$ is cross-sectional overlap area, $W_a$ is wheel-envelope arc width, $A_a$ is arc-weighted overlap area, $S_y,S_z$ are the first area moments of the overlap region and $(Y_c,Z_c)$ is its area centroid. The island-discovery grid and the per-island quadrature grid discretize different questions, so the deepest quadrature point need not coincide with the maximum interpenetration on the union grid.
 
-### 3.6 Normal penetration, angles, and curvatures
+The quadrature grid carries a second threshold: a merged island with $\delta_v\leq\epsilon$ emits no contact patch, and neither does one whose secant-located width $Y_R-Y_L$ or whose quadrature area $A$ comes out nonpositive. Each retained merged island emits at most one patch, and the two are not in one-to-one correspondence: the quadrature grid is usually coarser than the union grid, so a narrow island can satisfy $g_i>\epsilon$ on the union grid and still miss at every quadrature station.
+
+### 3.6 Normal penetration, angles and curvatures
 
 Rail slope at the deepest quadrature station projects vertical penetration onto the local normal:
 
@@ -220,10 +222,10 @@ Wheel station and local radius at the centroid are
 $$
 \eta_c=\eta(Y_c),
 \qquad
-r_c=R_0+\hat h(\eta_c).
+r_c=r_0+\hat h(\eta_c).
 $$
 
-Define the rail-surface angle, common-normal angle, and canted contact-frame angle by
+Define the rail-surface angle, common-normal angle and canted contact-frame angle by
 
 $$
 \alpha_r=\arctan z_r'(Y_c),
@@ -238,10 +240,10 @@ $$
 $$
 
 $$
-\alpha_s=\alpha_r-\varsigma c_r,
+\alpha=\alpha_r-\varsigma c_r,
 $$
 
-where $\varsigma=+1$ denotes the right side and $\varsigma=-1$ the left, and $c_r$ is the cant magnitude used by geometry. Cant is not added again to $\gamma$ because the pose roll already contains the rail attitude. The angle $\alpha_s$ is used to construct the contact-force frame.
+where $\varsigma=+1$ denotes the right side and $\varsigma=-1$ the left. Here $c_r$ is the cant magnitude carried by contact geometry itself; it and the cant magnitude $\phi_c$ used by pose reduction are two separately given constants and should not be read as one quantity even where they agree numerically. Cant is not added again to $\gamma$ because the pose roll already contains the rail attitude. The angle $\alpha$ is used to construct the contact frame.
 
 The patch longitudinal coordinate on the wheel is
 
@@ -260,7 +262,7 @@ Wheel curvature is evaluated on $\hat h$ at $\eta_c$, and rail curvature on $z_r
 
 ### 3.7 Rail material reference point
 
-Each patch carries a point on the undeformed rail surface at which subsequent stages form the two body velocities. The wheel-side representative point is projected longitudinally and transversely into the rail frame, then dropped vertically onto the rail:
+Each patch carries a point on the undeformed rail surface at which subsequent stages form the two body velocities. Call that point `R`, with position vector $\mathbf x_R=(x_R,Y_R,Z_R)$. The wheel-side representative point is projected longitudinally and transversely into $T_c$, then dropped vertically onto the rail:
 
 $$
 x_R=\cos\beta\,x_c-\sin\beta\,\eta_c,
@@ -269,7 +271,7 @@ $$
 $$
 Y_R=
 \cos\varphi(\sin\beta\,x_c+\cos\beta\,\eta_c)
--\sin\varphi(r_c-R_0)+d_y,
+-\sin\varphi(r_c-r_0)+t_y,
 $$
 
 $$
@@ -286,7 +288,9 @@ $$
 o(\eta,\tau)=Z(\eta,\tau)-z_r(Y(\eta,\tau)).
 $$
 
-Starting from the visible-outline angle $\tau_s$, it searches in both circumferential directions until each side brackets a root of $o=0$. The initial angular step combines a local circular estimate with a finite lower bound:
+A station enters the longitudinal resolution only if its local rolling radius $r(\eta)$ is finite and positive and the exact surface of revolution gives a finite, strictly positive $o(\eta,\tau_s)$ at the visible-outline angle. The cross-sectional envelope reads a shape-preserving fit of a projection while the longitudinal resolver reads the surface itself, so the two can disagree at the same station: where the envelope says the station penetrates and the exact surface of revolution says it does not, that station contributes no $\ell$ and does not enter the maximum defining $L$. This is also what makes the square root below well defined.
+
+Starting from $\tau_s$, the resolver searches in both circumferential directions until each side brackets a root of $o=0$. The initial angular step combines a local circular estimate with a finite lower bound:
 
 $$
 \Delta_0=
@@ -353,7 +357,7 @@ $$
 
 The approximation has an explicit local error bound over the prescribed search width. When overlap is extremely close to zero it may change one bisection branch, so it is a budgeted numerical approximation rather than an algebraic identity.
 
-Provided that the true roots remain bracketed, exact arithmetic gives the following geometric competitive upper bound for a station that has not yet been fully resolved:
+For a station that has not yet been fully resolved, let $\tau_{\min}$ and $\tau_{\max}$ be the least and greatest angles among all endpoints of the two root brackets. Provided that each true root remains in its bracket, exact arithmetic gives the geometric competitive upper bound
 
 $$
 U=p(\tau_{\max}-\tau_{\min}).
@@ -366,26 +370,26 @@ If $U$ is already no greater than the current longest chord, the station cannot 
 `ContactGeometrySolver::Solve` proceeds in this order:
 
 1. Decode the pose offsets and project the pre-sampled wheel-outline points.
-2. Bin by transverse coordinate and retain the outermost sample in each bin.
-3. Construct shape-preserving cubic segments for the envelope and the piecewise-linear $\eta(Y)$ map.
-4. Merge wheel-envelope and rail-profile nodes, compute interpenetration on the union grid, and discover the raw islands that can be retained.
-5. Merge adjacent islands by valley depth and locate island edges with secant interpolation.
-6. Integrate each retained merged island to obtain area, widths, centroid, penetration, and deepest station.
-7. Compute angles, local radius, wheel and rail curvatures, and the rail material reference point.
-8. Restore the circumferential degree of freedom and resolve the longest three-dimensional longitudinal chord.
+2. Bin by transverse coordinate and retain the outermost sample in each bin, which yields the envelope nodes and the nodes of the piecewise-linear $\eta(Y)$ map.
+3. Merge wheel-envelope and rail-profile nodes into an ordered union grid.
+4. Compute shape-preserving cubic slopes for the envelope, then interpenetration on the union grid, and discover the raw islands that can be retained.
+5. Merge adjacent islands by valley depth; locate interior edges by secant interpolation and use a common-support endpoint directly when an island reaches it.
+6. Integrate each retained merged island to obtain area, widths, centroid, penetration and deepest station; an island that fails a threshold stops here and emits no patch.
+7. Still inside the same per-island body, compute angles and local radius, then restore the circumferential degree of freedom and resolve the longest three-dimensional longitudinal chord, then compute the wheel and rail curvatures.
+8. After the per-island loop, sort the patches by ascending centroid transverse coordinate, then form the rail material reference points in a separate pass.
 
-For $n_s$ outline samples, $n_e$ envelope nodes, $n_r$ rail nodes, $n_i$ merged islands, and $N_q$ quadrature stations per island, the main work consists of $O(n_s)$ projection and binning, $O(n_e+n_r)$ union-grid merging, and $O(n_iN_q)$ quadrature and longitudinal resolution. Bisection depth depends on the length-error target and local projected radius.
+For $n_s$ outline samples, $n_e$ envelope nodes, $n_r$ rail nodes, $n_i$ merged islands and $N_q$ quadrature stations per island, the main work consists of $O(n_s)$ projection and binning, $O(n_e+n_r)$ union-grid merging and $O(n_iN_q)$ quadrature and longitudinal resolution. Bisection depth depends on the length-error target and local projected radius.
 
-## 5. Discrete approximations, non-smoothness, and applicability
+## 5. Discrete approximations, non-smoothness and applicability
 
 - The visible outline is sampled at finitely many wheel stations; profile features narrower than that scale can be missed.
 - The exact normal-orthogonality form requires $|\tan\beta\,h'(\eta)|\leq1$; outside that domain, the model uses the clamped continuation $\sin\tau_s=\pm1$.
 - Envelope binning uses $w_b$ as the transverse competition scale between projected branches; changing $w_b$ can change which folded branch survives.
 - The union grid discovers islands, whereas a separate uniform grid approximates patch integrals. The two grids must not be treated as one discretization.
-- The discrete solver retains at most 64 raw islands in scan order and emits at most the first 16 merged patches. The formulas in this chapter fully cover the model domain in which neither ceiling is reached. Beyond it, the algorithm merges only the retained 64-island prefix and forms at most 16 patches from the resulting merged islands.
-- The strict contact threshold, island-merge threshold, first-maximizer rule, bin winner, and maximum longitudinal chord all introduce branch switching and non-smoothness.
+- The discrete solver retains at most 64 raw islands in scan order and emits at most 16 merged patches. The formulas in this chapter fully cover the model domain in which neither ceiling is reached. Beyond it, the algorithm merges only the retained 64-island prefix and forms at most 16 patches from it in scan order.
+- The strict contact threshold, island-merge threshold, first-maximizer rule, bin winner and maximum longitudinal chord all introduce branch switching and non-smoothness.
 - The map $\eta(Y)$ is allowed to jump where the projection folds; piecewise-linear interpolation preserves that geometric fact.
-- Curvature requires meaningful local first and second derivatives and a nondegenerate curvature denominator. Near corners, near-vertical tangents, or nonsmooth measured profiles make local curvature an unstable descriptor.
+- Curvature requires meaningful local first and second derivatives and a nondegenerate curvature denominator. Near corners, near-vertical tangents or nonsmooth measured profiles make local curvature an unstable descriptor.
 - Longitudinal resolution assumes that moving forward and backward from the visible outline finds one separation root on each side within a finite angular domain. $L=0$ denotes an unavailable measurement, after which the normal model uses its own analytic longitudinal scale.
 - The model describes a patch as a cross-sectional overlap island combined with circumferential chords at sampled stations. It does not solve a three-dimensional elastic free-boundary problem; the normal and tangential models construct equivalent contact scales from this geometry.
 
@@ -393,8 +397,10 @@ For $n_s$ outline samples, $n_e$ envelope nodes, $n_r$ rail nodes, $n_i$ merged 
 
 | Theoretical object | Main implementation |
 |---|---|
-| Wheel and rail profile values and derivatives | [natural_cubic_spline.cc](../../../libs/wheel_rail_contact/src/natural_cubic_spline.cc), [monotone_cubic_interpolant.cc](../../../libs/wheel_rail_contact/src/monotone_cubic_interpolant.cc) |
-| Outline projection, envelope, islands, and quadrature | [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |
-| Longitudinal bracketing, bisection, screening, and chord length | ResolveLongitudinalLength in [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |
+| Natural cubic spline values and derivatives | [natural_cubic_spline.cc](../../../libs/wheel_rail_contact/src/natural_cubic_spline.cc) |
+| Shape-preserving cubic values, derivatives and curvature | [monotone_cubic_interpolant.cc](../../../libs/wheel_rail_contact/src/monotone_cubic_interpolant.cc) |
+| Side resolution and equal-arc-length rescan of the wheel-profile nodes | [wheel_profile_preprocessing.cc](../../../libs/wheel_rail_contact/src/wheel_profile_preprocessing.cc) |
+| Outline projection, envelope, islands and quadrature | `ContactGeometrySolver::Solve` in [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |
+| Longitudinal bracketing, bisection, screening and chord length | `ResolveLongitudinalLength`, called by `ContactGeometrySolver::Solve` in [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |
 | Geometric input pose | [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc) |
 | Normal consumption of geometric patches | [normal_contact_force.cc](../../../libs/wheel_rail_contact/src/normal_contact_force.cc) |

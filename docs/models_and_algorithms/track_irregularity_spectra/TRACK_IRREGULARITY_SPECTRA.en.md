@@ -2,23 +2,23 @@
 
 # Track-irregularity spectra and their spatial random realization
 
-This chapter explains how ORVD turns a one-sided spatial power spectral density (PSD) into a finite-length lateral and vertical track-irregularity field. It focuses on spectral variables and units, the finite band, the random-phase harmonic sum, the deterministic seed-to-phase map, inter-channel correlation, and the two-ended `smoothstep5` envelope; a compact table at the end maps these theoretical objects to the source.
+This chapter explains how ORVD turns a one-sided spatial power spectral density (PSD) into a finite-length lateral and vertical track-irregularity field. It focuses on spectral variables and units, the finite band, the random-phase harmonic sum, the deterministic seed-to-phase map, inter-channel correlation and the two-ended `smoothstep5` envelope; a compact table at the end maps these theoretical objects to the source.
 
 ## 1. Model objects and scope
 
 Track-irregularity modelling contains three independent choices: the spectral formula specifies second-order statistical energy across spatial frequencies, the finite band specifies the longest and shortest retained wavelengths, and the random realization specifies the phase at each discrete frequency. One spectrum and band admit infinitely many realizations; changing the random seed does not change the theoretical PSD, whereas changing either cutoff changes the variance and dynamical meaning.
 
-This chapter treats only stationary random geometric irregularity superposed on an ideal line. Plan curvature, grade, vertical curves, and superelevation belong to [line geometry and track frames](../track_geometry/TRACK_GEOMETRY_AND_FRAMES.en.md), while local deterministic defects such as welds, corrugation, and scuffing cannot be specified uniquely by a stationary PSD. Lateral displacement is positive to the right in the track frame, vertical displacement is positive downward, and station is the planar-projected mileage defined in [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md).
+This chapter treats only stationary random geometric irregularity superposed on an ideal line. Plan curvature and superelevation belong to [Line geometry and track frames](../track_geometry/TRACK_GEOMETRY_AND_FRAMES.en.md), and the piecewise closed-form models of grade and vertical curves belong to [Track vertical profile modelling and its three-dimensional coupling](../track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.en.md), while local deterministic defects such as welds, corrugation and scuffing cannot be specified uniquely by a stationary PSD. Lateral displacement is positive to the right in the track frame, vertical displacement is positive downward, and station is the planar-projected mileage defined in [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md).
 
-The current implementation can generate one two-channel realization from an AAR5/AAR6 spectrum or resolve one of three already gated frozen fields; both paths ultimately form the same `TrackIrregularityField`, and a frozen point series receives no second envelope.
+The current implementation has two irregularity sources: generating one two-channel realization from an AAR5/AAR6 spectrum, or resolving a frozen field. A frozen field is a pre-existing point series whose spectral provenance is not restricted to the single-cutoff AAR family of section 3, and this chapter does not derive the spectral model of those series. Both paths ultimately form the same `TrackIrregularityField`, and a frozen point series receives no second envelope.
 
-AAR5 and AAR6 denote two parameter sets for track-quality spectra here; they do not identify a vehicle class and are not universal descriptions valid for every line, speed, and vehicle frequency range.
+AAR5 and AAR6 denote two parameter sets for track-quality spectra here; they do not identify a vehicle class and are not universal descriptions valid for every line, speed and vehicle frequency range.
 
 ## 2. Spatial frequency and one-sided PSD
 
-### 2.1 Cyclic spatial frequency, angular wavenumber, and wavelength
+### 2.1 Cyclic spatial frequency, angular wavenumber and wavelength
 
-Let $f$ be cyclic spatial frequency in $\mathrm{cycles/m}$, $\Omega$ angular spatial wavenumber in $\mathrm{rad/m}$, and $\lambda$ spatial wavelength. They satisfy
+Let $f$ be cyclic spatial frequency in $\mathrm{cycles/m}$, $\Omega$ angular spatial wavenumber in $\mathrm{rad/m}$ and $\lambda$ spatial wavelength. They satisfy
 
 $$
 \Omega=2\pi f,
@@ -58,7 +58,7 @@ Speed changes the mapping from spatial excitation to the vehicle's temporal resp
 
 ### 3.1 Lateral and vertical single-cutoff spectra
 
-The AAR5/AAR6 model implemented by ORVD uses a single-cutoff angular-wavenumber spectrum. This family of stationary random track representations in terms of a PSD, roughness parameters, and cutoffs is described in the [FRA report on statistical representations of track geometry](https://rosap.ntl.bts.gov/view/dot/9617). The lateral and vertical spectra are
+The AAR5/AAR6 model implemented by ORVD uses a single-cutoff angular-wavenumber spectrum. This family of stationary random track representations in terms of a PSD, roughness parameters and cutoffs is described in the [FRA report on statistical representations of track geometry](https://rosap.ntl.bts.gov/view/dot/9617). The lateral and vertical spectra are
 
 $$
 S_{\mathrm{lat}}(\Omega)
@@ -77,17 +77,27 @@ The implementation uses the following parameters. $A_a$ and $A_v$ are traditiona
 | AAR5 | `0.0762` | `0.2095` | `0.8245` | `0.25` |
 | AAR6 | `0.0339` | `0.0339` | `0.8245` | `0.25` |
 
-Writing $d=10^{-4}$ and using $A$ for the corresponding direction's $A_a$ or $A_v$, the same spectrum has the polynomial-ratio form
+Writing $A$ for the corresponding direction's $A_a$ or $A_v$, every rational spectrum in this chapter uses one polynomial-ratio template
 
 $$
-S_\Omega(\Omega)=\frac{b_0}{a_2\Omega^2+\Omega^4},
+S_\Omega(\Omega)=\frac{b_0}{a_0+a_2\Omega^2+a_4\Omega^4},
+$$
+
+in which $a_0$, $a_2$ and $a_4$ are the coefficients of the denominator expanded in even powers of $\Omega$ and $b_0$ is the constant numerator. The $S_\Omega$ of the template is in SI form, that is, the $\mathrm{cm^2\to m^2}$ conversion above has already been applied, so it equals the closed form written earlier in this section from the traditional tabulated values multiplied by $10^{-4}$. The single-cutoff spectrum is the special case
+
+$$
+a_0=0,
 \qquad
 a_2=\Omega_c^2,
 \qquad
-b_0=kAd\,\Omega_c^2.
+a_4=1,
+\qquad
+b_0=kA\cdot10^{-4}\,\Omega_c^2,
 $$
 
-`AarTrackClass` selects only the shape and amplitude determined by $A_a$, $A_v$, $k$, and $\Omega_c$; it does not implicitly prescribe unique values of $f_{\min}$, $f_{\max}$, or the number of discrete frequencies.
+in which $a_0=0$ is what makes the spectrum grow as $\Omega^{-2}$ at low angular wavenumber.
+
+`AarTrackClass` selects only the shape and amplitude determined by $A_a$, $A_v$, $k$ and $\Omega_c$; it does not implicitly prescribe unique values of $f_{\min}$, $f_{\max}$ or the number of discrete frequencies.
 
 ### 3.2 Gauge and cross-level (theory only)
 
@@ -99,7 +109,7 @@ S_{gcl}(\Omega)=
 {(\Omega^2+\Omega_c^2)(\Omega^2+\Omega_s^2)}.
 $$
 
-Its polynomial form satisfies
+In the template of section 3.1, likewise in the converted SI form, its coefficients are
 
 $$
 a_0=\Omega_c^2\Omega_s^2,
@@ -123,7 +133,7 @@ Gauge and cross-level are different geometric quantities; sharing a rational-fun
 
 ## 4. Finite band and variance
 
-The single-cutoff spectrum grows as $\Omega^{-2}$ at low angular wavenumber, so its variance diverges if the lower cutoff tends to zero. A positive $f_{\min}$ is part of the model definition, not a numerical detail that can be removed for free. The high-angular-wavenumber tail decays as $\Omega^{-4}$, but $f_{\max}$ still sets the shortest wavelength and the highest spatial frequency delivered to the track, wheel-rail contact, and vehicle models.
+The single-cutoff spectrum grows as $\Omega^{-2}$ at low angular wavenumber, so its variance diverges if the lower cutoff tends to zero. A positive $f_{\min}$ is part of the model definition, not a numerical detail that can be removed for free. The high-angular-wavenumber tail decays as $\Omega^{-4}$, but $f_{\max}$ still sets the shortest wavelength and the highest spatial frequency delivered to the track, wheel-rail contact and vehicle models.
 
 For $0<\Omega_{\min}<\Omega_{\max}$, define
 
@@ -142,7 +152,7 @@ $$
 \Omega_{\min,\max}=2\pi f_{\min,\max}.
 $$
 
-Lowering $f_{\min}$ adds long-wave energy, while raising $f_{\max}$ adds short-wave energy, so the spectral formula, finite band, and realization jointly define a random operating case. The spacing $\Delta s$ of the spatial output grid must also satisfy the necessary Nyquist condition
+Lowering $f_{\min}$ adds long-wave energy, while raising $f_{\max}$ adds short-wave energy, so the spectral formula, finite band and realization jointly define a random operating case. The spacing $\Delta s$ of the spatial output grid must also satisfy the necessary Nyquist condition
 
 $$
 \Delta s\,f_{\max}<\frac12.
@@ -174,14 +184,22 @@ r_{\mathrm{raw}}(s)=\sum_{j=1}^{N}
 \xi=s-s_0,
 $$
 
-where $s_0$ is the placement start and $\theta_j$ is uniform over $[0,2\pi)$. Each term has zero phase expectation and variance $S_f(f_j)\Delta f$, so independent phases give total expected variance
+where $s_0$ is the placement start and $\theta_j$ is uniform over $[0,2\pi)$. Taking expectation over the phases, each harmonic term has zero mean and variance $S_f(f_j)\Delta f$. If the phases are mutually independent, the harmonic sum has zero mean and variance
 
 $$
 \sigma_{\mathrm{discrete}}^2
 =\sum_{j=1}^{N}S_f(f_j)\Delta f.
 $$
 
-The generator gives endpoints and interior frequencies the same rectangular weight instead of trapezoidal half-weights at the endpoints. Consequently, $\sigma_{\mathrm{discrete}}^2$ and the preceding continuous integral are distinct quantities that approach each other as the frequency grid is refined. The phase coordinate is local station $\xi$, so moving the placement while holding the spectrum, frequency grid, and seed fixed translates the same realization with its start.
+The generator gives endpoints and interior frequencies the same rectangular weight instead of trapezoidal half-weights at the endpoints. Consequently, $\sigma_{\mathrm{discrete}}^2$ and the preceding continuous integral are distinct quantities that approach each other as the frequency grid is refined. The phase coordinate is local station $\xi$, so moving the placement while holding the spectrum, frequency grid and seed fixed translates the same realization with its start.
+
+The equally spaced frequency grid carries one further identity. Write the harmonic sum in complex form as $Z(\xi)=\sum_{j=1}^{N}\sqrt{2S_f(f_j)\Delta f}\,e^{\mathrm i(2\pi f_j\xi+\theta_j)}$, so that $r_{\mathrm{raw}}=\operatorname{Re}Z$. With $T=1/\Delta f$, the relations $f_jT=f_{\min}/\Delta f+(j-1)$ and $e^{\mathrm i2\pi(j-1)}=1$ give
+
+$$
+Z(\xi+T)=e^{\mathrm i2\pi f_{\min}/\Delta f}Z(\xi).
+$$
+
+A shift by $T$ multiplies the complex harmonic sum by a single constant phase factor independent of both $\xi$ and $j$. Thus $|Z|$ has $T$ as a period, but this does not make $T$ a general period or an “effective random length” of the real-valued realization. The real signal $r_{\mathrm{raw}}=\operatorname{Re}Z$ usually does not repeat pointwise after a shift by $T$: if $f_{\min}/\Delta f=p/q$ in lowest terms, then $qT$ is one of its periods; if that ratio is irrational, the equally spaced grid forms a quasiperiodic sum with no finite common period.
 
 ### 5.2 From realization seed to phase
 
@@ -201,7 +219,7 @@ lateral_seed  = SplitMix64(realization_seed XOR 0x4C41544552414C00)
 vertical_seed = SplitMix64(realization_seed XOR 0x564552544943414C)
 ```
 
-The two domain constants encode `LATERAL` followed by a null byte and `VERTICAL`, respectively. The additions, odd multiplications, and xor-shifts above are invertible, so the complete `SplitMix64` map is a bijection; the two different domain inputs therefore produce two different channel seeds.
+The two domain constants encode `LATERAL` followed by a null byte and `VERTICAL`, respectively. The additions, odd multiplications and xor-shifts above are invertible, so the complete `SplitMix64` map is a bijection; the two different domain inputs therefore produce two different channel seeds.
 
 Each channel uses an independent `std::mt19937_64` engine and consumes random words in ascending frequency order. For its $j$th 64-bit output $x_j$, the phase map is defined explicitly as
 
@@ -238,9 +256,7 @@ In real arithmetic this is equivalent to direct evaluation of the harmonic formu
 If both channels reused exactly the same phases, the AAR6 lateral and vertical sequences would be pointwise identical because their PSDs are equal. The two AAR5 spectra differ only in amplitude, so their sequences would have the fixed ratio
 
 $$
-\sqrt{\frac{A_v}{A_a}}
-=\sqrt{\frac{0.2095}{0.0762}}
-\approx1.65811454.
+\sqrt{\frac{A_v}{A_a}}.
 $$
 
 Such phase locking is not a physical correlation prescribed by an AAR spectrum. Domain separation gives the current two channels different pseudorandom phase streams, but different seeds do not force the sample correlation coefficient over every finite interval to equal zero. A multidirectional field with a known cross-spectrum should instead specify a positive-semidefinite cross-spectral matrix and use joint spectral factorization and generation; the current implementation does not contain that algorithm, so this is a theoretical extension only.
@@ -276,7 +292,7 @@ $$
 r(s)=w(s)r_{\mathrm{raw}}(s).
 $$
 
-This construction requires $s_1>s_0$, $L_{\mathrm{in}}>0$, $L_{\mathrm{out}}>0$, and $L_{\mathrm{in}}+L_{\mathrm{out}}\le s_1-s_0$. Equality means that the two fades meet at one full-amplitude point without a negative-length plateau.
+This construction requires $s_1>s_0$, $L_{\mathrm{in}}>0$, $L_{\mathrm{out}}>0$ and $L_{\mathrm{in}}+L_{\mathrm{out}}\le s_1-s_0$. Equality means that the two fades meet at one full-amplitude point without a negative-length plateau.
 
 The quintic satisfies
 
@@ -286,22 +302,23 @@ q(0)=0,
 \quad q'(0)=q'(1)=q''(0)=q''(1)=0.
 $$
 
-Because the finite harmonic sum is itself smooth, the analytic product $r(s)$ has continuous displacement, first slope, and second derivative where the zero, fade, and full-amplitude regions join. For $u>0.5$, `Smoothstep5` evaluates the form symmetric about $u=0.5$ to reduce cancellation from direct polynomial evaluation near 1.
+Because the finite harmonic sum is itself smooth, the analytic product $r(s)$ has continuous displacement, first slope and second derivative where the zero, fade and full-amplitude regions join. For $u>0.5$, `Smoothstep5` evaluates the form symmetric about $u=0.5$ to reduce cancellation from direct polynomial evaluation near 1.
 
 The generated samples are multiplied by the envelope first, then cropped to $[s_0,s_1]$ and used to construct the natural-cubic-spline `TrackIrregularityField`. This field returns zero displacement and zero slope strictly outside its definition interval, but the spline endpoint derivatives arise from discrete interpolation and are not necessarily bitwise zero merely because the analytic window has $q'(0)=q'(1)=0$.
 
 ## 7. Theoretical assumptions and applicability
 
-In the infinite-station idealization, the raw random-phase sum has the second-order statistical structure prescribed by the input PSD. A finite band, finite frequency count, and finite station interval turn it into a discrete approximation. Multiplication by the placement envelope makes the field non-stationary in the transition regions, so the stationary interpretation of spectrum and variance applies directly only to the ungated harmonic sum or the full-amplitude plateau.
+In the infinite-station idealization, the raw random-phase sum has the second-order statistical structure prescribed by the input PSD. A finite band, finite frequency count and finite station interval turn it into a discrete approximation. Multiplication by the placement envelope makes the field non-stationary in the transition regions, so the stationary interpretation of spectrum and variance applies directly only to the ungated harmonic sum or the full-amplitude plateau.
 
-A PSD specifies only second-order statistics; it preserves neither the deterministic phase of a real line nor isolated defects. Random phases, no prescribed cross-spectrum between lateral and vertical channels, the single-cutoff spectrum, and natural-spline reconstruction are model assumptions. A study that depends on deterministic defects, non-stationary evolution, or directional coherence needs an extended model.
+A PSD specifies only second-order statistics; it preserves neither the deterministic phase of a real line nor isolated defects. Random phases, no prescribed cross-spectrum between lateral and vertical channels, the single-cutoff spectrum and natural-spline reconstruction are model assumptions. A study that depends on deterministic defects, non-stationary evolution or directional coherence needs an extended model.
 
 ## 8. Source mapping
 
 | Theoretical object | Primary implementation |
 |---|---|
-| AAR parameters, $S_\Omega\to S_f$, and continuous finite-band variance | `AarSingleCutoffPsdParametersFor`, `EvaluateAarOneSidedSpatialPsd`, `ContinuousBandVariance`; see [`aar_track_irregularity_generator.cc`](../../../libs/track_irregularity/src/aar_track_irregularity_generator.cc) |
+| AAR parameters, $S_\Omega\to S_f$ and continuous finite-band variance | `AarSingleCutoffPsdParametersFor`, `EvaluateAarOneSidedSpatialPsd`, `ContinuousBandVariance`; see [`aar_track_irregularity_generator.cc`](../../../libs/track_irregularity/src/aar_track_irregularity_generator.cc) |
 | Domain separation and seed-to-phase mapping | `DeriveAarTrackIrregularityChannelSeeds`, `SplitMix64`, `ReproduciblePhaseGenerator` |
-| Harmonic sum, discrete variance, and periodic reanchoring | `AccumulateHarmonicChannel` |
+| Harmonic sum, discrete variance and periodic reanchoring | `AccumulateHarmonicChannel` inside `GenerateAarTrackIrregularity` |
 | Quintic envelope and two-channel generation | `Smoothstep5`, `TrackIrregularityPlacementWeight`, `GenerateAarTrackIrregularity`; type definitions are in [`aar_track_irregularity_generator.h`](../../../libs/track_irregularity/include/orvd/track_irregularity/aar_track_irregularity_generator.h) |
-| Generated samples to vehicle field | `ResolveTrackIrregularityField`; see [`resolve_track_irregularity_field.cc`](../../../libs/configuration/src/resolve_track_irregularity_field.cc); outside-domain semantics are in [`track_irregularity_field.cc`](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |
+| Generated samples to vehicle field | `ResolveTrackIrregularityField`; see [`resolve_track_irregularity_field.cc`](../../../libs/configuration/src/resolve_track_irregularity_field.cc) |
+| Zero displacement and zero slope outside the definition interval | `TrackIrregularityField::LateralDisplacementMeters`, `VerticalDisplacementMeters`, `LateralSlopeMetersPerMeter`, `VerticalSlopeMetersPerMeter`; see [`track_irregularity_field.cc`](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |

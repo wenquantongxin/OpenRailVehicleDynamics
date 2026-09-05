@@ -2,7 +2,7 @@
 
 # 单轮接触模型组装与成对扳手
 
-本篇说明 `WheelRailContactModel` 如何把接触几何、法向力、蠕滑率、Kalker 系数与 FASTSIM 切向力组装成作用于一个车轮—钢轨接触斑的空间扳手。重点是各物理阶段之间传递什么、钢轨材料参考点 `R` 与轮侧力作用点 `P` 为何不同，以及力和力矩如何换点、换基。
+本篇说明 `WheelRailContactModel` 如何把接触几何、法向力、蠕滑率、Kalker 系数与 FASTSIM 切向力组装成一个车轮—钢轨配对中各接触斑的空间扳手。重点是各物理阶段之间传递什么、钢轨材料参考点 `R` 与轮侧力作用点 `P` 为何不同，以及力和力矩如何换点、换基。
 
 ## 1. 五阶段物理链
 
@@ -10,9 +10,9 @@
 
 1. **接触几何**：由轮轨型面和相对位姿得到零个或多个接触斑，以及每个斑的位置、宽度、面积、穿透、局部半径和表面方向。
 2. **法向接触**：由斑几何和法向接近速度得到法向力 $N$、等效穿透 $\delta_{\mathrm{eq}}$ 与接触椭圆半轴 $a$、$b$。
-3. **蠕滑率**：由接触系中的相对平动、相对转动和滚动参考速度得到 $\xi_x$、$\xi_y$ 与 $\varphi$。
+3. **蠕滑率**：由接触坐标系中的相对平动、相对转动和滚动参考速度得到 $\xi_x$、$\xi_y$ 与 $\xi_{sp}$。
 4. **Kalker 系数**：由半轴比 $a/b$ 与材料泊松比得到 $C_{11}$、$C_{22}$、$C_{23}$，并由此形成切向局部柔度。
-5. **切向接触**：由 $N$、$a$、$b$、摩擦系数、蠕滑率与局部柔度求得接触系中的 $F_x$、$F_y$。
+5. **切向接触**：由 $N$、$a$、$b$、摩擦系数、蠕滑率与局部柔度求得接触坐标系中的 $F_x$、$F_y$。
 
 随后，组装层把 $(F_x,F_y,N)$ 转为轨型系中的力，放置到轮侧作用点 `P`，并形成成对扳手。各阶段的内部理论分别见[接触几何](CONTACT_GEOMETRY.md)、[法向接触力](NORMAL_CONTACT_FORCE.md)、[蠕滑率与接触坐标系](CREEPAGE_AND_CONTACT_FRAME.md)、[Kalker 线性蠕滑系数](KALKER_COEFFICIENTS.md)和 [FASTSIM 切向接触](TANGENTIAL_CONTACT_FASTSIM.md)。
 
@@ -26,10 +26,10 @@
 
 ### 3.1 钢轨材料参考点 R
 
-几何阶段给出 `R` 在钢轨型面自身坐标中的坐标 $\mathbf r_R$。由钢轨型面原点 $\mathbf o_{\mathrm{rail}}$ 与姿态 $R_{T\mathrm{rail}}$ 放置到轨型系：
+几何阶段给出 `R` 在钢轨型面自身三维坐标中的坐标 $\mathbf r_R$；其纵向分量沿型面的挤出方向，横竖分量位于型面横截面内。钢轨型面在轨型系中的放置原点为 $\mathbf o_c$、放置姿态为 $R_{T\mathrm{rail}}$，后者除轨底坡外还含方向与高低不平顺的两个斜率角，并含承载站位与有效站位两处轨型系之间的姿态差：
 
 $$
-\mathbf x_R=\mathbf o_{\mathrm{rail}}+R_{T\mathrm{rail}}\mathbf r_R.
+\mathbf x_R=\mathbf o_c+R_{T\mathrm{rail}}\mathbf r_R.
 $$
 
 若轮型面系 W 的基准点位置与速度为 $\mathbf o_W$、$\mathbf v_o$，轮体实际角速度为 $\boldsymbol\omega$，则轮材料在 `R` 处的速度以及相对角速度为
@@ -44,6 +44,8 @@ $$
 `R` 的用途是使轮、轨材料速度在同一个空间位置上比较。它不是轮面上的力作用点，也不是压力形心。
 
 ### 3.2 轮侧力作用点 P
+
+本篇的轮型面系 W 不含车轮自旋，其原点是车轴上的型面基准，$z$ 轴沿径向向下，见[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)。下式的第三分量与后文的 $z_{\mathrm{rev}}$ 都以这一原点为准：只有竖向坐标自车轴量起，轮面点的竖向坐标才等于局部半径。[接触几何](CONTACT_GEOMETRY.md)篇内部使用的是相对标称滚动圆的型面高度 $h_w=r-r_0$；它与本篇 W 系中从车轴量起的径向坐标相差 $r_0$。
 
 设接触斑在轮型面中的纵向坐标、横向站位和未变形局部半径为 $x_w$、$y_w$、$r$。本实现以下式定义力的取矩点：
 
@@ -64,15 +66,15 @@ $$
 z_{\mathrm{rev}}=\sqrt{\max(0,r^2-x_w^2)},
 $$
 
-而上式采用 $r-\delta_{\mathrm{eq}}/2$。因此 $x_w\ne0$ 时，`P` 一般不是精确回转面材料点，而是把局部型面沿纵向挤出后，再沿轮型面 $z$ 轴内移半个等效穿透所得的作用点；在 $x_w=0$ 时，其未变形部分才与最低径向位置重合。这一区分确定后续扳手换点的力臂，但不改变接触几何求得的 $x_w$。
+而上式采用 $r-\delta_{\mathrm{eq}}/2$。因此 `P` 不是未变形回转面上的精确材料点：它把局部型面沿纵向挤出，再沿轮型面 $z$ 轴内移半个等效穿透。内移的半个等效穿透在任何 $x_w$ 处都存在，$x_w=0$ 也不例外；$x_w\ne0$ 时另有挤出面与回转面之差 $r-z_{\mathrm{rev}}$，该差在 $x_w=0$ 处为零。这一区分确定后续扳手换点的力臂，但不改变接触几何求得的 $x_w$。
 
 `R` 与 `P` 来自不同构造：前者服务相对速度，后者服务力作用位置。把二者合并会改变将接触力搬移到车轮刚体原点时的力臂和力矩。
 
-## 4. 接触系中的力
+## 4. 接触坐标系中的力
 
-接触系 `C` 由斑的 `rail_slope_angle_radians` 构成，其到轨型系的旋转为 $R_{TC}$。同一个接触系用于法向接近速度、蠕滑率和最终力变换，避免三部分采用不同的表面方向。
+接触坐标系 `C` 由斑的 `rail_slope_angle_radians` 构成，其到轨型系的旋转为 $R_{TC}$。同一个接触坐标系用于法向接近速度、蠕滑率和最终力变换，避免三部分采用不同的表面方向。
 
-法向 $+z_C$ 指入钢轨，因此钢轨作用于车轮的法向分量为 $-N$。接触系与轨型系中的力为
+法向 $+z_C$ 指入钢轨，因此钢轨作用于车轮的法向分量为 $-N$。接触坐标系与轨型系中的力为
 
 $$
 \mathbf f_C=
@@ -144,7 +146,7 @@ for each geometric patch:
 
     creepages = contact_creepages(relative_motion, frame, patch.local_radius)
     mu = friction_law(creepages)
-    (F_x, F_y) = tangential_contact(normal, creepages, mu, a / b)
+    (F_x, F_y) = tangential_contact(normal, creepages, mu)
 
     f_C = (F_x, F_y, -N)
     f_T = frame.rotation * f_C
@@ -152,13 +154,13 @@ for each geometric patch:
     emit paired_wrench(point = x_P, force = f_T, direct_moment = 0)
 ```
 
-法向载荷不为正时不计算切向力，因为没有法向约束就没有库仑摩擦容量。多斑情况下，每个斑独立走完以上链条；车辆力计划再把各斑扳手搬移到车轮或轮对的所需参考点并累加。
+法向载荷不为正时不计算切向力，因为没有法向约束就没有库仑摩擦容量。多斑情况下，每个斑独立走完以上链条。对每个轮轨接口，车辆力计划把各斑的钢轨作用于车轮扳手从各自的 `P` 点搬移到车轮刚体原点，在承载站位的轨型系中累加，再把总扳手转入惯性系并施加到车轮刚体。钢轨不是多体树中的刚体，因而成对结果中的车轮作用于钢轨一半不作为刚体外力施加。
 
 ## 7. 模型范围与近似
 
 该组装继承各阶段的适用条件与非光滑性：接触斑出现、消失或合并；法向力的单边接触；低速蠕滑参考速度约定；Kalker 折线与渐近拼接；FASTSIM 的黏滑切换和自适应条带。组装层不会消除这些特征。
 
-当前模型还作出四项明确取舍：钢轨材料在接触元中静止；斑间不直接弹性耦合；斑内直接自旋力矩为零；`P` 采用上述型面挤出式作用点，而不是非零 $x_w$ 处的精确回转面材料点。这些量若要进入车辆动力学，需要扩展相应物理阶段，不能从现有成对力扳手中唯一恢复。
+当前模型还作出四项明确取舍：钢轨材料在接触元中静止；斑间不直接弹性耦合；斑内直接自旋力矩为零；`P` 采用上述型面挤出并沿轮型面 $z$ 轴内移半个等效穿透的作用点，而不是未变形回转面上的精确材料点。这些量若要进入车辆动力学，需要扩展相应物理阶段，不能从现有成对力扳手中唯一恢复。
 
 ## 8. 源码映射
 
@@ -166,6 +168,7 @@ for each geometric patch:
 |---|---|
 | 五阶段组装与 `R`、`P` 的形成 | `WheelRailContactModel::Evaluate`，见 [`wheel_rail_contact_model.cc`](../../../libs/wheel_rail_contact/src/wheel_rail_contact_model.cc) |
 | 模型输入和逐斑结果 | `WheelRailContactInput`、`WheelRailContactPatchResult`，见 [`wheel_rail_contact_model.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/wheel_rail_contact_model.h) |
-| 接触系与相对运动 | `ContactFrame`、`ContactRelativeMotion`，见 [`contact_creepage.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h) |
+| 接触坐标系与相对运动 | `ContactFrame`、`ContactRelativeMotion`，见 [`contact_creepage.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h) |
 | 空间扳手换点与换基 | `TransportWrench`、`RotateWrench`，见 [`contact_wrench.cc`](../../../libs/wheel_rail_contact/src/contact_wrench.cc) |
-| 成对扳手 | `PairedContactWrench`、`MakePairedContactWrench`，见 [`contact_wrench.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_wrench.h) |
+| 成对扳手 | `PairedContactWrench`、`MakePairedContactWrench`，见 [`contact_wrench.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_wrench.h) 与 [`contact_wrench.cc`](../../../libs/wheel_rail_contact/src/contact_wrench.cc) |
+| 多斑换点、累加与施加 | `WheelRailContactForcePlan::CalcAppliedForcesImpl`，见 [`wheel_rail_contact_force_plan.cc`](../../../libs/forces/src/wheel_rail_contact_force_plan.cc) |

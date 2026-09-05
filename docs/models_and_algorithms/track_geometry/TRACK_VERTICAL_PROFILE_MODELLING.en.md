@@ -1,12 +1,12 @@
 [中文](TRACK_VERTICAL_PROFILE_MODELLING.md)
 
-# Track vertical profiles and their three-dimensional coupling
+# Track vertical profile modelling and its three-dimensional coupling
 
-This chapter explains how ORVD constructs a vertical profile from constant-grade segments, parabolic vertical curves, and circular vertical curves parameterized by planar-projected station; how explicit quintic seams connect adjacent segments; and how the vertical profile combines with planar curvature and superelevation to form the three-dimensional centerline and track frame. The formulas state the mathematical model and the analytic relations used by its code implementation.
+This chapter explains how ORVD constructs a vertical profile from constant-grade segments, parabolic vertical curves and circular vertical curves parameterized by planar-projected station; how explicit quintic seams connect adjacent segments; and how the vertical profile combines with planar curvature and superelevation to form the three-dimensional centerline and track frame. The formulas state the mathematical model and the analytic relations used by its code implementation.
 
 ## 1. Scope and notation
 
-The track inertial frame is denoted by `I`: its `+x` axis follows increasing station at the line's starting point, `+y` points right when facing increasing station, and `+z` points downward. Station $s$ is arc length of the centerline's horizontal projection, not arc length of the three-dimensional centerline. See [Conventions and Notation](../CONVENTIONS_AND_NOTATION.en.md) for the complete coordinate conventions and [Track geometry and frames](TRACK_GEOMETRY_AND_FRAMES.en.md) for the general algorithms for planar curvature, centerline integration, and track frames.
+The track inertial frame is denoted by `I`: its `+x` axis follows increasing station at the line's starting point, `+y` points right when facing increasing station and `+z` points downward. Station $s$ is arc length of the centerline's horizontal projection, not arc length of the three-dimensional centerline. See [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md) for the complete coordinate conventions and [Line geometry and track frames](TRACK_GEOMETRY_AND_FRAMES.en.md) for the general algorithms for planar curvature, centerline integration and track frames.
 
 | Symbol | Meaning |
 |---|---|
@@ -18,8 +18,8 @@ The track inertial frame is denoted by `I`: its `+x` axis follows increasing sta
 | $\psi(s)$, $\kappa(s)$ | Horizontal heading and planar curvature, with $d\psi/ds=\kappa$ |
 | $\mathbf C(s)$ | Three-dimensional centerline position expressed in `I` |
 | $\ell$ | Three-dimensional centerline arc length |
-| $\kappa_v$ | Signed curvature of the vertical profile in the “planar-projected station–upward elevation” plane |
-| $u(s)$, $b$, $\phi(s)$ | Signed superelevation, superelevation reference baselength, and track roll angle |
+| $\kappa_v$, $r_v$ | Signed curvature and signed radius of the vertical profile in the plane of planar-projected station and upward elevation |
+| $u(s)$, $b$, $\phi(s)$ | Signed superelevation, superelevation reference baselength and track roll angle |
 
 Track vertical irregularity is a local excitation superposed on the ideal line and is not part of what this chapter calls the vertical profile. A vertical curve specifically means a transition over which grade varies continuously; it is not a synonym for every nonzero-grade segment.
 
@@ -50,11 +50,11 @@ $$
 \frac{d\ell}{ds}=\sqrt{1+g^2},\qquad \dot\ell=\sqrt{1+g^2}\,\dot s.
 $$
 
-When grade is nonzero, $s$, $\ell$, and their time rates are not interchangeable. All vertical-alignment segment lengths and seam widths are measured along $s$.
+When grade is nonzero, $s$, $\ell$ and their time rates are not interchangeable. All vertical-alignment segment lengths and seam widths are measured along $s$.
 
 ## 3. The vertical profile as a mathematical object
 
-A vertical profile is a finite end-to-end sequence of segments. Each raw segment analytically supplies $g$, $g'$, $g''$, and $\int g\,ds$ accumulated from that segment's start; the complete profile forms $I_g$ by adding the integrals of preceding pieces to the local integral of the current piece. ORVD currently implements three raw segment types:
+A vertical profile is a finite end-to-end sequence of segments. Each raw segment analytically supplies $g$, $g'$, $g''$ and $\int g\,ds$ accumulated from that segment's start; the complete profile forms $I_g$ by adding the integrals of preceding pieces to the local integral of the current piece. ORVD currently implements three raw segment types:
 
 | Physical alignment | Parameters | Within-segment grade property |
 |---|---|---|
@@ -93,31 +93,31 @@ g(\hat s)=g_1+\frac{g_2-g_1}{L}\hat s,
 \qquad 0\le\hat s\le L.
 $$
 
-Let $q=(g_2-g_1)/L$. Then
+Let $m_g=(g_2-g_1)/L$. Then
 
 $$
-g'=q,\qquad g''=0,
+g'=m_g,\qquad g''=0,
 $$
 
 $$
-\int_0^{\hat s}g(u)\,du=g_1\hat s+\frac{q}{2}\hat s^2,
+\int_0^{\hat s}g(u)\,du=g_1\hat s+\frac{m_g}{2}\hat s^2,
 \qquad
-z(\hat s)-z(0)=-g_1\hat s-\frac{q}{2}\hat s^2.
+z(\hat s)-z(0)=-g_1\hat s-\frac{m_g}{2}\hat s^2.
 $$
 
 “Parabolic” means that elevation is quadratic in planar-projected station. It does not mean that the inclination angle $\theta$ is linear in station, because
 
 $$
-\frac{d\theta}{ds}=\frac{q}{1+g^2},
+\frac{d\theta}{ds}=\frac{m_g}{1+g^2},
 \qquad
-\frac{d^2\theta}{ds^2}=-\frac{2gq^2}{(1+g^2)^2}.
+\frac{d^2\theta}{ds^2}=-\frac{2g m_g^2}{(1+g^2)^2}.
 $$
 
 A PL2 has smooth elevation and grade within the segment, but its $g'$ generally jumps where it directly meets a constant-grade segment. The explicit seam in Section 5 supplies higher junction smoothness when required.
 
 ### 4.3 Circular vertical curve (CIR)
 
-A CIR is an exact circular arc in the “planar-projected station–upward elevation” plane. It is parameterized by $L$, $g_1$, and $g_2$, with
+A CIR is an exact circular arc in the plane of planar-projected station and upward elevation. It is parameterized by $L$, $g_1$ and $g_2$, with
 
 $$
 \theta_i=\arctan g_i,
@@ -130,31 +130,29 @@ $$
 The signed inverse radius and radius are
 
 $$
-\rho=\frac{1}{R}=\frac{\sin\theta_2-\sin\theta_1}{L},
+\rho=\frac{1}{r_v}=\frac{\sin\theta_2-\sin\theta_1}{L},
 \qquad
-R=\frac{L}{\sin\theta_2-\sin\theta_1}.
+r_v=\frac{L}{\sin\theta_2-\sin\theta_1}.
 $$
 
-Within the segment, define
+Within the segment it is the sine of the inclination that varies linearly:
 
 $$
-q(\hat s)=\sin\theta_1+\rho\hat s.
+\sin\theta(\hat s)=\sin\theta_1+\rho\hat s.
 $$
 
 Because finite grade has $\cos\theta>0$, the grade follows from
 
 $$
-\sin\theta(\hat s)=q(\hat s),
+\cos\theta(\hat s)=\sqrt{1-\sin^2\theta(\hat s)},
 \qquad
-\cos\theta(\hat s)=\sqrt{1-q(\hat s)^2},
-\qquad
-g(\hat s)=\frac{q(\hat s)}{\sqrt{1-q(\hat s)^2}}
+g(\hat s)=\frac{\sin\theta(\hat s)}{\cos\theta(\hat s)}
 $$
 
 Elevation can be written as
 
 $$
-z(\hat s)-z(0)=R\left[\cos\theta(\hat s)-\cos\theta_1\right],
+z(\hat s)-z(0)=r_v\left[\cos\theta(\hat s)-\cos\theta_1\right],
 $$
 
 while the code uses the mathematically equivalent grade-integral form that avoids multiplying a large radius by a difference of nearby cosines:
@@ -162,8 +160,8 @@ while the code uses the mathematically equivalent grade-integral form that avoid
 $$
 \int_0^{\hat s}g(u)\,du
 =\hat s\,
-\frac{q(\hat s)+\sin\theta_1}
-{\sqrt{1-q(\hat s)^2}+\cos\theta_1},
+\frac{\sin\theta(\hat s)+\sin\theta_1}
+{\cos\theta(\hat s)+\cos\theta_1},
 \qquad
 z(\hat s)-z(0)=-\int_0^{\hat s}g(u)\,du.
 $$
@@ -201,7 +199,7 @@ $$
 For a CIR, substituting $g'=\rho/\cos^3\theta$ and $1+g^2=1/\cos^2\theta$ gives
 
 $$
-\kappa_v=\rho=\frac{1}{R},
+\kappa_v=\rho=\frac{1}{r_v},
 $$
 
 so a CIR has constant curvature in the vertical-profile plane even though $d\theta/ds$ varies with grade.
@@ -216,7 +214,7 @@ No implicit smoothing is added at such a boundary. At an internal piece boundary
 
 ### 5.2 Quintic grade bridge
 
-An explicit seam window is centered on a raw-segment boundary $s_b$, has full width $w>0$, and has endpoints $s_L=s_b-w/2$ and $s_R=s_b+w/2$. The left endpoint data come from the left raw segment and the right endpoint data from the right raw segment:
+An explicit seam window is centered on a raw-segment boundary $s_b$, has full width $w>0$ and has endpoints $s_L=s_b-w/2$ and $s_R=s_b+w/2$. The left endpoint data come from the left raw segment and the right endpoint data from the right raw segment:
 
 $$
 \mathbf d=
@@ -255,15 +253,15 @@ $$
 =w\sum_{r=0}^{5}d_r\int_0^{\xi}H_r(\eta)\,d\eta.
 $$
 
-Elevation therefore uses the area of the replacement seam rather than continuing to accumulate the covered raw segments. Seam grade is $C^2$ at both window endpoints; since $z'=-g$, the corresponding elevation has continuous derivatives through third order there, while its fourth derivative can generally jump.
+Elevation therefore uses the area of the replacement seam rather than continuing to accumulate the covered raw segments. At each window endpoint the seam matches $(g,g',g'')$ of the raw segment it is built from. When that endpoint lies inside that raw segment, the seam is $C^2$ there; the same conclusion holds in the one-sided sense within the profile when it coincides with a definition endpoint of the complete profile. Since $z'=-g$, the corresponding elevation has continuous derivatives through third order at that endpoint, while its fourth derivative can generally jump. When a half-width exactly fills the whole length of the adjacent raw segment, that segment is entirely covered by the seam and no longer forms a piece of its own, and the window endpoint coincides with a further raw-segment boundary that carries no seam; the two sides of that endpoint are then the seam formula and the next raw segment outward, so only the grade value is guaranteed continuous, $g'$ may jump and elevation is guaranteed only $C^1$. The same situation can arise at either window endpoint.
 
-A seam window lies at an internal boundary with raw segments on both sides, its half-width does not pass beyond either adjacent raw segment, and the interiors of distinct seam windows do not overlap. These geometric conditions ensure that each station is defined by exactly one raw formula or one seam formula.
+A seam window lies at an internal boundary with raw segments on both sides, its half-width does not pass beyond either adjacent raw segment and the interiors of distinct seam windows do not overlap. These geometric conditions ensure that each station is defined by exactly one raw formula or one seam formula.
 
 ## 6. Three-dimensional coupling with planar alignment
 
 ### 6.1 Centerline integration
 
-Planar curvature $\kappa(s)$ and vertical grade $g(s)$ share the same planar-projected station. Heading, horizontal position, and vertical position are
+Planar curvature $\kappa(s)$ and vertical grade $g(s)$ share the same planar-projected station. Heading, horizontal position and vertical position are
 
 $$
 \psi(s)=\int_{s_{\min}}^s\kappa(\sigma)\,d\sigma,
@@ -290,9 +288,9 @@ $$
 \end{bmatrix}.
 $$
 
-Vertical raw-segment and seam boundaries therefore form the partition of second-order centerline geometry. A raw boundary covered by a seam window remains part of the line topology, but the actual formula switches occur at the two seam-window endpoints.
+Vertical raw-segment boundaries, seam-window endpoints and planar-curvature breakpoints therefore all enter the centerline node partition. A raw boundary covered by a seam window remains part of the line topology, but the actual switch of the vertical formula occurs at the two seam-window endpoints.
 
-### 6.2 Planar, vertical-profile, and spatial curvature
+### 6.2 Planar, vertical-profile and spatial curvature
 
 Let $\mathbf T$ be the three-dimensional unit tangent, and use the roll-free axes $\mathbf y_0$ and $\mathbf z_0$ from Section 7. Then
 
@@ -310,19 +308,19 @@ $$
 =\sqrt{\kappa^2\cos^4\theta+\kappa_v^2}.
 $$
 
-Planar curvature, vertical-profile curvature, and three-dimensional centerline curvature are therefore three distinct quantities. Superelevation rolls axes about the centerline and changes neither the centerline itself nor this spatial curvature.
+Planar curvature, vertical-profile curvature and three-dimensional centerline curvature are therefore three distinct quantities. Superelevation rolls axes about the centerline and changes neither the centerline itself nor this spatial curvature.
 
 ### 6.3 Analytic vertical integration and horizontal quadrature
 
-Vertical position is always formed from the analytic $I_g$ supplied by `TrackVerticalProfile`. Horizontal position depends only on $\kappa$: constant-curvature intervals use a closed-form circular chord, while varying-curvature intervals use panelized fixed-order Gauss–Legendre quadrature. Centerline nodes lie on the ordered union of planar-curvature breakpoints and vertical raw-segment and seam boundaries, so each node interval does not cross a piece boundary of $\mathbf C''$. Superelevation does not change the centerline, so its boundaries do not independently add centerline-integration nodes.
+Vertical position is always formed from the analytic $I_g$ supplied by `TrackVerticalProfile`. Horizontal position depends only on $\kappa$: constant-curvature intervals use a closed-form circular chord, while varying-curvature intervals use panelized fixed-order Gauss–Legendre quadrature. The centerline node table is built on the ordered union of planar-curvature breakpoints, vertical raw-segment boundaries and seam-window endpoints; each breakpoint interval is then divided into equal panels no longer than the declared node spacing, and a terminal node is appended at the end of the definition interval. Each node interval therefore crosses neither a switch of the horizontal integration formula nor a piece boundary of $\mathbf C''$. Superelevation does not change the centerline, so its boundaries do not independently add centerline-integration nodes.
 
 This separation means that horizontal integration panels do not replace the analytic accuracy of the vertical profile; conversely, closed-form PL2 or CIR elevation does not remove the numerical approximation in varying-curvature horizontal integration.
 
 ## 7. Coupling with superelevation and the track frame
 
-### 7.1 Roll-free track frame
+### 7.1 Roll-free tangent frame
 
-Let $n=\sqrt{1+g^2}$ and $\mathbf t=\mathbf C'$. The roll-free track-frame axes are
+Let $n=\sqrt{1+g^2}$ and $\mathbf t=\mathbf C'$. The roll-free tangent-frame axes are
 
 $$
 \mathbf x_0=\frac{\mathbf t}{n},
@@ -348,7 +346,7 @@ $$
 \qquad |u|<b.
 $$
 
-The final track-profile frame `T` is obtained by rolling the roll-free frame about its own longitudinal axis:
+The final track frame `T` is obtained by rolling the roll-free tangent frame about its own longitudinal axis:
 
 $$
 R_{IT}=R_{I0}R_x(\phi),
@@ -361,7 +359,7 @@ R_x(\phi)=
 \end{bmatrix}.
 $$
 
-Positive superelevation places the right reference point lower. If the baseline endpoints are separated by $b$ along the track-profile lateral axis, their separation along the downward inertial `z` axis is
+Positive superelevation places the right reference point lower. If the baseline endpoints are separated by $b$ along the track frame's lateral axis, their separation along the downward inertial `z` axis is
 
 $$
 \Delta z_I=b\sin\phi\,(\mathbf z_0\cdot\mathbf e_z)
@@ -372,7 +370,7 @@ Thus, at nonzero grade, the input $u$ is not the two points' height difference a
 
 ### 7.3 Track-frame station rotation rate
 
-The track-frame station rotation rate is constructed from the same $\kappa$, $g$, $g'$, $u$, and $u'$ as the pose. Derivatives of the roll-free axes are
+The track-frame station rotation rate is constructed from the same $\kappa$, $g$, $g'$, $u$ and $u'$ as the pose. Derivatives of the roll-free axes are
 
 $$
 \mathbf t'=\mathbf C'',
@@ -417,38 +415,38 @@ $$
 
 ### 7.4 Theoretical boundary of superelevation datums
 
-The current implementation uses a centerline datum: superelevation rotates the track frame without translating $\mathbf C(s)$ as $u$ changes. The superelevation reference baselength $b$ is the length of an abstract reference baseline, not nominal track gauge or a wheel–rail profile-placement distance.
+The current implementation uses a centerline datum: superelevation rotates the track frame without translating $\mathbf C(s)$ as $u$ changes. The superelevation reference baselength $b$ is the length of an abstract reference baseline, not nominal track gauge or a wheel-rail profile-placement distance.
 
-**Theory only:** If the inner or outer rail is used as a fixed datum, changing superelevation must also translate the centerline in space so that the designated rail reference point remains fixed. Those alternatives require additional definitions of the fixed side, reference point, and displacement direction; the current `TrackGeometry` does not represent that centerline translation.
+**Theory only:** If the inner or outer rail is used as a fixed datum, changing superelevation must also translate the centerline in space so that the designated rail reference point remains fixed. Those alternatives require additional definitions of the fixed side, reference point and displacement direction; the current `TrackGeometry` does not represent that centerline translation.
 
 ## 8. Definition interval and irregularity layering
 
 ### 8.1 Three-dimensional tangent extension
 
-Planar curvature, the vertical profile, and superelevation share a finite interval $[s_{\min},s_{\max}]$ when assembled. For a finite station outside that interval, let $s_b$ be the nearest boundary. The assembled line geometry uses the three-dimensional tangent extension
+Planar curvature, the vertical profile and superelevation share a finite interval $[s_{\min},s_{\max}]$ when assembled. For a finite station outside that interval, let $s_\ast\in\{s_{\min},s_{\max}\}$ be the nearest definition boundary. The assembled line geometry uses the three-dimensional tangent extension
 
 $$
-\mathbf C(s)=\mathbf C(s_b)+(s-s_b)\mathbf C'(s_b),
+\mathbf C(s)=\mathbf C(s_\ast)+(s-s_\ast)\mathbf C'(s_\ast),
 \qquad
-\mathbf C'(s)=\mathbf C'(s_b),
+\mathbf C'(s)=\mathbf C'(s_\ast),
 \qquad
 \mathbf C''(s)=\mathbf 0.
 $$
 
-Outside the interval, boundary values of $\psi$, $g$, $u$, and $\phi$ are held, while $\kappa=g'=u'=0$. The centerline and track attitude are therefore continuous at a definition boundary, but the centerline second derivative and track-frame rotation rate may jump. This is an explicit extension of the assembled line, not an extrapolation uniquely implied by its final PL2 or CIR.
+Outside the interval, boundary values of $\psi$, $g$, $u$ and $\phi$ are held, while $\kappa=g'=u'=0$. The centerline and track-frame attitude are therefore continuous at a definition boundary, but the centerline second derivative and track-frame rotation rate may jump. This is an explicit extension of the assembled line, not an extrapolation uniquely implied by its final PL2 or CIR.
 
 ### 8.2 Ideal vertical alignment and irregularity
 
-The ideal vertical profile determines centerline elevation, grade, and the track frame. Vertical irregularity is a local displacement field superposed at a rail-profile reference and does not rewrite $g(s)$, $I_g(s)$, or the ideal centerline. The displacement rate produced as a vehicle samples irregularity along the line belongs to wheel–rail relative motion; it is not a new constant-grade segment, PL2, or CIR.
+The ideal vertical profile determines centerline elevation, grade and the track frame. Vertical irregularity is a local displacement field expressed in the track frame and superposed on the ideal line; it does not rewrite $g(s)$, $I_g(s)$ or the ideal centerline. The displacement rate produced as a vehicle samples irregularity along the line belongs to wheel-rail relative motion; it is not a new constant-grade segment, PL2 or CIR.
 
-## 9. Approximations, non-smoothness, and applicability
+## 9. Approximations, non-smoothness and applicability
 
-- This model always uses planar-projected station as its independent variable. Constant-grade segments, PL2, and CIR obey the distinct analytic relations in Section 4; similar names do not make those formulas interchangeable.
-- Grade, derivatives, and integrals of constant-grade, PL2, CIR, and quintic-seam pieces are evaluated analytically within each piece. Numerical approximation occurs in horizontal-centerline integration for varying planar curvature, not in the vertical-segment formulas.
-- An unseamed boundary guarantees only continuity of grade; $g'$ and higher derivatives may jump. A quintic seam matches through $g''$ at its window endpoints, while $g'''$ may generally still jump.
+- This model always uses planar-projected station as its independent variable. Constant-grade segments, PL2 and CIR obey the distinct analytic relations in Section 4; similar names do not make those formulas interchangeable.
+- Grade, derivatives and integrals of constant-grade, PL2, CIR and quintic-seam pieces are evaluated analytically within each piece. Numerical approximation occurs in horizontal-centerline integration for varying planar curvature, not in the vertical-segment formulas.
+- An unseamed boundary guarantees only continuity of grade; $g'$ and higher derivatives may jump. A quintic seam matches $(g,g',g'')$ of the raw segment it is built from at its window endpoints, while $g'''$ may generally still jump. Whether the assembled profile is $C^2$ at such an endpoint follows from the conditions in Section 5.3.
 - A CIR uses the finite-grade branch $\theta\in(-\pi/2,\pi/2)$ and its exact circular definition requires $L>0$ and $g_1\ne g_2$. A PL2 likewise uses $g_1\ne g_2$ to remain nondegenerate; equal-grade cases use a constant-grade segment.
 - Superelevation uses centerline roll and satisfies $|u|<b$; a fixed inner- or outer-rail datum appears only as the theoretical boundary in Section 7.4.
-- Three-dimensional tangent extension outside the domain, explicit seam windows, and separation of ideal alignment from irregularity are parts of the model rather than unique consequences automatically implied by local curve formulas.
+- Three-dimensional tangent extension outside the domain, explicit seam windows and separation of ideal alignment from irregularity are parts of the model rather than unique consequences automatically implied by local curve formulas.
 
 ## 10. Core code mapping
 
@@ -456,7 +454,7 @@ The following table only locates the core implementations that carry the mathema
 
 | Theoretical object | Primary implementation | Source file |
 |---|---|---|
-| Grade, derivatives, and analytic integrals of constant-grade, PL2, and CIR segments | `TrackVerticalProfile` and the three named vertical segment types | [`track_vertical_profile.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_vertical_profile.h), [`track_vertical_profile.cc`](../../../libs/track_geometry/src/track_vertical_profile.cc) |
+| Grade, derivatives and analytic integrals of constant-grade, PL2 and CIR segments | `TrackVerticalProfile` and the three named vertical segment types | [`track_vertical_profile.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_vertical_profile.h), [`track_vertical_profile.cc`](../../../libs/track_geometry/src/track_vertical_profile.cc) |
 | Quintic $(g,g',g'')$ seam | `internal::BuildQuinticHermiteCoefficients` | [`track_profile_quintic.cc`](../../../libs/track_geometry/src/track_profile_quintic.cc) |
-| Three-dimensional centerline, tangent extension, and track-frame kinematics | `TrackGeometry`, `EvaluateTrackFrame` | [`track_geometry.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_geometry.h), [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
-| Value types for pose, centerline derivative, and station rotation rate | `TrackFramePose`, `TrackFrameKinematics` | [`track_frame_pose.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_frame_pose.h) |
+| Three-dimensional centerline, tangent extension and track-frame kinematics | `TrackGeometry`, `EvaluateTrackFrame` | [`track_geometry.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_geometry.h), [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
+| Value types for pose, centerline derivative and station rotation rate | `TrackFramePose`, `TrackFrameKinematics` | [`track_frame_pose.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_frame_pose.h) |

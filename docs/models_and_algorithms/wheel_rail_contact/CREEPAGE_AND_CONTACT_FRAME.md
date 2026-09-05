@@ -12,20 +12,21 @@
 
 | 记号 | 含义 |
 |---|---|
-| $R_{TC}$ | 接触系 `C` 到轨型系 `T` 的旋转 |
-| $\alpha$ | 接触系角，即斑形心处轨面坡角加带侧别符号的轨底坡 |
+| $R_{TC}$ | 接触坐标系 `C` 到轨型系 `T` 的旋转 |
+| $\alpha$ | 接触坐标系角；接触几何按 $\alpha=\alpha_r-\varsigma c_r$ 由斑形心处轨面自身坡角与其另行保存的轨底坡幅值构成 |
 | $\mathbf n_T$ | 在 `T` 中表达的接触法向 |
 | $\mathbf v_T$、$\boldsymbol\omega_T$ | 接触处轮相对轨的平动速度与角速度 |
 | $\dot\ell$ | 接触沿线路前进的路径速率 |
 | $\Omega$ | 车轮绕车轴的自转率；按本仓库坐标约定，前进滚动时为负 |
 | $r$ | 接触处未变形的局部滚动半径 |
+| $v_{\mathrm{rim}}$ | 接触处的轮周速度 |
 | $V_0$、$V$ | 托底前、托底后的蠕滑参考速度 |
-| $\xi_x$、$\xi_y$、$\varphi$ | 纵向、横向与自旋蠕滑率 |
+| $\xi_x$、$\xi_y$、$\xi_{sp}$ | 纵向、横向与自旋蠕滑率 |
 | $v_n$ | 法向接近速度；接近为正 |
 
 ## 2. 接触坐标系与相对运动
 
-### 2.1 由轨面坡角构造接触系
+### 2.1 由轨面坡角构造接触坐标系
 
 `MakeContactFrame` 构造绕轨型系 `+x` 轴的纯滚转：
 
@@ -40,9 +41,9 @@ R_{TC}(\alpha)=
 \begin{bmatrix}0\\-\sin\alpha\\\cos\alpha\end{bmatrix}.
 $$
 
-因此接触系的纵轴与轨型系纵轴完全重合。实现采用 `ContactPatch::rail_slope_angle_radians`，而不是 `common_normal_angle_radians`；前者描述钢轨参考表面的朝向，后者描述轮轨型面的几何公法线，两者不能互换。
+因此接触坐标系的纵轴与轨型系纵轴完全重合。实现采用 `ContactPatch::rail_slope_angle_radians`，而不是 `common_normal_angle_radians`；前者描述钢轨参考表面的朝向，后者描述轮轨型面的几何公法线，两者不能互换。
 
-相对速度与相对角速度通过旋转的转置写入接触系：
+相对速度与相对角速度通过旋转的转置写入接触坐标系：
 
 $$
 \mathbf v_C=R_{TC}^{\mathsf T}\mathbf v_T,
@@ -68,7 +69,7 @@ $$
 
 ### 3.1 参考速度
 
-轮缘速度与未托底参考速度定义为
+轮周速度与未托底参考速度定义为
 
 $$
 v_{\mathrm{rim}}=-\Omega r,
@@ -100,10 +101,10 @@ $$
 \qquad
 \xi_y=\frac{v_{C,y}}{V},
 \qquad
-\varphi=\frac{\omega_{C,z}}{V}.
+\xi_{sp}=\frac{\omega_{C,z}}{V}.
 $$
 
-$\xi_x$ 与 $\xi_y$ 无量纲；$\varphi$ 的量纲为 $\mathrm{m}^{-1}$。由于接触系是纯滚转，纵向蠕滑率的分子不受 $\alpha$ 影响。自旋则包含车轮角速度在接触法向上的投影：
+$\xi_x$ 与 $\xi_y$ 无量纲；$\xi_{sp}$ 的量纲为 $\mathrm{m}^{-1}$。由于接触坐标系是纯滚转，纵向蠕滑率的分子不受 $\alpha$ 影响。自旋则包含车轮角速度在接触法向上的投影：
 
 $$
 \omega_{C,z}=-\sin\alpha\,\omega_{T,y}+\cos\alpha\,\omega_{T,z}.
@@ -111,7 +112,7 @@ $$
 
 ### 3.3 法向接近速度
 
-法向接近速度与接触系中的法向速度分量相同：
+法向接近速度与接触坐标系中的法向速度分量相同：
 
 $$
 v_n=\mathbf n_T\cdot\mathbf v_T
@@ -129,20 +130,20 @@ $$
 r=r_0+h_w(y_w),
 $$
 
-其中 $r_0$ 是标称滚动半径，$h_w(y_w)$ 是轮型面在接触站位处的高度。本实现不从 $r$ 中减去弹性穿透。力作用点可以采用 $r-\delta_{\mathrm{eq}}/2$，但那是作用点位置的约定，不改变蠕滑率的参考速度。
+其中 $r_0$ 是标称滚动半径，$h_w(y_w)$ 是轮型面在接触站位处的高度。本实现不从 $r$ 中减去弹性穿透。力作用点取 $r-\delta_{\mathrm{eq}}/2$（见[接触模型组装与成对扳手](CONTACT_MODEL_ASSEMBLY_AND_WRENCH.md)），但那是作用点位置的约定，不改变蠕滑率的参考速度。
 
 ## 4. 数值结构与适用条件
 
-计算顺序为：构造 $R_{TC}$ 与 $\mathbf n_T$，把相对运动转入接触系，形成 $V$，再计算三个蠕滑率；法向接近速度由同一接触系直接投影。这样法向力、蠕滑率与最终力向量使用完全相同的 $\alpha$。
+计算顺序为：构造 $R_{TC}$ 与 $\mathbf n_T$，把相对运动转入接触坐标系，形成 $V$，再计算三个蠕滑率；法向接近速度由同一接触坐标系直接投影。这样法向接近速度、蠕滑率与最终力向量使用完全相同的 $\alpha$。法向律在此基础上另读公法线角，用以构造纵向接触长度的解析基线；当接触几何解出三维纵向长度时，该基线被后者取代，见[法向接触力](NORMAL_CONTACT_FORCE.md)。
 
-对有界的分子，参考速度托底使精确静止附近的比值保持有界，但保留两类非光滑性：$V_0=0$ 处的符号跳变，以及 $|V_0|=V_{\min}$ 处的导数折点。该模型适合具有明确行进方向的滚动工况；若研究持续低速换向，应把这一托底视为模型的一部分，并评估它对力与数值 Jacobian 的影响。
+对有界的分子，参考速度托底使精确静止附近的比值保持有界，但保留两类非光滑性：$V_0=0$ 处的符号跳变，以及 $|V_0|=V_{\min}$ 处的导数折点。该模型适合具有明确行进方向的滚动工况；持续低速换向时，这一托底必须作为接触模型的一部分，并会把相应的分段结构传递给后续切向力。
 
 ## 5. 源码映射
 
 | 理论对象 | 主要实现 |
 |---|---|
-| 接触系与法向 | `ContactFrame`、`MakeContactFrame`，见 [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
-| 相对运动与蠕滑率 | `ContactRelativeMotion`、`Creepages`、`ComputeCreepages`，见 [`contact_creepage.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h) |
+| 接触坐标系与法向 | `ContactFrame`（结构体定义见 `contact_creepage.h`）与 `MakeContactFrame`，见 [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
+| 相对运动与蠕滑率 | `ContactRelativeMotion`、`Creepages`、`CreepageConfiguration`（结构体定义见 `contact_creepage.h`）与 `ComputeCreepages`，见 [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
 | 法向接近速度 | `ComputeNormalApproachSpeed`，见 [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
 | `R` 点处的刚体速度 | `WheelRailContactModel::Evaluate`，见 [`wheel_rail_contact_model.cc`](../../../libs/wheel_rail_contact/src/wheel_rail_contact_model.cc) |
 | $\alpha$ 与局部半径的几何来源 | `ContactPatch`，见 [`contact_geometry.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_geometry.h) |

@@ -13,12 +13,12 @@
 
 | 文档 | 内容 |
 |---|---|
-| [models_and_algorithms/README.md](models_and_algorithms/README.md) | **理论模型与计算算法入口**：轨道几何、轮轨接触、车辆动力学、控制与估计、数值方法的物理和数学说明；含理论文档边界、形式约定与中英双语索引。 |
+| [models_and_algorithms/README.md](models_and_algorithms/README.md) | **理论模型与计算算法入口**：线路几何、轨道不平顺谱、轮轨接触和时间积分方法的物理与数学说明；含理论文档边界、形式约定与中英双语索引。 |
 | [models_and_algorithms/CONVENTIONS_AND_NOTATION.md](models_and_algorithms/CONVENTIONS_AND_NOTATION.md) | **坐标与记号约定**：轨道惯性系与轨型系、正号、站位与弧长、位姿记号、`[q;v;z]` 状态块、单位后缀与中英术语表。 |
 | [models_and_algorithms/track_geometry/TRACK_GEOMETRY_AND_FRAMES.md](models_and_algorithms/track_geometry/TRACK_GEOMETRY_AND_FRAMES.md) | **线路几何与轨道坐标系**：标量剖面与缓和段、五次接缝、平面积分、轨型系与站位导数恒等式、切线延长、种子式局部投影。 |
-| [models_and_algorithms/wheel_rail_contact/](models_and_algorithms/wheel_rail_contact/) | **轮轨接触链八篇**：型面与插值、位姿归约、接触几何、法向力、蠕滑与接触系、Kalker 系数、FASTSIM、单轮模型组装与成对扳手。 |
 | [models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md](models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md) | **轨道竖向剖面建模**：恒坡段、竖曲线以及平面线形、纵坡和超高的三维耦合。 |
 | [models_and_algorithms/track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md](models_and_algorithms/track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md) | **轨道不平顺谱**：空间频率、FRA/AAR 谱、有限频带、随机实现和多方向关系。 |
+| [models_and_algorithms/wheel_rail_contact/](models_and_algorithms/wheel_rail_contact/) | **轮轨接触链八篇**：型面与插值、位姿归约、接触几何、法向力、蠕滑与接触坐标系、Kalker 系数、FASTSIM、单轮模型组装与成对扳手。 |
 | [models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md](models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md) | **时间积分方法**：BDF、Radau5、Newmark 与 Zhai 的计算公式、误差稳定性及 ORVD 状态适用边界。 |
 
 ## 当前权威文件

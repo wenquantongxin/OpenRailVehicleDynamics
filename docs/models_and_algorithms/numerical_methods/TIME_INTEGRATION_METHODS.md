@@ -2,11 +2,13 @@
 
 # BDF、Radau5、Newmark 与 Zhai 时间积分方法
 
-本文说明 BDF、三阶段五阶 Radau IIA、Newmark 与 Zhai 简单显式法如何把连续动力学方程推进为离散状态，并讨论它们的误差、稳定性以及与 ORVD 状态结构的相容关系。ORVD 当前以 CVODE BDF2 为默认后端，也保留源码树内的 BDF5 与 Radau5 实现；Newmark 和 Zhai 尚未实现，本文将二者标为 **仅理论**。
+本文说明 BDF、三阶段五阶 Radau IIA、Newmark 与 Zhai 简单显式法如何把连续动力学方程推进为离散状态，并讨论它们的误差、稳定性以及与 ORVD 状态结构的相容关系。ORVD 生产系统当前采用最大阶数为 2 的 CVODE BDF，源码树中另有最大阶数为 5 的 CVODE BDF 与 Radau5 实现。Newmark 和 Zhai 尚未实现，本文将二者标为 **仅理论**。
 
 ## 1. 方程形态与共同记号
 
 ### 1.1 一阶状态方程
+
+本篇沿用[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)的量，只作一处替换：该篇记作 $x$ 的连续状态，本篇按一阶初值问题的通用写法记作 $y$；其维数记作 $n_x$，与该篇的 $n_q$、$n_v$ 同族。大写 $N$ 在本篇只表示位置导数映射 $N(q)$。
 
 BDF 和 Radau5 直接作用于一阶初值问题
 
@@ -15,7 +17,7 @@ $$
 \qquad
 y(t_0)=y_0,
 \qquad
-y\in\mathbb R^N.
+y\in\mathbb R^{n_x}.
 $$
 
 ORVD 的连续状态写成
@@ -32,21 +34,27 @@ N(q)v\\a(t,q,v,z)\\g(t,q,v,z)
 \end{bmatrix}.
 $$
 
-其中 $q$ 是广义位置，$v$ 是广义速度，$z$ 是 Maxwell 串联弹簧黏性阻尼器等力元的一阶内变量。自由体以四元数表示姿态时，$q$ 与 $v$ 不等维，位形运动学为 $\dot q=N(q)v$，不能把完整状态简化成 $\dot q=v$。状态与导数的代码映射见 [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h)；例如 Maxwell 力状态满足
+其中 $q$ 是广义位置，$v$ 是广义速度，$z$ 是串联弹簧黏性阻尼（Maxwell 型）等力元的一阶内变量。自由体以四元数表示姿态时，$q$ 与 $v$ 不等维，位形运动学为 $\dot q=N(q)v$，不能把完整状态简化成 $\dot q=v$。
+
+这个右端的各部分落在不同模块。多体部分 $[q;v]\mapsto[N(q)v;\dot v]$ 由 [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) 中的 `MultibodyModel::CalcStateTimeDerivatives` 表达。含 $z$ 块的完整 $[q;v;z]$ 导数由 [`compiled_system_plan.cc`](../../../libs/system_assembly/src/compiled_system_plan.cc) 中的 `CompiledSystemPlan::CalcStateTimeDerivatives` 装配；[`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) 中的 `SystemRhsBridge::CalcTimeDerivatives` 把积分器给出的 $(t,y)$ 写入试算上下文，再转交该装配。串联弹簧黏性阻尼的力元定义与力状态方程见 [`vehicle_force_elements.h`](../../../libs/forces/include/orvd/forces/vehicle_force_elements.h) 的 `SeriesSpringViscousDamper`，该力状态的导数在 [`vehicle_force_plan.cc`](../../../libs/forces/src/vehicle_force_plan.cc) 的 `VehicleForcePlan::CalcAppliedForces` 中形成：
 
 $$
-\dot F=K v_{\mathrm{rel}}-\frac{K}{C}F.
+\dot F=k\,v_{\mathrm{rel}}-\frac{k}{c}F.
 $$
+
+弹簧与阻尼串联时二者共享同一个力而变形不同，因此力本身成为状态。式中 $k$、$c$ 是该力元的标量串联刚度与串联阻尼，$v_{\mathrm{rel}}$ 是两端沿作用轴的相对速度，时间常数为 $c/k$。本篇小写 $k$、$c$ 专指力元级标量，大写 $M$、$C$、$K$ 只表示系统级矩阵。
 
 ### 1.2 二阶机械方程
 
 经典 Newmark 和 Zhai 方法通常从二阶机械方程出发：
 
 $$
-M(q)a+C(q,v)v+f_{\mathrm{int}}(q,v,z)=p(t),
+M(u)a+C(u,v)v+f_{\mathrm{int}}(u,v,z)=p(t),
 \qquad
-\dot q=v.
+\dot u=v.
 $$
+
+这里 $u$ 是欧氏位移，与第 4、5 节的用法一致，不是第 1.1 节的广义位置 $q$；$a$ 是加速度，$p$ 是外载荷。$M$ 是系统质量矩阵；$C(u,v)v$ 汇集科氏、离心等速度相关惯性项以及黏性阻尼；$f_{\mathrm{int}}$ 是其余内力，含弹性恢复力与依赖内变量 $z$ 的力元力。
 
 这一形式天然适合位移、速度和加速度同维的欧氏坐标。对一般多体系统，位形必须通过切空间增量与 retraction 更新；一阶内变量 $z$ 也需要单独的离散方程。若不作这些扩展，把某个一阶积分公式直接作用于 $[q;v;z]$，得到的是另一种一阶状态方法，而不是经典 Newmark 或 Zhai 方法。
 
@@ -58,7 +66,7 @@ $$
 w_i=\frac{1}{\operatorname{rtol}|y_i|+\operatorname{atol}_i},
 \qquad
 \lVert e\rVert_{\mathrm{WRMS}}
-=\sqrt{\frac{1}{N}\sum_{i=1}^{N}(w_i e_i)^2}.
+=\sqrt{\frac{1}{n_x}\sum_{i=1}^{n_x}(w_i e_i)^2}.
 $$
 
 局部误差估计在这种加权范数下决定步长调整。不同方法使用的误差估计器与控制器并不相同，因此相同的 `rtol` 和 `atol` 不代表相同的全局误差。
@@ -98,13 +106,16 @@ $$
 把历史项收集后，新端点可表示为非线性残差
 
 $$
-R(y_{n+1})=y_{n+1}-\gamma f(t_{n+1},y_{n+1})-a_n=0,
+\mathcal F_{\mathrm{BDF}}(y_{n+1})
+=y_{n+1}-\gamma_{\mathrm{BDF}}f(t_{n+1},y_{n+1})
+-y_{n+1}^{\mathrm{hist}}=0,
 $$
 
-其中 $a_n$ 由已接受的历史决定，$\gamma$ 由当前步长和 BDF 系数决定。Newton 或 modified Newton 迭代求解
+其中历史向量 $y_{n+1}^{\mathrm{hist}}$ 由已接受的状态决定，$\gamma_{\mathrm{BDF}}$ 由当前步长和 BDF 系数决定。Newton 或 modified Newton 迭代求解
 
 $$
-\left(I-\gamma J\right)\delta=-R,
+\left(I_{n_x}-\gamma_{\mathrm{BDF}}J\right)\delta
+=-\mathcal F_{\mathrm{BDF}},
 \qquad
 J=\frac{\partial f}{\partial y},
 \qquad
@@ -122,7 +133,7 @@ $$
 
 ### 2.4 ORVD 中的实现
 
-[`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 以 `CV_BDF` 构造 CVODE 后端，并分别把最大阶数固定为 2 或 5。公共系统推进器选择 BDF2；BDF5 是源码树内部的具名实现。[`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) 把完整 $[q;v;z]$ 状态映射到多体动力学右端，[`continuous_state_advancer.h`](../../../libs/integrators/include/orvd/integrators/continuous_state_advancer.h) 则承接接受内步和最近一步稠密输出所需的共同数学结果。
+[`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 的 `CvodeContinuousStateAdvancer` 以 `CV_BDF` 构造 CVODE 后端，并把最大阶数固定为 2 或 5；生产系统当前采用最大二阶形式，源码树中同时保留最大五阶形式。完整 $[q;v;z]$ 状态到系统右端的映射见第 1.1 节所引的 `SystemRhsBridge::CalcTimeDerivatives`。稠密输出由 CVODE 在最近一个内部步上的历史多项式给出。
 
 ## 3. Radau5：三阶段五阶 Radau IIA
 
@@ -173,13 +184,14 @@ $$
 
 ### 3.2 耦合 Newton 求解
 
-由于 $A$ 不是下三角矩阵，三个阶段构成耦合非线性系统。简化 Newton 的原始线性化为
+由于 $A$ 不是下三角矩阵，三个阶段构成耦合非线性系统。将三个阶段残差堆叠为 $\mathcal F_{\mathrm{stage}}$，简化 Newton 的原始线性化为
 
 $$
-\left(I_3\otimes I_N-hA\otimes J\right)\Delta=-R.
+\left(I_3\otimes I_{n_x}-hA\otimes J\right)\Delta
+=-\mathcal F_{\mathrm{stage}}.
 $$
 
-直接分解该 $3N\times3N$ 系统并非必要。利用 $A^{-1}$ 的一个实特征值和一对共轭复特征值，可以把它变换为一个实 $N\times N$ 系统与一个复 $N\times N$ 系统。阶段状态仍分别求值右端，Jacobian 与线性分解则可在若干 Newton 迭代或相邻步骤间复用。
+直接分解该 $3n_x\times3n_x$ 系统并非必要。利用 $A^{-1}$ 的一个实特征值和一对共轭复特征值，可以把它变换为一个实 $n_x\times n_x$ 系统与一个复 $n_x\times n_x$ 系统。阶段状态仍分别求值右端，Jacobian 与线性分解则可在若干 Newton 迭代或相邻步骤间复用。
 
 ### 3.3 误差控制与稠密输出
 
@@ -199,11 +211,11 @@ $$
 
 ### 3.5 ORVD 中的实现
 
-[`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) 实现正向一阶常微分方程、$M=I$、稠密 Jacobian、三阶段五阶 Radau IIA、自适应误差控制和最近成功步的配点稠密输出。它用一个实线性系统和一个复线性系统完成简化 Newton 迭代。[`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) 把该核心接到与 BDF 相同的完整一阶状态右端。Radau5 已有源码树实现，但不是公共默认后端。
+[`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) 的 `radau5::Core::AdvanceOneAcceptedStepToward` 只实现常微分方程形式 $y'=f(t,y)$：经典 RADAU5 接口意义上的 ODE 质量矩阵取单位阵，源码中不设该项，也不支持一般质量矩阵形式；此处与第 1.2 节的机械质量矩阵 $M(u)$ 无关。该核心使用稠密 Jacobian、三阶段五阶 Radau IIA、自适应误差控制和最近成功步的配点稠密输出，并用一个实线性系统和一个复线性系统完成简化 Newton 迭代。[`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) 的 `Radau5ContinuousStateAdvancer` 把该核心接到与 BDF 相同的完整一阶状态右端。Radau5 已在源码树中实现，生产系统当前仍采用最大阶数为 2 的 CVODE BDF。
 
 ## 4. Newmark：二阶机械系统的一步法族（仅理论）
 
-[Newmark 方法](https://doi.org/10.1061/JMCEA3.0000098)以端点加速度参数化位移和速度更新。给定 $u_n$、$v_n$、$a_n$，其基本公式为
+[Newmark 方法](https://doi.org/10.1061/JMCEA3.0000098)以端点加速度参数化位移和速度更新。给定 $u_n$、$v_n$、$a_n$ 与两个无量纲参数 $\beta$、$\gamma$，其基本公式为
 
 $$
 u_{n+1}=u_n+h v_n+h^2\left[\left(\frac12-\beta\right)a_n+\beta a_{n+1}\right],
@@ -218,7 +230,9 @@ $$
 隐式 Newmark 还要求新端点满足动力学平衡
 
 $$
-R_{n+1}=p_{n+1}-M a_{n+1}-C v_{n+1}-f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0.
+\mathbf r^{\mathrm{eq}}_{n+1}
+=p_{n+1}-M a_{n+1}-C v_{n+1}
+-f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0.
 $$
 
 初始加速度由初始动力学平衡确定，例如
@@ -258,7 +272,7 @@ $$
 
 ## 5. Zhai 简单显式二步法（仅理论）
 
-Zhai 在 1996 年提出的简单显式法使用当前和前一端点的加速度：
+[Zhai 简单显式法](https://doi.org/10.1002/(SICI)1097-0207(19961230)39:24%3C4199::AID-NME39%3E3.0.CO;2-Y)使用当前和前一端点的加速度，并引入两个无量纲参数 $\phi$、$\psi$：
 
 $$
 u_{n+1}=u_n+h v_n+\left(\frac12+\psi\right)h^2a_n-\psi h^2a_{n-1},
@@ -273,6 +287,8 @@ $$
 $$
 a_{n+1}=M^{-1}\left[p_{n+1}-C v_{n+1}-f_{\mathrm{int}}(u_{n+1},v_{n+1})\right].
 $$
+
+这里的“显式”表示在求 $a_{n+1}$ 之前，$u_{n+1}$ 与 $v_{n+1}$ 已由历史量确定。若要保持原方法不求解联立代数方程的计算形式，$M$ 还需是对角质量矩阵。
 
 ### 5.1 启动与历史
 
@@ -301,8 +317,8 @@ $$
 
 | 方法 | 基本方程 | 主阶数 | 隐式性 | 稳定性要点 | 历史结构 | ORVD 实现状态 |
 |---|---|---:|---|---|---|---|
-| CVODE BDF | 完整一阶 $\dot y=f(t,y)$ | 1–5 | 隐式 | BDF1–2 为 A-stable | 多步历史 | BDF2 默认；BDF5 源码树内实现 |
-| Radau5 | 完整一阶 $\dot y=f(t,y)$ | 5 | 三阶段全隐式 | A-stable、L-stable | 单步阶段与线性化历史 | 源码树内实现，非默认 |
+| CVODE BDF | 完整一阶 $\dot y=f(t,y)$ | 1–5 | 隐式 | BDF1–2 为 A-stable | 多步历史 | 生产系统最大阶数为 2；源码树另有最大阶数为 5 的实现 |
+| Radau5 | 完整一阶 $\dot y=f(t,y)$ | 5 | 三阶段全隐式 | A-stable、L-stable | 单步阶段与线性化历史 | 源码树已有实现；生产系统当前未采用 |
 | Newmark | 二阶机械平衡 | 通常 2 | 常用形式隐式 | 取决于 $\beta,\gamma$ | 单步端点量 | **仅理论** |
 | Zhai 简单显式法 | 二阶机械加速度 | 2 | 显式 | 受最高频率限制 | 两步加速度历史 | **仅理论** |
 

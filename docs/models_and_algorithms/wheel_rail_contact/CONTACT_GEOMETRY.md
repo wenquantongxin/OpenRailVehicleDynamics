@@ -12,45 +12,45 @@
 2. 投影轮廓与轨面在哪里互穿，以及互穿区如何分成接触岛。
 3. 每个岛的几何尺度、形心、法向、曲率和纵向弦长是什么。
 
-模型不计算压力分布、法向力或切向力。不平顺已在上游位姿归约中进入轮轨相对放置。输入位姿见[轮轨位姿归约与不平顺输入](WHEEL_RAIL_POSE_REDUCTION.md)，法向载荷见[法向接触力](NORMAL_CONTACT_FORCE.md)，接触系与蠕滑率见[蠕滑率与接触系](CREEPAGE_AND_CONTACT_FRAME.md)。
+模型不计算压力分布、法向力或切向力。不平顺已在上游位姿归约中进入轮轨相对放置。输入位姿见[轮轨位姿归约与不平顺输入](WHEEL_RAIL_POSE_REDUCTION.md)，法向载荷见[法向接触力](NORMAL_CONTACT_FORCE.md)，接触坐标系与蠕滑率见[蠕滑率与接触坐标系](CREEPAGE_AND_CONTACT_FRAME.md)。
 
 ## 2. 记号
 
-型面横向坐标为 $Y$，竖向向下为正。为避免与线路姿态混淆，本篇把位姿滚转记为 $\varphi$、位姿摇头记为 $\beta$。
+型面横向坐标为 $Y$，竖向向下为正。位姿滚转 $\varphi$、位姿摇头 $\beta$、位姿横向偏移 $d_y$ 与向上为正的竖向抬升 $d_z^{\uparrow}$ 沿用共享约定的位姿标量记号，不在下表重列。解码后的平面平移在本篇记为 $t_y,t_z$，与位姿标量 $d_y,d_z^{\uparrow}$ 不是同一对量。下表给出本篇正文用到的其余记号。
 
 | 记号 | 含义 | 实现量 |
 |---|---|---|
-| $\eta$ | 侧解析后的轮型面横向站位 | wheel_station_meters |
-| $h(\eta)$ | 自然三次样条轮面高度 | wheel_spline_ |
-| $\hat h(\eta)$ | 由节点值与自然样条节点斜率构造的 Hermite 轮面 | wheel_surface_ |
-| $R_0$ | 标称滚动半径 | nominal_rolling_radius_meters |
-| $r(\eta)$ | 局部轮径 $R_0+h(\eta)$ | local_radius |
-| $\tau$ | 从车轴正下方起算的周向角 | angle |
-| $\tau_s(\eta)$ | 可见轮廓的周向角 | silhouette_angle |
-| $u_y,u_z^\uparrow$ | 位姿横向偏移与向上为正的竖向抬升 | ContactPoseScalars |
-| $d_y,d_z$ | 轮基准相对轨基准的横、竖平移 | lateral_offset, vertical_offset |
-| $z_r(Y)$ | 钢轨横截面高度 | rail_surface_ |
-| $H(Y)$ | 投影轮廓的单值上包络 | envelope cubic segments |
-| $\eta(Y)$ | 包络横坐标到轮站位的分段线性映射 | envelope_station_ |
-| $g(Y)$ | 轮包络减轨面的竖向互穿 | union_gap_ |
-| $\epsilon$ | 接触判定间隙阈值 | contact_gap_epsilon_meters |
-| $\delta_m$ | 接触岛合并的谷深阈值 | island_merge_gap_tolerance_meters |
-| $\delta_v,\delta_n$ | 竖向与法向穿透 | patch penetration fields |
-| $Y_c,Z_c$ | 重叠区域的面积形心 | centroid fields |
-| $\alpha_r,\alpha_s,\gamma$ | 轨面角、含轨底坡的接触系角、公法线角 | patch angle fields |
-| $\varsigma$ | 侧号，右侧 $+1$、左侧 $-1$ | `WheelSide` 的数学编码 |
-| $L$ | 接触斑的三维纵向最长弦 | longitudinal_length_meters |
+| $\eta$ | 侧解析后的轮型面横向站位 | `wheel_station_meters` |
+| $h(\eta)$ | 自然三次样条轮面高度 | `wheel_spline_` |
+| $\hat h(\eta)$ | 由节点值与自然样条节点斜率构造的 Hermite 轮面 | `wheel_surface_` |
+| $r_0$ | 标称滚动半径 | `nominal_rolling_radius_meters` |
+| $r(\eta)$ | 局部滚动半径 $r_0+h(\eta)$ | `local_radius` |
+| $\tau$ | 从车轴正下方起算的周向角 | `angle` |
+| $\tau_s(\eta)$ | 可见轮廓的周向角 | `silhouette_angle` |
+| $t_y,t_z$ | 解码后轮型面基准相对钢轨型面基准在 $T_c$ 中的横、竖平移 | `lateral_offset`、`vertical_offset` |
+| $z_r(Y)$ | 钢轨横截面高度 | `rail_surface_` |
+| $H(Y)$ | 投影轮廓的单值上包络 | `envelope_vertical` 与 `envelope_vertical_slopes` 定出的三次段 |
+| $\eta(Y)$ | 包络横坐标到轮站位的分段线性映射 | `envelope_station_` |
+| $g(Y)$ | 轮包络减轨面的竖向互穿 | `union_gap_` |
+| $\epsilon$ | 接触判定间隙阈值 | `contact_gap_epsilon_meters` |
+| $\delta_m$ | 接触岛合并的谷深阈值 | `island_merge_gap_tolerance_meters` |
+| $\delta_v,\delta_n$ | 竖向与法向穿透 | `vertical_penetration_meters`、`normal_penetration_meters` |
+| $Y_c,Z_c$ | 重叠区域的面积形心 | `centroid_lateral_meters`、`centroid_vertical_meters` |
+| $\alpha_r,\alpha,\gamma$ | 轨面自身坡角、含轨底坡的接触坐标系角、公法线角 | $\alpha_r$ 为接触几何内部量；`rail_slope_angle_radians`、`common_normal_angle_radians` |
+| $c_r$ | 接触几何自带的轨底坡幅值常量 | `rail_cant_radians` |
+| $\varsigma$ | 侧号，右侧 $+1$、左侧 $-1$ | `WheelSide` 的数学编码，与实现内部的 `side_sign_` 反号 |
+| $L$ | 接触斑的三维纵向最长弦 | `longitudinal_length_meters` |
 
 ## 3. 模型
 
 ### 3.1 轮面插值、位姿与投影
 
-轮型面点先按左右侧解析并按横向站位升序排列；可选的等弧长重扫只改变后续使用的节点集。由这组节点构造两套相关但职责不同的轮面表示：
+轮型面点列先落成一组节点，路径有两条。未启用等弧长重扫时，作者点列直接按所需侧解析：横坐标按侧号取符号并重排。启用重扫时，作者点列先解析到物理右侧，等弧长布点在这个右侧顺序上完成；请求右侧时直接保留所得节点，请求左侧时才把它们镜像（横坐标取反、次序反转）。顺序如此是因为站位相位锚在物理右侧，左右两侧才共享同一网格相位，构造细节见[型面点列与插值](PROFILES_AND_INTERPOLANTS.md)第 3.5 节。两条路径给出的节点集都按该侧横向站位升序。由这组节点构造两套相关但职责不同的轮面表示：
 
 - `wheel_spline_` 是自然三次样条，用于轮廓高度、轮廓斜率以及三维纵向解析。
 - `wheel_surface_` 通过 `FromNodalSlopes` 取得同一节点值与自然样条在节点处的斜率，提供共享的表面值、导数和曲率接口。`FromNodalSlopes` 直接使用调用者给出的斜率，不进行保形限斜。
 
-两者在节点区间之外都保持端点值为常数，并在严格端外给出零的一阶、二阶导数；共存原因不是外推规则不同，而是消费者和接口不同。若自然样条没有把近似等距点列替换为理想网格、两者实际使用完全相同的节点横坐标与区间长度，则区间内由同一节点值与斜率确定的 Hermite 三次段相同。自然样条对“近似等距”的节点可启用理想网格 $x_0+ih$，而 `wheel_surface_` 接收原始节点，因此在这种路径下二者不保证逐点完全相同。轨面 $z_r(Y)$ 也由自然样条节点斜率经同一 `FromNodalSlopes` 路径构造，并非经过保形限斜的曲线。
+两者在节点区间之外都保持端点值为常数；一阶导数只在严格端外为零，在边界节点上取内侧单侧斜率，二阶导数在边界节点上及端外都为零。这一严格与非严格之别是两者共同的约定，共存原因不是外推规则不同，而是消费者和接口不同。若自然样条没有把近似等距点列替换为理想网格、两者实际使用完全相同的节点横坐标与区间长度，则区间内由同一节点值与斜率确定的 Hermite 三次段相同。自然样条对“近似等距”的输入节点可启用理想网格 $x_0+ih$，而 `wheel_surface_` 仍接收传给求解器的实际控制节点，因此在这种路径下二者不保证逐点完全相同。轨面 $z_r(Y)$ 也由自然样条节点斜率经同一 `FromNodalSlopes` 路径构造，并非经过保形限斜的曲线。
 
 在轮型面基准系中，回转面点为
 
@@ -59,30 +59,30 @@ $$
 \begin{bmatrix}
 r(\eta)\sin\tau\\
 \eta\\
-r(\eta)\cos\tau-R_0
+r(\eta)\cos\tau-r_0
 \end{bmatrix},
 \qquad
-r(\eta)=R_0+h(\eta).
+r(\eta)=r_0+h(\eta).
 $$
 
 位姿偏移先由配对编码还原为平面平移：
 
 $$
-d_y=u_y\cos\varphi+u_z^\uparrow\sin\varphi,
+t_y=d_y\cos\varphi+d_z^{\uparrow}\sin\varphi,
 \qquad
-d_z=u_y\sin\varphi-u_z^\uparrow\cos\varphi.
+t_z=d_y\sin\varphi-d_z^{\uparrow}\cos\varphi.
 $$
 
-该二阶变换是行列式为 $-1$ 的自逆反射。令 $x_w=r\sin\tau$、$z_w=r\cos\tau-R_0$，经摇头和滚转投影到轨型横截面：
+$t_y,t_z$ 是轮型面基准相对钢轨型面基准在轨底坡系 $T_c$ 中的横、竖平移，不是位姿标量：$\varphi=0$ 时 $t_y=d_y$、$t_z=-d_z^{\uparrow}$，一般位姿下 $t_y$ 与 $d_y$ 也不相等，本篇不把两者互换。该二阶变换是行列式为 $-1$ 的自逆反射。令 $x_w=r\sin\tau$、$z_w=r\cos\tau-r_0$，经摇头和滚转投影到 $T_c$ 的横截面：
 
 $$
 \widetilde y=\sin\beta\,x_w+\cos\beta\,\eta,
 $$
 
 $$
-Y=\cos\varphi\,\widetilde y-\sin\varphi\,z_w+d_y,
+Y=\cos\varphi\,\widetilde y-\sin\varphi\,z_w+t_y,
 \qquad
-Z=\sin\varphi\,\widetilde y+\cos\varphi\,z_w+d_z.
+Z=\sin\varphi\,\widetilde y+\cos\varphi\,z_w+t_z.
 $$
 
 ### 3.2 可见轮廓
@@ -120,7 +120,7 @@ $$
 
 每个箱只保留 $Z$ 最大的投影点，即最外层、能够接触钢轨的分支。保留的是样本本身的 $(Y_i,Z_i,\eta_i)$，不是箱中心；$w_b$ 是折叠竞争尺度，不是重新采样步长。
 
-包络节点的斜率由保形三次规则计算。注意保形限斜只用于这个投影上包络 $H(Y)$，不用于上一节的 wheel_surface_ 或 rail_surface_。相邻包络节点之间采用 Hermite 三次段。令
+包络节点的斜率由保形三次规则计算。注意保形限斜只用于这个投影上包络 $H(Y)$，不用于上一节的 `wheel_surface_` 或 `rail_surface_`。相邻包络节点之间采用 Hermite 三次段。令
 
 $$
 t=\frac{Y-Y_j}{\Delta_j},\qquad \Delta_j=Y_{j+1}-Y_j,
@@ -159,14 +159,14 @@ $$
 v_k=\min_{e_k\leq i\leq s_{k+1}}g_i.
 $$
 
-若 $v_k>-\delta_m$，两岛合并。判据取谷的竖向深度，而不是两岛的横向距离。合并岛边缘在相邻异号网格值之间用一次割线插值：
+若 $v_k>-\delta_m$，两岛合并。判据取谷的竖向深度，而不是两岛的横向距离。对共同覆盖区内部的岛边缘，在分类相反的相邻网格点之间用一次割线插值，即取 $g-\epsilon$ 的一次割线零点：
 
 $$
 Y_e=Y_a+
 \frac{(\epsilon-g_a)(Y_b-Y_a)}{g_b-g_a}.
 $$
 
-当分母为零时取中点。该一次插值与岛发现阶段采用的分段线性符号模型一致。
+求的是 $g=\epsilon$ 的根，因此 $\epsilon\neq0$ 时边界两侧的 $g_a,g_b$ 不必异号。该一次插值与岛发现阶段采用的分段线性符号模型一致；若岛一直延伸到共同覆盖区的端点，则相应端点本身就是岛边缘，不作割线插值。
 
 ### 3.5 逐岛求积
 
@@ -187,23 +187,25 @@ $$
 $$
 A_a=\int_{Y_L}^{Y_R}o\sqrt{1+H'^2}\,dY,
 \qquad
-M_y=\int_{Y_L}^{Y_R}Yo\,dY,
+S_y=\int_{Y_L}^{Y_R}Yo\,dY,
 $$
 
 $$
-M_z=\int_{Y_L}^{Y_R}
+S_z=\int_{Y_L}^{Y_R}
 \frac{(z_r+o)^2-z_r^2}{2}\,dY.
 $$
 
 于是
 
 $$
-Y_c=\frac{M_y}{A},
+Y_c=\frac{S_y}{A},
 \qquad
-Z_c=\frac{M_z}{A}.
+Z_c=\frac{S_z}{A}.
 $$
 
-$A$ 是横截面重叠面积，$W_a$ 是轮包络弧宽，$A_a$ 是弧加权重叠面积，$(Y_c,Z_c)$ 是重叠区域的面积形心。岛发现网格与岛内求积网格解决不同的离散问题，因此求积所得最深点不必与共同网格的最大互穿点相同。
+$A$ 是横截面重叠面积，$W_a$ 是轮包络弧宽，$A_a$ 是弧加权重叠面积，$S_y,S_z$ 是重叠区域的面积静矩，$(Y_c,Z_c)$ 是其面积形心。岛发现网格与岛内求积网格解决不同的离散问题，因此求积所得最深点不必与共同网格的最大互穿点相同。
+
+求积网格上还有一道阈值：$\delta_v\leq\epsilon$ 的合并岛不产出接触斑；割线定出的岛宽 $Y_R-Y_L$ 非正、或求积所得 $A$ 非正时同样不产出。每个保留的合并岛至多产出一个斑，两者并非一一对应——求积网格通常比共同网格粗，窄岛可以在共同网格上满足 $g_i>\epsilon$，而在求积站位上全部落空。
 
 ### 3.6 法向穿透、角度与曲率
 
@@ -220,10 +222,10 @@ $$
 $$
 \eta_c=\eta(Y_c),
 \qquad
-r_c=R_0+\hat h(\eta_c).
+r_c=r_0+\hat h(\eta_c).
 $$
 
-定义轨面自身坡角、公法线角及含轨底坡的接触系角：
+定义轨面自身坡角、公法线角及含轨底坡的接触坐标系角：
 
 $$
 \alpha_r=\arctan z_r'(Y_c),
@@ -238,10 +240,10 @@ $$
 $$
 
 $$
-\alpha_s=\alpha_r-\varsigma c_r,
+\alpha=\alpha_r-\varsigma c_r,
 $$
 
-其中 $\varsigma=+1$ 表示右侧、$\varsigma=-1$ 表示左侧，$c_r$ 是几何模型采用的轨底坡幅值。$\gamma$ 不再重复加入轨底坡，因为位姿滚转已含钢轨姿态；$\alpha_s$ 则用于构造接触力坐标系。
+其中 $\varsigma=+1$ 表示右侧、$\varsigma=-1$ 表示左侧。$c_r$ 是接触几何自带的轨底坡幅值常量，与位姿归约所用的轨底坡幅值 $\phi_c$ 是两个各自独立给定的常量，即使数值相同也不应视为同一个量。$\gamma$ 不再重复加入轨底坡，因为位姿滚转已含钢轨姿态；$\alpha$ 则用于构造接触坐标系。
 
 接触斑在轮上的纵向坐标为
 
@@ -260,7 +262,7 @@ $$
 
 ### 3.7 钢轨材料参考点
 
-接触斑携带一个未变形轨面上的材料参考点，用于后续在同一空间位置形成两体速度。它由轮侧几何代表点的纵横坐标投影到轨系，再竖直落到轨面：
+接触斑携带一个未变形轨面上的材料参考点，用于后续在同一空间位置形成两体速度。记该点为 `R`，其位置向量为 $\mathbf x_R=(x_R,Y_R,Z_R)$。它由轮侧几何代表点的纵横坐标投影到 $T_c$，再竖直落到轨面：
 
 $$
 x_R=\cos\beta\,x_c-\sin\beta\,\eta_c,
@@ -269,7 +271,7 @@ $$
 $$
 Y_R=
 \cos\varphi(\sin\beta\,x_c+\cos\beta\,\eta_c)
--\sin\varphi(r_c-R_0)+d_y,
+-\sin\varphi(r_c-r_0)+t_y,
 $$
 
 $$
@@ -286,7 +288,9 @@ $$
 o(\eta,\tau)=Z(\eta,\tau)-z_r(Y(\eta,\tau)).
 $$
 
-从可见轮廓角 $\tau_s$ 向前后搜索，使两侧都括住 $o=0$ 的根。初始角步长采用局部圆估计并设有限下界：
+只有局部滚动半径 $r(\eta)$ 有限且为正、并且精确回转面在可见轮廓角 $\tau_s$ 上给出的 $o(\eta,\tau_s)$ 有限且严格为正的站位，才进入纵向解析。横截面包络读的是投影的保形拟合，纵向解析读的是回转面本身，两者可以在同一站位得出相反判断；包络判该站位穿透而精确回转面判不穿透时，该站位不贡献 $\ell$，也不参与 $L$ 的取最大。这同时是下式根号有定义的前提。
+
+从 $\tau_s$ 向前后搜索，使两侧都括住 $o=0$ 的根。初始角步长采用局部圆估计并设有限下界：
 
 $$
 \Delta_0=
@@ -353,7 +357,7 @@ $$
 
 在搜索规定的角宽内，该近似有显式局部误差界；它可能在重叠量极接近零时改变一次二分分支，因此属于带误差预算的数值近似，而不是代数恒等替换。
 
-对尚未完整解析的站位，只要真实根仍在括区内，精确算术中可由根括区得到几何竞争上界：
+对尚未完整解析的站位，令 $\tau_{\min}$、$\tau_{\max}$ 为前后两个根括区全部端点中的最小角与最大角。只要真实根仍在各自括区内，精确算术中可得几何竞争上界：
 
 $$
 U=p(\tau_{\max}-\tau_{\min}).
@@ -366,13 +370,13 @@ $$
 `ContactGeometrySolver::Solve` 的主要顺序为：
 
 1. 解码位姿偏移并投影预先采样的轮廓点。
-2. 按横向位置分箱，保留每箱最外层点。
-3. 为上包络构造保形三次段，并建立分段线性的 $\eta(Y)$。
-4. 合并轮包络与轨型节点，在共同网格上计算互穿并发现可保留的原始岛。
-5. 按谷深阈值合并相邻岛，以割线插值得到岛边缘。
-6. 在每个保留的合并岛上求积，形成面积、宽度、形心、穿透和最深站位。
-7. 计算角度、局部半径、轮轨曲率和钢轨材料参考点。
-8. 恢复周向自由度并求三维纵向最长弦。
+2. 按横向位置分箱，保留每箱最外层点，由此得到上包络节点与分段线性 $\eta(Y)$ 的节点。
+3. 把轮包络与轨型节点合并为有序共同网格。
+4. 为上包络计算保形三次段斜率，在共同网格上计算互穿并发现可保留的原始岛。
+5. 按谷深阈值合并相邻岛；内部边缘以割线插值得到，共同覆盖区端点上的边缘直接取端点。
+6. 在每个保留的合并岛上求积，形成面积、宽度、形心、穿透和最深站位；未过阈值的岛在此止步，不产出斑。
+7. 仍在同一逐岛循环体内，依次计算角度与局部半径、恢复周向自由度求三维纵向最长弦、再计算轮轨曲率。
+8. 逐岛循环结束后，接触斑按形心横坐标升序排列，再在单独一趟里形成钢轨材料参考点。
 
 若轮廓采样数为 $n_s$、包络节点数为 $n_e$、轨节点数为 $n_r$、合并岛数为 $n_i$、每岛求积站位数为 $N_q$，主要工作量由投影和分箱 $O(n_s)$、共同网格归并 $O(n_e+n_r)$ 与岛内求积/纵向解析 $O(n_iN_q)$ 构成。二分深度由长度误差目标与局部投影半径共同决定。
 
@@ -382,7 +386,7 @@ $$
 - 精确法向正交形式要求 $|\tan\beta\,h'(\eta)|\leq1$；超出时采用 $\sin\tau_s=\pm1$ 的夹制延拓。
 - 分箱上包络以 $w_b$ 判定投影分支之间的横向竞争；改变 $w_b$ 会改变折叠分支选择。
 - 接触岛由共同节点网格发现，而斑的积分量由另一均匀网格近似；两套网格不应混作同一离散化。
-- 离散求解器按扫描顺序最多保留 64 个原始岛，并最多输出前 16 个合并斑。本篇公式完整覆盖未触及上限的模型域；超过上限时，算法只继续合并所保留的 64 岛前缀，并从所得合并岛中形成至多 16 个斑。
+- 离散求解器按扫描顺序最多保留 64 个原始岛，并最多输出 16 个合并斑。本篇公式完整覆盖未触及上限的模型域；超过上限时，算法只继续合并所保留的 64 岛前缀，并按扫描顺序从其中形成至多 16 个斑。
 - 严格接触阈值、岛合并阈值、首个最大值选择、分箱胜者选择与最长弦的 max 都引入分段切换和非光滑性。
 - $\eta(Y)$ 在投影折叠处允许跳变；分段线性映射保留这个几何事实。
 - 轮轨曲率要求局部一阶、二阶导数及曲率分母有意义。近尖点、近竖直切线或非光滑测量型面会使局部曲率成为不稳定描述。
@@ -393,8 +397,10 @@ $$
 
 | 理论对象 | 主要实现 |
 |---|---|
-| 轮轨型面与导数接口 | [natural_cubic_spline.cc](../../../libs/wheel_rail_contact/src/natural_cubic_spline.cc)、[monotone_cubic_interpolant.cc](../../../libs/wheel_rail_contact/src/monotone_cubic_interpolant.cc) |
-| 轮廓投影、包络、接触岛与求积 | [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |
-| 纵向根括取、二分、筛除与弦长 | [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) 中的 ResolveLongitudinalLength |
+| 自然三次样条的值与导数 | [natural_cubic_spline.cc](../../../libs/wheel_rail_contact/src/natural_cubic_spline.cc) |
+| 保形三次插值的值、导数与曲率 | [monotone_cubic_interpolant.cc](../../../libs/wheel_rail_contact/src/monotone_cubic_interpolant.cc) |
+| 车轮型面节点的侧解析与等弧长重扫 | [wheel_profile_preprocessing.cc](../../../libs/wheel_rail_contact/src/wheel_profile_preprocessing.cc) |
+| 轮廓投影、包络、接触岛与求积 | [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) 中的 `ContactGeometrySolver::Solve` |
+| 纵向根括取、二分、筛除与弦长 | [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) 中 `ContactGeometrySolver::Solve` 调用的 `ResolveLongitudinalLength` |
 | 几何输入位姿 | [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc) |
 | 几何斑的法向消费 | [normal_contact_force.cc](../../../libs/wheel_rail_contact/src/normal_contact_force.cc) |

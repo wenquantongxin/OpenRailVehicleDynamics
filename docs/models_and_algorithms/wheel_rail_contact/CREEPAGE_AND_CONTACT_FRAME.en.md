@@ -2,32 +2,33 @@
 
 # Creepages and the contact frame
 
-This chapter explains how ORVD expresses relative motion at a contact in the contact frame and forms longitudinal creepage, lateral creepage, spin creepage, and normal approach speed. The theoretical definitions and their implementation reside in [`contact_creepage.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h) and [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc), respectively.
+This chapter explains how ORVD expresses relative motion at a contact in the contact frame and forms longitudinal creepage, lateral creepage, spin creepage and normal approach speed. The theoretical definitions and their implementation reside in [`contact_creepage.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h) and [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc), respectively.
 
 ## 1. Scope and notation
 
-Contact geometry supplies the patch position, local rolling radius, and rail-surface slope angle; this chapter defines the kinematic quantities built from them. See [normal contact force](NORMAL_CONTACT_FORCE.en.md) for the normal law, [Kalker linear creepage coefficients](KALKER_COEFFICIENTS.en.md) and [FASTSIM tangential contact](TANGENTIAL_CONTACT_FASTSIM.en.md) for the tangential law, and [contact-model assembly and paired wrench](CONTACT_MODEL_ASSEMBLY_AND_WRENCH.en.md) for the final assembly.
+Contact geometry supplies the patch position, local rolling radius and rail-surface slope angle; this chapter defines the kinematic quantities built from them. See [normal contact force](NORMAL_CONTACT_FORCE.en.md) for the normal law, [Kalker linear creepage coefficients](KALKER_COEFFICIENTS.en.md) and [FASTSIM tangential contact](TANGENTIAL_CONTACT_FASTSIM.en.md) for the tangential law, and [contact-model assembly and paired wrench](CONTACT_MODEL_ASSEMBLY_AND_WRENCH.en.md) for the final assembly.
 
-Unless stated otherwise, vectors are expressed in the track-profile frame `T`. The notation is:
+Unless stated otherwise, vectors are expressed in the track frame `T`. The notation is:
 
 | Symbol | Meaning |
 |---|---|
-| $R_{TC}$ | Rotation from contact frame `C` into track-profile frame `T` |
-| $\alpha$ | Contact-frame angle: rail-surface slope at the patch centroid plus the side-signed laying cant |
+| $R_{TC}$ | Rotation from contact frame `C` into track frame `T` |
+| $\alpha$ | Contact-frame angle; contact geometry forms $\alpha=\alpha_r-\varsigma c_r$ from the rail-surface slope at the patch centroid and its separately stored cant magnitude |
 | $\mathbf n_T$ | Contact normal expressed in `T` |
 | $\mathbf v_T$, $\boldsymbol\omega_T$ | Translational and angular velocity of the wheel relative to the rail at contact |
 | $\dot\ell$ | Path rate at which the contact advances along the line |
 | $\Omega$ | Wheel rotation rate about the axle; negative in forward rolling under the repository convention |
 | $r$ | Undeformed local rolling radius at contact |
+| $v_{\mathrm{rim}}$ | Rim speed at the contact |
 | $V_0$, $V$ | Creepage reference speed before and after flooring |
-| $\xi_x$, $\xi_y$, $\varphi$ | Longitudinal, lateral, and spin creepage |
+| $\xi_x$, $\xi_y$, $\xi_{sp}$ | Longitudinal, lateral and spin creepage |
 | $v_n$ | Normal approach speed; positive in approach |
 
 ## 2. Contact frame and relative motion
 
 ### 2.1 Contact frame from the rail-surface slope
 
-`MakeContactFrame` constructs a pure roll about the `+x` axis of the track-profile frame:
+`MakeContactFrame` constructs a pure roll about the `+x` axis of the track frame:
 
 $$
 R_{TC}(\alpha)=
@@ -40,7 +41,7 @@ R_{TC}(\alpha)=
 \begin{bmatrix}0\\-\sin\alpha\\\cos\alpha\end{bmatrix}.
 $$
 
-The longitudinal axes of the contact and track-profile frames therefore coincide exactly. The implementation uses `ContactPatch::rail_slope_angle_radians`, not `common_normal_angle_radians`: the former describes the orientation of the rail reference surface, whereas the latter describes the geometric common normal of the wheel and rail profiles. They are not interchangeable.
+The longitudinal axes of the contact and track frames therefore coincide exactly. The implementation uses `ContactPatch::rail_slope_angle_radians`, not `common_normal_angle_radians`: the former describes the orientation of the rail reference surface, whereas the latter describes the geometric common normal of the wheel and rail profiles. They are not interchangeable.
 
 Relative translational and angular velocities are expressed in the contact frame with the transpose of the rotation:
 
@@ -50,11 +51,11 @@ $$
 \boldsymbol\omega_C=R_{TC}^{\mathsf T}\boldsymbol\omega_T.
 $$
 
-In particular, $v_{C,x}=v_{T,x}$; the lateral, normal, and normal-spin components are mixed by $\alpha$.
+In particular, $v_{C,x}=v_{T,x}$; the lateral, normal and normal-spin components are mixed by $\alpha$.
 
 ### 2.2 Motion at the rail material reference point
 
-The assembly layer forms the relative motion at the rail material reference point `R`. Let $\mathbf o_W$ and $\mathbf v_o$ be the position and velocity of the datum of wheel-profile frame W, $\boldsymbol\omega$ the wheel-body angular velocity, and $\mathbf x_R$ the position of `R` in the track-profile frame. Then
+The assembly layer forms the relative motion at the rail material reference point `R`. Let $\mathbf o_W$ and $\mathbf v_o$ be the position and velocity of the datum of wheel-profile frame W, $\boldsymbol\omega$ the wheel-body angular velocity and $\mathbf x_R$ the position of `R` in the track frame. Then
 
 $$
 \mathbf v_T=\mathbf v_o+\boldsymbol\omega\times(\mathbf x_R-\mathbf o_W),
@@ -100,10 +101,10 @@ $$
 \qquad
 \xi_y=\frac{v_{C,y}}{V},
 \qquad
-\varphi=\frac{\omega_{C,z}}{V}.
+\xi_{sp}=\frac{\omega_{C,z}}{V}.
 $$
 
-$\xi_x$ and $\xi_y$ are dimensionless; $\varphi$ has dimension $\mathrm{m}^{-1}$. Because the contact frame is a pure roll, the numerator of longitudinal creepage is independent of $\alpha$. Spin contains the projection of wheel angular velocity onto the contact normal:
+$\xi_x$ and $\xi_y$ are dimensionless; $\xi_{sp}$ has dimension $\mathrm{m}^{-1}$. Because the contact frame is a pure roll, the numerator of longitudinal creepage is independent of $\alpha$. Spin contains the projection of wheel angular velocity onto the contact normal:
 
 $$
 \omega_{C,z}=-\sin\alpha\,\omega_{T,y}+\cos\alpha\,\omega_{T,z}.
@@ -119,7 +120,7 @@ v_n=\mathbf n_T\cdot\mathbf v_T
 =v_{C,z}.
 $$
 
-The vertical axis of the track-profile frame points downward and $\mathbf n_T$ points into the rail, so a wheel approaching the rail along the normal has $v_n>0$. The normal contact law uses this sign convention for its damping term.
+The vertical axis of the track frame points downward and $\mathbf n_T$ points into the rail, so a wheel approaching the rail along the normal has $v_n>0$. The normal contact law uses this sign convention for its damping term.
 
 ### 3.4 Rolling-radius convention
 
@@ -129,20 +130,20 @@ $$
 r=r_0+h_w(y_w),
 $$
 
-where $r_0$ is the nominal rolling radius and $h_w(y_w)$ is wheel-profile height at the contact station. This implementation does not subtract elastic penetration from $r$. The force application point may use $r-\delta_{\mathrm{eq}}/2$, but that is a point-placement convention and does not alter the creepage reference speed.
+where $r_0$ is the nominal rolling radius and $h_w(y_w)$ is wheel-profile height at the contact station. This implementation does not subtract elastic penetration from $r$. The force application point uses $r-\delta_{\mathrm{eq}}/2$ (see [contact-model assembly and paired wrench](CONTACT_MODEL_ASSEMBLY_AND_WRENCH.en.md)), but that is a point-placement convention and does not alter the creepage reference speed.
 
 ## 4. Numerical structure and applicability
 
-The calculation order is: construct $R_{TC}$ and $\mathbf n_T$, rotate relative motion into the contact frame, form $V$, and then calculate the three creepages. Normal approach speed is projected with the same contact frame. The normal law, creepages, and final force vector therefore use exactly the same $\alpha$.
+The calculation order is: construct $R_{TC}$ and $\mathbf n_T$, rotate relative motion into the contact frame, form $V$, and then calculate the three creepages. Normal approach speed is projected with the same contact frame. The normal approach speed, the creepages and the final force vector therefore use exactly the same $\alpha$. On top of that the normal law reads the common normal angle to build the analytic baseline for the longitudinal contact length; when contact geometry resolves a three-dimensional longitudinal extent, that extent replaces the baseline. See [normal contact force](NORMAL_CONTACT_FORCE.en.md).
 
-For bounded numerators, the reference-speed floor keeps the ratios bounded near exact standstill but retains two non-smooth features: the sign jump at $V_0=0$ and the derivative corner at $|V_0|=V_{\min}$. The model is intended for rolling regimes with a well-defined travel direction. A study of sustained low-speed reversal should treat the floor as part of the model and assess its effect on forces and numerical Jacobians.
+For bounded numerators, the reference-speed floor keeps the ratios bounded near exact standstill but retains two non-smooth features: the sign jump at $V_0=0$ and the derivative corner at $|V_0|=V_{\min}$. The model is intended for rolling regimes with a well-defined travel direction. Under sustained low-speed reversal, this floor remains part of the contact model and passes its piecewise structure into the downstream tangential force.
 
 ## 5. Source mapping
 
 | Theoretical object | Primary implementation |
 |---|---|
-| Contact frame and normal | `ContactFrame`, `MakeContactFrame`; see [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
-| Relative motion and creepages | `ContactRelativeMotion`, `Creepages`, `ComputeCreepages`; see [`contact_creepage.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h) |
+| Contact frame and normal | `ContactFrame` (struct defined in `contact_creepage.h`) and `MakeContactFrame`; see [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
+| Relative motion and creepages | `ContactRelativeMotion`, `Creepages`, `CreepageConfiguration` (structs defined in `contact_creepage.h`) and `ComputeCreepages`; see [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
 | Normal approach speed | `ComputeNormalApproachSpeed`; see [`contact_creepage.cc`](../../../libs/wheel_rail_contact/src/contact_creepage.cc) |
 | Rigid-body velocity at point `R` | `WheelRailContactModel::Evaluate`; see [`wheel_rail_contact_model.cc`](../../../libs/wheel_rail_contact/src/wheel_rail_contact_model.cc) |
 | Geometric origin of $\alpha$ and local radius | `ContactPatch`; see [`contact_geometry.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_geometry.h) |

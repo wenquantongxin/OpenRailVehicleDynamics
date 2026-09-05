@@ -2,7 +2,7 @@
 
 # Kalker linear creepage coefficients
 
-This chapter describes the three Kalker coefficients used by ORVD's tangential contact model and how they are obtained from Poisson's ratio and the contact-ellipse semi-axis ratio. The finite table, interpolation, and slender-ellipse asymptotic expressions are implemented in [`kalker_coefficient_table.cc`](../../../libs/wheel_rail_contact/src/kalker_coefficient_table.cc); the coefficients then enter [FASTSIM tangential contact](TANGENTIAL_CONTACT_FASTSIM.en.md).
+This chapter describes the three Kalker coefficients used by ORVD's tangential contact model and how they are obtained from Poisson's ratio and the contact-ellipse semi-axis ratio. The finite table, interpolation and slender-ellipse asymptotic expressions are implemented in [`kalker_coefficient_table.cc`](../../../libs/wheel_rail_contact/src/kalker_coefficient_table.cc); the coefficients then enter [FASTSIM tangential contact](TANGENTIAL_CONTACT_FASTSIM.en.md).
 
 ## 1. Notation and role
 
@@ -12,38 +12,38 @@ $$
 \kappa=\frac{a}{b},\qquad \kappa>0,
 $$
 
-where the current numerical model has positive finite semi-axis ratio as its domain. This document locally uses $\kappa$ for the contact-ellipse semi-axis ratio; it is unrelated to the identically shaped symbol for planar curvature in the track-geometry documents. With Young's modulus $E$ and Poisson's ratio $\nu$, the shear modulus is
+Only positive finite semi-axis ratios are considered below; whether the coefficient functions are defined for positive finite values outside the table depends on the outside-table rule of Section 3. This document locally uses $\kappa$ for the contact-ellipse semi-axis ratio; it is unrelated to the identically shaped symbol for planar curvature in the track-geometry documents. With Young's modulus $E$ and Poisson's ratio $\nu$, the shear modulus is
 
 $$
 G=\frac{E}{2(1+\nu)}.
 $$
 
-The implementation supplies three dimensionless coefficients: longitudinal $C_{11}$, lateral $C_{22}$, and lateral-spin coupling $C_{23}$. The tangential solver converts them into three flexibility scales:
+The implementation supplies three dimensionless coefficients: longitudinal $C_{11}$, lateral $C_{22}$ and lateral-spin coupling $C_{23}$. The tangential solver converts them into three flexibility scales:
 
 $$
 L_x=\frac{8a}{3C_{11}G},\qquad
 L_y=\frac{8a}{3C_{22}G},\qquad
-L_\varphi=\frac{\pi a\sqrt{\kappa}}{4C_{23}G}.
+L_{sp}=\frac{\pi a\sqrt{\kappa}}{4C_{23}G}.
 $$
 
 $C_{11}$ and $C_{22}$ control longitudinal and lateral stress build-up due to translational creepage; $C_{23}$ controls the coupling between spin and stress build-up in both directions. This implementation does not use $C_{33}$: spin is handled by the within-patch strip march, and the result contains no direct spin moment about the patch normal.
 
-In the continuous, fully adhering small-creepage limit, the corresponding linear resultants are
+Let $\xi_x$, $\xi_y$ and $\xi_{sp}$ be the longitudinal, lateral and spin creepages, the spin creepage having units of $\mathrm{m}^{-1}$; all three are defined in [Creepages and the contact frame](CREEPAGE_AND_CONTACT_FRAME.en.md). In the continuous, fully adhering small-creepage limit, the corresponding linear resultants are
 
 $$
 F_x=-G\,a\,b\,C_{11}\xi_x,
 \qquad
 F_y=-G\,a\,b\,C_{22}\xi_y
--G\,(ab)^{3/2}C_{23}\varphi,
+-G\,(ab)^{3/2}C_{23}\xi_{sp},
 $$
 
-The spin term in the longitudinal resultant integrates to zero by transverse symmetry of the patch, whereas the lateral resultant retains the $C_{23}$ spin coupling. Finite-resolution `FASTSIM` strip quadrature introduces its own quadrature factor; the no-spin discrete expression is given in the adjacent chapter.
+The spin contribution to the longitudinal stress build-up rate is odd in the in-patch lateral coordinate $y$, and the patch is mirror-symmetric about the rolling (longitudinal) axis, so that term integrates to zero in the longitudinal resultant; the lateral resultant retains the $C_{23}$ spin coupling. Finite-resolution `FASTSIM` strip quadrature introduces its own quadrature factor; the no-spin discrete expression is given in [Section 4.3 of the FASTSIM strip-marching chapter](TANGENTIAL_CONTACT_FASTSIM.en.md#43-small-creepage-limit).
 
 ## 2. Finite table and interpolation along two axes
 
 ### 2.1 Table structure
 
-`kLongitudinal`, `kLateral`, and `kLateralSpin` in the source are three constant $3\times19$ tables. Their Poisson-ratio nodes are
+`kLongitudinal`, `kLateral` and `kLateralSpin` in the source are three constant $3\times19$ tables. Their Poisson-ratio nodes are
 
 $$
 (\nu_0,\nu_1,\nu_2)=(0,\,0.25,\,0.5),
@@ -76,7 +76,7 @@ $$
 \qquad i=0,\ldots,18.
 $$
 
-The same three weights are shared by all columns of $C_{11}$, $C_{22}$, and $C_{23}$. At a Poisson-ratio node the weights reduce to a Kronecker delta and select the original row exactly. The implementation uses this interpolation only over the material range $0\le\nu\le0.5$.
+The same three weights are shared by all columns of $C_{11}$, $C_{22}$ and $C_{23}$. At a Poisson-ratio node the weights reduce to a Kronecker delta and select the original row exactly. The implementation uses this interpolation only over the material range $0\le\nu\le0.5$.
 
 ### 2.3 Interpolation along the semi-axis-ratio axis
 
@@ -92,7 +92,7 @@ The independent variable is neither $\ln\kappa$ nor $\min(\kappa,1/\kappa)$. The
 
 ## 3. Slender-ellipse asymptotic expressions
 
-The finite table covers the closed interval $0.1\le\kappa\le10$. For positive finite semi-axis ratios outside the table, the current wheel-rail contact model uses slender-ellipse asymptotic expressions. Define
+The finite table covers the closed interval $0.1\le\kappa\le10$. The table selects one outside-table rule when it is constructed, and every subsequent patch lookup follows that same choice: one rule continues positive finite semi-axis ratios into the slender-ellipse asymptotic expressions below, while the other restricts the domain of the coefficient functions to the finite table itself. The expressions that follow are those of the asymptotic continuation. Define
 
 $$
 \sigma=\min\left(\kappa,\frac{1}{\kappa}\right),
@@ -139,13 +139,13 @@ The two asymptotic regions are not simple mirror images obtained by swapping the
 
 ### 3.3 Junctions and applicability
 
-The finite table and asymptotic expressions switch directly at $\kappa=0.1$ and $\kappa=10$, with no blending region. The current coefficient function is therefore generally only piecewise smooth at interior table nodes and may also have value jumps at the two table boundaries. Such a jump belongs to the algorithmic junction between a finite table and an asymptotic approximation; it must not be interpreted as a physical discontinuity of real contact mechanics at that ellipse shape.
+Under the asymptotic-continuation rule, the finite table and asymptotic expressions switch directly at $\kappa=0.1$ and $\kappa=10$, with no blending region. The resulting coefficient function is therefore generally only piecewise smooth at interior table nodes and may also have value jumps at the two table boundaries. Such a jump belongs to the algorithmic junction between a finite table and an asymptotic approximation; it must not be interpreted as a physical discontinuity of real contact mechanics at that ellipse shape.
 
 The asymptotic expressions cover slender ellipses beyond the finite table. As $\sigma\to0$, their logarithmic and power terms display the singular scales of the slender limit; they should not be extrapolated into a model of degenerate line contact or zero-area contact.
 
 ## 4. Numerical algorithm
 
-At construction, the implementation first evaluates the three $\ell_j(\nu)$ and then collapses each column into three one-dimensional tables. Each patch computes $\kappa=a/b$ once. Lookup locates adjacent columns and shares a single interpolation fraction inside the table; outside it, the algorithm evaluates the expressions in Section 3.
+At construction, the implementation first evaluates the three $\ell_j(\nu)$ and then collapses each column into three one-dimensional tables. Each patch computes $\kappa=a/b$ once. Lookup locates adjacent columns and shares a single interpolation fraction inside the table; outside it, the table's selected rule either continues into the expressions of Section 3 or leaves the coefficient functions undefined beyond the finite table.
 
 The two endpoints $\kappa=0.1$ and $\kappa=10$ return the first and last node values directly. For a strict interior point $0.1<\kappa<10$, the algorithm is
 
@@ -156,15 +156,15 @@ t = (kappa - kappa_node[low]) / (kappa_node[high] - kappa_node[low])
 C = C_collapsed[low] + (C_collapsed[high] - C_collapsed[low]) * t
 ```
 
-All three coefficients share `high`, `low`, and $t$. This structure preserves the original node values and makes the derivative with respect to $\kappa$ discontinuous at general nodes. The downstream tangential force may inherit those corners and the jumps at table-asymptotic junctions; degenerate states such as zero creepage can mask coefficient changes completely.
+All three coefficients share `high`, `low` and $t$. This structure preserves the original node values and makes the derivative with respect to $\kappa$ discontinuous at general nodes. The downstream tangential force may inherit those corners and the jumps at table-asymptotic junctions; degenerate states such as zero creepage can mask coefficient changes completely.
 
 ## 5. Source mapping
 
 | Theoretical object | Primary implementation |
 |---|---|
-| Coefficient triple and table object | `KalkerCoefficients`, `KalkerCoefficientTable`; see [`kalker_coefficient_table.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/kalker_coefficient_table.h) |
-| Finite tables and nodes | `kLongitudinal`, `kLateral`, `kLateralSpin`, `kSemiAxisRatioNodes`; see [`kalker_coefficient_table.cc`](../../../libs/wheel_rail_contact/src/kalker_coefficient_table.cc) |
-| Poisson-ratio collapse | `PoissonInterpolationWeights`, `CollapsePoissonAxis` |
+| Coefficient triple, table object and outside-table rule | `KalkerCoefficients`, `KalkerCoefficientTable`, `OutsideTableRule`; see [`kalker_coefficient_table.h`](../../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/kalker_coefficient_table.h) |
+| Finite tables and nodes | `kLongitudinal`, `kLateral`, `kLateralSpin`, `kPoissonNodes`, `kSemiAxisRatioNodes`; see [`kalker_coefficient_table.cc`](../../../libs/wheel_rail_contact/src/kalker_coefficient_table.cc) |
+| Poisson-ratio collapse | `KalkerCoefficientTable::ForPoissonRatio`, internally `PoissonInterpolationWeights` and `CollapsePoissonAxis` |
 | Semi-axis-ratio lookup | `KalkerCoefficientTable::At` |
-| Slender-ellipse expressions | `AsymptoticCoefficients` |
+| Slender-ellipse expressions | `AsymptoticCoefficients`, called by `KalkerCoefficientTable::At` under the asymptotic-continuation rule |
 | Flexibility consumer | `TangentialContactSolver::Solve`; see [`tangential_contact_force.cc`](../../../libs/wheel_rail_contact/src/tangential_contact_force.cc) |

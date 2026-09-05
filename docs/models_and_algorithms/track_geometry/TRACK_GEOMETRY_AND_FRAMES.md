@@ -8,16 +8,17 @@
 
 本篇建模的对象是 [`libs/track_geometry`](../../../libs/track_geometry/README.md) 中的标量剖面 `TrackScalarProfile`（平面曲率与超高共用同一表示）、线路 `TrackGeometry`、位姿与运动学量 `TrackFramePose` 与 `TrackFrameKinematics`，以及局部分支投影 `TrackStationProjection`。重点是这些对象表达的物理量、解析关系和数值离散，不展开配置文件格式或调用接口清单。
 
-本篇明确不做的事：竖向剖面 `TrackVerticalProfile` 的恒坡段、抛物线竖曲线与圆弧竖曲线公式见 [`TRACK_VERTICAL_PROFILE_MODELLING.md`](TRACK_VERTICAL_PROFILE_MODELLING.md)，本篇只写它进入中心线与轨道系的方式；轨道不平顺不属于线路几何，见 [`TRACK_IRREGULARITY_SPECTRA.md`](../track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)；轮轨位姿归约如何消费 `TrackFrameKinematics` 属于 [`WHEEL_RAIL_POSE_REDUCTION.md`](../wheel_rail_contact/WHEEL_RAIL_POSE_REDUCTION.md)。投影种子的时间推进与回滚属于动力学和数值方法，本篇只讨论单次几何投影。
+本篇明确不做的事：竖向剖面 `TrackVerticalProfile` 的恒坡段、抛物线竖曲线与圆弧竖曲线公式见 [`TRACK_VERTICAL_PROFILE_MODELLING.md`](TRACK_VERTICAL_PROFILE_MODELLING.md)，本篇只写它进入中心线与轨型系的方式；轨道不平顺不属于线路几何，见 [`TRACK_IRREGULARITY_SPECTRA.md`](../track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)；轮轨位姿归约如何消费 `TrackFrameKinematics` 属于 [`WHEEL_RAIL_POSE_REDUCTION.md`](../wheel_rail_contact/WHEEL_RAIL_POSE_REDUCTION.md)。投影种子的时间推进与回滚属于动力学和数值方法，本篇只讨论单次几何投影。
 
 坐标系、正号、站位定义与单位后缀全部沿用[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)，本篇不重复其第 2 节与第 3 节的结论，只在需要时引用。
 
 ## 2. 记号
 
-以下只列本篇新增的记号；$s$、$\psi$、$\kappa$、$g$、$u$、$b$、$\phi$、$\mathbf C(s)$、$R_{IT}$、$R_{I0}$、$\mathbf x_0,\mathbf y_0,\mathbf z_0$、$\boldsymbol\omega_{IT}$ 与定义区间 $[s_{\min},s_{\max}]$ 的含义见[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)第 2、3 节。
+以下只列本篇新增的记号；$s$、$\psi$、$\kappa$、$g$、$u$、$b$、$\phi$、$\mathbf C(s)$、$R_{IT}$、$R_{I0}$、$\mathbf x_0,\mathbf y_0,\mathbf z_0$ 与 $\boldsymbol\omega_{IT}$ 的含义见[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)第 2、3 节。
 
 | 记号 | 含义 | 对应标识符 |
 |---|---|---|
+| $[s_{\min},s_{\max}]$ | 线路几何的定义区间，端点是曲率剖面的起终站位，定义见第 3.5 节 | `start_track_station_meters`、`end_track_station_meters` |
 | $v(s)$ | 一条标量剖面的值，代入曲率剖面时为 $\kappa$，代入超高剖面时为 $u$ | `TrackScalarProfile::Value` |
 | $s_i$、$L_i$ | 第 $i$ 段的起点站位与长度，起点由 `start_track_station_meters` 累加各段 `length_meters` 得到 | `TrackScalarSegment::length_meters` |
 | $o$、$\hat s=s-o$ | 一个片的多项式原点与局部坐标 | `polynomial_origin_track_station_meters` |
@@ -30,7 +31,7 @@
 | $\Delta s$ | 声明的站位节点间距 | `station_node_spacing_meters` |
 | $B_j$、$n_j$ | 曲率断点与竖向断点有序并集中的第 $j$ 个断点；断点区间被分成的面板数 | `nodes_` |
 | $\xi_q$、$w_q$ | 八点 Gauss–Legendre 求积的横坐标与权 | `kQuadratureAbscissae`、`kQuadratureWeights` |
-| $h$ | 常曲率面板的半转角 | `half_turn` |
+| $h$ | 常曲率节点区间上跨 $L$ 的半转角 | `half_turn` |
 | $\mathbf t$、$n$ | 未归一化的三维切向 $\mathbf C'(s)$ 及其模 $\sqrt{1+g^2}$ | `tangent`、`slope_norm` |
 | $\boldsymbol\omega_0$ | 无侧滚切向系相对惯性系的站位旋转率 | `roll_free_rate` |
 | $\mathbf p$、$f(s)$ | 待投影的空间点；投影目标函数，README 中记作 objective | `EvaluateObjectiveDerivatives` |
@@ -53,7 +54,7 @@ $$
 v(s)=c_0+c_2\,\hat s^{2}+c_3\,\hat s^{3},\qquad c_0=v_{\text{start}},\quad c_2=\frac{3\,\Delta v}{L_i^{2}},\quad c_3=-\frac{2\,\Delta v}{L_i^{3}}
 $$
 
-对 $x$ 求导可见这条混合的两端性质：
+对 $s$ 求导并以 $x$ 表示，可见这条混合的两端性质：
 
 $$
 v'(s)=\frac{6\,\Delta v}{L_i}\,x\,(1-x),\qquad v''(s)=\frac{6\,\Delta v}{L_i^{2}}\,(1-2x)
@@ -61,7 +62,7 @@ $$
 
 一阶导在 $x=0$ 与 $x=1$ 处为零，二阶导在两端分别取 $6\Delta v/L_i^{2}$ 与 $-6\Delta v/L_i^{2}$；当 $\Delta v\ne0$ 时，它与相邻常值段的零二阶导之间存在跳变，$\Delta v=0$ 时则退化为常值段。这条曲线因此不是非平凡的回旋线：回旋线的曲率随站位线性变化，其非零曲率变化率不会在两端降为零。头文件 [`track_geometry_segments.h`](../../../libs/track_geometry/include/orvd/track_geometry/track_geometry_segments.h) 写明这是本库有意的选择（"It is deliberately not a clothoid"），模块 [`README.md`](../../../libs/track_geometry/README.md) 进一步规定下游不得按回旋线标准解释这里的缓和段；把这种段用于曲率剖面时，它就是本库的缓和曲线。
 
-没有接缝窗口的相邻段界采用连续剖面假设：前一段的声明终值等于后一段的声明起值。实现比较声明值而不是重新求值多项式，因为 Hermite 混合在浮点算术中到达终值时未必逐位复现。若允许值跳变，由剖面积分得到的航向虽仍连续，但轨道系及其站位导数会在跳变处失去通常的微分意义，因此这种情形不属于本模型。
+没有接缝窗口的相邻段界采用连续剖面假设：前一段的声明终值等于后一段的声明起值。实现比较声明值而不是重新求值多项式，因为 Hermite 混合在浮点算术中到达终值时未必逐位复现。若允许值跳变，由剖面积分得到的航向虽仍连续，但轨型系及其站位导数会在跳变处失去通常的微分意义，因此这种情形不属于本模型。
 
 ### 3.2 五次接缝过渡
 
@@ -115,7 +116,7 @@ $$
 
 分别由 `CenterlineDerivativeUnchecked` 与 `CenterlineSecondDerivativeUnchecked` 形成；其中 $g'$ 是 `grade_.FirstDerivativePerMeter`。站位是平面投影里程，所以 $\mathbf C'$ 的水平投影是单位向量，而完整三维导数的模是 $\sqrt{1+g^2}$，纵坡非零处不等于一；$\mathbf C''$ 只在投影的二阶判据中使用，因此保持私有。竖向剖面各段的 $g$、$g'$、$g''$ 与 $\int g$ 的闭式见 [`TRACK_VERTICAL_PROFILE_MODELLING.md`](TRACK_VERTICAL_PROFILE_MODELLING.md) 第 4 节；本篇只用到它们是解析的这一事实。
 
-### 3.4 轨道系：惯性系 I、无侧滚切向系与轨型系 T
+### 3.4 轨道坐标系：惯性系 I、无侧滚切向系与轨型系 T
 
 惯性系 `I` 由线路定义：原点在线路起点，`+x` 沿起点处站位增加方向，`+y` 指向右侧，`+z` 向下，`DownwardUnitVectorInInertial()` 返回 `(0.0, 0.0, 1.0)`。两个坐标系沿线路移动。无侧滚切向系的三轴为
 
@@ -135,7 +136,7 @@ $$
 
 其中 $R_{I0}$ 的三列依次是 $\mathbf x_0,\mathbf y_0,\mathbf z_0$，实现为 `rotation = rotation_roll_free * roll_about_x`；`TrackRollRadians` 返回 `std::asin(superelevation_.Value(definition_station) / superelevation_reference_baselength_meters_)`。$u$ 是超高剖面的值 `SuperelevationMeters`，$b$ 是构造参数 `superelevation_reference_baselength_meters`。
 
-有符号超高的定义：在轨型系横轴 $\mathbf y_T$（$R_{IT}$ 的第二列）上距中心线各 $b/2$ 处取两个抽象参考点 $\mathbf p_{\text{right}}=+\tfrac{b}{2}\mathbf y_T$ 与 $\mathbf p_{\text{left}}=-\tfrac{b}{2}\mathbf y_T$，$u$ 是它们沿无侧滚系竖轴 $\mathbf z_0$ 的有符号分离量：
+有符号超高的定义：在轨型系横轴 $\mathbf y_T=R_{IT}\mathbf e_2$ 上距中心线各 $b/2$ 处取两个抽象参考点 $\mathbf p_{\text{right}}=+\tfrac{b}{2}\mathbf y_T$ 与 $\mathbf p_{\text{left}}=-\tfrac{b}{2}\mathbf y_T$，$u$ 是它们沿无侧滚系竖轴 $\mathbf z_0$ 的有符号分离量：
 
 $$
 u=(\mathbf p_{\text{right}}-\mathbf p_{\text{left}})\cdot\mathbf z_0=b\sin\phi,\qquad
@@ -156,17 +157,17 @@ $$
 
 ### 3.5 定义区间与三维切线延长
 
-线路几何定义在有限站位区间 $[s_{\min},s_{\max}]$ 上，端点是曲率剖面的起终站位（构造期三条剖面已被规范到共同终点，第 4.2 节）。`ClassifyTrackStation` 对 $s<s_{\min}$ 返回 `TrackStationRegion::kBeforeDefinedInterval`，对 $s>s_{\max}$ 返回 `kAfterDefinedInterval`，其余返回 `kWithinDefinedInterval`；两个端点属于区间内。对区间外的任意有限站位，`TrackGeometry` 从最近的定义边界 $s_b$ 沿三维切线作直线延长：
+线路几何定义在有限站位区间 $[s_{\min},s_{\max}]$ 上，端点是曲率剖面的起终站位（构造期三条剖面已被规范到共同终点，第 4.2 节）。`ClassifyTrackStation` 对 $s<s_{\min}$ 返回 `TrackStationRegion::kBeforeDefinedInterval`，对 $s>s_{\max}$ 返回 `kAfterDefinedInterval`，其余返回 `kWithinDefinedInterval`；两个端点属于区间内。对区间外的任意有限站位，`TrackGeometry` 从最近的端点 $s_\ast\in\{s_{\min},s_{\max}\}$ 沿三维切线作直线延长（$s_\ast$ 是定义区间的端点，与第 3.2 节的接缝边界 $s_b$ 无关）：
 
 $$
-\mathbf C(s)=\mathbf C(s_b)+(s-s_b)\,\mathbf C'(s_b),\qquad
+\mathbf C(s)=\mathbf C(s_\ast)+(s-s_\ast)\,\mathbf C'(s_\ast),\qquad
 \kappa(s)=0,\qquad \mathbf C''(s)=\mathbf 0,\qquad
-\psi(s)=\psi(s_b),\quad g(s)=g(s_b),\quad u(s)=u(s_b),\quad g'(s)=u'(s)=0
+\psi(s)=\psi(s_\ast),\quad g(s)=g(s_\ast),\quad u(s)=u(s_\ast),\quad g'(s)=u'(s)=0
 $$
 
-实现中 `CenterlinePositionUnchecked` 对域外站位组合边界位置与边界导数；航向、超高、纵坡与滚转角取边界值，曲率、中心线二阶导数以及纵坡和超高的变化率取零。这里的切线延长属于 `TrackGeometry` 的几何定义，而底层标量剖面仍只定义在自身有限区间内。它是一种明确的延拓选择，不等价于把原剖面的最后一个解析片继续外推。
+实现中 `CenterlinePositionUnchecked` 对域外站位组合端点位置与端点导数；航向、超高、纵坡与滚转角取端点值，曲率、中心线二阶导数以及纵坡和超高的变化率取零。这里的切线延长属于 `TrackGeometry` 的几何定义，而底层标量剖面仍只定义在自身有限区间内。它是一种明确的延拓选择，不等价于把原剖面的最后一个解析片继续外推。
 
-`support_start_track_station_meters()` 表示剖面支集的实现近似：它取第一个多项式系数不全为零的片的起点，整条剖面恒为零时为空。因为它检查解析片而不是样本，当第一个非零片是接缝窗口时，返回窗口起点而不是原段边界。竖向剖面也使用同一思想：恒坡原段按起始坡度判零，接缝片按全部系数判零。
+`support_start_track_station_meters()` 给出剖面支集的起点：它取第一个多项式系数不全为零的片的起点，整条剖面恒为零时为空。因为它检查解析片而不是样本，当第一个非零片是接缝窗口时，返回窗口起点而不是原段边界。竖向剖面也使用同一思想：恒坡原段按起始坡度判零，接缝片按全部系数判零。
 
 ### 3.6 站位投影的目标函数
 
@@ -190,7 +191,7 @@ $\tau$ 是 `kObjectiveGradientRelativeTolerance`，值为 `1.0e-10`。残差门�
 
 ### 4.1 标量剖面的构造与求值
 
-剖面构造可分为五步。第一步逐段累加站位，并按第 3.1 节形成各原始段的局部多项式。第二步由内部段界与窗口宽度形成全部接缝区间，并共同检查第 3.2 节的几何前提。第三步要求所有未被窗口覆盖的段界满足声明值连续。第四步把窗口按起点排序，再沿站位游标切出片序列：窗口之前的原段部分、窗口本身、窗口之后的原段部分依次成片。原段被窗口切开后仍保留原段起点作为多项式原点，避免把原系数围绕切点重新展开而引入额外舍入；接缝片的原点是窗口起点。第五步计算每个片起点的累计积分 $I_i$、记录断点表（各片起点加整条剖面终点），并求支持起点。
+构造时先逐段累加站位，按第 3.1 节形成各原始段的局部多项式，并由内部段界与窗口宽度形成接缝区间。在切出片序列之前，第 3.2 节的几何前提与所有未被窗口覆盖段界的声明值连续性均须成立。随后把窗口按起点排序，沿站位游标切出窗口之前的原段部分、窗口本身与窗口之后的原段部分。原段被窗口切开后仍保留原段起点作为多项式原点，避免把原系数围绕切点重新展开而引入额外舍入；接缝片的原点是窗口起点。最后计算每个片起点的累计积分 $I_i$，记录断点表（各片起点加整条剖面终点），并求支持起点。
 
 每个片保存至多六个升幂系数与系数个数（常值一项、Hermite 混合四项、接缝六项），求值用 Horner 格式在局部坐标 $\hat s=s-o$ 上进行，`Value`、`FirstDerivativePerMeter`、`SecondDerivativePerMeterSquared` 分别对应 `EvaluatePolynomial`、`EvaluateFirstDerivative`、`EvaluateSecondDerivative`。积分是解析的：每个片的原函数取局部坐标零点处为零，
 
@@ -211,7 +212,7 @@ $$
 
 节点表建立在曲率断点与竖向断点的有序并集 $\{B_j\}$ 上（排序去重）。断点区间 $[B_j,B_{j+1}]$ 长度 $\ell_j$ 被分成 $n_j=\max\{1,\lceil \ell_j/\Delta s\rceil\}$ 个面板，节点位于 $B_j+\ell_j\,q/n_j$，$q=0,\dots,n_j-1$，最后再追加终点节点。一个节点区间因此既不跨越水平积分公式的切换，也不跨越中心线导数公式的切换；每个区间在其中点处查询 `LocalPolynomialDegree` 决定是否常曲率，并记录该处曲率值。
 
-每个节点存航向 $\psi_n$（`curvature_.IntegralFromStart` 的精确积分）与中心线位置。从节点到其区间内任一站位的水平位移由 `HorizontalDisplacementFromNode` 给出。曲率常数时用圆弧弦的半角形式：
+每个节点存自身站位 $s_n$、航向 $\psi_n$（`curvature_.IntegralFromStart` 的精确积分）与中心线位置。从节点 $s_n$ 到其区间内任一站位 $s$ 的水平位移由 `HorizontalDisplacementFromNode` 给出；以下两条位移公式中的 $L=s-s_n$ 是这一段的站位差，不是记号表里的段长 $L_i$：建表时它等于整个面板长，非节点求值时是该面板内从节点到求值站位的部分，因此 $0\le L$ 且不超过一个面板长，$L=0$ 时位移为零。曲率常数时用圆弧弦的半角形式：
 
 $$
 h=\tfrac12\,\kappa\,L,\qquad
@@ -245,11 +246,11 @@ c\leftarrow c+\begin{cases}(S-t)+a,&\lvert S\rvert\ge\lvert a\rvert\\ (a-t)+S,&\
 S\leftarrow t,\qquad x_n=S+c
 $$
 
-节点的 $z$ 分量直接取 `-grade_.IntegralFromStart`，不参与连加。非节点站位的位置是 `NodeIndexAtOrBefore` 二分找到的节点位置加上该节点到目标站位的一次 `HorizontalDisplacementFromNode`，即最多补积一个面板的剩余部分；落在最后一个节点上的站位归入以它结束的区间。
+节点的 $z$ 分量直接取 `-grade_.IntegralFromStart`，不参与连加。非节点站位的位置是 `NodeIndexAtOrBefore` 二分找到的节点位置加上该节点到目标站位的一次 `HorizontalDisplacementFromNode`，即最多补积一个面板内从节点到目标站位的部分；落在最后一个节点上的站位归入以它结束的区间。
 
-### 4.3 轨道系运动学
+### 4.3 轨型系运动学
 
-`EvaluateTrackFrame` 一次求出位姿与站位导数。先取 $\psi$、$\kappa$、$g$、$g'$、$u$、$u'$（区间外按第 3.5 节取零或边界值），再按第 3.4 节形成三轴与旋转。三轴的站位导数是
+`EvaluateTrackFrame` 一次求出位姿与站位导数。先取 $\psi$、$\kappa$、$g$、$g'$、$u$、$u'$（区间外按第 3.5 节取零或端点值），再按第 3.4 节形成三轴与旋转。三轴的站位导数是
 
 $$
 \mathbf t'=\begin{bmatrix}-\kappa\sin\psi\\ \kappa\cos\psi\\ -g'\end{bmatrix},\qquad
@@ -287,7 +288,7 @@ $$
 
 实现混合了解析计算与受控数值近似。标量剖面的值、导数、积分与航向为片内解析计算；常曲率水平位移采用半角弦形式以避免相消；变曲率面板使用固定八点 Gauss–Legendre 求积；节点位置采用 Neumaier 补偿求和。三剖面的共同终点只吸收可由浮点累加解释的末位差，$\lvert u\rvert<b$ 则通过解析片极值判定。局部投影用带绝对地板的尺度化残差和严格的 $f''>0$ 条件，并把迭代次数固定为至多两次。因而中心线水平位置与投影根是数值近似，剖面多项式及其解析积分不是。
 
-非光滑点如下。Hermite 混合段两端：值与一阶导连续，二阶导通常跳变；退化的 $\Delta v=0$ 段或端部二阶导恰好匹配的相邻段是例外。无接缝的段界：值连续，一阶导在常值与混合的交界处连续为零，二阶导可跳变；两常值段等值交界处完全光滑。接缝窗口两端：值、一阶导、二阶导连续，三阶导可跳变。定义边界：$\mathbf C$ 与 $\mathbf C'$ 连续、$R_{IT}$ 连续，但 $\kappa$、$g'$、$u'$ 在边界外侧取零，因此 $\mathbf C''$ 与 $\boldsymbol\omega_{IT}$ 在边界处可跳变。片查找在片界处取右侧片、在终点取最后一片，所以导数查询在这些站位返回单侧值。$\phi=\arcsin(u/b)$ 的导数在 $\lvert u\rvert\to b$ 时无界，因而模型限定在 $\lvert u\rvert<b$。
+非光滑点如下。Hermite 混合段两端：值与一阶导连续，二阶导通常跳变；退化的 $\Delta v=0$ 段或端部二阶导恰好匹配的相邻段是例外。无接缝的段界：值连续，一阶导连续且为零，二阶导可跳变；两常值段等值交界处完全光滑。接缝窗口端点位于其边界数据所取原段的内部时，值、一阶导、二阶导连续，三阶导可跳变；端点与完整剖面的定义端点重合时，同一结论按域内单侧意义成立。若半窗恰好覆盖该原段，使窗口端点同时落在另一处无接缝原始段界，则装配后的剖面在那里一般只到 $C^1$，二阶导可以跳变。定义边界：$\mathbf C$ 与 $\mathbf C'$ 连续、$R_{IT}$ 连续，但 $\kappa$、$g'$、$u'$ 在边界外侧取零，因此 $\mathbf C''$ 与 $\boldsymbol\omega_{IT}$ 在边界处可跳变。片查找在片界处取右侧片、在终点取最后一片，所以导数查询在这些站位返回单侧值。$\phi=\arcsin(u/b)$ 的导数在 $\lvert u\rvert\to b$ 时无界，因而模型限定在 $\lvert u\rvert<b$。
 
 复杂度：剖面的一次求值或积分是对片起点的二分加 Horner，即 $O(\log P)$，$P$ 为片数；一次中心线位置是对节点的二分 $O(\log N)$ 加一次闭式或八次航向求值；一次 `EvaluateTrackFrame` 是常数个剖面查询加一次位置；一次投影至多三次目标导数求值。构造期为 $O(N)$ 个面板位移加 $O(P)$ 次极值搜索。
 
@@ -298,24 +299,20 @@ $$
 | 理论对象或算法 | 主要实现 | 源文件 |
 |---|---|---|
 | 常值与 Hermite 三次标量剖面、解析导数与积分 | `TrackScalarProfile` | [`track_geometry_segments.cc`](../../../libs/track_geometry/src/track_geometry_segments.cc) |
-| 五次 $C^2$ 接缝 | `internal::BuildQuinticHermiteCoefficients` | [`track_profile_quintic.cc`](../../../libs/track_geometry/src/track_profile_quintic.cc) |
+| 五次 $(v,v',v'')$ 接缝 | `internal::BuildQuinticHermiteCoefficients` | [`track_profile_quintic.cc`](../../../libs/track_geometry/src/track_profile_quintic.cc) |
 | 片内极值与导数多项式根 | `MaximumAbsoluteValue`、`FindPolynomialRootsInClosedInterval` | [`track_geometry_segments.cc`](../../../libs/track_geometry/src/track_geometry_segments.cc) |
 | 航向、中心线节点与水平求积 | `TrackGeometry`、`HorizontalDisplacementFromNode` | [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
-| 轨道姿态与站位旋转率 | `EvaluateTrackFrame` | [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
-| 有限域外的三维切线延长 | `CenterlinePositionUnchecked` 及各剖面查询 | [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
+| 轨型系姿态与站位旋转率 | `EvaluateTrackFrame` | [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
+| 有限域外的三维切线延长 | `TrackGeometry::CenterlinePositionInInertialMeters` 与其内部的 `CenterlinePositionUnchecked` | [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
 | 距离目标的一、二阶导与 Newton 投影 | `EvaluateObjectiveDerivatives`、`ProjectPointOntoSeededBranch` | [`track_geometry.cc`](../../../libs/track_geometry/src/track_geometry.cc) |
 | 竖向剖面的解析量 | `TrackVerticalProfile` | [`track_vertical_profile.cc`](../../../libs/track_geometry/src/track_vertical_profile.cc) |
 
 ## 6. 理论假设与适用范围
 
 - 站位 $s$ 是中心线在水平面的投影里程，不是三维弧长。因此 $\|\mathbf C'(s)\|=\sqrt{1+g^2}$；只有 $g=0$ 时其值为一。
-- 平面曲率和超高只由常值片、Hermite 三次混合片与可选的五次 $C^2$ 接缝组成。对曲率从 $\kappa_0$ 过渡到 $\kappa_1$，Hermite 律
-  $$
-  \kappa(s)=\kappa_0+(\kappa_1-\kappa_0)(3x^2-2x^3)
-  $$
-  正是 Bloss 缓和曲线的曲率律，而不是回旋线。当前模型不包含线性曲率的回旋线、正弦型缓和曲线或由采样点定义的任意线形；这些线形不能由现有段类型无损表达。
+- 平面曲率和超高只由常值片、Hermite 三次混合片与可选的五次接缝组成。接缝在窗口端点匹配所取原段的 $(v,v',v'')$；若半窗恰好覆盖该原段并在更外侧原始段界结束，装配后该端点一般只到 $C^1$。对曲率从 $\kappa_0$ 过渡到 $\kappa_1$，Hermite 律 $\kappa(s)=\kappa_0+(\kappa_1-\kappa_0)(3x^2-2x^3)$ 正是 Bloss 缓和曲线的曲率律，而不是回旋线。当前模型不包含线性曲率的回旋线、正弦型缓和曲线或由采样点定义的任意线形；这些线形不能由现有段类型无损表达。
 - 超高采用中心线滚转模型，$u=b\sin\phi$ 是沿无侧滚系竖轴的有符号分离量。模型不定义以内轨或外轨为固定基准时中心线应如何平移，也不把 $b$ 等同于名义轨距。
 - 水平中心线对常曲率面板解析积分，对变曲率面板作固定八点 Gauss–Legendre 求积。$\Delta s$ 决定面板尺度；当前推导没有给出适用于任意曲率片和任意 $\Delta s$ 的统一绝对误差界。
-- 有限定义区间之外采用边界三维切线延长。这是人为选定的几何延拓，并非由区间内曲率、纵坡或超高的解析式唯一推出。
+- 有限定义区间之外采用端点三维切线延长。这是人为选定的几何延拓，并非由区间内曲率、纵坡或超高的解析式唯一推出。
 - 空间点投影是由种子标识的局部分支问题，不是全线最近点问题。至多两次 Newton 校正假设种子已处于一个满足 $f''>0$ 的正则极小根的局部吸引域；该吸引域尚无统一解析半径。
-- 光滑阶由片型决定：Hermite 混合端点通常为 $C^1$、五次接缝端点为 $C^2$；定义边界的切线延长保持 $\mathbf C$ 与 $\mathbf C'$ 连续，但 $\mathbf C''$ 和轨道系旋转率可以跳变。
+- 光滑阶由片型及窗口端点所处的原始拓扑共同决定：Hermite 混合端点通常为 $C^1$；五次接缝与其取数原段在普通窗口端点达到 $C^2$，但半窗铺满原段时可能在更外侧原始段界仅为 $C^1$。定义边界的切线延长保持 $\mathbf C$ 与 $\mathbf C'$ 连续，但 $\mathbf C''$ 和轨型系旋转率可以跳变。
