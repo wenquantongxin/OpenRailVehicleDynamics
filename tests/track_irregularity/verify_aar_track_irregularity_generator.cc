@@ -26,7 +26,7 @@ using orvd::track_irregularity::AarTrackClass;
 using orvd::track_irregularity::AarTrackIrregularityGenerationSpec;
 using orvd::track_irregularity::DeriveAarTrackIrregularityChannelSeeds;
 using orvd::track_irregularity::GenerateAarTrackIrregularity;
-using orvd::track_irregularity::GeneratedTrackIrregularity;
+using orvd::track_irregularity::GeneratedAarTrackIrregularity;
 using orvd::track_irregularity::Smoothstep5;
 using orvd::track_irregularity::SpatialFrequencyGridSpec;
 using orvd::track_irregularity::TrackIrregularityDirection;
@@ -815,7 +815,7 @@ void CheckGridPlacementAndSplineClosure() {
         TrackStationGridSpec{0.0, 12.0, 0.25},
         TrackIrregularityPlacementSpec{2.0, 10.0, 2.0, 2.0},
         42};
-    const GeneratedTrackIrregularity generated =
+    const GeneratedAarTrackIrregularity generated =
         GenerateAarTrackIrregularity(specification);
     Require(generated.track_station_meters.size() == 49 &&
                 generated.lateral_displacement_meters.size() == 49 &&

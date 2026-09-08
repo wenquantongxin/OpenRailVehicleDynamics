@@ -849,6 +849,27 @@ target_link_libraries(verify_aar_track_irregularity_generator
 add_test(NAME verify_aar_track_irregularity_generator
          COMMAND verify_aar_track_irregularity_generator)
 
+add_executable(verify_erri_b176_track_irregularity_generator
+    track_irregularity/erri_b176_track_irregularity_generator_header_self_containment.cc
+    track_irregularity/verify_erri_b176_track_irregularity_generator.cc)
+orvd_configure_first_party_target(
+    verify_erri_b176_track_irregularity_generator)
+target_link_libraries(verify_erri_b176_track_irregularity_generator
+    PRIVATE orvd_track_irregularity)
+add_test(NAME verify_erri_b176_track_irregularity_generator
+         COMMAND verify_erri_b176_track_irregularity_generator)
+
+# The IRW V200 ERRI Low instance is checked through both the generated source
+# and the existing frozen SIMPACK field using the same statistical PSD recovery.
+add_executable(verify_irw_v200_erri_low_spectrum
+    track_irregularity/verify_irw_v200_erri_low_spectrum.cc)
+orvd_configure_first_party_target(verify_irw_v200_erri_low_spectrum)
+target_link_libraries(verify_irw_v200_erri_low_spectrum
+    PRIVATE orvd_configuration)
+add_test(NAME verify_irw_v200_erri_low_spectrum
+         COMMAND verify_irw_v200_erri_low_spectrum
+             ${CMAKE_SOURCE_DIR})
+
 add_executable(verify_wheel_profile_preprocessing
     wheel_rail_contact/profile_points_header_self_containment.cc
     wheel_rail_contact/profile_arc_length_header_self_containment.cc

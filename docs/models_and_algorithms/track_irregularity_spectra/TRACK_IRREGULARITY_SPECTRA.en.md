@@ -10,9 +10,9 @@ Track-irregularity modelling contains three independent choices: the spectral fo
 
 This chapter treats only stationary random geometric irregularity superposed on an ideal line. Plan curvature and superelevation belong to [Line geometry and track frames](../track_geometry/TRACK_GEOMETRY_AND_FRAMES.en.md), and the piecewise closed-form models of grade and vertical curves belong to [Track vertical profile modelling and its three-dimensional coupling](../track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.en.md), while local deterministic defects such as welds, corrugation and scuffing cannot be specified uniquely by a stationary PSD. Lateral displacement is positive to the right in the track frame, vertical displacement is positive downward, and station is the planar-projected mileage defined in [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md).
 
-The current implementation has two irregularity sources: generating one two-channel realization from an AAR5/AAR6 spectrum, or resolving a frozen field. A frozen field is a pre-existing point series whose spectral provenance is not restricted to the single-cutoff AAR family of section 3, and this chapter does not derive the spectral model of those series. Both paths ultimately form the same `TrackIrregularityField`, and a frozen point series receives no second envelope.
+The current implementation has two source families: generating one two-channel realization from an AAR5/AAR6 or ERRI B176 spectrum, or resolving a frozen field. A frozen field is a point-series asset that preserves its existing phase, gating and interpolation history; even when its spectral family is known, a PSD alone cannot recover it pointwise. Both paths ultimately form the same `TrackIrregularityField`, and a frozen point series is neither regenerated nor given a second envelope.
 
-AAR5 and AAR6 denote two parameter sets for track-quality spectra here; they do not identify a vehicle class and are not universal descriptions valid for every line, speed and vehicle frequency range.
+AAR5, AAR6 and ERRI Low/High denote track-irregularity spectral parameter sets here, with ERRI Low/High explicitly distinguishing irregularity-amplitude levels. They identify neither vehicle classes nor speed classes and are not universal descriptions valid for every line and vehicle frequency range.
 
 ## 2. Spatial frequency and one-sided PSD
 
@@ -54,7 +54,7 @@ $$
 
 Speed changes the mapping from spatial excitation to the vehicle's temporal response; it does not change the spatial PSD of the line itself.
 
-## 3. Simplified FRA/AAR spectra
+## 3. Spectral models
 
 ### 3.1 Lateral and vertical single-cutoff spectra
 
@@ -99,7 +99,75 @@ in which $a_0=0$ is what makes the spectrum grow as $\Omega^{-2}$ at low angular
 
 `AarTrackClass` selects only the shape and amplitude determined by $A_a$, $A_v$, $k$ and $\Omega_c$; it does not implicitly prescribe unique values of $f_{\min}$, $f_{\max}$ or the number of discrete frequencies.
 
-### 3.2 Gauge and cross-level (theory only)
+### 3.2 ERRI B176 lateral and vertical displacement spectra
+
+The SIMPACK 2021x QCH page `Power Spectral Densities: Library | 3: Predefined` gives predefined lateral, vertical and crosslevel spectra based on ORE (ERRI) B176. This section adopts its implementation definition for the lateral and vertical displacement spectra:
+
+$$
+S_\Omega(\Omega)=
+\frac{b_0}{a_0+a_2\Omega^2+a_4\Omega^4}.
+$$
+
+The lateral and vertical Low/High spectra share one denominator and differ in amplitude only through $b_0$:
+
+| Parameter set | Direction | $b_0$ | $a_0$ | $a_2$ | $a_4$ |
+|---|---|---:|---:|---:|---:|
+| ERRI Low | Lateral | `1.440846e-7` | `0.00028855` | `0.6803895` | `1` |
+| ERRI Low | Vertical | `2.741619e-7` | `0.00028855` | `0.6803895` | `1` |
+| ERRI High | Lateral | `4.164787e-7` | `0.00028855` | `0.6803895` | `1` |
+| ERRI High | Vertical | `7.343623e-7` | `0.00028855` | `0.6803895` | `1` |
+
+These numbers are directly the coefficients of the angular-wavenumber spectrum above, with $S_\Omega$ in $\mathrm{m^2/(rad/m)}$. They do not pass through the AAR-specific $k=0.25$, $\mathrm{cm^2\to m^2}$ or $\Omega_c=0.8245\,\mathrm{rad/m}$ parameter conversions. Conversion to cyclic spatial frequency uses only the variance-preserving change of variable from section 2.1, $S_f(f)=2\pi S_\Omega(2\pi f)$.
+
+The ERRI denominator has a positive constant term, so its low-angular-wavenumber limit is finite:
+
+$$
+S_\Omega(0)=\frac{b_0}{a_0}.
+$$
+
+This differs from the $\Omega^{-2}$ growth of the current AAR single-cutoff spectrum, but it does not prescribe an engineering lower cutoff. A finite value of the continuous PSD at zero also does not add a random constant component to a realization; the current spatial generator still uses a strictly positive $f_{\min}$.
+
+Let
+
+$$
+p=\frac{a_2}{a_4},
+\qquad
+q=\frac{a_0}{a_4},
+$$
+
+and define $0<\Omega_1<\Omega_2$ by
+
+$$
+\Omega_2^2=\frac{p+\sqrt{p^2-4q}}{2},
+\qquad
+\Omega_1^2=\frac{q}{\Omega_2^2}.
+$$
+
+Then
+
+$$
+a_0+a_2\Omega^2+a_4\Omega^4
+=a_4(\Omega^2+\Omega_1^2)(\Omega^2+\Omega_2^2).
+$$
+
+All four spectra in this section share the same pair $\Omega_1$ and $\Omega_2$ determined by the denominator coefficients above. Their continuous finite-band variance is
+
+$$
+\sigma_{\mathrm{continuous}}^2
+=\frac{b_0}{a_4(\Omega_2^2-\Omega_1^2)}
+\left[
+\frac{1}{\Omega_1}\arctan\frac{\Omega}{\Omega_1}
+-\frac{1}{\Omega_2}\arctan\frac{\Omega}{\Omega_2}
+\right]_{\Omega_{\min}}^{\Omega_{\max}}.
+$$
+
+Low and High differ only in $b_0$ within one direction and therefore have the same spectral shape. If their frequency grids and phases are also identical, the High realization is the Low realization multiplied by $\sqrt{b_{0,\mathrm{High}}/b_{0,\mathrm{Low}}}$.
+
+The ERRI displacement spectrum decays as $\Omega^{-4}$ at high angular wavenumber. The formal variance moment of its $n$th spatial derivative contains $\int\Omega^{2n}S_\Omega(\Omega)\,d\Omega$: the high-frequency tails of displacement and first slope converge, whereas that of the second derivative diverges. A finite $f_{\max}$ therefore remains part of the geometric model; integrability of the displacement spectrum does not imply infinite usable bandwidth.
+
+The 200 km/h straight line in the IRW SIMPACK reference model uses the ERRI Low lateral and vertical spectra from this section. The repository's frozen field of the same name retains the independent asset identity of that existing realization; support for its spectral family does not claim that the new generator can recover its phases and boundary-processing history pointwise.
+
+### 3.3 Gauge and cross-level (theory only)
 
 One common simplified reference form writes gauge or cross-level as a double-cutoff spectrum, where $\Omega_s$ is the second cutoff angular wavenumber:
 
@@ -129,11 +197,11 @@ $$
 S_\phi=\frac{S_u}{b_{\mathrm{ref}}^2}.
 $$
 
-Gauge and cross-level are different geometric quantities; sharing a rational-function shape does not make them physically equivalent. The current generator implements only lateral and vertical displacement channels. The double-cutoff spectrum and correlated multichannel generation discussed here are theory only and cannot be recovered from the existing two-channel output.
+Gauge and cross-level are different geometric quantities; sharing a rational-function shape does not make them physically equivalent. The QCH also gives ERRI crosslevel Low/High spectra, but their source quantity, angular conversion and application to the two rails are outside this lateral-vertical displacement implementation. The current generator implements only those two displacement channels; crosslevel spectra and correlated multichannel generation discussed here are theory only and cannot be recovered from the existing two-channel output.
 
 ## 4. Finite band and variance
 
-The single-cutoff spectrum grows as $\Omega^{-2}$ at low angular wavenumber, so its variance diverges if the lower cutoff tends to zero. A positive $f_{\min}$ is part of the model definition, not a numerical detail that can be removed for free. The high-angular-wavenumber tail decays as $\Omega^{-4}$, but $f_{\max}$ still sets the shortest wavelength and the highest spatial frequency delivered to the track, wheel-rail contact and vehicle models.
+The AAR single-cutoff spectrum grows as $\Omega^{-2}$ at low angular wavenumber, so its displacement variance diverges if the lower cutoff tends to zero; the ERRI displacement spectrum instead approaches the finite plateau in section 3.2. Both generation specifications require a positive $f_{\min}$: it bounds the longest retained wavelength and excludes a zero-frequency random constant not separately defined by the PSD density. The value of $f_{\max}$ sets the shortest wavelength and the highest spatial frequency delivered to the track, wheel-rail contact and vehicle models.
 
 For $0<\Omega_{\min}<\Omega_{\max}$, define
 
@@ -203,7 +271,7 @@ A shift by $T$ multiplies the complex harmonic sum by a single constant phase fa
 
 ### 5.2 From realization seed to phase
 
-One unsigned 64-bit realization seed first undergoes fixed domain separation to produce lateral and vertical channel seeds. The `SplitMix64` map is
+One unsigned 64-bit realization seed first undergoes the fixed domain separation shared by AAR and ERRI to produce lateral and vertical channel seeds. The `SplitMix64` map is
 
 ```text
 x = x + 0x9E3779B97F4A7C15
@@ -310,15 +378,15 @@ The generated samples are multiplied by the envelope first, then cropped to $[s_
 
 In the infinite-station idealization, the raw random-phase sum has the second-order statistical structure prescribed by the input PSD. A finite band, finite frequency count and finite station interval turn it into a discrete approximation. Multiplication by the placement envelope makes the field non-stationary in the transition regions, so the stationary interpretation of spectrum and variance applies directly only to the ungated harmonic sum or the full-amplitude plateau.
 
-A PSD specifies only second-order statistics; it preserves neither the deterministic phase of a real line nor isolated defects. Random phases, no prescribed cross-spectrum between lateral and vertical channels, the single-cutoff spectrum and natural-spline reconstruction are model assumptions. A study that depends on deterministic defects, non-stationary evolution or directional coherence needs an extended model.
+A PSD specifies only second-order statistics; it preserves neither the deterministic phase of a real line nor isolated defects. Random phases, no prescribed cross-spectrum between lateral and vertical channels, the selected AAR or ERRI spectral family and natural-spline reconstruction are model assumptions. A study that depends on deterministic defects, non-stationary evolution or directional coherence needs an extended model.
 
 ## 8. Source mapping
 
 | Theoretical object | Primary implementation |
 |---|---|
 | AAR parameters, $S_\Omega\to S_f$ and continuous finite-band variance | `AarSingleCutoffPsdParametersFor`, `EvaluateAarOneSidedSpatialPsd`, `ContinuousBandVariance`; see [`aar_track_irregularity_generator.cc`](../../../libs/track_irregularity/src/aar_track_irregularity_generator.cc) |
-| Domain separation and seed-to-phase mapping | `DeriveAarTrackIrregularityChannelSeeds`, `SplitMix64`, `ReproduciblePhaseGenerator` |
-| Harmonic sum, discrete variance and periodic reanchoring | `AccumulateHarmonicChannel` inside `GenerateAarTrackIrregularity` |
-| Quintic envelope and two-channel generation | `Smoothstep5`, `TrackIrregularityPlacementWeight`, `GenerateAarTrackIrregularity`; type definitions are in [`aar_track_irregularity_generator.h`](../../../libs/track_irregularity/include/orvd/track_irregularity/aar_track_irregularity_generator.h) |
+| ERRI B176 parameters, angular-wavenumber PSD, $S_\Omega\to S_f$ and continuous finite-band variance | `ErriB176DisplacementPsdParametersFor`, `EvaluateErriB176AngularWavenumberPsd`, `EvaluateErriB176OneSidedSpatialPsd`, `ContinuousBandVariance`; see [`erri_b176_track_irregularity_generator.cc`](../../../libs/track_irregularity/src/erri_b176_track_irregularity_generator.cc) |
+| Domain separation, seed-to-phase mapping, harmonic sum and periodic reanchoring | `DeriveTrackIrregularityChannelSeeds`, `SplitMix64`, `ReproduciblePhaseGenerator`, `AccumulateHarmonicChannel`, and `GenerateTrackIrregularityCore`; see [`track_irregularity_generation.cc`](../../../libs/track_irregularity/src/track_irregularity_generation.cc) |
+| Quintic envelope and two-channel generation | `Smoothstep5`, `TrackIrregularityPlacementWeight`, `GenerateAarTrackIrregularity`, `GenerateErriB176TrackIrregularity`; common types are in [`track_irregularity_generation.h`](../../../libs/track_irregularity/include/orvd/track_irregularity/track_irregularity_generation.h) |
 | Generated samples to vehicle field | `ResolveTrackIrregularityField`; see [`resolve_track_irregularity_field.cc`](../../../libs/configuration/src/resolve_track_irregularity_field.cc) |
 | Zero displacement and zero slope outside the definition interval | `TrackIrregularityField::LateralDisplacementMeters`, `VerticalDisplacementMeters`, `LateralSlopeMetersPerMeter`, `VerticalSlopeMetersPerMeter`; see [`track_irregularity_field.cc`](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |

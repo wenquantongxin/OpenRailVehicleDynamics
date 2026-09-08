@@ -7,22 +7,31 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 
 #include "orvd/configuration/load_track_irregularity_field.h"
 #include "orvd/configuration/resolve_track_irregularity_field.h"
 #include "orvd/track_irregularity/aar_track_irregularity_generator.h"
+#include "orvd/track_irregularity/erri_b176_track_irregularity_generator.h"
 
 namespace {
 
 using orvd::configuration::FrozenTrackIrregularityFieldSource;
 using orvd::configuration::GeneratedAarTrackIrregularityFieldSource;
+using orvd::configuration::GeneratedErriB176TrackIrregularityFieldSource;
 using orvd::configuration::LoadTrackIrregularityFieldFromDataRoot;
 using orvd::configuration::ResolveTrackIrregularityField;
 using orvd::configuration::TrackIrregularityFieldSource;
 using orvd::track_irregularity::AarTrackClass;
 using orvd::track_irregularity::AarTrackIrregularityGenerationSpec;
+using orvd::track_irregularity::AarTrackIrregularityGenerationMetadata;
 using orvd::track_irregularity::DeriveAarTrackIrregularityChannelSeeds;
+using orvd::track_irregularity::DeriveErriB176TrackIrregularityChannelSeeds;
+using orvd::track_irregularity::ErriB176TrackIrregularityGenerationMetadata;
+using orvd::track_irregularity::ErriB176TrackIrregularityGenerationSpec;
+using orvd::track_irregularity::ErriB176IrregularityLevel;
 using orvd::track_irregularity::GenerateAarTrackIrregularity;
+using orvd::track_irregularity::GenerateErriB176TrackIrregularity;
 
 int failures = 0;
 
@@ -95,7 +104,7 @@ void CheckFrozenSource(const std::filesystem::path& data_root) {
             "the closed frozen source accepted an unlisted field");
 }
 
-void CheckGeneratedSource() {
+void CheckGeneratedAarSource() {
     constexpr std::uint64_t kRealizationSeed = 0x0123456789abcdefULL;
     const AarTrackIrregularityGenerationSpec specification =
         MakeGeneratedSpecification(kRealizationSeed);
@@ -112,11 +121,18 @@ void CheckGeneratedSource() {
 
     const auto expected_channel_seeds =
         DeriveAarTrackIrregularityChannelSeeds(kRealizationSeed);
-    const auto& metadata = *resolved.generated_metadata;
-    Require(metadata.specification.realization_seed == kRealizationSeed &&
-                metadata.lateral.seed == expected_channel_seeds.lateral &&
-                metadata.vertical.seed == expected_channel_seeds.vertical &&
-                metadata.lateral.seed != metadata.vertical.seed,
+    const auto* metadata =
+        std::get_if<AarTrackIrregularityGenerationMetadata>(
+            &*resolved.generated_metadata);
+    Require(metadata != nullptr,
+            "the generated AAR source returned the wrong metadata kind");
+    if (!metadata) {
+        return;
+    }
+    Require(metadata->specification.realization_seed == kRealizationSeed &&
+                metadata->lateral.seed == expected_channel_seeds.lateral &&
+                metadata->vertical.seed == expected_channel_seeds.vertical &&
+                metadata->lateral.seed != metadata->vertical.seed,
             "the generated field did not retain its seed identity");
 
     for (const double station : {9.95, 9.999, 90.001, 90.05}) {
@@ -181,6 +197,71 @@ void CheckGeneratedSource() {
             "a different realization seed repeated both channels");
 }
 
+void CheckGeneratedErriSource() {
+    constexpr std::uint64_t kRealizationSeed = 0xfedcba9876543210ULL;
+    const ErriB176TrackIrregularityGenerationSpec specification{
+        ErriB176IrregularityLevel::kHigh,
+        {0.01, 0.03, 9},
+        {0.0, 100.0, 0.1},
+        {10.0, 90.0, 10.0, 10.0},
+        kRealizationSeed};
+    const auto resolved = ResolveTrackIrregularityField(
+        {}, TrackIrregularityFieldSource{
+                GeneratedErriB176TrackIrregularityFieldSource{
+                    specification}});
+    Require(resolved.field != nullptr &&
+                resolved.generated_metadata.has_value(),
+            "the generated ERRI source returned no field or metadata");
+    if (!resolved.field || !resolved.generated_metadata) {
+        return;
+    }
+
+    const auto* metadata =
+        std::get_if<ErriB176TrackIrregularityGenerationMetadata>(
+            &*resolved.generated_metadata);
+    Require(metadata != nullptr,
+            "the generated ERRI source returned the wrong metadata kind");
+    if (!metadata) {
+        return;
+    }
+    const auto expected_channel_seeds =
+        DeriveErriB176TrackIrregularityChannelSeeds(kRealizationSeed);
+    Require(metadata->specification.irregularity_level ==
+                    ErriB176IrregularityLevel::kHigh &&
+                metadata->specification.realization_seed ==
+                    kRealizationSeed &&
+                metadata->lateral.seed == expected_channel_seeds.lateral &&
+                metadata->vertical.seed == expected_channel_seeds.vertical,
+            "the generated ERRI field lost its irregularity-level or seed "
+            "identity");
+
+    for (const double station : {9.95, 9.999, 90.001, 90.05}) {
+        Require(resolved.field->LateralDisplacementMeters(station) == 0.0 &&
+                    resolved.field->VerticalDisplacementMeters(station) ==
+                        0.0 &&
+                    resolved.field->LateralSlopeMetersPerMeter(station) ==
+                        0.0 &&
+                    resolved.field->VerticalSlopeMetersPerMeter(station) ==
+                        0.0,
+                "a generated ERRI field was nonzero outside placement");
+    }
+
+    const auto generated = GenerateErriB176TrackIrregularity(specification);
+    constexpr std::array<std::size_t, 2> kFadeProbeIndices{101, 899};
+    constexpr double kSplineKnotToleranceMeters = 1.0e-15;
+    for (const std::size_t sample_index : kFadeProbeIndices) {
+        const double station = generated.track_station_meters[sample_index];
+        Require(
+            std::abs(resolved.field->LateralDisplacementMeters(station) -
+                     generated.lateral_displacement_meters[sample_index]) <=
+                    kSplineKnotToleranceMeters &&
+                std::abs(resolved.field->VerticalDisplacementMeters(station) -
+                         generated.vertical_displacement_meters[sample_index]) <=
+                    kSplineKnotToleranceMeters,
+            "the generated ERRI source did not preserve both placement fades");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -189,6 +270,7 @@ int main(int argc, char* argv[]) {
         return 2;
     }
     CheckFrozenSource(argv[1]);
-    CheckGeneratedSource();
+    CheckGeneratedAarSource();
+    CheckGeneratedErriSource();
     return failures == 0 ? 0 : 1;
 }

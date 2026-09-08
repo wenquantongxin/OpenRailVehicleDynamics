@@ -1,10 +1,12 @@
 # Model-neutral construction of finite station-domain realizations from the
-# simplified one-sided FRA/AAR spectra.  This layer owns neither asset parsing
-# nor a vehicle scenario: its output is an ordinary pair of sampled fields that
-# a higher layer may retain directly or turn into its interpolation type.
+# supported one-sided track spectra. This layer owns neither asset parsing nor
+# a vehicle scenario: its output is an ordinary pair of sampled fields that a
+# higher layer may retain directly or turn into its interpolation type.
 
 add_library(orvd_track_irregularity STATIC
-    src/aar_track_irregularity_generator.cc)
+    src/aar_track_irregularity_generator.cc
+    src/erri_b176_track_irregularity_generator.cc
+    src/track_irregularity_generation.cc)
 
 orvd_configure_first_party_target(orvd_track_irregularity)
 

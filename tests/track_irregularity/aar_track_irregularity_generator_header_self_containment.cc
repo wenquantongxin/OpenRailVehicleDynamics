@@ -13,4 +13,4 @@ static_assert(std::is_same_v<
               decltype(orvd::track_irregularity::GenerateAarTrackIrregularity(
                   std::declval<const orvd::track_irregularity::
                                    AarTrackIrregularityGenerationSpec&>())),
-              orvd::track_irregularity::GeneratedTrackIrregularity>);
+              orvd::track_irregularity::GeneratedAarTrackIrregularity>);

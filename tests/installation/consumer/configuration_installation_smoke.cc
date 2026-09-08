@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Eigen/Core>
@@ -173,9 +174,15 @@ int main(int argc, char* argv[]) {
                                     {0.0, 1100.0, 0.25},
                                     {160.0, 1100.0, 40.0, 40.0},
                                     2026082001ULL}}});
-        if (!irw_irregularity.generated_metadata.has_value() ||
-            irw_irregularity.generated_metadata->specification
-                    .realization_seed != 2026082001ULL) {
+        const auto* irw_generation_metadata =
+            irw_irregularity.generated_metadata
+                ? std::get_if<orvd::track_irregularity::
+                                  AarTrackIrregularityGenerationMetadata>(
+                      &*irw_irregularity.generated_metadata)
+                : nullptr;
+        if (irw_generation_metadata == nullptr ||
+            irw_generation_metadata->specification.realization_seed !=
+                2026082001ULL) {
             std::fprintf(stderr,
                          "installed IRW source resolver lost generated "
                          "realization identity\n");
@@ -365,9 +372,15 @@ int main(int argc, char* argv[]) {
                                     {0.0, 1100.0, 0.25},
                                     {50.0, 300.0, 50.0, 50.0},
                                     2026082002ULL}}});
-        if (!gz18_generated_irregularity.generated_metadata.has_value() ||
-            gz18_generated_irregularity.generated_metadata->specification
-                    .realization_seed != 2026082002ULL) {
+        const auto* gz18_generation_metadata =
+            gz18_generated_irregularity.generated_metadata
+                ? std::get_if<orvd::track_irregularity::
+                                  AarTrackIrregularityGenerationMetadata>(
+                      &*gz18_generated_irregularity.generated_metadata)
+                : nullptr;
+        if (gz18_generation_metadata == nullptr ||
+            gz18_generation_metadata->specification.realization_seed !=
+                2026082002ULL) {
             std::fprintf(stderr,
                          "installed GZ18 source resolver lost generated "
                          "realization identity\n");

@@ -10,9 +10,9 @@
 
 本篇只讨论叠加在理想线路上的平稳随机几何不平顺。线路平面曲线与超高属于[线路几何与轨道坐标系](../track_geometry/TRACK_GEOMETRY_AND_FRAMES.md)，纵坡与竖曲线的分段闭式模型属于[轨道竖向剖面建模及其三维耦合](../track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md)；焊缝、波磨、擦伤等局部确定性缺陷也不能由平稳 PSD 唯一描述。横向位移沿轨型系向右为正，竖向位移向下为正，站位沿用[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)中的平面投影里程。
 
-当前实现有两条不平顺来源：由 AAR5/AAR6 谱生成一次双通道 realization，或解析一套冻结 field。冻结 field 是既有点列，其谱来源不限于第 3 节的单截止 AAR 族，本篇不推导这些点列的谱模型。两条路径最终都形成同一种 `TrackIrregularityField`，冻结点列不会再叠加第二层包络。
+当前实现有两类不平顺来源：由 AAR5/AAR6 或 ERRI B176 谱生成一次双通道 realization，或解析一套冻结 field。冻结 field 是保留既有相位、门控和插值历史的点列资产；即使其谱族已知，也不能仅由 PSD 逐点恢复。两条路径最终都形成同一种 `TrackIrregularityField`，冻结点列不会重新生成或叠加第二层包络。
 
-AAR5 与 AAR6 在这里表示两组轨道平顺性谱参数，不表示车辆类别，也不是对任意线路、速度和车辆频带都适用的普遍描述。
+AAR5、AAR6 以及 ERRI Low/High 在这里表示轨道不平顺谱参数集，其中 ERRI Low/High 明确区分不平顺幅值等级；它们不表示车辆类别或速度等级，也不是对任意线路和车辆频带都适用的普遍描述。
 
 ## 2. 空间频率与单边 PSD
 
@@ -54,7 +54,7 @@ $$
 
 速度改变的是空间激励到车辆时间响应的映射，不会改变线路本身的空间 PSD。
 
-## 3. 简化 FRA/AAR 谱
+## 3. 谱模型
 
 ### 3.1 横向与竖向单截止谱
 
@@ -99,7 +99,75 @@ $$
 
 `AarTrackClass` 只选择 $A_a$、$A_v$、$k$ 与 $\Omega_c$ 所确定的谱形和幅值，并不隐式规定唯一的 $f_{\min}$、$f_{\max}$ 或离散频率数。
 
-### 3.2 Gauge 与 cross-level（仅理论）
+### 3.2 ERRI B176 横向与竖向位移谱
+
+SIMPACK 2021x QCH 的 `Power Spectral Densities: Library | 3: Predefined` 依据 ORE（ERRI）B176 给出横向、竖向与 crosslevel 预定义谱。ORVD 本节采用其中横向与竖向位移谱的实现定义：
+
+$$
+S_\Omega(\Omega)=
+\frac{b_0}{a_0+a_2\Omega^2+a_4\Omega^4}.
+$$
+
+横向与竖向 Low/High 共用分母，只由 $b_0$ 区分幅值：
+
+| 参数集 | 方向 | $b_0$ | $a_0$ | $a_2$ | $a_4$ |
+|---|---|---:|---:|---:|---:|
+| ERRI Low | 横向 | `1.440846e-7` | `0.00028855` | `0.6803895` | `1` |
+| ERRI Low | 竖向 | `2.741619e-7` | `0.00028855` | `0.6803895` | `1` |
+| ERRI High | 横向 | `4.164787e-7` | `0.00028855` | `0.6803895` | `1` |
+| ERRI High | 竖向 | `7.343623e-7` | `0.00028855` | `0.6803895` | `1` |
+
+这些数值直接是上述角波数谱的系数，$S_\Omega$ 的单位为 $\mathrm{m^2/(rad/m)}$。它们不经过 AAR 专属的 $k=0.25$、$\mathrm{cm^2\to m^2}$ 或 $\Omega_c=0.8245\,\mathrm{rad/m}$ 参数转换；转到循环空间频率时只采用第 2.1 节的方差保持换元 $S_f(f)=2\pi S_\Omega(2\pi f)$。
+
+ERRI 分母的常数项为正，因此低角波数极限有限：
+
+$$
+S_\Omega(0)=\frac{b_0}{a_0}.
+$$
+
+这与当前 AAR 单截止谱按 $\Omega^{-2}$ 增长不同，但并不规定某个工程下截止频率。连续 PSD 在零点的有限值也不等于 realization 中另加一个随机常量分量；当前空间生成仍使用严格为正的 $f_{\min}$。
+
+令
+
+$$
+p=\frac{a_2}{a_4},
+\qquad
+q=\frac{a_0}{a_4},
+$$
+
+并定义 $0<\Omega_1<\Omega_2$：
+
+$$
+\Omega_2^2=\frac{p+\sqrt{p^2-4q}}{2},
+\qquad
+\Omega_1^2=\frac{q}{\Omega_2^2}.
+$$
+
+则
+
+$$
+a_0+a_2\Omega^2+a_4\Omega^4
+=a_4(\Omega^2+\Omega_1^2)(\Omega^2+\Omega_2^2).
+$$
+
+本节四组谱共用由上述分母系数确定的同一对 $\Omega_1$ 与 $\Omega_2$。有限带连续方差为
+
+$$
+\sigma_{\mathrm{continuous}}^2
+=\frac{b_0}{a_4(\Omega_2^2-\Omega_1^2)}
+\left[
+\frac{1}{\Omega_1}\arctan\frac{\Omega}{\Omega_1}
+-\frac{1}{\Omega_2}\arctan\frac{\Omega}{\Omega_2}
+\right]_{\Omega_{\min}}^{\Omega_{\max}}.
+$$
+
+Low 与 High 在同一方向上只有 $b_0$ 不同，因而具有相同谱形；若频率网格和相位也相同，High realization 是 Low realization 乘以 $\sqrt{b_{0,\mathrm{High}}/b_{0,\mathrm{Low}}}$。
+
+ERRI 位移谱在高角波数端按 $\Omega^{-4}$ 衰减。对第 $n$ 阶空间导数，其形式方差矩含 $\int\Omega^{2n}S_\Omega(\Omega)\,d\Omega$：位移与一阶坡度的高频端分别收敛，二阶导数的高频端发散。因此有限的 $f_{\max}$ 仍是几何模型的一部分，不能由位移谱本身可积推导出无限带宽。
+
+IRW SIMPACK 参考模型的 200 km/h 直线采用本节 ERRI Low 横向、竖向谱。仓库中同名冻结 field 保留该既有 realization 的独立资产身份；支持这一谱族并不声称新生成器能够逐点恢复其相位与边界处理历史。
+
+### 3.3 Gauge 与 cross-level（仅理论）
 
 一种常见的简化参考式把 gauge 或 cross-level 写成双截止谱，其中 $\Omega_s$ 是第二个截止角波数：
 
@@ -129,11 +197,11 @@ $$
 S_\phi=\frac{S_u}{b_{\mathrm{ref}}^2}.
 $$
 
-Gauge 与 cross-level 是不同的几何量，共享有理函数外形不代表物理等价。当前生成器只实现横向、竖向位移通道；这里的双截止谱和相关多通道生成均为理论说明，不能从现有两通道结果中恢复。
+Gauge 与 cross-level 是不同的几何量，共享有理函数外形不代表物理等价。QCH 还给出 ERRI crosslevel Low/High，但其原量、角度换算及左右轨施加方式不属于本轮横向—竖向位移实现。当前生成器只实现这两个位移通道；这里的 crosslevel 谱和相关多通道生成均为理论说明，不能从现有两通道结果中恢复。
 
 ## 4. 有限频带与方差
 
-单截止谱在低角波数处按 $\Omega^{-2}$ 增长，因此若令下截止趋于零，其方差发散。正的 $f_{\min}$ 是模型定义的一部分，而不是可以无代价删除的数值细节。高角波数端按 $\Omega^{-4}$ 衰减，但 $f_{\max}$ 仍决定最短波长以及轨道、轮轨接触和车辆模型会接收到的最高空间频率。
+AAR 单截止谱在低角波数处按 $\Omega^{-2}$ 增长，因此若令下截止趋于零，其位移方差发散；ERRI 位移谱则趋于第 3.2 节的有限平台。两者的生成规格都要求正的 $f_{\min}$：它既界定保留的最长波长，也排除 PSD 密度没有单独定义的零频随机常量。$f_{\max}$ 决定最短波长以及轨道、轮轨接触和车辆模型会接收到的最高空间频率。
 
 对 $0<\Omega_{\min}<\Omega_{\max}$，定义
 
@@ -203,7 +271,7 @@ $$
 
 ### 5.2 从 realization seed 到相位
 
-一个无符号 64 位 realization seed 先经固定领域分离得到横向和竖向 channel seed。`SplitMix64` 的映射为
+一个无符号 64 位 realization seed 先经 AAR 与 ERRI 共用的固定领域分离得到横向和竖向 channel seed。`SplitMix64` 的映射为
 
 ```text
 x = x + 0x9E3779B97F4A7C15
@@ -310,15 +378,15 @@ $$
 
 原始随机相位和在无限站位观念下具有由输入 PSD 决定的二阶统计结构；有限频带、有限频率数和有限站位区间把它变成一个离散近似。乘以 placement 包络后，场在过渡区不再平稳，因此谱与方差的平稳解释只直接适用于未加窗的谐波和或满幅平台。
 
-PSD 只规定二阶统计量，不保存某条真实线路的确定相位，也不描述孤立缺陷。随机相位、横竖通道无指定互谱、单截止谱以及自然样条重建都是模型假设；研究对象若依赖确定性缺陷、非平稳演化或方向间相干，需要另行扩展模型。
+PSD 只规定二阶统计量，不保存某条真实线路的确定相位，也不描述孤立缺陷。随机相位、横竖通道无指定互谱、所选 AAR 或 ERRI 谱族以及自然样条重建都是模型假设；研究对象若依赖确定性缺陷、非平稳演化或方向间相干，需要另行扩展模型。
 
 ## 8. 源码映射
 
 | 理论对象 | 主要实现 |
 |---|---|
 | AAR 参数、$S_\Omega\to S_f$ 与连续频带方差 | `AarSingleCutoffPsdParametersFor`、`EvaluateAarOneSidedSpatialPsd`、`ContinuousBandVariance`，见 [`aar_track_irregularity_generator.cc`](../../../libs/track_irregularity/src/aar_track_irregularity_generator.cc) |
-| 领域分离和 seed 到相位映射 | `DeriveAarTrackIrregularityChannelSeeds`、`SplitMix64`、`ReproduciblePhaseGenerator` |
-| 谐波和、离散方差与周期重锚 | `GenerateAarTrackIrregularity` 内的 `AccumulateHarmonicChannel` |
-| 五次包络与双通道生成 | `Smoothstep5`、`TrackIrregularityPlacementWeight`、`GenerateAarTrackIrregularity`；类型定义见 [`aar_track_irregularity_generator.h`](../../../libs/track_irregularity/include/orvd/track_irregularity/aar_track_irregularity_generator.h) |
+| ERRI B176 参数、角波数谱、$S_\Omega\to S_f$ 与连续频带方差 | `ErriB176DisplacementPsdParametersFor`、`EvaluateErriB176AngularWavenumberPsd`、`EvaluateErriB176OneSidedSpatialPsd`、`ContinuousBandVariance`，见 [`erri_b176_track_irregularity_generator.cc`](../../../libs/track_irregularity/src/erri_b176_track_irregularity_generator.cc) |
+| 领域分离、seed 到相位映射、谐波和与周期重锚 | `DeriveTrackIrregularityChannelSeeds`、`SplitMix64`、`ReproduciblePhaseGenerator`、`AccumulateHarmonicChannel`、`GenerateTrackIrregularityCore`，见 [`track_irregularity_generation.cc`](../../../libs/track_irregularity/src/track_irregularity_generation.cc) |
+| 五次包络与双通道生成 | `Smoothstep5`、`TrackIrregularityPlacementWeight`、`GenerateAarTrackIrregularity`、`GenerateErriB176TrackIrregularity`；公共类型见 [`track_irregularity_generation.h`](../../../libs/track_irregularity/include/orvd/track_irregularity/track_irregularity_generation.h) |
 | 生成点列到车辆场 | `ResolveTrackIrregularityField`，见 [`resolve_track_irregularity_field.cc`](../../../libs/configuration/src/resolve_track_irregularity_field.cc) |
 | 定义域外的零位移与零坡度 | `TrackIrregularityField::LateralDisplacementMeters`、`VerticalDisplacementMeters`、`LateralSlopeMetersPerMeter`、`VerticalSlopeMetersPerMeter`，见 [`track_irregularity_field.cc`](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |

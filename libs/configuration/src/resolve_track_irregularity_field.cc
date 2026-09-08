@@ -15,6 +15,9 @@
 namespace orvd::configuration {
 namespace {
 
+template <typename>
+inline constexpr bool kAlwaysFalse = false;
+
 void ValidateFrozenTrackIrregularityIdentifier(
     std::string_view track_irregularity_identifier) {
     constexpr std::array<std::string_view, 3> kAuthorizedIdentifiers{
@@ -40,6 +43,39 @@ std::size_t StationGridIndex(
     return static_cast<std::size_t>(std::round(coordinate));
 }
 
+template <typename GeneratedTrackIrregularity>
+ResolvedTrackIrregularityField MakeResolvedGeneratedField(
+    GeneratedTrackIrregularity generated,
+    const track_irregularity::TrackStationGridSpec& station_grid,
+    const track_irregularity::TrackIrregularityPlacementSpec& placement) {
+    const std::size_t active_start_index =
+        StationGridIndex(station_grid, placement.start_meters);
+    const std::size_t active_end_index =
+        StationGridIndex(station_grid, placement.end_meters);
+    const std::size_t active_sample_count =
+        active_end_index - active_start_index + 1;
+    const std::span<const double> active_station_meters(
+        generated.track_station_meters.begin() +
+            static_cast<std::ptrdiff_t>(active_start_index),
+        active_sample_count);
+    const std::span<const double> active_lateral_meters(
+        generated.lateral_displacement_meters.begin() +
+            static_cast<std::ptrdiff_t>(active_start_index),
+        active_sample_count);
+    const std::span<const double> active_vertical_meters(
+        generated.vertical_displacement_meters.begin() +
+            static_cast<std::ptrdiff_t>(active_start_index),
+        active_sample_count);
+    auto field =
+        std::make_unique<wheel_rail_contact::TrackIrregularityField>(
+            active_station_meters, active_lateral_meters,
+            active_station_meters, active_vertical_meters);
+    GeneratedTrackIrregularityMetadata metadata{
+        std::move(generated.metadata)};
+    return ResolvedTrackIrregularityField{
+        std::move(field), std::move(metadata)};
+}
+
 }  // namespace
 
 ResolvedTrackIrregularityField ResolveTrackIrregularityField(
@@ -59,36 +95,29 @@ ResolvedTrackIrregularityField ResolveTrackIrregularityField(
                             data_root,
                             selected.track_irregularity_identifier)),
                     std::nullopt};
-            } else {
+            } else if constexpr (std::is_same_v<
+                                     Source,
+                                     GeneratedAarTrackIrregularityFieldSource>) {
                 auto generated =
                     track_irregularity::GenerateAarTrackIrregularity(
                         selected.specification);
-                const std::size_t active_start_index = StationGridIndex(
+                return MakeResolvedGeneratedField(
+                    std::move(generated),
                     selected.specification.station_grid,
-                    selected.specification.placement.start_meters);
-                const std::size_t active_end_index = StationGridIndex(
+                    selected.specification.placement);
+            } else if constexpr (std::is_same_v<
+                                     Source,
+                                     GeneratedErriB176TrackIrregularityFieldSource>) {
+                auto generated =
+                    track_irregularity::GenerateErriB176TrackIrregularity(
+                        selected.specification);
+                return MakeResolvedGeneratedField(
+                    std::move(generated),
                     selected.specification.station_grid,
-                    selected.specification.placement.end_meters);
-                const std::size_t active_sample_count =
-                    active_end_index - active_start_index + 1;
-                const std::span<const double> active_station_meters(
-                    generated.track_station_meters.begin() +
-                        static_cast<std::ptrdiff_t>(active_start_index),
-                    active_sample_count);
-                const std::span<const double> active_lateral_meters(
-                    generated.lateral_displacement_meters.begin() +
-                        static_cast<std::ptrdiff_t>(active_start_index),
-                    active_sample_count);
-                const std::span<const double> active_vertical_meters(
-                    generated.vertical_displacement_meters.begin() +
-                        static_cast<std::ptrdiff_t>(active_start_index),
-                    active_sample_count);
-                auto field = std::make_unique<
-                    wheel_rail_contact::TrackIrregularityField>(
-                    active_station_meters, active_lateral_meters,
-                    active_station_meters, active_vertical_meters);
-                return ResolvedTrackIrregularityField{
-                    std::move(field), std::move(generated.metadata)};
+                    selected.specification.placement);
+            } else {
+                static_assert(kAlwaysFalse<Source>,
+                              "unsupported track-irregularity source");
             }
         },
         source);

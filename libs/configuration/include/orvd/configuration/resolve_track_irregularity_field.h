@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "orvd/track_irregularity/aar_track_irregularity_generator.h"
+#include "orvd/track_irregularity/erri_b176_track_irregularity_generator.h"
 #include "orvd/wheel_rail_contact/track_irregularity_field.h"
 
 namespace orvd::configuration {
@@ -24,20 +25,28 @@ struct GeneratedAarTrackIrregularityFieldSource {
     track_irregularity::AarTrackIrregularityGenerationSpec specification;
 };
 
-/// Closed source choice authorized by DEC-043. It deliberately does not admit
-/// an arbitrary measured-series import or a mutable frozen-field
-/// transformation.
+/// Selects one newly generated, finite ERRI B176 PSD realization.
+struct GeneratedErriB176TrackIrregularityFieldSource {
+    track_irregularity::ErriB176TrackIrregularityGenerationSpec specification;
+};
+
+/// Closed source choice. It deliberately does not admit an arbitrary measured
+/// series import or a mutable frozen-field transformation.
 using TrackIrregularityFieldSource =
     std::variant<FrozenTrackIrregularityFieldSource,
-                 GeneratedAarTrackIrregularityFieldSource>;
+                 GeneratedAarTrackIrregularityFieldSource,
+                 GeneratedErriB176TrackIrregularityFieldSource>;
+
+using GeneratedTrackIrregularityMetadata = std::variant<
+    track_irregularity::AarTrackIrregularityGenerationMetadata,
+    track_irregularity::ErriB176TrackIrregularityGenerationMetadata>;
 
 /// One field ready for either vehicle assembly, plus generation identity when
 /// the selected source was a PSD realization. Frozen fields have no generated
 /// metadata because their manifest and point series remain their identity.
 struct ResolvedTrackIrregularityField {
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField> field;
-    std::optional<track_irregularity::TrackIrregularityGenerationMetadata>
-        generated_metadata;
+    std::optional<GeneratedTrackIrregularityMetadata> generated_metadata;
 };
 
 /// Resolves exactly one source before vehicle assembly.

@@ -3,12 +3,16 @@
 #include <exception>
 
 #include "orvd/track_irregularity/aar_track_irregularity_generator.h"
+#include "orvd/track_irregularity/erri_b176_track_irregularity_generator.h"
 
 int main() {
     try {
         using orvd::track_irregularity::AarTrackClass;
         using orvd::track_irregularity::AarTrackIrregularityGenerationSpec;
+        using orvd::track_irregularity::ErriB176TrackIrregularityGenerationSpec;
+        using orvd::track_irregularity::ErriB176IrregularityLevel;
         using orvd::track_irregularity::GenerateAarTrackIrregularity;
+        using orvd::track_irregularity::GenerateErriB176TrackIrregularity;
         using orvd::track_irregularity::SpatialFrequencyGridSpec;
         using orvd::track_irregularity::TrackIrregularityPlacementSpec;
         using orvd::track_irregularity::TrackStationGridSpec;
@@ -36,7 +40,24 @@ int main() {
                 0.0 &&
             std::isfinite(generated.lateral_displacement_meters[24]) &&
             std::isfinite(generated.vertical_displacement_meters[24]);
-        if (!valid) {
+        const auto generated_erri = GenerateErriB176TrackIrregularity(
+            ErriB176TrackIrregularityGenerationSpec{
+                ErriB176IrregularityLevel::kHigh,
+                SpatialFrequencyGridSpec{0.01, 0.03, 9},
+                TrackStationGridSpec{0.0, 12.0, 0.25},
+                TrackIrregularityPlacementSpec{2.0, 10.0, 2.0, 2.0},
+                5678});
+        const bool erri_valid =
+            generated_erri.track_station_meters.size() == 49 &&
+            generated_erri.metadata.specification.irregularity_level ==
+                ErriB176IrregularityLevel::kHigh &&
+            generated_erri.metadata.lateral
+                    .continuous_band_variance_meters_squared >
+                0.0 &&
+            generated_erri.metadata.vertical
+                    .discrete_harmonic_variance_meters_squared >
+                0.0;
+        if (!valid || !erri_valid) {
             std::fprintf(stderr,
                          "installed track-irregularity generator returned an "
                          "invalid realization\n");
