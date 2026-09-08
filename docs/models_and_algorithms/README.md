@@ -25,6 +25,7 @@
 | `track_geometry/` | 线路平纵断面、超高、轨道坐标系、站位投影和竖向剖面 |
 | `track_irregularity_spectra/` | 轨道不平顺 PSD、有限空间频带、随机实现和多方向相关性 |
 | `wheel_rail_contact/` | 型面与插值、位姿归约、接触几何、法向力、蠕滑、Kalker 系数、FASTSIM 与扳手组装 |
+| `force_elements/` | 连接运动学与扳手、三向平动弹簧—阻尼、侧滚力偶、串联 Maxwell、饱和折线阻尼与半角中点 RPY 衬套 |
 | `numerical_methods/` | 时间积分、隐式非线性迭代、误差控制与稳定性 |
 
 ## 理论文档形式
@@ -64,6 +65,15 @@
 - [Kalker 线性蠕滑系数](wheel_rail_contact/KALKER_COEFFICIENTS.md)：有限系数表、泊松轴插值、半轴比插值与细长椭圆渐近式。
 - [切向接触力：FASTSIM 条带推进](wheel_rail_contact/TANGENTIAL_CONTACT_FASTSIM.md)：条带推进、应力积累、压力分布、黏滑边界、自旋加密与下降摩擦律。
 - [单轮接触模型组装与成对扳手](wheel_rail_contact/CONTACT_MODEL_ASSEMBLY_AND_WRENCH.md)：接触链的物理组装、材料参考点、轮侧作用点、坐标变换与成对扳手。
+
+### 力元
+
+- [力元连接运动学与空间扳手](force_elements/FORCE_ELEMENT_KINEMATICS_AND_WRENCHES.md)：两端相对位置、相对姿态、含运输项的相对速度与相对角速度，三种成对扳手施加方式、换点规则、功率恒等式与组织原则。
+- [三向平动弹簧—阻尼力元](force_elements/TRANSLATIONAL_SPRING_DAMPER.md)：参考端三轴并联弹簧—阻尼与名义力、端点力对加支承矩、储能与耗散、对角本构在空间表达中的姿态依赖。
+- [侧滚弹簧—阻尼力偶](force_elements/ROLL_SPRING_DAMPER_COUPLE.md)：矩阵元滚转度量、相对角速度分量、纯力偶对、纯滚转下的储能与耦合转动下的性质。
+- [串联弹簧—黏性阻尼力元](force_elements/SERIES_SPRING_VISCOUS_DAMPER.md)：Maxwell 内力方程、松弛时间、解析响应、力状态与系统连续状态的衔接。
+- [奇对称饱和分段线性阻尼力元](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.md)：非负半轴折线力曲线、末节点外恒值延拓、奇延拓、定义域三条要求的后果与耗散势。
+- [半角中点 RPY 衬套](force_elements/HALF_ANGLE_MIDPOINT_RPY_BUSHING.md)：半角中间系、中点材料相对速度、space-XYZ 角提取与速率映射、功率共轭的物理力矩与中点扳手对。
 
 ### 数值方法
 

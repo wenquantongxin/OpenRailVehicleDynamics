@@ -25,6 +25,7 @@ A theory document may state a model's mathematical assumptions and conditions of
 | `track_geometry/` | horizontal and vertical alignment, superelevation, track frames, station projection and vertical profiles |
 | `track_irregularity_spectra/` | track-irregularity PSD, finite spatial bands, random realizations and multi-direction correlation |
 | `wheel_rail_contact/` | profiles and interpolation, pose reduction, contact geometry, normal force, creepage, Kalker coefficients, FASTSIM and wrench assembly |
+| `force_elements/` | connection kinematics and wrenches, translational spring-damper, roll couple, series Maxwell element, saturated piecewise-linear damper and half-angle midpoint RPY bushing |
 | `numerical_methods/` | time integration, implicit nonlinear iteration, error control and stability |
 
 ## Form of a theory document
@@ -64,6 +65,15 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 - [Kalker linear creepage coefficients](wheel_rail_contact/KALKER_COEFFICIENTS.en.md): finite coefficient tables, interpolation in Poisson ratio, interpolation in semi-axis ratio and slender-ellipse asymptotics.
 - [Tangential contact force: FASTSIM strip marching](wheel_rail_contact/TANGENTIAL_CONTACT_FASTSIM.en.md): strip marching, stress accumulation, pressure distribution, adhesion-slip boundary, spin refinement and the falling friction law.
 - [Single-wheel contact-model assembly and paired wrench](wheel_rail_contact/CONTACT_MODEL_ASSEMBLY_AND_WRENCH.en.md): physical assembly of the contact chain, material reference point, wheel-side application point, coordinate transformations and the paired wrench.
+
+### Force elements
+
+- [Force-element kinematics and spatial wrenches](force_elements/FORCE_ELEMENT_KINEMATICS_AND_WRENCHES.en.md): relative position, relative attitude, relative velocity with transport term and relative angular velocity of the two ends, the three paired-wrench application schemes, reduction-point rules, power identities and the organizing principle.
+- [Three-axis translational spring-damper element](force_elements/TRANSLATIONAL_SPRING_DAMPER.en.md): parallel spring-damper pairs on the three reference-end axes with a nominal force, endpoint force pair with support moment, stored energy and dissipation, and the attitude dependence of the diagonal law in space.
+- [Roll spring-damper couple](force_elements/ROLL_SPRING_DAMPER_COUPLE.en.md): matrix-entry roll measure, relative-angular-velocity component, pure couple pair, stored energy under pure roll and properties under coupled rotation.
+- [Series spring-viscous-damper element](force_elements/SERIES_SPRING_VISCOUS_DAMPER.en.md): Maxwell force equation, relaxation time, analytical responses and the coupling of the force state to the system continuous state.
+- [Odd-symmetric saturated piecewise-linear damper](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.en.md): piecewise-linear force curve on the non-negative half-axis, constant continuation beyond the last node, odd extension, consequences of the three domain requirements and the dissipation potential.
+- [Half-angle midpoint RPY bushing](force_elements/HALF_ANGLE_MIDPOINT_RPY_BUSHING.en.md): half-angle intermediate frame, midpoint relative material velocity, space-XYZ angle extraction and rate map, physical moment by power conjugacy and the midpoint wrench pair.
 
 ### Numerical methods
 
