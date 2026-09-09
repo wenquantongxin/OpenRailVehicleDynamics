@@ -24,8 +24,9 @@ A theory document may state a model's mathematical assumptions and conditions of
 |---|---|
 | `track_geometry/` | horizontal and vertical alignment, superelevation, track frames, station projection and vertical profiles |
 | `track_irregularity_spectra/` | track-irregularity PSD, finite spatial bands, random realizations and multi-direction correlation |
-| `wheel_rail_contact/` | profiles and interpolation, pose reduction, contact geometry, normal force, creepage, Kalker coefficients, FASTSIM and wrench assembly |
+| `wheel_rail_contact/` | profiles and interpolation, pose reduction, contact geometry, normal force, creepage, Kalker coefficients, FASTSIM, wrench assembly and contact-force-plan kinematics |
 | `force_elements/` | connection kinematics and wrenches, translational spring-damper, roll couple, series Maxwell element, saturated piecewise-linear damper and half-angle midpoint RPY bushing |
+| `vehicle_dynamics/` | multibody equations of motion, articulated-body forward dynamics, assembly of the complete right-hand side, and startup state construction |
 | `numerical_methods/` | time integration, implicit nonlinear iteration, error control and stability |
 
 ## Form of a theory document
@@ -65,6 +66,7 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 - [Kalker linear creepage coefficients](wheel_rail_contact/KALKER_COEFFICIENTS.en.md): finite coefficient tables, interpolation in Poisson ratio, interpolation in semi-axis ratio and slender-ellipse asymptotics.
 - [Tangential contact force: FASTSIM strip marching](wheel_rail_contact/TANGENTIAL_CONTACT_FASTSIM.en.md): strip marching, stress accumulation, pressure distribution, adhesion-slip boundary, spin refinement and the falling friction law.
 - [Single-wheel contact-model assembly and paired wrench](wheel_rail_contact/CONTACT_MODEL_ASSEMBLY_AND_WRENCH.en.md): physical assembly of the contact chain, material reference point, wheel-side application point, coordinate transformations and the paired wrench.
+- [Contact force plan kinematics](wheel_rail_contact/CONTACT_FORCE_PLAN_KINEMATICS.en.md): seeded local-branch projection of the carrier station, pose and rates in the track frame, the spin-free geometric attitude, interface kinematics of the two carrier types, rigid motion of the profile and irregularity sampling, rail-profile placement, and combination of the per-patch wrenches into one equivalent body wrench acting on the wheel body.
 
 ### Force elements
 
@@ -75,6 +77,11 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 - [Odd-symmetric saturated piecewise-linear damper](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.en.md): piecewise-linear force curve on the non-negative half-axis, constant continuation beyond the last node, odd extension, consequences of the three domain requirements and the dissipation potential.
 - [Half-angle midpoint RPY bushing](force_elements/HALF_ANGLE_MIDPOINT_RPY_BUSHING.en.md): half-angle intermediate frame, midpoint relative material velocity, space-XYZ angle extraction and rate map, physical moment by power conjugacy and the midpoint wrench pair.
 
+### Vehicle dynamics
+
+- [Multibody equations of motion](vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.en.md): rigid-body tree and generalized coordinates, rate maps of quaternions and the Ball-RPY joint, spatial velocities and the shift of body wrenches to the body origin, power conjugacy and generalized forces, equations of motion and on-demand assembly of the mass matrix, the three-pass articulated-body forward dynamics and assembly of the complete right-hand side.
+- [Startup state assembly](vehicle_dynamics/STARTUP_STATE_ASSEMBLY.en.md): the physically meaningful initial quantities of a startup record, the station as a sum of three terms and attitude and position in the complete track frame at each body's station, change of basis of inertial velocities and the common-spin generation rule, joint coordinates and series internal forces, and accompanying non-state quantities such as nominal forces and the rail-profile vertical datum.
+
 ### Numerical methods
 
-- [BDF, Radau5, Newmark and Zhai time-integration methods](numerical_methods/TIME_INTEGRATION_METHODS.en.md): discrete formulas, one-step and multistep advancement algorithms, error and stability, as well as the conditions under which each method applies to the ORVD state structure.
+- [BDF, Radau5, Newmark and Zhai time-integration methods](numerical_methods/TIME_INTEGRATION_METHODS.en.md): discrete formulas, one-step and multistep advancement algorithms, formation of the finite-difference Jacobian, error and stability, as well as the conditions under which each method applies to the ORVD state structure.

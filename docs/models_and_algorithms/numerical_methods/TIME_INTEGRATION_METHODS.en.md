@@ -124,14 +124,43 @@ $$
 
 An adaptive BDF step performs historical extrapolation, nonlinear solution, local-error estimation and selection of the next step size and order. The method history advances only after the new endpoint is accepted. When the state equation or an externally held quantity changes, the old history no longer represents the same initial-value problem and must be reconstructed from the current endpoint.
 
-### 2.3 Accuracy and stability
+### 2.3 Forming the finite-difference Jacobian
+
+The iteration matrix $I_{n_x}-\gamma_{\mathrm{BDF}}J$ of section 2.2 requires $J=\partial f/\partial y$, and ORVD forms it by finite differences. The differenced object is the complete right-hand side $f(t,\cdot)$ of section 1.1, that is, the whole map $[q;v;z]\mapsto[N(q)v;\dot v;\dot z]$: multibody forward dynamics, force elements and wheel-rail contact all lie inside the differenced function. The differences are taken at the trial point $(t,y)$ at which the solver requests a linearization; $t$ and every input that is not part of the continuous state (for example the station seeds of the wheel-rail projections and the nominal forces of force elements) are held fixed throughout the batch of column evaluations, only one stored component of the continuous state is changed at a time, and each column is a one-sided difference quotient
+
+$$
+J_{:,j}\approx\frac{f(t,\,y+\Delta_j\mathbf e_j)-f(t,\,y)}{\Delta_j},
+\qquad j=1,\dots,n_x,
+$$
+
+where $\mathbf e_j$ is the $j$-th coordinate unit vector and $f(t,y)$ is the baseline derivative the solver has already evaluated at that point, so forming $J$ once costs $n_x$ additional right-hand-side evaluations. The perturbation is applied to stored values: each of the four components of every quaternion in $q$ is likewise treated as an ordinary scalar and incremented by $\Delta_j$, with no projection onto the unit sphere, and the right-hand side is evaluated at the perturbed stored values (the position-derivative map likewise uses the quaternion as stored, see section 3.1 of [Multibody equations of motion](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.en.md)). The resulting column is therefore the partial derivative, with respect to that stored component, of $f$ as the implementation defines it, including how the right-hand side extends to non-unit quaternions; it is not the tangential derivative on the unit-quaternion manifold. For the components of $v$ and $z$ and for the position coordinates that are not quaternions, the two readings coincide.
+
+The increment $\Delta_j$ follows the scale rule of CVODE's built-in dense difference quotient (see the [CVODE mathematical description](https://sundials.readthedocs.io/en/latest/cvode/Mathematics_link.html) cited above):
+
+$$
+\Delta_j=\max\left(\sqrt U\,\lvert y_j\rvert,\ \frac{\Delta_{\min}}{w_j}\right),
+\qquad
+\Delta_{\min}=
+\begin{cases}
+\mu\,\lvert h\rvert\,U\,n_x\,\lVert f(t,y)\rVert_{\mathrm{WRMS}}, & \lVert f(t,y)\rVert_{\mathrm{WRMS}}\neq0,\\
+1, & \lVert f(t,y)\rVert_{\mathrm{WRMS}}=0.
+\end{cases}
+$$
+
+Here $U$ is CVODE's unit roundoff, `DBL_EPSILON` in double precision; $w_j$ is the error weight the solver holds for the current step and keeps fixed throughout this batch of differences, formed as in section 1.3 from `rtol` and `atol` at the step's reference state $y^{(w)}$, which need not be the trial point at which the differences are taken, and $\lVert\cdot\rVert_{\mathrm{WRMS}}$ is the weighted norm of the same section; $h$ is the current internal step size; and $\mu=1000$ is the dimensionless constant that defines the increment floor $\Delta_{\min}$. The first term makes the increment proportional to the magnitude of the component itself, the usual compromise of a one-sided difference between truncation and roundoff error. The second term keeps the increment from vanishing as $y_j$ approaches zero: $\Delta_{\min}$ measures, through $\lvert h\rvert\,\lVert f\rVert_{\mathrm{WRMS}}$, the weighted size of the state change over one step, and $1/w_j=\operatorname{rtol}\lvert y^{(w)}_j\rvert+\operatorname{atol}_j$ converts it to the units of component $j$. The denominator of the quotient is the nominal increment $\Delta_j$, not the increment actually realized after floating-point addition; this differs from the Radau5 core of section 3.5.
+
+In the implementation the differencing is organized in one of two ways, both of which define the same finite-difference Jacobian by the same increment rule and the same denominator. The first is the built-in difference quotient of CVODE's dense linear solver. The second is ORVD's own column provider: `DenseFiniteDifferenceJacobianProvider` in [`dense_finite_difference_jacobian_provider.h`](../../../libs/integrators/src/dense_finite_difference_jacobian_provider.h) is responsible only for the perturbed derivatives $f(t,y+\Delta_j\mathbf e_j)$ of the columns, and its system implementation, `CalcPerturbedDerivatives` in [`system_continuous_state_backend.cc`](../../../libs/integrators/src/system_continuous_state_backend.cc), copies $y$ for each column in a separate trial context, adds $\Delta_j$ and calls the complete right-hand side of section 1.1; the increments $\Delta_j$, the baseline derivative $f(t,y)$ and the quotient itself are held by `EvaluateDenseJacobian` in [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) according to the formulas above, and the provider contains no differencing formula.
+
+The finite-difference Jacobian does not change the BDF nonlinear residual equation itself: $\mathcal F_{\mathrm{BDF}}$ is always evaluated with the exact right-hand side; but an error in $J$ affects the convergence behavior of the modified Newton iteration, so that the endpoint obtained under finite precision and a finite stopping test is not guaranteed to be identical, and it also governs how long one $J$ can be reused. Once formed, $J$ enters the iteration matrix of section 2.2 and can be reused across the iterations of one step and across neighboring steps; when $\gamma_{\mathrm{BDF}}$ changes, only $I_{n_x}-\gamma_{\mathrm{BDF}}J$ has to be re-formed and re-factored. When the differences are recomputed is decided by the solver's refresh policy, which is a solver setting.
+
+### 2.4 Accuracy and stability
 
 - For a sufficiently smooth problem, order-$k$ BDF has local truncation error $O(h^{k+1})$ and global error $O(h^k)$.
 - BDF1 and BDF2 are A-stable. BDF3–BDF5 no longer cover the entire left half-plane, although they remain useful for stiff problems.
 - BDF is a multistep method and requires startup history. Contact transitions or corners in force laws can reduce the observed high-order convergence.
 - Dense output is obtained from a history polynomial over the most recent internal step and is not defined beyond that step.
 
-### 2.4 Implementation in ORVD
+### 2.5 Implementation in ORVD
 
 `CvodeContinuousStateAdvancer` in [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) constructs the CVODE backend with `CV_BDF` and fixes the maximum order to either 2 or 5. The production system currently uses the maximum-order-two form, while the source tree also retains the maximum-order-five form. The map from the complete $[q;v;z]$ state to the system right-hand side is `SystemRhsBridge::CalcTimeDerivatives`, cited in section 1.1. Dense output is supplied by CVODE's history polynomial over the most recent internal step.
 
@@ -212,6 +241,22 @@ The method is A-stable, and $\mathcal R(\zeta)\to0$ as $|\zeta|\to\infty$ in the
 ### 3.5 Implementation in ORVD
 
 `radau5::Core::AdvanceOneAcceptedStepToward` in [`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) implements only the ordinary-differential form $y'=f(t,y)$: the ODE mass matrix of the classical RADAU5 interface is the identity, the source carries no such term, and a general mass-matrix form is not supported. This is unrelated to the mechanical mass matrix $M(u)$ of section 1.2. The core uses a dense Jacobian, three-stage fifth-order Radau IIA, adaptive error control and collocation dense output over the latest successful step, and it performs simplified Newton iteration through one real and one complex linear system. `Radau5ContinuousStateAdvancer` in [`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) connects that core to the same complete first-order state right-hand side used by BDF. Radau5 is implemented in the source tree, while the production system currently remains on CVODE BDF with maximum order 2.
+
+The Radau5 core forms the dense Jacobian required by section 3.2 itself and does not borrow the column provider of section 2.3: `ComputeJacobian` of `radau5::Core` takes one-sided difference quotients of the same complete right-hand side, column by column, at the current accepted endpoint $(t_n,y_n)$; the perturbation is again applied to stored components, and $t_n$ and the inputs that are not part of the continuous state are held fixed. The nominal increment of column $j$ is
+
+$$
+\Delta_j=\sqrt{U_R\max\left(10^{-5},\lvert y_j\rvert\right)},
+\qquad
+U_R=10^{-16},
+$$
+
+where $U_R$ is the rounding-unit constant of this core; its meaning differs from CVODE's $U$ of section 2.3, and the two must not be substituted for each other. The constant $10^{-5}$ bounds the magnitude under the square root from below, so that the increment does not vanish with small $\lvert y_j\rvert$. Unlike section 2.3, the denominator is not the nominal increment but the actually representable one: `SelectRepresentablePerturbation` in the same file first forms the perturbed value $\hat y_j=y_j+\Delta_j$ in floating-point arithmetic, replacing it by the representable neighbor of $y_j$ if the sum leaves the stored value unchanged, and then sets $\tilde\Delta_j=\hat y_j-y_j$, so that
+
+$$
+J_{:,j}\approx\frac{f(t_n,\hat y)-f(t_n,y_n)}{\tilde\Delta_j},
+$$
+
+where $\hat y$ differs from $y_n$ only in component $j$. The denominator thus agrees with the perturbation actually applied, avoiding a mismatch between the nominal denominator and the actual perturbation; the rounding error of the right-hand-side evaluations themselves remains in the quotient. The resulting $J$ enters the real and complex systems of section 3.2 and is reused across Newton iterations and neighboring steps as described there.
 
 ## 4. Newmark: a family of one-step methods for second-order mechanical systems (theory only)
 

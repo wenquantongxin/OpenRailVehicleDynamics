@@ -188,7 +188,7 @@ $\mathbf p_{AoBo\_A}$ 表示从 A 原点到 B 原点、在 A 中表达的位置�
 
 ### 4.2 四元数与自由体
 
-自由体使用七个广义位置和六个广义速度：位置为 `[四元数 w,x,y,z；原点位置]`，速度为 `[角速度；原点平移速度]`。四元数的四个分量承载三个转动自由度，因此一般有 $n_q\ne n_v$。区间类型见 [`multibody_coordinate_ranges.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_coordinate_ranges.h)。上述两条分量顺序约定见 [`multibody_model.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) 的 `MultibodyModel::GetFreeBodyPositionRange` 与 `MultibodyModel::GetFreeBodyVelocityRange`。
+自由体使用七个广义位置和六个广义速度：位置为 `[四元数 w,x,y,z；原点位置]`，速度为 `[角速度；原点平移速度]`，均在世界系表达。四元数的四个分量承载三个转动自由度，因此一般有 $n_q\ne n_v$。区间类型见 [`multibody_coordinate_ranges.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_coordinate_ranges.h)。上述两条分量顺序约定见 [`multibody_model.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) 的 `MultibodyModel::GetFreeBodyPositionRange` 与 `MultibodyModel::GetFreeBodyVelocityRange`。
 
 ### 4.3 Ball-RPY 球铰
 

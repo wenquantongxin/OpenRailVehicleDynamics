@@ -124,14 +124,43 @@ $$
 
 一个自适应 BDF 步依次完成历史外推、非线性求解、局部误差估计以及步长和阶数选择。只有接受新端点后，方法历史才滚动到下一步；状态方程或外部保持量改变后，旧历史不再表示同一初值问题，必须从当前端点重建。
 
-### 2.3 精度与稳定性
+### 2.3 差分 Jacobian 的形成
+
+第 2.2 节的迭代矩阵 $I_{n_x}-\gamma_{\mathrm{BDF}}J$ 需要 $J=\partial f/\partial y$，ORVD 以差分形成它。差分对象是第 1.1 节的完整右端 $f(t,\cdot)$，即整个映射 $[q;v;z]\mapsto[N(q)v;\dot v;\dot z]$：多体前向动力学、力元与轮轨接触都在被差分的函数之内。差分在求解器请求线性化的试算点 $(t,y)$ 上进行，$t$ 与全部不属于连续状态的输入（例如轮轨投影的站位种子与力元的名义力）在整批列求值中保持不变，每次只改动连续状态的一个存储分量，逐列取单边差商
+
+$$
+J_{:,j}\approx\frac{f(t,\,y+\Delta_j\mathbf e_j)-f(t,\,y)}{\Delta_j},
+\qquad j=1,\dots,n_x,
+$$
+
+其中 $\mathbf e_j$ 是第 $j$ 个坐标单位向量，$f(t,y)$ 是求解器在该点已经算出的基线导数，因此形成一次 $J$ 需要 $n_x$ 次额外的右端求值。扰动按存储值施加：$q$ 中每个四元数的四个分量也各自作为普通标量加上 $\Delta_j$，不作单位球面投影，右端按被扰动后的存储值求值（位置导数映射同样按存储值使用四元数，见[整车多体动力学方程](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.md)第 3.1 节）。所得的列因此是实现所定义的 $f$ 对该存储分量的偏导数，其中包含右端对非单位四元数的延拓方式，而不是单位四元数流形上的切向导数；对 $v$、$z$ 以及非四元数的位置坐标，两种理解一致。
+
+增量 $\Delta_j$ 沿用 CVODE 内建稠密差商的尺度规则（见前引的 [CVODE 数学说明](https://sundials.readthedocs.io/en/latest/cvode/Mathematics_link.html)）：
+
+$$
+\Delta_j=\max\left(\sqrt U\,\lvert y_j\rvert,\ \frac{\Delta_{\min}}{w_j}\right),
+\qquad
+\Delta_{\min}=
+\begin{cases}
+\mu\,\lvert h\rvert\,U\,n_x\,\lVert f(t,y)\rVert_{\mathrm{WRMS}}, & \lVert f(t,y)\rVert_{\mathrm{WRMS}}\neq0,\\
+1, & \lVert f(t,y)\rVert_{\mathrm{WRMS}}=0.
+\end{cases}
+$$
+
+这里 $U$ 是 CVODE 的单位舍入，双精度下为 `DBL_EPSILON`；$w_j$ 是求解器本步持有、在本批差分中固定的误差权重，按第 1.3 节由 `rtol` 与 `atol` 对本步的参考状态 $y^{(w)}$ 形成，该参考状态不必是差分所在的试算点，$\lVert\cdot\rVert_{\mathrm{WRMS}}$ 是同节的加权范数；$h$ 是当前内部步长；$\mu=1000$ 是定义增量下限 $\Delta_{\min}$ 的无量纲常数。第一项使增量正比于分量自身的量级，是单边差商在截断误差与舍入误差之间的常规折中；第二项防止 $y_j$ 接近零时增量随之消失：$\Delta_{\min}$ 以 $\lvert h\rvert\,\lVert f\rVert_{\mathrm{WRMS}}$ 度量一步内状态变化的加权量级，再经 $1/w_j=\operatorname{rtol}\lvert y^{(w)}_j\rvert+\operatorname{atol}_j$ 换算到第 $j$ 个分量的量纲。差商的分母是名义增量 $\Delta_j$，不是浮点求和后实际实现的增量；这一点与第 3.5 节 Radau5 核的做法不同。
+
+在实现上，这一差分有两条组织方式，二者按同一增量规则与同一分母定义同一个差分 Jacobian。一是 CVODE 稠密线性求解器的内建差商。二是 ORVD 的自有列提供者：[`dense_finite_difference_jacobian_provider.h`](../../../libs/integrators/src/dense_finite_difference_jacobian_provider.h) 的 `DenseFiniteDifferenceJacobianProvider` 只负责求各列的扰动导数 $f(t,y+\Delta_j\mathbf e_j)$，其系统实现是 [`system_continuous_state_backend.cc`](../../../libs/integrators/src/system_continuous_state_backend.cc) 的 `CalcPerturbedDerivatives`，它在独立的试算上下文中对每一列复制 $y$、加上 $\Delta_j$ 并调用第 1.1 节的完整右端；增量 $\Delta_j$、基线导数 $f(t,y)$ 与差商本身由 [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 的 `EvaluateDenseJacobian` 按上式持有，提供者内不含任何差分公式。
+
+差分 Jacobian 不改变 BDF 非线性残差方程本身：$\mathcal F_{\mathrm{BDF}}$ 始终用精确的右端求值；但 $J$ 的误差会影响 modified Newton 迭代的收敛行为，有限精度、有限停止条件下得到的端点不保证完全相同，它也决定同一个 $J$ 可以复用多久。形成后的 $J$ 进入第 2.2 节的迭代矩阵，可在同一步的多次迭代以及相邻步之间复用，$\gamma_{\mathrm{BDF}}$ 改变时只需重新形成并分解 $I_{n_x}-\gamma_{\mathrm{BDF}}J$；何时重新差分由求解器的刷新策略决定，属于求解器设置。
+
+### 2.4 精度与稳定性
 
 - 对足够光滑的问题，$k$ 阶 BDF 的局部截断误差为 $O(h^{k+1})$，全局误差为 $O(h^k)$。
 - BDF1 和 BDF2 是 A-stable；BDF3–BDF5 不再覆盖整个左半平面，但仍可用于刚性问题。
 - BDF 是多步法，需要启动历史；接触切换或力律折点会削弱高阶收敛。
 - 稠密输出来自最近内部步的历史多项式，其定义域不能超出该内部步。
 
-### 2.4 ORVD 中的实现
+### 2.5 ORVD 中的实现
 
 [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 的 `CvodeContinuousStateAdvancer` 以 `CV_BDF` 构造 CVODE 后端，并把最大阶数固定为 2 或 5；生产系统当前采用最大二阶形式，源码树中同时保留最大五阶形式。完整 $[q;v;z]$ 状态到系统右端的映射见第 1.1 节所引的 `SystemRhsBridge::CalcTimeDerivatives`。稠密输出由 CVODE 在最近一个内部步上的历史多项式给出。
 
@@ -212,6 +241,22 @@ $$
 ### 3.5 ORVD 中的实现
 
 [`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) 的 `radau5::Core::AdvanceOneAcceptedStepToward` 只实现常微分方程形式 $y'=f(t,y)$：经典 RADAU5 接口意义上的 ODE 质量矩阵取单位阵，源码中不设该项，也不支持一般质量矩阵形式；此处与第 1.2 节的机械质量矩阵 $M(u)$ 无关。该核心使用稠密 Jacobian、三阶段五阶 Radau IIA、自适应误差控制和最近成功步的配点稠密输出，并用一个实线性系统和一个复线性系统完成简化 Newton 迭代。[`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) 的 `Radau5ContinuousStateAdvancer` 把该核心接到与 BDF 相同的完整一阶状态右端。Radau5 已在源码树中实现，生产系统当前仍采用最大阶数为 2 的 CVODE BDF。
+
+Radau5 核自行形成第 3.2 节所需的稠密 Jacobian，不借用第 2.3 节的列提供者：`radau5::Core` 的 `ComputeJacobian` 在当前已接受端点 $(t_n,y_n)$ 上对同一完整右端逐列取单边差商，扰动同样按存储分量施加，$t_n$ 与不属于连续状态的输入保持不变。第 $j$ 列的名义增量为
+
+$$
+\Delta_j=\sqrt{U_R\max\left(10^{-5},\lvert y_j\rvert\right)},
+\qquad
+U_R=10^{-16},
+$$
+
+其中 $U_R$ 是该核的舍入单位常量，与第 2.3 节 CVODE 的 $U$ 含义不同，两者不可互相代入；常数 $10^{-5}$ 给根号内的量级设下限，使 $\lvert y_j\rvert$ 很小时增量不随之消失。与第 2.3 节不同，分母不取名义增量，而取实际可表示增量：同文件的 `SelectRepresentablePerturbation` 先在浮点算术中形成扰动值 $\hat y_j=y_j+\Delta_j$，若该和未改变存储值则改取与 $y_j$ 相邻的可表示数，再令 $\tilde\Delta_j=\hat y_j-y_j$，于是
+
+$$
+J_{:,j}\approx\frac{f(t_n,\hat y)-f(t_n,y_n)}{\tilde\Delta_j},
+$$
+
+其中 $\hat y$ 只在第 $j$ 个分量上与 $y_n$ 不同。这样分母与实际施加的扰动一致，避免名义分母与实际扰动不匹配；右端求值本身的舍入误差仍在差商之中。所得 $J$ 进入第 3.2 节的实系统与复系统，并按该节所述在 Newton 迭代与相邻步之间复用。
 
 ## 4. Newmark：二阶机械系统的一步法族（仅理论）
 

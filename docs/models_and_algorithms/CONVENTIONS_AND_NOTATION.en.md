@@ -188,7 +188,7 @@ Letter subscripts on a rotation matrix name frames, whereas two numeric subscrip
 
 ### 4.2 Quaternions and free bodies
 
-A free body uses seven generalized positions and six generalized velocities: position is `[quaternion w,x,y,z; origin position]`, and velocity is `[angular velocity; origin translational velocity]`. Four quaternion components carry three rotational degrees of freedom, so in general $n_q\ne n_v$. The range types are in [`multibody_coordinate_ranges.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_coordinate_ranges.h). The two component orderings above are stated in [`multibody_model.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h), at `MultibodyModel::GetFreeBodyPositionRange` and `MultibodyModel::GetFreeBodyVelocityRange`.
+A free body uses seven generalized positions and six generalized velocities: position is `[quaternion w,x,y,z; origin position]`, and velocity is `[angular velocity; origin translational velocity]`, both expressed in the world frame. Four quaternion components carry three rotational degrees of freedom, so in general $n_q\ne n_v$. The range types are in [`multibody_coordinate_ranges.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_coordinate_ranges.h). The two component orderings above are stated in [`multibody_model.h`](../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h), at `MultibodyModel::GetFreeBodyPositionRange` and `MultibodyModel::GetFreeBodyVelocityRange`.
 
 ### 4.3 Ball-RPY joint
 

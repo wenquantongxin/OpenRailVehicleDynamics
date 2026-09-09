@@ -24,8 +24,9 @@
 |---|---|
 | `track_geometry/` | 线路平纵断面、超高、轨道坐标系、站位投影和竖向剖面 |
 | `track_irregularity_spectra/` | 轨道不平顺 PSD、有限空间频带、随机实现和多方向相关性 |
-| `wheel_rail_contact/` | 型面与插值、位姿归约、接触几何、法向力、蠕滑、Kalker 系数、FASTSIM 与扳手组装 |
+| `wheel_rail_contact/` | 型面与插值、位姿归约、接触几何、法向力、蠕滑、Kalker 系数、FASTSIM、扳手组装与接触力计划运动学 |
 | `force_elements/` | 连接运动学与扳手、三向平动弹簧—阻尼、侧滚力偶、串联 Maxwell、饱和折线阻尼与半角中点 RPY 衬套 |
+| `vehicle_dynamics/` | 整车多体动力学方程、铰接体前向动力学、完整右端装配与起动状态构造 |
 | `numerical_methods/` | 时间积分、隐式非线性迭代、误差控制与稳定性 |
 
 ## 理论文档形式
@@ -65,6 +66,7 @@
 - [Kalker 线性蠕滑系数](wheel_rail_contact/KALKER_COEFFICIENTS.md)：有限系数表、泊松轴插值、半轴比插值与细长椭圆渐近式。
 - [切向接触力：FASTSIM 条带推进](wheel_rail_contact/TANGENTIAL_CONTACT_FASTSIM.md)：条带推进、应力积累、压力分布、黏滑边界、自旋加密与下降摩擦律。
 - [单轮接触模型组装与成对扳手](wheel_rail_contact/CONTACT_MODEL_ASSEMBLY_AND_WRENCH.md)：接触链的物理组装、材料参考点、轮侧作用点、坐标变换与成对扳手。
+- [轮轨接触力计划的运动学装配](wheel_rail_contact/CONTACT_FORCE_PLAN_KINEMATICS.md)：载体站位的局部分支投影与种子、轨型系中的位姿与速率、去自转的几何姿态、两类载体的接口运动学、型面刚体运动与不平顺取样、钢轨型面放置，以及逐斑扳手合成为作用于车轮刚体的一条等效体扳手。
 
 ### 力元
 
@@ -75,6 +77,11 @@
 - [奇对称饱和分段线性阻尼力元](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.md)：非负半轴折线力曲线、末节点外恒值延拓、奇延拓、定义域三条要求的后果与耗散势。
 - [半角中点 RPY 衬套](force_elements/HALF_ANGLE_MIDPOINT_RPY_BUSHING.md)：半角中间系、中点材料相对速度、space-XYZ 角提取与速率映射、功率共轭的物理力矩与中点扳手对。
 
+### 整车动力学
+
+- [整车多体动力学方程](vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.md)：刚体树与广义坐标、四元数与 Ball-RPY 的速率映射、空间速度与体扳手到体原点的搬移、功率共轭与广义力、动力学方程与质量矩阵的按需装配、铰接体前向动力学的三趟递推与完整右端的装配。
+- [起动状态装配](vehicle_dynamics/STARTUP_STATE_ASSEMBLY.md)：起动记录给出的物理初始量、站位三项之和与各体站位处完整轨型系中的姿态与位置、惯性速度的换基与公共自转生成规则、关节坐标与串联内力，以及名义力、钢轨型面竖向基准等配套的非状态量。
+
 ### 数值方法
 
-- [BDF、Radau5、Newmark 与 Zhai 时间积分方法](numerical_methods/TIME_INTEGRATION_METHODS.md)：离散公式、单步与多步推进算法、误差和稳定性，以及不同方法对 ORVD 状态结构的适用条件。
+- [BDF、Radau5、Newmark 与 Zhai 时间积分方法](numerical_methods/TIME_INTEGRATION_METHODS.md)：离散公式、单步与多步推进算法、差分 Jacobian 的形成、误差和稳定性，以及不同方法对 ORVD 状态结构的适用条件。
