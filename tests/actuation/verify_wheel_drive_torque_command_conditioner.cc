@@ -155,21 +155,30 @@ void CheckEightDistinctBranches() {
                 WheelDriveTorqueLimitFlag::kLowSpeedLookupClamped),
             "low-speed lookup clamp was not reported");
 
-    Require(result.actual_wheel_torques_newton_metres[3] == 0.0 &&
-                result.wheel_dynamic_torque_limits_newton_metres[3] == 0.0 &&
-                result.next_drive_side_torque_memory_newton_metres[3] == 0.0,
-            "unsupported high speed did not close output and memory");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[3], 20.0,
+        "unsupported high speed did not slew the previous torque toward zero");
+    Require(result.wheel_dynamic_torque_limits_newton_metres[3] == 0.0 &&
+                result.next_drive_side_torque_memory_newton_metres[3] == 20.0,
+            "unsupported high speed did not retain its rate-limited memory");
     Require(Has(result.limit_flags[3],
                 WheelDriveTorqueLimitFlag::kUnsupportedHighSpeed) &&
                 Has(result.limit_flags[3],
-                    WheelDriveTorqueLimitFlag::kDynamicValueAdvisory),
-            "unsupported high speed did not report both active flags");
+                    WheelDriveTorqueLimitFlag::kDynamicValueAdvisory) &&
+                Has(result.limit_flags[3],
+                    WheelDriveTorqueLimitFlag::kSlewLimited),
+            "unsupported high speed did not report its three active flags");
 
-    Require(result.actual_wheel_torques_newton_metres[4] == 0.0 &&
-                result.wheel_dynamic_torque_limits_newton_metres[4] == 0.0 &&
-                result.next_drive_side_torque_memory_newton_metres[4] == 0.0 &&
-                result.limit_flags[4] == WheelDriveTorqueLimitFlag::kNone,
-            "the inclusive request deadband did not clear output and memory");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[4], 80.0,
+        "the inclusive request deadband did not slew the previous torque "
+        "toward zero");
+    Require(result.wheel_dynamic_torque_limits_newton_metres[4] == 0.0 &&
+                result.next_drive_side_torque_memory_newton_metres[4] == 80.0 &&
+                result.limit_flags[4] ==
+                    WheelDriveTorqueLimitFlag::kSlewLimited,
+            "the inclusive request deadband did not retain rate-limited "
+            "memory and diagnostics");
 
     RequireRoundoffClose(
         result.actual_wheel_torques_newton_metres[5], 115.0,
@@ -189,19 +198,22 @@ void CheckEightDistinctBranches() {
             "increase-rate limiting was not reported");
 
     RequireRoundoffClose(
-        result.actual_wheel_torques_newton_metres[7], -10.0,
-        "cross-zero rate limiting did not restart magnitude in the new "
-        "source direction");
+        result.actual_wheel_torques_newton_metres[7], -7.5,
+        "cross-zero rate limiting did not share the sample period between "
+        "the old and new source directions");
     RequireRoundoffClose(
-        result.next_drive_side_torque_memory_newton_metres[7], -10.0,
-        "cross-zero next memory has the wrong source sign");
+        result.next_drive_side_torque_memory_newton_metres[7], -7.5,
+        "cross-zero next memory has the wrong signed magnitude");
     Require(Has(result.limit_flags[7],
                 WheelDriveTorqueLimitFlag::kSlewLimited),
             "cross-zero rate limiting was not reported");
 }
 
 void CheckDecreaseRateAndUnavailableEndpoint() {
-    const WheelDriveTorqueCommandConditioner conditioner(MakeConfig());
+    auto config = MakeConfig();
+    config.regeneration.dynamic_limit_drive_side_newton_metres[1] = 0.0;
+    config.regeneration.dynamic_limit_drive_side_newton_metres[2] = 0.0;
+    const WheelDriveTorqueCommandConditioner conditioner(std::move(config));
     WheelDriveTorqueChannelValues requested{};
     WheelDriveTorqueChannelValues speeds{};
     WheelDriveTorqueChannelValues previous{};
@@ -211,7 +223,10 @@ void CheckDecreaseRateAndUnavailableEndpoint() {
     previous[0] = 80.0;
     requested[1] = 50.0;
     speeds[1] = WheelSpeedForDriveRpm(950.0);
-    previous[1] = 10.0;
+    previous[1] = 30.0;
+    requested[2] = -50.0;
+    speeds[2] = WheelSpeedForDriveRpm(250.0);
+    previous[2] = -30.0;
     const auto result = conditioner.Step(requested, speeds, previous);
 
     RequireRoundoffClose(
@@ -221,10 +236,14 @@ void CheckDecreaseRateAndUnavailableEndpoint() {
                 WheelDriveTorqueLimitFlag::kSlewLimited),
             "decrease-rate limiting was not reported");
 
-    Require(result.actual_wheel_torques_newton_metres[1] == 0.0 &&
-                result.wheel_dynamic_torque_limits_newton_metres[1] == 0.0 &&
-                result.next_drive_side_torque_memory_newton_metres[1] == 0.0,
-            "an unavailable dynamic endpoint did not close immediately");
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[1], 10.0,
+        "an unavailable dynamic endpoint did not slew the previous torque "
+        "toward zero");
+    Require(result.wheel_dynamic_torque_limits_newton_metres[1] == 0.0 &&
+                result.next_drive_side_torque_memory_newton_metres[1] == 10.0,
+            "an unavailable dynamic endpoint did not retain rate-limited "
+            "memory");
     Require(Has(result.limit_flags[1],
                 WheelDriveTorqueLimitFlag::kDynamicValueAdvisory) &&
                 Has(result.limit_flags[1],
@@ -232,46 +251,248 @@ void CheckDecreaseRateAndUnavailableEndpoint() {
                 Has(result.limit_flags[1],
                     WheelDriveTorqueLimitFlag::kSlewLimited),
             "an unavailable endpoint did not preserve its active diagnostics");
+
+    RequireRoundoffClose(
+        result.actual_wheel_torques_newton_metres[2], -10.0,
+        "a zero dynamic limit did not slew the previous torque toward zero");
+    Require(result.wheel_dynamic_torque_limits_newton_metres[2] == 0.0 &&
+                result.next_drive_side_torque_memory_newton_metres[2] ==
+                    -10.0 &&
+                Has(result.limit_flags[2],
+                    WheelDriveTorqueLimitFlag::kMagnitudeLimited) &&
+                Has(result.limit_flags[2],
+                    WheelDriveTorqueLimitFlag::kSlewLimited) &&
+                !Has(result.limit_flags[2],
+                     WheelDriveTorqueLimitFlag::kDynamicValueAdvisory),
+            "a zero dynamic limit reported the wrong output or diagnostics");
+
+    WheelDriveTorqueChannelValues completion_previous{};
+    completion_previous[1] =
+        result.next_drive_side_torque_memory_newton_metres[1];
+    const auto completion =
+        conditioner.Step(requested, speeds, completion_previous);
+    Require(completion.actual_wheel_torques_newton_metres[1] == 0.0 &&
+                completion.next_drive_side_torque_memory_newton_metres[1] ==
+                    0.0 &&
+                Has(completion.limit_flags[1],
+                    WheelDriveTorqueLimitFlag::kDynamicValueAdvisory) &&
+                Has(completion.limit_flags[1],
+                    WheelDriveTorqueLimitFlag::kMagnitudeLimited) &&
+                !Has(completion.limit_flags[1],
+                     WheelDriveTorqueLimitFlag::kSlewLimited),
+            "reaching an unavailable endpoint's zero target still reported "
+            "slew limiting");
 }
 
-void CheckImmediateDirectionReversal() {
+void CheckFourInterpolatedRatesAndDirectionReversal() {
+    auto config = MakeConfig();
+    for (std::size_t index = 0;
+         index < orvd::actuation::kWheelDriveTorqueSpeedNodeCount; ++index) {
+        const double rate_step = 200.0 * static_cast<double>(index);
+        config.traction
+            .magnitude_increase_rate_drive_side_newton_metres_per_second
+                [index] = 400.0 + rate_step;
+        config.traction
+            .magnitude_decrease_rate_drive_side_newton_metres_per_second
+                [index] = 200.0 + rate_step;
+        config.regeneration
+            .magnitude_increase_rate_drive_side_newton_metres_per_second
+                [index] = rate_step;
+        config.regeneration
+            .magnitude_decrease_rate_drive_side_newton_metres_per_second
+                [index] = 600.0 + rate_step;
+    }
+    const WheelDriveTorqueCommandConditioner conditioner(std::move(config));
+    const WheelDriveTorqueChannelValues requested{80.0,  1.0,  -80.0, -1.0,
+                                                   -80.0, 80.0, -80.0, 80.0};
+    WheelDriveTorqueChannelValues speeds{};
+    speeds.fill(WheelSpeedForDriveRpm(250.0));
+    const WheelDriveTorqueChannelValues previous{0.0,  20.0, 0.0, -20.0,
+                                                  75.0, -75.0, 4.0, -4.0};
+
+    const auto result = conditioner.Step(requested, speeds, previous);
+    const WheelDriveTorqueChannelValues expected{
+        7.0, 15.0, -3.0, -11.0, 70.0, -66.0, -0.6,
+        700.0 * (0.01 - 4.0 / 900.0)};
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+        RequireRoundoffClose(
+            result.actual_wheel_torques_newton_metres[index], expected[index],
+            "an interpolated four-rate signed-torque branch is wrong");
+        RequireRoundoffClose(
+            result.next_drive_side_torque_memory_newton_metres[index],
+            expected[index],
+            "an interpolated four-rate branch stored the wrong signed memory");
+        Require(result.limit_flags[index] ==
+                    WheelDriveTorqueLimitFlag::kSlewLimited,
+                "an incomplete four-rate progression did not report slew "
+                "limiting");
+    }
+}
+
+void CheckEqualRateDegeneracyAndCompletedReversal() {
     auto config = MakeConfig();
     config.traction
         .magnitude_increase_rate_drive_side_newton_metres_per_second
-        .fill(700.0);
+        .fill(1000.0);
+    config.traction
+        .magnitude_decrease_rate_drive_side_newton_metres_per_second
+        .fill(1000.0);
     config.regeneration
         .magnitude_increase_rate_drive_side_newton_metres_per_second
-        .fill(300.0);
+        .fill(1000.0);
+    config.regeneration
+        .magnitude_decrease_rate_drive_side_newton_metres_per_second
+        .fill(1000.0);
+    const WheelDriveTorqueCommandConditioner conditioner(std::move(config));
+    const WheelDriveTorqueChannelValues requested{20.0, 4.0,  -20.0, -4.0,
+                                                   -5.0, 8.0,  0.0,   0.0};
+    WheelDriveTorqueChannelValues speeds{};
+    speeds.fill(WheelSpeedForDriveRpm(250.0));
+    const WheelDriveTorqueChannelValues previous{4.0,  20.0, -4.0, -20.0,
+                                                  4.0,  -4.0, 4.0,  10.0};
+
+    const auto result = conditioner.Step(requested, speeds, previous);
+    constexpr double maximum_signed_delta = 1000.0 * 0.01;
+    for (std::size_t index = 0; index < requested.size(); ++index) {
+        const double target = requested[index];
+        const double expected =
+            previous[index] +
+            std::clamp(target - previous[index], -maximum_signed_delta,
+                       maximum_signed_delta);
+        RequireRoundoffClose(
+            result.actual_wheel_torques_newton_metres[index], expected,
+            "equal four-rate curves did not reduce to signed-axis clamping");
+        RequireRoundoffClose(
+            result.next_drive_side_torque_memory_newton_metres[index],
+            expected,
+            "equal four-rate curves stored the wrong signed-axis result");
+        const bool expected_slew_limited = expected != target;
+        Require(Has(result.limit_flags[index],
+                    WheelDriveTorqueLimitFlag::kSlewLimited) ==
+                    expected_slew_limited,
+                "equal-rate signed-axis clamping reported the wrong slew "
+                "state");
+    }
+    const double exact_zero_actual =
+        result.actual_wheel_torques_newton_metres[7];
+    const double exact_zero_memory =
+        result.next_drive_side_torque_memory_newton_metres[7];
+    Require(exact_zero_actual == 0.0 && !std::signbit(exact_zero_actual) &&
+                exact_zero_memory == 0.0 &&
+                !std::signbit(exact_zero_memory) &&
+                result.limit_flags[7] == WheelDriveTorqueLimitFlag::kNone,
+            "a zero target reached exactly at the sample end was not closed "
+            "as positive zero without slew limiting");
+
+    WheelDriveTorqueChannelValues crossing_requested{};
+    WheelDriveTorqueChannelValues crossing_previous{};
+    crossing_requested[0] = -20.0;
+    crossing_previous[0] = 10.0;
+    const auto crossing =
+        conditioner.Step(crossing_requested, speeds, crossing_previous);
+    const double crossing_actual =
+        crossing.actual_wheel_torques_newton_metres[0];
+    const double crossing_memory =
+        crossing.next_drive_side_torque_memory_newton_metres[0];
+    Require(crossing_actual == 0.0 && !std::signbit(crossing_actual) &&
+                crossing_memory == 0.0 &&
+                !std::signbit(crossing_memory) &&
+                crossing.limit_flags[0] ==
+                    WheelDriveTorqueLimitFlag::kSlewLimited,
+            "a reversal reaching zero exactly at the sample end did not "
+            "stop at positive zero with slew limiting");
+
+    WheelDriveTorqueChannelValues residual_requested{};
+    WheelDriveTorqueChannelValues residual_previous{};
+    residual_requested[0] = 10.0 + 5.0e-10;
+    const auto residual =
+        conditioner.Step(residual_requested, speeds, residual_previous);
+    RequireRoundoffClose(residual.actual_wheel_torques_newton_metres[0], 10.0,
+                         "a sub-nanonewton-metre residual changed the finite "
+                         "rate result");
+    Require(residual.limit_flags[0] ==
+                WheelDriveTorqueLimitFlag::kSlewLimited,
+            "an unresolved sub-nanonewton-metre residual was not reported");
+}
+
+void CheckDeadbandDecayOutsideTheSpeedTable() {
+    const WheelDriveTorqueCommandConditioner conditioner(MakeConfig());
+    WheelDriveTorqueChannelValues requested{};
+    WheelDriveTorqueChannelValues speeds{};
+    WheelDriveTorqueChannelValues previous{};
+    requested[0] = 0.5;
+    speeds[0] = WheelSpeedForDriveRpm(1001.0);
+    previous[0] = 40.0;
+    requested[1] = -0.5;
+    speeds[1] = WheelSpeedForDriveRpm(50.0);
+    previous[1] = -40.0;
+    requested[2] = 80.0;
+    speeds[2] = WheelSpeedForDriveRpm(1001.0);
+
+    const auto result = conditioner.Step(requested, speeds, previous);
+    RequireRoundoffClose(result.actual_wheel_torques_newton_metres[0], 20.0,
+                         "high-speed deadband decay did not use the terminal "
+                         "decrease rate");
+    Require(Has(result.limit_flags[0],
+                WheelDriveTorqueLimitFlag::kUnsupportedHighSpeed) &&
+                Has(result.limit_flags[0],
+                    WheelDriveTorqueLimitFlag::kDynamicValueAdvisory) &&
+                Has(result.limit_flags[0],
+                    WheelDriveTorqueLimitFlag::kSlewLimited),
+            "high-speed deadband decay omitted an active diagnostic");
+    RequireRoundoffClose(result.actual_wheel_torques_newton_metres[1], -20.0,
+                         "low-speed deadband decay did not use the first "
+                         "decrease rate");
+    Require(Has(result.limit_flags[1],
+                WheelDriveTorqueLimitFlag::kLowSpeedLookupClamped) &&
+                Has(result.limit_flags[1],
+                    WheelDriveTorqueLimitFlag::kSlewLimited),
+            "low-speed deadband decay omitted an active diagnostic");
+    Require(result.actual_wheel_torques_newton_metres[2] == 0.0 &&
+                result.wheel_dynamic_torque_limits_newton_metres[2] == 0.0 &&
+                result.next_drive_side_torque_memory_newton_metres[2] ==
+                    0.0 &&
+                result.limit_flags[2] ==
+                    (WheelDriveTorqueLimitFlag::kUnsupportedHighSpeed |
+                     WheelDriveTorqueLimitFlag::kDynamicValueAdvisory),
+            "an unsupported high-speed request established new torque");
+}
+
+void CheckZeroRateReversalSegments() {
+    auto config = MakeConfig();
+    config.traction
+        .magnitude_increase_rate_drive_side_newton_metres_per_second
+        .fill(0.0);
+    config.traction
+        .magnitude_decrease_rate_drive_side_newton_metres_per_second
+        .fill(0.0);
     const WheelDriveTorqueCommandConditioner conditioner(std::move(config));
     WheelDriveTorqueChannelValues requested{};
     WheelDriveTorqueChannelValues speeds{};
     WheelDriveTorqueChannelValues previous{};
-    requested[0] = -80.0;
-    previous[0] = 75.0;
-    requested[1] = 80.0;
-    previous[1] = -75.0;
+    requested[0] = -20.0;
+    previous[0] = 5.0;
+    requested[1] = 20.0;
+    previous[1] = -5.0;
     speeds.fill(WheelSpeedForDriveRpm(250.0));
 
     const auto result = conditioner.Step(requested, speeds, previous);
     RequireRoundoffClose(
-        result.actual_wheel_torques_newton_metres[0], -3.0,
-        "positive-to-negative reversal did not adopt the requested direction "
-        "immediately and restart its magnitude from zero");
-    RequireRoundoffClose(
-        result.next_drive_side_torque_memory_newton_metres[0], -3.0,
-        "positive-to-negative reversal stored the wrong direction");
-    RequireRoundoffClose(
-        result.actual_wheel_torques_newton_metres[1], 7.0,
-        "negative-to-positive reversal did not adopt the requested direction "
-        "immediately and restart its magnitude from zero");
-    RequireRoundoffClose(
-        result.next_drive_side_torque_memory_newton_metres[1], 7.0,
-        "negative-to-positive reversal stored the wrong direction");
-    Require(Has(result.limit_flags[0],
-                WheelDriveTorqueLimitFlag::kSlewLimited) &&
-                Has(result.limit_flags[1],
-                    WheelDriveTorqueLimitFlag::kSlewLimited),
-            "direction reversals did not report magnitude slew limiting");
+        result.actual_wheel_torques_newton_metres[0], 5.0,
+        "a zero old-direction decrease rate did not retain the previous "
+        "torque");
+    const double zero_rate_actual =
+        result.actual_wheel_torques_newton_metres[1];
+    const double zero_rate_memory =
+        result.next_drive_side_torque_memory_newton_metres[1];
+    Require(zero_rate_actual == 0.0 && !std::signbit(zero_rate_actual) &&
+                zero_rate_memory == 0.0 && !std::signbit(zero_rate_memory),
+            "a zero new-direction increase rate moved beyond positive zero");
+    Require(result.limit_flags[0] ==
+                    WheelDriveTorqueLimitFlag::kSlewLimited &&
+                result.limit_flags[1] ==
+                    WheelDriveTorqueLimitFlag::kSlewLimited,
+            "a zero reversal rate did not report incomplete progression");
 }
 
 std::string Read(const std::filesystem::path& path) {
@@ -467,7 +688,10 @@ int main(int argc, char* argv[]) {
         }
         CheckEightDistinctBranches();
         CheckDecreaseRateAndUnavailableEndpoint();
-        CheckImmediateDirectionReversal();
+        CheckFourInterpolatedRatesAndDirectionReversal();
+        CheckEqualRateDegeneracyAndCompletedReversal();
+        CheckDeadbandDecayOutsideTheSpeedTable();
+        CheckZeroRateReversalSegments();
         CheckStrictAssetAndLoader(argv[1], argv[2]);
         CheckDirectConfigValidation();
         CheckWarmStepDoesNotUseOrdinaryCppAllocation();
