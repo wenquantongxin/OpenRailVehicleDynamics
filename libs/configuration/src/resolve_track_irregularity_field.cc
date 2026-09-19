@@ -115,6 +115,13 @@ ResolvedTrackIrregularityField ResolveTrackIrregularityField(
                     std::move(generated),
                     selected.specification.station_grid,
                     selected.specification.placement);
+            } else if constexpr (std::is_same_v<
+                                     Source,
+                                     GeneratedCompositeTrackIrregularityFieldSource>) {
+                return MakeResolvedGeneratedField(
+                    track_irregularity::GenerateCompositeTrackIrregularity(selected.specification),
+                    selected.specification.station_grid,
+                    selected.specification.placement);
             } else {
                 static_assert(kAlwaysFalse<Source>,
                               "unsupported track-irregularity source");

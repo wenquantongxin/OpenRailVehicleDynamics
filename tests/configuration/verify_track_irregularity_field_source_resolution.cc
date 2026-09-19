@@ -262,6 +262,51 @@ void CheckGeneratedErriSource() {
     }
 }
 
+void CheckCompositeSource() {
+    using namespace orvd::track_irregularity;
+    const CompositeTrackIrregularityGenerationSpec specification{
+        {{AarTrackClass::kAar5, {0.05, 0.25, 41}},
+         {ErriB176IrregularityLevel::kLow, {0.01, 0.25, 41}}},
+        {{40.0, 60.0}}, {0.0, 100.0, 0.1}, {10.0, 90.0, 10.0, 10.0},
+        9223372038880858309ULL};
+    const auto combined = GenerateCompositeTrackIrregularity(specification);
+    const auto aar = GenerateAarTrackIrregularity({AarTrackClass::kAar5,
+        {0.05, 0.25, 41}, specification.station_grid, specification.placement,
+        specification.realization_seed});
+    const auto erri = GenerateErriB176TrackIrregularity({ErriB176IrregularityLevel::kLow,
+        {0.01, 0.25, 41}, specification.station_grid, specification.placement,
+        specification.realization_seed});
+    const auto resolved = ResolveTrackIrregularityField({},
+        orvd::configuration::GeneratedCompositeTrackIrregularityFieldSource{specification});
+    for (const std::size_t index : {400U, 500U, 600U}) {
+        const double station = combined.track_station_meters[index];
+        const double weight = Smoothstep5((station - 40.0) / 20.0);
+        const double expected = (1.0 - weight) * aar.lateral_displacement_meters[index] +
+            weight * erri.lateral_displacement_meters[index];
+        Require(std::abs(combined.lateral_displacement_meters[index] - expected) < 1.0e-15,
+                "composite displacement differs from the weighted components");
+        Require(std::abs(resolved.field->LateralDisplacementMeters(station) - expected) < 1.0e-15,
+                "composite source changed a field knot");
+    }
+    const double station = 50.03;
+    const double half_width = 1.0e-4;
+    const double difference_slope =
+        (resolved.field->LateralDisplacementMeters(station + half_width) -
+         resolved.field->LateralDisplacementMeters(station - half_width)) / (2.0 * half_width);
+    Require(std::abs(resolved.field->LateralSlopeMetersPerMeter(station) - difference_slope) < 1.0e-10,
+            "composite slope is not the derivative of the combined field");
+    const auto& metadata = std::get<CompositeTrackIrregularityGenerationMetadata>(
+        *resolved.generated_metadata);
+    Require(metadata.components.size() == 2 && metadata.intervals.size() == 3,
+            "composite source lost component or interval metadata");
+    for (const auto& component : metadata.components) {
+        std::visit([&](const auto& value) {
+            Require(value.specification.realization_seed == specification.realization_seed,
+                    "composite source advanced a component seed");
+        }, component);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -272,5 +317,6 @@ int main(int argc, char* argv[]) {
     CheckFrozenSource(argv[1]);
     CheckGeneratedAarSource();
     CheckGeneratedErriSource();
+    CheckCompositeSource();
     return failures == 0 ? 0 : 1;
 }

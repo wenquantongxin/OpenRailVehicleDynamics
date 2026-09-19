@@ -7,6 +7,7 @@
 #include <variant>
 
 #include "orvd/track_irregularity/aar_track_irregularity_generator.h"
+#include "orvd/track_irregularity/composite_track_irregularity_generator.h"
 #include "orvd/track_irregularity/erri_b176_track_irregularity_generator.h"
 #include "orvd/wheel_rail_contact/track_irregularity_field.h"
 
@@ -30,16 +31,22 @@ struct GeneratedErriB176TrackIrregularityFieldSource {
     track_irregularity::ErriB176TrackIrregularityGenerationSpec specification;
 };
 
+struct GeneratedCompositeTrackIrregularityFieldSource {
+    track_irregularity::CompositeTrackIrregularityGenerationSpec specification;
+};
+
 /// Closed source choice. It deliberately does not admit an arbitrary measured
 /// series import or a mutable frozen-field transformation.
 using TrackIrregularityFieldSource =
     std::variant<FrozenTrackIrregularityFieldSource,
                  GeneratedAarTrackIrregularityFieldSource,
-                 GeneratedErriB176TrackIrregularityFieldSource>;
+                 GeneratedErriB176TrackIrregularityFieldSource,
+                 GeneratedCompositeTrackIrregularityFieldSource>;
 
 using GeneratedTrackIrregularityMetadata = std::variant<
     track_irregularity::AarTrackIrregularityGenerationMetadata,
-    track_irregularity::ErriB176TrackIrregularityGenerationMetadata>;
+    track_irregularity::ErriB176TrackIrregularityGenerationMetadata,
+    track_irregularity::CompositeTrackIrregularityGenerationMetadata>;
 
 /// One field ready for either vehicle assembly, plus generation identity when
 /// the selected source was a PSD realization. Frozen fields have no generated
