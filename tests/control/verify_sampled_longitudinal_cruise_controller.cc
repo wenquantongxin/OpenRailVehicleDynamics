@@ -66,7 +66,7 @@ SampledLongitudinalCruiseControllerConfig MakeConfig() {
 void CheckScalarCruiseCalculation() {
     const SampledLongitudinalCruiseController controller(MakeConfig());
     const SampledLongitudinalCruiseControllerState previous;
-    const auto first = controller.Step(9.0, previous);
+    const auto first = controller.Step(9.0, 10.0, previous);
     RequireNear(first.speed_error_meters_per_second, 1.0, 0.0,
                 "the target-minus-measurement speed error changed");
     RequireNear(first.next_state.speed_pi.integral, 0.1, 0.0,
@@ -78,7 +78,7 @@ void CheckScalarCruiseCalculation() {
                 previous.speed_pi.filtered_output == 0.0,
             "Step modified caller-owned state");
 
-    const auto second = controller.Step(10.0, first.next_state);
+    const auto second = controller.Step(10.0, 10.0, first.next_state);
     RequireNear(second.speed_error_meters_per_second, 0.0, 0.0,
                 "zero speed error was not preserved");
     RequireNear(second.next_state.speed_pi.integral, 0.1, 0.0,
@@ -89,9 +89,14 @@ void CheckScalarCruiseCalculation() {
 
     Require(Throws([&] {
                 (void)controller.Step(
-                    std::numeric_limits<double>::quiet_NaN(), previous);
+                    std::numeric_limits<double>::quiet_NaN(), 10.0, previous);
             }),
             "a non-finite measured speed was accepted");
+    const auto accelerating = controller.Step(10.0, 11.0, second.next_state);
+    RequireNear(accelerating.next_state.speed_pi.integral, 0.2, 1.0e-15,
+                "changing reference discarded accepted PI memory");
+    RequireNear(accelerating.requested_common_wheel_torque_newton_metres,
+                110.0, 1.0e-13, "changing reference did not reach the same PI");
     auto invalid = MakeConfig();
     invalid.target_speed_meters_per_second = 0.0;
     Require(Throws([&] {

@@ -623,6 +623,7 @@ void RequireExactNames(const std::vector<std::string>& actual,
     result.controller_result = controller.Step(
         observation.wheel_speeds
             .common_forward_circumferential_speed_meters_per_second,
+        controller.config().target_speed_meters_per_second,
         controller_state);
     if (differential_torque_callback) {
         const IrwSimpackRealtimeControlObservation control_observation{

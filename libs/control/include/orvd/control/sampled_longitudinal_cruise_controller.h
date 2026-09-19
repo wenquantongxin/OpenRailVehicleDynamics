@@ -46,8 +46,12 @@ class SampledLongitudinalCruiseController {
         return config_;
     }
 
+    /// The target belongs to this event. Fixed-speed callers pass
+    /// config().target_speed_meters_per_second;
+    /// changing it does not reset the caller-owned integral or output-filter memory.
     [[nodiscard]] SampledLongitudinalCruiseControllerResult Step(
         double measured_speed_meters_per_second,
+        double target_speed_meters_per_second,
         const SampledLongitudinalCruiseControllerState& previous_state) const;
 
    private:

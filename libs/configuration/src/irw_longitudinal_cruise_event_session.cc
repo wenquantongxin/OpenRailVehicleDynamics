@@ -224,6 +224,7 @@ IrwLongitudinalCruiseEventSession::ComputeCandidate(
     audit.controller_result = controller_.Step(
         audit.wheel_speed_observation
             .common_forward_wheel_circumferential_speed_meters_per_second,
+        controller_.config().target_speed_meters_per_second,
         controller_state_);
     audit.requested_wheel_torques_newton_metres.fill(
         audit.controller_result

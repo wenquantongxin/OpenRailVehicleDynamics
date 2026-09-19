@@ -40,13 +40,17 @@ SampledLongitudinalCruiseController::
 SampledLongitudinalCruiseControllerResult
 SampledLongitudinalCruiseController::Step(
     double measured_speed_meters_per_second,
+    double target_speed_meters_per_second,
     const SampledLongitudinalCruiseControllerState& previous_state) const {
     if (!std::isfinite(measured_speed_meters_per_second)) {
         Reject("measured_speed_meters_per_second must be finite");
     }
+    if (!std::isfinite(target_speed_meters_per_second)) {
+        Reject("target_speed_meters_per_second must be finite");
+    }
     SampledLongitudinalCruiseControllerResult result;
     result.speed_error_meters_per_second =
-        config_.target_speed_meters_per_second -
+        target_speed_meters_per_second -
         measured_speed_meters_per_second;
     const SampledFilteredPiResult pi_result = speed_pi_.Step(
         result.speed_error_meters_per_second,
