@@ -1383,3 +1383,10 @@ target_link_libraries(verify_resolved_startup_state_loading
 add_test(NAME verify_resolved_startup_state_loading
          COMMAND verify_resolved_startup_state_loading
              ${CMAKE_CURRENT_BINARY_DIR}/resolved-startup-state-fixtures)
+
+if(TARGET orvd_state_stream)
+    add_executable(verify_state_stream ../tools/state_stream/verify_state_stream.cc)
+    orvd_configure_first_party_target(verify_state_stream)
+    target_link_libraries(verify_state_stream PRIVATE orvd_state_stream)
+    add_test(NAME verify_state_stream COMMAND verify_state_stream)
+endif()

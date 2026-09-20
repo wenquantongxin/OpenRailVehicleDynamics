@@ -215,6 +215,11 @@ Linux 可显式构建并安装 `ORVD::simpack_realtime` 可选组件，以机械
 本机 SIMPACK Realtime 模型；默认产品及普通安装消费者不依赖 SIMPACK 或其专有 ABI。完整命令见
 [Linux 构建说明](docs/build_and_install/LINUX.md#可选-simpack-realtime-组件)。
 
+Linux另有默认关闭的接受态输出组件 `ORVD::state_stream`，通过
+`-DORVD_BUILD_STATE_STREAM=ON` 构建安装。它从公开多体运动学采集具名刚体位姿与速度，
+以非阻塞UDP供独立显示器使用；不要求ROS，不参与积分或控制同步。协议与独立Python接收示例见
+[state_stream](tools/state_stream/README.md)。
+
 Linux、Windows 与 macOS 的依赖安装、离线构建、测试及消费命令见
 [分平台构建与安装说明](docs/build_and_install/README.md)；离线源码包的内部结构见
 [依赖超级构建说明](distribution/dependencies/README.md)。架构决策与共享模块消费边界见

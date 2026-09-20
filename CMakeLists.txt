@@ -197,6 +197,17 @@ if(ORVD_BUILD_SIMPACK_REALTIME_TOOLS)
     list(APPEND ORVD_PRODUCT_MODULE_DIRECTORIES tools/simpack_realtime)
 endif()
 
+option(ORVD_BUILD_STATE_STREAM "Build the optional Linux UDP state stream component" OFF)
+set(ORVD_STATE_STREAM_COMPONENT_BUILT FALSE)
+if(ORVD_BUILD_STATE_STREAM)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "ORVD_BUILD_STATE_STREAM currently supports Linux senders")
+    endif()
+    add_subdirectory(tools/state_stream)
+    list(APPEND ORVD_PRODUCT_MODULE_DIRECTORIES tools/state_stream)
+    set(ORVD_STATE_STREAM_COMPONENT_BUILT TRUE)
+endif()
+
 # --- Installable package ---
 # The installable first-party targets form the documented surface. The
 # rigid-tree archive is exported only because a static modelling archive must
@@ -301,6 +312,15 @@ install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/OpenRailVehicleDynamicsConfigVersion.cmake"
         "${CMAKE_CURRENT_SOURCE_DIR}/cmake/OrvdPlatformToolchainBootstrap.cmake"
         DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+if(TARGET orvd_state_stream)
+    install(TARGETS orvd_state_stream EXPORT OpenRailVehicleDynamicsStateStreamTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(DIRECTORY tools/state_stream/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(EXPORT OpenRailVehicleDynamicsStateStreamTargets NAMESPACE ORVD::
+        DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
+    install(FILES tools/state_stream/README.md tools/state_stream/receive_state_stream.py
+        DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/OpenRailVehicleDynamics/state_stream")
+endif()
 install(FILES
         NOTICE
         external/drake_mbtree/LICENSE.TXT
