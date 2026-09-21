@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "irw_guidance_control_transaction.h"
-#include "simpack_realtime_instance.h"
+#include "orvd/simpack_realtime/simpack_realtime_instance.h"
 
 #include "orvd/configuration/load_wheel_drive_torque_command_conditioner.h"
 

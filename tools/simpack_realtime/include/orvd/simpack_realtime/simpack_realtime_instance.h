@@ -17,7 +17,7 @@ struct SimpackRealtimeInstanceConfiguration final {
     int verbose_level{0};
 };
 
-// One owning API-v2 direct-call session.
+// One owning SIMPACK Realtime direct-call session.
 //
 // Construction launches the solver, loads the model and captures its exact
 // input/output ABI. Destruction always calls SpckRtFinish and therefore releases

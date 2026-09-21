@@ -293,7 +293,7 @@ install(EXPORT OpenRailVehicleDynamicsTargets
         NAMESPACE ORVD::
         DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
 if(TARGET orvd_irw_simpack_realtime_runner)
-    install(TARGETS orvd_irw_simpack_realtime_runner
+    install(TARGETS orvd_irw_simpack_realtime_runner orvd_simpack_realtime_direct_call
             EXPORT OpenRailVehicleDynamicsSimpackRealtimeTargets
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

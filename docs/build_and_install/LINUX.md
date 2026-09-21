@@ -211,8 +211,8 @@ POSIX child resource accounting 和 `sched_setaffinity`。它不代表 Windows/m
 
 ## 可选 SIMPACK Realtime 组件
 
-该组件默认关闭，只在确有本机 SIMPACK 2021x Realtime SDK 时启用。低层直调 ABI 留在实现内部，
-安装面只导出高层 IRW 机械观测、四轴差动转矩回调和运行汇总：
+该组件默认关闭，只在确有本机 SIMPACK 2021x Realtime SDK 时启用。专有 ABI 留在实现内部；
+安装面提供高层 IRW 运行器和持有单个求解器实例的底层直调封装：
 
 ```sh
 cmake -S "$ORVD_SOURCE_ROOT" -B /absolute/path/to/simpack-build -G Ninja \
@@ -236,6 +236,12 @@ find_package(OpenRailVehicleDynamics CONFIG REQUIRED
              COMPONENTS simpack_realtime)
 target_link_libraries(my_closed_loop PRIVATE ORVD::simpack_realtime)
 ```
+
+需要自行安排控制交换时点的消费者可以链接同一组件中的
+`ORVD::simpack_realtime_direct_call`，包含
+`orvd/simpack_realtime/simpack_realtime_instance.h`。该封装提供具名输入／输出清单、
+初始化输入、启动、保持输入和推进接口，并管理求解器实例的释放；交换时点与模型内部步长
+由调用方和模型明确配置。高层运行器复用同一封装，其控制时序不变。
 
 只有构建 ORVD 时启用了该组件、安装包包含对应目标、且消费端能找到 `spck_rt.h` 和
 `linux64/libspck_rt.a` 时，请求才会成功。CMake 在非 Linux 宿主会直接拒绝构建选项。默认 ORVD

@@ -194,31 +194,9 @@ if(ORVD_ENABLE_SIMPACK_REALTIME_COMPARISON)
         message(FATAL_ERROR
             "The current SIMPACK Realtime direct-call adapter is Linux-only")
     endif()
-    find_package(Threads REQUIRED)
-    find_path(ORVD_SIMPACK_REALTIME_INCLUDE_DIRECTORY spck_rt.h
-        HINTS "${ORVD_SIMPACK_ROOT}/run/realtime"
-        NO_DEFAULT_PATH REQUIRED)
-    find_library(ORVD_SIMPACK_REALTIME_LIBRARY spck_rt
-        HINTS "${ORVD_SIMPACK_ROOT}/run/realtime/linux64"
-        NO_DEFAULT_PATH REQUIRED)
-    get_filename_component(ORVD_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-        ABSOLUTE)
-    set(ORVD_SIMPACK_REALTIME_TOOL_DIRECTORY
-        "${ORVD_SOURCE_ROOT}/tools/simpack_realtime")
-
-    add_library(irw_simpack_realtime_direct_call STATIC
-        "${ORVD_SIMPACK_REALTIME_TOOL_DIRECTORY}/simpack_realtime_instance.cc")
-    target_compile_features(irw_simpack_realtime_direct_call PUBLIC cxx_std_23)
-    set_target_properties(irw_simpack_realtime_direct_call
-        PROPERTIES CXX_EXTENSIONS OFF)
-    target_include_directories(irw_simpack_realtime_direct_call
-        PUBLIC "${ORVD_SIMPACK_REALTIME_TOOL_DIRECTORY}")
-    target_include_directories(irw_simpack_realtime_direct_call SYSTEM
-        PRIVATE "${ORVD_SIMPACK_REALTIME_INCLUDE_DIRECTORY}")
-    target_compile_definitions(irw_simpack_realtime_direct_call
-        PRIVATE SPCK_RT_API=2)
-    target_link_libraries(irw_simpack_realtime_direct_call
-        PRIVATE "${ORVD_SIMPACK_REALTIME_LIBRARY}" Threads::Threads rt m)
+    set(OpenRailVehicleDynamics_SIMPACK_ROOT "${ORVD_SIMPACK_ROOT}")
+    find_package(OpenRailVehicleDynamics CONFIG REQUIRED
+        COMPONENTS simpack_realtime)
 
     add_library(irw_single_curve_guidance_simpack_realtime_run STATIC
         irw_single_curve_guidance_simpack_realtime_run.cc)
@@ -231,7 +209,7 @@ if(ORVD_ENABLE_SIMPACK_REALTIME_COMPARISON)
     target_link_libraries(irw_single_curve_guidance_simpack_realtime_run
         PUBLIC irw_guidance_control_transaction
                irw_guidance_operating_point_schedules
-               irw_simpack_realtime_direct_call
+               ORVD::simpack_realtime_direct_call
                ORVD::configuration)
 
     add_executable(orvd_irw_r300_aar5_v60_normal_simpack_realtime
@@ -397,8 +375,6 @@ if(MSVC OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
             /W4 /permissive- /Zc:__cplusplus)
     endforeach()
     if(ORVD_ENABLE_SIMPACK_REALTIME_COMPARISON)
-        target_compile_options(irw_simpack_realtime_direct_call PRIVATE
-            /W4 /permissive- /Zc:__cplusplus)
         target_compile_options(irw_single_curve_guidance_simpack_realtime_run PRIVATE
             /W4 /permissive- /Zc:__cplusplus)
         target_compile_options(
@@ -457,8 +433,6 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
             -Wall -Wextra -Wpedantic)
     endforeach()
     if(ORVD_ENABLE_SIMPACK_REALTIME_COMPARISON)
-        target_compile_options(irw_simpack_realtime_direct_call PRIVATE
-            -Wall -Wextra -Wpedantic)
         target_compile_options(irw_single_curve_guidance_simpack_realtime_run PRIVATE
             -Wall -Wextra -Wpedantic)
         target_compile_options(
