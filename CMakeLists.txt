@@ -123,6 +123,9 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # --- Module graph, wired in as each module is implemented ---
 # Dependency direction: multibody_runtime + internal rigid tree
 #   -> multibody_model -> forces -> system_assembly -> integrators.
+# scene_observation reads multibody_model, forces and track_geometry to
+# produce renderer-independent scene data; scene_record writes and reads it
+# on disk. Neither is an upstream of any dynamics module.
 # Control owns state-explicit sampled algorithms, while actuation owns
 # state-explicit command-conditioning laws. Both are independent of vehicle
 # topology; configuration is their first typed asset consumer.
@@ -149,6 +152,8 @@ set(ORVD_PRODUCT_MODULE_DIRECTORIES
     libs/system_assembly
     libs/integrators
     libs/configuration
+    libs/scene_observation
+    libs/scene_record
     libs/equilibrium)
 foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${product_module_relative_path}/CMakeLists.txt")
@@ -225,6 +230,8 @@ set(ORVD_INSTALL_TARGETS
     orvd_forces
     orvd_system_assembly
     orvd_integrators
+    orvd_scene_observation
+    orvd_scene_record
     orvd_rigid_multibody_tree)
 install(TARGETS ${ORVD_INSTALL_TARGETS}
         EXPORT OpenRailVehicleDynamicsTargets
@@ -235,7 +242,7 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
 foreach(orvd_public_module
         control actuation track_geometry track_irregularity wheel_rail_contact
         configuration multibody_runtime multibody_model forces system_assembly
-        integrators)
+        integrators scene_observation scene_record)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

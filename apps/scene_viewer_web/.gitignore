@@ -1,0 +1,5 @@
+node_modules/
+dist/
+public/records/
+# Dependency pinning by integrity digest is not used in this repository.
+package-lock.json

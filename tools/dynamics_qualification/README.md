@@ -120,6 +120,20 @@ samples use dense output and do not become additional integrator stops. The
 destination must not already exist; a successful run publishes one complete
 directory atomically.
 
+The passive IRW runner accepts an optional `--scene-record` flag anywhere on its
+command line. It then also publishes `<OUTPUT_DIRECTORY>/scene_record/` through
+`ORVD::scene_record`: every rigid body's world-frame state at the same dense
+samples the observation replay already visits, the unwrapped spin angle of
+every independently rotating wheel (its revolute joint position, signed about
+the wheel's spin axis, so a display can choose the rotation branch between two
+samples more than half a turn apart), the carrier, interface and
+representative-body scalars of `observations.tsv`, the sampled line around the
+visited stations, and a verbatim copy of
+`vehicle_library/<vehicle>/visualization/visual_definition.json`. It adds no
+integrator stop and no RHS evaluation; `performance.json` reports its frame
+count and wall time separately. The default output is unchanged when the flag
+is absent.
+
 ## Controlled IRW event semantics
 
 The controller and torque-conditioner assets provide one common 10 ms event

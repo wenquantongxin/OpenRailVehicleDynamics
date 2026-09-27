@@ -1,0 +1,24 @@
+:root {
+  font-family: system-ui, "Noto Sans CJK SC", sans-serif;
+  color: #2b2722;
+  background: #f3ede4;
+}
+html, body, #root { margin: 0; height: 100%; }
+.layout { display: grid; grid-template-columns: 1fr 360px; height: 100%; }
+.stage { position: relative; min-width: 0; }
+.viewport { position: absolute; inset: 0; }
+.viewport canvas { display: block; width: 100%; height: 100%; }
+.panel { overflow: auto; padding: 12px 16px; background: #faf7f2; border-left: 1px solid #ddd5c8; font-size: 13px; }
+.panel h1 { font-size: 16px; margin: 4px 0 8px; }
+.panel h2 { font-size: 13px; margin: 14px 0 6px; color: #7a6f60; text-transform: uppercase; letter-spacing: 0.04em; }
+.status { color: #5b554c; }
+.picker input { display: block; margin-top: 4px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+button { background: #e0722a; color: #fff; border: 0; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+button:hover { background: #c9631f; }
+input[type="range"] { width: 100%; }
+.readouts { width: 100%; border-collapse: collapse; }
+.readouts td { padding: 2px 4px; border-bottom: 1px solid #ece5d9; font-variant-numeric: tabular-nums; }
+.readouts td:first-child { color: #5b554c; word-break: break-all; }
+.readouts td:last-child { text-align: right; white-space: nowrap; }
+.parts { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow: auto; }

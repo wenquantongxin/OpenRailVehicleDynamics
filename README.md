@@ -207,9 +207,12 @@ find_package(OpenRailVehicleDynamics CONFIG REQUIRED)
 target_link_libraries(my_vehicle_simulation PRIVATE ORVD::integrators)
 ```
 
-安装包默认导出 11 个按依赖层级组织的目标：`control`、`actuation`、`track_geometry`、
+安装包默认导出 13 个按依赖层级组织的目标：`control`、`actuation`、`track_geometry`、
 `track_irregularity`、`wheel_rail_contact`、`configuration`、`multibody_runtime`、
-`multibody_model`、`forces`、`system_assembly` 与 `integrators`，使用时添加 `ORVD::` 命名空间。
+`multibody_model`、`forces`、`system_assembly`、`integrators`，以及面向三维观察的
+`scene_observation`（刚体世界状态采样、车轮放置与线路采样）和 `scene_record`（可携带的场景
+记录读写），使用时添加 `ORVD::` 命名空间。`apps/scene_viewer_web/` 是读取场景记录的
+React + Three.js 回放器。
 
 Linux 可显式构建并安装 `ORVD::simpack_realtime` 可选组件，以机械观测和四轴差动转矩回调驱动
 本机 SIMPACK Realtime 模型；默认产品及普通安装消费者不依赖 SIMPACK 或其专有 ABI。完整命令见

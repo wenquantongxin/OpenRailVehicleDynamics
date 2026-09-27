@@ -33,7 +33,7 @@ target_include_directories(orvd_dynamics_qualification_support
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/libs/integrators/src>)
 
 target_link_libraries(orvd_dynamics_qualification_support
-    PUBLIC orvd_configuration orvd_integrators
+    PUBLIC orvd_configuration orvd_integrators orvd_scene_record
     PRIVATE OpenMP::OpenMP_CXX nlohmann_json::nlohmann_json)
 
 add_executable(orvd_gz18_dynamics_qualification

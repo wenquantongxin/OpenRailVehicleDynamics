@@ -1390,3 +1390,40 @@ if(TARGET orvd_state_stream)
     target_link_libraries(verify_state_stream PRIVATE orvd_state_stream)
     add_test(NAME verify_state_stream COMMAND verify_state_stream)
 endif()
+
+# The renderer-independent scene observation: free-body sampling against a
+# stated pose, wheel placement from a stated profile basis and datum, and a
+# line with a closed-form centerline and frame.
+add_executable(verify_scene_observation
+    scene_observation/body_state_header_self_containment.cc
+    scene_observation/scalar_definition_header_self_containment.cc
+    scene_observation/scene_frame_header_self_containment.cc
+    scene_observation/scene_topology_header_self_containment.cc
+    scene_observation/track_sampling_header_self_containment.cc
+    scene_observation/wheel_spin_sampling_header_self_containment.cc
+    scene_observation/verify_scene_observation.cc)
+orvd_configure_first_party_target(verify_scene_observation)
+target_link_libraries(verify_scene_observation PRIVATE orvd_scene_observation)
+add_test(NAME verify_scene_observation COMMAND verify_scene_observation)
+
+# The bundled IRW scenario as a scene: eight wheel datums derived from the
+# contact constants land on the axle at the signed lateral datum of each side.
+add_executable(verify_irw_scene_topology
+    scene_observation/verify_irw_scene_topology.cc)
+orvd_configure_first_party_target(verify_irw_scene_topology)
+target_link_libraries(verify_irw_scene_topology
+    PRIVATE orvd_scene_observation orvd_configuration)
+add_test(NAME verify_irw_scene_topology
+         COMMAND verify_irw_scene_topology ${CMAKE_SOURCE_DIR})
+
+# A scene record written from stated values reads back bit for bit; an
+# unclosed record is refused; the writer rejects what it must.
+add_executable(verify_scene_record_round_trip
+    scene_record/scene_record_writer_header_self_containment.cc
+    scene_record/scene_record_reader_header_self_containment.cc
+    scene_record/verify_scene_record_round_trip.cc)
+orvd_configure_first_party_target(verify_scene_record_round_trip)
+target_link_libraries(verify_scene_record_round_trip PRIVATE orvd_scene_record)
+add_test(NAME verify_scene_record_round_trip
+         COMMAND verify_scene_record_round_trip
+             ${CMAKE_CURRENT_BINARY_DIR}/scene-record-fixtures)

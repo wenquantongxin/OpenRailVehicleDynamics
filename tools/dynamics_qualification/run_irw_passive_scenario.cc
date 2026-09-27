@@ -1,8 +1,10 @@
 #include <charconv>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <string_view>
+#include <vector>
 
 #include "irw_passive_scenario_runs.h"
 
@@ -26,12 +28,27 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    // `--scene-record` may appear anywhere; it is removed before the
+    // positional arguments are read and publishes `<OUTPUT>/scene_record/`.
+    bool publish_scene_record = false;
+    std::vector<char*> positional;
+    positional.reserve(static_cast<std::size_t>(argc));
+    for (int index = 0; index < argc; ++index) {
+        if (std::string_view(argv[index]) == "--scene-record") {
+            publish_scene_record = true;
+        } else {
+            positional.push_back(argv[index]);
+        }
+    }
+    argc = static_cast<int>(positional.size());
+    argv = positional.data();
     if (argc != 10 && argc != 11) {
         std::fprintf(
             stderr,
             "usage: orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID_OR_NONE OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS [TIME_INTEGRATOR_QUALIFICATION_CASE]\n"
+            "SAMPLE_PERIOD_NS [TIME_INTEGRATOR_QUALIFICATION_CASE] "
+            "[--scene-record]\n"
             "SCENARIO: irw_r300_no_irregularity_v60_passive, "
             "irw_r300_aar5_v60_passive, irw_straight_aar5_v80_passive, "
             "irw_r600_aar5_v80_passive, irw_r800_aar5_v100_passive, "
@@ -52,6 +69,7 @@ int main(int argc, char** argv) {
         config.track_irregularity_identifier = argv[6];
     }
     config.output_directory = argv[7];
+    config.publish_scene_record = publish_scene_record;
     if (!ParsePositiveInteger(argv[8], &config.duration_nanoseconds) ||
         !ParsePositiveInteger(argv[9], &config.sample_period_nanoseconds)) {
         std::fprintf(stderr,
@@ -80,6 +98,11 @@ int main(int argc, char** argv) {
             summary.observation_wall_seconds,
             summary.endpoint_diagnostics_wall_seconds,
             summary.data_and_metadata_write_wall_seconds);
+        if (config.publish_scene_record) {
+            std::printf("scene record: %zu frames in %.6f s\n",
+                        summary.scene_record_frame_count,
+                        summary.scene_record_wall_seconds);
+        }
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "IRW passive scenario run failed: %s\n",

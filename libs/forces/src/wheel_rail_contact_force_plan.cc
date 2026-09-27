@@ -190,7 +190,9 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
     : model_(&model),
       line_(std::move(line)),
       personality_(std::move(personality)),
-      track_irregularity_(std::move(track_irregularity)) {
+      track_irregularity_(std::move(track_irregularity)),
+      carrier_definitions_(carriers),
+      interface_definitions_(interfaces) {
     if (!model.is_finalized()) {
         throw std::logic_error(
             "WheelRailContactForcePlan requires a finalized multibody model");
@@ -323,6 +325,22 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
                    "' has no wheel-rail interface");
         }
     }
+}
+
+const WheelRailContactCarrierDefinition&
+WheelRailContactForcePlan::carrier_definition(int index) const {
+    if (index < 0 || index >= carrier_count()) {
+        Reject("the requested carrier index is out of range");
+    }
+    return carrier_definitions_[static_cast<std::size_t>(index)];
+}
+
+const WheelRailContactInterfaceDefinition&
+WheelRailContactForcePlan::interface_definition(int index) const {
+    if (index < 0 || index >= interface_count()) {
+        Reject("the requested interface index is out of range");
+    }
+    return interface_definitions_[static_cast<std::size_t>(index)];
 }
 
 std::string_view WheelRailContactForcePlan::carrier_name(int index) const {

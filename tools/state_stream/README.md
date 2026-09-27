@@ -13,6 +13,8 @@ target_link_libraries(your_target PRIVATE ORVD::state_stream)
 ```
 
 公开接口见 [`state_stream.h`](include/orvd/state_stream/state_stream.h)。
+刚体状态值类型、采样器与标量定义来自公共库 `ORVD::scene_observation`
+（`orvd/scene_observation/body_state.h`、`scalar_definition.h`）；本组件只承担编码、分片与 UDP 发送。
 调用方负责采样时机、输出内容与目标地址；组件不介入控制或积分时序。
 
 ## 收发边界

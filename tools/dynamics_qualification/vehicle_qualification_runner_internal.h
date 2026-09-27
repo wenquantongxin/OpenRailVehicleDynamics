@@ -38,6 +38,10 @@ struct QualificationRunConfiguration final {
     std::optional<QualificationSampleRefinement> local_sample_refinement;
     std::optional<TimeIntegratorQualificationCase>
         time_integrator_qualification_case;
+    // Publishes `<output>/scene_record/` from the same dense samples and
+    // observation context the qualification observations use. It adds no
+    // integrator stop and leaves every existing artefact unchanged.
+    bool publish_scene_record{false};
 };
 
 // A closed, private recipe used only by the two migration executables. It is

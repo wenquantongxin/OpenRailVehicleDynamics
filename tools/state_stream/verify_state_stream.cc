@@ -1,48 +1,24 @@
 #include "orvd/state_stream/state_stream.h"
 
-#include <bit>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 
-#include "orvd/multibody_model/multibody_evaluation_context.h"
-
+// The wire protocol and sender boundary of the optional UDP component. Body
+// sampling itself is verified with the public scene_observation library.
 int main(int argc, char** argv) {
     using namespace orvd;
     try {
-        multibody_model::MultibodyModel model;
-        multibody_runtime::RigidBodyInertiaParameters inertia;
-        inertia.mass_kilograms = 1.0;
-        inertia.unit_inertia_moments = Eigen::Vector3d(0.01, 0.02, 0.02);
-        const auto body = model.AddRigidBody("test_body", inertia);
-        model.DeclareFreeBody(body);
-        model.Finalize();
-        auto context = model.CreateDefaultContext();
-        Eigen::VectorXd q = Eigen::VectorXd::Zero(model.num_generalized_positions());
-        q[0] = std::cos(0.2);
-        q[3] = std::sin(0.2);
-        q.segment<3>(4) = Eigen::Vector3d(1.5, -2.25, 0.75);
-        model.SetGeneralizedPositions(context.get(), q);
-        Eigen::VectorXd v = Eigen::VectorXd::Zero(model.num_generalized_velocities());
-        const auto range = model.GetFreeBodyVelocityRange(body);
-        v.segment<3>(range.start()) = Eigen::Vector3d(0.3, -0.7, 1.2);
-        v.segment<3>(range.start() + 3) = Eigen::Vector3d(2.0, 3.0, -4.0);
-        model.SetGeneralizedVelocities(context.get(), v);
-        state_stream::BodyStateSampler sampler(model);
-        const auto states = sampler.Sample(*context);
-        if (sampler.names() != std::vector<std::string>{"test_body"} ||
-            states.size() != 1 || states[0].position_meters != std::array<double, 3>{1.5, -2.25, 0.75} ||
-            std::abs(states[0].orientation_wxyz[0] - std::cos(0.2)) > 1e-14 ||
-            std::abs(states[0].orientation_wxyz[3] - std::sin(0.2)) > 1e-14)
-            throw std::runtime_error("named sampling differs from the stated free-body pose");
-        if (states[0].angular_velocity_radians_per_second != std::array<double, 3>{0.3, -0.7, 1.2} ||
-            states[0].linear_velocity_meters_per_second != std::array<double, 3>{2.0, 3.0, -4.0})
-            throw std::runtime_error("angular and origin-linear velocity slots differ");
-        std::vector<state_stream::BodyState> many(25, states[0]);
+        scene_observation::BodyState state;
+        state.position_meters = {1.5, -2.25, 0.75};
+        state.orientation_wxyz = {std::cos(0.2), 0.0, 0.0, std::sin(0.2)};
+        state.angular_velocity_radians_per_second = {0.3, -0.7, 1.2};
+        state.linear_velocity_meters_per_second = {2.0, 3.0, -4.0};
+        std::vector<scene_observation::BodyState> many(25, state);
         many[0].linear_velocity_meters_per_second[0] = -0.0;
-        state_stream::ScalarValues scalars;
+        scene_observation::ScalarValues scalars;
         scalars.values.assign(44, 0.0);
         scalars.statuses.assign(44, 1);
         scalars.values[0] = -0.0;
@@ -69,6 +45,11 @@ int main(int argc, char** argv) {
         }
         if (packets.size() != 3 || recovered != payload)
             throw std::runtime_error("fragmentation changed payload");
+        const std::string description = state_stream::UdpStateStream::Describe(
+            {"test_body"}, "world", {{"speed", "m/s", "world", "speed", "sampled", "instantaneous"}});
+        if (description.find("orvd.state-stream") == std::string::npos ||
+            description.find("\"speed\"") == std::string::npos)
+            throw std::runtime_error("description lost its schema or scalar names");
         bool invalid_rejected = false;
         try { state_stream::UdpStateStream invalid({"127.0.0.1:70000"}); }
         catch (const std::invalid_argument&) { invalid_rejected = true; }
@@ -81,7 +62,7 @@ int main(int argc, char** argv) {
                 if (!out) throw std::runtime_error("fixture write failed");
             }
         }
-        std::puts("state_stream sampling, endian encoding and fragments passed");
+        std::puts("state_stream endian encoding, fragments and description passed");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

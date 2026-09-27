@@ -14,7 +14,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <Eigen/Geometry>
 #include <nlohmann/json.hpp>
 
 namespace orvd::state_stream {
@@ -30,35 +29,10 @@ void Real(std::vector<std::uint8_t>& out, double value) {
     static_assert(sizeof(double) == 8 && std::numeric_limits<double>::is_iec559);
     Unsigned(out, std::bit_cast<std::uint64_t>(value), 8);
 }
-std::array<double, 3> Triple(const Eigen::Vector3d& value) {
-    return {value.x(), value.y(), value.z()};
-}
 }  // namespace
 
-BodyStateSampler::BodyStateSampler(const multibody_model::MultibodyModel& model) : model_(&model) {
-    for (int i = 0; i < model.num_rigid_bodies(); ++i) {
-        const auto body = model.GetRigidBody(i);
-        bodies_.push_back(body);
-        names_.emplace_back(model.GetRigidBodyName(body));
-    }
-}
-
-std::vector<BodyState> BodyStateSampler::Sample(
-    const multibody_model::MultibodyEvaluationContext& context) const {
-    std::vector<BodyState> values;
-    values.reserve(bodies_.size());
-    for (const auto body : bodies_) {
-        const auto pose = model_->CalcPoseInWorld(context, body);
-        const Eigen::Quaterniond q(pose.rotation());
-        const auto velocity = model_->CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(context, body);
-        values.push_back({Triple(pose.translation()), {q.w(), q.x(), q.y(), q.z()},
-            Triple(velocity.translational_velocity_at_frame_origin_meters_per_second()),
-            Triple(velocity.angular_velocity_radians_per_second())});
-    }
-    return values;
-}
-
-std::vector<std::uint8_t> EncodeState(std::span<const BodyState> bodies, const ScalarValues& scalars) {
+std::vector<std::uint8_t> EncodeState(std::span<const scene_observation::BodyState> bodies,
+                                      const scene_observation::ScalarValues& scalars) {
     if (bodies.size() > std::numeric_limits<std::uint32_t>::max() ||
         scalars.values.size() > std::numeric_limits<std::uint32_t>::max())
         throw std::length_error("state stream count exceeds wire representation");
@@ -166,7 +140,7 @@ UdpStateStream::UdpStateStream(const std::vector<std::string>& destinations)
 UdpStateStream::~UdpStateStream() = default;
 
 std::string UdpStateStream::Describe(const std::vector<std::string>& names, const std::string& world_frame,
-                                    const std::vector<ScalarDefinition>& scalars) {
+                                    const std::vector<scene_observation::ScalarDefinition>& scalars) {
     auto definitions = nlohmann::json::array();
     for (const auto& field : scalars) {
         definitions.push_back({{"name", field.name}, {"unit", field.unit},
@@ -186,8 +160,9 @@ void UdpStateStream::PublishDescription(std::uint64_t sequence, double time, con
     implementation_->Send(1, sequence, time, std::span(
         reinterpret_cast<const std::uint8_t*>(description.data()), description.size()));
 }
-void UdpStateStream::PublishState(std::uint64_t sequence, double time, std::span<const BodyState> bodies,
-                                 const ScalarValues& scalars) {
+void UdpStateStream::PublishState(std::uint64_t sequence, double time,
+                                 std::span<const scene_observation::BodyState> bodies,
+                                 const scene_observation::ScalarValues& scalars) {
     const auto payload = EncodeState(bodies, scalars);
     ++implementation_->statistics.attempted_state_frames;
     implementation_->Send(2, sequence, time, payload);

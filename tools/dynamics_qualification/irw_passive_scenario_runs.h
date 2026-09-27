@@ -59,6 +59,7 @@ struct IrwPassiveScenarioRunConfiguration final {
     std::int64_t sample_period_nanoseconds{};
     std::optional<TimeIntegratorQualificationCase>
         time_integrator_qualification_case;
+    bool publish_scene_record{false};
 };
 
 // Runs one passive IRW qualification in a private assembled system. A

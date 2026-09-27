@@ -253,6 +253,22 @@ class WheelRailContactForcePlan {
     [[nodiscard]] std::string_view interface_name(int index) const;
     [[nodiscard]] double initial_projection_station_meters(int index) const;
 
+    // The frozen definitions this plan was constructed from, in plan order.
+    // They name the station-reference body, the wheel body, the side and the
+    // non-spinning wheel-profile basis, which a scene observer needs to place
+    // a wheel on its axle without repeating a vehicle's naming convention.
+    [[nodiscard]] const WheelRailContactCarrierDefinition& carrier_definition(
+        int index) const;
+    [[nodiscard]] const WheelRailContactInterfaceDefinition&
+    interface_definition(int index) const;
+
+    // The fixed wheel/rail placement constants of one side: rail datum,
+    // wheel lateral datum and nominal rolling radius.
+    [[nodiscard]] const wheel_rail_contact::WheelRailPoseConstants&
+    pose_constants(wheel_rail_contact::WheelSide side) const {
+        return personality_->pose_constants(side);
+    }
+
     [[nodiscard]] std::unique_ptr<WheelRailContactForceWorkspace>
     CreateWorkspace() const;
 
@@ -337,6 +353,8 @@ class WheelRailContactForcePlan {
         track_irregularity_;
     std::vector<CarrierBinding> carriers_;
     std::vector<InterfaceBinding> interfaces_;
+    std::vector<WheelRailContactCarrierDefinition> carrier_definitions_;
+    std::vector<WheelRailContactInterfaceDefinition> interface_definitions_;
 };
 
 }  // namespace orvd::forces

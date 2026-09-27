@@ -28,6 +28,11 @@ struct QualificationRunSummary final {
     std::size_t sample_count{};
     double advance_wall_seconds{};
     double observation_wall_seconds{};
+    // Zero when no scene record was requested. The scene export runs inside
+    // the observation replay, so its time is also contained in
+    // observation_wall_seconds.
+    std::size_t scene_record_frame_count{};
+    double scene_record_wall_seconds{};
     double endpoint_diagnostics_wall_seconds{};
     double data_and_metadata_write_wall_seconds{};
     double endpoint_generalized_force_residual_inf_norm{};

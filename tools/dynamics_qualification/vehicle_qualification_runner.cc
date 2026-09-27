@@ -10,7 +10,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <memory>
+#include <numbers>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -46,6 +49,12 @@
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_model.h"
+#include "orvd/scene_observation/body_state.h"
+#include "orvd/scene_observation/scene_frame.h"
+#include "orvd/scene_observation/scene_topology.h"
+#include "orvd/scene_observation/track_sampling.h"
+#include "orvd/scene_observation/wheel_spin_sampling.h"
+#include "orvd/scene_record/scene_record_writer.h"
 #include "orvd/track_geometry/track_geometry.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 #include "system_continuous_state_integration_access.h"
@@ -405,6 +414,195 @@ MakeAdvancer(const configuration::AssembledVehicleSystem& assembled,
                   "representative-body lateral position");
     RequireFinite(observation.yaw_radians, "representative-body yaw");
     return observation;
+}
+
+// The optional scene record: the same dense samples and observation context
+// the qualification observes, sampled once more as world-frame body states and
+// a few named scalars. It adds no integrator stop and no RHS evaluation.
+struct SceneRecordExport final {
+    SceneRecordExport(const configuration::AssembledVehicleSystem& assembled,
+                      const std::filesystem::path& directory,
+                      scene_observation::SceneTopology topology,
+                      std::vector<scene_observation::ScalarDefinition>
+                          scalar_definitions,
+                      std::string visual_definition_json)
+        : sampler(assembled.model()),
+          spin_sampler(assembled.model(), topology),
+          wheel_body_slots(ResolveWheelBodySlots(topology)),
+          writer(directory, std::move(topology),
+                 std::move(scalar_definitions),
+                 std::move(visual_definition_json),
+                 spin_sampler.available()) {}
+
+    [[nodiscard]] static std::vector<std::size_t> ResolveWheelBodySlots(
+        const scene_observation::SceneTopology& topology) {
+        std::vector<std::size_t> slots;
+        for (const auto& wheel : topology.wheel_placements) {
+            for (std::size_t slot = 0; slot < topology.bodies.size(); ++slot) {
+                if (topology.bodies[slot].name == wheel.wheel_body_name) {
+                    slots.push_back(slot);
+                    break;
+                }
+            }
+        }
+        return slots;
+    }
+
+    scene_observation::BodyStateSampler sampler;
+    scene_observation::WheelSpinAngleSampler spin_sampler;
+    std::vector<std::size_t> wheel_body_slots;
+    scene_record::SceneRecordWriter writer;
+    // The largest wheel rotation, in radians, that the recorded angular
+    // velocities imply between two consecutive samples. Above a half turn a
+    // display cannot pick the rotation branch from the orientations alone.
+    double maximum_wheel_rotation_between_samples_radians{0.0};
+    double previous_sample_time_seconds{0.0};
+    double minimum_carrier_station_meters{
+        std::numeric_limits<double>::infinity()};
+    double maximum_carrier_station_meters{
+        -std::numeric_limits<double>::infinity()};
+    double wall_seconds{0.0};
+};
+
+[[nodiscard]] std::string ReadVisualDefinitionText(
+    const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::in | std::ios::binary);
+    if (!input) {
+        Reject("the scene record needs the parametric visual definition '" +
+               path.string() + "', which could not be opened");
+    }
+    std::ostringstream text;
+    text << input.rdbuf();
+    return text.str();
+}
+
+[[nodiscard]] std::vector<scene_observation::ScalarDefinition>
+MakeSceneScalarDefinitions(
+    const configuration::AssembledVehicleSystem& assembled,
+    const VehicleQualificationRecipe& recipe) {
+    using scene_observation::ScalarDefinition;
+    constexpr const char* kDenseSample =
+        "dense integrator sample replayed in a private observation context";
+    constexpr const char* kCarrierTrackFrame =
+        "Track-T at the body's projected station; +y right, +z down";
+    std::vector<ScalarDefinition> definitions;
+    const auto* contact_plan = assembled.contact_force_plan();
+    const auto add_track_coordinates = [&](const std::string& body) {
+        definitions.push_back(ScalarDefinition{
+            body + ".track_station_meters", "m", "track inertial frame",
+            "planar projected track station of the body origin",
+            "seeded local centerline projection", kDenseSample});
+        definitions.push_back(ScalarDefinition{
+            body + ".lateral_meters", "m", kCarrierTrackFrame,
+            "lateral position of the body origin",
+            "body origin expressed in Track-T", kDenseSample});
+        definitions.push_back(ScalarDefinition{
+            body + ".yaw_radians", "rad", kCarrierTrackFrame,
+            "yaw of the body about the track vertical",
+            "X-Z-Y roll-yaw-pitch resolution of R_TB in the ORVD body basis",
+            kDenseSample});
+    };
+    for (int carrier = 0; carrier < contact_plan->carrier_count(); ++carrier) {
+        add_track_coordinates(std::string(contact_plan->carrier_name(carrier)));
+    }
+    for (int interface = 0; interface < contact_plan->interface_count();
+         ++interface) {
+        const std::string name(contact_plan->interface_name(interface));
+        definitions.push_back(ScalarDefinition{
+            name + ".contact_patch_count", "1", "wheel-rail contact evaluation",
+            "number of loaded contact patches",
+            "wheel-rail contact evaluated at the sample state", kDenseSample});
+        definitions.push_back(ScalarDefinition{
+            name + ".vertical_support_force_on_wheel_newtons", "N",
+            "Track-T at the carrier projection station; positive upward "
+            "support",
+            "vertical support force on the wheel",
+            "minus the z component of the patch force total", kDenseSample});
+        definitions.push_back(ScalarDefinition{
+            name + ".normal_force_newtons", "N", "patch normal directions",
+            "total normal force on the wheel", "sum over loaded patches",
+            kDenseSample});
+    }
+    for (const std::string_view body : recipe.representative_body_names) {
+        add_track_coordinates(std::string(body));
+    }
+    return definitions;
+}
+
+void FillSceneScalarValues(const QualificationObservation& observation,
+                           scene_observation::ScalarValues* values) {
+    values->values.clear();
+    for (const CarrierObservation& carrier : observation.carriers) {
+        values->values.push_back(carrier.track_station_meters);
+        values->values.push_back(carrier.lateral_meters);
+        values->values.push_back(carrier.yaw_radians);
+    }
+    for (const QualificationInterfaceObservation& interface :
+         observation.interfaces) {
+        values->values.push_back(
+            static_cast<double>(interface.contact_patch_count));
+        values->values.push_back(
+            interface.vertical_support_force_on_wheel_newtons);
+        values->values.push_back(interface.normal_force_newtons);
+    }
+    for (const RepresentativeBodyObservation& body :
+         observation.representative_bodies) {
+        values->values.push_back(body.track_station_meters);
+        values->values.push_back(body.lateral_meters);
+        values->values.push_back(body.yaw_radians);
+    }
+    values->statuses.assign(
+        values->values.size(),
+        static_cast<std::uint8_t>(scene_observation::ScalarStatus::kValid));
+}
+
+[[nodiscard]] scene_observation::SamplePhase SceneSamplePhase(
+    std::size_t sample, std::size_t sample_count) {
+    if (sample == 0) {
+        return scene_observation::SamplePhase::kInitialAcceptedState;
+    }
+    if (sample + 1 == sample_count) {
+        return scene_observation::SamplePhase::kAcceptedEndpoint;
+    }
+    return scene_observation::SamplePhase::kDenseIntermediateSample;
+}
+
+// Samples the line over the stations the carriers actually visited plus a
+// margin that covers the vehicle's own length, so the short record carries
+// its own track without describing the whole line.
+void WriteSceneTrack(const configuration::AssembledVehicleSystem& assembled,
+                     SceneRecordExport* scene_export) {
+    constexpr double kMarginMeters = 25.0;
+    constexpr double kSpacingMeters = 0.5;
+    const auto* contact_plan = assembled.contact_force_plan();
+    const double begin =
+        scene_export->minimum_carrier_station_meters - kMarginMeters;
+    const double end =
+        scene_export->maximum_carrier_station_meters + kMarginMeters;
+    if (!std::isfinite(begin) || !std::isfinite(end) || !(end > begin)) {
+        Reject("the scene record observed no finite carrier station range");
+    }
+    const std::size_t count =
+        static_cast<std::size_t>(std::floor((end - begin) / kSpacingMeters)) +
+        1U;
+    std::vector<double> stations(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        stations[index] =
+            begin + static_cast<double>(index) * kSpacingMeters;
+    }
+    const auto& left =
+        contact_plan->pose_constants(wheel_rail_contact::WheelSide::kLeft);
+    const auto& right =
+        contact_plan->pose_constants(wheel_rail_contact::WheelSide::kRight);
+    scene_observation::TrackSampleTable table;
+    scene_observation::SampleTrackGeometry(
+        contact_plan->track_geometry(), stations,
+        scene_observation::RailDatumPlacement{
+            left.rail_lateral_datum_meters, left.rail_vertical_datum_meters},
+        scene_observation::RailDatumPlacement{
+            right.rail_lateral_datum_meters, right.rail_vertical_datum_meters},
+        table);
+    scene_export->writer.WriteTrackSampleTable(table);
 }
 
 void RecordBoundaryUse(
@@ -932,6 +1130,10 @@ void WritePerformance(const std::filesystem::path& path,
            << summary.advance_wall_seconds << ",\n"
            << "  \"observation_wall_seconds\": "
            << summary.observation_wall_seconds << ",\n"
+           << "  \"scene_record_frame_count\": "
+           << summary.scene_record_frame_count << ",\n"
+           << "  \"scene_record_wall_seconds\": "
+           << summary.scene_record_wall_seconds << ",\n"
            << "  \"endpoint_diagnostics_wall_seconds\": "
            << summary.endpoint_diagnostics_wall_seconds << ",\n"
            << "  \"data_and_metadata_write_wall_seconds\": "
@@ -1205,6 +1407,19 @@ QualificationRunSummary RunVehicleQualification(
                                     recipe.representative_body_names[index]);
     }
 
+    std::optional<SceneRecordExport> scene_export;
+    if (run_configuration.publish_scene_record) {
+        const std::filesystem::path visual_definition_path =
+            resolved_run_configuration.vehicle_definition_path.parent_path() /
+            "visualization" / "visual_definition.json";
+        scene_export.emplace(
+            assembled, output_directory.working_path() / "scene_record",
+            scene_observation::DescribeSceneTopology(
+                assembled.model(), assembled.contact_force_plan()),
+            MakeSceneScalarDefinitions(assembled, recipe),
+            ReadVisualDefinitionText(visual_definition_path));
+    }
+
     std::vector<QualificationObservation> observations;
     observations.reserve(sample_clock.sample_count());
     std::vector<QualificationPatchObservation> patch_observations;
@@ -1328,6 +1543,68 @@ QualificationRunSummary RunVehicleQualification(
                           &before_definition_interval,
                           &after_definition_interval);
         observations.push_back(observation);
+        if (scene_export.has_value()) {
+            const Clock::time_point scene_begin = Clock::now();
+            scene_observation::SceneFrame frame;
+            frame.identity.time_seconds = sample_times[sample];
+            frame.identity.time_nanoseconds =
+                static_cast<std::int64_t>(observation.time_nanoseconds);
+            frame.identity.sample_index = static_cast<std::int64_t>(sample);
+            frame.identity.phase =
+                SceneSamplePhase(sample, sample_clock.sample_count());
+            frame.bodies = scene_export->sampler.Sample(component.context());
+            if (scene_export->spin_sampler.available()) {
+                frame.wheel_spin_angles_radians.resize(
+                    scene_export->spin_sampler.wheel_count());
+                scene_export->spin_sampler.Sample(
+                    component.context(), frame.wheel_spin_angles_radians);
+            }
+            FillSceneScalarValues(observation, &frame.scalars);
+            if (sample > 0) {
+                const double interval =
+                    sample_times[sample] -
+                    scene_export->previous_sample_time_seconds;
+                for (const std::size_t slot : scene_export->wheel_body_slots) {
+                    const auto& omega =
+                        frame.bodies[slot].angular_velocity_radians_per_second;
+                    const double rate = std::sqrt(omega[0] * omega[0] +
+                                                  omega[1] * omega[1] +
+                                                  omega[2] * omega[2]);
+                    scene_export->maximum_wheel_rotation_between_samples_radians =
+                        std::max(scene_export
+                                     ->maximum_wheel_rotation_between_samples_radians,
+                                 rate * interval);
+                }
+            }
+            scene_export->previous_sample_time_seconds = sample_times[sample];
+            scene_export->writer.WriteFrame(frame);
+            for (const CarrierObservation& carrier : observation.carriers) {
+                scene_export->minimum_carrier_station_meters =
+                    std::min(scene_export->minimum_carrier_station_meters,
+                             carrier.track_station_meters);
+                scene_export->maximum_carrier_station_meters =
+                    std::max(scene_export->maximum_carrier_station_meters,
+                             carrier.track_station_meters);
+            }
+            scene_export->wall_seconds +=
+                ElapsedSeconds(scene_begin, Clock::now());
+        }
+    }
+    if (scene_export.has_value()) {
+        const Clock::time_point scene_begin = Clock::now();
+        WriteSceneTrack(assembled, &*scene_export);
+        scene_export->writer.Close();
+        scene_export->wall_seconds += ElapsedSeconds(scene_begin, Clock::now());
+        if (!scene_export->spin_sampler.available() &&
+            scene_export->maximum_wheel_rotation_between_samples_radians >
+                0.5 * std::numbers::pi) {
+            std::fprintf(
+                stderr,
+                "warning: the scene record samples wheel orientations up to "
+                "%.3f rad apart and carries no unwrapped spin angles; a display "
+                "cannot choose the spin branch between such samples\n",
+                scene_export->maximum_wheel_rotation_between_samples_radians);
+        }
     }
     const Clock::time_point observation_end = Clock::now();
 
@@ -1353,6 +1630,10 @@ QualificationRunSummary RunVehicleQualification(
         ElapsedSeconds(advance_begin, advance_end);
     summary.observation_wall_seconds =
         ElapsedSeconds(observation_begin, observation_end);
+    if (scene_export.has_value()) {
+        summary.scene_record_frame_count = scene_export->writer.frame_count();
+        summary.scene_record_wall_seconds = scene_export->wall_seconds;
+    }
     summary.endpoint_diagnostics_wall_seconds = ElapsedSeconds(
         endpoint_diagnostics_begin, endpoint_diagnostics_end);
     summary.endpoint_generalized_force_residual_inf_norm =
