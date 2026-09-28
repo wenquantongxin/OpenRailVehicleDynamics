@@ -65,8 +65,6 @@ def wrapper_options(vehicle_recipe: str) -> list[str]:
         "/bin/true",
         "--identity-output",
         "/tmp/orvd-unused-qualification-identity.json",
-        "--orvd-revision",
-        "test",
         "--build-type",
         "Release",
         "--compiler-identity",

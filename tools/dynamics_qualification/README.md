@@ -198,11 +198,14 @@ executable or
 guidance executable. The default is the GZ18 runner.
 
 The wrapper records outer wall time, child CPU time, peak resident memory,
-executable digest, compiler/build identity, effective OpenMP environment
+the executable's actual path, compiler/build identity, effective OpenMP environment
 (including active-level and legacy nested controls), complete runner arguments,
-output directory, and the CPU affinity accepted by the kernel. This is execution
-provenance for a local experiment; its digest is not a physical acceptance
-criterion.
+output directory, and the CPU affinity accepted by the kernel. It neither accepts
+a Git revision argument nor computes or publishes executable hashes. Run inputs,
+resolved configuration, interface contracts, and build/run checks establish the
+comparison conditions. Any separately retained experimental notes containing
+commit identifiers or hashes belong only under disposable `tmp/`; no tool,
+build, installation, or compatibility check may depend on those notes.
 
 For manifest-bound evidence, `--compiler-identity` must use the exact
 `<compiler_id> <compiler_version>` text reported by the qualification binary;

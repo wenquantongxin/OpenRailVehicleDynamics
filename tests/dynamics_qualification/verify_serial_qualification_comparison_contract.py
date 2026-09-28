@@ -322,8 +322,6 @@ def wrapper_arguments(
         str(executable_path),
         "--identity-output",
         str(identity_output),
-        "--orvd-revision",
-        "test-revision",
         "--build-type",
         "Release",
         "--compiler-identity",
@@ -514,7 +512,6 @@ def check_wrapper_main_execution(
     isolated_subprocess.__dict__.update(vars(real_subprocess))
     original_validate = wrapper.validate_manifest_bound_artifact
     original_processor_identity = wrapper.processor_identity
-    original_sha256_file = wrapper.sha256_file
     captured_environments: list[dict[str, str]] = []
     captured_affinities: list[tuple[int, set[int]]] = []
 
@@ -578,6 +575,30 @@ def check_wrapper_main_execution(
             require(success_code == 0, "main() rejected a valid serial run")
             success = json.loads(success_identity.read_text(encoding="utf-8"))
             require(
+                set(success) == {
+                    "vehicle_recipe",
+                    "build_type",
+                    "compiler",
+                    "hardware",
+                    "requested_cpu_affinity",
+                    "applied_cpu_affinity",
+                    "openmp_environment",
+                    "runner_arguments",
+                    "qualification_artifact_directory",
+                    "process_wall_seconds",
+                    "process_user_seconds",
+                    "process_system_seconds",
+                    "process_cpu_utilization_percent",
+                    "maximum_resident_set_kilobytes",
+                    "executable",
+                    "runner_exit_status",
+                    "wrapper_exit_status",
+                    "exit_status",
+                    "comparison_binding",
+                },
+                "main() execution record does not match its explicit field contract",
+            )
+            require(
                 success["runner_exit_status"] == 0
                 and success["wrapper_exit_status"] == 0
                 and success["exit_status"] == 0
@@ -614,11 +635,7 @@ def check_wrapper_main_execution(
             def failed_processor_identity() -> str:
                 raise OSError("simulated processor identity failure")
 
-            def failed_sha256(path: Path) -> str:
-                raise OSError("simulated executable hash failure")
-
             wrapper.processor_identity = failed_processor_identity
-            wrapper.sha256_file = failed_sha256
             with contextlib.redirect_stderr(io.StringIO()):
                 provenance_code = wrapper.main(
                     main_arguments(provenance_identity)
@@ -630,14 +647,18 @@ def check_wrapper_main_execution(
                 provenance_code == 2
                 and provenance["runner_exit_status"] == 0
                 and provenance["wrapper_exit_status"] == 2
+                and provenance["exit_status"] == 2
                 and provenance["hardware"] == "unavailable"
-                and provenance["executable_sha256"] is None
                 and provenance["comparison_binding"]["validation_status"]
-                == "failed",
-                "provenance OSError did not fail closed with a stable identity",
+                == "failed"
+                and provenance["comparison_binding"]["validation_errors"]
+                == [
+                    "could not read processor identity: "
+                    "simulated processor identity failure"
+                ],
+                "processor identity OSError did not retain its independent failure gate",
             )
             wrapper.processor_identity = original_processor_identity
-            wrapper.sha256_file = original_sha256_file
 
             runner_identity = temporary_path / "runner-failed.json"
 
@@ -681,7 +702,6 @@ def check_wrapper_main_execution(
         wrapper.subprocess = real_subprocess
         wrapper.validate_manifest_bound_artifact = original_validate
         wrapper.processor_identity = original_processor_identity
-        wrapper.sha256_file = original_sha256_file
 
 
 def check_manifest_bound_wrapper(

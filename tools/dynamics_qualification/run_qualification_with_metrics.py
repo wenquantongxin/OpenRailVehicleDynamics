@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -60,14 +59,6 @@ CONTACT_PATCH_COLUMNS = (
     "force_on_wheel_in_carrier_track_frame_y_newtons",
     "force_on_wheel_in_carrier_track_frame_z_newtons",
 )
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def parse_affinity(text: str) -> set[int]:
@@ -756,7 +747,6 @@ def parse_arguments(argv: Iterable[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--executable", type=Path, required=True)
     parser.add_argument("--identity-output", type=Path, required=True)
-    parser.add_argument("--orvd-revision", required=True)
     parser.add_argument("--build-type", choices=("Release",), required=True)
     parser.add_argument("--compiler-identity", required=True)
     parser.add_argument("--cpu-affinity", required=True)
@@ -894,11 +884,6 @@ def main(argv: Iterable[str] | None = None) -> int:
     except (OSError, UnicodeError) as error:
         hardware = "unavailable"
         provenance_errors.append(f"could not read processor identity: {error}")
-    try:
-        executable_sha256: str | None = sha256_file(executable)
-    except OSError as error:
-        executable_sha256 = None
-        provenance_errors.append(f"could not hash qualification executable: {error}")
     postflight_errors.extend(provenance_errors)
 
     wrapper_exit_status = (
@@ -913,7 +898,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         )
         binding_identity["validation_errors"] = postflight_errors
     identity = {
-        "orvd_revision": arguments.orvd_revision,
         "vehicle_recipe": arguments.vehicle_recipe,
         "build_type": arguments.build_type,
         "compiler": arguments.compiler_identity,
@@ -933,7 +917,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         ),
         "maximum_resident_set_kilobytes": after_usage.ru_maxrss,
         "executable": str(executable),
-        "executable_sha256": executable_sha256,
         "runner_exit_status": runner_exit_status,
         "wrapper_exit_status": wrapper_exit_status,
         "exit_status": wrapper_exit_status,

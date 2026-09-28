@@ -15,12 +15,13 @@ INT-07 不把相同 tolerance 数字、较少步数或一次较快墙钟当作�
    case、串行执行身份和严格浮点语义；
 3. runner 发布 `metadata.json`、`continuous_states.tsv`、`observations.tsv`、`contact_patches.tsv` 和
    `performance.json`；
-4. `run_qualification_with_metrics.py` 在仓外记录 revision、二进制、编译器、硬件、CPU affinity、完整
+4. `run_qualification_with_metrics.py` 记录实际可执行文件路径、编译器、硬件、CPU affinity、完整
    argv、OpenMP 环境、进程墙钟、CPU 时间和峰值内存。
 
-轨迹、计时、执行 identity、哈希和比较报告不进入 Git。manifest 不写死当前未提交工作树 revision，
-也不以一个顶层输入哈希冒充传递资产闭包；实际 revision、manifest identifier 和每个 artifact 的
-canonical input paths 必须一起出现。禁止事后原地修改 manifest 来迁就结果；需要改变预算或场景时应
+轨迹、计时、执行 identity 和比较报告不进入 Git。比较条件依据实际输入、已解析配置、公共接口与
+构建运行验证确定；保留 manifest identifier 和每个 artifact 的 canonical input paths。包装器不要求
+Git 修订号，不生成或记录内容摘要。含提交标识或摘要的独立实验笔记只能放在可随时删除的 `tmp/`，
+不得成为配置、安装、兼容性或工件准入条件。禁止事后原地修改 manifest 来迁就结果；需要改变预算或场景时应
 增加 schema/manifest 版本，并把旧结果留在原身份下。
 
 ## 2. INT-07A 冻结场景
@@ -193,7 +194,7 @@ INT-07C 候选前 provisional baseline，但 reference 门完成前仍不能排�
 CVODE provider，因此任何只想归因于 Jacobian 的结论都必须明确报告完整执行配置，不能把整套配置的
 加速冒称单一子因子收益。
 
-正式计时只在 reference/equal-error 门通过后开始：同一 revision、Release 二进制、主机、affinity 和
+正式计时只在 reference/equal-error 门通过后开始：使用同一实际 Release 构建和输入，在同一主机、affinity 和
 OpenMP 身份下，每个 arm 使用 fresh process 按 ABBA 顺序各运行两次，报告算术均值及 `[min,max]`；
 区间重叠则结论为“无稳定收益”，不追加第三次追逐最好值。GZ18 与 IRW 分开报告，reference case 不
 参加速度排名。单一积分器速度比的主计时量固定为 `performance.json` 的 `advance_wall_seconds`；wrapper
