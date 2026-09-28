@@ -513,6 +513,33 @@ class MultibodyModel {
         const Eigen::VectorXd& generalized_position_derivatives,
         Eigen::VectorXd* generalized_velocities) const;
 
+    /// Maps generalized-velocity derivatives vdot to position second
+    /// derivatives qddot = N(q) * vdot + Ndot(q,v) * v. Both q and v are read
+    /// from context; the supplied vdot belongs only to this call.
+    ///
+    /// The stored quaternion is used as written, without normalization. Its
+    /// complete four-entry wxyz result includes the radial acceleration term;
+    /// scaling the stored quaternion scales those four entries. Ball-RPY uses
+    /// the relative angular velocity of M in F, expressed in F, and its
+    /// generalized-velocity derivatives, rather than Euler-angle derivatives
+    /// or world-expressed angular accelerations.
+    ///
+    /// The caller supplies an already sized nq-entry output. The result is
+    /// copied only after every mobilizer succeeds and every entry is finite;
+    /// refusal leaves both the context and the entire output unchanged.
+    ///
+    /// @throws std::invalid_argument if the context is foreign, either vector
+    /// has the wrong size, vdot is non-finite, the output is null, or input and
+    /// output are the same object.
+    /// @throws std::logic_error if the model is not finalized or a mobilizer
+    /// does not implement this forward map.
+    /// @throws std::runtime_error if a Ball-RPY rate map is singular
+    /// (abs(cos(pitch)) < 1e-3) or the result is non-finite.
+    void MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_velocity_derivatives,
+        Eigen::VectorXd* generalized_position_second_derivatives) const;
+
     /// Computes every public rigid body's frame acceleration A_WB_W for an
     /// explicitly supplied generalized-velocity derivative vdot.
     ///

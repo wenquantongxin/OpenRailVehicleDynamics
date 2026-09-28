@@ -16,6 +16,7 @@ namespace {
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
+using orvd::integrators::ContinuousStateNumericalFailure;
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
 using orvd::system_assembly::CompiledSystemPlan;
@@ -31,6 +32,24 @@ bool Near(double measured, double expected) {
     return std::abs(measured - expected) <=
            1.0e-8 *
                std::max({1.0, std::abs(measured), std::abs(expected)});
+}
+
+int RunInstalledNumericalFailureSmoke() {
+    using Reason = ContinuousStateNumericalFailure::Reason;
+    // Existing serialized classifications keep their values; single-attempt
+    // basic methods have distinct appended reasons, not fictitious retries.
+    static_assert(static_cast<int>(Reason::kAdvanceWorkBudgetExhausted) == 0);
+    static_assert(static_cast<int>(Reason::kNonFiniteLinearSystem) == 7);
+    for (const auto reason : {Reason::kNonFiniteState,
+                              Reason::kNonlinearConvergenceFailure,
+                              Reason::kSingularLinearSystem}) {
+        try {
+            throw ContinuousStateNumericalFailure(reason, 19, "installed failure classification");
+        } catch (const ContinuousStateNumericalFailure& failure) {
+            if (failure.reason() != reason || failure.backend_code() != 19) return 1;
+        }
+    }
+    return 0;
 }
 
 // The installed line layer, exercised through its own public header rather than
@@ -99,6 +118,43 @@ int RunInstalledBallRpySmoke() {
         std::fprintf(stderr,
                      "installed ORVD Ball-RPY smoke did not preserve its "
                      "3q/3v state and finite dynamics\n");
+        return 1;
+    }
+
+    // Exercise the newly installed second-coordinate-derivative symbol with a
+    // nonzero velocity bias. The reference differentiates omega = T(q) qdot.
+    const Eigen::Vector3d omega(0.23, -0.17, 0.31);
+    const Eigen::Vector3d alpha(0.07, 0.12, -0.09);
+    Eigen::VectorXd velocities = omega;
+    Eigen::VectorXd accelerations = alpha;
+    model.SetGeneralizedVelocities(context.get(), velocities);
+    Eigen::VectorXd qddot(3);
+    model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *context, accelerations, &qddot);
+    const double cp = std::cos(default_angles[1]);
+    const double sp = std::sin(default_angles[1]);
+    const double cy = std::cos(default_angles[2]);
+    const double sy = std::sin(default_angles[2]);
+    Eigen::Matrix3d velocity_map;
+    velocity_map << cy * cp, -sy, 0.0,
+                   sy * cp,  cy, 0.0,
+                       -sp, 0.0, 1.0;
+    const Eigen::Vector3d rates = velocity_map.fullPivLu().solve(omega);
+    Eigen::Matrix3d map_derivative = Eigen::Matrix3d::Zero();
+    map_derivative(0, 0) = -sy * rates[2] * cp - cy * sp * rates[1];
+    map_derivative(0, 1) = -cy * rates[2];
+    map_derivative(1, 0) = cy * rates[2] * cp - sy * sp * rates[1];
+    map_derivative(1, 1) = -sy * rates[2];
+    map_derivative(2, 0) = -cp * rates[1];
+    const Eigen::Vector3d expected_qddot =
+        velocity_map.fullPivLu().solve(alpha - map_derivative * rates);
+    if (!qddot.allFinite() ||
+        (qddot - expected_qddot).cwiseAbs().maxCoeff() > 1e-12 ||
+        !(context->generalized_positions() == default_angles) ||
+        !(context->generalized_velocities() == velocities)) {
+        std::fprintf(stderr,
+                     "installed ORVD second-coordinate-derivative mapping "
+                     "failed its Ball-RPY acceleration or state-purity check\n");
         return 1;
     }
     return 0;
@@ -173,6 +229,9 @@ int main() {
             return 1;
         }
         if (RunInstalledBallRpySmoke() != 0) {
+            return 1;
+        }
+        if (RunInstalledNumericalFailureSmoke() != 0) {
             return 1;
         }
     } catch (const std::exception& error) {

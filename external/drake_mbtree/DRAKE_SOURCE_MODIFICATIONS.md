@@ -492,3 +492,16 @@ finalize 期一次确定性遍历分配的**类别内序号**。上游拆开的�
 写门组合出的真实消费者触发，不恢复上游的拼接 `BasicVector`、可写 Eigen 视图或 systems
 状态容器。目的不是兼容上游布局，而是避免高频 RHS 用“先写 q、再写 v”的两次事务留下半写
 试算状态，同时不为强保证复制整块缓存。
+
+## 基本机械积分批次二：整树前向坐标加速度映射
+
+**`multibody_tree.h/.cc` 新增 `MultibodyTree::MapAccelerationToQDDot()`。**
+入口读取同一 `MultibodyStateInstance` 中的 q、v，接收本次调用显式提供的 vdot，逐个
+mobilizer 调用已有的 `MapAccelerationToQDDot()`，按速度范围读取、按位置范围装回完整
+qddot。局部块容量与现有 qdot 聚合相同，最多七维；四元数四维径向项保持原实现，不归一化
+存储、不把它投影为三维残差，也不新增逆 qddot 映射或差分回退。
+
+**失败与工作区边界。** 尚未实现该前向映射的 mobilizer 保留基类明确抛错，Ball-RPY 保留
+已有奇异域拒绝。内部逐块聚合允许失败前已有局部输出；第一方 `MultibodyModel` 门面在
+调用局部的 nq 向量中完成聚合并检查有限性，全部成功后才复制至调用方输出。vdot 与 qddot
+均不进入 runtime 状态或持久缓存。

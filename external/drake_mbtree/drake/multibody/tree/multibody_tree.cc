@@ -1920,6 +1920,27 @@ void MultibodyTree<T>::MapVelocityToQDot(
 }
 
 template <typename T>
+void MultibodyTree<T>::MapAccelerationToQDDot(
+    const orvd::multibody_runtime::MultibodyStateInstance& state,
+    const Eigen::Ref<const VectorX<T>>& vdot,
+    EigenPtr<VectorX<T>> qddot) const {
+  ValidateStateInstance(state);
+  DRAKE_DEMAND(vdot.size() == num_velocities());
+  DRAKE_DEMAND(qddot != nullptr);
+  DRAKE_DEMAND(qddot->size() == num_positions());
+
+  constexpr int kMaxQddot = 7;
+  Eigen::Matrix<T, Eigen::Dynamic, 1, 0, kMaxQddot, 1> qddot_mobilizer;
+  for (const auto& mobilizer : mobilizers_) {
+    const auto vdot_mobilizer = mobilizer->get_velocities_from_array(vdot);
+    DRAKE_DEMAND(mobilizer->num_positions() <= kMaxQddot);
+    qddot_mobilizer.resize(mobilizer->num_positions());
+    mobilizer->MapAccelerationToQDDot(state, vdot_mobilizer, &qddot_mobilizer);
+    mobilizer->get_mutable_positions_from_array(qddot) = qddot_mobilizer;
+  }
+}
+
+template <typename T>
 Eigen::SparseMatrix<T> MultibodyTree<T>::MakeVelocityToQDotMap(
     const orvd::multibody_runtime::MultibodyStateInstance& state) const {
   ValidateStateInstance(state);

@@ -26,6 +26,9 @@
 #include "bdf_integration_access.h"
 #include "dense_finite_difference_jacobian_provider.h"
 #include "radau5_continuous_state_advancer.h"
+#include "newmark_continuous_state_advancer.h"
+#include "zhai_continuous_state_advancer.h"
+#include "system_coordinate_problem.h"
 
 namespace orvd::integrators::internal {
 namespace {
@@ -56,19 +59,6 @@ static_assert(SelectParallelJacobianWorkerCount(15) == 12);
 static_assert(SelectParallelJacobianWorkerCount(16) == 16);
 static_assert(SelectParallelJacobianWorkerCount(31) == 16);
 static_assert(SelectParallelJacobianWorkerCount(32) == 32);
-
-[[nodiscard]] bool UsesCvode(
-    SystemContinuousStateIntegrationRecipe recipe) {
-    switch (recipe) {
-        case SystemContinuousStateIntegrationRecipe::kCvodeBdf2:
-        case SystemContinuousStateIntegrationRecipe::kCvodeBdf5:
-            return true;
-        case SystemContinuousStateIntegrationRecipe::kRadau5:
-            return false;
-    }
-    throw std::invalid_argument(
-        "system integration backend: unsupported recipe");
-}
 
 [[nodiscard]] int ResolveParallelJacobianWorkerCount(
     const system_assembly::SystemInstance& system) {
@@ -224,200 +214,204 @@ class SystemDenseFiniteDifferenceJacobian final
     std::vector<unsigned char> attempted_;
 };
 
-struct CvodeBdf2Runtime final {
-    std::unique_ptr<CvodeContinuousStateAdvancer> advancer;
-};
+template <class Configuration, int Order>
+struct CvodeRuntime final {
+    static constexpr auto kRecipe = Order == 2
+        ? SystemContinuousStateIntegrationRecipe::kCvodeBdf2
+        : SystemContinuousStateIntegrationRecipe::kCvodeBdf5;
 
-struct CvodeBdf5Runtime final {
+    CvodeRuntime(const system_assembly::SystemInstance& system,
+                 const system_assembly::CompiledSystemPlan& plan,
+                 system_assembly::SystemRuntimeContext& candidate,
+                 const system_assembly::SystemRuntimeContext& accepted,
+                 const Eigen::VectorXd& initial, Configuration configuration,
+                 NoCallTimeAppliedForces forces)
+        : rhs(system, plan, candidate, forces) {
+        rhs.SynchronizeContextLocalDataFrom(accepted);
+        const int workers = ResolveParallelJacobianWorkerCount(system);
+        if (workers != 0) {
+            jacobian = std::make_unique<SystemDenseFiniteDifferenceJacobian>(
+                system, plan, candidate, workers, forces);
+        }
+        if constexpr (Order == 2) {
+            advancer = std::make_unique<CvodeContinuousStateAdvancer>(
+                rhs, accepted.time_seconds(), initial,
+                std::move(configuration.tolerances));
+        } else {
+            advancer = BdfIntegrationAccess::MakeFifthOrderCvodeContinuousStateAdvancer(
+                rhs, accepted.time_seconds(), initial,
+                std::move(configuration.tolerances));
+        }
+        if (jacobian) {
+            DenseFiniteDifferenceJacobianRegistration::Attach(*advancer, *jacobian);
+        }
+        if (BdfIntegrationAccess::ConfiguredMaximumBdfOrder(*advancer) != Order) {
+            throw std::logic_error("system integration backend: CVODE recipe identity mismatch");
+        }
+    }
+
+    void SynchronizeContextLocalDataFrom(
+        const system_assembly::SystemRuntimeContext& accepted) {
+        rhs.SynchronizeContextLocalDataFrom(accepted);
+        if (jacobian) jacobian->SynchronizeContextLocalDataFrom(accepted);
+    }
+    void NotifyAcceptedProjectionHistoryChange() noexcept {}
+
+    // Borrowers are destroyed first; the enclosing object never moves.
+    SystemRhsBridge rhs;
+    std::unique_ptr<SystemDenseFiniteDifferenceJacobian> jacobian;
     std::unique_ptr<CvodeContinuousStateAdvancer> advancer;
 };
+using CvodeBdf2Runtime = CvodeRuntime<CvodeBdf2Configuration, 2>;
+using CvodeBdf5Runtime = CvodeRuntime<CvodeBdf5Configuration, 5>;
 
 struct Radau5Runtime final {
+    static constexpr auto kRecipe = SystemContinuousStateIntegrationRecipe::kRadau5;
+    Radau5Runtime(const system_assembly::SystemInstance& system,
+                  const system_assembly::CompiledSystemPlan& plan,
+                  system_assembly::SystemRuntimeContext& candidate,
+                  const system_assembly::SystemRuntimeContext& accepted,
+                  const Eigen::VectorXd& initial, Radau5Configuration configuration,
+                  NoCallTimeAppliedForces forces)
+        : rhs(system, plan, candidate, forces) {
+        rhs.SynchronizeContextLocalDataFrom(accepted);
+        advancer = std::make_unique<Radau5ContinuousStateAdvancer>(
+            rhs, accepted.time_seconds(), initial, std::move(configuration.tolerances));
+    }
+    void SynchronizeContextLocalDataFrom(
+        const system_assembly::SystemRuntimeContext& accepted) {
+        rhs.SynchronizeContextLocalDataFrom(accepted);
+    }
+    void NotifyAcceptedProjectionHistoryChange() noexcept {
+        advancer->InvalidateLinearizationAfterNumericalRhsHistoryChange();
+    }
+    SystemRhsBridge rhs;
     std::unique_ptr<Radau5ContinuousStateAdvancer> advancer;
 };
 
-using ConcreteRuntime =
-    std::variant<CvodeBdf2Runtime, CvodeBdf5Runtime, Radau5Runtime>;
+template <class Configuration, class Advancer, SystemContinuousStateIntegrationRecipe Recipe>
+struct CoordinateRuntime final {
+    static constexpr auto kRecipe = Recipe;
+    CoordinateRuntime(const system_assembly::SystemInstance& system,
+                      const system_assembly::CompiledSystemPlan& plan,
+                      system_assembly::SystemRuntimeContext& candidate,
+                      const system_assembly::SystemRuntimeContext& accepted,
+                      const Eigen::VectorXd& initial, Configuration configuration,
+                      NoCallTimeAppliedForces forces)
+        : problem(system, plan, candidate, forces) {
+        // The initial B/G evaluation must already see all accepted held inputs.
+        problem.SynchronizeContextLocalDataFrom(accepted);
+        advancer = std::make_unique<Advancer>(
+            problem, accepted.time_seconds(), initial, std::move(configuration));
+    }
+    void SynchronizeContextLocalDataFrom(
+        const system_assembly::SystemRuntimeContext& accepted) {
+        problem.SynchronizeContextLocalDataFrom(accepted);
+    }
+    void NotifyAcceptedProjectionHistoryChange() noexcept {
+        // At the same accepted physical endpoint the returned projection is an
+        // idempotent seed. B/G remain valid; do not restart the Zhai history.
+        // External state/input/branch changes require explicit synchronization.
+    }
+    SystemCoordinateProblem problem;
+    std::unique_ptr<Advancer> advancer;
+};
+using NewmarkRuntime = CoordinateRuntime<NewmarkConfiguration, NewmarkContinuousStateAdvancer,
+    SystemContinuousStateIntegrationRecipe::kNewmark>;
+using ZhaiRuntime = CoordinateRuntime<ZhaiConfiguration, ZhaiContinuousStateAdvancer,
+    SystemContinuousStateIntegrationRecipe::kZhai>;
 
-[[nodiscard]] ContinuousStateAdvancer& RuntimeAdvancer(
-    ConcreteRuntime& runtime) {
-    return std::visit(
-        [](auto& concrete) -> ContinuousStateAdvancer& {
-            return *concrete.advancer;
-        },
-        runtime);
-}
+using ConcreteRuntime = std::variant<std::unique_ptr<CvodeBdf2Runtime>,
+    std::unique_ptr<CvodeBdf5Runtime>, std::unique_ptr<Radau5Runtime>,
+    std::unique_ptr<NewmarkRuntime>, std::unique_ptr<ZhaiRuntime>>;
 
-[[nodiscard]] const ContinuousStateAdvancer& RuntimeAdvancer(
-    const ConcreteRuntime& runtime) {
-    return std::visit(
-        [](const auto& concrete) -> const ContinuousStateAdvancer& {
-            return *concrete.advancer;
-        },
-        runtime);
-}
-
-[[nodiscard]] SystemContinuousStateIntegrationRecipe RuntimeRecipe(
-    const ConcreteRuntime& runtime) noexcept {
-    return std::visit(
-        [](const auto& concrete) noexcept {
-            using Runtime = std::decay_t<decltype(concrete)>;
-            if constexpr (std::is_same_v<Runtime, CvodeBdf2Runtime>) {
-                return SystemContinuousStateIntegrationRecipe::kCvodeBdf2;
-            } else if constexpr (std::is_same_v<Runtime,
-                                                CvodeBdf5Runtime>) {
-                return SystemContinuousStateIntegrationRecipe::kCvodeBdf5;
-            } else {
-                static_assert(std::is_same_v<Runtime, Radau5Runtime>);
-                return SystemContinuousStateIntegrationRecipe::kRadau5;
-            }
-        },
-        runtime);
+ConcreteRuntime MakeRuntime(
+    SystemIntegrationMethodConfiguration method,
+    const system_assembly::SystemInstance& system,
+    const system_assembly::CompiledSystemPlan& plan,
+    system_assembly::SystemRuntimeContext& candidate,
+    const system_assembly::SystemRuntimeContext& accepted,
+    const Eigen::VectorXd& initial, NoCallTimeAppliedForces forces) {
+    return std::visit([&](auto&& configuration) -> ConcreteRuntime {
+        using Configuration = std::decay_t<decltype(configuration)>;
+        using Runtime = std::conditional_t<std::is_same_v<Configuration, CvodeBdf2Configuration>,
+            CvodeBdf2Runtime,
+            std::conditional_t<std::is_same_v<Configuration, CvodeBdf5Configuration>,
+                CvodeBdf5Runtime,
+                std::conditional_t<std::is_same_v<Configuration, Radau5Configuration>,
+                    Radau5Runtime,
+                    std::conditional_t<std::is_same_v<Configuration, NewmarkConfiguration>,
+                        NewmarkRuntime, ZhaiRuntime>>>>;
+        static_assert(std::is_same_v<Configuration, CvodeBdf2Configuration> ||
+                      std::is_same_v<Configuration, CvodeBdf5Configuration> ||
+                      std::is_same_v<Configuration, Radau5Configuration> ||
+                      std::is_same_v<Configuration, NewmarkConfiguration> ||
+                      std::is_same_v<Configuration, ZhaiConfiguration>);
+        return std::make_unique<Runtime>(system, plan, candidate, accepted, initial,
+                                         std::move(configuration), forces);
+    }, std::move(method));
 }
 
 }  // namespace
 
 class SystemContinuousStateBackend::Implementation final {
    public:
-    Implementation(
-        SystemContinuousStateIntegrationRecipe recipe,
-        const system_assembly::SystemInstance& system,
-        const system_assembly::CompiledSystemPlan& plan,
-        system_assembly::SystemRuntimeContext& candidate_context,
-        const system_assembly::SystemRuntimeContext& accepted_context,
-        const Eigen::VectorXd& initial_continuous_state,
-        ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces)
-        : rhs_bridge_(system, plan, candidate_context,
-                      no_call_time_applied_forces) {
-        rhs_bridge_.SynchronizeContextLocalDataFrom(accepted_context);
-        if (UsesCvode(recipe)) {
-            const int worker_count =
-                ResolveParallelJacobianWorkerCount(system);
-            if (worker_count != 0) {
-                dense_jacobian_ =
-                    std::make_unique<SystemDenseFiniteDifferenceJacobian>(
-                        system, plan, candidate_context, worker_count,
-                        no_call_time_applied_forces);
+    Implementation(SystemIntegrationMethodConfiguration configuration,
+                   const system_assembly::SystemInstance& system,
+                   const system_assembly::CompiledSystemPlan& plan,
+                   system_assembly::SystemRuntimeContext& candidate,
+                   const system_assembly::SystemRuntimeContext& accepted,
+                   const Eigen::VectorXd& initial, NoCallTimeAppliedForces forces)
+        : runtime_(MakeRuntime(std::move(configuration), system, plan, candidate,
+                               accepted, initial, forces)) {}
+
+    ContinuousStateAdvancer& advancer() {
+        return std::visit([](auto& runtime) -> ContinuousStateAdvancer& {
+            return *runtime->advancer;
+        }, runtime_);
+    }
+    const ContinuousStateAdvancer& advancer() const {
+        return std::visit([](const auto& runtime) -> const ContinuousStateAdvancer& {
+            return *runtime->advancer;
+        }, runtime_);
+    }
+    SystemContinuousStateIntegrationRecipe configured_recipe() const noexcept {
+        return std::visit([](const auto& runtime) {
+            return std::remove_reference_t<decltype(*runtime)>::kRecipe;
+        }, runtime_);
+    }
+    std::optional<CoordinateIntegrationDiagnostics> coordinate_diagnostics() const {
+        return std::visit([](const auto& runtime) -> std::optional<CoordinateIntegrationDiagnostics> {
+            if constexpr (requires { runtime->advancer->diagnostics(); }) {
+                return runtime->advancer->diagnostics();
+            } else {
+                return std::nullopt;
             }
-        }
-        runtime_.emplace(MakeRuntime(
-            recipe, accepted_context.time_seconds(), initial_continuous_state,
-            std::move(tolerances)));
+        }, runtime_);
     }
-
-    [[nodiscard]] ContinuousStateAdvancer& advancer() {
-        return RuntimeAdvancer(Runtime());
-    }
-
-    [[nodiscard]] const ContinuousStateAdvancer& advancer() const {
-        return RuntimeAdvancer(Runtime());
-    }
-
-    [[nodiscard]] SystemContinuousStateIntegrationRecipe configured_recipe()
-        const noexcept {
-        return RuntimeRecipe(*runtime_);
-    }
-
     void SynchronizeContextLocalDataFrom(
-        const system_assembly::SystemRuntimeContext& accepted_context) {
-        rhs_bridge_.SynchronizeContextLocalDataFrom(accepted_context);
-        if (dense_jacobian_ != nullptr) {
-            dense_jacobian_->SynchronizeContextLocalDataFrom(
-                accepted_context);
-        }
+        const system_assembly::SystemRuntimeContext& accepted) {
+        std::visit([&](auto& runtime) { runtime->SynchronizeContextLocalDataFrom(accepted); }, runtime_);
     }
-
     void NotifyAcceptedProjectionHistoryChange() {
-        std::visit(
-            [](auto& concrete) {
-                using Runtime = std::decay_t<decltype(concrete)>;
-                if constexpr (std::is_same_v<Runtime, Radau5Runtime>) {
-                    concrete.advancer
-                        ->InvalidateLinearizationAfterNumericalRhsHistoryChange();
-                }
-            },
-            Runtime());
+        std::visit([](auto& runtime) { runtime->NotifyAcceptedProjectionHistoryChange(); }, runtime_);
     }
 
    private:
-    [[nodiscard]] ConcreteRuntime MakeRuntime(
-        SystemContinuousStateIntegrationRecipe recipe,
-        double initial_time_seconds,
-        const Eigen::VectorXd& initial_continuous_state,
-        ContinuousStateErrorTolerances tolerances) {
-        switch (recipe) {
-            case SystemContinuousStateIntegrationRecipe::kCvodeBdf2: {
-                auto advancer =
-                    std::make_unique<CvodeContinuousStateAdvancer>(
-                        rhs_bridge_, initial_time_seconds,
-                        initial_continuous_state,
-                        std::move(tolerances));
-                ConfigureAndVerifyCvode(*advancer, 2);
-                return CvodeBdf2Runtime{std::move(advancer)};
-            }
-            case SystemContinuousStateIntegrationRecipe::kCvodeBdf5: {
-                auto advancer = BdfIntegrationAccess::
-                    MakeFifthOrderCvodeContinuousStateAdvancer(
-                        rhs_bridge_, initial_time_seconds,
-                        initial_continuous_state,
-                        std::move(tolerances));
-                ConfigureAndVerifyCvode(*advancer, 5);
-                return CvodeBdf5Runtime{std::move(advancer)};
-            }
-            case SystemContinuousStateIntegrationRecipe::kRadau5:
-                if (dense_jacobian_ != nullptr) {
-                    throw std::logic_error(
-                        "system integration backend: Radau5 cannot borrow "
-                        "the CVODE Jacobian provider");
-                }
-                return Radau5Runtime{
-                    std::make_unique<Radau5ContinuousStateAdvancer>(
-                        rhs_bridge_, initial_time_seconds,
-                        initial_continuous_state,
-                        std::move(tolerances))};
-        }
-        throw std::invalid_argument(
-            "system integration backend: unsupported recipe");
-    }
-
-    void ConfigureAndVerifyCvode(CvodeContinuousStateAdvancer& advancer,
-                                 int expected_maximum_bdf_order) {
-        if (dense_jacobian_ != nullptr) {
-            DenseFiniteDifferenceJacobianRegistration::Attach(
-                advancer, *dense_jacobian_);
-        }
-        if (BdfIntegrationAccess::ConfiguredMaximumBdfOrder(advancer) !=
-            expected_maximum_bdf_order) {
-            throw std::logic_error(
-                "system integration backend: CVODE recipe identity "
-                "mismatch");
-        }
-    }
-
-    [[nodiscard]] ConcreteRuntime& Runtime() {
-        if (!runtime_.has_value()) {
-            throw std::logic_error(
-                "system integration backend: runtime is not initialized");
-        }
-        return *runtime_;
-    }
-
-    [[nodiscard]] const ConcreteRuntime& Runtime() const {
-        if (!runtime_.has_value()) {
-            throw std::logic_error(
-                "system integration backend: runtime is not initialized");
-        }
-        return *runtime_;
-    }
-
-    // Declaration order is intentional: the concrete advancer is destroyed
-    // before the optional Jacobian provider and production bridge it may
-    // borrow.
-    SystemRhsBridge rhs_bridge_;
-    std::unique_ptr<SystemDenseFiniteDifferenceJacobian> dense_jacobian_;
-    std::optional<ConcreteRuntime> runtime_;
+    ConcreteRuntime runtime_;
 };
+
+SystemContinuousStateBackend::SystemContinuousStateBackend(
+    SystemIntegrationMethodConfiguration configuration,
+    const system_assembly::SystemInstance& system,
+    const system_assembly::CompiledSystemPlan& plan,
+    system_assembly::SystemRuntimeContext& candidate_context,
+    const system_assembly::SystemRuntimeContext& accepted_context,
+    const Eigen::VectorXd& initial_continuous_state,
+    NoCallTimeAppliedForces no_call_time_applied_forces)
+    : implementation_(std::make_unique<Implementation>(
+          std::move(configuration), system, plan, candidate_context, accepted_context,
+          initial_continuous_state, no_call_time_applied_forces)) {}
 
 SystemContinuousStateBackend::SystemContinuousStateBackend(
     SystemContinuousStateIntegrationRecipe recipe,
@@ -428,10 +422,9 @@ SystemContinuousStateBackend::SystemContinuousStateBackend(
     const Eigen::VectorXd& initial_continuous_state,
     ContinuousStateErrorTolerances tolerances,
     NoCallTimeAppliedForces no_call_time_applied_forces)
-    : implementation_(std::make_unique<Implementation>(
-          recipe, system, plan, candidate_context, accepted_context,
-          initial_continuous_state, std::move(tolerances),
-          no_call_time_applied_forces)) {}
+    : SystemContinuousStateBackend(MakeOdeMethodConfiguration(recipe, std::move(tolerances)),
+          system, plan, candidate_context, accepted_context, initial_continuous_state,
+          no_call_time_applied_forces) {}
 
 SystemContinuousStateBackend::~SystemContinuousStateBackend() = default;
 
@@ -447,6 +440,11 @@ const ContinuousStateAdvancer& SystemContinuousStateBackend::advancer()
 SystemContinuousStateIntegrationRecipe
 SystemContinuousStateBackend::configured_recipe() const noexcept {
     return implementation_->configured_recipe();
+}
+
+std::optional<CoordinateIntegrationDiagnostics>
+SystemContinuousStateBackend::coordinate_diagnostics() const {
+    return implementation_->coordinate_diagnostics();
 }
 
 void SystemContinuousStateBackend::SynchronizeContextLocalDataFrom(

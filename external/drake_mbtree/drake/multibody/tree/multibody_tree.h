@@ -1630,6 +1630,16 @@ class MultibodyTree {
       const Eigen::Ref<const VectorX<T>>& qdot,
       EigenPtr<VectorX<T>> v) const;
 
+  // Maps the supplied generalized-velocity derivatives to position second
+  // derivatives using q and v from state: qddot = N(q) * vdot + Ndot(q,v) * v.
+  // This retains every position component, including quaternion radial terms.
+  // A mobilizer without a forward acceleration map throws; no inverse map or
+  // finite-difference fallback is used. Output may be partial if a map throws.
+  void MapAccelerationToQDDot(
+      const orvd::multibody_runtime::MultibodyStateInstance& state,
+      const Eigen::Ref<const VectorX<T>>& vdot,
+      EigenPtr<VectorX<T>> qddot) const;
+
   // See MultibodyPlant method.
   Eigen::SparseMatrix<T> MakeVelocityToQDotMap(
       const orvd::multibody_runtime::MultibodyStateInstance& state) const;

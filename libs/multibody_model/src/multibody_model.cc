@@ -1177,6 +1177,45 @@ void MultibodyModel::MapGeneralizedPositionDerivativesToVelocities(
 }
 
 void MultibodyModel::
+    MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        const MultibodyEvaluationContext& context,
+        const Eigen::VectorXd& generalized_velocity_derivatives,
+        Eigen::VectorXd* generalized_position_second_derivatives) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized(
+        "map generalized velocity derivatives to position second derivatives");
+    Implementation::RequireOwnContext(
+        model, &context, "map generalized velocity derivatives in");
+    RequireCoordinateCount(
+        static_cast<int>(generalized_velocity_derivatives.size()),
+        model.tree_.num_velocities(), "generalized velocity derivatives");
+    RequireFiniteVector(generalized_velocity_derivatives,
+                        "generalized velocity derivatives");
+    RequireVectorOutput(generalized_position_second_derivatives,
+                        model.tree_.num_positions(),
+                        "generalized position second derivatives");
+    if (&generalized_velocity_derivatives ==
+        generalized_position_second_derivatives) {
+        Reject("generalized velocity derivatives and position second "
+               "derivatives are the same object; in-place mapping is not "
+               "supported and nothing was written");
+    }
+
+    // A later mobilizer may refuse a singular coordinate map after earlier
+    // blocks have succeeded. Keep that partial result private to this call.
+    Eigen::VectorXd candidate(model.tree_.num_positions());
+    model.tree_.MapAccelerationToQDDot(
+        context.implementation_->tree_context().state(),
+        generalized_velocity_derivatives, &candidate);
+    if (!candidate.allFinite()) {
+        throw std::runtime_error(
+            "multibody model: generalized position second derivatives are "
+            "non-finite; nothing was written");
+    }
+    *generalized_position_second_derivatives = candidate;
+}
+
+void MultibodyModel::
     CalcRigidBodyFrameSpatialAccelerationsRelativeToWorldExpressedInWorld(
         const MultibodyEvaluationContext& context,
         const Eigen::VectorXd& generalized_velocity_derivatives,

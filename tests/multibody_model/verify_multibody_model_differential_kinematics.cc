@@ -342,6 +342,238 @@ void CheckMappings() {
                "a refused inverse mapping leaves its output unchanged");
 }
 
+void CheckPositionSecondDerivatives() {
+    DifferentialKinematicsFixture fixture;
+    auto context = fixture.MakeContext(fixture.positions, fixture.velocities);
+    const int nq = fixture.model.num_generalized_positions();
+    const int nv = fixture.model.num_generalized_velocities();
+    const Eigen::VectorXd acceleration =
+        Eigen::VectorXd::LinSpaced(nv, -0.43, 0.71);
+    Eigen::VectorXd actual(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *context, acceleration, &actual);
+
+    Eigen::VectorXd expected = Eigen::VectorXd::Zero(nq);
+    for (const JointHandle joint : {fixture.base_joint, fixture.slider_joint,
+                                    fixture.reverse_joint}) {
+        const auto q_range = fixture.model.GetJointPositionRange(joint);
+        const auto v_range = fixture.model.GetJointVelocityRange(joint);
+        expected[q_range.start()] = acceleration[v_range.start()];
+    }
+    const auto free_q = fixture.model.GetFreeBodyPositionRange(fixture.free);
+    const auto free_v = fixture.model.GetFreeBodyVelocityRange(fixture.free);
+    const Eigen::Vector4d quaternion =
+        fixture.positions.segment<4>(free_q.start());
+    const Eigen::Vector3d omega =
+        fixture.velocities.segment<3>(free_v.start());
+    const Eigen::Vector3d alpha = acceleration.segment<3>(free_v.start());
+    expected.segment<4>(free_q.start()) =
+        QuaternionDerivative(quaternion, alpha) -
+        0.25 * omega.squaredNorm() * quaternion;
+    expected.segment<3>(free_q.start() + 4) =
+        acceleration.segment<3>(free_v.start() + 3);
+    ExpectVectorNear(actual, expected,
+                     1024.0 * std::numeric_limits<double>::epsilon(),
+                     "mixed-tree qddot follows independent joint formulas, "
+                     "including reversed revolute and welded traversal");
+
+    const Eigen::Vector4d qdot_quaternion =
+        QuaternionDerivative(quaternion, omega);
+    const double norm_second_derivative =
+        quaternion.dot(actual.segment<4>(free_q.start())) +
+        qdot_quaternion.squaredNorm();
+    ExpectTrue(std::abs(norm_second_derivative) < 2e-14 &&
+                   quaternion.dot(actual.segment<4>(free_q.start())) < -0.01,
+               "full quaternion qddot contains the required radial component");
+
+    Eigen::VectorXd qdot(nq);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *context, fixture.velocities, &qdot);
+    constexpr double delta = 1.0e-5;
+    auto minus = fixture.MakeContext(fixture.positions - delta * qdot,
+                                     fixture.velocities - delta * acceleration);
+    auto plus = fixture.MakeContext(fixture.positions + delta * qdot,
+                                    fixture.velocities + delta * acceleration);
+    Eigen::VectorXd rate_minus(nq);
+    Eigen::VectorXd rate_plus(nq);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *minus, minus->generalized_velocities(), &rate_minus);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *plus, plus->generalized_velocities(), &rate_plus);
+    ExpectVectorNear(actual, (rate_plus - rate_minus) / (2.0 * delta), 2e-9,
+                     "qddot agrees with a central derivative of N(q)v");
+
+    Eigen::VectorXd zero_acceleration = Eigen::VectorXd::Zero(nv);
+    Eigen::VectorXd bias(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *context, zero_acceleration, &bias);
+    Eigen::VectorXd expected_bias = Eigen::VectorXd::Zero(nq);
+    expected_bias.segment<4>(free_q.start()) =
+        -0.25 * omega.squaredNorm() * quaternion;
+    ExpectVectorNear(bias, expected_bias, 2e-14,
+                     "zero physical acceleration retains quaternion bias");
+
+    auto rest = fixture.MakeContext(fixture.positions,
+                                    Eigen::VectorXd::Zero(nv));
+    Eigen::VectorXd at_rest(nq);
+    Eigen::VectorXd mapped_acceleration(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *rest, acceleration, &at_rest);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *rest, acceleration, &mapped_acceleration);
+    ExpectVectorNear(at_rest, mapped_acceleration, 2e-14,
+                     "at rest the second derivative reduces to N(q)a");
+
+    for (const double scale : {2.4, -0.65}) {
+        Eigen::VectorXd scaled_q = fixture.positions;
+        scaled_q.segment<4>(free_q.start()) *= scale;
+        auto scaled_context = fixture.MakeContext(scaled_q, fixture.velocities);
+        Eigen::VectorXd scaled_actual(nq);
+        fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+            *scaled_context, acceleration, &scaled_actual);
+        Eigen::VectorXd scaled_expected = expected;
+        scaled_expected.segment<4>(free_q.start()) *= scale;
+        ExpectVectorNear(scaled_actual, scaled_expected, 3e-13,
+                         "positive and negative non-unit scaling applies to "
+                         "the full quaternion second derivative");
+        ExpectTrue(scaled_context->generalized_positions() == scaled_q &&
+                       scaled_context->generalized_velocities() ==
+                           fixture.velocities,
+                   "second-derivative mapping never normalizes or rewrites state");
+    }
+}
+
+void CheckEmptyAndWeldedSecondDerivativeMaps() {
+    for (const bool add_welded_body : {false, true}) {
+        MultibodyModel model;
+        if (add_welded_body) {
+            const auto body = model.AddRigidBody("welded", PhysicalInertia(1.0));
+            model.AddWeldJoint("weld", model.world_frame(), model.body_frame(body));
+        }
+        model.Finalize();
+        const auto context = model.CreateDefaultContext();
+        const Eigen::VectorXd acceleration(0);
+        Eigen::VectorXd second_derivative(0);
+        model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+            *context, acceleration, &second_derivative);
+        ExpectTrue(second_derivative.size() == 0,
+                   "empty and all-welded trees admit an empty acceleration map");
+    }
+}
+
+void CheckSecondDerivativeRefusals() {
+    DifferentialKinematicsFixture fixture;
+    DifferentialKinematicsFixture foreign;
+    auto context = fixture.MakeContext(fixture.positions, fixture.velocities);
+    auto foreign_context = foreign.MakeContext(foreign.positions, foreign.velocities);
+    const Eigen::VectorXd acceleration = Eigen::VectorXd::LinSpaced(
+        fixture.model.num_generalized_velocities(), 0.27, -0.19);
+    Eigen::VectorXd output = Eigen::VectorXd::Constant(
+        fixture.model.num_generalized_positions(), 73.0);
+    const Eigen::VectorXd before = output;
+
+    const auto expect_invalid = [&](auto&& attempt, const char* description) {
+        bool refused = false;
+        try {
+            attempt();
+        } catch (const std::invalid_argument&) {
+            refused = true;
+        }
+        ExpectTrue(refused, description);
+        ExpectTrue(output == before,
+                   std::string(description) + " leaves the complete output untouched");
+    };
+    expect_invalid(
+        [&] {
+            fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+                *foreign_context, acceleration, &output);
+        },
+        "second-derivative mapping refuses a foreign context");
+    const Eigen::VectorXd wrong_input = Eigen::VectorXd::Zero(acceleration.size() + 1);
+    expect_invalid(
+        [&] {
+            fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+                *context, wrong_input, &output);
+        },
+        "second-derivative mapping refuses a wrong input size");
+    for (const double invalid_value : {std::numeric_limits<double>::quiet_NaN(),
+                                       std::numeric_limits<double>::infinity()}) {
+        Eigen::VectorXd invalid = acceleration;
+        invalid[invalid.size() - 1] = invalid_value;
+        expect_invalid(
+            [&] {
+                fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+                    *context, invalid, &output);
+            },
+            "second-derivative mapping refuses non-finite acceleration");
+    }
+    expect_invalid(
+        [&] {
+            fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+                *context, acceleration, nullptr);
+        },
+        "second-derivative mapping refuses a null output");
+    Eigen::VectorXd wrong_output = Eigen::VectorXd::Constant(output.size() + 1, 19.0);
+    const Eigen::VectorXd wrong_before = wrong_output;
+    expect_invalid(
+        [&] {
+            fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+                *context, acceleration, &wrong_output);
+        },
+        "second-derivative mapping refuses a wrong output size");
+    ExpectTrue(wrong_output == wrong_before,
+               "the wrong-sized second-derivative output is also unchanged");
+
+    MultibodyModel unfinalized;
+    bool not_finalized = false;
+    try {
+        unfinalized.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+            *context, acceleration, &output);
+    } catch (const std::logic_error&) {
+        not_finalized = true;
+    }
+    ExpectTrue(not_finalized && output == before,
+               "an unfinalized second-derivative map fails without output writes");
+
+    MultibodyModel alias_model;
+    const auto body = alias_model.AddRigidBody("alias_body", PhysicalInertia(1.0));
+    alias_model.AddRevoluteJoint("alias_joint", alias_model.world_frame(),
+                                 alias_model.body_frame(body),
+                                 Eigen::Vector3d::UnitZ(), 0.0);
+    alias_model.Finalize();
+    auto alias_context = alias_model.CreateDefaultContext();
+    Eigen::VectorXd same_vector = Eigen::VectorXd::Constant(1, 0.23);
+    bool alias_refused = false;
+    try {
+        alias_model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+            *alias_context, same_vector, &same_vector);
+    } catch (const std::invalid_argument&) {
+        alias_refused = true;
+    }
+    ExpectTrue(alias_refused && same_vector[0] == 0.23,
+               "second-derivative mapping refuses in-place aliasing atomically");
+
+    Eigen::VectorXd large_velocity = fixture.velocities;
+    const auto free_v = fixture.model.GetFreeBodyVelocityRange(fixture.free);
+    large_velocity[free_v.start()] = 1e200;
+    auto overflowing = fixture.MakeContext(fixture.positions, large_velocity);
+    bool overflow_refused = false;
+    try {
+        fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+            *overflowing, acceleration, &output);
+    } catch (const std::runtime_error&) {
+        overflow_refused = true;
+    }
+    ExpectTrue(overflow_refused && output == before,
+               "finite input producing non-finite qddot leaves all output unchanged");
+    ExpectTrue(overflowing->generalized_positions() == fixture.positions &&
+                   overflowing->generalized_velocities() == large_velocity,
+               "overflow refusal does not rewrite the input state");
+    ExpectTrue(context->generalized_positions() == fixture.positions &&
+                   context->generalized_velocities() == fixture.velocities,
+               "all refused mappings preserve the source context");
+}
+
 Eigen::Vector3d AngularVelocityFromCentralDifference(
     const Eigen::Matrix3d& rotation_minus,
     const Eigen::Matrix3d& rotation_at_state,
@@ -916,6 +1148,9 @@ void CheckFailureBoundaries() {
 
 int main() {
     CheckMappings();
+    CheckPositionSecondDerivatives();
+    CheckEmptyAndWeldedSecondDerivativeMaps();
+    CheckSecondDerivativeRefusals();
     CheckJacobianColumns();
     CheckSpatialAccelerationAgainstVelocityDerivativeAndBodyOrder();
     CheckSpatialAccelerations();

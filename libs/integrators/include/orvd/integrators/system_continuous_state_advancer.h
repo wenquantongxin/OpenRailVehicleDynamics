@@ -21,7 +21,6 @@ namespace orvd::integrators {
 
 namespace internal {
 class SystemContinuousStateIntegrationAccess;
-enum class SystemContinuousStateIntegrationRecipe;
 }
 
 /// Advances one compiled system while keeping trial state out of its accepted
@@ -76,8 +75,10 @@ class SystemContinuousStateAdvancer final {
     ///
     /// A same-time request is a no-op.  Any failure after entering the backend
     /// leaves the accepted context unchanged and blocks another advance until
-    /// `SynchronizeAfterAcceptedContextChange()` succeeds. One public advance
-    /// may accept at most 1,000,000 internal steps.
+    /// `SynchronizeAfterAcceptedContextChange()` succeeds. The public constructor
+    /// uses a budget of at most 1,000,000 successful internal steps per public
+    /// advance. Source-private recipes may explicitly set that work
+    /// budget. Exhaustion is reported as kAdvanceWorkBudgetExhausted.
     void AdvanceTo(double target_time_seconds);
 
     /// Advances once while returning selected states from the successful
@@ -119,15 +120,8 @@ class SystemContinuousStateAdvancer final {
    private:
     friend class internal::SystemContinuousStateIntegrationAccess;
 
-    SystemContinuousStateAdvancer(
-        const system_assembly::SystemInstance& system,
-        const system_assembly::CompiledSystemPlan& plan,
-        system_assembly::SystemRuntimeContext& accepted_context,
-        ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces,
-        internal::SystemContinuousStateIntegrationRecipe integration_recipe);
-
     class Implementation;
+    explicit SystemContinuousStateAdvancer(std::unique_ptr<Implementation> implementation);
     std::unique_ptr<Implementation> implementation_;
 };
 

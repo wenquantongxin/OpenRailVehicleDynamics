@@ -14,7 +14,8 @@
 
 namespace orvd::integrators {
 
-/// A known numerical failure from a positive-length backend advance.
+/// A known numerical failure from a positive-length advance, including its
+/// execution work budget.
 ///
 /// `reason()` is the backend-neutral classification intended for caller
 /// decisions. `backend_code()` preserves the backend's original diagnostic
@@ -31,6 +32,11 @@ class ContinuousStateNumericalFailure final : public std::runtime_error {
         kStepSizeUnderflow,
         kRepeatedSingularLinearSystem,
         kNonFiniteLinearSystem,
+        // A fixed-step method may fail without any retry. Keep these distinct
+        // from the existing repeated-failure classifications above.
+        kNonFiniteState,
+        kNonlinearConvergenceFailure,
+        kSingularLinearSystem,
     };
 
     ContinuousStateNumericalFailure(Reason reason,
@@ -123,7 +129,8 @@ struct ContinuousStateIntegrationStatistics final {
     std::uint64_t linear_solver_setup_count{};
     std::uint64_t jacobian_evaluation_count{};
     // Numerical execution identity, not an observed OpenMP team size. A value
-    // of one denotes a serial dense finite-difference path.
+    // of one denotes a serial dense finite-difference path; zero denotes a
+    // method with no such Jacobian path.
     int requested_dense_finite_difference_jacobian_worker_count{};
 };
 

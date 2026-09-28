@@ -609,6 +609,43 @@ target_include_directories(verify_radau5_core
 target_link_libraries(verify_radau5_core PRIVATE Eigen3::Eigen)
 add_test(NAME verify_radau5_core COMMAND verify_radau5_core)
 
+# The basic coordinate kernels use the same objects embedded in the product
+# archive, but their tests need only Eigen and the source-private contracts.
+foreach(method IN ITEMS newmark zhai)
+    add_executable(verify_${method}_core
+        integrators/verify_${method}_core.cc
+        $<TARGET_OBJECTS:orvd_coordinate_integrator_core_objects>)
+    orvd_configure_first_party_target(verify_${method}_core)
+    target_include_directories(verify_${method}_core PRIVATE
+        ${PROJECT_SOURCE_DIR}/libs/integrators/include
+        ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+    target_link_libraries(verify_${method}_core PRIVATE Eigen3::Eigen)
+    add_test(NAME verify_${method}_core COMMAND verify_${method}_core)
+endforeach()
+
+# Coordinate/physical state conversion and the real compiled physics bridge.
+add_executable(verify_system_coordinate_problem
+    integrators/verify_system_coordinate_problem.cc
+    integrators/system_coordinate_problem_contact_checks.cc)
+orvd_configure_first_party_target(verify_system_coordinate_problem)
+target_include_directories(verify_system_coordinate_problem PRIVATE
+    ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+target_link_libraries(verify_system_coordinate_problem PRIVATE orvd_integrators)
+add_test(NAME verify_system_coordinate_problem COMMAND verify_system_coordinate_problem)
+
+# Mechanical adapters share physical-state lifecycle tests, with their actual
+# initialization work and linear-output accuracy instead of ODE assumptions.
+foreach(method IN ITEMS newmark zhai)
+    add_executable(verify_${method}_continuous_state_advancer
+        integrators/verify_${method}_continuous_state_advancer.cc)
+    orvd_configure_first_party_target(verify_${method}_continuous_state_advancer)
+    target_include_directories(verify_${method}_continuous_state_advancer PRIVATE
+        ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+    target_link_libraries(verify_${method}_continuous_state_advancer PRIVATE orvd_integrators)
+    add_test(NAME verify_${method}_continuous_state_advancer
+             COMMAND verify_${method}_continuous_state_advancer)
+endforeach()
+
 # The same backend-neutral contract used by CVODE, instantiated with the real
 # source-private Radau5 adapter. Radau-specific method tests remain in the core
 # executable above instead of leaking backend diagnostics into this suite.
@@ -640,6 +677,16 @@ target_link_libraries(verify_system_continuous_state_advancer
     PRIVATE orvd_integrators)
 add_test(NAME verify_system_continuous_state_advancer
          COMMAND verify_system_continuous_state_advancer)
+
+add_executable(verify_basic_system_continuous_state_advancer
+    integrators/verify_basic_system_continuous_state_advancer.cc
+    integrators/system_coordinate_problem_contact_checks.cc)
+orvd_configure_first_party_target(verify_basic_system_continuous_state_advancer)
+target_include_directories(verify_basic_system_continuous_state_advancer PRIVATE
+    ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+target_link_libraries(verify_basic_system_continuous_state_advancer PRIVATE orvd_integrators)
+add_test(NAME verify_basic_system_continuous_state_advancer
+         COMMAND verify_basic_system_continuous_state_advancer)
 
 # G46's installed-package qualification.  This test moves an actual installation
 # to a second prefix, configures an independent public-header-only consumer,

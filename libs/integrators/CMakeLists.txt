@@ -1,11 +1,24 @@
+add_library(orvd_coordinate_integrator_core_objects OBJECT
+    src/newmark_core.cc
+    src/zhai_core.cc)
+orvd_configure_first_party_target(orvd_coordinate_integrator_core_objects)
+target_include_directories(orvd_coordinate_integrator_core_objects
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(orvd_coordinate_integrator_core_objects
+    PRIVATE Eigen3::Eigen)
+
 add_library(orvd_integrators STATIC
     src/continuous_state_advancer.cc
     src/cvode_continuous_state_advancer.cc
     src/radau5_continuous_state_advancer.cc
+    src/newmark_continuous_state_advancer.cc
+    src/zhai_continuous_state_advancer.cc
     src/system_continuous_state_backend.cc
     src/system_continuous_state_advancer.cc
+    src/system_coordinate_problem.cc
     src/system_rhs_bridge.cc
-    $<TARGET_OBJECTS:orvd_radau5_core_objects>)
+    $<TARGET_OBJECTS:orvd_radau5_core_objects>
+    $<TARGET_OBJECTS:orvd_coordinate_integrator_core_objects>)
 
 orvd_configure_first_party_target(orvd_integrators)
 

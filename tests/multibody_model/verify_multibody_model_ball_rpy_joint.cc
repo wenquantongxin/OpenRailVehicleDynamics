@@ -253,6 +253,149 @@ void CheckVelocityAndPositionDerivativeMaps() {
            "the frozen Ball joint contributes no internal damping force");
 }
 
+Eigen::Matrix3d AngularVelocityFromRpyRates(const Eigen::Vector3d& q) {
+    Eigen::Matrix3d matrix;
+    matrix << std::cos(q[2]) * std::cos(q[1]), -std::sin(q[2]), 0.0,
+              std::sin(q[2]) * std::cos(q[1]),  std::cos(q[2]), 0.0,
+                               -std::sin(q[1]),             0.0, 1.0;
+    return matrix;
+}
+
+Eigen::Matrix3d AngularVelocityFromRpyRatesDerivative(
+    const Eigen::Vector3d& q, const Eigen::Vector3d& s) {
+    // Differentiate the independently written physical-velocity map above.
+    const double cp = std::cos(q[1]);
+    const double sp = std::sin(q[1]);
+    const double cy = std::cos(q[2]);
+    const double sy = std::sin(q[2]);
+    Eigen::Matrix3d derivative = Eigen::Matrix3d::Zero();
+    derivative(0, 0) = -sy * s[2] * cp - cy * sp * s[1];
+    derivative(0, 1) = -cy * s[2];
+    derivative(1, 0) = cy * s[2] * cp - sy * sp * s[1];
+    derivative(1, 1) = -sy * s[2];
+    derivative(2, 0) = -cp * s[1];
+    return derivative;
+}
+
+void CheckPositionSecondDerivatives() {
+    BallRpyFixture fixture;
+    const Eigen::Vector3d angles{0.21, -0.32, -4.571};
+    const Eigen::Vector3d omega{0.31, -0.27, 0.19};
+    const Eigen::Vector3d alpha{0.14, 0.17, -0.23};
+    auto context = fixture.MakeContext(angles, omega);
+    const auto q_range = fixture.model.GetJointPositionRange(fixture.ball_joint);
+    const auto v_range = fixture.model.GetJointVelocityRange(fixture.ball_joint);
+    const int nq = fixture.model.num_generalized_positions();
+    const int nv = fixture.model.num_generalized_velocities();
+    Eigen::VectorXd acceleration = Eigen::VectorXd::LinSpaced(nv, 0.12, -0.24);
+    acceleration.segment<3>(v_range.start()) = alpha;
+
+    const Eigen::Matrix3d velocity_map = AngularVelocityFromRpyRates(angles);
+    const Eigen::Vector3d rates = velocity_map.fullPivLu().solve(omega);
+    const Eigen::Matrix3d map_derivative =
+        AngularVelocityFromRpyRatesDerivative(angles, rates);
+    const Eigen::Vector3d expected =
+        velocity_map.fullPivLu().solve(alpha - map_derivative * rates);
+    Eigen::VectorXd actual(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *context, acceleration, &actual);
+    ExpectMatrixNear(actual.segment<3>(q_range.start()), expected, 3e-13,
+                     "Ball qddot includes the independently derived velocity bias");
+    Expect((expected - velocity_map.fullPivLu().solve(alpha)).norm() > 1e-2,
+           "the fixture distinguishes full qddot from N(q)a");
+
+    Eigen::VectorXd qdot(nq);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *context, context->generalized_velocities(), &qdot);
+    constexpr double delta = 1e-5;
+    auto minus = fixture.model.CreateDefaultContext();
+    auto plus = fixture.model.CreateDefaultContext();
+    fixture.model.SetGeneralizedState(
+        minus.get(), context->generalized_positions() - delta * qdot,
+        context->generalized_velocities() - delta * acceleration);
+    fixture.model.SetGeneralizedState(
+        plus.get(), context->generalized_positions() + delta * qdot,
+        context->generalized_velocities() + delta * acceleration);
+    Eigen::VectorXd rate_minus(nq);
+    Eigen::VectorXd rate_plus(nq);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *minus, minus->generalized_velocities(), &rate_minus);
+    fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+        *plus, plus->generalized_velocities(), &rate_plus);
+    ExpectMatrixNear(actual, (rate_plus - rate_minus) / (2 * delta), 2e-8,
+                     "free-plus-Ball qddot matches a central derivative of N(q)v");
+
+    const Eigen::VectorXd zero_acceleration = Eigen::VectorXd::Zero(nv);
+    Eigen::VectorXd zero_acceleration_result(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *context, zero_acceleration, &zero_acceleration_result);
+    ExpectMatrixNear(zero_acceleration_result.segment<3>(q_range.start()),
+                     velocity_map.fullPivLu().solve(-map_derivative * rates),
+                     3e-13, "Ball velocity alone produces coordinate acceleration");
+    Expect(context->generalized_positions().segment<3>(q_range.start()) == angles,
+           "second-derivative mapping preserves the noncanonical yaw branch");
+
+    auto rest = fixture.MakeContext(angles, Eigen::Vector3d::Zero());
+    Eigen::VectorXd rest_result(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *rest, acceleration, &rest_result);
+    ExpectMatrixNear(rest_result.segment<3>(q_range.start()),
+                     velocity_map.fullPivLu().solve(alpha), 3e-13,
+                     "Ball qddot at rest reduces to N(q)a");
+}
+
+void CheckSecondDerivativeSingularityAndAtomicOutput() {
+    BallRpyFixture fixture;
+    const auto q_range = fixture.model.GetJointPositionRange(fixture.ball_joint);
+    const auto free_v = fixture.model.GetFreeBodyVelocityRange(fixture.axle_bridge);
+    const int nq = fixture.model.num_generalized_positions();
+    const int nv = fixture.model.num_generalized_velocities();
+    Expect(q_range.start() >= 7,
+           "the singular Ball block comes after a real free-body output block");
+    const Eigen::VectorXd acceleration = Eigen::VectorXd::LinSpaced(nv, -0.7, 0.8);
+
+    const Eigen::Vector3d legal_angles{0.12, std::acos(2e-3), -4.571};
+    auto legal = fixture.MakeContext(legal_angles, Eigen::Vector3d(0.2, -0.3, 0.1));
+    Eigen::VectorXd legal_result(nq);
+    fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+        *legal, acceleration, &legal_result);
+    Expect(legal_result.allFinite(),
+           "a legal Ball pitch outside the existing singularity guard is admitted");
+
+    for (const double pitch : {std::acos(5e-4), -std::acos(5e-4),
+                               std::acos(-5e-4)}) {
+        const Eigen::Vector3d angles{0.12, pitch, -4.571};
+        auto context = fixture.MakeContext(angles, Eigen::Vector3d(0.2, -0.3, 0.1));
+        Eigen::VectorXd velocities = context->generalized_velocities();
+        velocities.segment<6>(free_v.start()) << 0.42, -0.31, 0.27,
+                                                   0.1, -0.2, 0.3;
+        fixture.model.SetGeneralizedVelocities(context.get(), velocities);
+        const Eigen::VectorXd before_q = context->generalized_positions();
+        const Eigen::VectorXd before_v = context->generalized_velocities();
+        Eigen::VectorXd sentinel = Eigen::VectorXd::Constant(nq, 73.0);
+        const Eigen::VectorXd before_output = sentinel;
+        const std::string reason = RefusalMessage([&] {
+            fixture.model.MapGeneralizedVelocityDerivativesToPositionSecondDerivatives(
+                *context, acceleration, &sentinel);
+        });
+        Expect(reason.find("singularity") != std::string::npos,
+               "second-derivative mapping retains the Ball pitch singularity refusal");
+        Expect(sentinel == before_output,
+               "a later singular Ball block cannot publish earlier free-body output");
+        Expect(context->generalized_positions() == before_q &&
+                   context->generalized_velocities() == before_v,
+               "singular second-derivative mapping leaves the source state untouched");
+
+        Eigen::VectorXd qdot(nq);
+        const std::string forward_reason = RefusalMessage([&] {
+            fixture.model.MapGeneralizedVelocitiesToPositionDerivatives(
+                *context, velocities, &qdot);
+        });
+        Expect(forward_reason.find("singularity") != std::string::npos,
+               "first and second coordinate maps agree on the singularity domain");
+    }
+}
+
 void CheckMassAndForwardInverseDynamics() {
     BallRpyFixture fixture;
     const Eigen::Vector3d angles{0.018, -0.014, -4.569};
@@ -339,6 +482,8 @@ void CheckRefusals() {
 int main() {
     CheckTopologyDefaultsAndPose();
     CheckVelocityAndPositionDerivativeMaps();
+    CheckPositionSecondDerivatives();
+    CheckSecondDerivativeSingularityAndAtomicOutput();
     CheckMassAndForwardInverseDynamics();
     CheckRefusals();
     if (failure_count != 0) return 1;

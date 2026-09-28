@@ -25,18 +25,27 @@ bool SameDoubleBits(double left, double right) {
            std::bit_cast<std::uint64_t>(right);
 }
 
+std::size_t ValidateWorkBudget(std::size_t value) {
+    if (value == 0) {
+        throw std::invalid_argument(
+            "system continuous-state advancer: internal-step budget must be positive");
+    }
+    return value;
+}
+
 }  // namespace
 
 class SystemContinuousStateAdvancer::Implementation final {
    public:
     Implementation(
+        internal::SystemContinuousStateIntegrationConfiguration configuration,
         const system_assembly::SystemInstance& system,
         const system_assembly::CompiledSystemPlan& plan,
         system_assembly::SystemRuntimeContext& accepted_context,
-        ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces,
-        internal::SystemContinuousStateIntegrationRecipe integration_recipe)
-        : system_(&system),
+        NoCallTimeAppliedForces no_call_time_applied_forces)
+        : maximum_internal_steps_(ValidateWorkBudget(
+              configuration.maximum_internal_steps_per_public_advance)),
+          system_(&system),
           accepted_context_(&accepted_context),
           candidate_context_(system.CreateDefaultRuntimeContext(
               accepted_context.time_seconds())),
@@ -48,8 +57,8 @@ class SystemContinuousStateAdvancer::Implementation final {
             accepted_context_->wheel_rail_projection_station_hints_meters());
         backend_ =
             std::make_unique<internal::SystemContinuousStateBackend>(
-                integration_recipe, system, plan, *candidate_context_,
-                *accepted_context_, candidate_state_, std::move(tolerances),
+                std::move(configuration.method), system, plan, *candidate_context_,
+                *accepted_context_, candidate_state_,
                 no_call_time_applied_forces);
     }
 
@@ -72,6 +81,11 @@ class SystemContinuousStateAdvancer::Implementation final {
     [[nodiscard]] internal::SystemContinuousStateIntegrationRecipe
     ConfiguredRecipe() const noexcept {
         return backend_->configured_recipe();
+    }
+
+    [[nodiscard]] std::optional<internal::CoordinateIntegrationDiagnostics>
+    CoordinateDiagnostics() const {
+        return backend_->coordinate_diagnostics();
     }
 
     void AdvanceToImpl(double target_time_seconds,
@@ -157,12 +171,13 @@ class SystemContinuousStateAdvancer::Implementation final {
                 accepted_context_->time_seconds();
             while (!reached_target) {
                 if (successful_internal_step_count ==
-                    internal::kMaximumInternalStepsPerPublicAdvance) {
-                    throw std::runtime_error(
+                    maximum_internal_steps_) {
+                    throw ContinuousStateNumericalFailure(
+                        ContinuousStateNumericalFailure::Reason::kAdvanceWorkBudgetExhausted,
+                        0,
                         "system continuous-state advancer: one public "
                         "advance exceeded " +
-                        std::to_string(
-                            internal::kMaximumInternalStepsPerPublicAdvance) +
+                        std::to_string(maximum_internal_steps_) +
                         " successful internal steps");
                 }
                 const ContinuousStateInternalStep step =
@@ -293,6 +308,7 @@ class SystemContinuousStateAdvancer::Implementation final {
         return BackendBundle().advancer();
     }
 
+    const std::size_t maximum_internal_steps_;
     const system_assembly::SystemInstance* system_;
     system_assembly::SystemRuntimeContext* accepted_context_;
     // Declared before backend_ because its RHS borrows this context.
@@ -308,23 +324,30 @@ SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
     system_assembly::SystemRuntimeContext& accepted_context,
     ContinuousStateErrorTolerances tolerances,
     NoCallTimeAppliedForces no_call_time_applied_forces)
-    : SystemContinuousStateAdvancer(
-          system, plan, accepted_context, std::move(tolerances),
-          no_call_time_applied_forces,
-          internal::SystemContinuousStateIntegrationRecipe::kCvodeBdf2) {}
+    : SystemContinuousStateAdvancer(std::make_unique<Implementation>(
+          internal::SystemContinuousStateIntegrationConfiguration{
+              internal::CvodeBdf2Configuration{std::move(tolerances)}},
+          system, plan, accepted_context, no_call_time_applied_forces)) {}
 
 SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
+    std::unique_ptr<Implementation> implementation)
+    : implementation_(std::move(implementation)) {}
+
+SystemContinuousStateAdvancer::~SystemContinuousStateAdvancer() = default;
+
+std::unique_ptr<SystemContinuousStateAdvancer>
+internal::SystemContinuousStateIntegrationAccess::Make(
+    SystemContinuousStateIntegrationConfiguration configuration,
     const system_assembly::SystemInstance& system,
     const system_assembly::CompiledSystemPlan& plan,
     system_assembly::SystemRuntimeContext& accepted_context,
-    ContinuousStateErrorTolerances tolerances,
-    NoCallTimeAppliedForces no_call_time_applied_forces,
-    internal::SystemContinuousStateIntegrationRecipe integration_recipe)
-    : implementation_(std::make_unique<Implementation>(
-          system, plan, accepted_context, std::move(tolerances),
-          no_call_time_applied_forces, integration_recipe)) {}
-
-SystemContinuousStateAdvancer::~SystemContinuousStateAdvancer() = default;
+    NoCallTimeAppliedForces no_call_time_applied_forces) {
+    auto implementation = std::make_unique<SystemContinuousStateAdvancer::Implementation>(
+        std::move(configuration), system, plan, accepted_context,
+        no_call_time_applied_forces);
+    return std::unique_ptr<SystemContinuousStateAdvancer>(
+        new SystemContinuousStateAdvancer(std::move(implementation)));
+}
 
 std::unique_ptr<SystemContinuousStateAdvancer>
 internal::SystemContinuousStateIntegrationAccess::Make(
@@ -334,10 +357,14 @@ internal::SystemContinuousStateIntegrationAccess::Make(
     system_assembly::SystemRuntimeContext& accepted_context,
     ContinuousStateErrorTolerances tolerances,
     NoCallTimeAppliedForces no_call_time_applied_forces) {
-    return std::unique_ptr<SystemContinuousStateAdvancer>(
-        new SystemContinuousStateAdvancer(
-            system, plan, accepted_context, std::move(tolerances),
-            no_call_time_applied_forces, recipe));
+    return Make({MakeOdeMethodConfiguration(recipe, std::move(tolerances))},
+                system, plan, accepted_context, no_call_time_applied_forces);
+}
+
+std::optional<internal::CoordinateIntegrationDiagnostics>
+internal::SystemContinuousStateIntegrationAccess::CoordinateDiagnostics(
+    const SystemContinuousStateAdvancer& advancer) {
+    return advancer.implementation_->CoordinateDiagnostics();
 }
 
 internal::SystemContinuousStateIntegrationRecipe

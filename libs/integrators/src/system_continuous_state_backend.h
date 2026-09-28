@@ -5,6 +5,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <type_traits>
 
 #include <Eigen/Dense>
 
@@ -12,6 +14,8 @@
 #include "orvd/integrators/system_rhs_bridge.h"
 
 #include "system_continuous_state_integration_recipe.h"
+#include "system_continuous_state_integration_configuration.h"
+#include "coordinate_second_order_problem.h"
 
 namespace orvd::system_assembly {
 class CompiledSystemPlan;
@@ -23,6 +27,23 @@ namespace orvd::integrators::internal {
 
 class SystemContinuousStateBackend final {
    public:
+    SystemContinuousStateBackend(
+        SystemIntegrationMethodConfiguration configuration,
+        const system_assembly::SystemInstance& system,
+        const system_assembly::CompiledSystemPlan& plan,
+        system_assembly::SystemRuntimeContext& candidate_context,
+        const system_assembly::SystemRuntimeContext& accepted_context,
+        const Eigen::VectorXd& initial_continuous_state,
+        NoCallTimeAppliedForces no_call_time_applied_forces);
+    template <class System, class Plan>
+        requires (!std::is_lvalue_reference_v<System&&> ||
+                  !std::is_lvalue_reference_v<Plan&&>)
+    SystemContinuousStateBackend(
+        SystemIntegrationMethodConfiguration, System&&, Plan&&,
+        system_assembly::SystemRuntimeContext&,
+        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
+        NoCallTimeAppliedForces) = delete;
+
     SystemContinuousStateBackend(
         SystemContinuousStateIntegrationRecipe recipe,
         const system_assembly::SystemInstance& system,
@@ -102,6 +123,8 @@ class SystemContinuousStateBackend final {
     [[nodiscard]] const ContinuousStateAdvancer& advancer() const;
     [[nodiscard]] SystemContinuousStateIntegrationRecipe configured_recipe()
         const noexcept;
+    [[nodiscard]] std::optional<CoordinateIntegrationDiagnostics>
+    coordinate_diagnostics() const;
     void SynchronizeContextLocalDataFrom(
         const system_assembly::SystemRuntimeContext& accepted_context);
 
