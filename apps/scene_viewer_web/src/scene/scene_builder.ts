@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 import type { SceneRecord } from '../record/scene_record.ts';
-import { parseVisualDefinition, type PartLabel, type VisualDefinition, type VisualPart, type WheelVisual } from '../record/visual_definition.ts';
+import type { PartLabel, VisualDefinition, VisualPart, WheelVisual } from '../record/visual_definition.ts';
 import { createPalette, stageColors, type ScenePalette } from './materials.ts';
 import { buildTrack } from './track_builder.ts';
 import { TrackModel } from './track_model.ts';
+import type { VehicleDisplayBindings } from './vehicle_display_bindings.ts';
 import { buildWheel, buildWheelSection, type WheelSection } from './wheel_geometry.ts';
 
 // Builds the Three.js objects once from the record. Every body is an empty
@@ -13,6 +14,9 @@ import { buildWheel, buildWheelSection, type WheelSection } from './wheel_geomet
 // in that body's own frame. The root group turns the ORVD inertial frame
 // (x forward, y right, z down) into Three.js Y-up: a rotation of +90 degrees
 // about x maps (x, y, z)_I to (x, -z, y)_V, so nothing else permutes axes.
+// The visual definition is parsed at the load boundary and handed in together
+// with the resolved display bindings; the carbody part group is whatever body
+// the bindings name, never a body picked by its name here.
 
 /** `body_axes` stands in for the vehicle when the record has no visual definition and is always shown. */
 export type PartGroup = 'carbody' | 'running_gear' | 'wheels' | 'track' | 'axes' | 'body_axes';
@@ -210,8 +214,9 @@ function defaultWheelVisual(radius: number): WheelVisual {
 
 type CarbodyRole = 'shell' | 'glass' | 'floor' | null;
 
-export function buildScene(record: SceneRecord): BuiltScene {
+export function buildScene(record: SceneRecord, visualDefinition: VisualDefinition | null, bindings: VehicleDisplayBindings): BuiltScene {
   const palette = createPalette();
+  const carbodyBodyName = bindings.carbody?.bodyName ?? null;
   const root = new THREE.Group();
   root.rotation.x = Math.PI / 2;
   const bodyObjects = new Map<string, THREE.Object3D>();
@@ -228,14 +233,12 @@ export function buildScene(record: SceneRecord): BuiltScene {
   const roles = new Map<ScenePart, { role: CarbodyRole; outline: THREE.LineSegments | null }>();
   const outlines: THREE.LineSegments[] = [];
   const outlineMaterial = new THREE.LineBasicMaterial({ color: '#9A9185', transparent: true, opacity: 0.42, depthWrite: false });
-  let visualDefinition: VisualDefinition | null = null;
-  if (record.visualDefinitionText !== null) {
-    visualDefinition = parseVisualDefinition(record.visualDefinitionText, new Set(bodyObjects.keys()));
+  if (visualDefinition !== null) {
     for (const part of visualDefinition.parts) {
       const object = buildPart(part, palette);
       const body = bodyObjects.get(part.bodyName);
       body?.add(object);
-      let group: PartGroup = part.bodyName === 'carbody' ? 'carbody' : 'running_gear';
+      let group: PartGroup = part.bodyName === carbodyBodyName ? 'carbody' : 'running_gear';
       let role: CarbodyRole = null;
       let outline: THREE.LineSegments | null = null;
       if (part.kind === 'axes') {

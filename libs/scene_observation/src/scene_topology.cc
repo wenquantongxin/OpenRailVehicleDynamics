@@ -20,6 +20,7 @@ SceneWheelPlacement DeriveWheelPlacement(
     SceneWheelPlacement placement;
     placement.interface_name = interface.interface_name;
     placement.wheel_body_name = interface.wheel_body_name;
+    placement.carrier_body_name = carrier.body_name;
     placement.side = interface.side;
     placement.datum_in_wheel_body_frame_meters =
         rotation_body_from_profile * datum_in_profile;

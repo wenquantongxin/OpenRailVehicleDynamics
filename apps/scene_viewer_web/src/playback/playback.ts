@@ -1,12 +1,12 @@
-import { frameAtOrBefore, frameTimeSeconds, type SceneRecord } from '../record/scene_record.ts';
+import { frameIndexAtOrBefore, frameTimeSeconds, type SceneRecord } from '../record/scene_record.ts';
 
 // The display clock. It advances with wall time scaled by the playback rate,
 // clamps to the record's time span, and resolves a display time to the two
-// bracketing frames. It never touches the record's own sample times.
+// bracketing frame rows. It never touches the record's own sample times.
 
 export interface FrameBracket {
-  frameA: number;
-  frameB: number;
+  firstFrameIndex: number;
+  secondFrameIndex: number;
   alpha: number;
 }
 
@@ -57,14 +57,14 @@ export class PlaybackController {
   }
 
   bracket(): FrameBracket {
-    const frameA = Math.max(0, frameAtOrBefore(this.record, this.timeSeconds));
-    const frameB = Math.min(this.record.frameCount - 1, frameA + 1);
-    if (frameB === frameA) {
-      return { frameA, frameB, alpha: 0 };
+    const firstFrameIndex = Math.max(0, frameIndexAtOrBefore(this.record, this.timeSeconds));
+    const secondFrameIndex = Math.min(this.record.frameCount - 1, firstFrameIndex + 1);
+    if (secondFrameIndex === firstFrameIndex) {
+      return { firstFrameIndex, secondFrameIndex, alpha: 0 };
     }
-    const tA = frameTimeSeconds(this.record, frameA);
-    const tB = frameTimeSeconds(this.record, frameB);
-    const alpha = Math.min(1, Math.max(0, (this.timeSeconds - tA) / (tB - tA)));
-    return { frameA, frameB, alpha };
+    const first = frameTimeSeconds(this.record, firstFrameIndex);
+    const second = frameTimeSeconds(this.record, secondFrameIndex);
+    const alpha = Math.min(1, Math.max(0, (this.timeSeconds - first) / (second - first)));
+    return { firstFrameIndex, secondFrameIndex, alpha };
   }
 }

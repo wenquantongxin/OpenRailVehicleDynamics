@@ -37,6 +37,13 @@ struct SceneBody {
 struct SceneWheelPlacement {
     std::string interface_name;
     std::string wheel_body_name;
+    /// The rigid body that carries this wheel's non-spinning profile frame:
+    /// the axle bridge of an independently rotating wheel, or the wheelset
+    /// body itself for a rigid wheelset, in which case it equals
+    /// `wheel_body_name`. It is the contact plan's carrier body, never a
+    /// name inferred from a convention; a display groups the left and right
+    /// wheels of one carrier through it.
+    std::string carrier_body_name;
     wheel_rail_contact::WheelSide side{wheel_rail_contact::WheelSide::kRight};
     Eigen::Vector3d datum_in_wheel_body_frame_meters{Eigen::Vector3d::Zero()};
     Eigen::Vector3d spin_axis_in_wheel_body_frame{Eigen::Vector3d::UnitY()};

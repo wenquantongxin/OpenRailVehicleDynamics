@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <stdexcept>
@@ -7,9 +8,11 @@
 #include "orvd/scene_record/scene_record_writer.h"
 
 // A record written from stated values and read back must return the same
-// values, statuses and identities; a record that was not closed must be
-// refused as incomplete; the writer must refuse an existing directory, a wrong
-// body count and a non-valid scalar carrying a value.
+// values, statuses and identities, including sample identities that differ
+// from the frame row numbers; a record that was not closed must be refused as
+// incomplete; the writer must refuse an existing directory, a placement that
+// names a body the topology does not list, a wrong body count and a non-valid
+// scalar carrying a value.
 
 namespace {
 
@@ -25,6 +28,7 @@ scene_observation::SceneTopology MakeTopology() {
     scene_observation::SceneWheelPlacement wheel;
     wheel.interface_name = "wheel_r";
     wheel.wheel_body_name = "wheel";
+    wheel.carrier_body_name = "carrier";
     wheel.side = wheel_rail_contact::WheelSide::kRight;
     wheel.datum_in_wheel_body_frame_meters = Eigen::Vector3d(0.0, -0.7465, 0.0);
     wheel.spin_axis_in_wheel_body_frame = Eigen::Vector3d(0.0, -1.0, 0.0);
@@ -39,11 +43,15 @@ std::vector<scene_observation::ScalarDefinition> MakeDefinitions() {
             {"c", "1", "none", "count", "stated", "instantaneous"}};
 }
 
+// Sample identities come from the run program and need not equal the frame
+// row numbers.
+constexpr std::int64_t kSampleIdentities[] = {42, 105, 901, 1300};
+
 scene_observation::SceneFrame MakeFrame(int index) {
     scene_observation::SceneFrame frame;
     frame.identity.time_seconds = 0.01 * index;
     frame.identity.time_nanoseconds = 10000000LL * index;
-    frame.identity.sample_index = index;
+    frame.identity.sample_index = kSampleIdentities[index];
     frame.identity.phase =
         index == 0 ? scene_observation::SamplePhase::kInitialAcceptedState
         : index == 2 ? scene_observation::SamplePhase::kAcceptedEndpoint
@@ -179,6 +187,23 @@ int main(int argc, char** argv) {
         if (!existing_refused) {
             Fail("the writer overwrote an existing directory");
         }
+        // A placement whose carrier body the topology does not list is
+        // refused before anything is written.
+        {
+            auto unlisted = MakeTopology();
+            unlisted.wheel_placements[0].carrier_body_name = "missing";
+            bool refused = false;
+            try {
+                scene_record::SceneRecordWriter bad(fixtures / "unlisted",
+                                                    std::move(unlisted),
+                                                    MakeDefinitions(), "", false);
+            } catch (const std::runtime_error&) {
+                refused = true;
+            }
+            if (!refused || std::filesystem::exists(fixtures / "unlisted")) {
+                Fail("a placement naming an unlisted carrier body was accepted");
+            }
+        }
 
         const auto record = scene_record::ReadSceneRecord(record_directory);
         if (record.topology.bodies.size() != 2 ||
@@ -187,6 +212,7 @@ int main(int argc, char** argv) {
             record.topology.bodies[1].moves_freely_in_world ||
             record.topology.wheel_placements.size() != 1 ||
             record.topology.wheel_placements[0].wheel_body_name != "wheel" ||
+            record.topology.wheel_placements[0].carrier_body_name != "carrier" ||
             record.topology.wheel_placements[0].datum_in_wheel_body_frame_meters !=
                 Eigen::Vector3d(0.0, -0.7465, 0.0) ||
             record.topology.wheel_placements[0].nominal_rolling_radius_meters !=
@@ -212,6 +238,9 @@ int main(int argc, char** argv) {
         for (int index = 0; index < 3; ++index) {
             const auto expected = MakeFrame(index);
             const auto& actual = record.frames[static_cast<std::size_t>(index)];
+            if (actual.identity.sample_index != kSampleIdentities[index]) {
+                Fail("the sample identity was replaced by the row number");
+            }
             if (actual.identity.time_seconds != expected.identity.time_seconds ||
                 actual.identity.time_nanoseconds !=
                     expected.identity.time_nanoseconds ||

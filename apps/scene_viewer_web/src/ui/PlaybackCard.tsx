@@ -4,11 +4,12 @@ import { frameTimeSeconds, framePhase, frameSampleIndex, type SceneRecord } from
 import { sectionNames, type TrackModel } from '../scene/track_model.ts';
 import { Card } from './Card.tsx';
 import { chainage, clock, fixed } from './format.ts';
-import type { ReadoutModel } from './readout_model.ts';
+import type { VehicleReadoutModel } from './vehicle_readout_model.ts';
 
 // Card 07. The timeline carries only recorded facts: the curvature under the
 // carbody, the line's element points and the samples where a wheel had two
-// contact points or none.
+// contact points or none. Seeking and events use frame row numbers; the
+// sample identity shown next to the time is the record's own value.
 
 export const playbackRates = [0.1, 0.25, 0.5, 1, 2, 5];
 
@@ -20,9 +21,9 @@ const phaseNames: Record<number, { en: string; zh: string }> = {
 
 interface Props {
   record: SceneRecord;
-  model: ReadoutModel;
+  readoutModel: VehicleReadoutModel;
   track: TrackModel | null;
-  frame: number;
+  frameIndex: number;
   timeSeconds: number;
   playing: boolean;
   rateIndex: number;
@@ -33,7 +34,7 @@ interface Props {
 }
 
 export function PlaybackCard(props: Props) {
-  const { record, model, track, frame } = props;
+  const { record, readoutModel, track, frameIndex } = props;
   const start = frameTimeSeconds(record, 0);
   const end = frameTimeSeconds(record, record.frameCount - 1);
   const span = Math.max(1e-9, end - start);
@@ -44,9 +45,9 @@ export function PlaybackCard(props: Props) {
     let kmax = 0;
     const values: number[] = [];
     for (let i = 0; i < samples; ++i) {
-      const f = Math.round((i / (samples - 1)) * (record.frameCount - 1));
-      const station = model.carbodyStation[f] ?? Number.NaN;
-      const k = track !== null && Number.isFinite(station) ? Math.abs(track.curvatureAt(station)) : 0;
+      const rowIndex = Math.round((i / (samples - 1)) * (record.frameCount - 1));
+      const stationMeters = readoutModel.carbodyStation[rowIndex] ?? Number.NaN;
+      const k = track !== null && Number.isFinite(stationMeters) ? Math.abs(track.curvatureAtStation(stationMeters)) : 0;
       values.push(k);
       kmax = Math.max(kmax, k);
     }
@@ -56,19 +57,19 @@ export function PlaybackCard(props: Props) {
       ' L1000,34 Z';
     // Element points: the first frame at which the carbody reaches the point.
     const elements = (track?.elementPoints ?? []).flatMap((point) => {
-      for (let f = 0; f < record.frameCount; ++f) {
-        if ((model.carbodyStation[f] ?? Number.NaN) >= point.station) {
-          return [{ ...point, at: (frameTimeSeconds(record, f) - start) / span }];
+      for (let rowIndex = 0; rowIndex < record.frameCount; ++rowIndex) {
+        if ((readoutModel.carbodyStation[rowIndex] ?? Number.NaN) >= point.stationMeters) {
+          return [{ ...point, at: (frameTimeSeconds(record, rowIndex) - start) / span }];
         }
       }
       return [];
     });
-    const events = model.contactSpans.map((spanEntry) => ({
-      at: (frameTimeSeconds(record, spanEntry.startFrame) - start) / span,
+    const events = readoutModel.contactSpans.map((spanEntry) => ({
+      at: (frameTimeSeconds(record, spanEntry.startFrameIndex) - start) / span,
       loss: spanEntry.patches === 0,
     }));
     return { area, elements, events };
-  }, [record, model, track, start, span]);
+  }, [record, readoutModel, track, start, span]);
 
   const barRef = useRef<HTMLDivElement>(null);
   const seekFromPointer = (clientX: number): void => {
@@ -81,8 +82,8 @@ export function PlaybackCard(props: Props) {
     props.onSeek(start + f * span);
   };
 
-  const station = model.carbodyStation[frame] ?? Number.NaN;
-  const section = track !== null && Number.isFinite(station) ? track.sectionAt(station) : null;
+  const stationMeters = readoutModel.carbodyStation[frameIndex] ?? Number.NaN;
+  const section = track !== null && Number.isFinite(stationMeters) ? track.sectionAtStation(stationMeters) : null;
   let current = '';
   if (section !== null && track !== null) {
     const names = sectionNames[section.kind];
@@ -91,13 +92,14 @@ export function PlaybackCard(props: Props) {
       parts.push(`R ${fixed(section.radiusMeters, 0)} m`);
     }
     if (section.kind !== 'tangent') {
-      parts.push(`CANT ${fixed(1000 * track.cantAt(station), 0)} mm`);
+      parts.push(`CANT ${fixed(1000 * track.superelevationAtStation(stationMeters), 0)} mm`);
     }
     current = parts.join(' · ');
   }
-  const firstStation = model.carbodyStation[0] ?? Number.NaN;
-  const lastStation = model.carbodyStation[record.frameCount - 1] ?? Number.NaN;
-  const phase = phaseNames[framePhase(record, frame)] ?? { en: 'Unknown phase', zh: '未知阶段' };
+  const firstStationMeters = readoutModel.carbodyStation[0] ?? Number.NaN;
+  const lastStationMeters = readoutModel.carbodyStation[record.frameCount - 1] ?? Number.NaN;
+  const phase = phaseNames[framePhase(record, frameIndex)] ?? { en: 'Unknown phase', zh: '未知阶段' };
+  const sampleIndex = frameSampleIndex(record, frameIndex);
 
   return (
     <Card index="07" en="Playback" zh="回放" className="playback">
@@ -119,9 +121,9 @@ export function PlaybackCard(props: Props) {
         </div>
         <div className="timeline">
           <div className="tl-labels">
-            <span>{Number.isFinite(firstStation) ? chainage(firstStation) : clock(0)}</span>
+            <span>{Number.isFinite(firstStationMeters) ? chainage(firstStationMeters) : clock(0)}</span>
             <span className="current">{current}</span>
-            <span>{Number.isFinite(lastStation) ? chainage(lastStation) : clock(span)}</span>
+            <span>{Number.isFinite(lastStationMeters) ? chainage(lastStationMeters) : clock(span)}</span>
           </div>
           <div
             className="tl-bar"
@@ -142,14 +144,14 @@ export function PlaybackCard(props: Props) {
               <svg viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true">
                 <path d={strip.area} className="curvature" />
                 {strip.elements.map((point) => (
-                  <line key={`${point.code}-${point.station}`} x1={1000 * point.at} x2={1000 * point.at} y1={4} y2={34} className="element" />
+                  <line key={`${point.code}-${point.stationMeters}`} x1={1000 * point.at} x2={1000 * point.at} y1={4} y2={34} className="element" />
                 ))}
                 {strip.events.map((event, index) => (
                   <line key={index} x1={1000 * event.at} x2={1000 * event.at} y1={26} y2={34} className={event.loss ? 'loss' : 'two'} />
                 ))}
               </svg>
               {strip.elements.map((point) => (
-                <span key={`${point.code}-${point.station}`} className="element-code" style={{ left: `${100 * point.at}%` }}>
+                <span key={`${point.code}-${point.stationMeters}`} className="element-code" style={{ left: `${100 * point.at}%` }}>
                   {point.code}
                 </span>
               ))}
@@ -161,9 +163,9 @@ export function PlaybackCard(props: Props) {
               {clock(props.timeSeconds - start)} <i>/ {clock(span)}</i>
             </span>
             <span className="sample">
-              Sample #{frameSampleIndex(record, frame)} · {phase.en} <span className="zh">{phase.zh}</span>
+              {sampleIndex >= 0 ? `Sample #${sampleIndex}` : 'Sample identity absent'} · Frame {frameIndex} · {phase.en} <span className="zh">{phase.zh}</span>
             </span>
-            <span>{Number.isFinite(station) ? chainage(station) : ''}</span>
+            <span>{Number.isFinite(stationMeters) ? chainage(stationMeters) : ''}</span>
           </div>
         </div>
         <div className="rate">

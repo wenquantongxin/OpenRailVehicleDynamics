@@ -12,13 +12,13 @@ const orientation = new THREE.Quaternion();
 /** Which body slots are wheels with a recorded spin angle, by body index. */
 export function wheelSpinBindings(record: SceneRecord): Map<number, WheelSpinBinding> {
   const bindings = new Map<number, WheelSpinBinding>();
-  if (record.columns.wheelSpinCount === 0) {
+  if (record.columns.wheelSpinAngleCount === 0) {
     return bindings;
   }
-  record.wheelPlacements.forEach((placement, wheel) => {
-    const body = record.bodies.findIndex((candidate) => candidate.name === placement.wheelBodyName);
-    if (body >= 0) {
-      bindings.set(body, { wheel, spinAxisInBody: placement.spinAxisInWheelBodyFrame });
+  record.wheelPlacements.forEach((placement, wheelPlacementIndex) => {
+    const bodyIndex = record.bodies.findIndex((candidate) => candidate.name === placement.wheelBodyName);
+    if (bodyIndex >= 0) {
+      bindings.set(bodyIndex, { wheelPlacementIndex, spinAxisInBody: placement.spinAxisInWheelBodyFrame });
     }
   });
   return bindings;
@@ -28,17 +28,17 @@ export function applyFrames(
   record: SceneRecord,
   scene: BuiltScene,
   bindings: Map<number, WheelSpinBinding>,
-  frameA: number,
-  frameB: number,
+  firstFrameIndex: number,
+  secondFrameIndex: number,
   alpha: number,
 ): void {
-  record.bodies.forEach((body, index) => {
+  record.bodies.forEach((body, bodyIndex) => {
     const object = scene.bodyObjects.get(body.name);
     if (object === undefined) {
       return;
     }
-    interpolatePosition(record, frameA, frameB, alpha, index, position);
-    interpolateOrientation(record, frameA, frameB, alpha, index, bindings.get(index), orientation);
+    interpolatePosition(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, position);
+    interpolateOrientation(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, bindings.get(bodyIndex), orientation);
     object.position.copy(position);
     object.quaternion.copy(orientation);
   });

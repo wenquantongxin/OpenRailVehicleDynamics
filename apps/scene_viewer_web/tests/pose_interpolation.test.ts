@@ -9,7 +9,7 @@ for (const flipped of [false, true]) {
   test(`wheel spin follows a turning carrier (${flipped ? 'half-turn' : 'identity'} body basis)`, () => {
     const basis = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), flipped ? Math.PI : 0);
     const axis = new THREE.Vector3(0, flipped ? -1 : 1, 0);
-    const binding = { wheel: 0, spinAxisInBody: axis.toArray() as [number, number, number] };
+    const binding = { wheelPlacementIndex: 0, spinAxisInBody: axis.toArray() as [number, number, number] };
     const carrier = (alpha: number): THREE.Quaternion =>
       new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.2 + 0.1 * alpha).multiply(basis);
 
@@ -19,14 +19,14 @@ for (const flipped of [false, true]) {
         carrier(alpha).multiply(new THREE.Quaternion().setFromAxisAngle(axis, angleA + delta * alpha));
       // Two one-body rows: position, wxyz, linear/angular velocity, spin angle.
       const values = new Float64Array(28);
-      for (const frame of [0, 1]) {
-        const q = pose(frame);
-        values.set([q.w, q.x, q.y, q.z], 14 * frame + 3);
-        values[14 * frame + 13] = angleA + delta * frame;
+      for (const frameIndex of [0, 1]) {
+        const q = pose(frameIndex);
+        values.set([q.w, q.x, q.y, q.z], 14 * frameIndex + 3);
+        values[14 * frameIndex + 13] = angleA + delta * frameIndex;
       }
       const record = {
         values,
-        columns: { rowValueCount: 14, bodyOffset: 0, valuesPerBody: 13, wheelSpinOffset: 13, wheelSpinCount: 1 },
+        columns: { rowValueCount: 14, bodyStatesColumnOffset: 0, valuesPerBody: 13, wheelSpinAnglesColumnOffset: 13, wheelSpinAngleCount: 1 },
       } as unknown as SceneRecord;
 
       for (const alpha of [0, 0.25, 0.5, 0.75, 1]) {

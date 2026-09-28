@@ -14,16 +14,16 @@ export interface Subtitle {
 export function scenarioSubtitle(carbodyStation: Float64Array, initialSpeedKmh: number | null, track: TrackModel | null): Subtitle | null {
   let low = Infinity;
   let high = -Infinity;
-  for (const station of carbodyStation) {
-    if (Number.isFinite(station)) {
-      low = Math.min(low, station);
-      high = Math.max(high, station);
+  for (const stationMeters of carbodyStation) {
+    if (Number.isFinite(stationMeters)) {
+      low = Math.min(low, stationMeters);
+      high = Math.max(high, stationMeters);
     }
   }
   const en: string[] = [];
   const zh: string[] = [];
   if (track !== null && low <= high) {
-    const sections = track.sections.filter((section) => section.endStation >= low && section.startStation <= high);
+    const sections = track.sections.filter((section) => section.endStationMeters >= low && section.startStationMeters <= high);
     let radius = Infinity;
     let circular = false;
     for (const section of sections) {
@@ -34,9 +34,9 @@ export function scenarioSubtitle(carbodyStation: Float64Array, initialSpeedKmh: 
     }
     if (circular) {
       let cant = 0;
-      track.stations.forEach((station, index) => {
-        if (station >= low && station <= high) {
-          cant = Math.max(cant, Math.abs(track.cant[index] ?? 0));
+      track.stationsMeters.forEach((stationMeters, stationIndex) => {
+        if (stationMeters >= low && stationMeters <= high) {
+          cant = Math.max(cant, Math.abs(track.superelevationMeters[stationIndex] ?? 0));
         }
       });
       en.push('CURVE NEGOTIATION');

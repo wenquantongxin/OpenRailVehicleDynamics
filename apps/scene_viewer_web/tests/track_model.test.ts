@@ -42,17 +42,17 @@ test('two circular curves meeting directly give a compound-curve point', () => {
   assert.deepEqual(model.elementPoints.map((point) => point.code), ['CC']);
 });
 
-test('rail offsets, gauge and lowest point come from the recorded table', () => {
+test('rail offsets, datum spacing and lowest point come from the recorded table', () => {
   const table = straightTable(range(0, 20, 0.5), () => 0, 0.8);
   // Raise the line by 0.3 m towards its far end (inertial z points down).
   table.centerlineInInertialMeters = table.stationsMeters.map((s) => [s, 0, -0.015 * s]);
   table.leftRailDatumInInertialMeters = table.stationsMeters.map((s) => [s, -0.8, -0.015 * s - 0.00018]);
   table.rightRailDatumInInertialMeters = table.stationsMeters.map((s) => [s, 0.8, -0.015 * s - 0.00018]);
   const model = new TrackModel(table);
-  assert.ok(Math.abs(model.gauge - 1.6) < 1e-12);
-  assert.ok(Math.abs(model.lowestCentreZ - 0) < 1e-12, 'the start is the lowest point');
-  const [vl, wl] = model.railOffsetAt(7.25, 'left');
-  const [vr, wr] = model.railOffsetAt(7.25, 'right');
+  assert.ok(Math.abs(model.medianRailDatumSpacingMeters - 1.6) < 1e-12);
+  assert.ok(Math.abs(model.lowestCentrelineInertialZMeters - 0) < 1e-12, 'the start is the lowest point');
+  const [vl, wl] = model.railDatumOffsetAtStation(7.25, 'left');
+  const [vr, wr] = model.railDatumOffsetAtStation(7.25, 'right');
   assert.ok(Math.abs(vl + 0.8) < 1e-12 && Math.abs(vr - 0.8) < 1e-12);
   assert.ok(Math.abs(wl + 0.00018) < 1e-12 && Math.abs(wr + 0.00018) < 1e-12);
 });
@@ -68,8 +68,8 @@ test('canted track: rail offsets are read in the rolled Track-T frame', () => {
   table.leftRailDatumInInertialMeters = stations.map((s) => [s, -0.75315 * Math.cos(roll), -0.75315 * Math.sin(roll)]);
   table.rightRailDatumInInertialMeters = stations.map((s) => [s, 0.75315 * Math.cos(roll), 0.75315 * Math.sin(roll)]);
   const model = new TrackModel(table);
-  const [vl, wl] = model.railOffsetAt(5, 'left');
-  const [vr, wr] = model.railOffsetAt(5, 'right');
+  const [vl, wl] = model.railDatumOffsetAtStation(5, 'left');
+  const [vr, wr] = model.railDatumOffsetAtStation(5, 'right');
   assert.ok(Math.abs(vl + 0.75315) < 1e-12 && Math.abs(vr - 0.75315) < 1e-12);
   assert.ok(Math.abs(wl) < 1e-12 && Math.abs(wr) < 1e-12);
 });

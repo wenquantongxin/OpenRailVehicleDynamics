@@ -16,15 +16,15 @@ import type { TrackTable } from '../record/scene_record.ts';
 // line definition; the record carries no segment table.
 //
 // Rail positions come from the recorded rail datums, expressed per station in
-// Track-T about the centreline, so a different gauge or datum is drawn as
+// Track-T about the centreline, so a different datum spacing is drawn as
 // recorded.
 
 export type SectionKind = 'tangent' | 'transition' | 'circular';
 
 export interface TrackSection {
   kind: SectionKind;
-  startStation: number;
-  endStation: number;
+  startStationMeters: number;
+  endStationMeters: number;
   /** Plateau radius of a circular section; null otherwise. */
   radiusMeters: number | null;
   /** +1 turns right (towards +y), -1 turns left, 0 straight. */
@@ -34,7 +34,7 @@ export interface TrackSection {
 export interface ElementPoint {
   code: 'TS' | 'SC' | 'CS' | 'ST' | 'TC' | 'CT' | 'CC';
   zh: string;
-  station: number;
+  stationMeters: number;
 }
 
 const elementNames: Record<ElementPoint['code'], string> = {
@@ -47,110 +47,112 @@ const elementNames: Record<ElementPoint['code'], string> = {
   CC: '复曲线点',
 };
 
+/** The Track-T frame at one station: origin and axes expressed in I. */
 export interface TrackFrame {
   position: THREE.Vector3;
-  /** Columns: along track, right, down (Track-T axes expressed in I). */
+  /** Along track, right, down: the Track-T axes expressed in I. */
   tangent: THREE.Vector3;
   right: THREE.Vector3;
   down: THREE.Vector3;
 }
 
 export class TrackModel {
-  readonly stations: Float64Array;
-  readonly curvature: Float64Array;
-  readonly cant: Float64Array;
+  readonly stationsMeters: Float64Array;
+  readonly curvatureRadiansPerMeter: Float64Array;
+  readonly superelevationMeters: Float64Array;
   readonly sections: TrackSection[];
   readonly elementPoints: ElementPoint[];
-  /** Recorded rail datums in Track-T about the centreline: lateral v (right) and depth w (down). */
-  readonly leftRailV: Float64Array;
-  readonly leftRailW: Float64Array;
-  readonly rightRailV: Float64Array;
-  readonly rightRailW: Float64Array;
-  /** The lowest centreline point of the table, as inertial z (z points down). */
-  readonly lowestCentreZ: number;
-  /** Median distance between the two rail datums. */
-  readonly gauge: number;
-  private readonly centers: THREE.Vector3[];
+  /** Recorded rail datums in Track-T about the centreline: lateral offset (right positive) and depth offset (down positive), metres. */
+  readonly leftRailLateralOffsetsMeters: Float64Array;
+  readonly leftRailDepthOffsetsMeters: Float64Array;
+  readonly rightRailLateralOffsetsMeters: Float64Array;
+  readonly rightRailDepthOffsetsMeters: Float64Array;
+  /** The lowest centreline point of the table as inertial z, which points down, so it is the largest z. */
+  readonly lowestCentrelineInertialZMeters: number;
+  /** Median lateral distance between the two recorded rail datums; not the gauge, which is measured between the rail heads. */
+  readonly medianRailDatumSpacingMeters: number;
+  private readonly centres: THREE.Vector3[];
   private readonly rotations: THREE.Quaternion[];
-  private hint = 0;
+  private nearestHint = 0;
 
   constructor(table: TrackTable) {
     const count = table.stationsMeters.length;
-    this.stations = Float64Array.from(table.stationsMeters);
-    this.curvature = Float64Array.from(table.curvatureRadiansPerMeter);
-    this.cant = Float64Array.from(table.superelevationMeters);
-    this.centers = table.centerlineInInertialMeters.map((row) => new THREE.Vector3(row[0] ?? 0, row[1] ?? 0, row[2] ?? 0));
+    this.stationsMeters = Float64Array.from(table.stationsMeters);
+    this.curvatureRadiansPerMeter = Float64Array.from(table.curvatureRadiansPerMeter);
+    this.superelevationMeters = Float64Array.from(table.superelevationMeters);
+    this.centres = table.centerlineInInertialMeters.map((row) => new THREE.Vector3(row[0] ?? 0, row[1] ?? 0, row[2] ?? 0));
     this.rotations = table.rotationInertialFromTrackWxyz.map((row) =>
       new THREE.Quaternion(row[1] ?? 0, row[2] ?? 0, row[3] ?? 0, row[0] ?? 1).normalize(),
     );
     if (
-      this.curvature.length !== count ||
+      this.curvatureRadiansPerMeter.length !== count ||
       this.rotations.length !== count ||
-      this.cant.length !== count ||
+      this.superelevationMeters.length !== count ||
       table.leftRailDatumInInertialMeters.length !== count ||
       table.rightRailDatumInInertialMeters.length !== count
     ) {
       throw new Error('track table: curvature, cant, rotation and rail columns disagree with the stations');
     }
-    this.leftRailV = new Float64Array(count);
-    this.leftRailW = new Float64Array(count);
-    this.rightRailV = new Float64Array(count);
-    this.rightRailW = new Float64Array(count);
+    this.leftRailLateralOffsetsMeters = new Float64Array(count);
+    this.leftRailDepthOffsetsMeters = new Float64Array(count);
+    this.rightRailLateralOffsetsMeters = new Float64Array(count);
+    this.rightRailDepthOffsetsMeters = new Float64Array(count);
     const offset = new THREE.Vector3();
     const right = new THREE.Vector3();
     const down = new THREE.Vector3();
     let lowest = -Infinity;
-    const gauges = new Float64Array(count);
-    for (let index = 0; index < count; ++index) {
-      const centre = this.centers[index] as THREE.Vector3;
-      const rotation = this.rotations[index] as THREE.Quaternion;
+    const spacings = new Float64Array(count);
+    for (let stationIndex = 0; stationIndex < count; ++stationIndex) {
+      const centre = this.centres[stationIndex] as THREE.Vector3;
+      const rotation = this.rotations[stationIndex] as THREE.Quaternion;
       right.set(0, 1, 0).applyQuaternion(rotation);
       down.set(0, 0, 1).applyQuaternion(rotation);
-      const left = table.leftRailDatumInInertialMeters[index] ?? [];
+      const left = table.leftRailDatumInInertialMeters[stationIndex] ?? [];
       offset.set(left[0] ?? 0, left[1] ?? 0, left[2] ?? 0).sub(centre);
-      this.leftRailV[index] = offset.dot(right);
-      this.leftRailW[index] = offset.dot(down);
-      const rightRail = table.rightRailDatumInInertialMeters[index] ?? [];
+      this.leftRailLateralOffsetsMeters[stationIndex] = offset.dot(right);
+      this.leftRailDepthOffsetsMeters[stationIndex] = offset.dot(down);
+      const rightRail = table.rightRailDatumInInertialMeters[stationIndex] ?? [];
       offset.set(rightRail[0] ?? 0, rightRail[1] ?? 0, rightRail[2] ?? 0).sub(centre);
-      this.rightRailV[index] = offset.dot(right);
-      this.rightRailW[index] = offset.dot(down);
-      gauges[index] = (this.rightRailV[index] as number) - (this.leftRailV[index] as number);
+      this.rightRailLateralOffsetsMeters[stationIndex] = offset.dot(right);
+      this.rightRailDepthOffsetsMeters[stationIndex] = offset.dot(down);
+      spacings[stationIndex] =
+        (this.rightRailLateralOffsetsMeters[stationIndex] as number) - (this.leftRailLateralOffsetsMeters[stationIndex] as number);
       lowest = Math.max(lowest, centre.z);
     }
-    this.lowestCentreZ = count > 0 ? lowest : 0;
-    gauges.sort();
-    this.gauge = count > 0 ? (gauges[count >> 1] as number) : 1.435;
-    this.sections = classifySections(this.stations, this.curvature);
+    this.lowestCentrelineInertialZMeters = count > 0 ? lowest : 0;
+    spacings.sort();
+    this.medianRailDatumSpacingMeters = count > 0 ? (spacings[count >> 1] as number) : 1.435;
+    this.sections = classifySections(this.stationsMeters, this.curvatureRadiansPerMeter);
     this.elementPoints = elementPointsOf(this.sections);
   }
 
-  get count(): number {
-    return this.stations.length;
+  get stationCount(): number {
+    return this.stationsMeters.length;
   }
 
-  get firstStation(): number {
-    return this.stations[0] as number;
+  get firstStationMeters(): number {
+    return this.stationsMeters[0] as number;
   }
 
-  get lastStation(): number {
-    return this.stations[this.stations.length - 1] as number;
+  get lastStationMeters(): number {
+    return this.stationsMeters[this.stationsMeters.length - 1] as number;
   }
 
   /** Fractional table index of a station, clamped to the table. */
-  indexOfStation(station: number): number {
-    const s = this.stations;
+  fractionalStationIndexOf(stationMeters: number): number {
+    const s = this.stationsMeters;
     const last = s.length - 1;
-    if (station <= (s[0] as number)) {
+    if (stationMeters <= (s[0] as number)) {
       return 0;
     }
-    if (station >= (s[last] as number)) {
+    if (stationMeters >= (s[last] as number)) {
       return last;
     }
     let low = 0;
     let high = last;
     while (high - low > 1) {
       const middle = (low + high) >> 1;
-      if ((s[middle] as number) <= station) {
+      if ((s[middle] as number) <= stationMeters) {
         low = middle;
       } else {
         high = middle;
@@ -158,35 +160,35 @@ export class TrackModel {
     }
     const s0 = s[low] as number;
     const s1 = s[high] as number;
-    return low + (station - s0) / (s1 - s0);
+    return low + (stationMeters - s0) / (s1 - s0);
   }
 
-  private interpolate(values: Float64Array, station: number): number {
-    const index = this.indexOfStation(station);
+  private interpolate(values: Float64Array, stationMeters: number): number {
+    const index = this.fractionalStationIndexOf(stationMeters);
     const low = Math.floor(index);
     const high = Math.min(values.length - 1, low + 1);
     const fraction = index - low;
     return (values[low] as number) * (1 - fraction) + (values[high] as number) * fraction;
   }
 
-  /** Recorded rail datum of one side at a station, in Track-T about the centreline: [v, w]. */
-  railOffsetAt(station: number, side: 'left' | 'right'): [number, number] {
-    const v = side === 'left' ? this.leftRailV : this.rightRailV;
-    const w = side === 'left' ? this.leftRailW : this.rightRailW;
-    return [this.interpolate(v, station), this.interpolate(w, station)];
+  /** Recorded rail datum of one side at a station, in Track-T about the centreline: [lateral, depth] metres. */
+  railDatumOffsetAtStation(stationMeters: number, side: 'left' | 'right'): [number, number] {
+    const lateral = side === 'left' ? this.leftRailLateralOffsetsMeters : this.rightRailLateralOffsetsMeters;
+    const depth = side === 'left' ? this.leftRailDepthOffsetsMeters : this.rightRailDepthOffsetsMeters;
+    return [this.interpolate(lateral, stationMeters), this.interpolate(depth, stationMeters)];
   }
 
-  curvatureAt(station: number): number {
-    return this.interpolate(this.curvature, station);
+  curvatureAtStation(stationMeters: number): number {
+    return this.interpolate(this.curvatureRadiansPerMeter, stationMeters);
   }
 
-  cantAt(station: number): number {
-    return this.interpolate(this.cant, station);
+  superelevationAtStation(stationMeters: number): number {
+    return this.interpolate(this.superelevationMeters, stationMeters);
   }
 
-  sectionAt(station: number): TrackSection | null {
+  sectionAtStation(stationMeters: number): TrackSection | null {
     for (const section of this.sections) {
-      if (station >= section.startStation && station <= section.endStation) {
+      if (stationMeters >= section.startStationMeters && stationMeters <= section.endStationMeters) {
         return section;
       }
     }
@@ -194,56 +196,57 @@ export class TrackModel {
   }
 
   /** Origin and Track-T axes at a station, interpolated between samples. */
-  frameAt(station: number, out?: TrackFrame): TrackFrame {
-    const frame = out ?? {
+  trackFrameAtStation(stationMeters: number, out?: TrackFrame): TrackFrame {
+    const trackFrame = out ?? {
       position: new THREE.Vector3(),
       tangent: new THREE.Vector3(),
       right: new THREE.Vector3(),
       down: new THREE.Vector3(),
     };
-    const index = this.indexOfStation(station);
+    const index = this.fractionalStationIndexOf(stationMeters);
     const low = Math.floor(index);
-    const high = Math.min(this.count - 1, low + 1);
+    const high = Math.min(this.stationCount - 1, low + 1);
     const fraction = index - low;
-    const c0 = this.centers[low] as THREE.Vector3;
-    const c1 = this.centers[high] as THREE.Vector3;
-    frame.position.copy(c0).lerp(c1, fraction);
+    const c0 = this.centres[low] as THREE.Vector3;
+    const c1 = this.centres[high] as THREE.Vector3;
+    trackFrame.position.copy(c0).lerp(c1, fraction);
     const rotation = scratchQuaternion.copy(this.rotations[low] as THREE.Quaternion).slerp(this.rotations[high] as THREE.Quaternion, fraction);
-    frame.tangent.set(1, 0, 0).applyQuaternion(rotation);
-    frame.right.set(0, 1, 0).applyQuaternion(rotation);
-    frame.down.set(0, 0, 1).applyQuaternion(rotation);
-    return frame;
+    trackFrame.tangent.set(1, 0, 0).applyQuaternion(rotation);
+    trackFrame.right.set(0, 1, 0).applyQuaternion(rotation);
+    trackFrame.down.set(0, 0, 1).applyQuaternion(rotation);
+    return trackFrame;
   }
 
-  /** Centreline points in the horizontal plane (inertial x, y), every `step` samples, ends included. */
-  planPoints(step: number): { x: number; y: number; station: number }[] {
-    const points: { x: number; y: number; station: number }[] = [];
-    const push = (index: number): void => {
-      const c = this.centers[index] as THREE.Vector3;
-      points.push({ x: c.x, y: c.y, station: this.stations[index] as number });
+  /** Centreline points in the horizontal plane (inertial x, y), every `stationStep` samples, ends included. */
+  planPointsEvery(stationStep: number): { x: number; y: number; stationMeters: number }[] {
+    const points: { x: number; y: number; stationMeters: number }[] = [];
+    const push = (stationIndex: number): void => {
+      const c = this.centres[stationIndex] as THREE.Vector3;
+      points.push({ x: c.x, y: c.y, stationMeters: this.stationsMeters[stationIndex] as number });
     };
-    for (let index = 0; index < this.count; index += Math.max(1, step)) {
-      push(index);
+    const step = Math.max(1, stationStep);
+    for (let stationIndex = 0; stationIndex < this.stationCount; stationIndex += step) {
+      push(stationIndex);
     }
-    if ((this.count - 1) % Math.max(1, step) !== 0) {
-      push(this.count - 1);
+    if ((this.stationCount - 1) % step !== 0) {
+      push(this.stationCount - 1);
     }
     return points;
   }
 
   /** The station whose centreline point is nearest to an inertial position, searched near the last answer. */
-  stationNearest(position: THREE.Vector3): number {
-    const centers = this.centers;
-    const distance = (index: number): number => {
-      const c = centers[index] as THREE.Vector3;
+  stationNearestToInertialPosition(position: THREE.Vector3): number {
+    const centres = this.centres;
+    const distance = (stationIndex: number): number => {
+      const c = centres[stationIndex] as THREE.Vector3;
       return (c.x - position.x) ** 2 + (c.y - position.y) ** 2;
     };
-    let best = Math.min(Math.max(0, this.hint), centers.length - 1);
+    let best = Math.min(Math.max(0, this.nearestHint), centres.length - 1);
     let bestDistance = distance(best);
     // Walk downhill from the last answer; after a jump fall back to a full scan.
-    for (let guard = 0; guard < centers.length; ++guard) {
+    for (let guard = 0; guard < centres.length; ++guard) {
       const previous = best > 0 ? distance(best - 1) : Infinity;
-      const next = best + 1 < centers.length ? distance(best + 1) : Infinity;
+      const next = best + 1 < centres.length ? distance(best + 1) : Infinity;
       if (previous < bestDistance && previous <= next) {
         best -= 1;
         bestDistance = previous;
@@ -255,33 +258,33 @@ export class TrackModel {
       }
     }
     if (bestDistance > 4) {
-      for (let index = 0; index < centers.length; ++index) {
-        const d = distance(index);
+      for (let stationIndex = 0; stationIndex < centres.length; ++stationIndex) {
+        const d = distance(stationIndex);
         if (d < bestDistance) {
-          best = index;
+          best = stationIndex;
           bestDistance = d;
         }
       }
     }
-    this.hint = best;
+    this.nearestHint = best;
     // Refine along the neighbouring segment.
-    const c = centers[best] as THREE.Vector3;
-    const neighbour = best + 1 < centers.length ? best + 1 : best - 1;
-    const n = centers[neighbour] as THREE.Vector3;
+    const c = centres[best] as THREE.Vector3;
+    const neighbour = best + 1 < centres.length ? best + 1 : best - 1;
+    const n = centres[neighbour] as THREE.Vector3;
     const sx = n.x - c.x;
     const sy = n.y - c.y;
     const length2 = sx * sx + sy * sy;
     const t = length2 > 0 ? ((position.x - c.x) * sx + (position.y - c.y) * sy) / length2 : 0;
-    const s0 = this.stations[best] as number;
-    const s1 = this.stations[neighbour] as number;
+    const s0 = this.stationsMeters[best] as number;
+    const s1 = this.stationsMeters[neighbour] as number;
     return s0 + t * (s1 - s0);
   }
 }
 
 const scratchQuaternion = new THREE.Quaternion();
 
-function classifySections(stations: Float64Array, curvature: Float64Array): TrackSection[] {
-  const count = stations.length;
+function classifySections(stationsMeters: Float64Array, curvature: Float64Array): TrackSection[] {
+  const count = stationsMeters.length;
   let kmax = 0;
   curvature.forEach((k) => {
     kmax = Math.max(kmax, Math.abs(k));
@@ -291,10 +294,10 @@ function classifySections(stations: Float64Array, curvature: Float64Array): Trac
   if (kmax > 0) {
     const tangentLimit = 1e-4 * kmax;
     const flatLimit = 1e-6 * kmax;
-    const k = (index: number): number => curvature[index] as number;
-    const isTangent = (index: number): boolean => Math.abs(k(index)) <= tangentLimit;
-    for (let index = 0; index < count; ++index) {
-      kinds[index] = isTangent(index) ? 'tangent' : 'transition';
+    const k = (stationIndex: number): number => curvature[stationIndex] as number;
+    const isTangent = (stationIndex: number): boolean => Math.abs(k(stationIndex)) <= tangentLimit;
+    for (let stationIndex = 0; stationIndex < count; ++stationIndex) {
+      kinds[stationIndex] = isTangent(stationIndex) ? 'tangent' : 'transition';
     }
     // Plateaus: runs of locally flat, non-tangent curvature at least 4 m long.
     let runStart = -1;
@@ -302,31 +305,34 @@ function classifySections(stations: Float64Array, curvature: Float64Array): Trac
       if (runStart < 0) {
         return;
       }
-      if ((stations[end] as number) - (stations[runStart] as number) >= 4) {
+      if ((stationsMeters[end] as number) - (stationsMeters[runStart] as number) >= 4) {
         const values = Array.from(curvature.subarray(runStart, end + 1)).sort((a, b) => a - b);
         const value = values[values.length >> 1] as number;
         let low = runStart;
         let high = end;
-        const within = (index: number): boolean => Math.abs(k(index) - value) <= 1e-4 * Math.abs(value);
+        const within = (stationIndex: number): boolean => Math.abs(k(stationIndex) - value) <= 1e-4 * Math.abs(value);
         while (low > 0 && within(low - 1)) {
           --low;
         }
         while (high < count - 1 && within(high + 1)) {
           ++high;
         }
-        for (let index = low; index <= high; ++index) {
-          kinds[index] = 'circular';
-          plateau[index] = value;
+        for (let stationIndex = low; stationIndex <= high; ++stationIndex) {
+          kinds[stationIndex] = 'circular';
+          plateau[stationIndex] = value;
         }
       }
       runStart = -1;
     };
-    for (let index = 1; index < count - 1; ++index) {
-      const flat = !isTangent(index) && Math.abs(k(index + 1) - k(index)) <= flatLimit && Math.abs(k(index) - k(index - 1)) <= flatLimit;
+    for (let stationIndex = 1; stationIndex < count - 1; ++stationIndex) {
+      const flat =
+        !isTangent(stationIndex) &&
+        Math.abs(k(stationIndex + 1) - k(stationIndex)) <= flatLimit &&
+        Math.abs(k(stationIndex) - k(stationIndex - 1)) <= flatLimit;
       if (flat && runStart < 0) {
-        runStart = index;
+        runStart = stationIndex;
       } else if (!flat && runStart >= 0) {
-        closeRun(index - 1);
+        closeRun(stationIndex - 1);
       }
     }
     closeRun(count - 2);
@@ -341,17 +347,17 @@ function classifySections(stations: Float64Array, curvature: Float64Array): Trac
     plateau: number;
   }
   const runs: Run[] = [];
-  for (let index = 0; index < count; ++index) {
-    const kind = kinds[index] as SectionKind;
-    const value = plateau[index] as number;
+  for (let stationIndex = 0; stationIndex < count; ++stationIndex) {
+    const kind = kinds[stationIndex] as SectionKind;
+    const value = plateau[stationIndex] as number;
     const previous = runs[runs.length - 1];
     if (previous !== undefined && previous.kind === kind && previous.plateau === value) {
-      previous.end = index;
+      previous.end = stationIndex;
     } else {
-      runs.push({ start: index, end: index, kind, plateau: value });
+      runs.push({ start: stationIndex, end: stationIndex, kind, plateau: value });
     }
   }
-  const lengthOf = (run: Run): number => (stations[run.end] as number) - (stations[run.start] as number);
+  const lengthOf = (run: Run): number => (stationsMeters[run.end] as number) - (stationsMeters[run.start] as number);
   const sameKey = (a: Run, b: Run): boolean => a.kind === b.kind && a.plateau === b.plateau;
   for (let changed = true; changed; ) {
     changed = false;
@@ -377,14 +383,16 @@ function classifySections(stations: Float64Array, curvature: Float64Array): Trac
   }
   return runs.map((run, position) => {
     const next = runs[position + 1];
-    const startStation = position === 0 ? (stations[run.start] as number) : 0.5 * ((stations[run.start] as number) + (stations[run.start - 1] as number));
-    const endStation = next === undefined ? (stations[run.end] as number) : 0.5 * ((stations[run.end] as number) + (stations[run.end + 1] as number));
+    const startStationMeters =
+      position === 0 ? (stationsMeters[run.start] as number) : 0.5 * ((stationsMeters[run.start] as number) + (stationsMeters[run.start - 1] as number));
+    const endStationMeters =
+      next === undefined ? (stationsMeters[run.end] as number) : 0.5 * ((stationsMeters[run.end] as number) + (stationsMeters[run.end + 1] as number));
     const middle = Math.floor(0.5 * (run.start + run.end));
     const kMiddle = run.kind === 'circular' ? run.plateau : (curvature[middle] as number);
     return {
       kind: run.kind,
-      startStation,
-      endStation,
+      startStationMeters,
+      endStationMeters,
       radiusMeters: run.kind === 'circular' && run.plateau !== 0 ? 1 / Math.abs(run.plateau) : null,
       direction: run.kind === 'tangent' ? 0 : Math.sign(kMiddle),
     };
@@ -396,7 +404,7 @@ function elementPointsOf(sections: TrackSection[]): ElementPoint[] {
   for (let index = 1; index < sections.length; ++index) {
     const before = (sections[index - 1] as TrackSection).kind;
     const after = (sections[index] as TrackSection).kind;
-    const station = (sections[index] as TrackSection).startStation;
+    const stationMeters = (sections[index] as TrackSection).startStationMeters;
     let code: ElementPoint['code'] | null = null;
     if (before === 'tangent' && after === 'transition') code = 'TS';
     else if (before === 'transition' && after === 'circular') code = 'SC';
@@ -406,7 +414,7 @@ function elementPointsOf(sections: TrackSection[]): ElementPoint[] {
     else if (before === 'circular' && after === 'tangent') code = 'CT';
     else if (before === 'circular' && after === 'circular') code = 'CC';
     if (code !== null) {
-      points.push({ code, zh: elementNames[code], station });
+      points.push({ code, zh: elementNames[code], stationMeters });
     }
   }
   return points;

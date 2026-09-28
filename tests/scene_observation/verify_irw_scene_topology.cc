@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -77,6 +78,22 @@ int main(int argc, char** argv) {
                 placement.side != definition.side) {
                 Fail("wheel placement identity differs from the plan");
             }
+            const int carrier_index = [&] {
+                for (int carrier = 0; carrier < plan->carrier_count(); ++carrier) {
+                    if (plan->carrier_definition(carrier).carrier_name ==
+                        definition.carrier_name) {
+                        return carrier;
+                    }
+                }
+                Fail("interface names an unknown carrier");
+            }();
+            if (placement.carrier_body_name !=
+                    plan->carrier_definition(carrier_index).body_name ||
+                placement.carrier_body_name == placement.wheel_body_name) {
+                Fail("IRW wheel '" + placement.wheel_body_name +
+                     "' must name its axle bridge body as carrier, distinct "
+                     "from the wheel body");
+            }
             const double signed_datum =
                 placement.side == wheel_rail_contact::WheelSide::kRight
                     ? 0.7465
@@ -96,8 +113,8 @@ int main(int argc, char** argv) {
             // signed lateral datum of its side in the carrier's track frame.
             const auto wheel_body =
                 assembled.model().GetRigidBodyByName(placement.wheel_body_name);
-            const auto carrier_body =
-                assembled.model().GetRigidBodyByName(definition.carrier_name);
+            const auto carrier_body = assembled.model().GetRigidBodyByName(
+                placement.carrier_body_name);
             const auto wheel_pose =
                 assembled.model().CalcPoseInWorld(component.context(), wheel_body);
             const auto carrier_pose = assembled.model().CalcPoseInWorld(
@@ -125,15 +142,6 @@ int main(int argc, char** argv) {
             const Eigen::Vector3d datum_in_world =
                 wheel_pose.translation() +
                 wheel_pose.rotation() * placement.datum_in_wheel_body_frame_meters;
-            const int carrier_index = [&] {
-                for (int carrier = 0; carrier < plan->carrier_count(); ++carrier) {
-                    if (plan->carrier_definition(carrier).carrier_name ==
-                        definition.carrier_name) {
-                        return carrier;
-                    }
-                }
-                Fail("interface names an unknown carrier");
-            }();
             const auto track = plan->track_geometry().EvaluateTrackFrame(
                 plan->initial_projection_station_meters(carrier_index));
             const Eigen::Vector3d offset_in_track =
@@ -147,8 +155,25 @@ int main(int argc, char** argv) {
                      "frame at the resolved start");
             }
         }
+        // Every carrier owns exactly one left and one right wheel, so a
+        // display can pair wheels through the carrier alone.
+        std::map<std::string, std::vector<wheel_rail_contact::WheelSide>> sides;
+        for (const auto& placement : topology.wheel_placements) {
+            sides[placement.carrier_body_name].push_back(placement.side);
+        }
+        if (sides.size() != 4) {
+            Fail("the eight IRW wheels do not sit on four carriers");
+        }
+        for (const auto& [carrier, carrier_sides] : sides) {
+            if (carrier_sides.size() != 2 ||
+                carrier_sides[0] == carrier_sides[1]) {
+                Fail("carrier '" + carrier +
+                     "' does not own one left and one right wheel");
+            }
+        }
         std::puts("IRW scene topology: eight wheel datums land on the axle at "
-                  "the signed lateral datum of their side");
+                  "the signed lateral datum of their side, paired through "
+                  "their carrier bodies");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

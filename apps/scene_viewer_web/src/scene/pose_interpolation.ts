@@ -16,46 +16,46 @@ const scratch = new THREE.Quaternion();
 
 export interface WheelSpinBinding {
   /** Index into the record's wheel placements. */
-  wheel: number;
+  wheelPlacementIndex: number;
   spinAxisInBody: [number, number, number];
 }
 
 export function interpolatePosition(
   record: SceneRecord,
-  frameA: number,
-  frameB: number,
+  firstFrameIndex: number,
+  secondFrameIndex: number,
   alpha: number,
-  body: number,
+  bodyIndex: number,
   out: THREE.Vector3,
 ): void {
-  const poseA = bodyPose(record, frameA, body);
-  out.set(...poseA.position);
-  if (frameB !== frameA && alpha > 0) {
-    const poseB = bodyPose(record, frameB, body);
-    out.lerp(new THREE.Vector3(...poseB.position), alpha);
+  const first = bodyPose(record, firstFrameIndex, bodyIndex);
+  out.set(...first.position);
+  if (secondFrameIndex !== firstFrameIndex && alpha > 0) {
+    const second = bodyPose(record, secondFrameIndex, bodyIndex);
+    out.lerp(new THREE.Vector3(...second.position), alpha);
   }
 }
 
 export function interpolateOrientation(
   record: SceneRecord,
-  frameA: number,
-  frameB: number,
+  firstFrameIndex: number,
+  secondFrameIndex: number,
   alpha: number,
-  body: number,
+  bodyIndex: number,
   spin: WheelSpinBinding | undefined,
   out: THREE.Quaternion,
 ): void {
-  const poseA = bodyPose(record, frameA, body);
-  const [wA, xA, yA, zA] = poseA.orientationWxyz;
+  const first = bodyPose(record, firstFrameIndex, bodyIndex);
+  const [wA, xA, yA, zA] = first.orientationWxyz;
   out.set(xA, yA, zA, wA);
-  if (frameB === frameA || alpha <= 0) {
+  if (secondFrameIndex === firstFrameIndex || alpha <= 0) {
     return;
   }
-  const poseB = bodyPose(record, frameB, body);
-  const [wB, xB, yB, zB] = poseB.orientationWxyz;
+  const second = bodyPose(record, secondFrameIndex, bodyIndex);
+  const [wB, xB, yB, zB] = second.orientationWxyz;
   scratch.set(xB, yB, zB, wB);
-  const angleA = spin === undefined ? null : wheelSpinAngle(record, frameA, spin.wheel);
-  const angleB = spin === undefined ? null : wheelSpinAngle(record, frameB, spin.wheel);
+  const angleA = spin === undefined ? null : wheelSpinAngle(record, firstFrameIndex, spin.wheelPlacementIndex);
+  const angleB = spin === undefined ? null : wheelSpinAngle(record, secondFrameIndex, spin.wheelPlacementIndex);
   if (spin === undefined || angleA === null || angleB === null) {
     out.slerp(scratch, alpha);
     return;
@@ -77,10 +77,10 @@ export function interpolateOrientation(
  */
 export function maximumWheelRotationBetweenFrames(record: SceneRecord, wheelBodyIndices: number[]): number {
   let maximum = 0;
-  for (let frame = 1; frame < record.frameCount; ++frame) {
-    const interval = frameTimeSeconds(record, frame) - frameTimeSeconds(record, frame - 1);
-    for (const body of wheelBodyIndices) {
-      const [x, y, z] = bodyAngularVelocity(record, frame, body);
+  for (let frameIndex = 1; frameIndex < record.frameCount; ++frameIndex) {
+    const interval = frameTimeSeconds(record, frameIndex) - frameTimeSeconds(record, frameIndex - 1);
+    for (const bodyIndex of wheelBodyIndices) {
+      const [x, y, z] = bodyAngularVelocity(record, frameIndex, bodyIndex);
       maximum = Math.max(maximum, Math.hypot(x, y, z) * interval);
     }
   }

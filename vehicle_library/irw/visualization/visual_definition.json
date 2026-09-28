@@ -8,6 +8,28 @@
   "placement_note": "Springs, the frame transom and the guide-link ends sit at the attachment points of the mechanical definition's force elements; their shapes and sizes are schematic.",
   "appearance_note": "An appearance names a display role (shell, glass, floor, structure, accent, dark), not a material; each viewer renders a role in its own way.",
   "naming_note": "End 1 is the +x end of the body frames, the model's front. Bogies, axles and wheels are numbered from end 1; a label on one bogie names its end so both bogies can be labelled.",
+  "display_bindings_note": "Display bindings name the bodies the viewer treats as carbody, bogie frames and carriers, in display order from end 1. They add no physics: wheel-to-carrier pairing, sides, datums and radii come from the record's wheel placements. A bogie's member list names the bodies drawn as its running gear; wheels follow their carrier and are not listed. Every carrier of the record must appear exactly once.",
+  "display_bindings": {
+    "carbody": {"body_name": "carbody", "display_name": {"en": "Carbody", "zh": "车体"}},
+    "bogies": [
+      {
+        "body_name": "frame_front",
+        "display_name": {"en": "Bogie frame · end 1", "zh": "一位端构架"},
+        "member_body_names": ["axlebridge_ff", "axlebridge_fr", "longibar_front_A", "longibar_front_B", "longibar_front_C", "longibar_front_D", "dum_front"]
+      },
+      {
+        "body_name": "frame_rear",
+        "display_name": {"en": "Bogie frame · end 2", "zh": "二位端构架"},
+        "member_body_names": ["axlebridge_rf", "axlebridge_rr", "longibar_rear_A", "longibar_rear_B", "longibar_rear_C", "longibar_rear_D", "dum_rear"]
+      }
+    ],
+    "carriers": [
+      {"carrier_body_name": "axlebridge_ff", "display_name": {"en": "Axle bridge 1", "zh": "1 位轴桥"}},
+      {"carrier_body_name": "axlebridge_fr", "display_name": {"en": "Axle bridge 2", "zh": "2 位轴桥"}},
+      {"carrier_body_name": "axlebridge_rf", "display_name": {"en": "Axle bridge 3", "zh": "3 位轴桥"}},
+      {"carrier_body_name": "axlebridge_rr", "display_name": {"en": "Axle bridge 4", "zh": "4 位轴桥"}}
+    ]
+  },
   "wheel_visual": {
     "width_meters": 0.135,
     "back_face_offset_meters": 0.07,

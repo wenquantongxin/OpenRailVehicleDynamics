@@ -118,6 +118,8 @@ SceneRecord ReadSceneRecord(const std::filesystem::path& directory) {
         placement.interface_name = wheel.at("interface_name").get<std::string>();
         placement.wheel_body_name =
             wheel.at("wheel_body_name").get<std::string>();
+        placement.carrier_body_name =
+            wheel.at("carrier_body_name").get<std::string>();
         placement.side = ParseSide(wheel.at("side").get<std::string>());
         placement.datum_in_wheel_body_frame_meters =
             Vector3FromJson(wheel.at("datum_in_wheel_body_frame_meters"));

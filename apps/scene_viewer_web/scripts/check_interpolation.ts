@@ -38,35 +38,35 @@ async function main(): Promise<void> {
   if (record.frameCount < 11) {
     throw new Error('the record needs at least eleven frames');
   }
-  const frameA = 0;
-  const frameB = 10;
-  const frameMid = 5;
+  const firstFrameIndex = 0;
+  const secondFrameIndex = 10;
+  const middleFrameIndex = 5;
   const alpha =
-    (frameTimeSeconds(record, frameMid) - frameTimeSeconds(record, frameA)) /
-    (frameTimeSeconds(record, frameB) - frameTimeSeconds(record, frameA));
+    (frameTimeSeconds(record, middleFrameIndex) - frameTimeSeconds(record, firstFrameIndex)) /
+    (frameTimeSeconds(record, secondFrameIndex) - frameTimeSeconds(record, firstFrameIndex));
   const bindings = wheelSpinBindings(record);
   const interpolated = new THREE.Quaternion();
   const recorded = new THREE.Quaternion();
   let worstBody = 0;
   let worstWheelWithSpin = 0;
   let worstWheelShortestPath = 0;
-  record.bodies.forEach((_body, index) => {
-    const [w, x, y, z] = bodyPose(record, frameMid, index).orientationWxyz;
+  record.bodies.forEach((_body, bodyIndex) => {
+    const [w, x, y, z] = bodyPose(record, middleFrameIndex, bodyIndex).orientationWxyz;
     recorded.set(x, y, z, w);
-    const binding = bindings.get(index);
-    interpolateOrientation(record, frameA, frameB, alpha, index, binding, interpolated);
+    const binding = bindings.get(bodyIndex);
+    interpolateOrientation(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, binding, interpolated);
     const error = geodesicAngle(interpolated, recorded);
     if (binding === undefined) {
       worstBody = Math.max(worstBody, error);
     } else {
       worstWheelWithSpin = Math.max(worstWheelWithSpin, error);
-      interpolateOrientation(record, frameA, frameB, alpha, index, undefined, interpolated);
+      interpolateOrientation(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, undefined, interpolated);
       worstWheelShortestPath = Math.max(worstWheelShortestPath, geodesicAngle(interpolated, recorded));
     }
   });
   const report = {
-    frames: [frameA, frameMid, frameB],
-    interval_seconds: frameTimeSeconds(record, frameB) - frameTimeSeconds(record, frameA),
+    frame_indices: [firstFrameIndex, middleFrameIndex, secondFrameIndex],
+    interval_seconds: frameTimeSeconds(record, secondFrameIndex) - frameTimeSeconds(record, firstFrameIndex),
     wheels_with_spin_angles: bindings.size,
     worst_non_wheel_error_radians: worstBody,
     worst_wheel_error_with_spin_angles_radians: worstWheelWithSpin,

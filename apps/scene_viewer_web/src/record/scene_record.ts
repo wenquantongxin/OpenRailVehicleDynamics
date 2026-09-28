@@ -1,6 +1,12 @@
 // The scene record as written by ORVD::scene_record. The layout is read from
 // scene.json, never assumed: column offsets, body count and scalar count all
 // come from the file, and the frame table is refused when it disagrees.
+//
+// Two indices must not be confused. A frame index is a row number of the
+// frame table, 0-based, and is what seeking and interpolation use. A sample
+// index is the run program's own sample identity stored in the row; it may
+// differ from the row number, is -1 when absent, and is shown, never used to
+// look a row up.
 
 export type WheelSide = 'left' | 'right';
 
@@ -12,6 +18,13 @@ export interface SceneBody {
 export interface WheelPlacement {
   interfaceName: string;
   wheelBodyName: string;
+  /**
+   * The body carrying this wheel's non-spinning profile frame: the axle bridge
+   * of an independently rotating wheel, or the wheelset body itself for a
+   * rigid wheelset, in which case it equals `wheelBodyName`. The left and
+   * right wheels of one carrier are paired through it.
+   */
+  carrierBodyName: string;
   side: WheelSide;
   datumInWheelBodyFrameMeters: [number, number, number];
   spinAxisInWheelBodyFrame: [number, number, number];
@@ -37,17 +50,18 @@ export interface TrackTable {
   rightRailDatumInInertialMeters: number[][];
 }
 
+/** Column offsets within one row of the frame table. */
 export interface FrameColumns {
-  timeSeconds: number;
-  timeNanoseconds: number;
-  sampleIndex: number;
-  phase: number;
-  bodyOffset: number;
+  timeSecondsColumnOffset: number;
+  timeNanosecondsColumnOffset: number;
+  sampleIndexColumnOffset: number;
+  phaseColumnOffset: number;
+  bodyStatesColumnOffset: number;
   valuesPerBody: number;
-  /** Unwrapped spin angle per wheel placement; count 0 when the record has none. */
-  wheelSpinOffset: number;
-  wheelSpinCount: number;
-  scalarOffset: number;
+  /** Unwrapped spin angle per wheel placement; the count is 0 when the record has none. */
+  wheelSpinAnglesColumnOffset: number;
+  wheelSpinAngleCount: number;
+  scalarValuesColumnOffset: number;
   scalarCount: number;
   rowValueCount: number;
 }
@@ -77,7 +91,7 @@ export interface SceneRecord {
   /** The whole frame table, row-major, in host byte order. */
   values: Float64Array;
   statuses: Uint8Array;
-  /** time_seconds of every frame, extracted once for seeking. */
+  /** time_seconds of every frame row, extracted once for seeking. */
   timesSeconds: Float64Array;
 }
 
@@ -158,17 +172,19 @@ export function parseSceneRecord(
   const wheelPlacements: WheelPlacement[] = requireArray(scene['wheel_placements'], 'wheel_placements').map(
     (entry, index) => {
       const wheel = entry as Record<string, unknown>;
-      const side = requireString(wheel['side'], `wheel_placements[${index}].side`);
+      const what = `wheel_placements[${index}]`;
+      const side = requireString(wheel['side'], `${what}.side`);
       if (side !== 'left' && side !== 'right') {
         throw new Error(`scene.json: unknown wheel side '${side}'`);
       }
       return {
-        interfaceName: requireString(wheel['interface_name'], 'interface_name'),
-        wheelBodyName: requireString(wheel['wheel_body_name'], 'wheel_body_name'),
+        interfaceName: requireString(wheel['interface_name'], `${what}.interface_name`),
+        wheelBodyName: requireString(wheel['wheel_body_name'], `${what}.wheel_body_name`),
+        carrierBodyName: requireString(wheel['carrier_body_name'], `${what}.carrier_body_name`),
         side,
-        datumInWheelBodyFrameMeters: requireTriple(wheel['datum_in_wheel_body_frame_meters'], 'datum'),
-        spinAxisInWheelBodyFrame: requireTriple(wheel['spin_axis_in_wheel_body_frame'], 'spin axis'),
-        nominalRollingRadiusMeters: requireNumber(wheel['nominal_rolling_radius_meters'], 'rolling radius'),
+        datumInWheelBodyFrameMeters: requireTriple(wheel['datum_in_wheel_body_frame_meters'], `${what}.datum`),
+        spinAxisInWheelBodyFrame: requireTriple(wheel['spin_axis_in_wheel_body_frame'], `${what}.spin axis`),
+        nominalRollingRadiusMeters: requireNumber(wheel['nominal_rolling_radius_meters'], `${what}.rolling radius`),
       };
     },
   );
@@ -190,15 +206,15 @@ export function parseSceneRecord(
   const spinColumns = columnsJson['wheel_spin_angles'] as Record<string, unknown>;
   const scalarColumns = columnsJson['scalar_values'] as Record<string, unknown>;
   const columns: FrameColumns = {
-    timeSeconds: requireNumber(columnsJson['time_seconds'], 'columns.time_seconds'),
-    timeNanoseconds: requireNumber(columnsJson['time_nanoseconds'], 'columns.time_nanoseconds'),
-    sampleIndex: requireNumber(columnsJson['sample_index'], 'columns.sample_index'),
-    phase: requireNumber(columnsJson['phase'], 'columns.phase'),
-    bodyOffset: requireNumber(bodyColumns['offset'], 'body_states.offset'),
+    timeSecondsColumnOffset: requireNumber(columnsJson['time_seconds'], 'columns.time_seconds'),
+    timeNanosecondsColumnOffset: requireNumber(columnsJson['time_nanoseconds'], 'columns.time_nanoseconds'),
+    sampleIndexColumnOffset: requireNumber(columnsJson['sample_index'], 'columns.sample_index'),
+    phaseColumnOffset: requireNumber(columnsJson['phase'], 'columns.phase'),
+    bodyStatesColumnOffset: requireNumber(bodyColumns['offset'], 'body_states.offset'),
     valuesPerBody: requireNumber(bodyColumns['values_per_body'], 'body_states.values_per_body'),
-    wheelSpinOffset: requireNumber(spinColumns['offset'], 'wheel_spin_angles.offset'),
-    wheelSpinCount: requireNumber(spinColumns['count'], 'wheel_spin_angles.count'),
-    scalarOffset: requireNumber(scalarColumns['offset'], 'scalar_values.offset'),
+    wheelSpinAnglesColumnOffset: requireNumber(spinColumns['offset'], 'wheel_spin_angles.offset'),
+    wheelSpinAngleCount: requireNumber(spinColumns['count'], 'wheel_spin_angles.count'),
+    scalarValuesColumnOffset: requireNumber(scalarColumns['offset'], 'scalar_values.offset'),
     scalarCount: requireNumber(scalarColumns['count'], 'scalar_values.count'),
     rowValueCount: requireNumber(frameTable['row_value_count'], 'row_value_count'),
   };
@@ -207,34 +223,32 @@ export function parseSceneRecord(
   if (
     bodyCount !== bodies.length ||
     columns.valuesPerBody !== 13 ||
-    columns.wheelSpinOffset !== columns.bodyOffset + columns.valuesPerBody * bodyCount ||
-    (columns.wheelSpinCount !== 0 && columns.wheelSpinCount !== wheelPlacements.length) ||
+    columns.wheelSpinAnglesColumnOffset !== columns.bodyStatesColumnOffset + columns.valuesPerBody * bodyCount ||
+    (columns.wheelSpinAngleCount !== 0 && columns.wheelSpinAngleCount !== wheelPlacements.length) ||
     columns.scalarCount !== scalars.length ||
-    columns.scalarOffset !== columns.wheelSpinOffset + columns.wheelSpinCount ||
-    columns.rowValueCount !== columns.scalarOffset + columns.scalarCount
+    columns.scalarValuesColumnOffset !== columns.wheelSpinAnglesColumnOffset + columns.wheelSpinAngleCount ||
+    columns.rowValueCount !== columns.scalarValuesColumnOffset + columns.scalarCount
   ) {
     throw new Error('scene.json: the frame table layout disagrees with the bodies, wheels or scalars');
   }
   const values = decodeLittleEndianDoubles(framesBuffer);
   if (values.length !== frameCount * columns.rowValueCount) {
-    throw new Error(
-      `frames file holds ${values.length} values, expected ${frameCount * columns.rowValueCount}`,
-    );
+    throw new Error(`frames file holds ${values.length} values, expected ${frameCount * columns.rowValueCount}`);
   }
   const statuses = new Uint8Array(statusesBuffer);
   if (statuses.length !== frameCount * columns.scalarCount) {
     throw new Error('scalar status file length disagrees with the frame and scalar counts');
   }
   const timesSeconds = new Float64Array(frameCount);
-  for (let frame = 0; frame < frameCount; ++frame) {
-    const time = values[frame * columns.rowValueCount + columns.timeSeconds];
+  for (let frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+    const time = values[frameIndex * columns.rowValueCount + columns.timeSecondsColumnOffset];
     if (time === undefined || !Number.isFinite(time)) {
-      throw new Error(`frame ${frame} has no finite time`);
+      throw new Error(`frame ${frameIndex} has no finite time`);
     }
-    if (frame > 0 && time <= (timesSeconds[frame - 1] as number)) {
-      throw new Error(`frame ${frame} time does not increase`);
+    if (frameIndex > 0 && time <= (timesSeconds[frameIndex - 1] as number)) {
+      throw new Error(`frame ${frameIndex} time does not increase`);
     }
-    timesSeconds[frame] = time;
+    timesSeconds[frameIndex] = time;
   }
 
   let track: TrackTable | null = null;
@@ -282,20 +296,25 @@ export function parseSceneRecord(
   };
 }
 
-export function frameTimeSeconds(record: SceneRecord, frame: number): number {
-  return record.timesSeconds[frame] as number;
+export function frameTimeSeconds(record: SceneRecord, frameIndex: number): number {
+  return record.timesSeconds[frameIndex] as number;
 }
 
-export function frameSampleIndex(record: SceneRecord, frame: number): number {
-  return record.values[frame * record.columns.rowValueCount + record.columns.sampleIndex] as number;
+/** The run program's sample identity recorded in a frame row; -1 when the row carries none. */
+export function frameSampleIndex(record: SceneRecord, frameIndex: number): number {
+  return record.values[frameIndex * record.columns.rowValueCount + record.columns.sampleIndexColumnOffset] as number;
 }
 
-export function framePhase(record: SceneRecord, frame: number): number {
-  return record.values[frame * record.columns.rowValueCount + record.columns.phase] as number;
+export function framePhase(record: SceneRecord, frameIndex: number): number {
+  return record.values[frameIndex * record.columns.rowValueCount + record.columns.phaseColumnOffset] as number;
 }
 
-export function bodyPose(record: SceneRecord, frame: number, body: number): BodyPose {
-  const base = frame * record.columns.rowValueCount + record.columns.bodyOffset + body * record.columns.valuesPerBody;
+function bodyValuesStart(record: SceneRecord, frameIndex: number, bodyIndex: number): number {
+  return frameIndex * record.columns.rowValueCount + record.columns.bodyStatesColumnOffset + bodyIndex * record.columns.valuesPerBody;
+}
+
+export function bodyPose(record: SceneRecord, frameIndex: number, bodyIndex: number): BodyPose {
+  const base = bodyValuesStart(record, frameIndex, bodyIndex);
   const v = record.values;
   return {
     position: [v[base] as number, v[base + 1] as number, v[base + 2] as number],
@@ -303,18 +322,24 @@ export function bodyPose(record: SceneRecord, frame: number, body: number): Body
   };
 }
 
-/** The unwrapped spin angle of wheel placement `wheel`, or null when the record has none. */
-export function wheelSpinAngle(record: SceneRecord, frame: number, wheel: number): number | null {
-  if (record.columns.wheelSpinCount === 0) {
-    return null;
-  }
-  return record.values[frame * record.columns.rowValueCount + record.columns.wheelSpinOffset + wheel] as number;
+export function bodyLinearVelocity(record: SceneRecord, frameIndex: number, bodyIndex: number): [number, number, number] {
+  const base = bodyValuesStart(record, frameIndex, bodyIndex);
+  const v = record.values;
+  return [v[base + 7] as number, v[base + 8] as number, v[base + 9] as number];
 }
 
-export function bodyAngularVelocity(record: SceneRecord, frame: number, body: number): [number, number, number] {
-  const base = frame * record.columns.rowValueCount + record.columns.bodyOffset + body * record.columns.valuesPerBody;
+export function bodyAngularVelocity(record: SceneRecord, frameIndex: number, bodyIndex: number): [number, number, number] {
+  const base = bodyValuesStart(record, frameIndex, bodyIndex);
   const v = record.values;
   return [v[base + 10] as number, v[base + 11] as number, v[base + 12] as number];
+}
+
+/** The unwrapped spin angle of a wheel placement, or null when the record has none. */
+export function wheelSpinAngle(record: SceneRecord, frameIndex: number, wheelPlacementIndex: number): number | null {
+  if (record.columns.wheelSpinAngleCount === 0) {
+    return null;
+  }
+  return record.values[frameIndex * record.columns.rowValueCount + record.columns.wheelSpinAnglesColumnOffset + wheelPlacementIndex] as number;
 }
 
 export interface ScalarSample {
@@ -322,15 +347,15 @@ export interface ScalarSample {
   status: number;
 }
 
-export function scalarSample(record: SceneRecord, frame: number, scalar: number): ScalarSample {
+export function scalarSample(record: SceneRecord, frameIndex: number, scalarIndex: number): ScalarSample {
   return {
-    value: record.values[frame * record.columns.rowValueCount + record.columns.scalarOffset + scalar] as number,
-    status: record.statuses[frame * record.columns.scalarCount + scalar] as number,
+    value: record.values[frameIndex * record.columns.rowValueCount + record.columns.scalarValuesColumnOffset + scalarIndex] as number,
+    status: record.statuses[frameIndex * record.columns.scalarCount + scalarIndex] as number,
   };
 }
 
-/** The last frame whose time is not after `timeSeconds`; -1 before the first frame. */
-export function frameAtOrBefore(record: SceneRecord, timeSeconds: number): number {
+/** The last frame index whose time is not after `timeSeconds`; -1 before the first frame. */
+export function frameIndexAtOrBefore(record: SceneRecord, timeSeconds: number): number {
   const times = record.timesSeconds;
   let low = 0;
   let high = times.length - 1;

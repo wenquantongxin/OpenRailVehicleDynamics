@@ -28,7 +28,7 @@ test('reaching the end stops playback and one toggle resumes after a seek back',
   assert.equal(playback.playing, true);
   playback.advance(0.1);
   assert.ok(Math.abs(playback.timeSeconds - 0.35) < 1e-12);
-  assert.deepEqual(playback.bracket(), { frameA: 0, frameB: 1, alpha: 0.35 / 0.5 });
+  assert.deepEqual(playback.bracket(), { firstFrameIndex: 0, secondFrameIndex: 1, alpha: 0.35 / 0.5 });
 });
 
 test('one toggle at the end restarts from the beginning', () => {

@@ -10,6 +10,7 @@ import { CameraRig, type ViewPreset } from '../scene/camera_rig.ts';
 import { LabelLayer, type Rect, type SafeArea } from '../scene/label_layer.ts';
 import { stageColors } from '../scene/materials.ts';
 import type { BuiltScene, CarbodyMode } from '../scene/scene_builder.ts';
+import type { VehicleDisplayBindings } from '../scene/vehicle_display_bindings.ts';
 
 export interface ViewportOptions {
   follow: boolean;
@@ -21,25 +22,23 @@ export interface ViewportOptions {
 }
 
 export interface ViewportCommands {
-  /** Set by the viewport; the panel calls it to move the camera. */
-  applyPreset: (preset: ViewPreset) => void;
+  /** Set by the viewport; the panel calls it to move the camera. False when the preset's anchor is not bound. */
+  applyPreset: (preset: ViewPreset) => boolean;
 }
 
 interface Props {
   record: SceneRecord;
   scene: BuiltScene;
   playback: PlaybackController;
-  carbodyBodyName: string | null;
-  bogieBodyName: string | null;
-  /** Every bogie frame body; each bogie's running gear is an obstacle for labels. */
-  bogieBodyNames: string[];
+  /** Camera anchors and label obstacle groups come from here, never from body names. */
+  bindings: VehicleDisplayBindings;
   initialPreset: ViewPreset;
   options: React.MutableRefObject<ViewportOptions>;
   commands: React.MutableRefObject<ViewportCommands | null>;
   /** Fills the loaded contact patch count of every wheel placement at a frame. */
-  contactPatchesAt: ((frame: number, out: Float64Array) => void) | null;
+  contactPatchesAt: ((frameIndex: number, out: Float64Array) => void) | null;
   safeArea: SafeArea;
-  onDisplayFrame: (frameA: number, timeSeconds: number, playing: boolean) => void;
+  onDisplayFrame: (frameIndex: number, timeSeconds: number, playing: boolean) => void;
 }
 
 /** Portion of the viewport width left between the card columns. */
@@ -48,7 +47,7 @@ function freeFraction(width: number, safe: SafeArea): number {
 }
 
 export function SceneViewport(props: Props) {
-  const { record, scene, playback, carbodyBodyName, bogieBodyName, bogieBodyNames, initialPreset, options, commands, contactPatchesAt, safeArea, onDisplayFrame } = props;
+  const { record, scene, playback, bindings, initialPreset, options, commands, contactPatchesAt, safeArea, onDisplayFrame } = props;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,9 +128,13 @@ export function SceneViewport(props: Props) {
     controls.maxPolarAngle = Math.PI / 2 - 0.01;
     controls.autoRotateSpeed = 0.7;
 
-    const carbody = carbodyBodyName === null ? null : (scene.bodyObjects.get(carbodyBodyName) ?? null);
-    const bogie = bogieBodyName === null ? null : (scene.bodyObjects.get(bogieBodyName) ?? null);
-    const rig = new CameraRig(camera, controls, { root: scene.root, carbody, bogie }, scene.track);
+    // Anchors are the bound bodies; without a bound carbody the rig looks at
+    // the mean of all bodies and assumes nothing about any one of them.
+    const carbody = bindings.carbody === null ? null : (scene.bodyObjects.get(bindings.carbody.bodyName) ?? null);
+    const firstBogie = bindings.bogies[0];
+    const bogie = firstBogie === undefined ? null : (scene.bodyObjects.get(firstBogie.bodyName) ?? null);
+    const bodies = [...scene.bodyObjects.values()];
+    const rig = new CameraRig(camera, controls, { root: scene.root, carbody, bogie, bodies }, scene.track);
     const labels = new LabelLayer(container, scene.labels);
 
     let width = 1;
@@ -149,50 +152,47 @@ export function SceneViewport(props: Props) {
     observer.observe(container);
     resize();
 
-    const bindings = wheelSpinBindings(record);
+    const spinBindings = wheelSpinBindings(record);
     const patches = new Float64Array(record.wheelPlacements.length);
-    const applyPose = (frameA: number, frameB: number, alpha: number): void => {
-      applyFrames(record, scene, bindings, frameA, frameB, alpha);
+    const applyPose = (firstFrameIndex: number, secondFrameIndex: number, alpha: number): void => {
+      applyFrames(record, scene, spinBindings, firstFrameIndex, secondFrameIndex, alpha);
       if (contactPatchesAt !== null) {
-        contactPatchesAt(frameA, patches);
+        contactPatchesAt(firstFrameIndex, patches);
         scene.setContactStates(patches);
       }
       scene.root.updateMatrixWorld(true);
     };
     const initial = playback.bracket();
-    applyPose(initial.frameA, initial.frameB, initial.alpha);
+    applyPose(initial.firstFrameIndex, initial.secondFrameIndex, initial.alpha);
 
-    // Each bogie's running gear, as a box in its frame body's coordinates taken
-    // at the first displayed pose; projected every frame as a label obstacle.
-    const obstacleBodies = bogieBodyNames
-      .map((name) => scene.bodyObjects.get(name))
-      .filter((body): body is THREE.Object3D => body !== undefined);
-    const obstacleBoxes = obstacleBodies.map((body) => ({ body, box: new THREE.Box3() }));
+    // Each bound bogie's running gear, as a box in its frame body's coordinates
+    // taken at the first displayed pose from the parts of the bodies its
+    // binding groups; projected every frame as a label obstacle.
+    const obstacleBoxes = bindings.bogies.flatMap((bound) => {
+      const body = scene.bodyObjects.get(bound.bodyName);
+      if (body === undefined) {
+        return [];
+      }
+      const memberNames = new Set(bound.memberBodyIndices.map((bodyIndex) => record.bodies[bodyIndex]?.name));
+      return [{ body, memberNames, box: new THREE.Box3() }];
+    });
     const partBox = new THREE.Box3();
     const corner = new THREE.Vector3();
-    const bodyPosition = new THREE.Vector3();
-    const partCentre = new THREE.Vector3();
     for (const part of scene.parts) {
-      if ((part.group !== 'running_gear' && part.group !== 'wheels') || obstacleBoxes.length === 0) {
+      if (part.group !== 'running_gear' && part.group !== 'wheels') {
+        continue;
+      }
+      const entry = obstacleBoxes.find((candidate) => candidate.memberNames.has(part.bodyName));
+      if (entry === undefined) {
         continue;
       }
       partBox.setFromObject(part.object);
       if (partBox.isEmpty()) {
         continue;
       }
-      partBox.getCenter(partCentre);
-      let nearest = obstacleBoxes[0] as (typeof obstacleBoxes)[number];
-      let nearestDistance = Infinity;
-      for (const entry of obstacleBoxes) {
-        const distance = entry.body.getWorldPosition(bodyPosition).distanceTo(partCentre);
-        if (distance < nearestDistance) {
-          nearest = entry;
-          nearestDistance = distance;
-        }
-      }
       for (let k = 0; k < 8; ++k) {
         corner.set(k & 1 ? partBox.max.x : partBox.min.x, k & 2 ? partBox.max.y : partBox.min.y, k & 4 ? partBox.max.z : partBox.min.z);
-        nearest.box.expandByPoint(nearest.body.worldToLocal(corner));
+        entry.box.expandByPoint(entry.body.worldToLocal(corner));
       }
     }
     const obstacles: Rect[] = obstacleBoxes.map(() => ({ x0: 0, y0: 0, x1: 0, y1: 0 }));
@@ -240,10 +240,28 @@ export function SceneViewport(props: Props) {
       applied = { ...next };
     };
 
-    const anchorWorld = new THREE.Vector3();
+    // The sun follows the bound carbody, or the mean of all bodies without one.
+    const sunAnchor = new THREE.Vector3();
+    const bodyWorld = new THREE.Vector3();
+    const updateSun = (): void => {
+      if (carbody !== null) {
+        carbody.getWorldPosition(sunAnchor);
+      } else if (bodies.length > 0) {
+        sunAnchor.set(0, 0, 0);
+        for (const body of bodies) {
+          sunAnchor.add(body.getWorldPosition(bodyWorld));
+        }
+        sunAnchor.multiplyScalar(1 / bodies.length);
+      } else {
+        return;
+      }
+      sun.target.position.copy(sunAnchor);
+      sun.position.copy(sunAnchor).add(sunOffset);
+      sun.target.updateMatrixWorld();
+    };
     let previousWall = performance.now();
     let lastReportWall = 0;
-    let lastReportedFrame = -1;
+    let lastReportedFrameIndex = -1;
     let lastReportedPlaying = !playback.playing;
     let lastReportedTime = Number.NaN;
     let animationFrame = 0;
@@ -255,14 +273,9 @@ export function SceneViewport(props: Props) {
       applyOptions();
       playback.advance(wallDelta);
       const bracket = playback.bracket();
-      applyPose(bracket.frameA, bracket.frameB, bracket.alpha);
+      applyPose(bracket.firstFrameIndex, bracket.secondFrameIndex, bracket.alpha);
       rig.update(wallDelta, freeFraction(width, safeArea));
-      if (carbody !== null) {
-        carbody.getWorldPosition(anchorWorld);
-        sun.target.position.copy(anchorWorld);
-        sun.position.copy(anchorWorld).add(sunOffset);
-        sun.target.updateMatrixWorld();
-      }
+      updateSun();
       sky.position.copy(camera.position);
       renderer.render(threeScene, camera);
       if (options.current.labels) {
@@ -270,13 +283,13 @@ export function SceneViewport(props: Props) {
       }
       labels.update(camera, width, height, safeArea, obstacles);
       const changed =
-        bracket.frameA !== lastReportedFrame || playback.playing !== lastReportedPlaying || playback.timeSeconds !== lastReportedTime;
+        bracket.firstFrameIndex !== lastReportedFrameIndex || playback.playing !== lastReportedPlaying || playback.timeSeconds !== lastReportedTime;
       if (changed && (!playback.playing || now - lastReportWall > 32 || playback.playing !== lastReportedPlaying)) {
         lastReportWall = now;
-        lastReportedFrame = bracket.frameA;
+        lastReportedFrameIndex = bracket.firstFrameIndex;
         lastReportedPlaying = playback.playing;
         lastReportedTime = playback.timeSeconds;
-        onDisplayFrame(bracket.frameA, playback.timeSeconds, playback.playing);
+        onDisplayFrame(bracket.firstFrameIndex, playback.timeSeconds, playback.playing);
       }
     };
     loop();
@@ -295,7 +308,7 @@ export function SceneViewport(props: Props) {
       renderer.domElement.remove();
       commands.current = null;
     };
-  }, [record, scene, playback, carbodyBodyName, bogieBodyName, bogieBodyNames, initialPreset, options, commands, contactPatchesAt, safeArea, onDisplayFrame]);
+  }, [record, scene, playback, bindings, initialPreset, options, commands, contactPatchesAt, safeArea, onDisplayFrame]);
 
   return <div ref={containerRef} className="viewport" />;
 }

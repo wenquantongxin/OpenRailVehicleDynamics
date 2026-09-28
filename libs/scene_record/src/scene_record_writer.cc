@@ -103,6 +103,26 @@ SceneRecordWriter::SceneRecordWriter(
     if (topology_.bodies.empty()) {
         Reject("the scene topology names no rigid body");
     }
+    const auto lists_body = [this](const std::string& name) {
+        for (const auto& body : topology_.bodies) {
+            if (body.name == name) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (const auto& wheel : topology_.wheel_placements) {
+        if (!lists_body(wheel.wheel_body_name)) {
+            Reject("wheel placement '" + wheel.interface_name +
+                   "' names wheel body '" + wheel.wheel_body_name +
+                   "', which the topology does not list");
+        }
+        if (!lists_body(wheel.carrier_body_name)) {
+            Reject("wheel placement '" + wheel.interface_name +
+                   "' names carrier body '" + wheel.carrier_body_name +
+                   "', which the topology does not list");
+        }
+    }
     std::error_code error;
     if (std::filesystem::exists(directory_, error) || error) {
         Reject("'" + directory_.string() +
@@ -260,6 +280,7 @@ void SceneRecordWriter::Close() {
         wheel_placements.push_back(
             {{"interface_name", wheel.interface_name},
              {"wheel_body_name", wheel.wheel_body_name},
+             {"carrier_body_name", wheel.carrier_body_name},
              {"side", SideName(wheel.side)},
              {"datum_in_wheel_body_frame_meters",
               Vector3Json(wheel.datum_in_wheel_body_frame_meters)},

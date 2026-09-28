@@ -1491,3 +1491,19 @@ button {
   background: transparent;
   border: 1.5px dashed var(--ink3);
 }
+
+/* a role view whose anchor the bindings do not provide */
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chip:disabled:hover {
+  border-color: #dbd2c4;
+}
+
+/* a carrier whose lateral position was not recorded: nominal place, not a measurement */
+.sch-axle.unrecorded {
+  stroke: var(--ink3);
+  stroke-dasharray: 3 2;
+}

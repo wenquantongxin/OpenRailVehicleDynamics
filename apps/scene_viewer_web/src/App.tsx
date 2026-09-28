@@ -1,33 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { loadRecordFromFiles, loadRecordFromUrl } from './record/load_record.ts';
-import { frameAtOrBefore, frameTimeSeconds, type SceneRecord } from './record/scene_record.ts';
+import { frameIndexAtOrBefore, frameTimeSeconds, type SceneRecord } from './record/scene_record.ts';
+import { parseVisualDefinition, type VisualDefinition } from './record/visual_definition.ts';
 import { PlaybackController } from './playback/playback.ts';
 import { maximumWheelRotationBetweenFrames } from './scene/pose_interpolation.ts';
-import { viewPresets, type ViewPreset } from './scene/camera_rig.ts';
+import { presetRequiresBogie, viewPresets, type ViewPreset } from './scene/camera_rig.ts';
 import type { SafeArea } from './scene/label_layer.ts';
 import { buildScene, type BuiltScene, type CarbodyMode } from './scene/scene_builder.ts';
+import { resolveVehicleDisplayBindings, type VehicleDisplayBindings } from './scene/vehicle_display_bindings.ts';
 import { EmptyState, Footer, MetaBar, Notice, ScalarsDrawer, TitleBlock } from './ui/Chrome.tsx';
 import { scenarioSubtitle, type Subtitle } from './ui/subtitle.ts';
 import { DisplayCard, ViewsCard } from './ui/ControlCards.tsx';
 import { fixed } from './ui/format.ts';
 import { PlaybackCard, playbackRates } from './ui/PlaybackCard.tsx';
-import { buildReadoutModel, type ReadoutModel } from './ui/readout_model.ts';
+import { buildVehicleReadoutModel, type VehicleReadoutModel } from './ui/vehicle_readout_model.ts';
 import { TrackCard } from './ui/TrackCard.tsx';
-import { AxleBridgeCard, VehicleCard, WheelForceCard } from './ui/VehicleCards.tsx';
+import { CarriersCard, VehicleCard, WheelForceCard } from './ui/VehicleCards.tsx';
 import { SceneViewport, type ViewportCommands, type ViewportOptions } from './viewer/SceneViewport.tsx';
 
-// The replay: load a record, build the scene once, drive body poses from the
-// display clock, and show only what the record carries.
+// The replay: load a record, parse its visual definition, resolve the display
+// bindings once, build the scene and the readout model from that one
+// resolution, drive body poses from the display clock, and show only what the
+// record carries.
 
-interface Loaded {
+interface LoadedSceneReplay {
   record: SceneRecord;
+  visualDefinition: VisualDefinition | null;
+  bindings: VehicleDisplayBindings;
   scene: BuiltScene;
   playback: PlaybackController;
-  model: ReadoutModel;
+  readoutModel: VehicleReadoutModel;
   name: string;
   subtitle: Subtitle | null;
   warning: string | null;
+  /** The requested first view, or the overview when the request needs a role the bindings do not provide. */
+  initialPreset: ViewPreset;
 }
 
 /** Card columns and the playback card, which labels and framing keep clear of. */
@@ -47,9 +55,13 @@ function initialOptions(): ViewportOptions {
   };
 }
 
-function initialPreset(): ViewPreset {
+function requestedPreset(): ViewPreset {
   const requested = query.get('view');
   return viewPresets.find((preset) => preset === requested) ?? 'overview';
+}
+
+function presetAvailable(preset: ViewPreset, bindings: VehicleDisplayBindings): boolean {
+  return !presetRequiresBogie(preset) || bindings.bogies.length > 0;
 }
 
 function recordNameFromUrl(url: string): string {
@@ -58,26 +70,33 @@ function recordNameFromUrl(url: string): string {
 }
 
 export function App() {
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [loaded, setLoaded] = useState<LoadedSceneReplay | null>(null);
   const [loadState, setLoadState] = useState<{ state: 'idle' | 'loading' | 'error'; message: string }>({ state: 'idle', message: '' });
-  const [frame, setFrame] = useState(0);
+  const [frameIndex, setFrameIndex] = useState(0);
   const [timeSeconds, setTimeSeconds] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [rateIndex, setRateIndex] = useState(3);
-  const [preset, setPreset] = useState<ViewPreset>(initialPreset);
+  const [preset, setPreset] = useState<ViewPreset>(requestedPreset);
   const [options, setOptions] = useState<ViewportOptions>(initialOptions);
   const [scalarsOpen, setScalarsOpen] = useState(false);
   const [definitionNoticeOpen, setDefinitionNoticeOpen] = useState(true);
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const commands = useRef<ViewportCommands | null>(null);
-  const firstPreset = useMemo(initialPreset, []);
-  const bogieBodyNames = useMemo(() => loaded?.model.bogies.map((bogie) => bogie.bodyName) ?? [], [loaded]);
+  const availablePresets = useMemo(
+    () => new Set(loaded === null ? viewPresets : viewPresets.filter((candidate) => presetAvailable(candidate, loaded.bindings))),
+    [loaded],
+  );
 
   const install = useCallback((record: SceneRecord, name: string) => {
-    const scene = buildScene(record);
+    const visualDefinition =
+      record.visualDefinitionText === null
+        ? null
+        : parseVisualDefinition(record.visualDefinitionText, new Set(record.bodies.map((body) => body.name)));
+    const bindings = resolveVehicleDisplayBindings(record, visualDefinition);
+    const scene = buildScene(record, visualDefinition, bindings);
     const playback = new PlaybackController(record);
-    const model = buildReadoutModel(record, scene.track);
+    const readoutModel = buildVehicleReadoutModel(record, scene.track, bindings);
     const startTime = Number(query.get('t'));
     if (query.get('t') !== null && Number.isFinite(startTime)) {
       playback.seek(startTime);
@@ -86,14 +105,28 @@ export function App() {
     scene.setUserHidden(new Set((query.get('hide') ?? '').split(',').filter((part) => part !== '')));
     const wheelBodies = record.wheelPlacements
       .map((placement) => record.bodies.findIndex((body) => body.name === placement.wheelBodyName))
-      .filter((index) => index >= 0);
+      .filter((bodyIndex) => bodyIndex >= 0);
     const coarsest = maximumWheelRotationBetweenFrames(record, wheelBodies);
     const warning =
-      record.columns.wheelSpinCount === 0 && coarsest > Math.PI / 2
+      record.columns.wheelSpinAngleCount === 0 && coarsest > Math.PI / 2
         ? `No wheel spin angles and up to ${fixed(coarsest, 2)} rad of wheel turn between samples: in-between wheel poses are unreliable. 无轮自转角，插值方向不可靠。`
         : null;
-    setLoaded({ record, scene, playback, model, name, subtitle: scenarioSubtitle(model.carbodyStation, model.initialSpeedKmh, scene.track), warning });
-    setFrame(Math.max(0, frameAtOrBefore(record, playback.timeSeconds)));
+    const wanted = requestedPreset();
+    const initialPreset = presetAvailable(wanted, bindings) ? wanted : 'overview';
+    setLoaded({
+      record,
+      visualDefinition,
+      bindings,
+      scene,
+      playback,
+      readoutModel,
+      name,
+      subtitle: scenarioSubtitle(readoutModel.carbodyStation, readoutModel.initialSpeedKmh, scene.track),
+      warning,
+      initialPreset,
+    });
+    setPreset(initialPreset);
+    setFrameIndex(Math.max(0, frameIndexAtOrBefore(record, playback.timeSeconds)));
     setTimeSeconds(playback.timeSeconds);
     setPlaying(false);
     setLoadState({ state: 'idle', message: '' });
@@ -123,8 +156,8 @@ export function App() {
     [install],
   );
 
-  const onDisplayFrame = useCallback((displayed: number, time: number, nowPlaying: boolean) => {
-    setFrame(displayed);
+  const onDisplayFrame = useCallback((displayedFrameIndex: number, time: number, nowPlaying: boolean) => {
+    setFrameIndex(displayedFrameIndex);
     setTimeSeconds(time);
     setPlaying(nowPlaying);
   }, []);
@@ -150,7 +183,7 @@ export function App() {
       }
       loaded.playback.seek(time);
       setTimeSeconds(loaded.playback.timeSeconds);
-      setFrame(Math.max(0, frameAtOrBefore(loaded.record, loaded.playback.timeSeconds)));
+      setFrameIndex(Math.max(0, frameIndexAtOrBefore(loaded.record, loaded.playback.timeSeconds)));
     },
     [loaded],
   );
@@ -162,7 +195,7 @@ export function App() {
       }
       const { record, playback } = loaded;
       playback.playing = false;
-      const current = Math.max(0, frameAtOrBefore(record, playback.timeSeconds));
+      const current = Math.max(0, frameIndexAtOrBefore(record, playback.timeSeconds));
       const onSample = Math.abs(frameTimeSeconds(record, current) - playback.timeSeconds) < 1e-9;
       const target = direction > 0 ? current + 1 : onSample ? current - 1 : current;
       seek(frameTimeSeconds(record, Math.min(record.frameCount - 1, Math.max(0, target))));
@@ -171,10 +204,18 @@ export function App() {
     [loaded, seek],
   );
 
-  const selectPreset = useCallback((next: ViewPreset) => {
-    commands.current?.applyPreset(next);
-    setPreset(next);
-  }, []);
+  // Every route to a preset, button, key or deep link, passes this one check.
+  const selectPreset = useCallback(
+    (next: ViewPreset) => {
+      if (loaded === null || !presetAvailable(next, loaded.bindings)) {
+        return;
+      }
+      if (commands.current?.applyPreset(next) === true) {
+        setPreset(next);
+      }
+    },
+    [loaded],
+  );
 
   const changeOptions = useCallback((next: Partial<ViewportOptions>) => {
     setOptions((previous) => ({ ...previous, ...next }));
@@ -231,7 +272,7 @@ export function App() {
 
   useEffect(() => () => loaded?.scene.dispose(), [loaded]);
 
-  const model = loaded?.model ?? null;
+  const readoutModel = loaded?.readoutModel ?? null;
   const track = loaded?.scene.track ?? null;
   return (
     <div className="app">
@@ -241,13 +282,11 @@ export function App() {
             record={loaded.record}
             scene={loaded.scene}
             playback={loaded.playback}
-            carbodyBodyName={loaded.model.carbody?.bodyName ?? null}
-            bogieBodyName={loaded.model.bogies[0]?.bodyName ?? null}
-            bogieBodyNames={bogieBodyNames}
-            initialPreset={firstPreset}
+            bindings={loaded.bindings}
+            initialPreset={loaded.initialPreset}
             options={optionsRef}
             commands={commands}
-            contactPatchesAt={loaded.model.contactPatchesAt}
+            contactPatchesAt={loaded.readoutModel.contactPatchesAt}
             safeArea={safeArea}
             onDisplayFrame={onDisplayFrame}
           />
@@ -255,31 +294,38 @@ export function App() {
       </div>
       <div className="vignette" />
       <div className="hud">
-        <TitleBlock definition={loaded?.scene.visualDefinition ?? null} subtitle={loaded?.subtitle ?? null} />
+        <TitleBlock definition={loaded?.visualDefinition ?? null} subtitle={loaded?.subtitle ?? null} />
         <MetaBar
           record={loaded?.record ?? null}
           name={loaded?.name ?? ''}
-          code={loaded?.scene.visualDefinition?.vehicleName ?? ''}
-          intervalSeconds={model?.sampleIntervalSeconds ?? 0}
+          code={loaded?.visualDefinition?.vehicleName ?? ''}
+          intervalSeconds={readoutModel?.sampleIntervalSeconds ?? 0}
           onPick={onPick}
         />
-        {loaded !== null && model !== null ? (
+        {loaded !== null && readoutModel !== null ? (
           <>
             <div className="col left">
-              <AxleBridgeCard record={loaded.record} model={model} frame={frame} wheelWidth={loaded.scene.visualDefinition?.wheelVisual.widthMeters ?? null} />
-              {track !== null && <TrackCard track={track} model={model} frame={frame} />}
+              <CarriersCard record={loaded.record} readoutModel={readoutModel} frameIndex={frameIndex} wheelWidth={loaded.visualDefinition?.wheelVisual.widthMeters ?? null} />
+              {track !== null && <TrackCard track={track} readoutModel={readoutModel} frameIndex={frameIndex} />}
             </div>
             <div className="col right">
-              <VehicleCard record={loaded.record} model={model} frame={frame} />
-              <WheelForceCard model={model} frame={frame} />
-              <ViewsCard current={preset} onSelect={selectPreset} options={options} onChange={changeOptions} />
+              <VehicleCard record={loaded.record} readoutModel={readoutModel} bindings={loaded.bindings} frameIndex={frameIndex} />
+              <WheelForceCard readoutModel={readoutModel} frameIndex={frameIndex} />
+              <ViewsCard
+                current={preset}
+                available={availablePresets}
+                bogieDisplayName={loaded.bindings.bogies[0]?.displayName ?? null}
+                onSelect={selectPreset}
+                options={options}
+                onChange={changeOptions}
+              />
               <DisplayCard options={options} onChange={changeOptions} scalarsOpen={scalarsOpen} onToggleScalars={() => setScalarsOpen((open) => !open)} />
             </div>
             <PlaybackCard
               record={loaded.record}
-              model={model}
+              readoutModel={readoutModel}
               track={track}
-              frame={frame}
+              frameIndex={frameIndex}
               timeSeconds={timeSeconds}
               playing={playing}
               rateIndex={rateIndex}
@@ -300,16 +346,16 @@ export function App() {
                   onDismiss={() => setLoadState({ state: 'idle', message: '' })}
                 />
               )}
-              {loaded.scene.visualDefinition === null && definitionNoticeOpen && (
+              {loaded.visualDefinition === null && definitionNoticeOpen && (
                 <Notice
                   kind="info"
-                  en="No visual definition in this record: bodies are shown as axes"
-                  zh="记录中没有视觉定义：刚体以坐标轴显示，车轮按记录放置绘出"
+                  en="No visual definition in this record: bodies are shown as axes and wheels from their placements; carbody and bogie readouts and the bogie view are unavailable"
+                  zh="记录中没有视觉定义：刚体以坐标轴显示，车轮按记录放置绘出；车体与构架读数、转向架视角不可用"
                   onDismiss={() => setDefinitionNoticeOpen(false)}
                 />
               )}
             </div>
-            {scalarsOpen && <ScalarsDrawer record={loaded.record} frame={frame} onClose={() => setScalarsOpen(false)} />}
+            {scalarsOpen && <ScalarsDrawer record={loaded.record} frameIndex={frameIndex} onClose={() => setScalarsOpen(false)} />}
           </>
         ) : (
           <EmptyState state={loadState.state} message={loadState.message} onPick={onPick} />

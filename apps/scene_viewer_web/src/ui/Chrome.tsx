@@ -162,7 +162,7 @@ export function EmptyState(props: { state: 'idle' | 'loading' | 'error'; message
   );
 }
 
-export function ScalarsDrawer({ record, frame, onClose }: { record: SceneRecord; frame: number; onClose: () => void }) {
+export function ScalarsDrawer({ record, frameIndex, onClose }: { record: SceneRecord; frameIndex: number; onClose: () => void }) {
   const groups = new Map<string, number[]>();
   record.scalars.forEach((definition, index) => {
     const owner = definition.name.includes('.') ? definition.name.slice(0, definition.name.indexOf('.')) : '';
@@ -190,7 +190,7 @@ export function ScalarsDrawer({ record, frame, onClose }: { record: SceneRecord;
             if (definition === undefined) {
               return null;
             }
-            const sample = scalarSample(record, frame, index);
+            const sample = scalarSample(record, frameIndex, index);
             const status =
               sample.status === ScalarStatus.valid ? null : sample.status === ScalarStatus.placeholder ? 'Placeholder 占位' : 'Not ready 未就绪';
             return (

@@ -3,17 +3,24 @@ import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import type { TrackModel } from './track_model.ts';
 
-// Camera presets stated in the line's local frame at the vehicle (forward,
+// Camera presets stated in the line's local frame at the anchor (forward,
 // left, up), so "front" stays in front of the vehicle through a curve. The
 // heading comes from the recorded track frame at the anchor's station, not
 // from the body's own yaw, so the view does not sway with the carbody.
+//
+// Anchors come from the display bindings, never from a body's name. A preset
+// anchored to the carbody falls back to the mean position of all bodies when
+// no carbody is bound, which assumes nothing about any one body; the bogie
+// preset needs a bound bogie and is unavailable otherwise.
 
 export type ViewPreset = 'overview' | 'bogie' | 'headon' | 'plan' | 'side';
 
 export const viewPresets: ViewPreset[] = ['overview', 'bogie', 'headon', 'plan', 'side'];
 
+type AnchorRole = 'carbody' | 'bogie';
+
 interface PresetSpec {
-  anchor: 'carbody' | 'bogie';
+  anchor: AnchorRole;
   /** Look-at point relative to the anchor: forward, left, up (metres). */
   target: [number, number, number];
   /** Direction from the target to the camera: forward, left, up (normalised here). */
@@ -31,15 +38,22 @@ const presets: Record<ViewPreset, PresetSpec> = {
   side: { anchor: 'carbody', target: [0, 0, 1.5], direction: [0, 1, 0.16], fitWidth: 23.5, fov: 30 },
 };
 
+/** Whether a preset needs a bound bogie; every other preset works with or without a bound carbody. */
+export function presetRequiresBogie(preset: ViewPreset): boolean {
+  return presets[preset].anchor === 'bogie';
+}
+
 const up = new THREE.Vector3(0, 1, 0);
 
-export interface Anchors {
+export interface CameraAnchors {
   root: THREE.Object3D;
   carbody: THREE.Object3D | null;
   bogie: THREE.Object3D | null;
+  /** Every body object; their mean position stands in for an unbound carbody. */
+  bodies: THREE.Object3D[];
 }
 
-interface LocalFrame {
+interface AnchorFrame {
   origin: THREE.Vector3;
   forward: THREE.Vector3;
   left: THREE.Vector3;
@@ -59,16 +73,16 @@ export class CameraRig {
     elapsed: number;
     duration: number;
   } | null = null;
-  private lastFrame: LocalFrame | null = null;
+  private lastAnchorFrame: AnchorFrame | null = null;
   private readonly scratch = new THREE.Vector3();
   private readonly inertial = new THREE.Vector3();
 
   private readonly camera: THREE.PerspectiveCamera;
   private readonly controls: OrbitControls;
-  private readonly anchors: Anchors;
+  private readonly anchors: CameraAnchors;
   private readonly track: TrackModel | null;
 
-  constructor(camera: THREE.PerspectiveCamera, controls: OrbitControls, anchors: Anchors, track: TrackModel | null) {
+  constructor(camera: THREE.PerspectiveCamera, controls: OrbitControls, anchors: CameraAnchors, track: TrackModel | null) {
     this.camera = camera;
     this.controls = controls;
     this.anchors = anchors;
@@ -82,23 +96,47 @@ export class CameraRig {
     return this.preset;
   }
 
-  /** The anchor's world position and the horizontal track heading there. */
-  private frameFor(anchorName: PresetSpec['anchor']): LocalFrame | null {
-    const anchor = anchorName === 'bogie' ? (this.anchors.bogie ?? this.anchors.carbody) : this.anchors.carbody;
-    if (anchor === null) {
+  presetAvailable(preset: ViewPreset): boolean {
+    return !presetRequiresBogie(preset) || this.anchors.bogie !== null;
+  }
+
+  /** The anchor's world position for a role, or null when the role is not bound and has no stand-in. */
+  private anchorOrigin(role: AnchorRole): THREE.Vector3 | null {
+    if (role === 'bogie') {
+      return this.anchors.bogie === null ? null : this.anchors.bogie.getWorldPosition(new THREE.Vector3());
+    }
+    if (this.anchors.carbody !== null) {
+      return this.anchors.carbody.getWorldPosition(new THREE.Vector3());
+    }
+    if (this.anchors.bodies.length === 0) {
       return null;
     }
-    const origin = anchor.getWorldPosition(new THREE.Vector3());
+    const mean = new THREE.Vector3();
+    for (const body of this.anchors.bodies) {
+      mean.add(body.getWorldPosition(this.scratch));
+    }
+    return mean.multiplyScalar(1 / this.anchors.bodies.length);
+  }
+
+  /** The anchor's world position and the horizontal track heading there. */
+  private anchorFrameFor(role: AnchorRole): AnchorFrame | null {
+    const origin = this.anchorOrigin(role);
+    if (origin === null) {
+      return null;
+    }
     const forward = new THREE.Vector3(1, 0, 0);
     if (this.track !== null) {
       this.inertial.copy(origin);
       this.anchors.root.worldToLocal(this.inertial);
-      const station = this.track.stationNearest(this.inertial);
-      const tangent = this.track.frameAt(station).tangent;
+      const stationMeters = this.track.stationNearestToInertialPosition(this.inertial);
+      const tangent = this.track.trackFrameAtStation(stationMeters).tangent;
       // Inertial (x, y, z) maps to Three.js (x, -z, y); keep the horizontal part.
       forward.set(tangent.x, 0, tangent.y);
-    } else {
-      forward.set(1, 0, 0).applyQuaternion(anchor.getWorldQuaternion(new THREE.Quaternion()));
+    } else if (role === 'bogie' && this.anchors.bogie !== null) {
+      forward.set(1, 0, 0).applyQuaternion(this.anchors.bogie.getWorldQuaternion(new THREE.Quaternion()));
+      forward.y = 0;
+    } else if (this.anchors.carbody !== null) {
+      forward.set(1, 0, 0).applyQuaternion(this.anchors.carbody.getWorldQuaternion(new THREE.Quaternion()));
       forward.y = 0;
     }
     if (forward.lengthSq() < 1e-12) {
@@ -109,17 +147,17 @@ export class CameraRig {
     return { origin, forward, left };
   }
 
-  private toWorld(frame: LocalFrame, local: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+  private toWorld(anchorFrame: AnchorFrame, local: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
     return out
-      .copy(frame.origin)
-      .addScaledVector(frame.forward, local.x)
-      .addScaledVector(frame.left, local.y)
+      .copy(anchorFrame.origin)
+      .addScaledVector(anchorFrame.forward, local.x)
+      .addScaledVector(anchorFrame.left, local.y)
       .addScaledVector(up, local.z);
   }
 
-  private toLocal(frame: LocalFrame, world: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    this.scratch.copy(world).sub(frame.origin);
-    return out.set(this.scratch.dot(frame.forward), this.scratch.dot(frame.left), this.scratch.y);
+  private toLocal(anchorFrame: AnchorFrame, world: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+    this.scratch.copy(world).sub(anchorFrame.origin);
+    return out.set(this.scratch.dot(anchorFrame.forward), this.scratch.dot(anchorFrame.left), this.scratch.y);
   }
 
   /** Camera and target of a preset, in the local frame, for the current viewport. */
@@ -131,38 +169,43 @@ export class CameraRig {
     return { camera: target.clone().addScaledVector(direction, distance), target };
   }
 
-  applyPreset(preset: ViewPreset, freeFraction: number, immediate: boolean): void {
-    this.preset = preset;
-    const spec = presets[preset];
-    const frame = this.frameFor(spec.anchor);
-    if (frame === null) {
-      return;
+  /** Moves to a preset; returns false and changes nothing when the preset's anchor is not bound. */
+  applyPreset(preset: ViewPreset, freeFraction: number, immediate: boolean): boolean {
+    if (!this.presetAvailable(preset)) {
+      return false;
     }
+    const spec = presets[preset];
+    const anchorFrame = this.anchorFrameFor(spec.anchor);
+    if (anchorFrame === null) {
+      return false;
+    }
+    this.preset = preset;
     if (immediate) {
       const destination = this.destination(spec, freeFraction);
-      this.toWorld(frame, destination.camera, this.camera.position);
-      this.toWorld(frame, destination.target, this.controls.target);
+      this.toWorld(anchorFrame, destination.camera, this.camera.position);
+      this.toWorld(anchorFrame, destination.target, this.controls.target);
       this.camera.fov = spec.fov;
       this.camera.updateProjectionMatrix();
       this.tween = null;
     } else {
       this.tween = {
-        startCamera: this.toLocal(frame, this.camera.position, new THREE.Vector3()),
-        startTarget: this.toLocal(frame, this.controls.target, new THREE.Vector3()),
+        startCamera: this.toLocal(anchorFrame, this.camera.position, new THREE.Vector3()),
+        startTarget: this.toLocal(anchorFrame, this.controls.target, new THREE.Vector3()),
         startFov: this.camera.fov,
         elapsed: 0,
         duration: 0.9,
       };
     }
-    this.lastFrame = frame;
+    this.lastAnchorFrame = anchorFrame;
     this.controls.update();
+    return true;
   }
 
   /** Called once per rendered frame after body poses are written. */
   update(wallDeltaSeconds: number, freeFraction: number): void {
     const spec = presets[this.preset];
-    const frame = this.frameFor(spec.anchor);
-    if (frame === null) {
+    const anchorFrame = this.anchorFrameFor(spec.anchor);
+    if (anchorFrame === null) {
       return;
     }
     if (this.tween !== null) {
@@ -171,21 +214,21 @@ export class CameraRig {
       const destination = this.destination(spec, freeFraction);
       const cameraLocal = this.tween.startCamera.clone().lerp(destination.camera, s);
       const targetLocal = this.tween.startTarget.clone().lerp(destination.target, s);
-      this.toWorld(frame, cameraLocal, this.camera.position);
-      this.toWorld(frame, targetLocal, this.controls.target);
+      this.toWorld(anchorFrame, cameraLocal, this.camera.position);
+      this.toWorld(anchorFrame, targetLocal, this.controls.target);
       this.camera.fov = THREE.MathUtils.lerp(this.tween.startFov, spec.fov, s);
       this.camera.updateProjectionMatrix();
       if (s >= 1) {
         this.tween = null;
       }
-    } else if (this.follow && this.lastFrame !== null) {
+    } else if (this.follow && this.lastAnchorFrame !== null) {
       // Carry the camera with the anchor: same offset, turned with the heading.
-      const cameraLocal = this.toLocal(this.lastFrame, this.camera.position, new THREE.Vector3());
-      const targetLocal = this.toLocal(this.lastFrame, this.controls.target, new THREE.Vector3());
-      this.toWorld(frame, cameraLocal, this.camera.position);
-      this.toWorld(frame, targetLocal, this.controls.target);
+      const cameraLocal = this.toLocal(this.lastAnchorFrame, this.camera.position, new THREE.Vector3());
+      const targetLocal = this.toLocal(this.lastAnchorFrame, this.controls.target, new THREE.Vector3());
+      this.toWorld(anchorFrame, cameraLocal, this.camera.position);
+      this.toWorld(anchorFrame, targetLocal, this.controls.target);
     }
-    this.lastFrame = frame;
+    this.lastAnchorFrame = anchorFrame;
     this.controls.update();
   }
 }

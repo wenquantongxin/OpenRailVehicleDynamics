@@ -17,8 +17,8 @@ export function Card(props: { index: string; en: string; zh: string; className?:
   );
 }
 
-/** An English term with its Chinese subtitle. */
-export function Bi(props: { en: string; zh: string; unit?: string; className?: string; title?: string }) {
+/** An English term with its Chinese subtitle, optionally followed by a unit. */
+export function BilingualLabel(props: { en: string; zh: string; unit?: string; className?: string; title?: string }) {
   return (
     <span className={`bi ${props.className ?? ''}`} title={props.title}>
       <span className="en">
@@ -34,7 +34,7 @@ export function Bi(props: { en: string; zh: string; unit?: string; className?: s
 export function ReadoutRow(props: { en: string; zh: string; value: ReactNode; muted?: boolean }) {
   return (
     <div className="kv">
-      <Bi en={props.en} zh={props.zh} className="k" />
+      <BilingualLabel en={props.en} zh={props.zh} className="k" />
       <span className={`v ${props.muted === true ? 'muted' : ''}`}>{props.value}</span>
     </div>
   );

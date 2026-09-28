@@ -1,6 +1,9 @@
 // The parametric visual definition copied into the record. Each part is
 // stated in its own body's frame; sizes are schematic and carry no physics.
 // An appearance names a display role; the viewer decides how a role looks.
+// The display bindings name the bodies the cards, camera and labels treat as
+// carbody, bogie frames and carriers; they are read here field by field, and
+// resolved against the record in one place, `vehicle_display_bindings.ts`.
 
 export type Appearance = 'shell' | 'glass' | 'floor' | 'structure' | 'accent' | 'dark';
 
@@ -72,11 +75,38 @@ export interface WheelLabel extends BilingualName {
   interfaceName: string;
 }
 
+/** A body given a display role and a name. */
+export interface DisplayBodyBinding {
+  bodyName: string;
+  displayName: BilingualName;
+}
+
+/** A bogie frame with the bodies shown as its running gear; wheels follow their carrier and are not listed. */
+export interface BogieDisplayBinding extends DisplayBodyBinding {
+  memberBodyNames: string[];
+}
+
+/** The display name of a carrier body named by the record's wheel placements, in display order. */
+export interface CarrierDisplayBinding {
+  carrierBodyName: string;
+  displayName: BilingualName;
+}
+
+export interface DisplayBindings {
+  /** null when the definition states that no body plays the carbody. */
+  carbody: DisplayBodyBinding | null;
+  /** In display order from end 1; may be empty. */
+  bogies: BogieDisplayBinding[];
+  /** In display order; must name every carrier of the record exactly once. */
+  carriers: CarrierDisplayBinding[];
+}
+
 export interface VisualDefinition {
   vehicleName: string;
   displayName: BilingualName;
   parts: VisualPart[];
   wheelVisual: WheelVisual;
+  displayBindings: DisplayBindings;
 }
 
 function triple(value: unknown, what: string): [number, number, number] {
@@ -107,11 +137,22 @@ function text(value: unknown, what: string): string {
   return value;
 }
 
-function bilingual(value: unknown, what: string): BilingualName {
-  const entry = value as Record<string, unknown> | undefined;
-  if (entry === undefined || entry === null || typeof entry !== 'object') {
-    throw new Error(`visual definition: ${what} is missing`);
+function object(value: unknown, what: string): Record<string, unknown> {
+  if (value === undefined || value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`visual definition: ${what} is missing or not an object`);
   }
+  return value as Record<string, unknown>;
+}
+
+function array(value: unknown, what: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`visual definition: ${what} is not an array`);
+  }
+  return value;
+}
+
+function bilingual(value: unknown, what: string): BilingualName {
+  const entry = object(value, what);
   return { en: text(entry['en'], `${what}.en`), zh: text(entry['zh'], `${what}.zh`) };
 }
 
@@ -128,10 +169,7 @@ function wheelLabels(value: unknown): WheelLabel[] {
   if (value === undefined) {
     return [];
   }
-  if (!Array.isArray(value)) {
-    throw new Error('visual definition: wheel_visual.labels is not an array');
-  }
-  return value.map((entry, index) => {
+  return array(value, 'wheel_visual.labels').map((entry, index) => {
     const what = `wheel_visual.labels[${index}]`;
     const names = bilingual(entry, what);
     return { ...names, interfaceName: text((entry as Record<string, unknown>)['interface_name'], `${what}.interface_name`) };
@@ -145,13 +183,38 @@ function appearance(value: unknown, what: string): Appearance {
   return value as Appearance;
 }
 
+function displayBodyBinding(value: unknown, what: string): DisplayBodyBinding {
+  const entry = object(value, what);
+  return { bodyName: text(entry['body_name'], `${what}.body_name`), displayName: bilingual(entry['display_name'], `${what}.display_name`) };
+}
+
+function displayBindings(value: unknown): DisplayBindings {
+  const entry = object(value, 'display_bindings');
+  if (!('carbody' in entry)) {
+    throw new Error('visual definition: display_bindings.carbody must be given, as a binding or null');
+  }
+  const carbody = entry['carbody'] === null ? null : displayBodyBinding(entry['carbody'], 'display_bindings.carbody');
+  const bogies = array(entry['bogies'], 'display_bindings.bogies').map((bogie, index) => {
+    const what = `display_bindings.bogies[${index}]`;
+    const members = array(object(bogie, what)['member_body_names'], `${what}.member_body_names`).map((name, member) =>
+      text(name, `${what}.member_body_names[${member}]`),
+    );
+    return { ...displayBodyBinding(bogie, what), memberBodyNames: members };
+  });
+  const carriers = array(entry['carriers'], 'display_bindings.carriers').map((carrier, index) => {
+    const what = `display_bindings.carriers[${index}]`;
+    const fields = object(carrier, what);
+    return {
+      carrierBodyName: text(fields['carrier_body_name'], `${what}.carrier_body_name`),
+      displayName: bilingual(fields['display_name'], `${what}.display_name`),
+    };
+  });
+  return { carbody, bogies, carriers };
+}
+
 export function parseVisualDefinition(textValue: string, bodyNames: ReadonlySet<string>): VisualDefinition {
   const json = JSON.parse(textValue) as Record<string, unknown>;
-  const partsJson = json['parts'];
-  if (!Array.isArray(partsJson)) {
-    throw new Error('visual definition: parts is not an array');
-  }
-  const parts: VisualPart[] = partsJson.map((entry, index) => {
+  const parts: VisualPart[] = array(json['parts'], 'parts').map((entry, index) => {
     const part = entry as Record<string, unknown>;
     const name = typeof part['name'] === 'string' ? part['name'] : `part_${index}`;
     const bodyName = part['body_name'];
@@ -181,9 +244,7 @@ export function parseVisualDefinition(textValue: string, bodyNames: ReadonlySet<
           centerInBodyFrameMeters: triple(part['center_in_body_frame_meters'], `${name}.center`),
           sizeMeters: triple(part['size_meters'], `${name}.size`),
           cornerRadiusMeters:
-            part['corner_radius_meters'] === undefined
-              ? 0
-              : nonNegativeNumber(part['corner_radius_meters'], `${name}.corner_radius`),
+            part['corner_radius_meters'] === undefined ? 0 : nonNegativeNumber(part['corner_radius_meters'], `${name}.corner_radius`),
         };
       case 'cylinder':
         return {
@@ -204,10 +265,7 @@ export function parseVisualDefinition(textValue: string, bodyNames: ReadonlySet<
         throw new Error(`visual definition: part '${name}' has unknown shape '${String(part['shape'])}'`);
     }
   });
-  const wheel = json['wheel_visual'] as Record<string, unknown> | undefined;
-  if (wheel === undefined) {
-    throw new Error('visual definition: wheel_visual is missing');
-  }
+  const wheel = object(json['wheel_visual'], 'wheel_visual');
   const wheelVisual: WheelVisual = {
     widthMeters: positiveNumber(wheel['width_meters'], 'wheel_visual.width_meters'),
     backFaceOffsetMeters: positiveNumber(wheel['back_face_offset_meters'], 'wheel_visual.back_face_offset_meters'),
@@ -228,5 +286,6 @@ export function parseVisualDefinition(textValue: string, bodyNames: ReadonlySet<
     displayName: bilingual(json['display_name'], 'display_name'),
     parts,
     wheelVisual,
+    displayBindings: displayBindings(json['display_bindings']),
   };
 }

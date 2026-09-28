@@ -3,10 +3,11 @@ import { useMemo } from 'react';
 import { sectionNames, type TrackModel } from '../scene/track_model.ts';
 import { Card, ReadoutRow } from './Card.tsx';
 import { chainage, fixed } from './format.ts';
-import type { ReadoutModel } from './readout_model.ts';
+import type { VehicleReadoutModel } from './vehicle_readout_model.ts';
 
 // Card 02: where the carbody is on the sampled line. The plan is drawn in the
 // inertial frame seen from above (x to the right, y downwards on screen).
+// Without a carbody binding the position readouts stay unavailable.
 
 const mapWidth = 236;
 const mapHeight = 118;
@@ -14,7 +15,7 @@ const mapHeight = 118;
 /** The line seen from above, turned so its principal axis runs left to right in the direction of increasing station. */
 function usePlan(track: TrackModel) {
   return useMemo(() => {
-    const points = track.planPoints(4);
+    const points = track.planPointsEvery(4);
     const count = Math.max(1, points.length);
     const meanX = points.reduce((sum, point) => sum + point.x, 0) / count;
     const meanY = points.reduce((sum, point) => sum + point.y, 0) / count;
@@ -63,15 +64,15 @@ function usePlan(track: TrackModel) {
   }, [track]);
 }
 
-export function TrackCard({ track, model, frame }: { track: TrackModel; model: ReadoutModel; frame: number }) {
+export function TrackCard({ track, readoutModel, frameIndex }: { track: TrackModel; readoutModel: VehicleReadoutModel; frameIndex: number }) {
   const plan = usePlan(track);
-  const station = model.carbodyStation[frame] ?? Number.NaN;
-  const startStation = model.carbodyStation[0] ?? Number.NaN;
-  const known = Number.isFinite(station);
-  const section = known ? track.sectionAt(station) : null;
-  const curvature = known ? track.curvatureAt(station) : 0;
-  const here = known ? track.frameAt(station).position : null;
-  const travelled = plan.points.filter((point) => point.station >= startStation && point.station <= station);
+  const stationMeters = readoutModel.carbodyStation[frameIndex] ?? Number.NaN;
+  const startStationMeters = readoutModel.carbodyStation[0] ?? Number.NaN;
+  const known = Number.isFinite(stationMeters);
+  const section = known ? track.sectionAtStation(stationMeters) : null;
+  const curvature = known ? track.curvatureAtStation(stationMeters) : 0;
+  const here = known ? track.trackFrameAtStation(stationMeters).position : null;
+  const travelled = plan.points.filter((point) => point.stationMeters >= startStationMeters && point.stationMeters <= stationMeters);
   const travelledPath = travelled
     .map((point, index) => `${index === 0 ? 'M' : 'L'}${plan.project(point.x, point.y).map((v) => v.toFixed(1)).join(',')}`)
     .join(' ');
@@ -85,20 +86,20 @@ export function TrackCard({ track, model, frame }: { track: TrackModel; model: R
           ? `${fixed(1 / Math.abs(curvature), 0)} m`
           : '∞';
   const hand = section === null || section.direction === 0 ? '' : section.direction > 0 ? ' · right-hand 右转' : ' · left-hand 左转';
-  const speed = model.speedKmhAt(frame);
+  const speed = readoutModel.speedKmhAt(frameIndex);
   return (
     <Card index="02" en="Track" zh="线路">
       <svg className="plan" width={mapWidth} height={mapHeight} viewBox={`0 0 ${mapWidth} ${mapHeight}`} aria-label="Line plan">
         <path d={plan.path} className="plan-line" />
         <path d={travelledPath} className="plan-travelled" />
         {track.elementPoints.map((point) => {
-          const at = track.frameAt(point.station).position;
+          const at = track.trackFrameAtStation(point.stationMeters).position;
           const [x, y] = plan.project(at.x, at.y);
-          return <circle key={`${point.code}-${point.station}`} cx={x} cy={y} r={2.2} className="plan-element" />;
+          return <circle key={`${point.code}-${point.stationMeters}`} cx={x} cy={y} r={2.2} className="plan-element" />;
         })}
         {here !== null && <circle cx={hx} cy={hy} r={4.6} className="plan-here" />}
       </svg>
-      <ReadoutRow en="Chainage" zh="里程" value={known ? chainage(station) : '—'} />
+      <ReadoutRow en="Chainage" zh="里程" value={known ? chainage(stationMeters) : '—'} />
       <ReadoutRow
         en="Section"
         zh="区段"
@@ -123,7 +124,7 @@ export function TrackCard({ track, model, frame }: { track: TrackModel; model: R
           </>
         }
       />
-      <ReadoutRow en="Cant" zh="超高" value={known ? `${fixed(1000 * track.cantAt(station), 1)} mm` : '—'} />
+      <ReadoutRow en="Cant" zh="超高" value={known ? `${fixed(1000 * track.superelevationAtStation(stationMeters), 1)} mm` : '—'} />
       <ReadoutRow en="Vehicle speed" zh="车速" value={speed === null ? '—' : `${fixed(speed, 1)} km/h`} />
     </Card>
   );

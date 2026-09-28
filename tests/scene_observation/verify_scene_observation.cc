@@ -90,19 +90,25 @@ void VerifyWheelPlacement() {
     left_constants.wheel_lateral_datum_meters = -0.7465;
 
     // A carrier whose body basis is the source model basis, half a turn about
-    // x away from the profile axes: body +y points left and body +z up.
+    // x away from the profile axes: body +y points left and body +z up. Its
+    // logical carrier name differs from its body name on purpose: the
+    // placement must carry the body.
     forces::WheelRailContactCarrierDefinition half_turn_carrier;
-    half_turn_carrier.carrier_name = "axle";
-    half_turn_carrier.body_name = "axle";
+    half_turn_carrier.carrier_name = "axle_logical";
+    half_turn_carrier.body_name = "axle_body";
     half_turn_carrier.rotation_body_from_nonspinning_wheel_profile =
         Eigen::Vector3d(1.0, -1.0, -1.0).asDiagonal();
     forces::WheelRailContactInterfaceDefinition right_interface;
     right_interface.interface_name = "wheel_r";
-    right_interface.carrier_name = "axle";
+    right_interface.carrier_name = "axle_logical";
     right_interface.wheel_body_name = "wheel_r";
     right_interface.side = wheel_rail_contact::WheelSide::kRight;
     const auto right = scene_observation::DeriveWheelPlacement(
         right_interface, half_turn_carrier, right_constants);
+    if (right.carrier_body_name != "axle_body") {
+        Fail("the placement must carry the carrier's body name, not its "
+             "logical carrier name");
+    }
     if (right.wheel_body_name != "wheel_r" ||
         right.side != wheel_rail_contact::WheelSide::kRight ||
         !right.datum_in_wheel_body_frame_meters.isApprox(
@@ -123,12 +129,25 @@ void VerifyWheelPlacement() {
         Fail("half-turn basis: the left wheel datum must sit at body +y");
     }
 
-    // A rigid wheelset whose body axes are the profile axes.
-    forces::WheelRailContactCarrierDefinition identity_carrier = half_turn_carrier;
+    // A rigid wheelset whose body axes are the profile axes: the wheel body
+    // is the carrier body, and there is no independent spin joint.
+    forces::WheelRailContactCarrierDefinition identity_carrier;
+    identity_carrier.carrier_name = "wheelset_logical";
+    identity_carrier.body_name = "wheelset";
     identity_carrier.rotation_body_from_nonspinning_wheel_profile =
         Eigen::Matrix3d::Identity();
+    forces::WheelRailContactInterfaceDefinition wheelset_interface =
+        right_interface;
+    wheelset_interface.carrier_name = "wheelset_logical";
+    wheelset_interface.wheel_body_name = "wheelset";
     const auto identity_right = scene_observation::DeriveWheelPlacement(
-        right_interface, identity_carrier, right_constants);
+        wheelset_interface, identity_carrier, right_constants);
+    if (identity_right.carrier_body_name != "wheelset" ||
+        identity_right.wheel_body_name != identity_right.carrier_body_name ||
+        identity_right.spin_joint_name.has_value()) {
+        Fail("a rigid wheelset placement must name the wheelset as both wheel "
+             "and carrier body, without a spin joint");
+    }
     if (!identity_right.datum_in_wheel_body_frame_meters.isApprox(
             Eigen::Vector3d(0.0, 0.7465, 0.0), 1e-15) ||
         !identity_right.spin_axis_in_wheel_body_frame.isApprox(
@@ -160,6 +179,7 @@ void VerifyWheelSpinSampling(const Eigen::Matrix3d& rotation_body_from_profile,
     scene_observation::SceneWheelPlacement placement;
     placement.interface_name = "wheel_r";
     placement.wheel_body_name = "wheel";
+    placement.carrier_body_name = "carrier";
     placement.side = wheel_rail_contact::WheelSide::kRight;
     placement.datum_in_wheel_body_frame_meters =
         rotation_body_from_profile * Eigen::Vector3d(0.0, 0.7465, 0.0);
