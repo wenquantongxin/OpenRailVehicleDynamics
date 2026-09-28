@@ -6,11 +6,13 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { SceneRecord } from '../record/scene_record.ts';
 import type { PlaybackController } from '../playback/playback.ts';
 import { applyFrames, wheelSpinBindings } from '../scene/apply_frame.ts';
-import { CameraRig, type ViewPreset } from '../scene/camera_rig.ts';
-import { LabelLayer, type Rect, type SafeArea } from '../scene/label_layer.ts';
+import { viewOffsetPixels, type ViewportArea } from '../scene/camera_framing.ts';
+import { CameraRig, cameraAnchorsFor, type FramedExtents, type ViewPreset } from '../scene/camera_rig.ts';
+import { LabelLayer, projectClippedBoxToScreen, type Rect, type SafeArea } from '../scene/label_layer.ts';
 import { stageColors } from '../scene/materials.ts';
 import type { BuiltScene, CarbodyMode } from '../scene/scene_builder.ts';
 import type { VehicleDisplayBindings } from '../scene/vehicle_display_bindings.ts';
+import { viewportAreaFromLayout } from './card_layout.ts';
 
 export interface ViewportOptions {
   follow: boolean;
@@ -22,7 +24,7 @@ export interface ViewportOptions {
 }
 
 export interface ViewportCommands {
-  /** Set by the viewport; the panel calls it to move the camera. False when the preset's anchor is not bound. */
+  /** Set by the viewport; the panel calls it to move the camera. False when the preset cannot be framed. */
   applyPreset: (preset: ViewPreset) => boolean;
 }
 
@@ -32,22 +34,20 @@ interface Props {
   playback: PlaybackController;
   /** Camera anchors and label obstacle groups come from here, never from body names. */
   bindings: VehicleDisplayBindings;
+  /** Vehicle and bogie extents measured at the load boundary; the presets frame these. */
+  extents: FramedExtents;
   initialPreset: ViewPreset;
   options: React.MutableRefObject<ViewportOptions>;
+  /** The stage margins covered by the cards, measured by the app; read every frame, never a constant. */
+  layout: React.MutableRefObject<SafeArea>;
   commands: React.MutableRefObject<ViewportCommands | null>;
   /** Fills the loaded contact patch count of every wheel placement at a frame. */
   contactPatchesAt: ((frameIndex: number, out: Float64Array) => void) | null;
-  safeArea: SafeArea;
   onDisplayFrame: (frameIndex: number, timeSeconds: number, playing: boolean) => void;
 }
 
-/** Portion of the viewport width left between the card columns. */
-function freeFraction(width: number, safe: SafeArea): number {
-  return width > 0 ? Math.max(0.35, (width - safe.left - safe.right) / width) : 1;
-}
-
 export function SceneViewport(props: Props) {
-  const { record, scene, playback, bindings, initialPreset, options, commands, contactPatchesAt, safeArea, onDisplayFrame } = props;
+  const { record, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, onDisplayFrame } = props;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -130,27 +130,46 @@ export function SceneViewport(props: Props) {
 
     // Anchors are the bound bodies; without a bound carbody the rig looks at
     // the mean of all bodies and assumes nothing about any one of them.
-    const carbody = bindings.carbody === null ? null : (scene.bodyObjects.get(bindings.carbody.bodyName) ?? null);
-    const firstBogie = bindings.bogies[0];
-    const bogie = firstBogie === undefined ? null : (scene.bodyObjects.get(firstBogie.bodyName) ?? null);
-    const bodies = [...scene.bodyObjects.values()];
-    const rig = new CameraRig(camera, controls, { root: scene.root, carbody, bogie, bodies }, scene.track);
+    const anchors = cameraAnchorsFor(scene, bindings);
+    const carbody = anchors.carbody;
+    const bodies = anchors.bodies;
+    const rig = new CameraRig(camera, controls, anchors, scene.track, extents);
     const labels = new LabelLayer(container, scene.labels);
 
     let width = 1;
     let height = 1;
+    let appliedOffsetX = Number.NaN;
+    let appliedOffsetY = Number.NaN;
     const resize = (): void => {
       width = Math.max(1, container.clientWidth);
       height = Math.max(1, container.clientHeight);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
-      // Lift the picture a little so the vehicle sits in the space above the playback card.
-      camera.setViewOffset(width, height, 0, Math.round(0.05 * height), width, height);
+      appliedOffsetX = Number.NaN;
       camera.updateProjectionMatrix();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(container);
     resize();
+    // The camera axis is aimed at the centre of the picture left free by the
+    // cards, so the framed target sits between them rather than at the canvas
+    // centre; the offset follows the measured layout.
+    const currentViewport = (): ViewportArea => {
+      const viewport = viewportAreaFromLayout(width, height, layout.current);
+      const { offsetX, offsetY } = viewOffsetPixels(viewport);
+      if (offsetX !== appliedOffsetX || offsetY !== appliedOffsetY) {
+        camera.setViewOffset(width, height, offsetX, offsetY, width, height);
+        appliedOffsetX = offsetX;
+        appliedOffsetY = offsetY;
+      }
+      return viewport;
+    };
+    const safeAreaOf = (viewport: ViewportArea): SafeArea => ({
+      left: viewport.free.x0,
+      right: viewport.width - viewport.free.x1,
+      top: viewport.free.y0,
+      bottom: viewport.height - viewport.free.y1,
+    });
 
     const spinBindings = wheelSpinBindings(record);
     const patches = new Float64Array(record.wheelPlacements.length);
@@ -196,6 +215,10 @@ export function SceneViewport(props: Props) {
       }
     }
     const obstacles: Rect[] = obstacleBoxes.map(() => ({ x0: 0, y0: 0, x1: 0, y1: 0 }));
+    const cameraSpaceCorners = Array.from({ length: 8 }, () => new THREE.Vector3());
+    // Corners go to camera space and are clipped against the near plane before
+    // projection, so a bogie the camera is close to or inside still gives a
+    // sound rectangle; matrixWorldInverse is current after the render call.
     const projectObstacles = (): void => {
       obstacleBoxes.forEach((entry, index) => {
         const rect = obstacles[index] as Rect;
@@ -207,22 +230,23 @@ export function SceneViewport(props: Props) {
           return;
         }
         for (let k = 0; k < 8; ++k) {
-          corner
+          (cameraSpaceCorners[k] as THREE.Vector3)
             .set(k & 1 ? entry.box.max.x : entry.box.min.x, k & 2 ? entry.box.max.y : entry.box.min.y, k & 4 ? entry.box.max.z : entry.box.min.z)
             .applyMatrix4(entry.body.matrixWorld)
-            .project(camera);
-          const x = ((corner.x + 1) / 2) * width;
-          const y = ((1 - corner.y) / 2) * height;
-          rect.x0 = Math.min(rect.x0, x);
-          rect.y0 = Math.min(rect.y0, y);
-          rect.x1 = Math.max(rect.x1, x);
-          rect.y1 = Math.max(rect.y1, y);
+            .applyMatrix4(camera.matrixWorldInverse);
+        }
+        const clipped = projectClippedBoxToScreen(cameraSpaceCorners, camera.projectionMatrix, camera.near, width, height);
+        if (clipped !== null) {
+          rect.x0 = clipped.x0;
+          rect.y0 = clipped.y0;
+          rect.x1 = clipped.x1;
+          rect.y1 = clipped.y1;
         }
       });
     };
-    rig.applyPreset(initialPreset, freeFraction(width, safeArea), true);
+    rig.applyPreset(initialPreset, currentViewport(), true);
     commands.current = {
-      applyPreset: (preset) => rig.applyPreset(preset, freeFraction(width, safeArea), false),
+      applyPreset: (preset) => rig.applyPreset(preset, currentViewport(), false),
     };
 
     let applied: ViewportOptions | null = null;
@@ -274,14 +298,16 @@ export function SceneViewport(props: Props) {
       playback.advance(wallDelta);
       const bracket = playback.bracket();
       applyPose(bracket.firstFrameIndex, bracket.secondFrameIndex, bracket.alpha);
-      rig.update(wallDelta, freeFraction(width, safeArea));
+      const viewport = currentViewport();
+      rig.refit(viewport);
+      rig.update(wallDelta, viewport);
       updateSun();
       sky.position.copy(camera.position);
       renderer.render(threeScene, camera);
       if (options.current.labels) {
         projectObstacles();
       }
-      labels.update(camera, width, height, safeArea, obstacles);
+      labels.update(camera, width, height, safeAreaOf(viewport), obstacles);
       const changed =
         bracket.firstFrameIndex !== lastReportedFrameIndex || playback.playing !== lastReportedPlaying || playback.timeSeconds !== lastReportedTime;
       if (changed && (!playback.playing || now - lastReportWall > 32 || playback.playing !== lastReportedPlaying)) {
@@ -308,7 +334,7 @@ export function SceneViewport(props: Props) {
       renderer.domElement.remove();
       commands.current = null;
     };
-  }, [record, scene, playback, bindings, initialPreset, options, commands, contactPatchesAt, safeArea, onDisplayFrame]);
+  }, [record, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, onDisplayFrame]);
 
   return <div ref={containerRef} className="viewport" />;
 }

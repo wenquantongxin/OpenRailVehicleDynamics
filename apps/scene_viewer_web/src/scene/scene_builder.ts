@@ -371,6 +371,10 @@ export function buildScene(record: SceneRecord, visualDefinition: VisualDefiniti
         object.dispose();
         return;
       }
+      if (object instanceof THREE.InstancedMesh) {
+        // Frees the instance buffers; the shared geometry is still collected below.
+        object.dispose();
+      }
       if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
         geometries.add(object.geometry as THREE.BufferGeometry);
       }

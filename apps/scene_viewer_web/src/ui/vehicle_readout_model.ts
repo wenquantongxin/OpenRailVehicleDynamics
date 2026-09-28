@@ -13,7 +13,8 @@ import { niceCeiling } from './format.ts';
 // recorded samples, converted to display units, and the only derived numbers
 // are the carbody speed (the norm of its recorded velocity), record-wide scale
 // ceilings, initial longitudinal offsets along the carbody axis and the plan
-// heading used to draw a body in the carrier plan. A scalar that is not ready
+// headings used to draw the carrier plan: a carrier's from its wheel axle, a
+// body's from its longitudinal axis. A scalar that is not ready
 // stays unknown; a scalar the record never exported is a null reference and
 // its readout shows as not recorded.
 //
@@ -30,6 +31,9 @@ export interface ScalarRef {
 
 export interface WheelReadout {
   placementIndex: number;
+  /** Body slot of the wheel body, whose recorded orientation carries the wheel's spin. */
+  wheelBodyIndex: number;
+  spinAxisInWheelBodyFrame: [number, number, number];
   /** Carrier number and side, such as `1L`. */
   code: string;
   side: WheelSide;
@@ -104,12 +108,27 @@ export interface VehicleReadoutModel {
   /** Loaded contact patch count per wheel placement; NaN where it is not ready. */
   contactPatchesAt: (frameIndex: number, out: Float64Array) => void;
   /**
-   * Plan heading of a body relative to the track at its station, radians,
-   * positive when its +x axis turns towards the right-hand rail. Computed from
-   * the recorded pose and the recorded track frame; null without a track.
+   * Plan heading of a body that does not spin, such as the carbody or a bogie
+   * frame, relative to the track at its station, radians, positive when its
+   * +x axis turns towards the right-hand rail. Computed from the recorded pose
+   * and the recorded track frame; null without a track. Not for wheelsets:
+   * their +x axis turns with the rolling spin.
    */
   headingAt: (frameIndex: number, body: TrackBodyReadout) => number | null;
+  /**
+   * Plan heading of a carrier from the recorded pose of one of its wheels:
+   * the wheel's spin axis taken into the inertial frame, projected onto the
+   * local track plane, on the half circle nearest the track's right axis, so
+   * that turning towards the right-hand rail is positive. A turn of the wheel
+   * about that axis leaves it unchanged, so it holds for independently
+   * rotating wheels and rigid wheelsets alike. null without a track, without
+   * a wheel, or when the axis has no horizontal part.
+   */
+  carrierHeadingAt: (frameIndex: number, carrier: CarrierReadoutBinding) => number | null;
 }
+
+/** Below this horizontal projection of the axle, radians of heading would be round-off. */
+const smallestHorizontalAxleProjection = 1e-6;
 
 function bodyPosition(record: SceneRecord, frameIndex: number, bodyIndex: number): THREE.Vector3 {
   const base = frameIndex * record.columns.rowValueCount + record.columns.bodyStatesColumnOffset + bodyIndex * record.columns.valuesPerBody;
@@ -157,8 +176,14 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
       throw new Error(`display bindings refer to wheel placement ${placementIndex}, which the record does not have`);
     }
     const name = placement.interfaceName;
+    const wheelBodyIndex = record.bodies.findIndex((body) => body.name === placement.wheelBodyName);
+    if (wheelBodyIndex < 0) {
+      throw new Error(`wheel placement '${name}' names wheel body '${placement.wheelBodyName}', which the record does not list`);
+    }
     const wheel: WheelReadout = {
       placementIndex,
+      wheelBodyIndex,
+      spinAxisInWheelBodyFrame: placement.spinAxisInWheelBodyFrame,
       code: `${number}${side === 'left' ? 'L' : 'R'}`,
       side,
       verticalSupportForceScalar: ref(`${name}.vertical_support_force_on_wheel_newtons`),
@@ -294,6 +319,32 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
     return Math.atan2(forward.dot(trackFrame.right), forward.dot(trackFrame.tangent));
   };
 
+  const axle = new THREE.Vector3();
+  const carrierHeadingAt = (frameIndex: number, carrier: CarrierReadoutBinding): number | null => {
+    const wheel = carrier.leftWheel ?? carrier.rightWheel;
+    if (track === null || wheel === null) {
+      return null;
+    }
+    const recordedStation = read(frameIndex, carrier.stationScalar);
+    headingPosition.copy(bodyPosition(record, frameIndex, carrier.bodyIndex));
+    const stationMeters = recordedStation?.valid === true ? recordedStation.value : track.stationNearestToInertialPosition(headingPosition);
+    const trackFrame = track.trackFrameAtStation(stationMeters);
+    axle.set(...wheel.spinAxisInWheelBodyFrame).normalize().applyQuaternion(bodyQuaternion(record, frameIndex, wheel.wheelBodyIndex));
+    let along = axle.dot(trackFrame.tangent);
+    let across = axle.dot(trackFrame.right);
+    if (Math.hypot(along, across) < smallestHorizontalAxleProjection) {
+      return null;
+    }
+    if (across < 0) {
+      along = -along;
+      across = -across;
+    }
+    // A yaw psi about the inertial +z axis, which points down, takes the
+    // track's right axis to (-sin psi, cos psi, 0), so this returns psi with
+    // the same sign as headingAt.
+    return Math.atan2(-along, across);
+  };
+
   const carbodyStation = new Float64Array(record.frameCount);
   const stationRef = carbody?.stationScalar ?? null;
   const scratch = new THREE.Vector3();
@@ -344,5 +395,6 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
     contactAt,
     contactPatchesAt,
     headingAt,
+    carrierHeadingAt,
   };
 }

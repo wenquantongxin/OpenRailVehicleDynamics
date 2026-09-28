@@ -33,6 +33,37 @@ export const groundDepth = 0.62;
 const formationSlope = 1.5;
 const groundSize = 4000;
 
+/**
+ * Stations at which the ballast and formation strips are sampled: from the
+ * first station every `stepMeters`, then the exact last station, appended when
+ * the last regular sample stops short of it and substituted for that sample
+ * when it lies within tolerance. The result is increasing, has no duplicate
+ * and always reaches both ends, so no tail shorter than one step is dropped
+ * and no degenerate tail face is drawn.
+ */
+export function stripStationsMeters(firstStationMeters: number, lastStationMeters: number, stepMeters: number): number[] {
+  if (!(stepMeters > 0)) {
+    throw new Error('the strip sampling step must be positive');
+  }
+  if (!(lastStationMeters >= firstStationMeters)) {
+    throw new Error('the last strip station must not precede the first');
+  }
+  const tolerance = 1e-9;
+  const stations: number[] = [firstStationMeters];
+  if (lastStationMeters === firstStationMeters) {
+    return stations;
+  }
+  for (let k = 1; ; ++k) {
+    const stationMeters = firstStationMeters + k * stepMeters;
+    if (stationMeters > lastStationMeters - tolerance) {
+      break;
+    }
+    stations.push(stationMeters);
+  }
+  stations.push(lastStationMeters);
+  return stations;
+}
+
 /** Half of a 60E1-like section, from the crown outwards and down to the foot. */
 const railHalfSection: [number, number][] = [
   [0.0, 0.0],
@@ -194,11 +225,11 @@ function ballastGeometry(model: TrackModel): THREE.BufferGeometry {
   const trackFrame = model.trackFrameAtStation(model.firstStationMeters);
   const point = new THREE.Vector3();
   const normal = new THREE.Vector3();
-  const step = 1.0;
-  const stripCount = Math.floor((model.lastStationMeters - model.firstStationMeters) / step) + 1;
+  const stripStations = stripStationsMeters(model.firstStationMeters, model.lastStationMeters, 1.0);
+  const stripCount = stripStations.length;
   const faces = profile.length - 1;
   for (let stripIndex = 0; stripIndex < stripCount; ++stripIndex) {
-    const stationMeters = Math.min(model.lastStationMeters, model.firstStationMeters + stripIndex * step);
+    const stationMeters = stripStations[stripIndex] as number;
     model.trackFrameAtStation(stationMeters, trackFrame);
     const [vMid, wMid] = datumMidpoint(model, stationMeters);
     for (let face = 0; face < faces; ++face) {
@@ -257,11 +288,11 @@ function formationGeometry(model: TrackModel, planeZ: number, halfWidth: number,
   const trackFrame = model.trackFrameAtStation(model.firstStationMeters);
   const lateral = new THREE.Vector3();
   const normal = new THREE.Vector3();
-  const step = 1.0;
-  const stripCount = Math.floor((model.lastStationMeters - model.firstStationMeters) / step) + 1;
+  const stripStations = stripStationsMeters(model.firstStationMeters, model.lastStationMeters, 1.0);
+  const stripCount = stripStations.length;
   const faces = 3;
   for (let stripIndex = 0; stripIndex < stripCount; ++stripIndex) {
-    const stationMeters = Math.min(model.lastStationMeters, model.firstStationMeters + stripIndex * step);
+    const stationMeters = stripStations[stripIndex] as number;
     model.trackFrameAtStation(stationMeters, trackFrame);
     horizontalRight(trackFrame, lateral);
     const topZ = trackFrame.position.z + groundDepth;

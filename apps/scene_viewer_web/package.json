@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check-record": "node --experimental-strip-types scripts/check_record.ts",
-    "test": "node --experimental-strip-types --test tests/playback_controller.test.ts tests/pose_interpolation.test.ts tests/vehicle_display_bindings.test.ts tests/vehicle_readout_model.test.ts tests/track_model.test.ts tests/subtitle.test.ts",
+    "test": "node --experimental-strip-types --test tests/playback_controller.test.ts tests/pose_interpolation.test.ts tests/vehicle_display_bindings.test.ts tests/vehicle_readout_model.test.ts tests/track_model.test.ts tests/track_builder.test.ts tests/screen_projection.test.ts tests/display_extents.test.ts tests/camera_framing.test.ts tests/card_layout.test.ts tests/camera_rig.test.ts tests/subtitle.test.ts",
     "check-interpolation": "node --experimental-strip-types scripts/check_interpolation.ts"
   },
   "dependencies": {

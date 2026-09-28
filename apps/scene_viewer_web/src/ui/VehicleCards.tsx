@@ -180,18 +180,22 @@ function CarrierPlan(props: { record: SceneRecord; readoutModel: VehicleReadoutM
       </text>
       {laid.flatMap((panel) =>
         panel.carriers.map((carrier) => {
-          // The drawn shift and turn are the recorded lateral scalar and the
-          // heading from the recorded pose against the local track frame
-          // (positive towards the right rail, i.e. clockwise here). A carrier
-          // whose lateral position was not recorded is drawn at the nominal
-          // place in the "unrecorded" style, not as a zero measurement. The
-          // recorded yaw scalar is shown unchanged in the table.
+          // The drawn shift is the recorded lateral scalar; the drawn turn is
+          // the heading of the carrier's wheel axle against the local track
+          // frame (positive towards the right rail, i.e. clockwise here). The
+          // two are judged separately: a recorded shift is kept even when the
+          // heading cannot be found, a known heading is kept even when the
+          // shift was not recorded, and whatever is missing leaves the axle at
+          // its nominal place or unturned, drawn dashed. Dashed means missing,
+          // never a measured zero. The recorded yaw scalar is shown unchanged
+          // in the table.
           const lateral = readoutModel.read(frameIndex, carrier.lateralScalar);
-          const recorded = lateral?.valid === true;
-          const heading = recorded ? readoutModel.headingAt(frameIndex, carrier) : null;
+          const lateralKnown = lateral?.valid === true;
+          const heading = readoutModel.carrierHeadingAt(frameIndex, carrier);
+          const measured = lateralKnown && heading !== null;
           const x = panel.xOf(offsetOf(carrier));
-          const angle = ((heading ?? 0) * 180) / Math.PI;
-          const shift = recorded ? (lateral?.value ?? 0) * scale : 0;
+          const angle = heading === null ? 0 : (heading * 180) / Math.PI;
+          const shift = lateralKnown ? (lateral?.value ?? 0) * scale : 0;
           const leftY = lateralOf(carrier.leftWheel) * scale;
           const rightY = lateralOf(carrier.rightWheel) * scale;
           const wheel = (readout: WheelReadout | null, y: number) => {
@@ -204,7 +208,7 @@ function CarrierPlan(props: { record: SceneRecord; readoutModel: VehicleReadoutM
           return (
             <g key={carrier.number}>
               <g transform={`translate(${x.toFixed(2)} ${(centreY + shift).toFixed(3)}) rotate(${angle.toFixed(4)})`}>
-                <line x1={0} y1={leftY} x2={0} y2={rightY} className={`sch-axle ${recorded ? '' : 'unrecorded'}`} style={{ strokeWidth: beamWidth * scale }} />
+                <line x1={0} y1={leftY} x2={0} y2={rightY} className={`sch-axle ${measured ? '' : 'unrecorded'}`} style={{ strokeWidth: beamWidth * scale }} />
                 {wheel(carrier.leftWheel, leftY)}
                 {wheel(carrier.rightWheel, rightY)}
               </g>
@@ -249,7 +253,7 @@ export function CarriersCard(props: { record: SceneRecord; readoutModel: Vehicle
           <CarrierPlan record={props.record} readoutModel={readoutModel} frameIndex={frameIndex} wheelWidth={props.wheelWidth} panels={panels} />
           <p className="caption">
             PLAN · TRUE SCALE · MID-SPAN OMITTED
-            <span className="zh">俯视原比例，转向架间断开省略；转角取自记录位姿，未记录横移的载体按标称位置虚线画出</span>
+            <span className="zh">俯视原比例，转向架间断开省略；转角取自记录的车轮轴向；横移未记录的载体画在标称位置，航向不可得的不转动，两者缺一即虚线</span>
           </p>
         </>
       ) : (

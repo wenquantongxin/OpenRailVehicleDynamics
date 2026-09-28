@@ -7,8 +7,9 @@ import { parseVisualDefinition } from '../src/record/visual_definition.ts';
 import { TrackModel } from '../src/scene/track_model.ts';
 import { resolveVehicleDisplayBindings } from '../src/scene/vehicle_display_bindings.ts';
 import { buildVehicleReadoutModel } from '../src/ui/vehicle_readout_model.ts';
+import type { WheelPlacement } from '../src/record/scene_record.ts';
 import { makeRecord, placement, visualDefinitionWithBindings, type FixtureFrame } from './record_fixtures.ts';
-import { range, straightTable } from './track_fixtures.ts';
+import { range, straightTable, turnedRotation, turnedTable } from './track_fixtures.ts';
 
 // Neutral body names: the readout model must get every role from the bindings.
 const bodies = ['body_a', 'body_b', 'body_c', 'body_d', 'body_e'];
@@ -77,7 +78,7 @@ test('recorded loss and two-point contact are reported with the coverage, by fra
   );
 });
 
-test('plan heading comes from the pose, whatever the body basis', () => {
+test('body plan heading comes from the +x axis of a body that does not spin, whatever its basis', () => {
   const track = new TrackModel(straightTable(range(-20, 40, 0.5), () => 0));
   const theta = 0.004;
   // Nose to the right: a turn about the inertial +z axis, which points down.
@@ -142,4 +143,108 @@ test('a scalar the record never exported reads as null while a wrong body refere
     () => build([frame(0, { patches: [1, 1], statuses: [ScalarStatus.valid, ScalarStatus.valid] })], { ...bindingsJson, bogies: [{ ...bindingsJson.bogies[0], body_name: 'body_x' }] }),
     /does not list/,
   );
+});
+
+// --- carrier heading from the wheel axle ---
+//
+// Two vehicles with neutral names. The IRW-like one has a separate carrier and
+// two wheel bodies in the half-turn basis (y left, z up) with the spin axis
+// (0, -1, 0); only the wheels spin. The rigid-wheelset-like one has one body
+// that is both carrier and wheel, in the identity basis with the spin axis
+// (0, 1, 0); the whole body spins. Every pose is built from the same yaw and
+// roll, so what is proved is that the spin does not enter the heading.
+
+interface AxleVehicle {
+  bodies: string[];
+  placements: WheelPlacement[];
+  basis: THREE.Quaternion;
+  spinAxis: [number, number, number];
+  carrierBody: string;
+  wheelBodies: string[];
+}
+
+const halfTurnBasis = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+const irwLike: AxleVehicle = {
+  bodies: ['body_c', 'body_d', 'body_e'],
+  placements: [placement('if_left', 'body_d', 'body_c', 'left', -1), placement('if_right', 'body_e', 'body_c', 'right', -1)],
+  basis: halfTurnBasis,
+  spinAxis: [0, -1, 0],
+  carrierBody: 'body_c',
+  wheelBodies: ['body_d', 'body_e'],
+};
+const wheelsetLike: AxleVehicle = {
+  bodies: ['body_f'],
+  placements: [placement('if_left_f', 'body_f', 'body_f', 'left', 1), placement('if_right_f', 'body_f', 'body_f', 'right', 1)],
+  basis: new THREE.Quaternion(),
+  spinAxis: [0, 1, 0],
+  carrierBody: 'body_f',
+  wheelBodies: ['body_f'],
+};
+
+const yaw = (psi: number): THREE.Quaternion => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), psi);
+const roll = (phi: number): THREE.Quaternion => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), phi);
+
+function axleModel(vehicle: AxleVehicle, track: TrackModel | null, trackTransform: THREE.Quaternion, psi: number, phi: number, theta: number) {
+  const carrierPose = trackTransform.clone().multiply(yaw(psi)).multiply(roll(phi)).multiply(vehicle.basis);
+  const spin = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...vehicle.spinAxis), theta);
+  const position = new THREE.Vector3(10, 0, -0.43).applyQuaternion(trackTransform).toArray() as [number, number, number];
+  const poses = Object.fromEntries(
+    vehicle.bodies.map((body) => {
+      const q = vehicle.wheelBodies.includes(body) ? carrierPose.clone().multiply(spin) : carrierPose;
+      return [body, { position, orientationWxyz: [q.w, q.x, q.y, q.z] as [number, number, number, number] }];
+    }),
+  );
+  const text = visualDefinitionWithBindings({
+    carbody: null,
+    bogies: [],
+    carriers: [{ carrier_body_name: vehicle.carrierBody, display_name: { en: 'Carrier', zh: '载体' } }],
+  });
+  const record = makeRecord({ bodies: vehicle.bodies, placements: vehicle.placements, frames: [{ timeSeconds: 0, poses }], visualDefinitionText: text });
+  const bindings = resolveVehicleDisplayBindings(record, parseVisualDefinition(text, new Set(vehicle.bodies)));
+  return buildVehicleReadoutModel(record, track, bindings);
+}
+
+test('carrier heading follows the wheel axle, not the turn of the wheel about it', () => {
+  const track = new TrackModel(straightTable(range(-20, 40, 0.5), () => 0));
+  for (const [label, vehicle] of [['independent wheels', irwLike], ['rigid wheelset', wheelsetLike]] as const) {
+    for (const psi of [0.004, -0.02]) {
+      for (const phi of [0, 0.05]) {
+        for (const theta of [0, Math.PI / 2, Math.PI, 13]) {
+          const model = axleModel(vehicle, track, new THREE.Quaternion(), psi, phi, theta);
+          const carrier = model.carriers[0];
+          assert.ok(carrier !== undefined);
+          const heading = model.carrierHeadingAt(0, carrier);
+          assert.ok(heading !== null && Math.abs(heading - psi) < 1e-9, `${label}: psi=${psi} phi=${phi} theta=${theta} gave ${heading}`);
+        }
+      }
+    }
+  }
+});
+
+test('carrier heading is relative to the local track frame, not to the world axes', () => {
+  const alpha = 0.35;
+  const cant = 0.08;
+  const track = new TrackModel(turnedTable(range(-20, 40, 0.5), alpha, cant));
+  const transform = turnedRotation(alpha, cant);
+  for (const vehicle of [irwLike, wheelsetLike]) {
+    for (const theta of [0, Math.PI / 2]) {
+      const model = axleModel(vehicle, track, transform, 0.004, 0, theta);
+      const carrier = model.carriers[0];
+      assert.ok(carrier !== undefined);
+      const heading = model.carrierHeadingAt(0, carrier);
+      assert.ok(heading !== null && Math.abs(heading - 0.004) < 1e-9, `turned track, theta=${theta} gave ${heading}`);
+    }
+  }
+});
+
+test('a carrier without a horizontal axle, or without a track, reads unavailable', () => {
+  const track = new TrackModel(straightTable(range(-20, 40, 0.5), () => 0));
+  const vertical = axleModel(irwLike, track, new THREE.Quaternion(), 0.004, Math.PI / 2, 0.3);
+  const carrier = vertical.carriers[0];
+  assert.ok(carrier !== undefined);
+  assert.equal(vertical.carrierHeadingAt(0, carrier), null, 'a vertical axle has no plan heading');
+  const noTrack = axleModel(irwLike, null, new THREE.Quaternion(), 0.004, 0, 0.3);
+  const untracked = noTrack.carriers[0];
+  assert.ok(untracked !== undefined);
+  assert.equal(noTrack.carrierHeadingAt(0, untracked), null, 'no track, no heading');
 });

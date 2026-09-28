@@ -10,10 +10,13 @@ import type { TrackTable } from '../record/scene_record.ts';
 //
 // Sections are recovered from the sampled curvature for display: tangent where
 // |k| is below 1e-4 of the largest curvature, circular where k stays on a
-// plateau (each plateau keeps its own radius), transition elsewhere. A run
-// shorter than 4 m between two runs of the same kind and radius is absorbed.
-// On the bundled R300 line this places the element points within 0.3 m of the
-// line definition; the record carries no segment table.
+// plateau at least 4 m long measured between the plateau's real edges (each
+// plateau keeps its own radius), transition elsewhere. A run shorter than 4 m
+// between two runs of the same kind and radius is absorbed. On the bundled
+// R300 line this places the element points within 0.3 m of the line
+// definition; the record carries no segment table. The classification is a
+// display description derived from finite samples, not a second authority on
+// the line.
 //
 // Rail positions come from the recorded rail datums, expressed per station in
 // Track-T about the centreline, so a different datum spacing is drawn as
@@ -299,24 +302,27 @@ function classifySections(stationsMeters: Float64Array, curvature: Float64Array)
     for (let stationIndex = 0; stationIndex < count; ++stationIndex) {
       kinds[stationIndex] = isTangent(stationIndex) ? 'tangent' : 'transition';
     }
-    // Plateaus: runs of locally flat, non-tangent curvature at least 4 m long.
+    // Plateaus: runs of locally flat, non-tangent curvature. A run holds the
+    // plateau's interior samples only, so it is first extended to every
+    // neighbouring sample on the same value and the 4 m length is judged
+    // between the plateau's real edges.
     let runStart = -1;
     const closeRun = (end: number): void => {
       if (runStart < 0) {
         return;
       }
-      if ((stationsMeters[end] as number) - (stationsMeters[runStart] as number) >= 4) {
-        const values = Array.from(curvature.subarray(runStart, end + 1)).sort((a, b) => a - b);
-        const value = values[values.length >> 1] as number;
-        let low = runStart;
-        let high = end;
-        const within = (stationIndex: number): boolean => Math.abs(k(stationIndex) - value) <= 1e-4 * Math.abs(value);
-        while (low > 0 && within(low - 1)) {
-          --low;
-        }
-        while (high < count - 1 && within(high + 1)) {
-          ++high;
-        }
+      const values = Array.from(curvature.subarray(runStart, end + 1)).sort((a, b) => a - b);
+      const value = values[values.length >> 1] as number;
+      let low = runStart;
+      let high = end;
+      const within = (stationIndex: number): boolean => Math.abs(k(stationIndex) - value) <= 1e-4 * Math.abs(value);
+      while (low > 0 && within(low - 1)) {
+        --low;
+      }
+      while (high < count - 1 && within(high + 1)) {
+        ++high;
+      }
+      if ((stationsMeters[high] as number) - (stationsMeters[low] as number) >= 4) {
         for (let stationIndex = low; stationIndex <= high; ++stationIndex) {
           kinds[stationIndex] = 'circular';
           plateau[stationIndex] = value;

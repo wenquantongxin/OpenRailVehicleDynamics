@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { loadRecordFromFiles, loadRecordFromUrl } from './record/load_record.ts';
 import { frameIndexAtOrBefore, frameTimeSeconds, type SceneRecord } from './record/scene_record.ts';
 import { parseVisualDefinition, type VisualDefinition } from './record/visual_definition.ts';
 import { PlaybackController } from './playback/playback.ts';
+import { applyFrames, wheelSpinBindings } from './scene/apply_frame.ts';
 import { maximumWheelRotationBetweenFrames } from './scene/pose_interpolation.ts';
-import { presetRequiresBogie, viewPresets, type ViewPreset } from './scene/camera_rig.ts';
+import { measureFramedExtents, presetAvailableFor, viewPresets, type FramedExtents, type ViewPreset } from './scene/camera_rig.ts';
 import type { SafeArea } from './scene/label_layer.ts';
 import { buildScene, type BuiltScene, type CarbodyMode } from './scene/scene_builder.ts';
 import { resolveVehicleDisplayBindings, type VehicleDisplayBindings } from './scene/vehicle_display_bindings.ts';
@@ -17,12 +18,13 @@ import { PlaybackCard, playbackRates } from './ui/PlaybackCard.tsx';
 import { buildVehicleReadoutModel, type VehicleReadoutModel } from './ui/vehicle_readout_model.ts';
 import { TrackCard } from './ui/TrackCard.tsx';
 import { CarriersCard, VehicleCard, WheelForceCard } from './ui/VehicleCards.tsx';
+import { measureCardLayout, type EdgeRect } from './viewer/card_layout.ts';
 import { SceneViewport, type ViewportCommands, type ViewportOptions } from './viewer/SceneViewport.tsx';
 
 // The replay: load a record, parse its visual definition, resolve the display
 // bindings once, build the scene and the readout model from that one
-// resolution, drive body poses from the display clock, and show only what the
-// record carries.
+// resolution, measure what the camera presets frame, drive body poses from
+// the display clock, and show only what the record carries.
 
 interface LoadedSceneReplay {
   record: SceneRecord;
@@ -31,15 +33,14 @@ interface LoadedSceneReplay {
   scene: BuiltScene;
   playback: PlaybackController;
   readoutModel: VehicleReadoutModel;
+  /** Extents at the first displayed pose; presets and their availability come from these. */
+  extents: FramedExtents;
   name: string;
   subtitle: Subtitle | null;
   warning: string | null;
-  /** The requested first view, or the overview when the request needs a role the bindings do not provide. */
+  /** The requested first view, or the overview when the request cannot be framed. */
   initialPreset: ViewPreset;
 }
-
-/** Card columns and the playback card, which labels and framing keep clear of. */
-const safeArea: SafeArea = { left: 294, right: 294, top: 86, bottom: 176 };
 
 const query = new URLSearchParams(window.location.search);
 
@@ -60,8 +61,19 @@ function requestedPreset(): ViewPreset {
   return viewPresets.find((preset) => preset === requested) ?? 'overview';
 }
 
-function presetAvailable(preset: ViewPreset, bindings: VehicleDisplayBindings): boolean {
-  return !presetRequiresBogie(preset) || bindings.bogies.length > 0;
+/** The one availability rule, shared with the rig: a bound anchor with a measured extent. */
+function presetAvailable(preset: ViewPreset, loaded: Pick<LoadedSceneReplay, 'bindings' | 'extents' | 'scene'>): boolean {
+  const firstBogie = loaded.bindings.bogies[0];
+  const bogieBound = firstBogie !== undefined && loaded.scene.bodyObjects.has(firstBogie.bodyName);
+  return presetAvailableFor(preset, loaded.extents, bogieBound);
+}
+
+function edgeRect(element: Element | null): EdgeRect | null {
+  if (element === null) {
+    return null;
+  }
+  const rect = element.getBoundingClientRect();
+  return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
 }
 
 function recordNameFromUrl(url: string): string {
@@ -83,10 +95,39 @@ export function App() {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const commands = useRef<ViewportCommands | null>(null);
+  const appRef = useRef<HTMLDivElement>(null);
+  // The stage margins the cards cover, measured from the elements and shared
+  // by the camera framing and the label layer; written in place so the
+  // viewport keeps one reference and reads it every frame.
+  const layoutRef = useRef<SafeArea>({ left: 0, right: 0, top: 0, bottom: 0 });
   const availablePresets = useMemo(
-    () => new Set(loaded === null ? viewPresets : viewPresets.filter((candidate) => presetAvailable(candidate, loaded.bindings))),
+    () => new Set(loaded === null ? viewPresets : viewPresets.filter((candidate) => presetAvailable(candidate, loaded))),
     [loaded],
   );
+
+  useLayoutEffect(() => {
+    const app = appRef.current;
+    if (app === null || loaded === null) {
+      return;
+    }
+    const stage = app.querySelector('.stage');
+    const watched = [stage, app.querySelector('.col.left'), app.querySelector('.col.right'), app.querySelector('.card.playback')];
+    const measure = (): void => {
+      const stageRect = edgeRect(stage);
+      if (stageRect === null) {
+        return;
+      }
+      Object.assign(layoutRef.current, measureCardLayout(stageRect, edgeRect(watched[1] ?? null), edgeRect(watched[2] ?? null), edgeRect(watched[3] ?? null)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const element of watched) {
+      if (element !== null) {
+        observer.observe(element);
+      }
+    }
+    return () => observer.disconnect();
+  }, [loaded]);
 
   const install = useCallback((record: SceneRecord, name: string) => {
     const visualDefinition =
@@ -101,6 +142,12 @@ export function App() {
     if (query.get('t') !== null && Number.isFinite(startTime)) {
       playback.seek(startTime);
     }
+    // Pose the scene at its first displayed time and measure what the camera
+    // presets frame, so their availability is known before the viewport exists.
+    const initial = playback.bracket();
+    applyFrames(record, scene, wheelSpinBindings(record), initial.firstFrameIndex, initial.secondFrameIndex, initial.alpha);
+    scene.root.updateMatrixWorld(true);
+    const extents = measureFramedExtents(record, scene, bindings);
     // Parts named in `hide` stay hidden whatever the display switches say.
     scene.setUserHidden(new Set((query.get('hide') ?? '').split(',').filter((part) => part !== '')));
     const wheelBodies = record.wheelPlacements
@@ -112,7 +159,7 @@ export function App() {
         ? `No wheel spin angles and up to ${fixed(coarsest, 2)} rad of wheel turn between samples: in-between wheel poses are unreliable. 无轮自转角，插值方向不可靠。`
         : null;
     const wanted = requestedPreset();
-    const initialPreset = presetAvailable(wanted, bindings) ? wanted : 'overview';
+    const initialPreset = presetAvailable(wanted, { bindings, extents, scene }) ? wanted : 'overview';
     setLoaded({
       record,
       visualDefinition,
@@ -120,6 +167,7 @@ export function App() {
       scene,
       playback,
       readoutModel,
+      extents,
       name,
       subtitle: scenarioSubtitle(readoutModel.carbodyStation, readoutModel.initialSpeedKmh, scene.track),
       warning,
@@ -133,15 +181,28 @@ export function App() {
     setDefinitionNoticeOpen(true);
   }, []);
 
+  // The deep-linked load is abortable: a superseded run (StrictMode's first
+  // effect run in development, or a re-run) neither installs its record nor
+  // writes its outcome over the current load state.
   useEffect(() => {
     const url = query.get('record');
     if (url === null) {
       return;
     }
+    const controller = new AbortController();
     setLoadState({ state: 'loading', message: '' });
-    loadRecordFromUrl(url)
-      .then((record) => install(record, recordNameFromUrl(url)))
-      .catch((error: unknown) => setLoadState({ state: 'error', message: error instanceof Error ? error.message : String(error) }));
+    loadRecordFromUrl(url, controller.signal)
+      .then((record) => {
+        if (!controller.signal.aborted) {
+          install(record, recordNameFromUrl(url));
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setLoadState({ state: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => controller.abort();
   }, [install]);
 
   const onPick = useCallback(
@@ -207,7 +268,7 @@ export function App() {
   // Every route to a preset, button, key or deep link, passes this one check.
   const selectPreset = useCallback(
     (next: ViewPreset) => {
-      if (loaded === null || !presetAvailable(next, loaded.bindings)) {
+      if (loaded === null || !presetAvailable(next, loaded)) {
         return;
       }
       if (commands.current?.applyPreset(next) === true) {
@@ -275,7 +336,7 @@ export function App() {
   const readoutModel = loaded?.readoutModel ?? null;
   const track = loaded?.scene.track ?? null;
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <div className="stage">
         {loaded !== null && (
           <SceneViewport
@@ -283,11 +344,12 @@ export function App() {
             scene={loaded.scene}
             playback={loaded.playback}
             bindings={loaded.bindings}
+            extents={loaded.extents}
             initialPreset={loaded.initialPreset}
             options={optionsRef}
+            layout={layoutRef}
             commands={commands}
             contactPatchesAt={loaded.readoutModel.contactPatchesAt}
-            safeArea={safeArea}
             onDisplayFrame={onDisplayFrame}
           />
         )}

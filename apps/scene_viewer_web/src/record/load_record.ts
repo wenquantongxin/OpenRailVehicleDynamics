@@ -6,33 +6,34 @@ import { parseSceneRecord, type SceneRecord } from './scene_record.ts';
 
 const sceneFileName = 'scene.json';
 
-async function fetchBytes(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
+async function fetchBytes(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`could not fetch ${url}: ${response.status}`);
   }
   return response.arrayBuffer();
 }
 
-async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url);
+async function fetchText(url: string, signal: AbortSignal): Promise<string> {
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`could not fetch ${url}: ${response.status}`);
   }
   return response.text();
 }
 
-export async function loadRecordFromUrl(baseUrl: string): Promise<SceneRecord> {
+/** Fetches a served record; `signal` aborts the fetches when the caller no longer wants the result. */
+export async function loadRecordFromUrl(baseUrl: string, signal: AbortSignal): Promise<SceneRecord> {
   const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const sceneText = await fetchText(`${base}${sceneFileName}`);
+  const sceneText = await fetchText(`${base}${sceneFileName}`, signal);
   const scene = JSON.parse(sceneText) as Record<string, unknown>;
   const frameTable = scene['frame_table'] as Record<string, unknown>;
   const statusTable = scene['scalar_status_table'] as Record<string, unknown>;
   const visualFile = scene['visual_definition_file'];
   const [frames, statuses, visualText] = await Promise.all([
-    fetchBytes(`${base}${String(frameTable['file'])}`),
-    fetchBytes(`${base}${String(statusTable['file'])}`),
-    typeof visualFile === 'string' ? fetchText(`${base}${visualFile}`) : Promise.resolve(null),
+    fetchBytes(`${base}${String(frameTable['file'])}`, signal),
+    fetchBytes(`${base}${String(statusTable['file'])}`, signal),
+    typeof visualFile === 'string' ? fetchText(`${base}${visualFile}`, signal) : Promise.resolve(null),
   ]);
   return parseSceneRecord(sceneText, frames, statuses, visualText);
 }

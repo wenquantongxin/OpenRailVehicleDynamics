@@ -73,3 +73,43 @@ test('canted track: rail offsets are read in the rolled Track-T frame', () => {
   assert.ok(Math.abs(vl + 0.75315) < 1e-12 && Math.abs(vr - 0.75315) < 1e-12);
   assert.ok(Math.abs(wl) < 1e-12 && Math.abs(wr) < 1e-12);
 });
+
+// Plateau length is judged between the plateau's real edges. With 0.5 m
+// samples the interior run is one sample shorter at each end, so a 4.0 m
+// circular curve must still be recognised while a 3.0 m one stays a
+// transition. These are display descriptions of finite samples; the short
+// run absorbed between two runs of the same plateau is a seam rule that stays.
+function plateauProfile(plateauLengthMeters: number): (s: number) => number {
+  return (s: number): number => {
+    if (s < 20) return 0;
+    if (s < 30) return (s - 20) / 10 / 300;
+    if (s < 30 + plateauLengthMeters) return 1 / 300;
+    if (s < 40 + plateauLengthMeters) return (1 - (s - 30 - plateauLengthMeters) / 10) / 300;
+    return 0;
+  };
+}
+
+test('a 4.0 m plateau at 0.5 m spacing is a circular section', () => {
+  for (const plateauLength of [4.0, 4.5, 5.0]) {
+    const model = new TrackModel(straightTable(range(0, 60 + plateauLength, 0.5), plateauProfile(plateauLength)));
+    const circular = model.sections.filter((section) => section.kind === 'circular');
+    assert.equal(circular.length, 1, `plateau of ${plateauLength} m`);
+    assert.ok(Math.abs((circular[0]?.radiusMeters ?? 0) - 300) < 1e-6);
+    assert.deepEqual(model.elementPoints.map((point) => point.code), ['TS', 'SC', 'CS', 'ST']);
+  }
+});
+
+test('a 3.0 m plateau stays a transition', () => {
+  const model = new TrackModel(straightTable(range(0, 63, 0.5), plateauProfile(3.0)));
+  assert.equal(model.sections.filter((section) => section.kind === 'circular').length, 0);
+  assert.deepEqual(model.elementPoints.map((point) => point.code), ['TS', 'ST']);
+});
+
+test('a plateau reaching the first or last sample is kept', () => {
+  const startsCircular = new TrackModel(straightTable(range(0, 40, 0.5), (s) => (s < 12 ? 1 / 300 : Math.max(0, (22 - s) / 10) / 300)));
+  assert.deepEqual(startsCircular.sections.map((section) => section.kind), ['circular', 'transition', 'tangent']);
+  assert.equal(startsCircular.sections[0]?.startStationMeters, 0);
+  const endsCircular = new TrackModel(straightTable(range(0, 40, 0.5), (s) => (s < 18 ? 0 : s < 28 ? (s - 18) / 10 / 300 : 1 / 300)));
+  assert.deepEqual(endsCircular.sections.map((section) => section.kind), ['tangent', 'transition', 'circular']);
+  assert.equal(endsCircular.sections[2]?.endStationMeters, 40);
+});

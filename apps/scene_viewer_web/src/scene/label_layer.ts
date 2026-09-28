@@ -46,6 +46,65 @@ interface Segment {
   by: number;
 }
 
+/** The twelve edges of a box whose corner index bits are 1 for max x, 2 for max y and 4 for max z. */
+const boxEdges: readonly [number, number][] = [
+  [0, 1], [2, 3], [4, 5], [6, 7],
+  [0, 2], [1, 3], [4, 6], [5, 7],
+  [0, 4], [1, 5], [2, 6], [3, 7],
+];
+const clippedPoint = new THREE.Vector3();
+const projectedPoint = new THREE.Vector3();
+
+/**
+ * Screen rectangle covered by the part of a box that lies in front of the
+ * camera's near plane. The corners are given in camera space (the camera looks
+ * down -z) in the bit order above. Each edge is clipped against the near plane
+ * before projection, so a corner behind the camera neither mirrors across the
+ * picture nor blows the rectangle up; the clipped point on the near plane is
+ * what bounds the rectangle on that side. null when no edge reaches in front
+ * of the camera.
+ */
+export function projectClippedBoxToScreen(
+  cornersInCameraSpace: readonly THREE.Vector3[],
+  projectionMatrix: THREE.Matrix4,
+  nearMeters: number,
+  width: number,
+  height: number,
+): Rect | null {
+  const rect: Rect = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  const limit = -nearMeters;
+  const include = (point: THREE.Vector3): void => {
+    projectedPoint.copy(point).applyMatrix4(projectionMatrix);
+    const x = ((projectedPoint.x + 1) / 2) * width;
+    const y = ((1 - projectedPoint.y) / 2) * height;
+    rect.x0 = Math.min(rect.x0, x);
+    rect.y0 = Math.min(rect.y0, y);
+    rect.x1 = Math.max(rect.x1, x);
+    rect.y1 = Math.max(rect.y1, y);
+  };
+  for (const [i, j] of boxEdges) {
+    const a = cornersInCameraSpace[i];
+    const b = cornersInCameraSpace[j];
+    if (a === undefined || b === undefined) {
+      continue;
+    }
+    const aInFront = a.z <= limit;
+    const bInFront = b.z <= limit;
+    if (aInFront && bInFront) {
+      include(a);
+      include(b);
+    } else if (aInFront || bInFront) {
+      const front = aInFront ? a : b;
+      const back = aInFront ? b : a;
+      const t = (limit - front.z) / (back.z - front.z);
+      clippedPoint.copy(front).lerp(back, t);
+      include(front);
+      include(clippedPoint);
+    }
+  }
+  return rect.x0 === Infinity ? null : rect;
+}
+
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const distances = [56, 100, 150, 210, 280, 360];
 const heights = [0, -44, 44, -88, 88, -132, 132, -176, 176, -220, 220, -264, 264];
