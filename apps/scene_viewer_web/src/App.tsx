@@ -1,315 +1,321 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { loadRecordFromFiles, loadRecordFromUrl } from './record/load_record.ts';
-import {
-  SamplePhaseNames,
-  ScalarStatus,
-  framePhase,
-  frameSampleIndex,
-  scalarSample,
-  type SceneRecord,
-} from './record/scene_record.ts';
+import { frameAtOrBefore, frameTimeSeconds, type SceneRecord } from './record/scene_record.ts';
 import { PlaybackController } from './playback/playback.ts';
 import { maximumWheelRotationBetweenFrames } from './scene/pose_interpolation.ts';
-import { buildScene, type BuiltScene } from './scene/scene_builder.ts';
-import { SceneViewport, type CameraPreset, type ViewportCommands } from './viewer/SceneViewport.tsx';
+import { viewPresets, type ViewPreset } from './scene/camera_rig.ts';
+import type { SafeArea } from './scene/label_layer.ts';
+import { buildScene, type BuiltScene, type CarbodyMode } from './scene/scene_builder.ts';
+import { EmptyState, Footer, MetaBar, Notice, ScalarsDrawer, TitleBlock } from './ui/Chrome.tsx';
+import { scenarioSubtitle, type Subtitle } from './ui/subtitle.ts';
+import { DisplayCard, ViewsCard } from './ui/ControlCards.tsx';
+import { fixed } from './ui/format.ts';
+import { PlaybackCard, playbackRates } from './ui/PlaybackCard.tsx';
+import { buildReadoutModel, type ReadoutModel } from './ui/readout_model.ts';
+import { TrackCard } from './ui/TrackCard.tsx';
+import { AxleBridgeCard, VehicleCard, WheelForceCard } from './ui/VehicleCards.tsx';
+import { SceneViewport, type ViewportCommands, type ViewportOptions } from './viewer/SceneViewport.tsx';
 
-// The plain replay: load a record, build the scene once, then drive body
-// poses from the display clock. Readouts show only what the record carries.
+// The replay: load a record, build the scene once, drive body poses from the
+// display clock, and show only what the record carries.
 
 interface Loaded {
   record: SceneRecord;
   scene: BuiltScene;
   playback: PlaybackController;
+  model: ReadoutModel;
+  name: string;
+  subtitle: Subtitle | null;
+  warning: string | null;
 }
 
-const speeds = [0.1, 0.25, 0.5, 1, 2, 5];
+/** Card columns and the playback card, which labels and framing keep clear of. */
+const safeArea: SafeArea = { left: 294, right: 294, top: 86, bottom: 176 };
 
-function statusText(status: number): string {
-  if (status === ScalarStatus.notReady) {
-    return '未就绪';
-  }
-  if (status === ScalarStatus.placeholder) {
-    return '占位';
-  }
-  return '';
+const query = new URLSearchParams(window.location.search);
+
+function initialOptions(): ViewportOptions {
+  const carbody = query.get('carbody');
+  return {
+    follow: query.get('follow') !== '0',
+    orbit: query.get('orbit') === '1',
+    labels: query.get('labels') === '1',
+    carbody: carbody === 'solid' || carbody === 'hidden' ? carbody : 'xray',
+    track: query.get('track') !== '0',
+    axes: query.get('axes') === '1',
+  };
+}
+
+function initialPreset(): ViewPreset {
+  const requested = query.get('view');
+  return viewPresets.find((preset) => preset === requested) ?? 'overview';
+}
+
+function recordNameFromUrl(url: string): string {
+  const parts = url.split('/').filter((part) => part !== '');
+  return parts[parts.length - 1] ?? url;
 }
 
 export function App() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [status, setStatus] = useState('等待记录');
-  const [displayFrame, setDisplayFrame] = useState(0);
-  const [displayTime, setDisplayTime] = useState(0);
+  const [loadState, setLoadState] = useState<{ state: 'idle' | 'loading' | 'error'; message: string }>({ state: 'idle', message: '' });
+  const [frame, setFrame] = useState(0);
+  const [timeSeconds, setTimeSeconds] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [follow, setFollow] = useState(true);
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [rateIndex, setRateIndex] = useState(3);
+  const [preset, setPreset] = useState<ViewPreset>(initialPreset);
+  const [options, setOptions] = useState<ViewportOptions>(initialOptions);
+  const [scalarsOpen, setScalarsOpen] = useState(false);
+  const [definitionNoticeOpen, setDefinitionNoticeOpen] = useState(true);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const commands = useRef<ViewportCommands | null>(null);
+  const firstPreset = useMemo(initialPreset, []);
+  const bogieBodyNames = useMemo(() => loaded?.model.bogies.map((bogie) => bogie.bodyName) ?? [], [loaded]);
 
-  const install = useCallback((record: SceneRecord) => {
+  const install = useCallback((record: SceneRecord, name: string) => {
     const scene = buildScene(record);
     const playback = new PlaybackController(record);
-    // Deep links: `hide` names parts to start hidden, `t` a start time.
-    const query = new URLSearchParams(window.location.search);
-    const hiddenAtStart = new Set((query.get('hide') ?? '').split(',').filter((name) => name !== ''));
+    const model = buildReadoutModel(record, scene.track);
     const startTime = Number(query.get('t'));
-    if (Number.isFinite(startTime) && query.get('t') !== null) {
+    if (query.get('t') !== null && Number.isFinite(startTime)) {
       playback.seek(startTime);
     }
-    setHidden(hiddenAtStart);
-    setLoaded({ record, scene, playback });
-    setDisplayFrame(0);
-    setDisplayTime(playback.timeSeconds);
-    setPlaying(false);
+    // Parts named in `hide` stay hidden whatever the display switches say.
+    scene.setUserHidden(new Set((query.get('hide') ?? '').split(',').filter((part) => part !== '')));
     const wheelBodies = record.wheelPlacements
       .map((placement) => record.bodies.findIndex((body) => body.name === placement.wheelBodyName))
       .filter((index) => index >= 0);
     const coarsest = maximumWheelRotationBetweenFrames(record, wheelBodies);
-    const spinNote =
-      record.columns.wheelSpinCount > 0
-        ? '，带未折返轮自转角'
-        : coarsest > Math.PI / 2
-          ? `，警告：无轮自转角且相邻样本间轮转角达 ${coarsest.toFixed(2)} rad，轮子插值方向不可靠`
-          : '';
-    setStatus(
-      `记录已加载：${record.frameCount} 帧，${record.bodies.length} 个刚体，` +
-        `${record.wheelPlacements.length} 个车轮，${record.scalars.length} 个标量，` +
-        `时间 ${playback.startSeconds.toFixed(3)} s 到 ${playback.endSeconds.toFixed(3)} s` +
-        (record.track === null ? '，无线路' : `，线路 ${record.track.stationsMeters.length} 站`) +
-        spinNote,
-    );
+    const warning =
+      record.columns.wheelSpinCount === 0 && coarsest > Math.PI / 2
+        ? `No wheel spin angles and up to ${fixed(coarsest, 2)} rad of wheel turn between samples: in-between wheel poses are unreliable. 无轮自转角，插值方向不可靠。`
+        : null;
+    setLoaded({ record, scene, playback, model, name, subtitle: scenarioSubtitle(model.carbodyStation, model.initialSpeedKmh, scene.track), warning });
+    setFrame(Math.max(0, frameAtOrBefore(record, playback.timeSeconds)));
+    setTimeSeconds(playback.timeSeconds);
+    setPlaying(false);
+    setLoadState({ state: 'idle', message: '' });
+    setDefinitionNoticeOpen(true);
   }, []);
 
   useEffect(() => {
-    const url = new URLSearchParams(window.location.search).get('record');
+    const url = query.get('record');
     if (url === null) {
       return;
     }
-    setStatus(`正在读取 ${url}`);
+    setLoadState({ state: 'loading', message: '' });
     loadRecordFromUrl(url)
-      .then(install)
-      .catch((error: unknown) => setStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`));
+      .then((record) => install(record, recordNameFromUrl(url)))
+      .catch((error: unknown) => setLoadState({ state: 'error', message: error instanceof Error ? error.message : String(error) }));
   }, [install]);
 
-  const onPickFolder = (files: FileList | null): void => {
-    if (files === null || files.length === 0) {
-      return;
-    }
-    setStatus('正在读取所选文件夹');
-    loadRecordFromFiles(files)
-      .then(install)
-      .catch((error: unknown) => setStatus(`读取失败：${error instanceof Error ? error.message : String(error)}`));
-  };
+  const onPick = useCallback(
+    (files: FileList) => {
+      const first = files[0];
+      const name = first?.webkitRelativePath.split('/')[0] ?? 'record';
+      setLoadState({ state: 'loading', message: '' });
+      loadRecordFromFiles(files)
+        .then((record) => install(record, name))
+        .catch((error: unknown) => setLoadState({ state: 'error', message: error instanceof Error ? error.message : String(error) }));
+    },
+    [install],
+  );
 
-  const onDisplayFrame = useCallback((frame: number, time: number, nowPlaying: boolean) => {
-    setDisplayFrame(frame);
-    setDisplayTime(time);
+  const onDisplayFrame = useCallback((displayed: number, time: number, nowPlaying: boolean) => {
+    setFrame(displayed);
+    setTimeSeconds(time);
     setPlaying(nowPlaying);
   }, []);
 
   useEffect(() => {
-    if (loaded === null) {
-      return;
+    if (loaded !== null) {
+      loaded.playback.speed = playbackRates[rateIndex] ?? 1;
     }
-    loaded.playback.speed = speed;
-  }, [loaded, speed]);
+  }, [loaded, rateIndex]);
 
-  const togglePlay = (): void => {
+  const togglePlay = useCallback(() => {
     if (loaded === null) {
       return;
     }
     loaded.playback.togglePlay();
     setPlaying(loaded.playback.playing);
-  };
+  }, [loaded]);
 
-  useEffect(() => {
-    if (loaded === null) {
-      return;
-    }
-    for (const part of loaded.scene.parts) {
-      part.object.visible = !hidden.has(part.name);
-    }
-  }, [loaded, hidden]);
-
-  const followBodyName = useMemo(() => {
-    if (loaded === null || !follow) {
-      return null;
-    }
-    const carbody = loaded.record.bodies.find((body) => body.name === 'carbody');
-    return (carbody ?? loaded.record.bodies[0])?.name ?? null;
-  }, [loaded, follow]);
-
-  const togglePart = (name: string): void => {
-    setHidden((previous) => {
-      const next = new Set(previous);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
+  const seek = useCallback(
+    (time: number) => {
+      if (loaded === null) {
+        return;
       }
-      return next;
-    });
-  };
+      loaded.playback.seek(time);
+      setTimeSeconds(loaded.playback.timeSeconds);
+      setFrame(Math.max(0, frameAtOrBefore(loaded.record, loaded.playback.timeSeconds)));
+    },
+    [loaded],
+  );
 
-  const toggleGroup = (group: string, visible: boolean): void => {
-    if (loaded === null) {
-      return;
-    }
-    setHidden((previous) => {
-      const next = new Set(previous);
-      for (const part of loaded.scene.parts) {
-        if (part.group === group) {
-          if (visible) {
-            next.delete(part.name);
-          } else {
-            next.add(part.name);
-          }
-        }
+  const step = useCallback(
+    (direction: -1 | 1) => {
+      if (loaded === null) {
+        return;
       }
-      return next;
-    });
-  };
+      const { record, playback } = loaded;
+      playback.playing = false;
+      const current = Math.max(0, frameAtOrBefore(record, playback.timeSeconds));
+      const onSample = Math.abs(frameTimeSeconds(record, current) - playback.timeSeconds) < 1e-9;
+      const target = direction > 0 ? current + 1 : onSample ? current - 1 : current;
+      seek(frameTimeSeconds(record, Math.min(record.frameCount - 1, Math.max(0, target))));
+      setPlaying(false);
+    },
+    [loaded, seek],
+  );
 
-  const seek = (time: number): void => {
-    if (loaded === null) {
-      return;
-    }
-    loaded.playback.seek(time);
-    setDisplayTime(loaded.playback.timeSeconds);
-  };
-
-  const preset = (name: CameraPreset): void => commands.current?.applyPreset(name);
-  const initialPreset = useMemo((): CameraPreset => {
-    const requested = new URLSearchParams(window.location.search).get('view');
-    return requested === 'side' || requested === 'front' || requested === 'top' ? requested : 'iso';
+  const selectPreset = useCallback((next: ViewPreset) => {
+    commands.current?.applyPreset(next);
+    setPreset(next);
   }, []);
 
+  const changeOptions = useCallback((next: Partial<ViewportOptions>) => {
+    setOptions((previous) => ({ ...previous, ...next }));
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+        return;
+      }
+      if (loaded === null || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === ' ') {
+        event.preventDefault();
+        togglePlay();
+      } else if (key === 'arrowleft' || key === 'arrowright') {
+        event.preventDefault();
+        const direction = key === 'arrowleft' ? -1 : 1;
+        if (event.shiftKey) {
+          seek(loaded.playback.timeSeconds + direction);
+        } else {
+          step(direction);
+        }
+      } else if (/^[1-5]$/.test(key)) {
+        const next = viewPresets[Number(key) - 1];
+        if (next !== undefined) {
+          selectPreset(next);
+        }
+      } else if (key === 'l') {
+        changeOptions({ labels: !optionsRef.current.labels });
+      } else if (key === 'x') {
+        const order: CarbodyMode[] = ['xray', 'solid', 'hidden'];
+        changeOptions({ carbody: order[(order.indexOf(optionsRef.current.carbody) + 1) % order.length] ?? 'xray' });
+      } else if (key === 'f') {
+        changeOptions({ follow: !optionsRef.current.follow });
+      } else if (key === 'o') {
+        changeOptions({ orbit: !optionsRef.current.orbit });
+      } else if (key === 't') {
+        changeOptions({ track: !optionsRef.current.track });
+      } else if (key === 'a') {
+        changeOptions({ axes: !optionsRef.current.axes });
+      } else if (key === 's') {
+        setScalarsOpen((open) => !open);
+      } else if (key === 'escape') {
+        setScalarsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [loaded, togglePlay, seek, step, selectPreset, changeOptions]);
+
+  useEffect(() => () => loaded?.scene.dispose(), [loaded]);
+
+  const model = loaded?.model ?? null;
+  const track = loaded?.scene.track ?? null;
   return (
-    <div className="layout">
+    <div className="app">
       <div className="stage">
         {loaded !== null && (
           <SceneViewport
             record={loaded.record}
             scene={loaded.scene}
             playback={loaded.playback}
-            followBodyName={followBodyName}
-            initialPreset={initialPreset}
+            carbodyBodyName={loaded.model.carbody?.bodyName ?? null}
+            bogieBodyName={loaded.model.bogies[0]?.bodyName ?? null}
+            bogieBodyNames={bogieBodyNames}
+            initialPreset={firstPreset}
+            options={optionsRef}
             commands={commands}
+            contactPatchesAt={loaded.model.contactPatchesAt}
+            safeArea={safeArea}
             onDisplayFrame={onDisplayFrame}
           />
         )}
       </div>
-      <aside className="panel">
-        <h1>ORVD 场景回放</h1>
-        <p id="viewer-status" className="status">
-          {status}
-        </p>
-        <label className="picker">
-          选择记录文件夹
-          <input
-            type="file"
-            // @ts-expect-error webkitdirectory is a non-standard attribute understood by browsers
-            webkitdirectory=""
-            multiple
-            onChange={(event) => onPickFolder(event.target.files)}
-          />
-        </label>
-        {loaded !== null && (
+      <div className="vignette" />
+      <div className="hud">
+        <TitleBlock definition={loaded?.scene.visualDefinition ?? null} subtitle={loaded?.subtitle ?? null} />
+        <MetaBar
+          record={loaded?.record ?? null}
+          name={loaded?.name ?? ''}
+          code={loaded?.scene.visualDefinition?.vehicleName ?? ''}
+          intervalSeconds={model?.sampleIntervalSeconds ?? 0}
+          onPick={onPick}
+        />
+        {loaded !== null && model !== null ? (
           <>
-            <section>
-              <h2>播放</h2>
-              <div className="row">
-                <button type="button" onClick={togglePlay}>
-                  {playing ? '暂停' : '播放'}
-                </button>
-                <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-                  {speeds.map((value) => (
-                    <option key={value} value={value}>
-                      {value}×
-                    </option>
-                  ))}
-                </select>
-                <label>
-                  <input type="checkbox" checked={follow} onChange={(event) => setFollow(event.target.checked)} />
-                  跟随车体
-                </label>
-              </div>
-              <input
-                type="range"
-                min={loaded.playback.startSeconds}
-                max={loaded.playback.endSeconds}
-                step={Math.max(1e-4, (loaded.playback.endSeconds - loaded.playback.startSeconds) / 2000)}
-                value={displayTime}
-                onChange={(event) => seek(Number(event.target.value))}
-              />
-              <div className="row">
-                <button type="button" onClick={() => preset('iso')}>
-                  斜视
-                </button>
-                <button type="button" onClick={() => preset('side')}>
-                  侧视
-                </button>
-                <button type="button" onClick={() => preset('front')}>
-                  正视
-                </button>
-                <button type="button" onClick={() => preset('top')}>
-                  俯视
-                </button>
-              </div>
-            </section>
-            <section>
-              <h2>读数</h2>
-              <table className="readouts">
-                <tbody>
-                  <tr>
-                    <td>显示时间</td>
-                    <td>{displayTime.toFixed(4)} s</td>
-                  </tr>
-                  <tr>
-                    <td>当前样本</td>
-                    <td>
-                      #{frameSampleIndex(loaded.record, displayFrame)} · {SamplePhaseNames[framePhase(loaded.record, displayFrame)] ?? '未知阶段'}
-                    </td>
-                  </tr>
-                  {loaded.record.scalars.map((definition, index) => {
-                    const sample = scalarSample(loaded.record, displayFrame, index);
-                    const text = statusText(sample.status);
-                    return (
-                      <tr key={definition.name}>
-                        <td title={`${definition.quantity}; ${definition.referenceFrame}; ${definition.method}`}>
-                          {definition.name}
-                        </td>
-                        <td>{text !== '' ? text : `${sample.value.toPrecision(6)} ${definition.unit}`}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </section>
-            <section>
-              <h2>显隐</h2>
-              {(['vehicle', 'wheels', 'track', 'grid'] as const).map((group) => (
-                <div key={group} className="row">
-                  <button type="button" onClick={() => toggleGroup(group, true)}>
-                    全显 {group}
-                  </button>
-                  <button type="button" onClick={() => toggleGroup(group, false)}>
-                    全隐 {group}
-                  </button>
-                </div>
-              ))}
-              <div className="parts">
-                {loaded.scene.parts.map((part) => (
-                  <label key={part.name}>
-                    <input type="checkbox" checked={!hidden.has(part.name)} onChange={() => togglePart(part.name)} />
-                    {part.name}
-                  </label>
-                ))}
-              </div>
-            </section>
+            <div className="col left">
+              <AxleBridgeCard record={loaded.record} model={model} frame={frame} wheelWidth={loaded.scene.visualDefinition?.wheelVisual.widthMeters ?? null} />
+              {track !== null && <TrackCard track={track} model={model} frame={frame} />}
+            </div>
+            <div className="col right">
+              <VehicleCard record={loaded.record} model={model} frame={frame} />
+              <WheelForceCard model={model} frame={frame} />
+              <ViewsCard current={preset} onSelect={selectPreset} options={options} onChange={changeOptions} />
+              <DisplayCard options={options} onChange={changeOptions} scalarsOpen={scalarsOpen} onToggleScalars={() => setScalarsOpen((open) => !open)} />
+            </div>
+            <PlaybackCard
+              record={loaded.record}
+              model={model}
+              track={track}
+              frame={frame}
+              timeSeconds={timeSeconds}
+              playing={playing}
+              rateIndex={rateIndex}
+              onToggle={togglePlay}
+              onSeek={seek}
+              onStep={step}
+              onRate={setRateIndex}
+            />
+            {loaded.warning !== null && <div className="warning">{loaded.warning}</div>}
+            <div className="notices">
+              {loadState.state === 'loading' && <Notice kind="loading" en="Reading the record…" zh="正在读取记录" />}
+              {loadState.state === 'error' && (
+                <Notice
+                  kind="error"
+                  en="Could not open the record"
+                  zh="无法打开记录；仍显示原记录"
+                  detail={loadState.message}
+                  onDismiss={() => setLoadState({ state: 'idle', message: '' })}
+                />
+              )}
+              {loaded.scene.visualDefinition === null && definitionNoticeOpen && (
+                <Notice
+                  kind="info"
+                  en="No visual definition in this record: bodies are shown as axes"
+                  zh="记录中没有视觉定义：刚体以坐标轴显示，车轮按记录放置绘出"
+                  onDismiss={() => setDefinitionNoticeOpen(false)}
+                />
+              )}
+            </div>
+            {scalarsOpen && <ScalarsDrawer record={loaded.record} frame={frame} onClose={() => setScalarsOpen(false)} />}
           </>
+        ) : (
+          <EmptyState state={loadState.state} message={loadState.message} onPick={onPick} />
         )}
-      </aside>
+        <Footer loaded={loaded !== null} />
+      </div>
     </div>
   );
 }
