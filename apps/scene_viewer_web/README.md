@@ -28,9 +28,19 @@ npm run dev
 车轮误差必须小于 0.05 rad；`npm test` 覆盖播放状态归属、插值端点、显示绑定解析、读数模型与轮轴航向、
 线路分段与道床采样、障碍框近平面裁剪、显示范围测量、取景拟合、布局实测、相机重构图与副标题。
 
+## 车型接入状态
+
+[IRW](../../vehicle_library/irw/visualization/visual_definition.json) 与
+[GZ18](../../vehicle_library/gz18/visualization/visual_definition.json) 均有独立的示意视觉定义和显式显示绑定，
+共用同一套场景、读数、相机与播放代码，不设车型专属页面。
+
+IRW 已有资格运行器场景导出入口；GZ18 当前完成示意资产与程序化显示夹具核对，
+导出开关透传、真实短记录和拓扑测试注册仍待完成。显示夹具不是 ORVD 仿真结果。
+后续方向见[三维场景显示综合完善计划](../../docs/planning/scene_visualization/SCENE_VISUALIZATION_IMPROVEMENT_PLAN.md)。
+
 ## 生成记录
 
-被动资格运行器带 `--scene-record` 时在其输出目录下写 `scene_record/`，例如从仓库根目录：
+IRW 被动资格运行器带 `--scene-record` 时在其输出目录下写 `scene_record/`，例如从仓库根目录：
 
 ```bash
 OMP_NUM_THREADS=4 ./build/tools/dynamics_qualification/orvd_irw_passive_scenario \
@@ -57,8 +67,8 @@ OMP_NUM_THREADS=4 ./build/tools/dynamics_qualification/orvd_irw_passive_scenario
 
 ## 显示约定
 
-- 记录中的坐标是 ORVD 轨道惯性系（x 沿增里程、y 向右、z 向下）；根节点绕 x 转 +90° 变到
-  Three.js 的 Y-up，其余代码不置换分量。
+- 刚体位置与速度使用 ORVD 惯性系（+z 向下）；沿线前向与右向取自相应站位的线路系，
+  不能把固定惯性 x 当作整条曲线的增里程方向。根节点绕 x 转 +90° 变到 Three.js 的 Y-up，其余代码不置换分量。
 - 帧行号（`frameIndex`）是帧表的行序，定位与插值用它；`sampleIndex` 是记录的样本身份，只显示。
 - 刚体四元数为 `w,x,y,z`、体系到世界系，已含车轮自转。相邻帧之间位置线性插值、姿态最短路径
   插值；对带 `wheel_spin_angles` 的车轮，帧间旋转按记录里的未折返自转角之差拆成“绕自转轴的
