@@ -43,8 +43,8 @@ recipe defaults to CVODE BDF5, relative tolerance `1e-8`, and q/v/z absolute
 tolerances `1e-8 / 1e-7 / 1e-6 N`. Each runner verifies the concrete backend
 identity and publishes `integrator_recipe_identifier` in the numerical
 execution contract. `maximum_bdf_order` remains an integer for CVODE and is
-`null` for Radau5. These are private execution recipes, not a public
-integrator-policy interface.
+`null` for Radau5, Newmark and Zhai. The scenario presets are private to these tools; every runner constructs the
+backend through the public `SystemIntegrationConfiguration` entry.
 
 The source-tree run configurations use the closed
 `TimeIntegratorQualificationCase`, which is the Cartesian product of
@@ -52,15 +52,128 @@ The source-tree run configurations use the closed
 `coarse`/`nominal`/`fine`/`reference`. All three executables accept one complete
 case identifier as their optional final argument, for example
 `scenario_default_cvode_fine` or `radau5_reference`. The parser recognizes only
-the eight complete identifiers: there are no independent backend or tolerance
-knobs, environment switch, installed API, or placeholder for Newmark/Zhai.
-Omitting the argument retains each scenario's prior CVODE default and original
-argument layout.
-If Newmark or Zhai is implemented later, selection must evolve together with a
-real concrete runtime into a tagged, method-specific configuration whose
-payload owns that method's parameters and state-history policy. Adding only an
-enum value, or putting unrelated method parameters into a generic option bag,
-is not an admissible qualification interface.
+the eight complete identifiers. Omitting the argument retains each scenario's
+prior CVODE default and original argument layout.
+
+All three executables also accept `--integration-config PATH`, mutually exclusive
+with the trailing ODE case. The source-private request is a closed variant of
+scenario default, an ODE case, an explicit ODE configuration, basic Newmark and
+basic Zhai. The tool resolves this request to the public method-specific
+configuration and the sole `SystemContinuousStateAdvancer` constructor.
+Vehicle assets and controllers do not select numerical methods.
+
+Explicit ODE JSON uses `schema_version: 1`, `method` equal to `cvode_bdf2`,
+`cvode_bdf5` or `radau5`, the four positive fields `relative_tolerance`,
+`generalized_position_absolute_tolerance`,
+`generalized_velocity_absolute_tolerance`, and
+`series_force_absolute_tolerance_newtons`, plus the optional
+`maximum_internal_steps_per_advance`. Step and Newton fields are rejected.
+This permits explicit physical-state tolerances without changing the eight ODE
+case identities.
+
+## Basic Newmark and Zhai vehicle entry
+
+`integration_configurations/newmark_explicit_trial.json` and `zhai_explicit_trial.json` are
+common **trial inputs**, not qualified vehicle defaults or error guarantees.
+Both declare a 25,000 ns nominal step. To select a different step, copy the file
+and set `step_size_nanoseconds` explicitly. The step is independent of the observation
+clock. Neither the runner nor the backend automatically reduces it on failure.
+The schema rejects unknown and duplicate keys, nonpositive/noninteger steps,
+unrelated Zhai Newton fields, and invalid scales. JSON records every Newmark
+scale explicitly; there is no fallback to a scenario's ODE tolerances.
+
+The library expands the declared scale families from model joint types and
+coordinate ranges. Translation uses metre units, revolute and Ball-RPY coordinates share
+the angle family, and each quaternion block multiplies the declared scales by
+its own reference stored norm. `quaternion_scale_convention` must be
+`reference_norm_multiple`: the reference comes from the latest successful
+initialization, including explicit synchronization. Force states use newtons. All four declared
+families must be positive and finite, including unused ones. The library checks
+coverage and overlap, and commits new references and private expanded scales
+together after successful initialization or synchronization. Failed synchronization
+preserves both; ordinary steps and station-hint refreshes preserve the current
+initialization epoch's scales. The table starts with position correction
+`1e-8`, coordinate-velocity correction `1e-7`, coordinate-acceleration residual
+`1e-6`, acceleration difference reference `10`, and force correction/residual
+`0.01 N` with force reference `1e5 N`. The maximum is 12 full Newton iterations, with
+a new finite-difference Jacobian each iteration. These are Newton stopping and
+perturbation scales, not global physical response tolerances.
+
+Examples from the source root, with an existing `tmp` parent and unused output
+names (`BUILD` denotes your independent Release build directory). The example
+copy explicitly selects 12,500 ns; the original 25,000 ns trial
+file stays unchanged:
+
+```sh
+BUILD=tmp/build-basic-coordinate-cores
+CONFIG=tmp/zhai-example-12500ns.json
+python3 - "$CONFIG" <<'PY'
+import json
+import sys
+from pathlib import Path
+source = Path("tools/dynamics_qualification/integration_configurations/zhai_explicit_trial.json")
+configuration = json.loads(source.read_text())
+configuration["step_size_nanoseconds"] = 12500
+with open(sys.argv[1], "x") as output:
+    json.dump(configuration, output, indent=2)
+    output.write("\n")
+PY
+"$BUILD/tools/dynamics_qualification/orvd_gz18_dynamics_qualification" \
+  vehicle_library/gz18/vehicle_definition.json \
+  vehicle_library/gz18/startup_states/moving_startup_60kmh.json \
+  track_library/geometries/straight_level_1100m.json . aar6_irregularity \
+  tmp/gz18-zhai-short 10000000 500000 --integration-config "$CONFIG"
+"$BUILD/tools/dynamics_qualification/orvd_irw_passive_scenario" \
+  irw_r300_aar5_v60_passive vehicle_library/irw/vehicle_definition.json \
+  vehicle_library/irw/startup_states/moving_startup_60kmh.json \
+  track_library/geometries/r300_centerline_superelevation_1100m.json . \
+  aar5_irregularity tmp/irw-zhai-short 10000000 500000 \
+  --integration-config "$CONFIG"
+"$BUILD/tools/dynamics_qualification/orvd_irw_r300_aar5_v60_100hz_full_state_guidance" \
+  vehicle_library/irw/vehicle_definition.json \
+  vehicle_library/irw/startup_states/moving_startup_60kmh.json \
+  track_library/geometries/r300_centerline_superelevation_1100m.json . \
+  controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json \
+  vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json \
+  tmp/irw-zhai-control-short 30000000 --integration-config "$CONFIG"
+```
+
+The same entry points accept the Newmark example. The GZ18 curve case changes
+only the line to the R300 asset and the irregularity to `aar5_irregularity`.
+Other IRW passive identities preserve their physical startup/binding checks.
+`--scene-record` retains its existing meaning. The metrics wrapper locates the
+output directory after parsing options and forwards the complete original argv.
+INT-07 manifest-bound runs still admit only the eight ODE cases and reject
+`--integration-config` before launching anything.
+
+The default execution budget is 1,000,000 successful internal steps per public
+advance; the configuration may explicitly change it. Metadata records the
+estimated requirement for the actual stop schedule (one passive window, or
+10 ms controlled intervals). An insufficient declared budget remains a valid
+run attempt: only the runtime reports budget exhaustion. Samples add no stops.
+General runs permit interior samples and short terminal steps; endpoint-aligned
+checks additionally verify their nanosecond grids and floating-point times.
+
+Metadata records the actual method, step, budget, original scale table, coordinate
+ownership. Expanded solver arrays remain private to the library. Mechanical ODE tolerance fields are `null`.
+Performance retains its legacy timing fields and adds `numerical_timings` for
+construction, advance, synchronization and their total. `integration_work`
+accumulates snapshot increments inside each successful construction/synchronization
+epoch, including the initial mechanical RHS. Startup and projection diagnostics
+remain private test details. Worker identity is a gauge, so Zhai's zero is valid. Control, observation
+and writing remain separate. Raw linear-solver setup counts retain each backend's
+meaning; they are not a common count of matrix factorizations.
+
+A construction, advance or synchronization failure writes the sibling
+`OUTPUT.failure_result.json` with its stage, target, last publicly accepted time,
+configuration, original exception, available numerical classification, known work
+and elapsed time. Construction without a returned backend reports unavailable
+statistics, not zero. Missing statistics after failure are explicit. The sidecar
+is published without overwriting an existing result; the partial success directory
+is discarded, and no `COMPLETE` or partial trajectory is published. Reporting
+errors never replace the original exception. A failed attempt is not resumed.
+
+## Existing ODE qualification protocol
 
 The four tolerance scales relative to the scenario recipe are respectively
 `10`, `1`, `0.1`, and `0.01`. Metadata records the complete case identifier,
@@ -152,15 +265,17 @@ committed.
 
 ## Published files
 
-Passive GZ18 and IRW runners publish `continuous_states.tsv` directly from the
-dense state matrix already used for observation replay. Its rows are joined by
+All three runners publish `continuous_states.tsv` directly from the
+dense state matrices already used for observation replay. Its rows are joined by
 `(sample_index,time_nanoseconds)` and its columns are the lossless `[q;v;z]`
 layout recorded in metadata; `time_seconds` is audit-only. Writing it adds no
 integrator stop or RHS evaluation. Raw quaternion columns are an archival
 representation, not a Euclidean orientation metric; offline comparison must use
-the free-quaternion and Ball-RPY rotation-log rules in the INT-07 protocol. The controlled IRW runner
-does not yet publish this file because its complete long-window comparison is an
-INT-08 deliverable.
+the free-quaternion and Ball-RPY rotation-log rules. The controlled IRW runner
+writes the initial state once and streams each arriving interval's samples,
+including its endpoint once. Its existing 10 ms control clock is unchanged.
+All methods publish the same assembled physical layout, coordinate ownership,
+rotation conventions, initial/terminal states and physical observation columns.
 
 `observations.tsv` keeps one fixed-width row per sample. Q and N are aggregated
 over all returned patches. The historical longitudinal/lateral force convenience

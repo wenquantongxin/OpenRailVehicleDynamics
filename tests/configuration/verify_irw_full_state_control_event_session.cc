@@ -23,7 +23,6 @@
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
-#include "system_continuous_state_integration_access.h"
 
 namespace {
 
@@ -225,18 +224,12 @@ void Run(const std::filesystem::path& vehicle_path,
 
     // The backend is constructed only after U0 is in the accepted context, so
     // no artificial t=0 reinitialization is introduced.
-    auto advancer = orvd::integrators::internal::
-        SystemContinuousStateIntegrationAccess::Make(
-            orvd::integrators::internal::
-                SystemContinuousStateIntegrationRecipe::kRadau5,
-            assembled.system(), assembled.compiled_plan(), accepted,
-            MakeTolerances(assembled),
-            orvd::integrators::NoCallTimeAppliedForces{});
-    Require(orvd::integrators::internal::
-                    SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-                        *advancer) ==
-                orvd::integrators::internal::
-                    SystemContinuousStateIntegrationRecipe::kRadau5 &&
+    auto advancer = std::make_unique<orvd::integrators::SystemContinuousStateAdvancer>(
+        assembled.system(), assembled.compiled_plan(), accepted,
+        orvd::integrators::SystemIntegrationConfiguration{
+            orvd::integrators::Radau5Configuration{MakeTolerances(assembled)}},
+        orvd::integrators::NoCallTimeAppliedForces{});
+    Require(advancer->method_identifier() == "radau5" &&
                 advancer->integration_statistics()
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     1,

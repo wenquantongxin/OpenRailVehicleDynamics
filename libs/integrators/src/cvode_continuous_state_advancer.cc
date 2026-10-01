@@ -1,4 +1,4 @@
-#include "orvd/integrators/cvode_continuous_state_advancer.h"
+#include "cvode_continuous_state_advancer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -17,7 +17,6 @@
 #include <sunlinsol/sunlinsol_dense.h>
 #include <sunmatrix/sunmatrix_dense.h>
 
-#include "bdf_integration_access.h"
 #include "dense_finite_difference_jacobian_provider.h"
 #include "integrator_limits.h"
 
@@ -707,15 +706,6 @@ CvodeContinuousStateAdvancer::CvodeContinuousStateAdvancer(
     ContinuousStateRhs& rhs,
     double initial_time_seconds,
     Eigen::VectorXd initial_continuous_state,
-    ContinuousStateErrorTolerances tolerances)
-    : CvodeContinuousStateAdvancer(
-          rhs, initial_time_seconds, std::move(initial_continuous_state),
-          std::move(tolerances), internal::MaximumBdfOrder::kSecond) {}
-
-CvodeContinuousStateAdvancer::CvodeContinuousStateAdvancer(
-    ContinuousStateRhs& rhs,
-    double initial_time_seconds,
-    Eigen::VectorXd initial_continuous_state,
     ContinuousStateErrorTolerances tolerances,
     internal::MaximumBdfOrder maximum_bdf_order)
     : implementation_(std::make_unique<Implementation>(
@@ -724,27 +714,12 @@ CvodeContinuousStateAdvancer::CvodeContinuousStateAdvancer(
 
 CvodeContinuousStateAdvancer::~CvodeContinuousStateAdvancer() = default;
 
-std::unique_ptr<CvodeContinuousStateAdvancer>
-internal::BdfIntegrationAccess::
-    MakeFifthOrderCvodeContinuousStateAdvancer(
-        ContinuousStateRhs& rhs,
-        double initial_time_seconds,
-        Eigen::VectorXd initial_continuous_state,
-        ContinuousStateErrorTolerances tolerances) {
-    return std::unique_ptr<CvodeContinuousStateAdvancer>(
-        new CvodeContinuousStateAdvancer(
-            rhs, initial_time_seconds, std::move(initial_continuous_state),
-            std::move(tolerances), MaximumBdfOrder::kFifth));
+int CvodeContinuousStateAdvancer::configured_maximum_bdf_order() const {
+    return implementation_->maximum_bdf_order();
 }
 
-int internal::BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
-    const CvodeContinuousStateAdvancer& advancer) {
-    return advancer.implementation_->maximum_bdf_order();
-}
-
-int internal::BdfIntegrationAccess::LastBdfOrder(
-    const CvodeContinuousStateAdvancer& advancer) {
-    return advancer.implementation_->last_bdf_order();
+int CvodeContinuousStateAdvancer::last_bdf_order() const {
+    return implementation_->last_bdf_order();
 }
 
 void internal::DenseFiniteDifferenceJacobianRegistration::Attach(

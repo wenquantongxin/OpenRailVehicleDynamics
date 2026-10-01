@@ -20,8 +20,8 @@ void ValidateScale(const Eigen::VectorXd& scale, int size, const char* name) {
     }
 }
 
-NewmarkConfiguration ValidateConfiguration(
-    CoordinateSecondOrderProblem& problem, NewmarkConfiguration configuration) {
+NewmarkCoreConfiguration ValidateConfiguration(
+    CoordinateSecondOrderProblem& problem, NewmarkCoreConfiguration configuration) {
     const int nq = problem.coordinate_size();
     const int nz = problem.internal_state_size();
     if (nq <= 0 || nz < 0 || nq > std::numeric_limits<int>::max() - nz) {
@@ -83,7 +83,7 @@ double PerturbedValue(double value, double reference) {
 class NewmarkCore::Implementation final {
    public:
     Implementation(CoordinateSecondOrderProblem& problem,
-                   NewmarkConfiguration configuration,
+                   NewmarkCoreConfiguration configuration,
                    const CoordinateState& initial)
         : configuration_(ValidateConfiguration(problem, std::move(configuration))),
           state_(problem, configuration_.step_size_seconds, initial, 1),
@@ -105,6 +105,23 @@ class NewmarkCore::Implementation final {
             configuration_.nonlinear_solver.acceleration_residual_scales;
         residual_scales_.tail(state_.nz_) =
             configuration_.nonlinear_solver.internal_state_residual_scales;
+    }
+
+    void Reinitialize(const CoordinateState& initial, NewmarkCoreConfiguration configuration) {
+        auto prepared = ValidateConfiguration(state_.problem_, std::move(configuration));
+        if (prepared.step_size_seconds != configuration_.step_size_seconds) {
+            throw std::invalid_argument("Newmark: reinitialization cannot change the nominal step size");
+        }
+        // Allocate and validate before invoking any callback. The assignments
+        // after successful state initialization use only already owned storage.
+        Eigen::VectorXd prepared_residual_scales(residual_scales_.size());
+        prepared_residual_scales.head(state_.nq_) =
+            prepared.nonlinear_solver.acceleration_residual_scales;
+        prepared_residual_scales.tail(state_.nz_) =
+            prepared.nonlinear_solver.internal_state_residual_scales;
+        state_.Reinitialize(initial);
+        configuration_ = std::move(prepared);
+        residual_scales_.swap(prepared_residual_scales);
     }
 
     void Advance(double h, std::optional<double> endpoint = std::nullopt) {
@@ -233,7 +250,7 @@ class NewmarkCore::Implementation final {
              "Newmark: endpoint Newton iteration limit reached");
     }
 
-    NewmarkConfiguration configuration_;
+    NewmarkCoreConfiguration configuration_;
     CoordinateCoreState state_;
     Eigen::VectorXd unknown_;
     Eigen::VectorXd perturbed_unknown_;
@@ -252,7 +269,7 @@ class NewmarkCore::Implementation final {
 };
 
 NewmarkCore::NewmarkCore(CoordinateSecondOrderProblem& problem,
-                         NewmarkConfiguration configuration,
+                         NewmarkCoreConfiguration configuration,
                          const CoordinateState& initial_state)
     : implementation_(std::make_unique<Implementation>(
           problem, std::move(configuration), initial_state)) {}
@@ -291,6 +308,15 @@ void NewmarkCore::AdvanceOneStep(double step_size_seconds, double endpoint_time_
 
 void NewmarkCore::Reinitialize(const CoordinateState& initial_state) {
     implementation_->state_.Reinitialize(initial_state);
+}
+
+void NewmarkCore::Reinitialize(const CoordinateState& initial_state,
+                              NewmarkCoreConfiguration configuration) {
+    implementation_->Reinitialize(initial_state, std::move(configuration));
+}
+
+const NewmarkCoreConfiguration& NewmarkCore::configuration() const {
+    return implementation_->configuration_;
 }
 
 }  // namespace orvd::integrators::internal

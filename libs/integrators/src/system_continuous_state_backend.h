@@ -13,9 +13,8 @@
 #include "orvd/integrators/continuous_state_advancer.h"
 #include "orvd/integrators/system_rhs_bridge.h"
 
-#include "system_continuous_state_integration_recipe.h"
-#include "system_continuous_state_integration_configuration.h"
-#include "coordinate_second_order_problem.h"
+#include "orvd/integrators/system_integration_configuration.h"
+#include <string_view>
 
 namespace orvd::system_assembly {
 class CompiledSystemPlan;
@@ -44,71 +43,6 @@ class SystemContinuousStateBackend final {
         const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
         NoCallTimeAppliedForces) = delete;
 
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe recipe,
-        const system_assembly::SystemInstance& system,
-        const system_assembly::CompiledSystemPlan& plan,
-        system_assembly::SystemRuntimeContext& candidate_context,
-        const system_assembly::SystemRuntimeContext& accepted_context,
-        const Eigen::VectorXd& initial_continuous_state,
-        ContinuousStateErrorTolerances tolerances,
-        NoCallTimeAppliedForces no_call_time_applied_forces);
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        system_assembly::SystemInstance&&,
-        const system_assembly::CompiledSystemPlan&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        const system_assembly::SystemInstance&&,
-        const system_assembly::CompiledSystemPlan&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        const system_assembly::SystemInstance&,
-        system_assembly::CompiledSystemPlan&&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        const system_assembly::SystemInstance&,
-        const system_assembly::CompiledSystemPlan&&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        system_assembly::SystemInstance&&,
-        system_assembly::CompiledSystemPlan&&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        system_assembly::SystemInstance&&,
-        const system_assembly::CompiledSystemPlan&&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        const system_assembly::SystemInstance&&,
-        system_assembly::CompiledSystemPlan&&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
-    SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe,
-        const system_assembly::SystemInstance&&,
-        const system_assembly::CompiledSystemPlan&&,
-        system_assembly::SystemRuntimeContext&,
-        const system_assembly::SystemRuntimeContext&, const Eigen::VectorXd&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
     ~SystemContinuousStateBackend();
 
     SystemContinuousStateBackend(const SystemContinuousStateBackend&) =
@@ -121,10 +55,7 @@ class SystemContinuousStateBackend final {
 
     [[nodiscard]] ContinuousStateAdvancer& advancer();
     [[nodiscard]] const ContinuousStateAdvancer& advancer() const;
-    [[nodiscard]] SystemContinuousStateIntegrationRecipe configured_recipe()
-        const noexcept;
-    [[nodiscard]] std::optional<CoordinateIntegrationDiagnostics>
-    coordinate_diagnostics() const;
+    [[nodiscard]] std::string_view method_identifier() const noexcept;
     void SynchronizeContextLocalDataFrom(
         const system_assembly::SystemRuntimeContext& accepted_context);
 

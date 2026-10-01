@@ -20,8 +20,12 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <omp.h>
 
 #include "atomic_qualification_directory.h"
+#include "qualification_continuous_state_writer.h"
+#include "qualification_integration_configuration.h"
+#include "qualification_integration_run.h"
 #include "irw_integration_recipes.h"
 #include "qualification_sample_clock.h"
 #include "strict_floating_point_qualification.h"
@@ -40,7 +44,6 @@
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_applied_forces.h"
 #include "orvd/multibody_model/multibody_model.h"
-#include "system_continuous_state_integration_access.h"
 
 namespace orvd::dynamics_qualification {
 namespace {
@@ -68,6 +71,7 @@ constexpr std::string_view kTorqueConditionerIdentifier =
     "irw_reference_wheel_drive_torque_conditioner";
 constexpr std::size_t kAxleCount = 4;
 constexpr std::size_t kWheelCount = 8;
+constexpr int kMaximumContactWorkerCount = 8;
 
 struct ResolvedConfiguration final {
     std::filesystem::path vehicle_definition_path;
@@ -90,6 +94,7 @@ struct ControlledObservation final {
     std::array<std::size_t, kWheelCount> contact_patch_counts{};
     std::array<double, kWheelCount> vertical_support_forces_newtons{};
     std::array<double, kWheelCount> normal_forces_newtons{};
+    std::array<double, kWheelCount> rail_profile_reference_marker_track_station_meters{};
     std::array<Eigen::Vector3d, kWheelCount>
         total_forces_in_carrier_track_frame_newtons{};
 };
@@ -100,6 +105,8 @@ struct ControlledEndpointDiagnostics final {
     double state_derivative_inf_norm{};
     double generalized_force_residual_inf_norm{};
     double virtual_power_residual_watts{};
+    double position_derivative_slice_consistency_inf_norm{};
+    double series_force_derivative_slice_consistency_inf_norm{};
 };
 
 struct ControlledPatchObservation final {
@@ -187,55 +194,6 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
     return output.str();
 }
 
-[[nodiscard]] integrators::ContinuousStateErrorTolerances MakeTolerances(
-    const configuration::AssembledVehicleSystem& assembled,
-    const ResolvedTimeIntegratorQualificationNumerics& numerics) {
-    const auto& system = assembled.system();
-    Eigen::VectorXd absolute = Eigen::VectorXd::Constant(
-        system.continuous_state_size(),
-        numerics.generalized_velocity_absolute_tolerance);
-    const auto q = system.generalized_positions_state_range();
-    const auto z = system.series_spring_damper_force_state_range();
-    absolute.segment(q.start(), q.size())
-        .setConstant(numerics.generalized_position_absolute_tolerance);
-    absolute.segment(z.start(), z.size())
-        .setConstant(numerics.series_force_absolute_tolerance_newtons);
-    return integrators::ContinuousStateErrorTolerances(
-        numerics.relative_tolerance, std::move(absolute));
-}
-
-void AccumulateStatistics(
-    const integrators::ContinuousStateIntegrationStatistics& source,
-    integrators::ContinuousStateIntegrationStatistics* destination) {
-    destination->successful_internal_step_count +=
-        source.successful_internal_step_count;
-    destination->right_hand_side_evaluation_count +=
-        source.right_hand_side_evaluation_count;
-    destination->linear_solver_right_hand_side_evaluation_count +=
-        source.linear_solver_right_hand_side_evaluation_count;
-    destination->error_test_failure_count += source.error_test_failure_count;
-    destination->nonlinear_solver_iteration_count +=
-        source.nonlinear_solver_iteration_count;
-    destination->nonlinear_solver_convergence_failure_count +=
-        source.nonlinear_solver_convergence_failure_count;
-    destination->linear_solver_setup_count += source.linear_solver_setup_count;
-    destination->jacobian_evaluation_count +=
-        source.jacobian_evaluation_count;
-    const int requested_workers =
-        source.requested_dense_finite_difference_jacobian_worker_count;
-    if (destination
-            ->requested_dense_finite_difference_jacobian_worker_count == 0) {
-        destination
-            ->requested_dense_finite_difference_jacobian_worker_count =
-            requested_workers;
-    } else if (destination
-                   ->requested_dense_finite_difference_jacobian_worker_count !=
-               requested_workers) {
-        Reject("the requested dense-Jacobian worker count changed between "
-               "control intervals");
-    }
-}
-
 [[nodiscard]] double WrenchPower(
     const multibody_model::MultibodyModel& model,
     const multibody_model::MultibodyEvaluationContext& context,
@@ -296,10 +254,13 @@ void AccumulateStatistics(
         observation.vertical_support_forces_newtons[wheel] =
             contact.vertical_support_force_on_wheel_newtons;
         observation.normal_forces_newtons[wheel] = contact.normal_force_newtons;
+        observation.rail_profile_reference_marker_track_station_meters[wheel] =
+            contact.rail_profile_reference_marker_track_station_meters;
         observation.total_forces_in_carrier_track_frame_newtons[wheel] =
             contact.total_force_on_wheel_in_carrier_track_frame_newtons;
         if (!std::isfinite(observation.vertical_support_forces_newtons[wheel]) ||
             !std::isfinite(observation.normal_forces_newtons[wheel]) ||
+            !std::isfinite(observation.rail_profile_reference_marker_track_station_meters[wheel]) ||
             !observation
                  .total_forces_in_carrier_track_frame_newtons[wheel]
                  .allFinite()) {
@@ -380,6 +341,10 @@ void AccumulateStatistics(
         component.context(), rhs.segment(nq, nv),
         required_generalized_force);
 
+    Eigen::VectorXd mapped_qdot(nq);
+    assembled.model().MapGeneralizedVelocitiesToPositionDerivatives(
+        component.context(), context.generalized_velocities(), &mapped_qdot);
+
     ControlledEndpointDiagnostics diagnostics;
     diagnostics.held_torque_event_ordinal = held_torque_event_ordinal;
     diagnostics.time_seconds = context.time_seconds();
@@ -390,7 +355,14 @@ void AccumulateStatistics(
     diagnostics.virtual_power_residual_watts =
         projected_generalized_force.dot(context.generalized_velocities()) -
         spatial_power;
-    if (!std::isfinite(diagnostics.state_derivative_inf_norm) ||
+    diagnostics.position_derivative_slice_consistency_inf_norm =
+        (rhs.head(nq) - mapped_qdot).lpNorm<Eigen::Infinity>();
+    diagnostics.series_force_derivative_slice_consistency_inf_norm =
+        (rhs.tail(series_derivatives->size()) - *series_derivatives)
+            .lpNorm<Eigen::Infinity>();
+    if (!std::isfinite(diagnostics.position_derivative_slice_consistency_inf_norm) ||
+        !std::isfinite(diagnostics.series_force_derivative_slice_consistency_inf_norm) ||
+        !std::isfinite(diagnostics.state_derivative_inf_norm) ||
         !std::isfinite(diagnostics.generalized_force_residual_inf_norm) ||
         !std::isfinite(diagnostics.virtual_power_residual_watts)) {
         Reject("a controlled endpoint diagnostic is not finite");
@@ -588,6 +560,7 @@ void WriteObservations(const std::filesystem::path& path,
         output << '\t' << "force_x." << wheel << '\t' << "force_y." << wheel
                << '\t' << "force_z." << wheel;
     }
+    WriteArrayHeader(&output, "rail_profile_reference_marker_track_station_meters.", kWheels);
     output << '\n';
     for (const auto& observation : observations) {
         output << observation.sample_index << '\t'
@@ -606,6 +579,7 @@ void WriteObservations(const std::filesystem::path& path,
             output << '\t' << force.x() << '\t' << force.y() << '\t'
                    << force.z();
         }
+        WriteArray(&output, observation.rail_profile_reference_marker_track_station_meters);
         output << '\n';
     }
     CloseChecked(&output, path);
@@ -671,15 +645,71 @@ void WriteEndpointDiagnostics(
            << "held_torque_event_ordinal\ttime_seconds"
               "\tstate_derivative_inf_norm"
               "\tgeneralized_force_residual_inf_norm"
-              "\tvirtual_power_residual_watts\n";
+              "\tvirtual_power_residual_watts"
+              "\tposition_derivative_slice_consistency_inf_norm"
+              "\tseries_force_derivative_slice_consistency_inf_norm\n";
     for (const auto& entry : diagnostics) {
         output << entry.held_torque_event_ordinal << '\t'
                << entry.time_seconds << '\t'
                << entry.state_derivative_inf_norm << '\t'
                << entry.generalized_force_residual_inf_norm << '\t'
-               << entry.virtual_power_residual_watts << '\n';
+               << entry.virtual_power_residual_watts << '\t'
+               << entry.position_derivative_slice_consistency_inf_norm << '\t'
+               << entry.series_force_derivative_slice_consistency_inf_norm << '\n';
     }
     CloseChecked(&output, path);
+}
+
+[[nodiscard]] nlohmann::json PhysicalObservationContract(
+    const configuration::AssembledVehicleSystem& assembled) {
+    constexpr std::array<std::string_view, kAxleCount> kAxles{"ff", "fr", "rf", "rr"};
+    constexpr std::array<std::string_view, kWheelCount> kWheels{
+        "ff_l", "ff_r", "fr_l", "fr_r", "rf_l", "rf_r", "rr_l", "rr_r"};
+    nlohmann::json carriers = nlohmann::json::array();
+    nlohmann::json interfaces = nlohmann::json::array();
+    for (std::size_t i = 0; i < kAxles.size(); ++i) {
+        const std::string suffix(kAxles[i]);
+        carriers.push_back({
+            {"name", assembled.contact_force_plan()->carrier_name(static_cast<int>(i))},
+            {"station_column", "station." + suffix},
+            {"lateral_column", "lateral." + suffix},
+            {"yaw_column", "source_body_yaw." + suffix},
+            {"yaw_basis", "physical_axle_bridge_source_body_relative_to_track_T"}});
+    }
+    for (std::size_t i = 0; i < kWheels.size(); ++i) {
+        const std::string suffix(kWheels[i]);
+        interfaces.push_back({
+            {"name", assembled.contact_force_plan()->interface_name(static_cast<int>(i))},
+            {"station_column", "rail_profile_reference_marker_track_station_meters." + suffix},
+            {"patch_count_column", "patch_count." + suffix},
+            {"normal_force_column", "N." + suffix},
+            {"support_force_column", "Q." + suffix},
+            {"force_columns", {{"x", "force_x." + suffix},
+                               {"y", "force_y." + suffix},
+                               {"z", "force_z." + suffix}}}});
+    }
+    return {{"schema_identifier", "orvd.qualification_physical_observations.v1"},
+            {"file", "observations.tsv"},
+            {"row_join_key", {"sample_index", "time_nanoseconds"}},
+            {"time_seconds_role", "audit_only"},
+            {"force_frame", "carrier_projection_track_T"},
+            {"carriers", std::move(carriers)}, {"interfaces", std::move(interfaces)}};
+}
+
+[[nodiscard]] nlohmann::json ComparisonEndpointDiagnostics(
+    const std::vector<ControlledEndpointDiagnostics>& diagnostics) {
+    double force = 0.0, power = 0.0, qdot = 0.0, series = 0.0;
+    for (const auto& entry : diagnostics) {
+        force = std::max(force, entry.generalized_force_residual_inf_norm);
+        power = std::max(power, std::abs(entry.virtual_power_residual_watts));
+        qdot = std::max(qdot, entry.position_derivative_slice_consistency_inf_norm);
+        series = std::max(series, entry.series_force_derivative_slice_consistency_inf_norm);
+    }
+    return {{"scope", "initial_and_all_arriving_hold_endpoints"},
+            {"generalized_force_residual_inf_norm", force},
+            {"absolute_virtual_power_residual_watts", power},
+            {"position_derivative_slice_consistency_inf_norm", qdot},
+            {"series_force_derivative_slice_consistency_inf_norm", series}};
 }
 
 void WriteMetadata(
@@ -689,10 +719,17 @@ void WriteMetadata(
     const configuration::AssembledVehicleSystem& assembled,
     const configuration::IrwFullStateControlEventSession& session,
     const IrwR300Aar5V60At100HzFullStateGuidanceRunSummary& summary,
-    const ResolvedTimeIntegratorQualificationNumerics& numerics,
+    const nlohmann::json& numerical_metadata,
     int contact_batch_parallel_team_probe_worker_count,
     std::string_view controller_identifier,
-    std::string_view conditioner_identifier) {
+    std::string_view conditioner_identifier,
+    const QualificationSampleClock& observation_clock,
+    const Eigen::Ref<const Eigen::VectorXd>& initial_state,
+    const std::vector<ControlledEndpointDiagnostics>& endpoint_diagnostics) {
+    const int requested_contact_worker_count = std::min(
+        {kMaximumContactWorkerCount,
+         assembled.contact_force_plan()->interface_count(),
+         omp_get_max_threads()});
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
@@ -700,6 +737,15 @@ void WriteMetadata(
     output << std::setprecision(17)
            << "{\n"
            << "  \"completed\": true,\n"
+           << "  \"artifact_schema_identifier\": \"orvd.controlled_vehicle_qualification.v1\",\n"
+           << "  \"continuous_state_observation_contract\": "
+           << ContinuousStateObservationContract(observation_clock).dump() << ",\n"
+           << "  \"comparison_state_contract\": "
+           << ComparisonStateContract(initial_state, summary.terminal_continuous_state).dump() << ",\n"
+           << "  \"physical_observation_contract\": "
+           << PhysicalObservationContract(assembled).dump() << ",\n"
+           << "  \"comparison_endpoint_diagnostics\": "
+           << ComparisonEndpointDiagnostics(endpoint_diagnostics).dump() << ",\n"
            << "  \"qualification_vehicle_recipe\": "
            << JsonString(
                   "IRW_R300_AAR5_V60_100HZ_FULL_STATE_WHEEL_SPEED_GUIDANCE")
@@ -771,38 +817,15 @@ void WriteMetadata(
            << assembled.contact_force_plan()->body_wrench_count()
            << ", \"active_torque_body_wrench_count\": "
            << assembled.active_torque_plan()->body_wrench_count() << "},\n"
-           << "  \"numerical_execution_contract\": {\n"
-           << "    \"qualification_case_identifier\": ";
-    if (numerics.qualification_case.has_value()) {
-        output << JsonString(numerics.qualification_case_identifier);
-    } else {
-        output << "null";
+           << "  \"numerical_execution_contract\": {\n";
+    for (const auto& [key, value] : numerical_metadata.items()) {
+        output << "    " << JsonString(key) << ": ";
+        // Preserve the existing scalar double text contract (17 digits).
+        if (value.is_number_float()) output << value.get<double>();
+        else output << value.dump();
+        output << ",\n";
     }
-    output << ",\n"
-           << "    \"tolerance_tier_identifier\": "
-           << JsonString(numerics.tolerance_tier_identifier) << ",\n"
-           << "    \"tolerance_scale_from_scenario_recipe\": "
-           << numerics.tolerance_scale_from_scenario_recipe << ",\n"
-           << "    \"integrator_recipe_identifier\": "
-           << JsonString(std::string(
-                  integrators::internal::IntegrationRecipeIdentifier(
-                      summary.integration_recipe)))
-           << ",\n"
-           << "    \"maximum_bdf_order\": ";
-    if (summary.maximum_bdf_order.has_value()) {
-        output << *summary.maximum_bdf_order;
-    } else {
-        output << "null";
-    }
-    output << ",\n"
-           << "    \"relative_tolerance\": "
-           << numerics.relative_tolerance << ",\n"
-           << "    \"generalized_position_absolute_tolerance\": "
-           << numerics.generalized_position_absolute_tolerance << ",\n"
-           << "    \"generalized_velocity_absolute_tolerance\": "
-           << numerics.generalized_velocity_absolute_tolerance << ",\n"
-           << "    \"series_force_absolute_tolerance_newtons\": "
-           << numerics.series_force_absolute_tolerance_newtons << ",\n"
+    output
            << "    \"floating_point_compilation_contract\": {\n"
            << "      \"identifier\": "
            << JsonString(
@@ -820,6 +843,10 @@ void WriteMetadata(
            << JsonString(internal::kQualificationCxxCompilerVersion)
            << "\n"
            << "    },\n"
+           << "    \"contact_batch_worker_cap\": "
+           << kMaximumContactWorkerCount << ",\n"
+           << "    \"contact_batch_requested_worker_count\": "
+           << requested_contact_worker_count << ",\n"
            << "    \"contact_batch_parallel_team_probe_worker_count\": "
            << contact_batch_parallel_team_probe_worker_count << "\n"
            << "  },\n"
@@ -870,7 +897,7 @@ void WritePerformance(
            << "{\n"
            << "  \"integrator_recipe_identifier\": "
            << JsonString(std::string(
-                  integrators::internal::IntegrationRecipeIdentifier(
+                  dynamics_qualification::IntegrationRecipeIdentifier(
                       summary.integration_recipe)))
            << ",\n"
            << "  \"qualification_case_identifier\": ";
@@ -915,6 +942,8 @@ void WritePerformance(
            << summary.maximum_generalized_force_residual_inf_norm << ",\n"
            << "  \"maximum_absolute_virtual_power_residual_watts\": "
            << summary.maximum_absolute_virtual_power_residual_watts << ",\n"
+           << "  \"numerical_timings\": " << summary.numerical_timings.ToJson().dump() << ",\n"
+           << "  \"integration_work\": " << summary.integration_work.ToJson().dump() << ",\n"
            << "  \"integration_statistics\": {"
            << "\"successful_internal_step_count\": "
            << stats.successful_internal_step_count
@@ -946,6 +975,9 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     const ResolvedConfiguration resolved = ResolveConfiguration(input);
     const int contact_batch_parallel_team_probe_worker_count =
         internal::RequireRealContactBatchParallelTeam();
+    const auto integration_request = RequestIntegrationConfiguration(
+        input.integration_config_path, input.time_integrator_qualification_case);
+    RequireFailureResultDestinationAvailable(resolved.output_directory);
     AtomicQualificationDirectory output_directory(
         resolved.output_directory);
     const auto vehicle = configuration::LoadVehicleDefinitionFromJsonFile(
@@ -1044,35 +1076,40 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     constexpr auto& numerical_recipe =
         internal::
             kIrwR300Aar5V60At100HzFullStateGuidanceIntegrationRecipe;
-    const ResolvedTimeIntegratorQualificationNumerics numerics =
-        ResolveTimeIntegratorQualificationNumerics(
-            input.time_integrator_qualification_case,
-            numerical_recipe.default_integration_recipe,
+    Eigen::VectorXd integration_initial_state(assembled.system().continuous_state_size());
+    assembled.system().CopyContinuousState(accepted, integration_initial_state);
+    auto numerics = ResolveIntegrationConfiguration(
+        integration_request, assembled, integration_initial_state,
+        ScenarioOdeDefaults{numerical_recipe.default_integration_recipe,
             numerical_recipe.relative_tolerance,
             numerical_recipe.position_absolute_tolerance,
             numerical_recipe.velocity_absolute_tolerance,
-            numerical_recipe.series_force_absolute_tolerance_newtons);
-    const auto requested_integration_recipe = numerics.integration_recipe;
-    auto advancer =
-        integrators::internal::SystemContinuousStateIntegrationAccess::Make(
-            requested_integration_recipe, assembled.system(),
-            assembled.compiled_plan(), accepted,
-            MakeTolerances(assembled, numerics),
-            integrators::NoCallTimeAppliedForces{});
+            numerical_recipe.series_force_absolute_tolerance_newtons});
+    AddQualificationBudgetEstimate(numerics.metadata, numerics.step_size_nanoseconds,
+        static_cast<std::uint64_t>(kEventPeriodNanoseconds), terminal_event_ordinal,
+        numerics.configuration.maximum_internal_steps_per_advance);
+    auto failure_metadata = numerics.metadata;
+    failure_metadata["input_paths"] = {
+        {"vehicle_definition", resolved.vehicle_definition_path.string()},
+        {"resolved_startup_state", resolved.resolved_startup_state_path.string()},
+        {"track_geometry", resolved.track_geometry_path.string()},
+        {"orvd_data_root", resolved.orvd_data_root.string()},
+        {"controller_configuration", resolved.controller_configuration_path.string()},
+        {"torque_conditioner_configuration", resolved.torque_conditioner_configuration_path.string()}};
+    failure_metadata["track_irregularity_identifier"] = kIrregularityIdentifier;
+    failure_metadata["sample_period_nanoseconds"] = kObservationPeriodNanoseconds;
+    QualificationIntegrationRun integration(resolved.output_directory, std::move(failure_metadata),
+        std::move(numerics.configuration), assembled, accepted,
+        observation_clock.terminal_time_seconds());
     const auto actual_integration_recipe =
-        integrators::internal::SystemContinuousStateIntegrationAccess::
-            ConfiguredRecipe(*advancer);
-    if (actual_integration_recipe != requested_integration_recipe) {
-        Reject("the constructed integrator does not match the controlled "
-               "qualification integration recipe");
-    }
+        ParseIntegrationMethod(integration.advancer().method_identifier());
     IrwR300Aar5V60At100HzFullStateGuidanceRunSummary summary(
         actual_integration_recipe);
     summary.control_wall_seconds = startup_control_wall_seconds;
     summary.time_integrator_qualification_case =
-        numerics.qualification_case;
+        numerics.ode_numerics ? numerics.ode_numerics->qualification_case : std::nullopt;
     summary.maximum_bdf_order =
-        integrators::internal::MaximumBdfOrderForRecipe(
+        dynamics_qualification::MaximumBdfOrderForRecipe(
             summary.integration_recipe);
     event_session.ConfirmBackendSynchronized();
 
@@ -1108,6 +1145,18 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         &series_derivatives));
     summary.observation_wall_seconds +=
         ElapsedSeconds(initial_observation_begin, Clock::now());
+    // Persist only the already requested dense samples, outside all numerical
+    // and observation timing scopes. Adjacent event boundaries are written once.
+    const Clock::time_point state_writer_begin = Clock::now();
+    QualificationContinuousStateWriter state_writer(
+        output_directory.working_path() / "continuous_states.tsv",
+        observation_clock, observation_times_seconds,
+        assembled.model().num_generalized_positions(),
+        assembled.model().num_generalized_velocities(),
+        assembled.force_plan().series_spring_damper_force_state_count());
+    state_writer.Append(0, initial_state);
+    summary.data_and_metadata_write_wall_seconds +=
+        ElapsedSeconds(state_writer_begin, Clock::now());
     std::size_t dense_state_peak_bytes{};
     for (std::uint64_t ordinal = 1; ordinal <= terminal_event_ordinal;
          ++ordinal) {
@@ -1117,18 +1166,21 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         const std::span<const double> interval_sample_times(
             observation_times_seconds.data() + interval_begin,
             static_cast<std::size_t>(kObservationsPerEventPeriod + 1U));
-        const Clock::time_point advance_begin = Clock::now();
         const Eigen::MatrixXd dense_states =
-            advancer->AdvanceToWithDenseStateSamples(
+            integration.Advance(
                 event_session.next_periodic_event_time_seconds(),
                 interval_sample_times);
-        summary.advance_and_synchronization_wall_seconds +=
-            ElapsedSeconds(advance_begin, Clock::now());
         dense_state_peak_bytes = std::max(
             dense_state_peak_bytes,
             static_cast<std::size_t>(dense_states.size()) * sizeof(double));
-        AccumulateStatistics(advancer->integration_statistics(),
-                             &summary.integration_statistics);
+        const Clock::time_point state_write_begin = Clock::now();
+        for (std::uint64_t local_sample = 1;
+             local_sample <= kObservationsPerEventPeriod; ++local_sample) {
+            state_writer.Append(interval_begin + static_cast<std::size_t>(local_sample),
+                dense_states.col(static_cast<Eigen::Index>(local_sample)));
+        }
+        summary.data_and_metadata_write_wall_seconds +=
+            ElapsedSeconds(state_write_begin, Clock::now());
         const Clock::time_point observation_begin = Clock::now();
         for (std::uint64_t local_sample = 1;
              local_sample <= kObservationsPerEventPeriod; ++local_sample) {
@@ -1163,15 +1215,18 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         summary.control_wall_seconds +=
             ElapsedSeconds(control_begin, Clock::now());
         if (ordinal < terminal_event_ordinal) {
-            const Clock::time_point synchronization_begin = Clock::now();
-            advancer->SynchronizeAfterAcceptedContextChange();
-            summary.advance_and_synchronization_wall_seconds +=
-                ElapsedSeconds(synchronization_begin, Clock::now());
+            integration.Synchronize();
             event_session.ConfirmBackendSynchronized();
             ++summary.backend_synchronization_count;
         }
     }
 
+    summary.integration_statistics = integration.ledger().total_statistics();
+    summary.integration_work = integration.ledger();
+    summary.numerical_timings = integration.timings();
+    summary.advance_and_synchronization_wall_seconds =
+        summary.numerical_timings.advance_wall_seconds +
+        summary.numerical_timings.synchronization_wall_seconds;
     summary.observation_count = observations.size();
     summary.control_audit_count = audits.size();
     summary.positive_hold_interval_count =
@@ -1191,6 +1246,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     }
 
     const Clock::time_point write_begin = Clock::now();
+    state_writer.Close();
     WriteControlAudits(output_directory.working_path() / "control_events.tsv",
                        audits);
     WriteObservations(output_directory.working_path() / "observations.tsv",
@@ -1203,9 +1259,10 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         endpoint_diagnostics);
     WriteMetadata(output_directory.working_path() / "metadata.json",
                   resolved, startup, assembled, event_session, summary,
-                  numerics,
+                  numerics.metadata,
                   contact_batch_parallel_team_probe_worker_count,
-                  controller_identifier, conditioner_identifier);
+                  controller_identifier, conditioner_identifier,
+                  observation_clock, integration_initial_state, endpoint_diagnostics);
     const std::filesystem::path complete_path =
         output_directory.working_path() / "COMPLETE";
     std::ofstream complete(complete_path, std::ios::out | std::ios::trunc);
@@ -1215,7 +1272,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     complete << summary.observation_count << " controlled observations\n";
     CloseChecked(&complete, complete_path);
     const Clock::time_point write_end = Clock::now();
-    summary.data_and_metadata_write_wall_seconds =
+    summary.data_and_metadata_write_wall_seconds +=
         ElapsedSeconds(write_begin, write_end);
     WritePerformance(
         output_directory.working_path() / "performance.json", summary,

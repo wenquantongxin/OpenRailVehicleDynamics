@@ -12,6 +12,7 @@ add_library(orvd_integrators STATIC
     src/cvode_continuous_state_advancer.cc
     src/radau5_continuous_state_advancer.cc
     src/newmark_continuous_state_advancer.cc
+    src/newmark_coordinate_layout.cc
     src/zhai_continuous_state_advancer.cc
     src/system_continuous_state_backend.cc
     src/system_continuous_state_advancer.cc

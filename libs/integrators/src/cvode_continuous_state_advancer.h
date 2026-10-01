@@ -12,15 +12,17 @@
 namespace orvd::integrators {
 
 namespace internal {
-class BdfIntegrationAccess;
 class DenseFiniteDifferenceJacobianRegistration;
-enum class MaximumBdfOrder : int;
+enum class MaximumBdfOrder : int { kSecond = 2, kFifth = 5 };
+[[nodiscard]] constexpr int MaximumBdfOrderValue(MaximumBdfOrder order) noexcept {
+    return static_cast<int>(order);
+}
 }
 
 /// Advances one positive-dimensional continuous state with SUNDIALS CVODE.
 ///
-/// The numerical method is fixed to the admitted first-backend configuration:
-/// double precision, a serial vector, BDF, and a dense finite-difference
+/// Source-private BDF backend with an explicitly selected maximum order.
+/// Uses double precision, a serial vector, and a dense finite-difference
 /// Jacobian. `rhs` is borrowed and must outlive this object. SUNDIALS types and
 /// storage do not enter the public interface.
 class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
@@ -29,7 +31,8 @@ class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
         ContinuousStateRhs& rhs,
         double initial_time_seconds,
         Eigen::VectorXd initial_continuous_state,
-        ContinuousStateErrorTolerances tolerances);
+        ContinuousStateErrorTolerances tolerances,
+        internal::MaximumBdfOrder maximum_bdf_order);
     ~CvodeContinuousStateAdvancer() override;
 
     CvodeContinuousStateAdvancer(const CvodeContinuousStateAdvancer&) = delete;
@@ -58,16 +61,11 @@ class CvodeContinuousStateAdvancer final : public ContinuousStateAdvancer {
         double time_seconds,
         Eigen::Ref<Eigen::VectorXd> continuous_state) const override;
 
-   private:
-    friend class internal::BdfIntegrationAccess;
-    friend class internal::DenseFiniteDifferenceJacobianRegistration;
+    [[nodiscard]] int configured_maximum_bdf_order() const;
+    [[nodiscard]] int last_bdf_order() const;
 
-    CvodeContinuousStateAdvancer(
-        ContinuousStateRhs& rhs,
-        double initial_time_seconds,
-        Eigen::VectorXd initial_continuous_state,
-        ContinuousStateErrorTolerances tolerances,
-        internal::MaximumBdfOrder maximum_bdf_order);
+   private:
+    friend class internal::DenseFiniteDifferenceJacobianRegistration;
 
     class Implementation;
     std::unique_ptr<Implementation> implementation_;

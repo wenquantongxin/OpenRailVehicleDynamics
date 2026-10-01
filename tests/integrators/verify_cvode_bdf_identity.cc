@@ -6,15 +6,14 @@
 
 #include <Eigen/Dense>
 
-#include "bdf_integration_access.h"
-#include "orvd/integrators/cvode_continuous_state_advancer.h"
+#include "cvode_continuous_state_advancer.h"
 
 namespace {
 
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::ContinuousStateRhs;
 using orvd::integrators::CvodeContinuousStateAdvancer;
-using orvd::integrators::internal::BdfIntegrationAccess;
+using orvd::integrators::internal::MaximumBdfOrder;
 
 int failure_count = 0;
 
@@ -92,7 +91,7 @@ int AdvanceFullyAndObserveMaximumOrder(
             stop_time_seconds, endpoint);
         maximum_observed_order = std::max(
             maximum_observed_order,
-            BdfIntegrationAccess::LastBdfOrder(advancer));
+            advancer.last_bdf_order());
         if (result.reached_stop) return maximum_observed_order;
     }
     Expect(false, "the BDF identity test exceeded its internal-step guard");
@@ -108,43 +107,40 @@ void CheckPerInstanceBdfOrderIdentity() {
 
     LinearOscillatorRhs default_rhs(kAngularFrequency);
     CvodeContinuousStateAdvancer default_advancer(
-        default_rhs, kInitialTime, initial_state, MakeTolerances());
+        default_rhs, kInitialTime, initial_state, MakeTolerances(), MaximumBdfOrder::kSecond);
     Expect(default_advancer.integration_statistics()
                    .requested_dense_finite_difference_jacobian_worker_count ==
                1,
-           "the public CVODE recipe retains its serial Jacobian identity");
-    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
-               default_advancer) == 2,
-           "the public CVODE construction retains the second-order identity");
+           "the second-order CVODE recipe retains its serial Jacobian identity");
+    Expect((default_advancer).configured_maximum_bdf_order() == 2,
+           "the second-order CVODE construction retains the second-order identity");
     const int maximum_default_order = AdvanceFullyAndObserveMaximumOrder(
         default_advancer, kFirstTargetTime);
     Expect(maximum_default_order > 0 && maximum_default_order <= 2,
-           "the public CVODE instance never exceeds second order");
+           "the second-order CVODE instance never exceeds second order");
     Eigen::VectorXd default_first_endpoint(2);
     default_advancer.CopyCurrentState(default_first_endpoint);
     default_advancer.ReinitializeAfterExternalChange(
         kFirstTargetTime, default_first_endpoint);
-    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
-               default_advancer) == 2,
+    Expect((default_advancer).configured_maximum_bdf_order() == 2,
            "CVODE reinitialization preserves the second-order identity");
     const int maximum_reinitialized_default_order =
         AdvanceFullyAndObserveMaximumOrder(default_advancer,
                                            kSecondTargetTime);
     Expect(maximum_reinitialized_default_order > 0 &&
                maximum_reinitialized_default_order <= 2,
-           "the reinitialized public CVODE instance remains second order");
+           "the reinitialized second-order CVODE instance remains second order");
 
     LinearOscillatorRhs fifth_order_rhs(kAngularFrequency);
     std::unique_ptr<CvodeContinuousStateAdvancer> fifth_order_advancer =
-        BdfIntegrationAccess::MakeFifthOrderCvodeContinuousStateAdvancer(
-            fifth_order_rhs, kInitialTime, initial_state, MakeTolerances());
+        std::make_unique<CvodeContinuousStateAdvancer>(
+            fifth_order_rhs, kInitialTime, initial_state, MakeTolerances(), MaximumBdfOrder::kFifth);
     Expect(fifth_order_advancer->integration_statistics()
                    .requested_dense_finite_difference_jacobian_worker_count ==
                1,
-           "the private CVODE recipe retains its serial Jacobian identity");
-    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
-               *fifth_order_advancer) == 5,
-           "the private CVODE construction retains the fifth-order identity");
+           "the fifth-order CVODE recipe retains its serial Jacobian identity");
+    Expect((*fifth_order_advancer).configured_maximum_bdf_order() == 5,
+           "the fifth-order CVODE construction retains the fifth-order identity");
     const int maximum_fifth_order = AdvanceFullyAndObserveMaximumOrder(
         *fifth_order_advancer, kFirstTargetTime);
     Expect(maximum_fifth_order >= 3 && maximum_fifth_order <= 5,
@@ -159,8 +155,7 @@ void CheckPerInstanceBdfOrderIdentity() {
 
     fifth_order_advancer->ReinitializeAfterExternalChange(
         kFirstTargetTime, first_endpoint);
-    Expect(BdfIntegrationAccess::ConfiguredMaximumBdfOrder(
-               *fifth_order_advancer) == 5,
+    Expect((*fifth_order_advancer).configured_maximum_bdf_order() == 5,
            "CVODE reinitialization preserves the fifth-order identity");
     const int maximum_reinitialized_order = AdvanceFullyAndObserveMaximumOrder(
         *fifth_order_advancer, kSecondTargetTime);

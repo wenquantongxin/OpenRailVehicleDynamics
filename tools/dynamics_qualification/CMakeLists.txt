@@ -6,7 +6,12 @@ add_library(orvd_dynamics_qualification_support STATIC
     gz18_qualification_runner.cc
     irw_passive_scenario_recipe_dispatch.cc
     irw_r300_aar5_v60_100hz_full_state_guidance_runner.cc
+    qualification_continuous_state_writer.cc
+    qualification_integration_configuration.cc
+    qualification_integration_run.cc
+    qualification_run_accounting.cc
     qualification_sample_clock.cc
+    qualification_state_layout.cc
     station_series_projection.cc
     vehicle_qualification_runner.cc)
 
@@ -29,12 +34,11 @@ target_compile_definitions(orvd_dynamics_qualification_support PRIVATE
 
 target_include_directories(orvd_dynamics_qualification_support
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/libs/integrators/src>)
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(orvd_dynamics_qualification_support
-    PUBLIC orvd_configuration orvd_integrators orvd_scene_record
-    PRIVATE OpenMP::OpenMP_CXX nlohmann_json::nlohmann_json)
+    PUBLIC orvd_configuration orvd_integrators orvd_scene_record nlohmann_json::nlohmann_json
+    PRIVATE OpenMP::OpenMP_CXX)
 
 add_executable(orvd_gz18_dynamics_qualification
     run_gz18_qualification.cc)

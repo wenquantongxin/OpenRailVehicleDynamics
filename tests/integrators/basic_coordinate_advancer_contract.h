@@ -12,6 +12,7 @@
 #include "coordinate_step_time.h"
 #include "newmark_continuous_state_advancer.h"
 #include "newmark_core.h"
+#include "newmark_coordinate_layout.h"
 #include "system_coordinate_problem.h"
 #include "zhai_continuous_state_advancer.h"
 #include "zhai_core.h"
@@ -90,16 +91,10 @@ struct SimpleSystem {
 template <typename Adapter>
 auto ConfigurationFor(const SystemCoordinateProblem& problem, double h) {
     if constexpr (std::is_same_v<Adapter, NewmarkContinuousStateAdvancer>) {
-        NewmarkConfiguration result;
-        result.step_size_seconds = h;
-        auto& solver = result.nonlinear_solver;
-        solver.position_correction_scales = Eigen::VectorXd::Constant(problem.coordinate_size(), 1e-12);
-        solver.velocity_correction_scales = solver.position_correction_scales;
-        solver.acceleration_residual_scales = solver.position_correction_scales;
-        solver.internal_state_correction_scales = Eigen::VectorXd::Constant(problem.internal_state_size(), 1e-12);
-        solver.internal_state_residual_scales = solver.internal_state_correction_scales;
-        solver.unknown_reference_scales = Eigen::VectorXd::Ones(problem.coordinate_size() + problem.internal_state_size());
-        return result;
+        static_cast<void>(problem);
+        return NewmarkConfiguration{h, {12, {1e-12, 1e-12, 1e-12, 1.0},
+            {1e-12, 1e-12, 1e-12, 1.0}, {1e-12, 1e-12, 1e-12, 1.0},
+            {1e-12, 1e-12, 1.0}}};
     } else {
         return ZhaiConfiguration{h};
     }
@@ -282,7 +277,15 @@ void CheckExplicitCoreClock() {
     using Core = std::conditional_t<std::is_same_v<Adapter, NewmarkContinuousStateAdvancer>, NewmarkCore, ZhaiCore>;
     SimpleSystem fixture;
     const auto initial = fixture.problem->MakeCoordinateState(0.0, Eigen::Vector2d::Zero());
-    Core core(*fixture.problem, ConfigurationFor<Adapter>(*fixture.problem, 0.1), initial);
+    const auto core_configuration = [&] {
+        if constexpr (std::is_same_v<Core, NewmarkCore>) {
+            return NewmarkCoordinateLayout(fixture.problem->model(), fixture.problem->internal_state_size())
+                .Expand(ConfigurationFor<Adapter>(*fixture.problem, 0.1), initial.q);
+        } else {
+            return ConfigurationFor<Adapter>(*fixture.problem, 0.1);
+        }
+    }();
+    Core core(*fixture.problem, core_configuration, initial);
     core.AdvanceOneStep();
     core.AdvanceOneStep();
     core.AdvanceOneStep(0.1, 0.3);
@@ -387,8 +390,13 @@ inline void CheckNewmarkSingularFailureClassification() {
     inertia.unit_inertia_products.setZero();
     for (const std::string name : {"first", "second"}) {
         const auto body = model.AddRigidBody(name, inertia);
-        model.AddPrismaticJoint(name + "_slide", model.world_frame(), model.body_frame(body),
-                                Eigen::Vector3d::UnitX(), 1.0);
+        if (name == "first") {
+            model.AddPrismaticJoint(name + "_slide", model.world_frame(), model.body_frame(body),
+                                    Eigen::Vector3d::UnitX(), 1.0);
+        } else {
+            model.AddRevoluteJoint(name + "_hinge", model.world_frame(), model.body_frame(body),
+                                   Eigen::Vector3d::UnitX(), 1.0);
+        }
     }
     model.SetGravityVector(Eigen::Vector3d::Zero());
     model.Finalize();
@@ -398,10 +406,10 @@ inline void CheckNewmarkSingularFailureClassification() {
     auto trial = system.CreateDefaultRuntimeContext(0.0);
     SystemCoordinateProblem problem(system, plan, *trial, NoCallTimeAppliedForces{});
     auto configuration = ConfigurationFor<NewmarkContinuousStateAdvancer>(problem, 0.1);
-    // The physical Jacobian is diagonal, with both entries 1 + h/2. These
+    // The physical Jacobian is diagonal with finite positive entries. These
     // positive finite scales deliberately make its scaled LU lose numerical
     // rank, exercising the real factorization failure without a test hook.
-    configuration.nonlinear_solver.acceleration_residual_scales[1] = 1e20;
+    configuration.nonlinear_solver.angle.acceleration_residual = 1e20;
     const Eigen::VectorXd initial = (Eigen::Vector4d() << 0.0, 0.0, 1.0, 1.0).finished();
     NewmarkContinuousStateAdvancer adapter(problem, 0.0, initial, configuration);
     Eigen::VectorXd output = Eigen::VectorXd::Constant(4, 43.0);

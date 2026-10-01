@@ -6,6 +6,10 @@
 
 #include "coordinate_second_order_problem.h"
 
+namespace orvd::multibody_model {
+class MultibodyModel;
+}
+
 namespace orvd::integrators::internal {
 
 // Source-private coordinate view of the same compiled physics as SystemRhsBridge.
@@ -42,6 +46,7 @@ class SystemCoordinateProblem final : public CoordinateSecondOrderProblem {
     SystemCoordinateProblem(SystemCoordinateProblem&&) = delete;
     SystemCoordinateProblem& operator=(SystemCoordinateProblem&&) = delete;
 
+    [[nodiscard]] const multibody_model::MultibodyModel& model() const;
     [[nodiscard]] int coordinate_size() const override;
     [[nodiscard]] int internal_state_size() const override;
     [[nodiscard]] int physical_state_size() const;

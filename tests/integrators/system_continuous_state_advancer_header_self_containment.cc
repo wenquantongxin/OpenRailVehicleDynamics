@@ -8,3 +8,11 @@ static_assert(!std::is_copy_constructible_v<SystemContinuousStateAdvancer>);
 static_assert(!std::is_copy_assignable_v<SystemContinuousStateAdvancer>);
 static_assert(!std::is_move_constructible_v<SystemContinuousStateAdvancer>);
 static_assert(!std::is_move_assignable_v<SystemContinuousStateAdvancer>);
+
+static_assert(!std::is_constructible_v<SystemContinuousStateAdvancer,
+    const orvd::system_assembly::SystemInstance&,
+    const orvd::system_assembly::CompiledSystemPlan&,
+    orvd::system_assembly::SystemRuntimeContext&,
+    orvd::integrators::ContinuousStateErrorTolerances,
+    orvd::integrators::NoCallTimeAppliedForces>);
+static_assert(!std::is_default_constructible_v<orvd::integrators::SystemIntegrationConfiguration>);

@@ -58,6 +58,10 @@
 
 namespace orvd::multibody_model {
 
+/// Semantic joint family exposed by the model construction interface. Free
+/// bodies are identified separately by IsFreeBody().
+enum class JointType { kRevolute, kPrismatic, kBallRpy, kWeld };
+
 class MultibodyModel {
    public:
     MultibodyModel();
@@ -284,6 +288,10 @@ class MultibodyModel {
     [[nodiscard]] std::string_view GetRigidBodyName(RigidBodyHandle body) const;
     [[nodiscard]] std::string_view GetFrameName(FrameHandle frame) const;
     [[nodiscard]] std::string_view GetJointName(JointHandle joint) const;
+
+    /// Returns the declared joint family. Requires a finalized model and a
+    /// joint handle belonging to this model.
+    [[nodiscard]] JointType GetJointType(JointHandle joint) const;
 
     /// Whether this body was declared to move freely in the world.
     [[nodiscard]] bool IsFreeBody(RigidBodyHandle body) const;

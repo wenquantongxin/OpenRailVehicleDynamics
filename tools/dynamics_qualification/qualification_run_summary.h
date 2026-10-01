@@ -6,8 +6,9 @@
 #include <Eigen/Core>
 
 #include "orvd/integrators/continuous_state_advancer.h"
-#include "system_continuous_state_integration_recipe.h"
+#include "qualification_integration_method.h"
 #include "time_integrator_qualification_case.h"
+#include "qualification_run_accounting.h"
 
 namespace orvd::dynamics_qualification {
 
@@ -15,12 +16,12 @@ namespace orvd::dynamics_qualification {
 // public vehicle-simulation or observation contract.
 struct QualificationRunSummary final {
     explicit QualificationRunSummary(
-        integrators::internal::SystemContinuousStateIntegrationRecipe
+        dynamics_qualification::QualificationIntegrationMethod
             integration_recipe_value)
         : integration_recipe(integration_recipe_value) {}
     QualificationRunSummary() = delete;
 
-    integrators::internal::SystemContinuousStateIntegrationRecipe
+    dynamics_qualification::QualificationIntegrationMethod
         integration_recipe;
     std::optional<TimeIntegratorQualificationCase>
         time_integrator_qualification_case;
@@ -40,6 +41,8 @@ struct QualificationRunSummary final {
     double endpoint_position_derivative_slice_consistency_inf_norm{};
     double endpoint_series_force_derivative_slice_consistency_inf_norm{};
     integrators::ContinuousStateIntegrationStatistics integration_statistics;
+    QualificationIntegrationWorkLedger integration_work;
+    QualificationRunTimings numerical_timings;
     Eigen::VectorXd terminal_continuous_state;
     bool used_before_track_definition_interval{false};
     bool used_after_track_definition_interval{false};

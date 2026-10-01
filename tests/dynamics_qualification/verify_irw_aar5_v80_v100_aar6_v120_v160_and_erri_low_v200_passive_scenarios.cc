@@ -185,6 +185,77 @@ struct ScenarioExpectation final {
     std::string_view output_stem;
 };
 
+void CheckMechanicalConfigurationPassthrough(
+    const IrwPassiveScenarioRunConfiguration& physical_configuration) {
+    using Recipe = orvd::dynamics_qualification::
+        QualificationIntegrationMethod;
+    for (const std::string method : {"newmark", "zhai"}) {
+        auto configuration = physical_configuration;
+        configuration.integration_config_path =
+            configuration.orvd_data_root /
+            "tools/dynamics_qualification/integration_configurations" /
+            (method + "_explicit_trial.json");
+        configuration.duration_nanoseconds = 25'000;
+        configuration.sample_period_nanoseconds = 25'000;
+        configuration.output_directory =
+            physical_configuration.output_directory.string() + "-" + method;
+        const auto summary = RunIrwPassiveScenario(configuration);
+        Require(summary.sample_count == 2 &&
+                    summary.integration_recipe ==
+                        (method == "newmark" ? Recipe::kNewmark : Recipe::kZhai) &&
+                    summary.integration_statistics.successful_internal_step_count == 1 &&
+                    summary.terminal_continuous_state.size() == 81 + 74 + 2 &&
+                    summary.terminal_continuous_state.allFinite(),
+                "a mechanical configuration did not run one finite IRW step");
+        const auto metadata = nlohmann::json::parse(
+            ReadWholeFile(configuration.output_directory / "metadata.json"));
+        const auto& contract = metadata.at("numerical_execution_contract");
+        const auto& layout = contract.at("coordinate_layout");
+        Require(contract.at("integrator_recipe_identifier") == method &&
+                    contract.at("step_size_nanoseconds") == 25'000 &&
+                    contract.at("step_size_seconds") == 25'000.0 * 1e-9 &&
+                    layout.at("physical_positions").at("start") == 0 &&
+                    layout.at("physical_positions").at("size") == 81 &&
+                    layout.at("physical_velocities").at("start") == 81 &&
+                    layout.at("physical_velocities").at("size") == 74 &&
+                    layout.at("internal_state").at("start") == 155 &&
+                    layout.at("internal_state").at("size") == 2,
+                "mechanical metadata lost the requested step or actual IRW binding");
+        if (method == "newmark") {
+            const auto& scales = contract.at("newton").at("scales");
+            Require(scales.size() == 4 && scales.contains("quaternion") &&
+                        scales.contains("force") && !contract.at("newton").contains("expanded_scales"),
+                    "Newmark metadata must declare families without private arrays");
+        } else {
+            Require(contract.at("newton").is_null(),
+                    "Zhai acquired a Newton configuration");
+        }
+        std::ifstream states(configuration.output_directory / "continuous_states.tsv");
+        std::string line;
+        std::getline(states, line);
+        std::size_t rows = 0;
+        while (std::getline(states, line)) {
+            std::size_t begin = 0;
+            std::size_t columns = 0;
+            while (true) {
+                const auto end = line.find('\t', begin);
+                const auto field = line.substr(begin, end - begin);
+                std::size_t consumed = 0;
+                const double value = std::stod(field, &consumed);
+                Require(consumed == field.size() && std::isfinite(value),
+                        "a mechanical IRW sample contains a non-finite field");
+                ++columns;
+                if (end == std::string::npos) break;
+                begin = end + 1;
+            }
+            Require(columns == 3 + 81 + 74 + 2,
+                    "a mechanical IRW state sample has the wrong layout");
+            ++rows;
+        }
+        Require(rows == 2, "a mechanical IRW run did not publish two state samples");
+    }
+}
+
 void CheckScenario(const ScenarioExpectation& expected,
                    const std::filesystem::path& vehicle,
                    const std::filesystem::path& data_root,
@@ -203,8 +274,8 @@ void CheckScenario(const ScenarioExpectation& expected,
     const auto summary = RunIrwPassiveScenario(configuration);
     Require(summary.sample_count == 2 && summary.maximum_bdf_order == 5 &&
                 summary.integration_recipe ==
-                    orvd::integrators::internal::
-                        SystemContinuousStateIntegrationRecipe::kCvodeBdf5,
+                    orvd::dynamics_qualification::
+                        QualificationIntegrationMethod::kCvodeBdf5,
             "a declared scenario did not run with its fifth-order recipe");
 
     const nlohmann::json metadata = nlohmann::json::parse(
@@ -237,6 +308,8 @@ void CheckScenario(const ScenarioExpectation& expected,
                         .get<std::string>()) ==
                     std::filesystem::canonical(expected.startup),
             "metadata did not retain the resolved line and start-up inputs");
+
+    CheckMechanicalConfigurationPassthrough(configuration);
 
     IrwPassiveScenarioRunConfiguration invalid = configuration;
     invalid.track_geometry_path = expected.different_geometry;

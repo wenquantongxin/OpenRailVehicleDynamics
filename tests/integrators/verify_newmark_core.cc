@@ -18,7 +18,7 @@ namespace {
 using orvd::integrators::internal::CoordinateIntegrationFailure;
 using orvd::integrators::internal::CoordinateSecondOrderProblem;
 using orvd::integrators::internal::CoordinateState;
-using orvd::integrators::internal::NewmarkConfiguration;
+using orvd::integrators::internal::NewmarkCoreConfiguration;
 using orvd::integrators::internal::NewmarkCore;
 using namespace orvd::integrators::internal::testing;
 using ConstVector = const Eigen::Ref<const Eigen::VectorXd>&;
@@ -60,9 +60,9 @@ void ExpectFailure(Operation&& operation,
     Expect(caught, message);
 }
 
-NewmarkConfiguration Configuration(const CoordinateSecondOrderProblem& problem,
+NewmarkCoreConfiguration Configuration(const CoordinateSecondOrderProblem& problem,
                                     double step, double tolerance = 1e-11) {
-    NewmarkConfiguration result;
+    NewmarkCoreConfiguration result;
     result.step_size_seconds = step;
     auto& solver = result.nonlinear_solver;
     solver.position_correction_scales =
@@ -409,9 +409,17 @@ void VerifyFailedReinitializationTransaction() {
     auto replacement = quaternion.ExactState(0.37);
     replacement.q *= 2.4 / replacement.q.norm();
     replacement.s *= 2.4 / quaternion.InitialState().q.norm();
+    auto replacement_configuration = Configuration(observed, 0.01, 3e-11);
+    replacement_configuration.nonlinear_solver.unknown_reference_scales.setConstant(7.0);
+    const auto old_configuration = core.configuration();
     fail_evaluation = true;
-    ExpectThrows<InitialEvaluationFailure>([&] { core.Reinitialize(replacement); },
+    ExpectThrows<InitialEvaluationFailure>([&] { core.Reinitialize(replacement, replacement_configuration); },
                                            "initialization RHS exception must propagate");
+    Expect((core.configuration().nonlinear_solver.position_correction_scales.array() ==
+            old_configuration.nonlinear_solver.position_correction_scales.array()).all() &&
+           (core.configuration().nonlinear_solver.unknown_reference_scales.array() ==
+            old_configuration.nonlinear_solver.unknown_reference_scales.array()).all(),
+           "failed initialization must preserve Newton scales and difference references");
     ExpectStateUnchanged(ReadState(core, observed), accepted,
                          "failed reinitialization preserves the accepted state");
     const auto failed_work = core.integration_statistics();
@@ -440,7 +448,12 @@ void VerifyFailedReinitializationTransaction() {
     core.AdvanceOneStep();
     ExpectNear(observed_reference_norm, accepted.q.norm(), 1e-14,
                "recovery with the old state retains its norm convention");
-    core.Reinitialize(replacement);
+    core.Reinitialize(replacement, replacement_configuration);
+    Expect((core.configuration().nonlinear_solver.position_correction_scales.array() ==
+            replacement_configuration.nonlinear_solver.position_correction_scales.array()).all() &&
+           (core.configuration().nonlinear_solver.unknown_reference_scales.array() ==
+            replacement_configuration.nonlinear_solver.unknown_reference_scales.array()).all(),
+           "successful initialization must commit the prepared Newton configuration");
     core.AdvanceOneStep();
     ExpectNear(observed_reference_norm, 2.4, 1e-14,
                "successful new initialization publishes the new projection reference");

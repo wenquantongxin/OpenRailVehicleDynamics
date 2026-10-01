@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string_view>
 
-#include "system_continuous_state_integration_recipe.h"
+#include "qualification_integration_method.h"
 
 namespace orvd::dynamics_qualification {
 
@@ -40,7 +40,7 @@ struct TimeIntegratorQualificationCase final {
 };
 
 struct ResolvedTimeIntegratorQualificationNumerics final {
-    integrators::internal::SystemContinuousStateIntegrationRecipe
+    dynamics_qualification::QualificationIntegrationMethod
         integration_recipe;
     std::optional<TimeIntegratorQualificationCase> qualification_case;
     std::string_view qualification_case_identifier;
@@ -141,14 +141,14 @@ ParseTimeIntegratorQualificationCase(std::string_view identifier) {
 [[nodiscard]] inline ResolvedTimeIntegratorQualificationNumerics
 ResolveTimeIntegratorQualificationNumerics(
     std::optional<TimeIntegratorQualificationCase> qualification_case,
-    integrators::internal::SystemContinuousStateIntegrationRecipe
+    dynamics_qualification::QualificationIntegrationMethod
         scenario_default_integration_recipe,
     double relative_tolerance,
     double generalized_position_absolute_tolerance,
     double generalized_velocity_absolute_tolerance,
     double series_force_absolute_tolerance_newtons) {
     using IntegrationRecipe =
-        integrators::internal::SystemContinuousStateIntegrationRecipe;
+        dynamics_qualification::QualificationIntegrationMethod;
     IntegrationRecipe integration_recipe = scenario_default_integration_recipe;
     double scale = 1.0;
     std::string_view case_identifier;

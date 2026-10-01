@@ -13,7 +13,7 @@ namespace {
 using orvd::integrators::internal::CoordinateIntegrationFailure;
 using orvd::integrators::internal::CoordinateSecondOrderProblem;
 using orvd::integrators::internal::CoordinateState;
-using orvd::integrators::internal::ZhaiConfiguration;
+using orvd::integrators::ZhaiConfiguration;
 using orvd::integrators::internal::ZhaiCore;
 namespace fixtures = orvd::integrators::internal::testing;
 

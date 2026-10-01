@@ -22,7 +22,6 @@
 #include "orvd/integrators/system_continuous_state_advancer.h"
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
-#include "system_continuous_state_integration_access.h"
 
 namespace {
 
@@ -35,8 +34,6 @@ using orvd::forces::WheelRailContactInterfaceObservation;
 using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
-using orvd::integrators::internal::SystemContinuousStateIntegrationAccess;
-using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
 using orvd::multibody_model::AppliedBodyWrench;
 
 constexpr std::size_t kSampleCount = 101;
@@ -361,14 +358,12 @@ int main(int argc, char** argv) {
     scenario->vehicle_system().system().CopyContinuousState(accepted,
                                                             initial_state);
     const auto sample_times = MakeSampleTimes();
-    auto advancer = SystemContinuousStateIntegrationAccess::Make(
-        SystemContinuousStateIntegrationRecipe::kRadau5,
-        scenario->vehicle_system().system(),
-        scenario->vehicle_system().compiled_plan(), accepted,
-        MakeGz18Tolerances(), NoCallTimeAppliedForces{});
-    Require(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-                *advancer) ==
-                SystemContinuousStateIntegrationRecipe::kRadau5 &&
+    auto advancer = std::make_unique<orvd::integrators::SystemContinuousStateAdvancer>(
+        scenario->vehicle_system().system(), scenario->vehicle_system().compiled_plan(), accepted,
+        orvd::integrators::SystemIntegrationConfiguration{
+            orvd::integrators::Radau5Configuration{MakeGz18Tolerances()}},
+        NoCallTimeAppliedForces{});
+    Require(advancer->method_identifier() == "radau5" &&
                 advancer->integration_statistics()
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     1,

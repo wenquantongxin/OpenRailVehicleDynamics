@@ -1,0 +1,53 @@
+#pragma once
+
+#include <cstddef>
+#include <filesystem>
+#include <optional>
+#include <stdexcept>
+#include <string_view>
+#include <vector>
+
+namespace orvd::dynamics_qualification::internal {
+
+struct QualificationCliOptions final {
+    // Includes argv[0], preserving the existing positional CLI layouts.
+    std::vector<char*> positional_arguments;
+    std::optional<std::filesystem::path> integration_config_path;
+    bool publish_scene_record{};
+};
+
+// This parses only the shared named options. Each executable retains its own
+// positional paths, duration validation, legacy case lookup and usage message.
+inline QualificationCliOptions ParseQualificationCliOptions(
+    int argc, char** argv, int required_positional_argument_count,
+    bool allow_scene_record = false) {
+    QualificationCliOptions result;
+    result.positional_arguments.reserve(static_cast<std::size_t>(argc));
+    result.positional_arguments.push_back(argv[0]);
+    for (int index = 1; index < argc; ++index) {
+        const std::string_view argument(argv[index]);
+        if (allow_scene_record && argument == "--scene-record") {
+            result.publish_scene_record = true;
+        } else if (argument == "--integration-config") {
+            if (result.integration_config_path.has_value()) {
+                throw std::invalid_argument("--integration-config may be specified only once");
+            }
+            if (index + 1 == argc || std::string_view(argv[index + 1]).empty() ||
+                std::string_view(argv[index + 1]).starts_with("--")) {
+                throw std::invalid_argument("--integration-config requires one non-empty path");
+            }
+            result.integration_config_path = argv[++index];
+        } else {
+            result.positional_arguments.push_back(argv[index]);
+        }
+    }
+    if (result.integration_config_path.has_value() &&
+        result.positional_arguments.size() ==
+            static_cast<std::size_t>(required_positional_argument_count + 2)) {
+        throw std::invalid_argument(
+            "--integration-config and the time-integrator qualification case are mutually exclusive");
+    }
+    return result;
+}
+
+}  // namespace orvd::dynamics_qualification::internal

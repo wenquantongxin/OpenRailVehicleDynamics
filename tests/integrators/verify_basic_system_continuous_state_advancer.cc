@@ -20,7 +20,7 @@
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 
-#include "system_continuous_state_integration_access.h"
+#include "system_integration_test_configuration.h"
 
 void VerifyBasicSystemHeldTorqueSynchronization();
 
@@ -30,12 +30,10 @@ using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::ContinuousStateNumericalFailure;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
-using orvd::integrators::internal::CoordinateIntegrationDiagnostics;
-using orvd::integrators::internal::NewmarkConfiguration;
-using orvd::integrators::internal::SystemContinuousStateIntegrationAccess;
-using orvd::integrators::internal::SystemContinuousStateIntegrationConfiguration;
-using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
-using orvd::integrators::internal::ZhaiConfiguration;
+using orvd::integrators::NewmarkConfiguration;
+using orvd::integrators::SystemIntegrationConfiguration;
+using orvd::integrators::test::TestIntegrationMethod;
+using orvd::integrators::ZhaiConfiguration;
 using orvd::multibody_model::JointHandle;
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_model::RigidBodyHandle;
@@ -45,17 +43,17 @@ using orvd::system_assembly::SystemAssemblyDescription;
 using orvd::system_assembly::SystemInstance;
 using orvd::system_assembly::SystemRuntimeContext;
 
-using Recipe = SystemContinuousStateIntegrationRecipe;
-using Configuration = SystemContinuousStateIntegrationConfiguration;
+using Recipe = TestIntegrationMethod;
+using Configuration = SystemIntegrationConfiguration;
 using Failure = ContinuousStateNumericalFailure;
 
 // The factory borrows both the immutable system and its compiled plan.
 template <class SystemArgument, class PlanArgument>
 concept CanMakeConfiguredAdvancer = requires(
     Configuration configuration, SystemRuntimeContext& accepted) {
-    SystemContinuousStateIntegrationAccess::Make(
-        std::move(configuration), std::declval<SystemArgument>(),
-        std::declval<PlanArgument>(), accepted, NoCallTimeAppliedForces{});
+    SystemContinuousStateAdvancer(
+        std::declval<SystemArgument>(), std::declval<PlanArgument>(), accepted,
+        std::move(configuration), NoCallTimeAppliedForces{});
 };
 static_assert(CanMakeConfiguredAdvancer<const SystemInstance&, const CompiledSystemPlan&>);
 static_assert(CanMakeConfiguredAdvancer<SystemInstance&, CompiledSystemPlan&>);
@@ -255,29 +253,17 @@ struct SliderMaxwellFixture final : SystemFixture {
 
 Configuration Settings(Recipe recipe, const SystemFixture& fixture, double h,
                        std::size_t budget = 1000000) {
-    if (recipe == Recipe::kZhai) return {ZhaiConfiguration{h}, budget};
+    if (recipe == Recipe::kZhai) return Configuration{ZhaiConfiguration{h}, budget};
     Expect(recipe == Recipe::kNewmark, "test requires a basic mechanical recipe");
-    const int nq = fixture.model.num_generalized_positions();
-    const int nz = fixture.system->series_spring_damper_force_state_range().size();
-    NewmarkConfiguration configuration;
-    configuration.step_size_seconds = h;
-    auto& solver = configuration.nonlinear_solver;
-    // These absolute scales use the fixture's metre/radian/second/Newton units.
-    // They are solver scales, not public physical-state ODE error tolerances.
-    solver.position_correction_scales = Eigen::VectorXd::Constant(nq, 1e-11);
-    solver.velocity_correction_scales = Eigen::VectorXd::Constant(nq, 1e-11);
-    solver.acceleration_residual_scales = Eigen::VectorXd::Constant(nq, 1e-11);
-    solver.internal_state_correction_scales = Eigen::VectorXd::Constant(nz, 1e-11);
-    solver.internal_state_residual_scales = Eigen::VectorXd::Constant(nz, 1e-11);
-    solver.unknown_reference_scales = Eigen::VectorXd::Ones(nq + nz);
-    return {std::move(configuration), budget};
+    static_cast<void>(fixture);
+    return Configuration{orvd::integrators::test::NewmarkSettings(h), budget};
 }
 
 std::unique_ptr<SystemContinuousStateAdvancer> Make(
     const SystemFixture& fixture, SystemRuntimeContext& accepted,
     Configuration configuration) {
-    return SystemContinuousStateIntegrationAccess::Make(
-        std::move(configuration), *fixture.system, *fixture.plan, accepted,
+    return std::make_unique<SystemContinuousStateAdvancer>(
+        *fixture.system, *fixture.plan, accepted, std::move(configuration),
         NoCallTimeAppliedForces{});
 }
 
@@ -294,25 +280,15 @@ void Unchanged(const SystemFixture& fixture, const SystemRuntimeContext& accepte
            message);
 }
 
-CoordinateIntegrationDiagnostics Diagnostics(const SystemContinuousStateAdvancer& advancer) {
-    const auto result = SystemContinuousStateIntegrationAccess::CoordinateDiagnostics(advancer);
-    Expect(result.has_value(), "basic factory backend exposes coordinate diagnostics");
-    return *result;
-}
-
 void CheckResetStatistics(const SystemContinuousStateAdvancer& advancer) {
     const auto statistics = advancer.integration_statistics();
-    const auto diagnostics = Diagnostics(advancer);
     Expect(statistics.successful_internal_step_count == 0 &&
                statistics.right_hand_side_evaluation_count == 1 &&
                statistics.linear_solver_right_hand_side_evaluation_count == 0 &&
                statistics.nonlinear_solver_iteration_count == 0 &&
                statistics.nonlinear_solver_convergence_failure_count == 0 &&
                statistics.jacobian_evaluation_count == 0 &&
-               statistics.linear_solver_setup_count == 0 &&
-               diagnostics.startup_step_count == 0 &&
-               diagnostics.endpoint_projection_evaluation_count == 0 &&
-               diagnostics.endpoint_projection_change_count == 0,
+               statistics.linear_solver_setup_count == 0,
            "successful synchronization resets work/history and counts its initial RHS");
 }
 
@@ -322,7 +298,7 @@ void CheckIdentityAndStepHistory(Recipe recipe) {
     const auto initial = fixture.ExactPhysicalState(0.0);
     fixture.system->SetContinuousState(*accepted, initial);
     auto advancer = Make(fixture, *accepted, Settings(recipe, fixture, 0.125));
-    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(*advancer) == recipe,
+    Expect(advancer->method_identifier() == orvd::integrators::test::MethodIdentifier(recipe),
            "factory retains the requested basic method identity");
     CheckResetStatistics(*advancer);
     Unchanged(fixture, *accepted, 0.0, initial, "factory construction preserves accepted state");
@@ -330,13 +306,8 @@ void CheckIdentityAndStepHistory(Recipe recipe) {
     advancer->AdvanceTo(0.125);
     advancer->AdvanceTo(0.25);
     const auto after_two = advancer->integration_statistics();
-    const auto first_diagnostics = Diagnostics(*advancer);
-    Expect(after_two.successful_internal_step_count == 2 &&
-               first_diagnostics.endpoint_projection_evaluation_count == 2 &&
-               first_diagnostics.endpoint_projection_change_count == 0,
+    Expect(after_two.successful_internal_step_count == 2,
            "two public calls preserve actual successful-step/projection counts");
-    Expect(first_diagnostics.startup_step_count == (recipe == Recipe::kZhai ? 1 : 0),
-           "a public-call boundary must not restart an equal-length Zhai step");
     if (recipe == Recipe::kZhai) {
         Expect(after_two.right_hand_side_evaluation_count == 3 &&
                    after_two.linear_solver_right_hand_side_evaluation_count == 0 &&
@@ -358,10 +329,7 @@ void CheckIdentityAndStepHistory(Recipe recipe) {
     advancer->AdvanceTo(0.3125);  // A genuine H/2 stop.
     advancer->AdvanceTo(0.4375);  // Return to H starts once more.
     advancer->AdvanceTo(0.5625);  // This second H is a normal recurrence.
-    const auto diagnostics = Diagnostics(*advancer);
-    Expect(advancer->integration_statistics().successful_internal_step_count == 5 &&
-               diagnostics.endpoint_projection_evaluation_count == 5 &&
-               diagnostics.startup_step_count == (recipe == Recipe::kZhai ? 3 : 0),
+    Expect(advancer->integration_statistics().successful_internal_step_count == 5,
            "actual stop lengths, not public calls, determine Zhai restart history");
 }
 
@@ -387,8 +355,7 @@ void CheckDenseFactoryTransaction(Recipe recipe) {
     Near((samples.col(3) - 0.5 * (samples.col(2) + samples.col(4))).norm(), 0.0, 2e-15,
          "dense samples straddling numerical intervals use local linear interpolation");
     Expect(advancer->integration_statistics().successful_internal_step_count == 2 &&
-               Diagnostics(*advancer).startup_step_count ==
-                   Diagnostics(*plain_advancer).startup_step_count,
+               plain_advancer->integration_statistics().successful_internal_step_count == 2,
            "sample times do not become numerical stops or change Zhai history");
 }
 
@@ -403,18 +370,12 @@ void CheckInvalidCalls(Recipe recipe) {
     }
     Throws([&] { static_cast<void>(Make(fixture, *accepted, Settings(recipe, fixture, 0.125, 0))); },
            "zero public execution budget is invalid configuration");
-    Throws([&] {
-        static_cast<void>(SystemContinuousStateIntegrationAccess::Make(
-            recipe, *fixture.system, *fixture.plan, *accepted,
-            ContinuousStateErrorTolerances(1e-8, Eigen::VectorXd::Constant(3, 1e-10)),
-            NoCallTimeAppliedForces{}));
-    }, "old ODE factory cannot invent a mechanical step or solver scales");
     if (recipe == Recipe::kNewmark) {
         auto invalid = Settings(recipe, fixture, 0.125);
         std::get<NewmarkConfiguration>(invalid.method).nonlinear_solver
-            .position_correction_scales.resize(2);
+            .translation.position_correction = 0.0;
         Throws([&] { static_cast<void>(Make(fixture, *accepted, invalid)); },
-               "Newmark factory validates coordinate-scale dimensions");
+               "Newmark factory validates dimensional scalar scales");
     }
     Unchanged(fixture, *accepted, 0.0, initial, "invalid factory configuration cannot alter accepted state");
     auto advancer = Make(fixture, *accepted, Settings(recipe, fixture, 0.125));
@@ -457,8 +418,7 @@ void CheckBudgetFailure(Recipe recipe, bool dense) {
               "public failure cannot commit any previously successful internal endpoint");
     const auto failed_statistics = advancer->integration_statistics();
     Expect(failed_statistics.successful_internal_step_count == 2 &&
-               failed_statistics.right_hand_side_evaluation_count >= 3 &&
-               Diagnostics(*advancer).endpoint_projection_evaluation_count == 2,
+               failed_statistics.right_hand_side_evaluation_count >= 3,
            "failed public transaction retains all work performed by successful private steps");
     Throws<std::logic_error>([&] { advancer->AdvanceTo(0.0); },
                              "same-time advance is blocked after numerical failure");
@@ -471,8 +431,7 @@ void CheckBudgetFailure(Recipe recipe, bool dense) {
     Unchanged(fixture, *accepted, 0.0, initial, "synchronization preserves the rollback endpoint");
     advancer->AdvanceTo(0.25);  // Exactly the allowed two steps must succeed.
     Expect(accepted->time_seconds() == 0.25 &&
-               advancer->integration_statistics().successful_internal_step_count == 2 &&
-               Diagnostics(*advancer).startup_step_count == (recipe == Recipe::kZhai ? 1 : 0),
+               advancer->integration_statistics().successful_internal_step_count == 2,
            "synchronization restores the accepted state and resets numerical history");
 }
 
@@ -520,8 +479,6 @@ void CheckContextLocalSynchronization(Recipe recipe) {
     advancer->AdvanceTo(1.25);
     Near((Physical(fixture, *accepted) - OneStep(recipe, initial, 0.125, 1.4, -0.7)).norm(),
          0.0, 3e-11, "explicit synchronization refreshes state, damping and nominal held force");
-    Expect(Diagnostics(*advancer).startup_step_count == (recipe == Recipe::kZhai ? 1 : 0),
-           "explicit input synchronization restarts Zhai from the replaced accepted state");
     Unchanged(fixture, *unrelated, 1.0, initial,
               "factory trials and synchronization leave another runtime context untouched");
     Expect(unrelated->nominal_forces().isZero(), "input synchronization is runtime-context local");
@@ -547,9 +504,7 @@ void CheckRpyFailureTransaction(Recipe recipe) {
     Unchanged(fixture, *accepted, 0.0, initial, "RPY endpoint failure leaves accepted q and physical v intact");
     Expect(advancer->integration_statistics().successful_internal_step_count == 0 &&
                advancer->integration_statistics().right_hand_side_evaluation_count ==
-                   (recipe == Recipe::kNewmark ? 2 : 1) &&
-               Diagnostics(*advancer).endpoint_projection_evaluation_count ==
-                   (recipe == Recipe::kZhai ? 1 : 0),
+                   (recipe == Recipe::kNewmark ? 2 : 1),
            "RPY failure records the attempted Newmark RHS or Zhai pre-RHS projection without accepting a step");
     Throws<std::logic_error>([&] { advancer->AdvanceTo(0.01); },
                              "real callback failure blocks retry until explicit synchronization");
@@ -617,8 +572,6 @@ Eigen::VectorXd Integrate(Recipe recipe, Fixture& fixture, double end, int steps
                advancer->integration_statistics().successful_internal_step_count ==
                    static_cast<std::uint64_t>(steps),
            "factory stop schedule must retain the requested fixed refinement grid");
-    Expect(Diagnostics(*advancer).startup_step_count == (recipe == Recipe::kZhai ? 1 : 0),
-           "smooth fixed-grid factory runs have only their original startup");
     return Physical(fixture, *accepted);
 }
 

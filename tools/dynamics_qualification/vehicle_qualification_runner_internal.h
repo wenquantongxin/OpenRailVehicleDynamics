@@ -12,7 +12,7 @@
 #include "time_integrator_qualification_case.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
-#include "system_continuous_state_integration_recipe.h"
+#include "qualification_integration_method.h"
 
 namespace orvd::dynamics_qualification::internal {
 
@@ -42,6 +42,7 @@ struct QualificationRunConfiguration final {
     // observation context the qualification observations use. It adds no
     // integrator stop and leaves every existing artefact unchanged.
     bool publish_scene_record{false};
+    std::optional<std::filesystem::path> integration_config_path;
 };
 
 // A closed, private recipe used only by the two migration executables. It is
@@ -55,7 +56,7 @@ struct VehicleQualificationRecipe final {
         double generalized_position_absolute_tolerance_value,
         double generalized_velocity_absolute_tolerance_value,
         double series_force_absolute_tolerance_newtons_value,
-        integrators::internal::SystemContinuousStateIntegrationRecipe
+        dynamics_qualification::QualificationIntegrationMethod
             default_integration_recipe_value,
         int expected_generalized_position_count_value,
         int expected_generalized_velocity_count_value,
@@ -93,7 +94,7 @@ struct VehicleQualificationRecipe final {
     double generalized_position_absolute_tolerance{};
     double generalized_velocity_absolute_tolerance{};
     double series_force_absolute_tolerance_newtons{};
-    integrators::internal::SystemContinuousStateIntegrationRecipe
+    dynamics_qualification::QualificationIntegrationMethod
         default_integration_recipe;
     int expected_generalized_position_count{};
     int expected_generalized_velocity_count{};

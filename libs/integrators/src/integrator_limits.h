@@ -1,13 +1,12 @@
 #pragma once
 
-#include <cstddef>
+#include "orvd/integrators/system_integration_configuration.h"
 
 namespace orvd::integrators::internal {
 
-// G44's per-public-advance termination bound.  CVODE's own mxsteps applies to
-// one CVode() call, so the system layer must also enforce this across its
-// CV_ONE_STEP loop.
-inline constexpr std::size_t kMaximumInternalStepsPerPublicAdvance =
-    1'000'000;
+// CVODE mxsteps bounds a single CVode call; the system also enforces the
+// configured per-advance budget across its CV_ONE_STEP loop.
+inline constexpr auto kMaximumInternalStepsPerPublicAdvance =
+    kDefaultMaximumInternalStepsPerAdvance;
 
 }  // namespace orvd::integrators::internal

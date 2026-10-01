@@ -1,6 +1,6 @@
 #pragma once
 
-#include "system_continuous_state_integration_recipe.h"
+#include "qualification_integration_method.h"
 
 namespace orvd::dynamics_qualification::internal {
 
@@ -13,7 +13,7 @@ struct IrwIntegrationRecipe final {
         double position_absolute_tolerance_value,
         double velocity_absolute_tolerance_value,
         double series_force_absolute_tolerance_newtons_value,
-        integrators::internal::SystemContinuousStateIntegrationRecipe
+        dynamics_qualification::QualificationIntegrationMethod
             default_integration_recipe_value)
         : relative_tolerance(relative_tolerance_value),
           position_absolute_tolerance(position_absolute_tolerance_value),
@@ -27,7 +27,7 @@ struct IrwIntegrationRecipe final {
     double position_absolute_tolerance{};
     double velocity_absolute_tolerance{};
     double series_force_absolute_tolerance_newtons{};
-    integrators::internal::SystemContinuousStateIntegrationRecipe
+    dynamics_qualification::QualificationIntegrationMethod
         default_integration_recipe;
 };
 
@@ -37,7 +37,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-6,
         1.0e-5,
         1.0e-6,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf2,
     };
 
@@ -47,7 +47,7 @@ inline constexpr IrwIntegrationRecipe
     1.0e-8,
     1.0e-7,
     1.0e-6,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -57,7 +57,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-6,
         1.0e-5,
         1.0e-6,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf2,
     };
 
@@ -70,7 +70,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -80,7 +80,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -90,7 +90,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -100,7 +100,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -110,7 +110,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -120,7 +120,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 
@@ -130,7 +130,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        integrators::internal::SystemContinuousStateIntegrationRecipe::
+        dynamics_qualification::QualificationIntegrationMethod::
             kCvodeBdf5,
     };
 

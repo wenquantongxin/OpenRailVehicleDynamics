@@ -12,8 +12,20 @@
 ## 决策
 
 整车推进采用两层接口。`ContinuousStateAdvancer` 是只负责端点、密集输出和重初始化的数值
-后端接口，首个且当前唯一准入的后端是 CVODE；其上的系统推进/事件执行器负责接受态提交、
+后端接口；当前具体后端包括 CVODE BDF2、CVODE BDF5、Radau5、Newmark 与 Zhai。
+其上的系统推进/事件执行器负责接受态提交、
 边界夹持和事件时序。数值后端不承担尚不存在的事件目录或向量外状态。
+
+系统只提供一个安装侧构造入口：`SystemContinuousStateAdvancer(system, plan, accepted_context,
+configuration, NoCallTimeAppliedForces{})`。`SystemIntegrationConfiguration` 按值拥有方法专属配置的
+闭合 variant 和独立的执行预算；方法由调用方显式指定，场景默认配方属于应用层。既有默认
+场景仍选择 BDF2，已指定 BDF5 等方法的场景保持原选择。`method_identifier()` 查询实际 runtime。
+不存在容差专用构造、私有 Access 工厂、字符串或环境变量选择开关，以及兼容转发头。
+
+Newmark 的安装配置使用平移、转角、四元数及串联内力四族量纲尺度。库内根据模型关节类型
+绑定不可变布局；四元数尺度按最近成功初始化的参考范数展开。同步时参考与尺度共同提交，
+失败不替换。内部坐标向量和具体 CVODE 类不成为安装接口。新增方法须具备真实 runtime、
+专属问题视图和完整的推进合同，才能加入配置闭集。
 
 两层合起来须承载的语义：
 

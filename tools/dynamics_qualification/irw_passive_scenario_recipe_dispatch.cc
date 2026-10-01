@@ -272,7 +272,7 @@ QualificationRunSummary RunIrwPassiveScenario(
             input.sample_period_nanoseconds,
             std::nullopt,
             input.time_integrator_qualification_case,
-            input.publish_scene_record},
+            input.publish_scene_record, input.integration_config_path},
         recipe);
 }
 

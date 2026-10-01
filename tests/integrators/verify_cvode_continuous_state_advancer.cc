@@ -6,12 +6,12 @@
 
 #include <Eigen/Dense>
 
-#include "orvd/integrators/cvode_continuous_state_advancer.h"
+#include "cvode_continuous_state_advancer.h"
 
 namespace {
 
 std::unique_ptr<orvd::integrators::ContinuousStateAdvancer>
-MakePublicCvodeAdvancer(
+MakeCvodeAdvancer(
     orvd::integrators::ContinuousStateRhs& rhs,
     double initial_time_seconds,
     Eigen::VectorXd initial_continuous_state,
@@ -19,7 +19,7 @@ MakePublicCvodeAdvancer(
     return std::make_unique<
         orvd::integrators::CvodeContinuousStateAdvancer>(
         rhs, initial_time_seconds, std::move(initial_continuous_state),
-        std::move(tolerances));
+        std::move(tolerances), orvd::integrators::internal::MaximumBdfOrder::kSecond);
 }
 
 }  // namespace
@@ -30,9 +30,9 @@ int main() {
     constexpr int kCvodeConvergenceFailureCode = -4;
     const int failure_count =
         orvd::integrators::test::RunContinuousStateAdvancerContract(
-            &MakePublicCvodeAdvancer) +
+            &MakeCvodeAdvancer) +
         orvd::integrators::test::RunContinuousStateFailureContract(
-            &MakePublicCvodeAdvancer,
+            &MakeCvodeAdvancer,
             orvd::integrators::ContinuousStateNumericalFailure::Reason::
                 kRepeatedNonlinearConvergenceFailure,
             kCvodeConvergenceFailureCode);

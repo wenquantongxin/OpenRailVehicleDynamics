@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "method": "newmark",
+  "step_size_nanoseconds": 25000,
+  "maximum_internal_steps_per_advance": 1000000,
+  "newton": {
+    "maximum_iterations": 12,
+    "quaternion_scale_convention": "reference_norm_multiple",
+    "scales": {
+      "translation": {
+        "position_correction": 1e-8,
+        "velocity_correction": 1e-7,
+        "acceleration_residual": 1e-6,
+        "acceleration_reference": 10.0
+      },
+      "angle": {
+        "position_correction": 1e-8,
+        "velocity_correction": 1e-7,
+        "acceleration_residual": 1e-6,
+        "acceleration_reference": 10.0
+      },
+      "quaternion": {
+        "position_correction": 1e-8,
+        "velocity_correction": 1e-7,
+        "acceleration_residual": 1e-6,
+        "acceleration_reference": 10.0
+      },
+      "force": {
+        "correction": 0.01,
+        "residual": 0.01,
+        "reference": 100000.0
+      }
+    }
+  }
+}

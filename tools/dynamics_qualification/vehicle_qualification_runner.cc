@@ -37,6 +37,9 @@
 #endif
 
 #include "atomic_qualification_directory.h"
+#include "qualification_integration_configuration.h"
+#include "qualification_continuous_state_writer.h"
+#include "qualification_integration_run.h"
 #include "qualification_sample_clock.h"
 #include "strict_floating_point_qualification.h"
 
@@ -57,7 +60,6 @@
 #include "orvd/scene_record/scene_record_writer.h"
 #include "orvd/track_geometry/track_geometry.h"
 #include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
-#include "system_continuous_state_integration_access.h"
 
 namespace orvd::dynamics_qualification::internal {
 namespace {
@@ -269,35 +271,6 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
     if (!*stream) {
         Reject("could not close '" + path.string() + "'");
     }
-}
-
-[[nodiscard]] integrators::ContinuousStateErrorTolerances
-MakeTolerances(const configuration::AssembledVehicleSystem& assembled,
-               const ResolvedTimeIntegratorQualificationNumerics& numerics) {
-    const auto& system = assembled.system();
-    Eigen::VectorXd absolute =
-        Eigen::VectorXd::Constant(system.continuous_state_size(),
-                                  numerics.generalized_velocity_absolute_tolerance);
-    const auto q = system.generalized_positions_state_range();
-    const auto z = system.series_spring_damper_force_state_range();
-    absolute.segment(q.start(), q.size())
-        .setConstant(numerics.generalized_position_absolute_tolerance);
-    absolute.segment(z.start(), z.size())
-        .setConstant(numerics.series_force_absolute_tolerance_newtons);
-    return integrators::ContinuousStateErrorTolerances(
-        numerics.relative_tolerance, std::move(absolute));
-}
-
-[[nodiscard]] std::unique_ptr<integrators::SystemContinuousStateAdvancer>
-MakeAdvancer(const configuration::AssembledVehicleSystem& assembled,
-             system_assembly::SystemRuntimeContext& accepted_context,
-             const ResolvedTimeIntegratorQualificationNumerics& numerics) {
-    auto tolerances = MakeTolerances(assembled, numerics);
-    return integrators::internal::SystemContinuousStateIntegrationAccess::Make(
-        numerics.integration_recipe, assembled.system(),
-        assembled.compiled_plan(),
-        accepted_context, std::move(tolerances),
-        integrators::NoCallTimeAppliedForces{});
 }
 
 [[nodiscard]] double InitialBodyTrackStation(
@@ -778,59 +751,6 @@ void WriteObservation(std::ofstream* output,
     *output << '\n';
 }
 
-void WriteContinuousStates(
-    const std::filesystem::path& path,
-    const QualificationSampleClock& clock,
-    const std::vector<double>& sample_times_seconds,
-    const Eigen::Ref<const Eigen::MatrixXd>& continuous_states,
-    int generalized_position_count,
-    int generalized_velocity_count,
-    int series_force_state_count) {
-    const Eigen::Index expected_state_size =
-        static_cast<Eigen::Index>(generalized_position_count +
-                                  generalized_velocity_count +
-                                  series_force_state_count);
-    if (continuous_states.rows() != expected_state_size ||
-        continuous_states.cols() !=
-            static_cast<Eigen::Index>(clock.sample_count()) ||
-        sample_times_seconds.size() != clock.sample_count()) {
-        Reject("continuous-state artifact has an incompatible state layout "
-               "or sample clock");
-    }
-
-    std::ofstream output(path, std::ios::out | std::ios::trunc);
-    if (!output) {
-        Reject("could not open '" + path.string() + "'");
-    }
-    output << std::setprecision(17)
-           << "sample_index\ttime_nanoseconds\ttime_seconds";
-    for (int index = 0; index < generalized_position_count; ++index) {
-        output << "\tq." << index;
-    }
-    for (int index = 0; index < generalized_velocity_count; ++index) {
-        output << "\tv." << index;
-    }
-    for (int index = 0; index < series_force_state_count; ++index) {
-        output << "\tz." << index;
-    }
-    output << '\n';
-
-    for (std::size_t sample = 0; sample < clock.sample_count(); ++sample) {
-        output << sample << '\t'
-               << clock.TargetTimeNanoseconds(
-                      static_cast<std::uint64_t>(sample))
-               << '\t' << sample_times_seconds[sample];
-        for (Eigen::Index state = 0; state < continuous_states.rows();
-             ++state) {
-            output << '\t'
-                   << continuous_states(
-                          state, static_cast<Eigen::Index>(sample));
-        }
-        output << '\n';
-    }
-    CloseChecked(&output, path);
-}
-
 void WritePatchObservationHeader(std::ofstream* output) {
     *output
         << "sample_index\ttime_nanoseconds\ttime_seconds\tinterface_name"
@@ -885,21 +805,53 @@ void WriteBoundaryUse(std::ofstream* output, std::string_view key,
     *output << (trailing_comma ? ",\n" : "\n");
 }
 
+nlohmann::json PhysicalObservationContract(
+    const configuration::AssembledVehicleSystem& assembled) {
+    nlohmann::json carriers = nlohmann::json::array();
+    nlohmann::json interfaces = nlohmann::json::array();
+    const auto& contact = *assembled.contact_force_plan();
+    for (int i = 0; i < contact.carrier_count(); ++i) {
+        const std::string name(contact.carrier_name(i));
+        carriers.push_back({{"name", name},
+                            {"station_column", name + ".track_station_meters"},
+                            {"lateral_column", name + ".lateral_meters"},
+                            {"yaw_column", name + ".yaw_radians"},
+                            {"yaw_basis", "assembled_carrier_body_relative_to_track_T"}});
+    }
+    for (int i = 0; i < contact.interface_count(); ++i) {
+        const std::string name(contact.interface_name(i));
+        const std::string prefix = name + ".";
+        interfaces.push_back({{"name", name},
+            {"station_column", prefix + "rail_profile_reference_marker_track_station_meters"},
+            {"patch_count_column", prefix + "contact_patch_count"},
+            {"normal_force_column", prefix + "normal_force_newtons"},
+            {"support_force_column", prefix + "vertical_support_force_on_wheel_newtons"},
+            {"force_columns", {{"x", prefix + "total_force_on_wheel_in_carrier_track_frame_x_newtons"},
+                               {"y", prefix + "total_force_on_wheel_in_carrier_track_frame_y_newtons"},
+                               {"z", prefix + "total_force_on_wheel_in_carrier_track_frame_z_newtons"}}}});
+    }
+    return {{"schema_identifier", "orvd.qualification_physical_observations.v1"},
+            {"file", "observations.tsv"},
+            {"row_join_key", {"sample_index", "time_nanoseconds"}},
+            {"time_seconds_role", "audit_only"},
+            {"force_frame", "carrier_projection_track_T"},
+            {"carriers", std::move(carriers)}, {"interfaces", std::move(interfaces)}};
+}
+
 void WriteMetadata(
     const std::filesystem::path& path,
     const QualificationRunConfiguration& configuration,
     const VehicleQualificationRecipe& recipe,
-    const ResolvedTimeIntegratorQualificationNumerics& numerics,
-    integrators::internal::SystemContinuousStateIntegrationRecipe
-        integration_recipe,
-    std::optional<int> maximum_bdf_order,
+    const nlohmann::json& numerical_metadata,
     int contact_batch_parallel_team_probe_worker_count,
     const configuration::ResolvedStartupState& startup,
     const configuration::AssembledVehicleSystem& assembled,
     const QualificationSampleClock& clock, const BoundaryUse& before,
     const BoundaryUse& after,
     const std::array<std::size_t, kInterfaceCount>& longest_zero_contact_runs,
-    const EndpointDiagnostics& diagnostics) {
+    const EndpointDiagnostics& diagnostics,
+    const Eigen::Ref<const Eigen::VectorXd>& initial_state,
+    const Eigen::Ref<const Eigen::VectorXd>& terminal_state) {
     const int requested_contact_worker_count =
         std::min({kMaximumContactWorkerCount,
                   static_cast<int>(kInterfaceCount), omp_get_max_threads()});
@@ -971,45 +923,29 @@ void WriteMetadata(
            << "    \"contact_body_wrench_count\": "
            << assembled.contact_force_plan()->body_wrench_count() << "\n"
            << "  },\n"
-           << "  \"continuous_state_observation_contract\": {\n"
-           << "    \"file\": \"continuous_states.tsv\",\n"
-           << "    \"row_join_key\": [\"sample_index\", "
-              "\"time_nanoseconds\"],\n"
-           << "    \"time_seconds_role\": \"audit_only\",\n"
-           << "    \"state_layout\": \"[q;v;z]\"\n"
-           << "  },\n"
-           << "  \"numerical_execution_contract\": {\n"
-           << "    \"qualification_case_identifier\": ";
-    if (numerics.qualification_case.has_value()) {
-        output << JsonString(numerics.qualification_case_identifier);
-    } else {
-        output << "null";
-    }
-    output << ",\n"
-           << "    \"tolerance_tier_identifier\": "
-           << JsonString(numerics.tolerance_tier_identifier) << ",\n"
-           << "    \"tolerance_scale_from_scenario_recipe\": "
-           << numerics.tolerance_scale_from_scenario_recipe << ",\n"
-           << "    \"integrator_recipe_identifier\": "
-           << JsonString(std::string(
-                  integrators::internal::IntegrationRecipeIdentifier(
-                      integration_recipe)))
+           << "  \"continuous_state_observation_contract\": "
+           << ContinuousStateObservationContract(clock).dump() << ",\n"
+           << "  \"comparison_state_contract\": "
+           << ComparisonStateContract(initial_state, terminal_state).dump() << ",\n"
+           << "  \"physical_observation_contract\": "
+           << PhysicalObservationContract(assembled).dump() << ",\n"
+           << "  \"comparison_endpoint_diagnostics\": "
+           << nlohmann::json({
+                  {"scope", "terminal"},
+                  {"generalized_force_residual_inf_norm", diagnostics.generalized_force_residual_inf_norm},
+                  {"absolute_virtual_power_residual_watts", std::abs(diagnostics.virtual_power_residual_watts)},
+                  {"position_derivative_slice_consistency_inf_norm", diagnostics.position_derivative_slice_consistency_inf_norm},
+                  {"series_force_derivative_slice_consistency_inf_norm", diagnostics.series_force_derivative_slice_consistency_inf_norm}}).dump()
            << ",\n"
-           << "    \"maximum_bdf_order\": ";
-    if (maximum_bdf_order.has_value()) {
-        output << *maximum_bdf_order;
-    } else {
-        output << "null";
+           << "  \"numerical_execution_contract\": {\n";
+    for (const auto& [key, value] : numerical_metadata.items()) {
+        output << "    " << JsonString(key) << ": ";
+        // Preserve the existing scalar double text contract (17 digits).
+        if (value.is_number_float()) output << value.get<double>();
+        else output << value.dump();
+        output << ",\n";
     }
-    output << ",\n"
-           << "    \"relative_tolerance\": " << numerics.relative_tolerance
-           << ",\n"
-           << "    \"generalized_position_absolute_tolerance\": "
-           << numerics.generalized_position_absolute_tolerance << ",\n"
-           << "    \"generalized_velocity_absolute_tolerance\": "
-           << numerics.generalized_velocity_absolute_tolerance << ",\n"
-           << "    \"series_force_absolute_tolerance_newtons\": "
-           << numerics.series_force_absolute_tolerance_newtons << ",\n"
+    output
            << "    \"floating_point_compilation_contract\": {\n"
            << "      \"identifier\": "
            << JsonString(kStrictFloatingPointSemanticsIdentifier) << ",\n"
@@ -1115,7 +1051,7 @@ void WritePerformance(const std::filesystem::path& path,
            << "{\n"
            << "  \"integrator_recipe_identifier\": "
            << JsonString(std::string(
-                  integrators::internal::IntegrationRecipeIdentifier(
+                  dynamics_qualification::IntegrationRecipeIdentifier(
                       summary.integration_recipe)))
            << ",\n"
            << "  \"qualification_case_identifier\": ";
@@ -1141,6 +1077,8 @@ void WritePerformance(const std::filesystem::path& path,
            << "  \"dense_state_bytes\": " << dense_state_bytes << ",\n"
            << "  \"observation_buffer_bytes\": " << observation_bytes
            << ",\n"
+           << "  \"numerical_timings\": " << summary.numerical_timings.ToJson().dump() << ",\n"
+           << "  \"integration_work\": " << summary.integration_work.ToJson().dump() << ",\n"
            << "  \"integration_statistics\": {\n"
            << "    \"successful_internal_step_count\": "
            << summary.integration_statistics.successful_internal_step_count
@@ -1260,6 +1198,10 @@ QualificationRunSummary RunVehicleQualification(
         sample_clock.MakeSampleTimesSeconds();
     const QualificationRunConfiguration resolved_run_configuration =
         ResolveInputPaths(run_configuration);
+    const auto integration_request = RequestIntegrationConfiguration(
+        run_configuration.integration_config_path,
+        run_configuration.time_integrator_qualification_case);
+    RequireFailureResultDestinationAvailable(resolved_run_configuration.output_directory);
     AtomicQualificationDirectory output_directory(
         resolved_run_configuration.output_directory);
 
@@ -1308,28 +1250,34 @@ QualificationRunSummary RunVehicleQualification(
     assembled.system().CopyContinuousState(accepted,
                                            initial_continuous_state);
 
-    const ResolvedTimeIntegratorQualificationNumerics numerics =
-        ResolveTimeIntegratorQualificationNumerics(
-            run_configuration.time_integrator_qualification_case,
-            recipe.default_integration_recipe, recipe.relative_tolerance,
+    auto numerics = ResolveIntegrationConfiguration(
+        integration_request, assembled, initial_continuous_state,
+        ScenarioOdeDefaults{recipe.default_integration_recipe, recipe.relative_tolerance,
             recipe.generalized_position_absolute_tolerance,
             recipe.generalized_velocity_absolute_tolerance,
-            recipe.series_force_absolute_tolerance_newtons);
-    const auto requested_integration_recipe = numerics.integration_recipe;
-    auto advancer = MakeAdvancer(assembled, accepted, numerics);
+            recipe.series_force_absolute_tolerance_newtons});
+    AddQualificationBudgetEstimate(numerics.metadata, numerics.step_size_nanoseconds,
+        static_cast<std::uint64_t>(run_configuration.duration_nanoseconds), 1,
+        numerics.configuration.maximum_internal_steps_per_advance);
+    auto failure_metadata = numerics.metadata;
+    failure_metadata["input_paths"] = {
+        {"vehicle_definition", resolved_run_configuration.vehicle_definition_path.string()},
+        {"resolved_startup_state", resolved_run_configuration.resolved_startup_state_path.string()},
+        {"track_geometry", resolved_run_configuration.track_geometry_path.string()},
+        {"orvd_data_root", resolved_run_configuration.orvd_data_root.string()}};
+    failure_metadata["qualification_vehicle_recipe"] = recipe.vehicle_label;
+    failure_metadata["sample_period_nanoseconds"] = run_configuration.sample_period_nanoseconds;
+    failure_metadata["track_irregularity_identifier"] =
+        run_configuration.track_irregularity_identifier
+            ? nlohmann::json(*run_configuration.track_irregularity_identifier) : nlohmann::json(nullptr);
+    QualificationIntegrationRun integration(
+        resolved_run_configuration.output_directory, std::move(failure_metadata),
+        std::move(numerics.configuration), assembled, accepted,
+        sample_clock.terminal_time_seconds());
     const auto actual_integration_recipe =
-        integrators::internal::SystemContinuousStateIntegrationAccess::
-            ConfiguredRecipe(*advancer);
-    if (actual_integration_recipe != requested_integration_recipe) {
-        Reject("the constructed integrator does not match the qualification "
-               "integration recipe");
-    }
-    const Clock::time_point advance_begin = Clock::now();
-    const Eigen::MatrixXd dense_states =
-        advancer->AdvanceToWithDenseStateSamples(
-            sample_clock.terminal_time_seconds(), sample_times);
-    const Clock::time_point advance_end = Clock::now();
-    const auto integration_statistics = advancer->integration_statistics();
+        ParseIntegrationMethod(integration.advancer().method_identifier());
+    const Eigen::MatrixXd dense_states = integration.Advance(
+        sample_clock.terminal_time_seconds(), sample_times);
     if (dense_states.rows() != assembled.system().continuous_state_size() ||
         dense_states.cols() !=
             static_cast<Eigen::Index>(sample_clock.sample_count()) ||
@@ -1621,13 +1569,13 @@ QualificationRunSummary RunVehicleQualification(
 
     QualificationRunSummary summary(actual_integration_recipe);
     summary.time_integrator_qualification_case =
-        numerics.qualification_case;
+        numerics.ode_numerics ? numerics.ode_numerics->qualification_case : std::nullopt;
     summary.maximum_bdf_order =
-        integrators::internal::MaximumBdfOrderForRecipe(
+        dynamics_qualification::MaximumBdfOrderForRecipe(
             actual_integration_recipe);
     summary.sample_count = sample_clock.sample_count();
     summary.advance_wall_seconds =
-        ElapsedSeconds(advance_begin, advance_end);
+        integration.timings().advance_wall_seconds;
     summary.observation_wall_seconds =
         ElapsedSeconds(observation_begin, observation_end);
     if (scene_export.has_value()) {
@@ -1645,7 +1593,9 @@ QualificationRunSummary RunVehicleQualification(
     summary.endpoint_series_force_derivative_slice_consistency_inf_norm =
         endpoint_diagnostics
             .series_force_derivative_slice_consistency_inf_norm;
-    summary.integration_statistics = integration_statistics;
+    summary.integration_statistics = integration.ledger().total_statistics();
+    summary.integration_work = integration.ledger();
+    summary.numerical_timings = integration.timings();
     summary.terminal_continuous_state.resize(
         assembled.system().continuous_state_size());
     assembled.system().CopyContinuousState(
@@ -1656,7 +1606,7 @@ QualificationRunSummary RunVehicleQualification(
         after_definition_interval.observed;
 
     const Clock::time_point write_begin = Clock::now();
-    WriteContinuousStates(
+    WriteQualificationContinuousStates(
         output_directory.working_path() / "continuous_states.tsv",
         sample_clock, sample_times, dense_states,
         assembled.model().num_generalized_positions(),
@@ -1694,15 +1644,14 @@ QualificationRunSummary RunVehicleQualification(
     CloseChecked(&patch_observation_output, patch_observation_path);
 
     WriteMetadata(output_directory.working_path() / "metadata.json",
-                  resolved_run_configuration, recipe, numerics,
-                  summary.integration_recipe,
-                  summary.maximum_bdf_order,
+                  resolved_run_configuration, recipe, numerics.metadata,
                   contact_batch_parallel_team_probe_worker_count,
                   startup, assembled,
                   sample_clock, before_definition_interval,
                   after_definition_interval,
                   longest_zero_contact_runs,
-                  endpoint_diagnostics);
+                  endpoint_diagnostics, initial_continuous_state,
+                  summary.terminal_continuous_state);
     const Clock::time_point write_end = Clock::now();
     summary.data_and_metadata_write_wall_seconds =
         ElapsedSeconds(write_begin, write_end);

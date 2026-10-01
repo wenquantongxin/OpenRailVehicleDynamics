@@ -5,11 +5,13 @@
 
 #include <memory>
 #include <span>
+#include <string_view>
 
 #include <Eigen/Dense>
 
 #include "orvd/integrators/continuous_state_advancer.h"
 #include "orvd/integrators/system_rhs_bridge.h"
+#include "orvd/integrators/system_integration_configuration.h"
 
 namespace orvd::system_assembly {
 class CompiledSystemPlan;
@@ -19,16 +21,12 @@ class SystemRuntimeContext;
 
 namespace orvd::integrators {
 
-namespace internal {
-class SystemContinuousStateIntegrationAccess;
-}
-
 /// Advances one compiled system while keeping trial state out of its accepted
 /// runtime context.
 ///
 /// `system`, `plan` and `accepted_context` are borrowed and must outlive this
 /// object. The dedicated RHS context and numerical backend are private. The
-/// public constructor continues to select CVODE BDF2. A
+/// configuration explicitly selects one of the supported methods. A
 /// successful public advance accepts time and the complete continuous state
 /// exactly once; a failed advance requires explicit synchronization from the
 /// still-valid accepted context before another attempt.
@@ -38,7 +36,7 @@ class SystemContinuousStateAdvancer final {
         const system_assembly::SystemInstance& system,
         const system_assembly::CompiledSystemPlan& plan,
         system_assembly::SystemRuntimeContext& accepted_context,
-        ContinuousStateErrorTolerances tolerances,
+        SystemIntegrationConfiguration configuration,
         NoCallTimeAppliedForces);
     ~SystemContinuousStateAdvancer();
 
@@ -46,22 +44,22 @@ class SystemContinuousStateAdvancer final {
         system_assembly::SystemInstance&&,
         const system_assembly::CompiledSystemPlan&,
         system_assembly::SystemRuntimeContext&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
+        SystemIntegrationConfiguration, NoCallTimeAppliedForces) = delete;
     SystemContinuousStateAdvancer(
         const system_assembly::SystemInstance&&,
         const system_assembly::CompiledSystemPlan&,
         system_assembly::SystemRuntimeContext&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
+        SystemIntegrationConfiguration, NoCallTimeAppliedForces) = delete;
     SystemContinuousStateAdvancer(
         const system_assembly::SystemInstance&,
         system_assembly::CompiledSystemPlan&&,
         system_assembly::SystemRuntimeContext&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
+        SystemIntegrationConfiguration, NoCallTimeAppliedForces) = delete;
     SystemContinuousStateAdvancer(
         const system_assembly::SystemInstance&,
         const system_assembly::CompiledSystemPlan&&,
         system_assembly::SystemRuntimeContext&,
-        ContinuousStateErrorTolerances, NoCallTimeAppliedForces) = delete;
+        SystemIntegrationConfiguration, NoCallTimeAppliedForces) = delete;
 
     SystemContinuousStateAdvancer(const SystemContinuousStateAdvancer&) =
         delete;
@@ -75,10 +73,9 @@ class SystemContinuousStateAdvancer final {
     ///
     /// A same-time request is a no-op.  Any failure after entering the backend
     /// leaves the accepted context unchanged and blocks another advance until
-    /// `SynchronizeAfterAcceptedContextChange()` succeeds. The public constructor
-    /// uses a budget of at most 1,000,000 successful internal steps per public
-    /// advance. Source-private recipes may explicitly set that work
-    /// budget. Exhaustion is reported as kAdvanceWorkBudgetExhausted.
+    /// `SynchronizeAfterAcceptedContextChange()` succeeds. The configured
+    /// maximum_internal_steps_per_advance bounds successful internal steps;
+    /// exhaustion is reported as kAdvanceWorkBudgetExhausted.
     void AdvanceTo(double target_time_seconds);
 
     /// Advances once while returning selected states from the successful
@@ -105,6 +102,9 @@ class SystemContinuousStateAdvancer final {
     [[nodiscard]] ContinuousStateIntegrationStatistics
     integration_statistics() const;
 
+    /// The identity of the concrete configured runtime.
+    [[nodiscard]] std::string_view method_identifier() const noexcept;
+
     /// Copies the accepted state, admitted context-local data and latest
     /// wheel-rail projection branches into the trial/backend configuration,
     /// then reinitializes numerical history.
@@ -118,10 +118,7 @@ class SystemContinuousStateAdvancer final {
     void SynchronizeAfterAcceptedContextChange();
 
    private:
-    friend class internal::SystemContinuousStateIntegrationAccess;
-
     class Implementation;
-    explicit SystemContinuousStateAdvancer(std::unique_ptr<Implementation> implementation);
     std::unique_ptr<Implementation> implementation_;
 };
 

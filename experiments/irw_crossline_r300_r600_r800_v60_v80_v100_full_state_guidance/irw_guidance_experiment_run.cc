@@ -1196,7 +1196,9 @@ IrwGuidanceExperimentRunSummary RunIrwGuidanceExperiment(
 
     integrators::SystemContinuousStateAdvancer advancer(
         assembled.system(), assembled.compiled_plan(), accepted,
-        MakeTolerances(assembled), integrators::NoCallTimeAppliedForces{});
+        integrators::SystemIntegrationConfiguration{
+            integrators::CvodeBdf2Configuration{MakeTolerances(assembled)}},
+        integrators::NoCallTimeAppliedForces{});
     event_session.ConfirmBackendSynchronized();
 
     auto contact_workspace = assembled.contact_force_plan()->CreateWorkspace();

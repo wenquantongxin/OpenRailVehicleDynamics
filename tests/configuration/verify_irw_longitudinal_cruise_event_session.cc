@@ -216,7 +216,8 @@ void Run(const std::filesystem::path& vehicle_path,
 
     orvd::integrators::SystemContinuousStateAdvancer advancer(
         assembled.system(), assembled.compiled_plan(), accepted,
-        MakeTolerances(assembled),
+        orvd::integrators::SystemIntegrationConfiguration{
+            orvd::integrators::CvodeBdf2Configuration{MakeTolerances(assembled)}},
         orvd::integrators::NoCallTimeAppliedForces{});
     session.ConfirmBackendSynchronized();
     session.RequireReadyToAdvance();

@@ -258,8 +258,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     const auto summary = RunGz18Qualification(configuration);
     Require(summary.sample_count == 2 &&
                 summary.integration_recipe ==
-                    orvd::integrators::internal::
-                        SystemContinuousStateIntegrationRecipe::kCvodeBdf2 &&
+                    orvd::dynamics_qualification::
+                        QualificationIntegrationMethod::kCvodeBdf2 &&
                 summary.maximum_bdf_order == 2 &&
                 summary.integration_statistics
                         .successful_internal_step_count > 0 &&
@@ -651,8 +651,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     const QualificationRunSummary radau5_summary =
         RunGz18Qualification(radau5);
     Require(radau5_summary.integration_recipe ==
-                    orvd::integrators::internal::
-                        SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                    orvd::dynamics_qualification::
+                        QualificationIntegrationMethod::kRadau5 &&
                 radau5_summary.time_integrator_qualification_case ==
                     radau5.time_integrator_qualification_case &&
                 !radau5_summary.maximum_bdf_order.has_value() &&

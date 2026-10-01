@@ -2,11 +2,16 @@
 
 #include <Eigen/Dense>
 
+#include "orvd/integrators/mechanical_integration_configuration.h"
+
 namespace orvd::integrators::internal {
 
-// Positive, dimensional absolute scales supplied explicitly by the caller.
-// They are fixed throughout a solve; none is an ODE local-error tolerance.
-struct NewmarkNewtonConfiguration final {
+// Positive dimensional absolute scales for one successful initialization epoch.
+// They remain fixed during nonlinear solves and ordinary advances. A successful
+// explicit reinitialization may replace them together with the coordinate
+// reference; a failed reinitialization replaces neither. These are not ODE
+// local-error tolerances.
+struct NewmarkNewtonSolverConfiguration final {
     int maximum_iterations{12};
     Eigen::VectorXd position_correction_scales;       // nq; units of q
     Eigen::VectorXd velocity_correction_scales;       // nq; units of qdot
@@ -16,13 +21,10 @@ struct NewmarkNewtonConfiguration final {
     Eigen::VectorXd unknown_reference_scales;         // nq+nz; units of (b,z)
 };
 
-struct NewmarkConfiguration final {
+struct NewmarkCoreConfiguration final {
     double step_size_seconds{};
-    NewmarkNewtonConfiguration nonlinear_solver;
+    NewmarkNewtonSolverConfiguration nonlinear_solver;
 };
 
-struct ZhaiConfiguration final {
-    double step_size_seconds{};
-};
 
 }  // namespace orvd::integrators::internal

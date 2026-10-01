@@ -219,10 +219,9 @@ class MultibodyModel::Implementation {
         return {parent_body, child_body};
     }
 
-    enum class JointKind { kRevolute, kPrismatic, kBallRpy, kWeld };
 
     void RecordJoint(const std::string& name, int parent_body, int child_body,
-                     drake::multibody::JointIndex tree_joint, JointKind kind) {
+                     drake::multibody::JointIndex tree_joint, JointType kind) {
         joint_by_name_.emplace(name, static_cast<int>(joint_names_.size()));
         joint_names_.push_back(name);
         tree_joint_.push_back(tree_joint);
@@ -268,7 +267,7 @@ class MultibodyModel::Implementation {
     std::vector<drake::multibody::BodyIndex> tree_body_;
     std::vector<drake::multibody::FrameIndex> tree_frame_;
     std::vector<drake::multibody::JointIndex> tree_joint_;
-    std::vector<JointKind> joint_kind_;
+    std::vector<JointType> joint_kind_;
 };
 
 MultibodyModel::MultibodyModel()
@@ -420,7 +419,7 @@ JointHandle MultibodyModel::AddRevoluteJoint(
             damping_newton_metre_seconds_per_radian));
 
     model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
-                      Implementation::JointKind::kRevolute);
+                      JointType::kRevolute);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -452,7 +451,7 @@ JointHandle MultibodyModel::AddPrismaticJoint(
             damping_newton_seconds_per_metre));
 
     model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
-                      Implementation::JointKind::kPrismatic);
+                      JointType::kPrismatic);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -481,7 +480,7 @@ JointHandle MultibodyModel::AddBallRpyJoint(
             std::move(owned_joint));
 
     model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
-                      Implementation::JointKind::kBallRpy);
+                      JointType::kBallRpy);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -506,7 +505,7 @@ JointHandle MultibodyModel::AddWeldJoint(std::string_view name,
             drake::math::RigidTransform<double>::Identity()));
 
     model.RecordJoint(joint_name, parent_body, child_body, joint.index(),
-                      Implementation::JointKind::kWeld);
+                      JointType::kWeld);
     return model.MakeHandle<JointHandle>(
         static_cast<int>(model.joint_names_.size()) - 1);
 }
@@ -760,6 +759,13 @@ std::string_view MultibodyModel::GetJointName(JointHandle joint) const {
         joint, static_cast<int>(model.joint_names_.size()), "joint")];
 }
 
+JointType MultibodyModel::GetJointType(JointHandle joint) const {
+    const Implementation& model = *implementation_;
+    model.ThrowIfNotFinalized("ask for a joint type");
+    return model.joint_kind_[model.Resolve(
+        joint, static_cast<int>(model.joint_kind_.size()), "joint")];
+}
+
 bool MultibodyModel::IsFreeBody(RigidBodyHandle body) const {
     const Implementation& model = *implementation_;
     model.ThrowIfNotFinalized("ask whether a rigid body is free");
@@ -950,7 +956,7 @@ void MultibodyModel::SetRevoluteJointDampingCoefficient(
                                       "write joint damping into");
     const int ordinal = model.Resolve(
         joint, static_cast<int>(model.joint_names_.size()), "joint");
-    if (model.joint_kind_[ordinal] != Implementation::JointKind::kRevolute) {
+    if (model.joint_kind_[ordinal] != JointType::kRevolute) {
         Reject("joint '" + model.joint_names_[ordinal] +
                "' is not revolute and has no damping coefficient in N m s/rad");
     }
@@ -972,7 +978,7 @@ void MultibodyModel::SetPrismaticJointDampingCoefficient(
                                       "write joint damping into");
     const int ordinal = model.Resolve(
         joint, static_cast<int>(model.joint_names_.size()), "joint");
-    if (model.joint_kind_[ordinal] != Implementation::JointKind::kPrismatic) {
+    if (model.joint_kind_[ordinal] != JointType::kPrismatic) {
         Reject("joint '" + model.joint_names_[ordinal] +
                "' is not prismatic and has no damping coefficient in N s/m");
     }
@@ -1479,7 +1485,7 @@ const Eigen::VectorXd& MultibodyModel::EvaluateForwardDynamics(
         const int ordinal = model.Resolve(
             effort.joint, static_cast<int>(model.joint_names_.size()), "joint");
         if (model.joint_kind_[ordinal] !=
-            Implementation::JointKind::kRevolute) {
+            JointType::kRevolute) {
             Reject("a revolute torque was applied to joint '" +
                    model.joint_names_[ordinal] + "', which is not revolute");
         }
@@ -1491,7 +1497,7 @@ const Eigen::VectorXd& MultibodyModel::EvaluateForwardDynamics(
         const int ordinal = model.Resolve(
             effort.joint, static_cast<int>(model.joint_names_.size()), "joint");
         if (model.joint_kind_[ordinal] !=
-            Implementation::JointKind::kPrismatic) {
+            JointType::kPrismatic) {
             Reject("a prismatic force was applied to joint '" +
                    model.joint_names_[ordinal] + "', which is not prismatic");
         }

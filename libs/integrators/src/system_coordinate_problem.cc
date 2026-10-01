@@ -308,6 +308,10 @@ SystemCoordinateProblem::SystemCoordinateProblem(
 
 SystemCoordinateProblem::~SystemCoordinateProblem() = default;
 
+const multibody_model::MultibodyModel& SystemCoordinateProblem::model() const {
+    return implementation_->model_;
+}
+
 int SystemCoordinateProblem::coordinate_size() const { return implementation_->nq_; }
 
 int SystemCoordinateProblem::internal_state_size() const { return implementation_->nz_; }

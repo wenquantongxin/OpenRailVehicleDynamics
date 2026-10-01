@@ -1,4 +1,9 @@
 #include <algorithm>
+#include <array>
+#include <stdexcept>
+#include <string_view>
+#include <type_traits>
+#include <utility>
 #include <cmath>
 #include <cstdio>
 #include <exception>
@@ -10,6 +15,10 @@
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 #include "orvd/track_geometry/track_geometry.h"
+
+#if __has_include("orvd/integrators/cvode_continuous_state_advancer.h")
+#error "Concrete CVODE backend must not be installed"
+#endif
 
 namespace {
 
@@ -179,51 +188,57 @@ int main() {
 
         MultibodyModel model;
         const auto rotor = model.AddRigidBody("rotor", inertia);
-        model.AddRevoluteJoint(
+        const auto bearing = model.AddRevoluteJoint(
             "bearing", model.world_frame(), model.body_frame(rotor),
             Eigen::Vector3d::UnitZ(), kDamping);
         model.SetGravityVector(Eigen::Vector3d::Zero());
         model.Finalize();
+        if (model.GetJointType(bearing) != orvd::multibody_model::JointType::kRevolute) {
+            throw std::runtime_error("installed joint type query mismatch");
+        }
 
         const SystemAssemblyDescription description(model);
         const SystemInstance system(description);
         const CompiledSystemPlan plan(system);
-        auto context = system.CreateDefaultRuntimeContext(0.0);
-
-        Eigen::Vector2d initial_state;
-        initial_state << kInitialPosition, kInitialVelocity;
-        system.SetContinuousState(*context, initial_state);
-
-        SystemContinuousStateAdvancer advancer(
-            system, plan, *context,
-            ContinuousStateErrorTolerances(
-                1.0e-10, Eigen::VectorXd::Constant(2, 1.0e-12)),
-            NoCallTimeAppliedForces{});
-        advancer.AdvanceTo(kTargetTime);
-
-        Eigen::VectorXd observed(system.continuous_state_size());
-        system.CopyContinuousState(*context, observed);
-
-        const double inertia_about_axis = kMassKilograms * kUnitInertia;
-        const double decay_rate = kDamping / inertia_about_axis;
-        const double expected_velocity =
-            kInitialVelocity * std::exp(-decay_rate * kTargetTime);
-        const double expected_position =
-            kInitialPosition +
-            kInitialVelocity *
-                (1.0 - std::exp(-decay_rate * kTargetTime)) / decay_rate;
-
-        if (context->time_seconds() != kTargetTime || observed.size() != 2 ||
-            !observed.allFinite() ||
-            !Near(observed[0], expected_position) ||
-            !Near(observed[1], expected_velocity)) {
-            std::fprintf(
-                stderr,
-                "installed ORVD smoke produced t=% .17g q=% .17g v=% .17g; "
-                "expected t=% .17g q=% .17g v=% .17g\n",
-                context->time_seconds(), observed[0], observed[1],
-                kTargetTime, expected_position, expected_velocity);
-            return 1;
+        using namespace orvd::integrators;
+        static_assert(!std::is_constructible_v<SystemContinuousStateAdvancer,
+            const SystemInstance&, const CompiledSystemPlan&,
+            orvd::system_assembly::SystemRuntimeContext&,
+            ContinuousStateErrorTolerances, NoCallTimeAppliedForces>);
+        const auto tolerances = [] {
+            return ContinuousStateErrorTolerances(
+                1.0e-10, Eigen::VectorXd::Constant(2, 1.0e-12));
+        };
+        constexpr double h = 1e-4;
+        const NewmarkConfiguration newmark{h, {12,
+            {1e-11, 1e-11, 1e-11, 1.0}, {1e-11, 1e-11, 1e-11, 1.0},
+            {1e-11, 1e-11, 1e-11, 1.0}, {1e-11, 1e-11, 1.0}}};
+        const std::array<SystemIntegrationMethodConfiguration, 5> methods{
+            CvodeBdf2Configuration{tolerances()}, CvodeBdf5Configuration{tolerances()},
+            Radau5Configuration{tolerances()}, newmark, ZhaiConfiguration{h}};
+        const std::array<std::string_view, 5> identifiers{
+            "cvode_bdf2", "cvode_bdf5", "radau5", "newmark", "zhai"};
+        const double decay_rate = kDamping / (kMassKilograms * kUnitInertia);
+        const double expected_velocity = kInitialVelocity * std::exp(-decay_rate * kTargetTime);
+        const double expected_position = kInitialPosition + kInitialVelocity *
+            (1.0 - std::exp(-decay_rate * kTargetTime)) / decay_rate;
+        for (std::size_t index = 0; index < methods.size(); ++index) {
+            auto context = system.CreateDefaultRuntimeContext(0.0);
+            system.SetContinuousState(*context, Eigen::Vector2d(kInitialPosition, kInitialVelocity));
+            SystemContinuousStateAdvancer advancer(
+                system, plan, *context, SystemIntegrationConfiguration{methods[index]},
+                NoCallTimeAppliedForces{});
+            advancer.AdvanceTo(kTargetTime);
+            Eigen::VectorXd observed(system.continuous_state_size());
+            system.CopyContinuousState(*context, observed);
+            if (advancer.method_identifier() != identifiers[index] ||
+                context->time_seconds() != kTargetTime || !observed.allFinite() ||
+                !Near(observed[0], expected_position) || !Near(observed[1], expected_velocity) ||
+                advancer.integration_statistics().successful_internal_step_count == 0) {
+                std::fprintf(stderr, "installed method %.*s failed analytic rotor smoke\n",
+                    static_cast<int>(identifiers[index].size()), identifiers[index].data());
+                return 1;
+            }
         }
         if (RunInstalledLineSmoke() != 0) {
             return 1;

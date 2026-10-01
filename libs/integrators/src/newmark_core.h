@@ -16,9 +16,9 @@ namespace orvd::integrators::internal {
 class NewmarkCore final {
    public:
     NewmarkCore(CoordinateSecondOrderProblem& problem,
-                NewmarkConfiguration configuration,
+                NewmarkCoreConfiguration configuration,
                 const CoordinateState& initial_state);
-    NewmarkCore(CoordinateSecondOrderProblem&&, NewmarkConfiguration,
+    NewmarkCore(CoordinateSecondOrderProblem&&, NewmarkCoreConfiguration,
                 const CoordinateState&) = delete;
     ~NewmarkCore();
 
@@ -50,6 +50,12 @@ class NewmarkCore final {
     // input leaves the core usable; an evaluation failure requires retrying
     // reinitialization. Neither failure replaces the last accepted state.
     void Reinitialize(const CoordinateState& initial_state);
+    // Initialization-dependent scales and projection reference form one
+    // transaction. A failed evaluation leaves both previous values intact.
+    void Reinitialize(const CoordinateState& initial_state,
+                      NewmarkCoreConfiguration configuration);
+    [[nodiscard]] const NewmarkCoreConfiguration& configuration() const;
+
 
    private:
     class Implementation;

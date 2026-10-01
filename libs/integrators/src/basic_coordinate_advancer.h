@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -9,6 +10,7 @@
 #include <utility>
 
 #include "coordinate_step_time.h"
+#include "coordinate_numerical_failure.h"
 #include "system_coordinate_problem.h"
 
 namespace orvd::integrators::internal {
@@ -22,13 +24,16 @@ class BasicCoordinateAdvancerImplementation {
                                           double initial_time,
                                           const Eigen::VectorXd& initial_physical,
                                           Configuration configuration,
-                                          const char* method_name)
+                                          const char* method_name,
+                                          std::function<Configuration(const CoordinateState&)> prepare = {})
         : problem_(problem),
           physical_size_(problem.physical_state_size()),
           nominal_h_(configuration.step_size_seconds),
           method_name_(method_name),
           coordinate_(problem.MakeCoordinateState(initial_time, initial_physical)),
-          core_(problem, std::move(configuration), coordinate_),
+          prepare_configuration_(std::move(prepare)),
+          core_(problem, prepare_configuration_ ? prepare_configuration_(coordinate_) :
+                                                  std::move(configuration), coordinate_),
           public_state_(initial_physical),
           candidate_physical_(physical_size_),
           dense_start_state_(physical_size_),
@@ -50,6 +55,12 @@ class BasicCoordinateAdvancerImplementation {
 
     [[nodiscard]] CoordinateIntegrationDiagnostics diagnostics() const {
         return core_.diagnostics();
+    }
+
+    [[nodiscard]] const Configuration& core_configuration() const
+        requires requires(const Core& core) { core.configuration(); }
+    {
+        return core_.configuration();
     }
 
     void CopyCurrentState(Eigen::Ref<Eigen::VectorXd> output) const {
@@ -100,7 +111,7 @@ class BasicCoordinateAdvancerImplementation {
             output = public_state_;
             return {start, step.end, step.end == stop};
         } catch (const CoordinateIntegrationFailure& failure) {
-            RethrowNumericalFailure(failure);
+            RethrowCoordinateNumericalFailure(failure);
         }
     }
 
@@ -109,9 +120,19 @@ class BasicCoordinateAdvancerImplementation {
         // physical endpoint nor an existing dense interval is invalidated.
         CoordinateState initial = problem_.MakeCoordinateState(time, physical);
         problem_.ValidateInitialState(time, initial.q, initial.s, initial.z);
+        std::optional<Configuration> prepared;
+        if (prepare_configuration_) prepared = prepare_configuration_(initial);
         requires_reinitialization_ = true;
         dense_interval_.reset();
-        core_.Reinitialize(initial);
+        if constexpr (requires(Core& core, Configuration config) { core.Reinitialize(initial, config); }) {
+            if (prepared) {
+                core_.Reinitialize(initial, std::move(*prepared));
+            } else {
+                core_.Reinitialize(initial);
+            }
+        } else {
+            core_.Reinitialize(initial);
+        }
         coordinate_ = initial;
         reference_q_ = initial.q;
         public_state_ = physical;
@@ -187,28 +208,12 @@ class BasicCoordinateAdvancerImplementation {
         }
     }
 
-    [[noreturn]] void RethrowNumericalFailure(const CoordinateIntegrationFailure& failure) const {
-        using Source = CoordinateIntegrationFailure::Reason;
-        using Target = ContinuousStateNumericalFailure::Reason;
-        Target reason;
-        switch (failure.reason()) {
-            case Source::kStepSizeUnderflow: reason = Target::kStepSizeUnderflow; break;
-            case Source::kNonFiniteState: reason = Target::kNonFiniteState; break;
-            case Source::kNonFiniteEvaluation: reason = Target::kNonFiniteRightHandSide; break;
-            case Source::kNonFiniteLinearSystem: reason = Target::kNonFiniteLinearSystem; break;
-            case Source::kSingularJacobian: reason = Target::kSingularLinearSystem; break;
-            case Source::kNonlinearConvergenceFailure: reason = Target::kNonlinearConvergenceFailure; break;
-            default: throw std::logic_error("unknown coordinate numerical failure classification");
-        }
-        throw ContinuousStateNumericalFailure(reason, static_cast<int>(failure.reason()),
-                                              std::string(method_name_) + ": " + failure.what());
-    }
-
     SystemCoordinateProblem& problem_;
     const int physical_size_;
     const double nominal_h_;
     const char* const method_name_;
     CoordinateState coordinate_;
+    const std::function<Configuration(const CoordinateState&)> prepare_configuration_;
     Core core_;
     Eigen::VectorXd public_state_;
     Eigen::VectorXd candidate_physical_;

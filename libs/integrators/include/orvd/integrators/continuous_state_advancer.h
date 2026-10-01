@@ -14,8 +14,8 @@
 
 namespace orvd::integrators {
 
-/// A known numerical failure from a positive-length advance, including its
-/// execution work budget.
+/// A known numerical failure during initialization, advancement or explicit
+/// synchronization, including an exhausted advancement work budget.
 ///
 /// `reason()` is the backend-neutral classification intended for caller
 /// decisions. `backend_code()` preserves the backend's original diagnostic

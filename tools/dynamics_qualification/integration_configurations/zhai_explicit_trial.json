@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "method": "zhai",
+  "step_size_nanoseconds": 25000,
+  "maximum_internal_steps_per_advance": 1000000
+}

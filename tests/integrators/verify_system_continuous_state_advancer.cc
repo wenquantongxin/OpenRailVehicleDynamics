@@ -18,7 +18,7 @@
 #include "orvd/system_assembly/system_assembly_description.h"
 
 #include "system_continuous_state_backend.h"
-#include "system_continuous_state_integration_access.h"
+#include "system_integration_test_configuration.h"
 
 namespace {
 
@@ -26,8 +26,10 @@ using orvd::integrators::ContinuousStateErrorTolerances;
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemContinuousStateAdvancer;
 using orvd::integrators::internal::SystemContinuousStateBackend;
-using orvd::integrators::internal::SystemContinuousStateIntegrationAccess;
-using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
+using orvd::integrators::SystemIntegrationConfiguration;
+using orvd::integrators::test::OdeMethod;
+using orvd::integrators::test::MethodIdentifier;
+using orvd::integrators::test::TestIntegrationMethod;
 using orvd::multibody_model::JointHandle;
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_runtime::RigidBodyInertiaParameters;
@@ -40,10 +42,9 @@ template <typename SystemArgument, typename PlanArgument>
 concept CanMakeSystemContinuousStateAdvancer = requires(
     SystemRuntimeContext& accepted_context,
     ContinuousStateErrorTolerances tolerances) {
-    SystemContinuousStateIntegrationAccess::Make(
-        SystemContinuousStateIntegrationRecipe::kRadau5,
+    SystemContinuousStateAdvancer(
         std::declval<SystemArgument>(), std::declval<PlanArgument>(),
-        accepted_context, std::move(tolerances),
+        accepted_context, SystemIntegrationConfiguration{orvd::integrators::Radau5Configuration{std::move(tolerances)}},
         NoCallTimeAppliedForces{});
 };
 
@@ -67,10 +68,10 @@ concept CanConstructSystemContinuousStateBackend = requires(
     const Eigen::VectorXd& initial_continuous_state,
     ContinuousStateErrorTolerances tolerances) {
     SystemContinuousStateBackend(
-        SystemContinuousStateIntegrationRecipe::kRadau5,
+        orvd::integrators::Radau5Configuration{std::move(tolerances)},
         std::declval<SystemArgument>(), std::declval<PlanArgument>(),
         candidate_context, accepted_context, initial_continuous_state,
-        std::move(tolerances), NoCallTimeAppliedForces{});
+        NoCallTimeAppliedForces{});
 };
 
 static_assert(CanConstructSystemContinuousStateBackend<
@@ -175,13 +176,13 @@ ContinuousStateErrorTolerances MakeTolerances(int state_size) {
 }
 
 std::unique_ptr<SystemContinuousStateAdvancer> MakeSystemAdvancer(
-    SystemContinuousStateIntegrationRecipe recipe,
+    TestIntegrationMethod recipe,
     const SystemInstance& system,
     const CompiledSystemPlan& plan,
     orvd::system_assembly::SystemRuntimeContext& accepted_context,
     ContinuousStateErrorTolerances tolerances) {
-    return SystemContinuousStateIntegrationAccess::Make(
-        recipe, system, plan, accepted_context, std::move(tolerances),
+    return std::make_unique<SystemContinuousStateAdvancer>(
+        system, plan, accepted_context, SystemIntegrationConfiguration{OdeMethod(recipe, std::move(tolerances))},
         NoCallTimeAppliedForces{});
 }
 
@@ -219,30 +220,22 @@ void CheckSystemIntegrationRecipeIdentity() {
     system.SetContinuousState(*radau5_context, initial_state);
 
     SystemContinuousStateAdvancer public_advancer(
-        system, plan, *public_context, MakeTolerances(2),
+        system, plan, *public_context, SystemIntegrationConfiguration{orvd::integrators::CvodeBdf2Configuration{MakeTolerances(2)}},
         NoCallTimeAppliedForces{});
     std::unique_ptr<SystemContinuousStateAdvancer> fifth_order_advancer =
-        SystemContinuousStateIntegrationAccess::Make(
-            SystemContinuousStateIntegrationRecipe::kCvodeBdf5, system,
-            plan, *fifth_order_context, MakeTolerances(2),
+        std::make_unique<SystemContinuousStateAdvancer>(
+            system, plan, *fifth_order_context, SystemIntegrationConfiguration{orvd::integrators::CvodeBdf5Configuration{MakeTolerances(2)}},
             NoCallTimeAppliedForces{});
     std::unique_ptr<SystemContinuousStateAdvancer> radau5_advancer =
-        SystemContinuousStateIntegrationAccess::Make(
-            SystemContinuousStateIntegrationRecipe::kRadau5, system, plan,
-            *radau5_context, MakeTolerances(2),
+        std::make_unique<SystemContinuousStateAdvancer>(
+            system, plan, *radau5_context, SystemIntegrationConfiguration{orvd::integrators::Radau5Configuration{MakeTolerances(2)}},
             NoCallTimeAppliedForces{});
-    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-               public_advancer) ==
-               SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
-           "the public system recipe constructs the CVODE BDF2 default");
-    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-               *fifth_order_advancer) ==
-               SystemContinuousStateIntegrationRecipe::kCvodeBdf5,
-           "the private system recipe constructs the CVODE BDF5 backend");
-    Expect(SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-               *radau5_advancer) ==
-               SystemContinuousStateIntegrationRecipe::kRadau5,
-           "the private system recipe constructs the Radau5 backend");
+    Expect((public_advancer).method_identifier() == MethodIdentifier(TestIntegrationMethod::kCvodeBdf2),
+           "the explicit public configuration constructs CVODE BDF2");
+    Expect((*fifth_order_advancer).method_identifier() == MethodIdentifier(TestIntegrationMethod::kCvodeBdf5),
+           "the public configuration constructs the CVODE BDF5 backend");
+    Expect((*radau5_advancer).method_identifier() == MethodIdentifier(TestIntegrationMethod::kRadau5),
+           "the public configuration constructs the Radau5 backend");
 
     constexpr double kTargetTime = 4.0;
     public_advancer.AdvanceTo(kTargetTime);
@@ -343,7 +336,7 @@ void CheckAtomicAcceptedTimeAndState() {
 }
 
 void CheckCommitAndDampingSynchronization(
-    SystemContinuousStateIntegrationRecipe recipe) {
+    TestIntegrationMethod recipe) {
     DampedRotorFixture fixture;
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
@@ -438,7 +431,7 @@ void CheckCommitAndDampingSynchronization(
 }
 
 void CheckDenseStateSamplingTransaction(
-    SystemContinuousStateIntegrationRecipe recipe) {
+    TestIntegrationMethod recipe) {
     DampedRotorFixture fixture;
     const SystemAssemblyDescription description(fixture.model);
     const SystemInstance system(description);
@@ -516,7 +509,7 @@ void CheckDenseStateSamplingTransaction(
 }
 
 void CheckRealForcePlanAndNominalForceSynchronization(
-    SystemContinuousStateIntegrationRecipe recipe) {
+    TestIntegrationMethod recipe) {
     constexpr double kSliderMass = 2.0;
     constexpr double kSeriesStiffness = 8.0;
     constexpr double kSeriesDamping = 2.0;
@@ -642,7 +635,7 @@ void CheckRealForcePlanAndNominalForceSynchronization(
 }
 
 void CheckRealRhsFailureRequiresSynchronization(
-    SystemContinuousStateIntegrationRecipe recipe) {
+    TestIntegrationMethod recipe) {
     MultibodyModel model;
     const auto massless = model.AddRigidBody("massless", MakeInertia(0.0, 0.0));
     model.AddRevoluteJoint("singular", model.world_frame(),
@@ -698,7 +691,7 @@ void CheckForeignAcceptedContextIsRejected() {
     ExpectInvalidArgument(
         [&] {
             (void)SystemContinuousStateAdvancer(
-                first, first_plan, *foreign_context, MakeTolerances(2),
+                first, first_plan, *foreign_context, SystemIntegrationConfiguration{orvd::integrators::CvodeBdf2Configuration{MakeTolerances(2)}},
                 NoCallTimeAppliedForces{});
         },
         "a system advancer refuses an accepted context from another system");
@@ -710,8 +703,8 @@ int main() {
     CheckAtomicAcceptedTimeAndState();
     CheckSystemIntegrationRecipeIdentity();
     for (const auto recipe :
-         {SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
-          SystemContinuousStateIntegrationRecipe::kRadau5}) {
+         {TestIntegrationMethod::kCvodeBdf2,
+          TestIntegrationMethod::kRadau5}) {
         CheckCommitAndDampingSynchronization(recipe);
         CheckDenseStateSamplingTransaction(recipe);
         CheckRealForcePlanAndNominalForceSynchronization(recipe);

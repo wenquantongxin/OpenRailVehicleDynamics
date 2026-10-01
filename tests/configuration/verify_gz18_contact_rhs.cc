@@ -981,7 +981,8 @@ int main(int argc, char** argv) {
     auto& boundary_context = boundary_scenario->initial_context().context();
     SystemContinuousStateAdvancer boundary_advancer(
         boundary_system.system(), boundary_system.compiled_plan(),
-        boundary_context, MakeGz18Tolerances(), NoCallTimeAppliedForces{});
+        boundary_context, orvd::integrators::SystemIntegrationConfiguration{
+            orvd::integrators::CvodeBdf2Configuration{MakeGz18Tolerances()}}, NoCallTimeAppliedForces{});
     constexpr double kAcceptedHistoryTargetSeconds = 1.0e-3;
     boundary_advancer.AdvanceTo(kAcceptedHistoryTargetSeconds);
     Require(boundary_context.time_seconds() == kAcceptedHistoryTargetSeconds,

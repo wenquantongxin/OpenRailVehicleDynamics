@@ -23,6 +23,7 @@ struct Gz18QualificationRunConfiguration final {
     std::int64_t sample_period_nanoseconds{};
     std::optional<TimeIntegratorQualificationCase>
         time_integrator_qualification_case;
+    std::optional<std::filesystem::path> integration_config_path;
 };
 
 // Runs one qualification in a private assembled system. The input files are

@@ -30,10 +30,10 @@ namespace {
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemRhsBridge;
 using orvd::integrators::internal::CoordinateState;
-using orvd::integrators::internal::NewmarkConfiguration;
+using orvd::integrators::internal::NewmarkCoreConfiguration;
 using orvd::integrators::internal::NewmarkCore;
 using orvd::integrators::internal::SystemCoordinateProblem;
-using orvd::integrators::internal::ZhaiConfiguration;
+using orvd::integrators::ZhaiConfiguration;
 using orvd::integrators::internal::ZhaiCore;
 using orvd::multibody_model::JointHandle;
 using orvd::multibody_model::MultibodyModel;
@@ -282,8 +282,8 @@ struct MixedFixture final : SystemFixture {
     }
 };
 
-NewmarkConfiguration NewmarkSettings(const SystemCoordinateProblem& problem, double h) {
-    NewmarkConfiguration result;
+NewmarkCoreConfiguration NewmarkSettings(const SystemCoordinateProblem& problem, double h) {
+    NewmarkCoreConfiguration result;
     result.step_size_seconds = h;
     auto& solver = result.nonlinear_solver;
     solver.position_correction_scales = Eigen::VectorXd::Constant(problem.coordinate_size(), 1e-11);

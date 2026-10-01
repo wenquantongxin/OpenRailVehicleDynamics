@@ -19,11 +19,10 @@
 #error "OpenMP compile semantics are required: _OPENMP is not defined"
 #endif
 
-#include "orvd/integrators/cvode_continuous_state_advancer.h"
+#include "cvode_continuous_state_advancer.h"
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
 
-#include "bdf_integration_access.h"
 #include "dense_finite_difference_jacobian_provider.h"
 #include "radau5_continuous_state_advancer.h"
 #include "newmark_continuous_state_advancer.h"
@@ -216,9 +215,7 @@ class SystemDenseFiniteDifferenceJacobian final
 
 template <class Configuration, int Order>
 struct CvodeRuntime final {
-    static constexpr auto kRecipe = Order == 2
-        ? SystemContinuousStateIntegrationRecipe::kCvodeBdf2
-        : SystemContinuousStateIntegrationRecipe::kCvodeBdf5;
+    static constexpr std::string_view kIdentifier = Order == 2 ? "cvode_bdf2" : "cvode_bdf5";
 
     CvodeRuntime(const system_assembly::SystemInstance& system,
                  const system_assembly::CompiledSystemPlan& plan,
@@ -233,19 +230,14 @@ struct CvodeRuntime final {
             jacobian = std::make_unique<SystemDenseFiniteDifferenceJacobian>(
                 system, plan, candidate, workers, forces);
         }
-        if constexpr (Order == 2) {
-            advancer = std::make_unique<CvodeContinuousStateAdvancer>(
-                rhs, accepted.time_seconds(), initial,
-                std::move(configuration.tolerances));
-        } else {
-            advancer = BdfIntegrationAccess::MakeFifthOrderCvodeContinuousStateAdvancer(
-                rhs, accepted.time_seconds(), initial,
-                std::move(configuration.tolerances));
-        }
+        advancer = std::make_unique<CvodeContinuousStateAdvancer>(
+            rhs, accepted.time_seconds(), initial,
+            std::move(configuration.tolerances),
+            Order == 2 ? MaximumBdfOrder::kSecond : MaximumBdfOrder::kFifth);
         if (jacobian) {
             DenseFiniteDifferenceJacobianRegistration::Attach(*advancer, *jacobian);
         }
-        if (BdfIntegrationAccess::ConfiguredMaximumBdfOrder(*advancer) != Order) {
+        if (advancer->configured_maximum_bdf_order() != Order) {
             throw std::logic_error("system integration backend: CVODE recipe identity mismatch");
         }
     }
@@ -266,7 +258,7 @@ using CvodeBdf2Runtime = CvodeRuntime<CvodeBdf2Configuration, 2>;
 using CvodeBdf5Runtime = CvodeRuntime<CvodeBdf5Configuration, 5>;
 
 struct Radau5Runtime final {
-    static constexpr auto kRecipe = SystemContinuousStateIntegrationRecipe::kRadau5;
+    static constexpr std::string_view kIdentifier = "radau5";
     Radau5Runtime(const system_assembly::SystemInstance& system,
                   const system_assembly::CompiledSystemPlan& plan,
                   system_assembly::SystemRuntimeContext& candidate,
@@ -289,9 +281,10 @@ struct Radau5Runtime final {
     std::unique_ptr<Radau5ContinuousStateAdvancer> advancer;
 };
 
-template <class Configuration, class Advancer, SystemContinuousStateIntegrationRecipe Recipe>
+template <class Configuration, class Advancer>
 struct CoordinateRuntime final {
-    static constexpr auto kRecipe = Recipe;
+    static constexpr std::string_view kIdentifier =
+        std::is_same_v<Configuration, NewmarkConfiguration> ? "newmark" : "zhai";
     CoordinateRuntime(const system_assembly::SystemInstance& system,
                       const system_assembly::CompiledSystemPlan& plan,
                       system_assembly::SystemRuntimeContext& candidate,
@@ -316,10 +309,8 @@ struct CoordinateRuntime final {
     SystemCoordinateProblem problem;
     std::unique_ptr<Advancer> advancer;
 };
-using NewmarkRuntime = CoordinateRuntime<NewmarkConfiguration, NewmarkContinuousStateAdvancer,
-    SystemContinuousStateIntegrationRecipe::kNewmark>;
-using ZhaiRuntime = CoordinateRuntime<ZhaiConfiguration, ZhaiContinuousStateAdvancer,
-    SystemContinuousStateIntegrationRecipe::kZhai>;
+using NewmarkRuntime = CoordinateRuntime<NewmarkConfiguration, NewmarkContinuousStateAdvancer>;
+using ZhaiRuntime = CoordinateRuntime<ZhaiConfiguration, ZhaiContinuousStateAdvancer>;
 
 using ConcreteRuntime = std::variant<std::unique_ptr<CvodeBdf2Runtime>,
     std::unique_ptr<CvodeBdf5Runtime>, std::unique_ptr<Radau5Runtime>,
@@ -375,18 +366,9 @@ class SystemContinuousStateBackend::Implementation final {
             return *runtime->advancer;
         }, runtime_);
     }
-    SystemContinuousStateIntegrationRecipe configured_recipe() const noexcept {
+    std::string_view method_identifier() const noexcept {
         return std::visit([](const auto& runtime) {
-            return std::remove_reference_t<decltype(*runtime)>::kRecipe;
-        }, runtime_);
-    }
-    std::optional<CoordinateIntegrationDiagnostics> coordinate_diagnostics() const {
-        return std::visit([](const auto& runtime) -> std::optional<CoordinateIntegrationDiagnostics> {
-            if constexpr (requires { runtime->advancer->diagnostics(); }) {
-                return runtime->advancer->diagnostics();
-            } else {
-                return std::nullopt;
-            }
+            return std::remove_reference_t<decltype(*runtime)>::kIdentifier;
         }, runtime_);
     }
     void SynchronizeContextLocalDataFrom(
@@ -413,19 +395,6 @@ SystemContinuousStateBackend::SystemContinuousStateBackend(
           std::move(configuration), system, plan, candidate_context, accepted_context,
           initial_continuous_state, no_call_time_applied_forces)) {}
 
-SystemContinuousStateBackend::SystemContinuousStateBackend(
-    SystemContinuousStateIntegrationRecipe recipe,
-    const system_assembly::SystemInstance& system,
-    const system_assembly::CompiledSystemPlan& plan,
-    system_assembly::SystemRuntimeContext& candidate_context,
-    const system_assembly::SystemRuntimeContext& accepted_context,
-    const Eigen::VectorXd& initial_continuous_state,
-    ContinuousStateErrorTolerances tolerances,
-    NoCallTimeAppliedForces no_call_time_applied_forces)
-    : SystemContinuousStateBackend(MakeOdeMethodConfiguration(recipe, std::move(tolerances)),
-          system, plan, candidate_context, accepted_context, initial_continuous_state,
-          no_call_time_applied_forces) {}
-
 SystemContinuousStateBackend::~SystemContinuousStateBackend() = default;
 
 ContinuousStateAdvancer& SystemContinuousStateBackend::advancer() {
@@ -437,14 +406,8 @@ const ContinuousStateAdvancer& SystemContinuousStateBackend::advancer()
     return implementation_->advancer();
 }
 
-SystemContinuousStateIntegrationRecipe
-SystemContinuousStateBackend::configured_recipe() const noexcept {
-    return implementation_->configured_recipe();
-}
-
-std::optional<CoordinateIntegrationDiagnostics>
-SystemContinuousStateBackend::coordinate_diagnostics() const {
-    return implementation_->coordinate_diagnostics();
+std::string_view SystemContinuousStateBackend::method_identifier() const noexcept {
+    return implementation_->method_identifier();
 }
 
 void SystemContinuousStateBackend::SynchronizeContextLocalDataFrom(

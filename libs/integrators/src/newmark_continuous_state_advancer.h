@@ -32,6 +32,7 @@ class NewmarkContinuousStateAdvancer final : public ContinuousStateAdvancer {
     [[nodiscard]] double current_time_seconds() const override;
     [[nodiscard]] ContinuousStateIntegrationStatistics integration_statistics() const override;
     [[nodiscard]] CoordinateIntegrationDiagnostics diagnostics() const;
+    [[nodiscard]] const NewmarkCoreConfiguration& expanded_configuration() const;
     void CopyCurrentState(Eigen::Ref<Eigen::VectorXd>) const override;
     [[nodiscard]] ContinuousStateInternalStep AdvanceOneInternalStepToward(
         double stop_time_seconds, Eigen::Ref<Eigen::VectorXd> endpoint) override;

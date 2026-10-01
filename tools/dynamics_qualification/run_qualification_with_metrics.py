@@ -61,6 +61,46 @@ CONTACT_PATCH_COLUMNS = (
 )
 
 
+def split_runner_arguments(
+    vehicle_recipe: str, runner_arguments: list[str]
+) -> tuple[list[str], str | None]:
+    """Locate positional paths without altering the argv sent to the runner."""
+
+    positionals: list[str] = []
+    integration_config_path: str | None = None
+    index = 0
+    while index < len(runner_arguments):
+        argument = runner_arguments[index]
+        if argument == "--integration-config":
+            if integration_config_path is not None:
+                raise ValueError("--integration-config may be specified only once")
+            if (
+                index + 1 == len(runner_arguments)
+                or not runner_arguments[index + 1]
+                or runner_arguments[index + 1].startswith("--")
+            ):
+                raise ValueError("--integration-config requires one non-empty path")
+            integration_config_path = runner_arguments[index + 1]
+            index += 2
+        elif argument == "--scene-record" and vehicle_recipe == "irw-passive-scenario":
+            index += 1
+        else:
+            positionals.append(argument)
+            index += 1
+    layouts = RUNNER_LAYOUTS[vehicle_recipe]
+    if len(positionals) not in layouts:
+        raise ValueError(
+            f"the {vehicle_recipe.upper()} qualification runner requires one of "
+            f"{tuple(layouts)} positional argument counts"
+        )
+    if integration_config_path is not None and len(positionals) != min(layouts):
+        raise ValueError(
+            "--integration-config and the time-integrator qualification case "
+            "are mutually exclusive"
+        )
+    return positionals, integration_config_path
+
+
 def parse_affinity(text: str) -> set[int]:
     result: set[int] = set()
     for item in text.split(","):
@@ -125,6 +165,10 @@ def prepare_manifest_bound_execution(
 
     if not _comparison_options_are_complete(arguments):
         return None
+    if "--integration-config" in arguments.runner_arguments:
+        raise ValueError(
+            "INT-07 manifest binding does not admit --integration-config"
+        )
     namespace = _load_comparison_namespace()
     source_root = (
         arguments.comparison_source_root
@@ -163,14 +207,14 @@ def prepare_manifest_bound_execution(
         raise ValueError("CPU affinity core count does not match the manifest")
 
     output_index = RUNNER_LAYOUTS[arguments.vehicle_recipe][
-        len(arguments.runner_arguments)
+        len(arguments.runner_positionals)
     ]
     expected_arguments = namespace["materialize_runner_arguments"](  # type: ignore[operator]
         manifest,
         scenario_identifier=arguments.comparison_scenario,
         qualification_case_identifier=arguments.comparison_case,
         source_root=source_root,
-        output_directory=arguments.runner_arguments[output_index],
+        output_directory=arguments.runner_positionals[output_index],
     )
     if arguments.runner_arguments != expected_arguments:
         raise ValueError(
@@ -779,12 +823,17 @@ def parse_arguments(argv: Iterable[str]) -> argparse.Namespace:
         value is not None for value in comparison_values
     ):
         parser.error("--comparison-source-root requires a complete binding")
-    layouts = RUNNER_LAYOUTS[arguments.vehicle_recipe]
-    if len(arguments.runner_arguments) not in layouts:
-        parser.error(
-            f"the {arguments.vehicle_recipe.upper()} qualification runner "
-            f"requires one of {tuple(layouts)} argument counts"
+    try:
+        arguments.runner_positionals, arguments.integration_config_path = (
+            split_runner_arguments(arguments.vehicle_recipe, arguments.runner_arguments)
         )
+    except ValueError as error:
+        parser.error(str(error))
+    if (
+        arguments.integration_config_path is not None
+        and _comparison_options_are_complete(arguments)
+    ):
+        parser.error("INT-07 manifest binding does not admit --integration-config")
     return arguments
 
 
@@ -839,9 +888,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     }
     output_directory_argument_index = RUNNER_LAYOUTS[
         arguments.vehicle_recipe
-    ][len(arguments.runner_arguments)]
+    ][len(arguments.runner_positionals)]
     artifact_directory = Path(
-        arguments.runner_arguments[output_directory_argument_index]
+        arguments.runner_positionals[output_directory_argument_index]
     ).resolve()
     before_usage = posix_resource.getrusage(posix_resource.RUSAGE_CHILDREN)
     begin = time.perf_counter()

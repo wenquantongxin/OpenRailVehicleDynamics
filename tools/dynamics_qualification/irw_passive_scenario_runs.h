@@ -60,6 +60,7 @@ struct IrwPassiveScenarioRunConfiguration final {
     std::optional<TimeIntegratorQualificationCase>
         time_integrator_qualification_case;
     bool publish_scene_record{false};
+    std::optional<std::filesystem::path> integration_config_path;
 };
 
 // Runs one passive IRW qualification in a private assembled system. A

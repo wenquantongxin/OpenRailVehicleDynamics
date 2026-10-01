@@ -574,21 +574,23 @@ target_link_libraries(verify_system_rhs_bridge PRIVATE orvd_integrators)
 add_test(NAME verify_system_rhs_bridge COMMAND verify_system_rhs_bridge)
 
 # The backend-neutral ContinuousStateAdvancer contract, instantiated here with
-# the real public CVODE factory. The shared suite is intentionally unable to
+# the source-private CVODE implementation. The shared suite is intentionally unable to
 # reach CVODE or BDF diagnostics so the Radau5 adapter can run it unchanged.
 add_executable(verify_cvode_continuous_state_advancer
     integrators/continuous_state_advancer_contract.cc
     integrators/cvode_continuous_state_advancer_header_self_containment.cc
     integrators/verify_cvode_continuous_state_advancer.cc)
 orvd_configure_first_party_target(verify_cvode_continuous_state_advancer)
+target_include_directories(verify_cvode_continuous_state_advancer PRIVATE
+    ${PROJECT_SOURCE_DIR}/libs/integrators/src)
 target_link_libraries(verify_cvode_continuous_state_advancer
     PRIVATE orvd_integrators)
 add_test(NAME verify_cvode_continuous_state_advancer
          COMMAND verify_cvode_continuous_state_advancer)
 
 # CVODE's BDF execution identity is deliberately outside the backend-neutral
-# contract: public construction is maximum order two and the source-tree-only
-# qualification recipe is maximum order five, including after reinitialization.
+# contract: explicit BDF2 and BDF5 selections retain their maximum order,
+# including after reinitialization.
 add_executable(verify_cvode_bdf_identity
     integrators/verify_cvode_bdf_identity.cc)
 orvd_configure_first_party_target(verify_cvode_bdf_identity)
@@ -622,6 +624,14 @@ foreach(method IN ITEMS newmark zhai)
     target_link_libraries(verify_${method}_core PRIVATE Eigen3::Eigen)
     add_test(NAME verify_${method}_core COMMAND verify_${method}_core)
 endforeach()
+
+add_executable(verify_newmark_coordinate_layout
+    integrators/verify_newmark_coordinate_layout.cc)
+orvd_configure_first_party_target(verify_newmark_coordinate_layout)
+target_include_directories(verify_newmark_coordinate_layout PRIVATE
+    ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+target_link_libraries(verify_newmark_coordinate_layout PRIVATE orvd_integrators)
+add_test(NAME verify_newmark_coordinate_layout COMMAND verify_newmark_coordinate_layout)
 
 # Coordinate/physical state conversion and the real compiled physics bridge.
 add_executable(verify_system_coordinate_problem
@@ -669,6 +679,8 @@ add_test(NAME verify_radau5_continuous_state_advancer
 # introducing a fake numerical backend or a production fault hook.
 add_executable(verify_system_continuous_state_advancer
     integrators/system_continuous_state_advancer_header_self_containment.cc
+    integrators/system_integration_configuration_header_self_containment.cc
+    integrators/mechanical_integration_configuration_header_self_containment.cc
     integrators/verify_system_continuous_state_advancer.cc)
 orvd_configure_first_party_target(verify_system_continuous_state_advancer)
 target_include_directories(verify_system_continuous_state_advancer
@@ -1190,6 +1202,22 @@ add_test(NAME verify_gz18_passive_short_window
 set_tests_properties(verify_gz18_passive_short_window
     PROPERTIES PROCESSORS 8)
 
+# Shared vehicle integration configuration and work-accounting contracts.
+foreach(test_name IN ITEMS verify_qualification_integration_configuration
+                           verify_qualification_run_accounting)
+    add_executable(${test_name} dynamics_qualification/${test_name}.cc)
+    orvd_configure_first_party_target(${test_name})
+    target_link_libraries(${test_name} PRIVATE orvd_dynamics_qualification_support
+        OpenMP::OpenMP_CXX nlohmann_json::nlohmann_json)
+endforeach()
+target_include_directories(verify_qualification_run_accounting PRIVATE
+    ${PROJECT_SOURCE_DIR}/libs/integrators/src)
+add_test(NAME verify_qualification_integration_configuration
+    COMMAND verify_qualification_integration_configuration ${CMAKE_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/qualification-integration-configuration-fixtures)
+add_test(NAME verify_qualification_run_accounting
+    COMMAND verify_qualification_run_accounting
+        ${CMAKE_CURRENT_BINARY_DIR}/qualification-run-accounting-fixtures)
 # G58's non-installed qualification leaf. A 30 ms real GZ18 run with only its
 # two endpoints exercises multiple dense Jacobians, sequential observation
 # projection across the dense-state batch, the

@@ -21,6 +21,7 @@
 #include "irw_passive_scenario_runs.h"
 #include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
 #include "time_integrator_qualification_case.h"
+#include "qualification_continuous_state_writer.h"
 
 namespace {
 
@@ -33,7 +34,7 @@ using orvd::dynamics_qualification::TimeIntegratorQualificationBackend;
 using orvd::dynamics_qualification::TimeIntegratorQualificationCase;
 using orvd::dynamics_qualification::
     TimeIntegratorQualificationToleranceTier;
-using orvd::integrators::internal::SystemContinuousStateIntegrationRecipe;
+using orvd::dynamics_qualification::QualificationIntegrationMethod;
 
 struct QualificationCaseIdentity final {
     TimeIntegratorQualificationCase qualification_case;
@@ -127,15 +128,15 @@ void CheckTimeIntegratorQualificationNumerics() {
     constexpr double kVelocityTolerance = 3.0e-4;
     constexpr double kSeriesForceTolerance = 4.0e-3;
     constexpr std::array kScenarioDefaultRecipes{
-        SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
-        SystemContinuousStateIntegrationRecipe::kCvodeBdf5};
+        QualificationIntegrationMethod::kCvodeBdf2,
+        QualificationIntegrationMethod::kCvodeBdf5};
     constexpr std::array kTiers{
         TimeIntegratorQualificationToleranceTier::kCoarse,
         TimeIntegratorQualificationToleranceTier::kNominal,
         TimeIntegratorQualificationToleranceTier::kFine,
         TimeIntegratorQualificationToleranceTier::kReference};
 
-    for (const SystemContinuousStateIntegrationRecipe default_recipe :
+    for (const QualificationIntegrationMethod default_recipe :
          kScenarioDefaultRecipes) {
         const auto unqualified = orvd::dynamics_qualification::
             ResolveTimeIntegratorQualificationNumerics(
@@ -198,7 +199,7 @@ void CheckTimeIntegratorQualificationNumerics() {
                     kPositionTolerance, kVelocityTolerance,
                     kSeriesForceTolerance);
             Require(radau5.integration_recipe ==
-                            SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                            QualificationIntegrationMethod::kRadau5 &&
                         radau5.qualification_case == radau5_case &&
                         radau5.qualification_case_identifier ==
                             orvd::dynamics_qualification::
@@ -343,6 +344,206 @@ std::size_t FindColumn(const std::vector<std::string>& header,
                              std::string(name));
 }
 
+void CheckStateComparisonArtifact(
+    const std::filesystem::path& directory,
+    const Eigen::Ref<const Eigen::VectorXd>& terminal,
+    std::size_t expected_samples, bool controlled) {
+    const auto metadata = nlohmann::json::parse(ReadWholeFile(directory / "metadata.json"));
+    const auto& contract = metadata.at("continuous_state_observation_contract");
+    Require(contract.at("sample_count") == expected_samples &&
+                contract.at("start_time_nanoseconds") == 0 &&
+                contract.at("float_precision_digits") == 17 &&
+                contract.at("state_layout") == "[q;v;z]" &&
+                metadata.at("artifact_schema_identifier") ==
+                    (controlled ? "orvd.controlled_vehicle_qualification.v1" :
+                                  "orvd.passive_vehicle_qualification.v2"),
+            "full-state metadata has the wrong schema, clock or precision");
+    std::ifstream states(directory / "continuous_states.tsv");
+    std::ifstream observations(directory / "observations.tsv");
+    std::string line, observation_line;
+    std::getline(states, line);
+    const auto header = SplitTabs(line);
+    std::getline(observations, observation_line);
+    const auto observation_header = SplitTabs(observation_line);
+    Require(header.size() == static_cast<std::size_t>(terminal.size()) + 3 &&
+                header[3] == "q.0" && header[84] == "v.0" &&
+                header[158] == "z.0" && header.back() == "z.1",
+            "full-state artifact did not preserve frozen IRW q/v/z order");
+    std::size_t sample = 0;
+    std::vector<double> initial, last;
+    while (std::getline(states, line)) {
+        const auto row = SplitTabs(line);
+        Require(row.size() == header.size(), "full-state row width changed");
+        if (row.size() != header.size()) return;
+        Require(static_cast<std::size_t>(std::stoull(row[0])) == sample &&
+                    std::stoull(row[1]) == sample *
+                        contract.at("sample_period_nanoseconds").get<std::uint64_t>(),
+                "full-state sample was repeated, omitted or assigned a different integer time");
+        const bool has_observation = static_cast<bool>(std::getline(observations, observation_line));
+        Require(has_observation, "full-state row lacks its physical observation");
+        if (has_observation) {
+            const auto observation = SplitTabs(observation_line);
+            Require(observation.size() == observation_header.size() &&
+                        observation[0] == row[0] && observation[1] == row[1] &&
+                        observation[2] == row[2],
+                    "full-state and physical observations disagree on exact sample time");
+        }
+        last.clear();
+        for (std::size_t i = 3; i < row.size(); ++i) last.push_back(ParseFiniteDouble(row[i]));
+        if (sample == 0) initial = last;
+        ++sample;
+    }
+    Require(sample == expected_samples && !std::getline(observations, observation_line),
+            "full-state and physical observation clocks do not end together");
+    const auto& endpoints = metadata.at("comparison_state_contract");
+    Require(endpoints.at("initial_physical_state") == initial &&
+                endpoints.at("terminal_physical_state") == last,
+            "full-state first/last rows disagree with independently recorded accepted endpoints");
+    if (last.size() == static_cast<std::size_t>(terminal.size())) {
+        for (Eigen::Index i = 0; i < terminal.size(); ++i) {
+            Require(last[static_cast<std::size_t>(i)] == terminal[i],
+                    "full-state terminal row changed the accepted physical state");
+        }
+    }
+    const auto& physical = metadata.at("physical_observation_contract");
+    Require(physical.at("schema_identifier") == "orvd.qualification_physical_observations.v1" &&
+                physical.at("force_frame") == "carrier_projection_track_T" &&
+                physical.at("carriers").size() == 4 && physical.at("interfaces").size() == 8,
+            "physical observation mapping is incomplete");
+    for (const auto& carrier : physical.at("carriers")) {
+        for (const auto key : {"station_column", "lateral_column", "yaw_column"}) {
+            (void)FindColumn(observation_header, carrier.at(key).get<std::string>());
+        }
+        Require(carrier.at("yaw_basis") ==
+                    (controlled ? "physical_axle_bridge_source_body_relative_to_track_T" :
+                                  "assembled_carrier_body_relative_to_track_T"),
+                "physical yaw mapping lost its actual source basis");
+    }
+    for (const auto& interface : physical.at("interfaces")) {
+        for (const auto key : {"station_column", "patch_count_column", "normal_force_column", "support_force_column"}) {
+            (void)FindColumn(observation_header, interface.at(key).get<std::string>());
+        }
+        for (const auto axis : {"x", "y", "z"}) {
+            (void)FindColumn(observation_header, interface.at("force_columns").at(axis).get<std::string>());
+        }
+    }
+    const auto& diagnostics = metadata.at("comparison_endpoint_diagnostics");
+    Require(diagnostics.at("scope") ==
+                (controlled ? "initial_and_all_arriving_hold_endpoints" : "terminal"),
+            "endpoint diagnostics do not identify their actual time scope");
+    for (const auto key : {"generalized_force_residual_inf_norm",
+                          "absolute_virtual_power_residual_watts",
+                          "position_derivative_slice_consistency_inf_norm",
+                          "series_force_derivative_slice_consistency_inf_norm"}) {
+        const auto value = diagnostics.at(key).get<double>();
+        Require(std::isfinite(value) && value >= 0.0,
+                "comparison endpoint diagnostic is missing or non-finite");
+    }
+}
+
+void CheckContinuousStateWriter(const std::filesystem::path& root) {
+    using namespace orvd::dynamics_qualification;
+    const QualificationSampleClock clock(2'000'000, 1'000'000);
+    auto times = clock.MakeSampleTimesSeconds();
+    // Preserve the caller's binary64 event-time value, not a recomputed clock.
+    times[1] = std::nextafter(times[1], 1.0);
+    Eigen::MatrixXd states(3, 3);
+    states << 1.0, std::nextafter(1.0, 2.0), 3.0,
+              -2.0, -3.0, -4.0,
+              5.0, 6.0, 7.0;
+    QualificationContinuousStateWriter writer(root / "writer-stream.tsv", clock, times, 1, 1, 1);
+    Require(Throws([&] { writer.Append(1, states.col(1)); }), "writer accepted an omitted initial sample");
+    writer.Append(0, states.col(0));
+    Require(Throws([&] { writer.Append(0, states.col(0)); }), "writer duplicated a control boundary");
+    Require(Throws([&] { writer.Close(); }), "writer published an incomplete clock");
+    auto invalid = states.col(1).eval();
+    invalid[0] = std::numeric_limits<double>::quiet_NaN();
+    Require(Throws([&] { writer.Append(1, invalid); }), "writer accepted a non-finite sample");
+    writer.Append(1, states.col(1));
+    writer.Append(2, states.col(2));
+    writer.Close();
+    Require(Throws([&] { writer.Append(2, states.col(2)); }), "closed writer accepted another sample");
+    WriteQualificationContinuousStates(root / "writer-matrix.tsv", clock, times, states, 1, 1, 1);
+    Require(ReadWholeFile(root / "writer-stream.tsv") == ReadWholeFile(root / "writer-matrix.tsv"),
+            "stream and matrix state writers produce different artifacts");
+    std::ifstream input(root / "writer-stream.tsv");
+    std::string line;
+    std::getline(input, line);
+    Require(line == "sample_index\ttime_nanoseconds\ttime_seconds\tq.0\tv.0\tz.0", "writer changed the TSV header");
+    for (Eigen::Index sample = 0; sample < 3; ++sample) {
+        std::getline(input, line);
+        const auto row = SplitTabs(line);
+        Require(ParseFiniteDouble(row[2]) == times[static_cast<std::size_t>(sample)],
+                "writer recomputed a binary64 sample time");
+        for (Eigen::Index state = 0; state < 3; ++state) {
+            Require(ParseFiniteDouble(row[static_cast<std::size_t>(state) + 3]) == states(state, sample),
+                    "writer lost physical-state binary64 precision");
+        }
+    }
+}
+
+void CheckNoIrregularityMechanicalConfigurations(
+    const IrwPassiveScenarioRunConfiguration& physical_configuration) {
+    for (const std::string method : {"newmark", "zhai"}) {
+        auto configuration = physical_configuration;
+        configuration.integration_config_path =
+            configuration.orvd_data_root /
+            "tools/dynamics_qualification/integration_configurations" /
+            (method + "_explicit_trial.json");
+        configuration.duration_nanoseconds = 25'000;
+        configuration.sample_period_nanoseconds = 25'000;
+        configuration.output_directory =
+            physical_configuration.output_directory.string() + "-" + method;
+        const auto summary = RunIrwPassiveScenario(configuration);
+        Require(summary.sample_count == 2 &&
+                    summary.integration_recipe ==
+                        (method == "newmark"
+                             ? QualificationIntegrationMethod::kNewmark
+                             : QualificationIntegrationMethod::kZhai) &&
+                    summary.integration_statistics.successful_internal_step_count == 1 &&
+                    summary.terminal_continuous_state.size() == 81 + 74 + 2 &&
+                    summary.terminal_continuous_state.allFinite(),
+                "a mechanical configuration did not run one finite no-irregularity IRW step");
+        const auto metadata = nlohmann::json::parse(
+            ReadWholeFile(configuration.output_directory / "metadata.json"));
+        const auto& contract = metadata.at("numerical_execution_contract");
+        const auto& layout = contract.at("coordinate_layout");
+        Require(metadata.at("track_irregularity_identifier").is_null() &&
+                    contract.at("integrator_recipe_identifier") == method &&
+                    contract.at("step_size_nanoseconds") == 25'000 &&
+                    contract.at("step_size_seconds") == 25'000.0 * 1e-9 &&
+                    layout.at("physical_positions").at("start") == 0 &&
+                    layout.at("physical_positions").at("size") == 81 &&
+                    layout.at("physical_velocities").at("start") == 81 &&
+                    layout.at("physical_velocities").at("size") == 74 &&
+                    layout.at("internal_state").at("start") == 155 &&
+                    layout.at("internal_state").at("size") == 2,
+                "mechanical no-irregularity metadata lost the requested step or IRW binding");
+        if (method == "newmark") {
+            const auto& scales = contract.at("newton").at("scales");
+            Require(scales.size() == 4 && scales.contains("quaternion") &&
+                        scales.contains("force") && !contract.at("newton").contains("expanded_scales"),
+                    "Newmark must declare scalar families without private arrays");
+        } else {
+            Require(contract.at("newton").is_null(),
+                    "no-irregularity Zhai acquired a Newton configuration");
+        }
+        std::ifstream states(configuration.output_directory / "continuous_states.tsv");
+        std::string line;
+        std::getline(states, line);
+        std::size_t rows = 0;
+        while (std::getline(states, line)) {
+            const auto fields = SplitTabs(line);
+            Require(fields.size() == 3 + 81 + 74 + 2,
+                    "a mechanical no-irregularity state sample has the wrong layout");
+            for (const auto& field : fields) (void)ParseFiniteDouble(field);
+            ++rows;
+        }
+        Require(rows == 2,
+                "a mechanical no-irregularity run did not publish two state samples");
+    }
+}
+
 void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     IrwPassiveScenarioRunConfiguration configuration;
     configuration.scenario_identifier =
@@ -360,7 +561,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     const auto summary = RunIrwPassiveScenario(configuration);
     Require(summary.sample_count == 101 && summary.maximum_bdf_order == 2 &&
                 summary.integration_recipe ==
-                    SystemContinuousStateIntegrationRecipe::kCvodeBdf2,
+                    QualificationIntegrationMethod::kCvodeBdf2,
             "the 10 ms / 100 us clock did not publish 101 points");
     Require(summary.integration_statistics.successful_internal_step_count > 0 &&
                 summary.integration_statistics.right_hand_side_evaluation_count +
@@ -523,6 +724,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     const std::string metadata =
         ReadWholeFile(configuration.output_directory / "metadata.json");
     const nlohmann::json metadata_document = nlohmann::json::parse(metadata);
+    CheckStateComparisonArtifact(configuration.output_directory, summary.terminal_continuous_state, 101, false);
     Require(metadata_document.at("artifact_schema_identifier") ==
                     "orvd.passive_vehicle_qualification.v2" &&
                 metadata_document.at("continuous_state_observation_contract")
@@ -600,6 +802,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the IRW runner overwrote an existing successful artifact");
 
+    CheckNoIrregularityMechanicalConfigurations(configuration);
+
     IrwPassiveScenarioRunConfiguration radau5 = configuration;
     radau5.output_directory = root / "real-irw-radau5-coarse";
     radau5.duration_nanoseconds = 1'000'000;
@@ -610,7 +814,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             TimeIntegratorQualificationToleranceTier::kCoarse};
     const auto radau5_summary = RunIrwPassiveScenario(radau5);
     Require(radau5_summary.integration_recipe ==
-                    SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                    QualificationIntegrationMethod::kRadau5 &&
                 radau5_summary.time_integrator_qualification_case ==
                     radau5.time_integrator_qualification_case &&
                 !radau5_summary.maximum_bdf_order.has_value() &&
@@ -860,7 +1064,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const auto summary = RunIrwR300Aar5V60At100HzFullStateGuidance(configuration);
     Require(summary.observation_count == 41 &&
                 summary.integration_recipe ==
-                    SystemContinuousStateIntegrationRecipe::kCvodeBdf2 &&
+                    QualificationIntegrationMethod::kCvodeBdf2 &&
                 summary.maximum_bdf_order == 2 &&
                 summary.control_audit_count == 4 &&
                 summary.positive_hold_interval_count == 2 &&
@@ -881,10 +1085,10 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     summary.maximum_absolute_virtual_power_residual_watts),
             "the real controlled IRW window did no finite numerical work");
 
-    constexpr std::array<std::string_view, 7> kFiles{
+    constexpr std::array<std::string_view, 8> kFiles{
         "COMPLETE", "metadata.json", "observations.tsv",
         "contact_patches.tsv", "control_events.tsv",
-        "endpoint_diagnostics.tsv", "performance.json"};
+        "endpoint_diagnostics.tsv", "performance.json", "continuous_states.tsv"};
     for (const std::string_view file : kFiles) {
         Require(std::filesystem::is_regular_file(
                     configuration.output_directory / file),
@@ -1072,9 +1276,17 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     "500000") != std::string::npos,
             "the controlled artifact lacks its event transaction identity");
 
-    const std::array<std::string_view, 4> physical_files{
+    CheckStateComparisonArtifact(configuration.output_directory, summary.terminal_continuous_state, 41, true);
+    const auto serial_numerical_contract =
+        nlohmann::json::parse(metadata).at("numerical_execution_contract");
+    Require(serial_numerical_contract.at("contact_batch_worker_cap") == 8 &&
+                serial_numerical_contract.at("contact_batch_requested_worker_count") == 1 &&
+                serial_numerical_contract.at("contact_batch_parallel_team_probe_worker_count") == 1,
+            "the serial controlled artifact lost its contact worker cap or actual request");
+
+    const std::array<std::string_view, 5> physical_files{
         "observations.tsv", "contact_patches.tsv", "control_events.tsv",
-        "endpoint_diagnostics.tsv"};
+        "endpoint_diagnostics.tsv", "continuous_states.tsv"};
     for (const int requested_threads : {4, 8, 12, 16, 32}) {
         omp_set_num_threads(requested_threads);
         auto comparison = configuration;
@@ -1083,6 +1295,16 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     std::to_string(requested_threads));
         const auto candidate =
             RunIrwR300Aar5V60At100HzFullStateGuidance(comparison);
+        const auto contact_contract = nlohmann::json::parse(
+            ReadWholeFile(comparison.output_directory / "metadata.json"))
+                                          .at("numerical_execution_contract");
+        const int contact_request = std::min(8, requested_threads);
+        const int contact_probe = contact_contract
+            .at("contact_batch_parallel_team_probe_worker_count").get<int>();
+        Require(contact_contract.at("contact_batch_worker_cap") == 8 &&
+                    contact_contract.at("contact_batch_requested_worker_count") == contact_request &&
+                    contact_probe >= 2 && contact_probe <= contact_request,
+                "the controlled contact worker request did not follow the eight-interface cap");
         Require(candidate.maximum_bdf_order == 2 &&
                     candidate.integration_statistics
                         .requested_dense_finite_difference_jacobian_worker_count ==
@@ -1110,7 +1332,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
     const auto radau5_summary =
         RunIrwR300Aar5V60At100HzFullStateGuidance(radau5);
     Require(radau5_summary.integration_recipe ==
-                    SystemContinuousStateIntegrationRecipe::kRadau5 &&
+                    QualificationIntegrationMethod::kRadau5 &&
                 !radau5_summary.maximum_bdf_order.has_value() &&
                 radau5_summary.observation_count == 41 &&
                 radau5_summary.control_audit_count == 4 &&
@@ -1125,6 +1347,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                 radau5_summary.terminal_continuous_state.allFinite(),
             "the Radau5 qualification recipe did not preserve the 100 Hz "
             "event and explicit-reinitialization contract");
+    CheckStateComparisonArtifact(radau5.output_directory, radau5_summary.terminal_continuous_state, 41, true);
     const std::string radau5_metadata =
         ReadWholeFile(radau5.output_directory / "metadata.json");
     const nlohmann::json radau5_metadata_document =
@@ -1229,6 +1452,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(root);
 
     try {
+        CheckContinuousStateWriter(root);
         CheckTimeIntegratorQualificationNumerics();
         CheckRealIrwRun(argv, root);
         CheckPassiveDenseJacobianThreading(argv, root);

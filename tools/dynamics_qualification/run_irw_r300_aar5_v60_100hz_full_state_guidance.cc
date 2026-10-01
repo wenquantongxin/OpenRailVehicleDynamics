@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
+#include "qualification_cli_options.h"
 
 namespace {
 
@@ -26,17 +27,28 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    orvd::dynamics_qualification::internal::QualificationCliOptions options;
+    try {
+        options = orvd::dynamics_qualification::internal::ParseQualificationCliOptions(
+            argc, argv, 8);
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s\n", error.what());
+        return 2;
+    }
+    argc = static_cast<int>(options.positional_arguments.size());
+    argv = options.positional_arguments.data();
     if (argc != 9 && argc != 10) {
         std::fprintf(
             stderr,
             "usage: orvd_irw_r300_aar5_v60_100hz_full_state_guidance "
             "VEHICLE STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER "
             "OUTPUT_DIRECTORY DURATION_NS "
-            "[TIME_INTEGRATOR_QUALIFICATION_CASE]\n");
+            "[TIME_INTEGRATOR_QUALIFICATION_CASE | --integration-config PATH]\n");
         return 2;
     }
     orvd::dynamics_qualification::
         IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration configuration;
+    configuration.integration_config_path = options.integration_config_path;
     configuration.vehicle_definition_path = argv[1];
     configuration.resolved_startup_state_path = argv[2];
     configuration.track_geometry_path = argv[3];

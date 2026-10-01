@@ -13,9 +13,11 @@
 #include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_instance.h"
 
-#include "integrator_limits.h"
+#include "coordinate_numerical_failure.h"
+#include "newmark_coordinate_layout.h"
+#include "orvd/multibody_model/multibody_model.h"
+#include <type_traits>
 #include "system_continuous_state_backend.h"
-#include "system_continuous_state_integration_access.h"
 
 namespace orvd::integrators {
 namespace {
@@ -28,9 +30,75 @@ bool SameDoubleBits(double left, double right) {
 std::size_t ValidateWorkBudget(std::size_t value) {
     if (value == 0) {
         throw std::invalid_argument(
-            "system continuous-state advancer: internal-step budget must be positive");
+            "system continuous-state advancer: maximum_internal_steps_per_advance must be positive");
     }
     return value;
+}
+
+void ValidateConfiguration(
+    const SystemIntegrationConfiguration& configuration,
+    const system_assembly::SystemInstance& system,
+    const system_assembly::CompiledSystemPlan& plan,
+    system_assembly::SystemRuntimeContext& accepted) {
+    // Scalar checks precede model binding and every backend/worker allocation.
+    std::visit([](const auto& method) {
+        using Method = std::decay_t<decltype(method)>;
+        if constexpr (std::is_same_v<Method, NewmarkConfiguration>) {
+            internal::ValidateNewmarkConfiguration(method);
+        } else if constexpr (std::is_same_v<Method, ZhaiConfiguration>) {
+            if (!std::isfinite(method.step_size_seconds) || method.step_size_seconds <= 0.0) {
+                throw std::invalid_argument("zhai.step_size_seconds must be positive and finite");
+            }
+        }
+    }, configuration.method);
+
+    // Resolving the view checks both plan and accepted-context ownership.
+    const auto component = system.GetMultibodyComponentView(accepted, plan.derivative_component());
+    const auto& model = component.model();
+    const auto q = system.generalized_positions_state_range();
+    const auto v = system.generalized_velocities_state_range();
+    const auto z = system.series_spring_damper_force_state_range();
+    if (q.start() != 0 || q.size() != model.num_generalized_positions() ||
+        v.start() != q.size() || v.size() != model.num_generalized_velocities() ||
+        z.start() != q.size() + v.size() || z.size() < 0 ||
+        z.start() + z.size() != system.continuous_state_size()) {
+        throw std::invalid_argument("system integration: unsupported continuous_state layout");
+    }
+    Eigen::VectorXd initial(system.continuous_state_size());
+    system.CopyContinuousState(accepted, initial);
+    if (!initial.allFinite() || !std::isfinite(accepted.time_seconds())) {
+        throw std::invalid_argument("system integration: initial_state must be finite");
+    }
+    std::visit([&](const auto& method) {
+        using Method = std::decay_t<decltype(method)>;
+        if constexpr (requires { method.tolerances; }) {
+            if (method.tolerances.component_absolute_tolerances().size() != initial.size()) {
+                throw std::invalid_argument("system integration: tolerances.component_absolute_tolerances has wrong size");
+            }
+        } else {
+            if (q.size() <= 0) {
+                throw std::invalid_argument("system integration: mechanical coordinates must be nonempty");
+            }
+        }
+        // Validate quaternion storage before numerical resources are created.
+        auto geometry = model.CreateDefaultContext();
+        const Eigen::VectorXd positions = initial.segment(q.start(), q.size());
+        model.SetGeneralizedPositions(geometry.get(), positions);
+        if constexpr (!requires { method.tolerances; }) {
+            const Eigen::VectorXd velocities = initial.segment(v.start(), v.size());
+            Eigen::VectorXd rates(q.size());
+            model.MapGeneralizedVelocitiesToPositionDerivatives(*geometry, velocities, &rates);
+            if (!rates.allFinite()) {
+                throw std::invalid_argument("system integration: initial coordinate rates must be finite");
+            }
+            // Exact topology coverage is checked independently of the selected
+            // mechanical formula, including empty series-force state.
+            const internal::NewmarkCoordinateLayout layout(model, z.size());
+            if constexpr (std::is_same_v<Method, NewmarkConfiguration>) {
+                (void)layout.Expand(method, positions);
+            }
+        }
+    }, configuration.method);
 }
 
 }  // namespace
@@ -38,18 +106,18 @@ std::size_t ValidateWorkBudget(std::size_t value) {
 class SystemContinuousStateAdvancer::Implementation final {
    public:
     Implementation(
-        internal::SystemContinuousStateIntegrationConfiguration configuration,
+        SystemIntegrationConfiguration configuration,
         const system_assembly::SystemInstance& system,
         const system_assembly::CompiledSystemPlan& plan,
         system_assembly::SystemRuntimeContext& accepted_context,
         NoCallTimeAppliedForces no_call_time_applied_forces)
         : maximum_internal_steps_(ValidateWorkBudget(
-              configuration.maximum_internal_steps_per_public_advance)),
+              configuration.maximum_internal_steps_per_advance)),
           system_(&system),
           accepted_context_(&accepted_context),
-          candidate_context_(system.CreateDefaultRuntimeContext(
-              accepted_context.time_seconds())),
           candidate_state_(system.continuous_state_size()) {
+        ValidateConfiguration(configuration, system, plan, accepted_context);
+        candidate_context_ = system.CreateDefaultRuntimeContext(accepted_context.time_seconds());
         system_->CopyContinuousState(*accepted_context_, candidate_state_);
         system_->SetTimeContinuousStateAndWheelRailProjectionHints(
             *candidate_context_, accepted_context_->time_seconds(),
@@ -78,14 +146,8 @@ class SystemContinuousStateAdvancer::Implementation final {
         return Backend().integration_statistics();
     }
 
-    [[nodiscard]] internal::SystemContinuousStateIntegrationRecipe
-    ConfiguredRecipe() const noexcept {
-        return backend_->configured_recipe();
-    }
-
-    [[nodiscard]] std::optional<internal::CoordinateIntegrationDiagnostics>
-    CoordinateDiagnostics() const {
-        return backend_->coordinate_diagnostics();
+    [[nodiscard]] std::string_view MethodIdentifier() const noexcept {
+        return backend_->method_identifier();
     }
 
     void AdvanceToImpl(double target_time_seconds,
@@ -322,67 +384,38 @@ SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
     const system_assembly::SystemInstance& system,
     const system_assembly::CompiledSystemPlan& plan,
     system_assembly::SystemRuntimeContext& accepted_context,
-    ContinuousStateErrorTolerances tolerances,
-    NoCallTimeAppliedForces no_call_time_applied_forces)
-    : SystemContinuousStateAdvancer(std::make_unique<Implementation>(
-          internal::SystemContinuousStateIntegrationConfiguration{
-              internal::CvodeBdf2Configuration{std::move(tolerances)}},
-          system, plan, accepted_context, no_call_time_applied_forces)) {}
-
-SystemContinuousStateAdvancer::SystemContinuousStateAdvancer(
-    std::unique_ptr<Implementation> implementation)
-    : implementation_(std::move(implementation)) {}
+    SystemIntegrationConfiguration configuration,
+    NoCallTimeAppliedForces no_call_time_applied_forces) try
+    : implementation_(std::make_unique<Implementation>(
+          std::move(configuration), system, plan, accepted_context,
+          no_call_time_applied_forces)) {}
+    catch (const internal::CoordinateIntegrationFailure& failure) {
+        internal::RethrowCoordinateNumericalFailure(failure);
+    }
 
 SystemContinuousStateAdvancer::~SystemContinuousStateAdvancer() = default;
 
-std::unique_ptr<SystemContinuousStateAdvancer>
-internal::SystemContinuousStateIntegrationAccess::Make(
-    SystemContinuousStateIntegrationConfiguration configuration,
-    const system_assembly::SystemInstance& system,
-    const system_assembly::CompiledSystemPlan& plan,
-    system_assembly::SystemRuntimeContext& accepted_context,
-    NoCallTimeAppliedForces no_call_time_applied_forces) {
-    auto implementation = std::make_unique<SystemContinuousStateAdvancer::Implementation>(
-        std::move(configuration), system, plan, accepted_context,
-        no_call_time_applied_forces);
-    return std::unique_ptr<SystemContinuousStateAdvancer>(
-        new SystemContinuousStateAdvancer(std::move(implementation)));
-}
-
-std::unique_ptr<SystemContinuousStateAdvancer>
-internal::SystemContinuousStateIntegrationAccess::Make(
-    SystemContinuousStateIntegrationRecipe recipe,
-    const system_assembly::SystemInstance& system,
-    const system_assembly::CompiledSystemPlan& plan,
-    system_assembly::SystemRuntimeContext& accepted_context,
-    ContinuousStateErrorTolerances tolerances,
-    NoCallTimeAppliedForces no_call_time_applied_forces) {
-    return Make({MakeOdeMethodConfiguration(recipe, std::move(tolerances))},
-                system, plan, accepted_context, no_call_time_applied_forces);
-}
-
-std::optional<internal::CoordinateIntegrationDiagnostics>
-internal::SystemContinuousStateIntegrationAccess::CoordinateDiagnostics(
-    const SystemContinuousStateAdvancer& advancer) {
-    return advancer.implementation_->CoordinateDiagnostics();
-}
-
-internal::SystemContinuousStateIntegrationRecipe
-internal::SystemContinuousStateIntegrationAccess::ConfiguredRecipe(
-    const SystemContinuousStateAdvancer& advancer) {
-    return advancer.implementation_->ConfiguredRecipe();
+std::string_view SystemContinuousStateAdvancer::method_identifier() const noexcept {
+    return implementation_->MethodIdentifier();
 }
 
 void SystemContinuousStateAdvancer::AdvanceTo(double target_time_seconds) {
-    implementation_->AdvanceTo(target_time_seconds);
+    try { implementation_->AdvanceTo(target_time_seconds); }
+    catch (const internal::CoordinateIntegrationFailure& failure) {
+        internal::RethrowCoordinateNumericalFailure(failure);
+    }
 }
 
 Eigen::MatrixXd
 SystemContinuousStateAdvancer::AdvanceToWithDenseStateSamples(
     double target_time_seconds,
     std::span<const double> sample_times_seconds) {
-    return implementation_->AdvanceToWithDenseStateSamples(
-        target_time_seconds, sample_times_seconds);
+    try {
+        return implementation_->AdvanceToWithDenseStateSamples(
+            target_time_seconds, sample_times_seconds);
+    } catch (const internal::CoordinateIntegrationFailure& failure) {
+        internal::RethrowCoordinateNumericalFailure(failure);
+    }
 }
 
 ContinuousStateIntegrationStatistics
@@ -391,7 +424,10 @@ SystemContinuousStateAdvancer::integration_statistics() const {
 }
 
 void SystemContinuousStateAdvancer::SynchronizeAfterAcceptedContextChange() {
-    implementation_->SynchronizeAfterAcceptedContextChange();
+    try { implementation_->SynchronizeAfterAcceptedContextChange(); }
+    catch (const internal::CoordinateIntegrationFailure& failure) {
+        internal::RethrowCoordinateNumericalFailure(failure);
+    }
 }
 
 }  // namespace orvd::integrators

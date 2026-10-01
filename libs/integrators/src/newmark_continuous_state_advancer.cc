@@ -4,16 +4,24 @@
 
 #include "basic_coordinate_advancer.h"
 #include "newmark_core.h"
+#include "newmark_coordinate_layout.h"
 
 namespace orvd::integrators::internal {
 
 class NewmarkContinuousStateAdvancer::Implementation final
-    : public BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkConfiguration> {
+    : public BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkCoreConfiguration> {
    public:
-    using Base = BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkConfiguration>;
+    using Base = BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkCoreConfiguration>;
     Implementation(SystemCoordinateProblem& problem, double time,
                    const Eigen::VectorXd& state, NewmarkConfiguration configuration)
-        : Base(problem, time, state, std::move(configuration), "Newmark continuous-state advancer") {}
+        : Base(problem, time, state,
+               NewmarkCoreConfiguration{.step_size_seconds = configuration.nominal_step_size_seconds,
+                                        .nonlinear_solver = {}},
+               "Newmark continuous-state advancer",
+               [layout = NewmarkCoordinateLayout(problem.model(), problem.internal_state_size()),
+                configuration = std::move(configuration)](const CoordinateState& initial) {
+                    return layout.Expand(configuration, initial.q);
+               }) {}
 };
 
 NewmarkContinuousStateAdvancer::NewmarkContinuousStateAdvancer(
@@ -34,6 +42,9 @@ ContinuousStateIntegrationStatistics NewmarkContinuousStateAdvancer::integration
 }
 CoordinateIntegrationDiagnostics NewmarkContinuousStateAdvancer::diagnostics() const {
     return implementation_->diagnostics();
+}
+const NewmarkCoreConfiguration& NewmarkContinuousStateAdvancer::expanded_configuration() const {
+    return implementation_->core_configuration();
 }
 void NewmarkContinuousStateAdvancer::CopyCurrentState(Eigen::Ref<Eigen::VectorXd> output) const {
     implementation_->CopyCurrentState(output);

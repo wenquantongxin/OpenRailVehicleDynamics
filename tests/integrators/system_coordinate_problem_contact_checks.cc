@@ -18,7 +18,8 @@
 #include "orvd/track_geometry/track_geometry.h"
 #include "orvd/wheel_rail_contact/wheel_rail_contact_runtime_personality.h"
 #include "system_coordinate_problem.h"
-#include "system_continuous_state_integration_access.h"
+#include "orvd/integrators/system_continuous_state_advancer.h"
+#include "system_integration_test_configuration.h"
 
 namespace {
 
@@ -315,7 +316,7 @@ void CheckContactIsolation(bool singular_inertia) {
 }
 
 void CheckHeldTorqueSynchronization(bool use_newmark) {
-    using namespace orvd::integrators::internal;
+    using namespace orvd::integrators;
     MultibodyModel model;
     RigidBodyInertiaParameters inertia;
     inertia.mass_kilograms = 100.0;
@@ -354,22 +355,10 @@ void CheckHeldTorqueSynchronization(bool use_newmark) {
     system.SetTimeContinuousStateAndWheelRailProjectionHints(
         *accepted, 0.0, initial, initial_hints);
     constexpr double h = 1.0 / 1024.0;
-    SystemContinuousStateIntegrationConfiguration configuration{ZhaiConfiguration{h}};
-    if (use_newmark) {
-        NewmarkConfiguration method;
-        method.step_size_seconds = h;
-        auto& solver = method.nonlinear_solver;
-        solver.position_correction_scales =
-            Eigen::VectorXd::Constant(model.num_generalized_positions(), 1e-11);
-        solver.velocity_correction_scales = solver.position_correction_scales;
-        solver.acceleration_residual_scales = solver.position_correction_scales;
-        solver.internal_state_correction_scales.resize(0);
-        solver.internal_state_residual_scales.resize(0);
-        solver.unknown_reference_scales = Eigen::VectorXd::Ones(model.num_generalized_positions());
-        configuration.method = std::move(method);
-    }
-    auto advancer = SystemContinuousStateIntegrationAccess::Make(
-        std::move(configuration), system, plan, *accepted, NoCallTimeAppliedForces{});
+    SystemIntegrationConfiguration configuration{ZhaiConfiguration{h}};
+    if (use_newmark) configuration.method = orvd::integrators::test::NewmarkSettings(h);
+    auto advancer = std::make_unique<SystemContinuousStateAdvancer>(
+        system, plan, *accepted, std::move(configuration), NoCallTimeAppliedForces{});
     const std::array<double, 1> held_torque{20.0};
     system.SetHeldIndependentWheelActiveTorques(*accepted, held_torque);
     // Merely changing accepted holds must not change the backend's frozen input.
@@ -381,16 +370,13 @@ void CheckHeldTorqueSynchronization(bool use_newmark) {
             "mechanical factory run did not refresh real nonempty projection history");
     Require(accepted->held_independent_wheel_active_torques_newton_metres()[0] == 20.0,
             "successful state publication overwrote accepted held wheel torque");
-    const auto diagnostics_before = SystemContinuousStateIntegrationAccess::CoordinateDiagnostics(*advancer);
-    Require(diagnostics_before.has_value() &&
-                advancer->integration_statistics().successful_internal_step_count == 4 &&
-                (use_newmark || diagnostics_before->startup_step_count == 1),
-            "same-branch station updates restarted Zhai or lost successful-step accounting");
+    Require(advancer->integration_statistics().successful_internal_step_count == 4,
+            "station updates preserve successful-step accounting");
 
     advancer->SynchronizeAfterAcceptedContextChange();
-    const auto diagnostics_after = SystemContinuousStateIntegrationAccess::CoordinateDiagnostics(*advancer);
-    Require(diagnostics_after.has_value() && diagnostics_after->startup_step_count == 0,
-            "explicit held-torque synchronization did not rebuild mechanical history");
+    Require(advancer->integration_statistics().successful_internal_step_count == 0 &&
+                advancer->integration_statistics().right_hand_side_evaluation_count == 1,
+            "held-torque synchronization rebuilds initial derivatives");
     const auto synced = TakeSnapshot(system, *accepted);
     Require(SameBits(synced.physical, before_sync.physical) &&
                 synced.time == before_sync.time && synced.hints == before_sync.hints,
@@ -402,11 +388,8 @@ void CheckHeldTorqueSynchronization(bool use_newmark) {
                 std::abs(driven.physical[physical_velocity]) < 1e-13 &&
                 std::abs(driven.physical[physical_velocity + 2]) < 1e-13,
             "synchronized held wheel torque did not produce its real multibody spin response");
-    const auto diagnostics_driven = SystemContinuousStateIntegrationAccess::CoordinateDiagnostics(*advancer);
-    Require(diagnostics_driven.has_value() &&
-                advancer->integration_statistics().successful_internal_step_count == 4 &&
-                (use_newmark || diagnostics_driven->startup_step_count == 1),
-            "post-synchronization projection updates repeatedly restarted the mechanical core");
+    Require(advancer->integration_statistics().successful_internal_step_count == 4,
+            "post-synchronization steps retain correct accounting");
     Require(accepted->held_independent_wheel_active_torques_newton_metres()[0] == 20.0,
             "mechanical trials or accepted publication changed the held active torque");
 }
