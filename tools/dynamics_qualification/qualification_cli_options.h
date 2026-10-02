@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -17,10 +18,9 @@ struct QualificationCliOptions final {
 };
 
 // This parses only the shared named options. Each executable retains its own
-// positional paths, duration validation, legacy case lookup and usage message.
+// positional paths, duration validation and usage message.
 inline QualificationCliOptions ParseQualificationCliOptions(
-    int argc, char** argv, int required_positional_argument_count,
-    bool allow_scene_record = false) {
+    int argc, char** argv, bool allow_scene_record = false) {
     QualificationCliOptions result;
     result.positional_arguments.reserve(static_cast<std::size_t>(argc));
     result.positional_arguments.push_back(argv[0]);
@@ -37,15 +37,11 @@ inline QualificationCliOptions ParseQualificationCliOptions(
                 throw std::invalid_argument("--integration-config requires one non-empty path");
             }
             result.integration_config_path = argv[++index];
+        } else if (argument.starts_with("--")) {
+            throw std::invalid_argument("unknown option: " + std::string(argument));
         } else {
             result.positional_arguments.push_back(argv[index]);
         }
-    }
-    if (result.integration_config_path.has_value() &&
-        result.positional_arguments.size() ==
-            static_cast<std::size_t>(required_positional_argument_count + 2)) {
-        throw std::invalid_argument(
-            "--integration-config and the time-integrator qualification case are mutually exclusive");
     }
     return result;
 }

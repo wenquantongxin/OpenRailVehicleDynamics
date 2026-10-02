@@ -29,12 +29,6 @@ Eigen::Index StateSize(int nq, int nv, int nz) {
     throw std::runtime_error("continuous-state writer: could not write '" + path.string() + "'");
 }
 
-nlohmann::json StateArray(const Eigen::Ref<const Eigen::VectorXd>& state) {
-    nlohmann::json result = nlohmann::json::array();
-    for (Eigen::Index i = 0; i < state.size(); ++i) result.push_back(state[i]);
-    return result;
-}
-
 }  // namespace
 
 QualificationContinuousStateWriter::QualificationContinuousStateWriter(
@@ -114,17 +108,6 @@ nlohmann::json ContinuousStateObservationContract(const QualificationSampleClock
             {"sample_count", clock.sample_count()}, {"start_time_nanoseconds", 0},
             {"terminal_time_nanoseconds", clock.terminal_time_nanoseconds()},
             {"sample_period_nanoseconds", clock.sample_period_nanoseconds()}};
-}
-
-nlohmann::json ComparisonStateContract(
-    const Eigen::Ref<const Eigen::VectorXd>& initial,
-    const Eigen::Ref<const Eigen::VectorXd>& terminal) {
-    if (initial.size() == 0 || initial.size() != terminal.size() ||
-        !initial.allFinite() || !terminal.allFinite()) {
-        throw std::invalid_argument("comparison state contract: invalid initial or terminal state");
-    }
-    return {{"initial_physical_state", StateArray(initial)},
-            {"terminal_physical_state", StateArray(terminal)}};
 }
 
 }  // namespace orvd::dynamics_qualification

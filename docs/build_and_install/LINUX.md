@@ -204,10 +204,8 @@ env OMP_NUM_THREADS=12 \
 ```
 
 多 NUMA 节点机器可改用 `numactl --physcpubind=... --membind=...`。不要同时依赖未记录的 shell
-环境；资格工件必须保存实际 OpenMP 环境和 CPU affinity。
-
-`tools/dynamics_qualification/run_qualification_with_metrics.py` 是 Linux research wrapper，会使用
-POSIX child resource accounting 和 `sched_setaffinity`。它不代表 Windows/macOS 的功能构建入口。
+环境；运行器记录启动时的 OpenMP 配置、接触 worker 请求数与可获得的 CPU affinity，
+差分 Jacobian 的请求 worker 数由积分工作账本记录。这些是运行条件，不是线程使用率测量。
 
 ## 可选 SIMPACK Realtime 组件
 

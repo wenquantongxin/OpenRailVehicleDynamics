@@ -2,29 +2,24 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include <Eigen/Core>
 
-#include "orvd/integrators/continuous_state_advancer.h"
-#include "qualification_integration_method.h"
-#include "time_integrator_qualification_case.h"
 #include "qualification_run_accounting.h"
 
 namespace orvd::dynamics_qualification {
 
-// One private migration-run summary. This type is not installed and is not a
+// Private run summary. This type is not installed and is not a
 // public vehicle-simulation or observation contract.
 struct QualificationRunSummary final {
     explicit QualificationRunSummary(
-        dynamics_qualification::QualificationIntegrationMethod
-            integration_recipe_value)
-        : integration_recipe(integration_recipe_value) {}
+        std::string_view method_identifier)
+        : integrator_recipe_identifier(method_identifier) {}
     QualificationRunSummary() = delete;
 
-    dynamics_qualification::QualificationIntegrationMethod
-        integration_recipe;
-    std::optional<TimeIntegratorQualificationCase>
-        time_integrator_qualification_case;
+    std::string integrator_recipe_identifier;
     std::optional<int> maximum_bdf_order;
     std::size_t sample_count{};
     double advance_wall_seconds{};
@@ -34,13 +29,7 @@ struct QualificationRunSummary final {
     // observation_wall_seconds.
     std::size_t scene_record_frame_count{};
     double scene_record_wall_seconds{};
-    double endpoint_diagnostics_wall_seconds{};
     double data_and_metadata_write_wall_seconds{};
-    double endpoint_generalized_force_residual_inf_norm{};
-    double endpoint_virtual_power_residual_watts{};
-    double endpoint_position_derivative_slice_consistency_inf_norm{};
-    double endpoint_series_force_derivative_slice_consistency_inf_norm{};
-    integrators::ContinuousStateIntegrationStatistics integration_statistics;
     QualificationIntegrationWorkLedger integration_work;
     QualificationRunTimings numerical_timings;
     Eigen::VectorXd terminal_continuous_state;

@@ -30,20 +30,19 @@ int main(int argc, char** argv) {
     orvd::dynamics_qualification::internal::QualificationCliOptions options;
     try {
         options = orvd::dynamics_qualification::internal::ParseQualificationCliOptions(
-            argc, argv, 9, true);
+            argc, argv, true);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 2;
     }
     argc = static_cast<int>(options.positional_arguments.size());
     argv = options.positional_arguments.data();
-    if (argc != 10 && argc != 11) {
+    if (argc != 10) {
         std::fprintf(
             stderr,
             "usage: orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID_OR_NONE OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS [TIME_INTEGRATOR_QUALIFICATION_CASE | "
-            "--integration-config PATH] "
+            "SAMPLE_PERIOD_NS [--integration-config PATH] "
             "[--scene-record]\n"
             "SCENARIO: irw_r300_no_irregularity_v60_passive, "
             "irw_r300_aar5_v60_passive, irw_straight_aar5_v80_passive, "
@@ -73,26 +72,14 @@ int main(int argc, char** argv) {
                      "nanoseconds\n");
         return 2;
     }
-    if (argc == 11) {
-        config.time_integrator_qualification_case =
-            orvd::dynamics_qualification::
-                ParseTimeIntegratorQualificationCase(argv[10]);
-        if (!config.time_integrator_qualification_case.has_value()) {
-            std::fprintf(stderr,
-                         "unknown time-integrator qualification case: %s\n",
-                         argv[10]);
-            return 2;
-        }
-    }
     try {
         const auto summary =
             orvd::dynamics_qualification::RunIrwPassiveScenario(config);
         std::printf(
             "published %zu samples; advance %.6f s, observations %.6f s, "
-            "endpoint diagnostics %.6f s, data+metadata write %.6f s\n",
+            "data+metadata write %.6f s\n",
             summary.sample_count, summary.advance_wall_seconds,
             summary.observation_wall_seconds,
-            summary.endpoint_diagnostics_wall_seconds,
             summary.data_and_metadata_write_wall_seconds);
         if (config.publish_scene_record) {
             std::printf("scene record: %zu frames in %.6f s\n",

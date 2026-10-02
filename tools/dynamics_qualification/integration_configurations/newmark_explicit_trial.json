@@ -5,7 +5,6 @@
   "maximum_internal_steps_per_advance": 1000000,
   "newton": {
     "maximum_iterations": 12,
-    "quaternion_scale_convention": "reference_norm_multiple",
     "scales": {
       "translation": {
         "position_correction": 1e-8,

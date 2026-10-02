@@ -4,11 +4,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string>
+#include <string_view>
 
 #include <Eigen/Core>
 
-#include "orvd/integrators/continuous_state_advancer.h"
-#include "time_integrator_qualification_case.h"
 #include "qualification_run_accounting.h"
 
 namespace orvd::dynamics_qualification {
@@ -25,22 +25,16 @@ struct IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration final {
     std::filesystem::path torque_conditioner_configuration_path;
     std::filesystem::path output_directory;
     std::int64_t duration_nanoseconds{};
-    std::optional<TimeIntegratorQualificationCase>
-        time_integrator_qualification_case;
     std::optional<std::filesystem::path> integration_config_path;
 };
 
 struct IrwR300Aar5V60At100HzFullStateGuidanceRunSummary final {
     explicit IrwR300Aar5V60At100HzFullStateGuidanceRunSummary(
-        dynamics_qualification::QualificationIntegrationMethod
-            integration_recipe_value)
-        : integration_recipe(integration_recipe_value) {}
+        std::string_view method_identifier)
+        : integrator_recipe_identifier(method_identifier) {}
     IrwR300Aar5V60At100HzFullStateGuidanceRunSummary() = delete;
 
-    dynamics_qualification::QualificationIntegrationMethod
-        integration_recipe;
-    std::optional<TimeIntegratorQualificationCase>
-        time_integrator_qualification_case;
+    std::string integrator_recipe_identifier;
     std::optional<int> maximum_bdf_order;
     std::size_t observation_count{};
     std::size_t control_audit_count{};
@@ -50,9 +44,6 @@ struct IrwR300Aar5V60At100HzFullStateGuidanceRunSummary final {
     double control_wall_seconds{};
     double observation_wall_seconds{};
     double data_and_metadata_write_wall_seconds{};
-    double maximum_generalized_force_residual_inf_norm{};
-    double maximum_absolute_virtual_power_residual_watts{};
-    integrators::ContinuousStateIntegrationStatistics integration_statistics;
     QualificationIntegrationWorkLedger integration_work;
     QualificationRunTimings numerical_timings;
     Eigen::VectorXd terminal_continuous_state;

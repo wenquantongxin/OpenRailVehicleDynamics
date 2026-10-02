@@ -383,7 +383,7 @@ int main(int argc, char** argv) {
             "the compiled direct RHS differs from its independently rebuilt "
             "typed-force order");
 
-    // One binary and one real GZ18 state request 1/2/4/8 workers through the
+    // One binary and one real GZ18 state request 1/2/4/8/16 threads through the
     // standard OpenMP process setting. The runtime may apply a tighter resource
     // limit. Each wheel owns a fixed output slot and no
     // cross-wheel floating-point reduction exists, so anything short of
@@ -391,14 +391,21 @@ int main(int argc, char** argv) {
     // order rather than an acceptable parallel rounding difference.
     const int original_openmp_dynamic = omp_get_dynamic();
     const int original_openmp_max_threads = omp_get_max_threads();
+    Require(contact_plan->maximum_worker_count() == 8,
+            "the contact plan must expose its actual eight-worker cap");
     omp_set_dynamic(0);
     std::array<AppliedBodyWrench, 8> reference_parallel_wrenches;
     std::array<orvd::forces::WheelRailContactInterfaceObservation, 8>
         reference_parallel_observations;
     Eigen::VectorXd reference_parallel_rhs(109);
     bool have_parallel_reference = false;
-    for (const int requested_threads : {1, 2, 4, 8}) {
+    for (const int requested_threads : {1, 2, 4, 8, 16}) {
         omp_set_num_threads(requested_threads);
+        Require(contact_plan->requested_worker_count() ==
+                    std::min(8, requested_threads) &&
+                    omp_get_max_threads() == requested_threads &&
+                    omp_get_dynamic() == 0,
+                "contact worker queries must respect the cap without changing OpenMP settings");
         // Keep every worker-count comparison on a fresh exact-input cache so
         // the real eight-interface contact kernel, rather than eight cache
         // hits left by the preceding request, remains under test.
@@ -466,6 +473,18 @@ int main(int argc, char** argv) {
     Require(rhs_allocations == 0,
             "a prepared cold-cache contact batch or warmed direct RHS called "
             "first-party ordinary C++ operator new/new[]");
+    int nested_request = 0;
+    bool active_parallel_region = false;
+#pragma omp parallel num_threads(2)
+    {
+#pragma omp single
+        {
+            active_parallel_region = omp_in_parallel() != 0;
+            nested_request = contact_plan->requested_worker_count();
+        }
+    }
+    Require(!active_parallel_region || nested_request == 1,
+            "contact evaluation inside an active OpenMP region must request serial work");
     omp_set_num_threads(original_openmp_max_threads);
     omp_set_dynamic(original_openmp_dynamic);
 

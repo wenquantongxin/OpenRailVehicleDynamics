@@ -249,6 +249,13 @@ class WheelRailContactForcePlan {
         return static_cast<int>(interfaces_.size());
     }
     [[nodiscard]] int body_wrench_count() const { return interface_count(); }
+
+    // Implementation cap for independently evaluated contact interfaces.
+    [[nodiscard]] int maximum_worker_count() const noexcept;
+    // Requested count in the calling thread's current OpenMP environment,
+    // including serial execution inside an existing parallel region. This is
+    // not a measurement of the team size granted by the OpenMP runtime.
+    [[nodiscard]] int requested_worker_count() const noexcept;
     [[nodiscard]] std::string_view carrier_name(int index) const;
     [[nodiscard]] std::string_view interface_name(int index) const;
     [[nodiscard]] double initial_projection_station_meters(int index) const;

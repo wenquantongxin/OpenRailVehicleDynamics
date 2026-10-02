@@ -11,7 +11,6 @@
 
 #include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/integrators/system_integration_configuration.h"
-#include "time_integrator_qualification_case.h"
 
 namespace orvd::dynamics_qualification {
 
@@ -44,36 +43,21 @@ struct ZhaiRequest final {
 };
 
 struct IntegrationRequest final {
-    std::variant<ScenarioDefaultRequest, TimeIntegratorQualificationCase,
-                 ExplicitOdeRequest, NewmarkRequest, ZhaiRequest> method;
+    std::variant<ScenarioDefaultRequest, ExplicitOdeRequest, NewmarkRequest,
+                 ZhaiRequest> method;
     std::size_t maximum_internal_steps_per_advance{integrators::kDefaultMaximumInternalStepsPerAdvance};
 };
 
-struct ScenarioOdeDefaults final {
-    dynamics_qualification::QualificationIntegrationMethod recipe;
-    double relative_tolerance;
-    double generalized_position_absolute_tolerance;
-    double generalized_velocity_absolute_tolerance;
-    double series_force_absolute_tolerance_newtons;
-};
-
 struct ResolvedIntegrationConfiguration final {
-    integrators::SystemIntegrationConfiguration
-        configuration;
+    integrators::SystemIntegrationConfiguration configuration;
     nlohmann::json metadata;
-    // Compatibility data only for the scenario default and eight legacy ODE
-    // cases. An explicit ODE request has no legacy tier/case identity.
-    std::optional<ResolvedTimeIntegratorQualificationNumerics> ode_numerics;
-    std::optional<std::uint64_t> step_size_nanoseconds;
 };
 
-// Each of the five JSON method tags has its own closed field set. The eight
-// legacy ODE cases retain their existing CLI spelling and numerical meaning.
+// Each of the five JSON method tags has its own closed field set.
 [[nodiscard]] IntegrationRequest ReadIntegrationConfiguration(
     const std::filesystem::path& path);
 [[nodiscard]] IntegrationRequest RequestIntegrationConfiguration(
-    const std::optional<std::filesystem::path>& configuration_path,
-    const std::optional<TimeIntegratorQualificationCase>& legacy_case);
+    const std::optional<std::filesystem::path>& configuration_path);
 [[nodiscard]] nlohmann::json RequestMetadata(const IntegrationRequest& request);
 
 // Resolves scenario defaults and physical tolerances into the public contract.
@@ -83,6 +67,6 @@ struct ResolvedIntegrationConfiguration final {
     const IntegrationRequest& request,
     const configuration::AssembledVehicleSystem& assembled,
     const Eigen::Ref<const Eigen::VectorXd>& initial_physical_state,
-    const ScenarioOdeDefaults& scenario_defaults);
+    const ExplicitOdeRequest& scenario_defaults);
 
 }  // namespace orvd::dynamics_qualification

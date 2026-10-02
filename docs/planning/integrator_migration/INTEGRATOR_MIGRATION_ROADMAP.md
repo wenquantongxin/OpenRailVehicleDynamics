@@ -1,5 +1,11 @@
 # 时间积分器迁移路书
 
+> 历史记录更新（2026-10-01）：本文保留迁移期间的决策与阶段状态。当前五种积分方法已通过
+> 统一公共强类型配置选择；INT-07 比较工具、包装器、清单和八档实验 case 已移除。
+> 专用实验协议正文已从当前源码树移除，历史正文可查 Git 历史；本地
+> `tmp/integrator_cleanup/archived_protocols/` 副本可随时删除，不再作为运行前提。
+> 当前调用方式见 integrators 与 dynamics_qualification 模块 README。
+
 本文是 ORVD 增加研究型时间积分后端的实施依据。算法公式、稳定性和车辆适用边界见
 [BDF、Radau5、Newmark 与 Zhai 时间积分方法](../../models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md)；
 本文只定义实施顺序、允许修改面和完成门。
@@ -17,8 +23,8 @@
 | Zhai 简单显式二步法 | 未实现 | 待做；本轮不启动接口审计或实现 |
 | 历史 Radau3 | 只存在于旧迁移记录和仓外参考语境 | 不属于本路书，不用 Radau5 静默替代其历史身份 |
 
-- 当前实施状态：`INT-01`–`INT-06` 已完成正确性复核，`INT-07A` 的协议与串行工件入口保留；
-  `INT-07B` 暂停。公共默认仍为 CVODE BDF2，Radau5 选择仍只存在于源码树资格边界。
+- `INT-01`–`INT-06` 已完成正确性复核，`INT-07A` 的协议与串行工件入口已移除，见文首说明。
+  当时 `INT-07B` 暂停，公共默认为 CVODE BDF2，Radau5 选择只存在于源码树资格边界。
 - 实／复近奇异线性系统的相对残差资格、跨构建严格浮点标志门和双工具链完整复核已经闭合；
   `INT-07B` 仍保持暂停。正确性前置闭合不自动授权 configuration-aware comparator、双 reference
   gate 或任何性能排名；后续恢复必须另行裁决。
@@ -159,14 +165,14 @@ UNIGE 页面把 RADAU5 纳入其两条款式许可范围；搬运时仍只按许
 | INT-04 | 自适应、误差控制、稠密输出和失败恢复 | INT-03 | 已完成；正确性修复（2026-08-24） |
 | INT-05 | `Radau5ContinuousStateAdvancer` | INT-02、INT-04 | 已完成；异常因果复核（2026-08-24） |
 | INT-06 | 系统事务层的私有 Radau5 研究入口 | INT-05 | 已完成；投影历史闭合（2026-08-24） |
-| INT-07 | Jacobian 复用与等误差性能资格 | INT-06 | **暂停**（保留 INT-07A 协议与串行工件；INT-07B 未启动） |
+| INT-07 | Jacobian 复用与等误差性能资格 | INT-06 | **暂停**（INT-07A 协议与串行工件入口已移除，见文首说明；INT-07B 未启动） |
 | INT-08 | 双车型、跨平台、安装与文档收口 | INT-07 | 待做 |
 
 INT-02 与 INT-03 在 INT-01 完成后可以分开开发，但 INT-05 前必须共同收口。
 
 2026-08-24 的独立审查确认三阶段五阶主链，但发现 stop 吸附、持续 recoverable 因果、线性建立分类
-和 accepted 投影历史下 Jacobian/LU 复用缺陷。定向修复与官方 oracle 已闭合这些正确性项；现有
-INT-07A manifest、串行工件协议和测试保留。实／复近奇异资格现在直接复用生产矩阵形成、分解与求解，
+和 accepted 投影历史下 Jacobian/LU 复用缺陷。定向修复与官方 oracle 已闭合这些正确性项；
+INT-07A manifest、串行工件协议和专属测试现已移除，见文首说明。实／复近奇异资格直接复用生产矩阵形成、分解与求解，
 并以逐级缩小谱隙的实／复块检查相对后向残差；严格浮点门在配置期、编译期和运行工件三处共同
 闭合。两项关闭不自动授权 comparator、并行 Jacobian 候选或正式性能排名，`INT-07B` 继续暂停。
 
@@ -414,7 +420,7 @@ INT-07A manifest、串行工件协议和测试保留。实／复近奇异资格�
 
 唯一产物：Radau5 在不改变数值合同的前提下具备可复核 Jacobian 路径和性能证据。
 
-资格定义由[INT-07 等误差资格协议与串行基线](INT_07_EQUAL_ERROR_QUALIFICATION_PROTOCOL.md)冻结；任何
+当时的资格定义由《INT-07 等误差资格协议与串行基线》（现已归档）冻结；任何
 比较实现不得静默改变其中的状态、reference、接触事件或计时语义。
 
 允许修改：`libs/integrators/`、`tests/integrators/`、`tests/dynamics_qualification/`、

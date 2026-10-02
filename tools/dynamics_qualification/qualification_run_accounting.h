@@ -12,6 +12,10 @@
 
 #include "orvd/integrators/continuous_state_advancer.h"
 
+namespace orvd::forces {
+class WheelRailContactForcePlan;
+}
+
 namespace orvd::dynamics_qualification {
 
 // A source-tree runner ledger. Only a successful backend construction or
@@ -48,6 +52,11 @@ class QualificationIntegrationWorkLedger final {
     bool complete_{true};
     std::vector<std::string> errors_;
 };
+
+// A single startup snapshot of requested execution resources. It neither
+// starts an OpenMP team nor changes thread placement or numerical behavior.
+[[nodiscard]] nlohmann::json CaptureQualificationExecutionConditions(
+    const forces::WheelRailContactForcePlan& contact_plan);
 
 [[nodiscard]] nlohmann::json QualificationStatisticsToJson(
     const integrators::ContinuousStateIntegrationStatistics& statistics);

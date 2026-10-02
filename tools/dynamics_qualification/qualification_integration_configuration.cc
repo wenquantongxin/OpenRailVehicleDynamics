@@ -16,7 +16,7 @@
 namespace orvd::dynamics_qualification {
 namespace {
 using Json = nlohmann::json;
-using Recipe = dynamics_qualification::QualificationIntegrationMethod;
+using Recipe = OdeIntegrationMethod;
 
 [[noreturn]] void Invalid(const std::string& message) {
     throw std::invalid_argument("qualification integration configuration: " + message);
@@ -66,17 +66,16 @@ double PositiveNumber(const Json& value, const char* field) {
     return result;
 }
 
-Recipe OdeRecipe(OdeIntegrationMethod method) {
+std::string_view OdeIdentifier(Recipe method) {
     switch (method) {
-        case OdeIntegrationMethod::kCvodeBdf2: return Recipe::kCvodeBdf2;
-        case OdeIntegrationMethod::kCvodeBdf5: return Recipe::kCvodeBdf5;
-        case OdeIntegrationMethod::kRadau5: return Recipe::kRadau5;
+        case Recipe::kCvodeBdf2: return "cvode_bdf2";
+        case Recipe::kCvodeBdf5: return "cvode_bdf5";
+        case Recipe::kRadau5: return "radau5";
     }
-    Invalid("unsupported explicit ODE method");
+    Invalid("unsupported ODE method");
 }
 
 void ExplicitOdeMetadata(const ExplicitOdeRequest& request, Json& result) {
-    const auto recipe = OdeRecipe(request.method);
     Positive(request.relative_tolerance, "relative_tolerance");
     Positive(request.generalized_position_absolute_tolerance,
              "generalized_position_absolute_tolerance");
@@ -84,13 +83,13 @@ void ExplicitOdeMetadata(const ExplicitOdeRequest& request, Json& result) {
              "generalized_velocity_absolute_tolerance");
     Positive(request.series_force_absolute_tolerance_newtons,
              "series_force_absolute_tolerance_newtons");
-    result["integrator_recipe_identifier"] = dynamics_qualification::IntegrationRecipeIdentifier(recipe);
+    result["integrator_recipe_identifier"] = OdeIdentifier(request.method);
     result["relative_tolerance"] = request.relative_tolerance;
     result["generalized_position_absolute_tolerance"] = request.generalized_position_absolute_tolerance;
     result["generalized_velocity_absolute_tolerance"] = request.generalized_velocity_absolute_tolerance;
     result["series_force_absolute_tolerance_newtons"] = request.series_force_absolute_tolerance_newtons;
-    if (const auto order = dynamics_qualification::MaximumBdfOrderForRecipe(recipe)) {
-        result["maximum_bdf_order"] = *order;
+    if (request.method != Recipe::kRadau5) {
+        result["maximum_bdf_order"] = request.method == Recipe::kCvodeBdf2 ? 2 : 5;
     }
 }
 
@@ -133,7 +132,6 @@ Json NewmarkJson(const NewmarkRequest& request) {
     Positive(request.force.residual, "force residual");
     Positive(request.force.reference, "force reference");
     return {{"maximum_iterations", request.maximum_iterations},
-            {"quaternion_scale_convention", "reference_norm_multiple"},
             {"scales", {{"translation", CoordinateScalesJson(request.translation)},
                         {"angle", CoordinateScalesJson(request.angle)},
                         {"quaternion", CoordinateScalesJson(request.quaternion)},
@@ -149,8 +147,6 @@ auto MakeOdeMethodConfiguration(Recipe recipe,
         case Recipe::kCvodeBdf2: return integrators::CvodeBdf2Configuration{std::move(tolerances)};
         case Recipe::kCvodeBdf5: return integrators::CvodeBdf5Configuration{std::move(tolerances)};
         case Recipe::kRadau5: return integrators::Radau5Configuration{std::move(tolerances)};
-        case Recipe::kNewmark:
-        case Recipe::kZhai: Invalid("ODE preset selected a mechanical method");
     }
     Invalid("unsupported ODE preset");
 }
@@ -230,13 +226,10 @@ IntegrationRequest ReadIntegrationConfiguration(const std::filesystem::path& pat
     } else if (method == "newmark") {
         if (!document.contains("newton")) Invalid("newmark requires newton configuration");
         const auto& newton = document.at("newton");
-        Fields(newton, {"maximum_iterations", "quaternion_scale_convention", "scales"});
+        Fields(newton, {"maximum_iterations", "scales"});
         const auto iterations = PositiveInteger(newton.at("maximum_iterations"), "maximum_iterations");
         if (iterations > static_cast<std::uint64_t>(std::numeric_limits<int>::max())) {
             Invalid("maximum_iterations is too large");
-        }
-        if (newton.at("quaternion_scale_convention") != "reference_norm_multiple") {
-            Invalid("quaternion_scale_convention must be reference_norm_multiple");
         }
         const auto& scales = newton.at("scales");
         Fields(scales, {"translation", "angle", "quaternion", "force"});
@@ -255,13 +248,9 @@ IntegrationRequest ReadIntegrationConfiguration(const std::filesystem::path& pat
 }
 
 IntegrationRequest RequestIntegrationConfiguration(
-    const std::optional<std::filesystem::path>& configuration_path,
-    const std::optional<TimeIntegratorQualificationCase>& legacy_case) {
-    if (configuration_path && legacy_case) Invalid("integration config and legacy case are mutually exclusive");
-    if (configuration_path) return ReadIntegrationConfiguration(*configuration_path);
-    IntegrationRequest result;
-    if (legacy_case) result.method = *legacy_case;
-    return result;
+    const std::optional<std::filesystem::path>& configuration_path) {
+    return configuration_path ? ReadIntegrationConfiguration(*configuration_path)
+                              : IntegrationRequest{};
 }
 
 Json RequestMetadata(const IntegrationRequest& request) {
@@ -270,10 +259,9 @@ Json RequestMetadata(const IntegrationRequest& request) {
                 {"maximum_internal_steps_per_advance", request.maximum_internal_steps_per_advance},
                 {"step_size_nanoseconds", nullptr}, {"step_size_seconds", nullptr},
                 {"newton", nullptr}};
-    for (const char* field : {"tolerance_tier_identifier", "tolerance_scale_from_scenario_recipe",
-                              "relative_tolerance", "generalized_position_absolute_tolerance",
+    for (const char* field : {"relative_tolerance", "generalized_position_absolute_tolerance",
                               "generalized_velocity_absolute_tolerance", "series_force_absolute_tolerance_newtons",
-                              "qualification_case_identifier", "integrator_recipe_identifier", "maximum_bdf_order"}) {
+                              "integrator_recipe_identifier", "maximum_bdf_order"}) {
         result[field] = nullptr;
     }
     if (const auto* newmark = std::get_if<NewmarkRequest>(&request.method)) {
@@ -285,8 +273,6 @@ Json RequestMetadata(const IntegrationRequest& request) {
         result["integrator_recipe_identifier"] = "zhai";
         result["step_size_nanoseconds"] = zhai->step_size_nanoseconds;
         result["step_size_seconds"] = StepSeconds(zhai->step_size_nanoseconds);
-    } else if (const auto* legacy = std::get_if<TimeIntegratorQualificationCase>(&request.method)) {
-        result["qualification_case_identifier"] = TimeIntegratorQualificationCaseIdentifier(*legacy);
     } else if (const auto* ode = std::get_if<ExplicitOdeRequest>(&request.method)) {
         ExplicitOdeMetadata(*ode, result);
     }
@@ -297,7 +283,7 @@ ResolvedIntegrationConfiguration ResolveIntegrationConfiguration(
     const IntegrationRequest& request,
     const configuration::AssembledVehicleSystem& assembled,
     const Eigen::Ref<const Eigen::VectorXd>& initial_physical_state,
-    const ScenarioOdeDefaults& scenario_defaults) {
+    const ExplicitOdeRequest& scenario_defaults) {
     Json metadata = RequestMetadata(request);
     const auto& system = assembled.system();
     if (initial_physical_state.size() != system.continuous_state_size() ||
@@ -311,44 +297,22 @@ ResolvedIntegrationConfiguration ResolveIntegrationConfiguration(
         const double step_seconds = metadata.at("step_size_seconds").get<double>();
         return {integrators::SystemIntegrationConfiguration{integrators::NewmarkConfiguration{
                      step_seconds, std::move(newton)}, budget},
-                std::move(metadata), std::nullopt, newmark->step_size_nanoseconds};
+                std::move(metadata)};
     }
-    if (const auto* zhai = std::get_if<ZhaiRequest>(&request.method)) {
+    if (std::holds_alternative<ZhaiRequest>(request.method)) {
         const double step_seconds = metadata.at("step_size_seconds").get<double>();
         return {integrators::SystemIntegrationConfiguration{integrators::ZhaiConfiguration{step_seconds}, budget},
-                std::move(metadata), std::nullopt, zhai->step_size_nanoseconds};
+                std::move(metadata)};
     }
-    if (const auto* ode = std::get_if<ExplicitOdeRequest>(&request.method)) {
-        return {integrators::SystemIntegrationConfiguration{MakeOdeMethodConfiguration(
-                     OdeRecipe(ode->method), PhysicalTolerances(system, ode->relative_tolerance,
-                         ode->generalized_position_absolute_tolerance,
-                         ode->generalized_velocity_absolute_tolerance,
-                         ode->series_force_absolute_tolerance_newtons)), budget},
-                std::move(metadata), std::nullopt, std::nullopt};
-    }
-    std::optional<TimeIntegratorQualificationCase> legacy;
-    if (const auto* value = std::get_if<TimeIntegratorQualificationCase>(&request.method)) legacy = *value;
-    const auto ode = ResolveTimeIntegratorQualificationNumerics(
-        legacy, scenario_defaults.recipe, scenario_defaults.relative_tolerance,
-        scenario_defaults.generalized_position_absolute_tolerance,
-        scenario_defaults.generalized_velocity_absolute_tolerance,
-        scenario_defaults.series_force_absolute_tolerance_newtons);
-    metadata["tolerance_tier_identifier"] = ode.tolerance_tier_identifier;
-    metadata["tolerance_scale_from_scenario_recipe"] = ode.tolerance_scale_from_scenario_recipe;
-    metadata["relative_tolerance"] = ode.relative_tolerance;
-    metadata["generalized_position_absolute_tolerance"] = ode.generalized_position_absolute_tolerance;
-    metadata["generalized_velocity_absolute_tolerance"] = ode.generalized_velocity_absolute_tolerance;
-    metadata["series_force_absolute_tolerance_newtons"] = ode.series_force_absolute_tolerance_newtons;
-    metadata["integrator_recipe_identifier"] = dynamics_qualification::IntegrationRecipeIdentifier(ode.integration_recipe);
-    if (const auto order = dynamics_qualification::MaximumBdfOrderForRecipe(ode.integration_recipe)) {
-        metadata["maximum_bdf_order"] = *order;
-    }
+    const auto* explicit_ode = std::get_if<ExplicitOdeRequest>(&request.method);
+    const auto& ode = explicit_ode ? *explicit_ode : scenario_defaults;
+    ExplicitOdeMetadata(ode, metadata);
     return {integrators::SystemIntegrationConfiguration{MakeOdeMethodConfiguration(
-                 ode.integration_recipe, PhysicalTolerances(system, ode.relative_tolerance,
+                 ode.method, PhysicalTolerances(system, ode.relative_tolerance,
                      ode.generalized_position_absolute_tolerance,
                      ode.generalized_velocity_absolute_tolerance,
                      ode.series_force_absolute_tolerance_newtons)), budget},
-            std::move(metadata), ode, std::nullopt};
+            std::move(metadata)};
 }
 
 }  // namespace orvd::dynamics_qualification

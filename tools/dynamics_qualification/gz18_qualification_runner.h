@@ -6,7 +6,6 @@
 #include <string>
 
 #include "qualification_run_summary.h"
-#include "time_integrator_qualification_case.h"
 
 namespace orvd::dynamics_qualification {
 
@@ -21,8 +20,6 @@ struct Gz18QualificationRunConfiguration final {
     std::filesystem::path output_directory;
     std::int64_t duration_nanoseconds{};
     std::int64_t sample_period_nanoseconds{};
-    std::optional<TimeIntegratorQualificationCase>
-        time_integrator_qualification_case;
     std::optional<std::filesystem::path> integration_config_path;
 };
 

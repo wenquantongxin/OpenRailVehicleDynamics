@@ -28,20 +28,8 @@ using orvd::dynamics_qualification::Gz18QualificationRunConfiguration;
 using orvd::dynamics_qualification::QualificationRunSummary;
 using orvd::dynamics_qualification::ProjectMonotoneSeriesToStationGrid;
 using orvd::dynamics_qualification::QualificationSampleClock;
-using orvd::dynamics_qualification::QualificationSampleRefinement;
 using orvd::dynamics_qualification::RunGz18Qualification;
-using orvd::dynamics_qualification::TimeIntegratorQualificationBackend;
-using orvd::dynamics_qualification::TimeIntegratorQualificationCase;
-using orvd::dynamics_qualification::
-    TimeIntegratorQualificationToleranceTier;
-
 int failures = 0;
-
-bool Near(double actual, double expected) {
-    return std::abs(actual - expected) <=
-           4.0 * std::numeric_limits<double>::epsilon() *
-               std::max({1.0, std::abs(actual), std::abs(expected)});
-}
 
 void Require(bool condition, std::string_view what) {
     if (!condition) {
@@ -68,17 +56,6 @@ std::string ReadWholeFile(const std::filesystem::path& path) {
     }
     return std::string(std::istreambuf_iterator<char>(input),
                        std::istreambuf_iterator<char>());
-}
-
-bool NumericalExecutionContractContains(
-    const std::string& metadata, std::string_view field) {
-    constexpr std::string_view kContract =
-        "\"numerical_execution_contract\": {";
-    const std::size_t begin = metadata.find(kContract);
-    const std::size_t end = metadata.find("\n  },", begin);
-    const std::size_t field_position = metadata.find(field, begin);
-    return begin != std::string::npos && end != std::string::npos &&
-           field_position != std::string::npos && field_position < end;
 }
 
 std::vector<std::string> SplitTabs(const std::string& line) {
@@ -160,32 +137,7 @@ void CheckIntegerClock() {
             }),
             "a terminal time not divisible by the sample period was accepted");
 
-    const QualificationSampleClock irw_a_layer(
-        30'000'000'000ULL, 500'000ULL,
-        QualificationSampleRefinement{
-            3'640'000'000ULL, 3'680'000'000ULL, 100'000ULL});
-    const auto irw_times = irw_a_layer.MakeSampleTimesSeconds();
-    Require(irw_a_layer.sample_count() == 60'321 &&
-                irw_times.front() == 0.0 && irw_times.back() == 30.0,
-            "the G71 base/refined integer-clock union is not 60321 points");
-    Require(irw_a_layer.TargetTimeNanoseconds(7'280) ==
-                    3'640'000'000ULL &&
-                irw_a_layer.TargetTimeNanoseconds(7'281) ==
-                    3'640'100'000ULL &&
-                irw_a_layer.TargetTimeNanoseconds(7'680) ==
-                    3'680'000'000ULL &&
-                irw_a_layer.TargetTimeNanoseconds(7'681) ==
-                    3'680'500'000ULL,
-            "the G71 refined window is not merged by integer nanosecond "
-            "identity");
-    Require(Throws([] {
-                (void)QualificationSampleClock(
-                    30'000'000'000ULL, 500'000ULL,
-                    QualificationSampleRefinement{
-                        3'640'000'000ULL, 3'680'000'001ULL, 100'000ULL});
-            }),
-            "a local-refinement interval not divisible by its period was "
-            "accepted");
+
 }
 
 void CheckStationProjection() {
@@ -239,9 +191,7 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     const int original_openmp_dynamic = omp_get_dynamic();
     const int original_openmp_max_threads = omp_get_max_threads();
     omp_set_dynamic(0);
-    // INT-07A's correctness oracle is the fully serial execution identity.
-    // Parallel candidates below must preserve its complete physical artifact
-    // and numerical work before any wall-clock result can be considered.
+    // Parallel evaluation must preserve the serial physical trajectory and work.
     omp_set_num_threads(1);
     Gz18QualificationRunConfiguration configuration;
     configuration.vehicle_definition_path =
@@ -257,19 +207,17 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
 
     const auto summary = RunGz18Qualification(configuration);
     Require(summary.sample_count == 2 &&
-                summary.integration_recipe ==
-                    orvd::dynamics_qualification::
-                        QualificationIntegrationMethod::kCvodeBdf2 &&
+                summary.integrator_recipe_identifier == "cvode_bdf2" &&
                 summary.maximum_bdf_order == 2 &&
-                summary.integration_statistics
+                summary.integration_work.total_statistics()
                         .successful_internal_step_count > 0 &&
-                summary.integration_statistics
+                summary.integration_work.total_statistics()
                             .right_hand_side_evaluation_count +
-                        summary.integration_statistics
+                        summary.integration_work.total_statistics()
                             .linear_solver_right_hand_side_evaluation_count >
                     0 &&
-                summary.integration_statistics.jacobian_evaluation_count > 1 &&
-                summary.integration_statistics
+                summary.integration_work.total_statistics().jacobian_evaluation_count > 1 &&
+                summary.integration_work.total_statistics()
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     1 &&
                 summary.used_before_track_definition_interval &&
@@ -516,7 +464,7 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 metadata_document.at("continuous_state_observation_contract")
                         .at("state_layout") == "[q;v;z]",
             "the artifact does not publish its lossless continuous-state "
-            "comparison contract");
+            "output contract");
     Require(metadata.find("\"before_definition_interval\": {") !=
                 std::string::npos &&
                 metadata.find("\"carrier_name\": \"rear_leading_wheelset\"") !=
@@ -541,55 +489,38 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 input_paths.at("orvd_data_root").get<std::string>() ==
                     std::filesystem::canonical(argv[4]).string(),
             "the successful artifact lacks canonical physical input paths");
-    Require(metadata.find(
-                "\"relative_tolerance\": 9.9999999999999995e-07") !=
-                std::string::npos &&
-                NumericalExecutionContractContains(
-                    metadata,
-                    "\"integrator_recipe_identifier\": \"cvode_bdf2\"") &&
-                NumericalExecutionContractContains(
-                    metadata, "\"qualification_case_identifier\": null") &&
-                NumericalExecutionContractContains(
-                    metadata,
-                    "\"tolerance_tier_identifier\": "
-                    "\"scenario_default\"") &&
-                NumericalExecutionContractContains(
-                    metadata,
-                    "\"tolerance_scale_from_scenario_recipe\": 1") &&
-                NumericalExecutionContractContains(
-                    metadata, "\"maximum_bdf_order\": 2") &&
-                metadata.find(
-                    "\"generalized_position_absolute_tolerance\": "
-                    "9.9999999999999995e-08") != std::string::npos &&
-                metadata.find(
-                    "\"generalized_velocity_absolute_tolerance\": "
-                    "9.9999999999999995e-07") != std::string::npos &&
-                metadata.find(
-                    "\"series_force_absolute_tolerance_newtons\": "
-                    "0.10000000000000001") != std::string::npos &&
-                metadata.find("\"openmp_dynamic_teams_enabled\": ") !=
-                    std::string::npos &&
-                metadata.find("\"contact_batch_worker_cap\": 8") !=
-                    std::string::npos &&
-                metadata.find(
-                    "\"contact_batch_requested_worker_count\": ") !=
-                    std::string::npos &&
-                metadata.find(
-                    "\"endpoint_assembly_and_state_slice_diagnostics\": {") !=
-                    std::string::npos &&
-                metadata.find("\"contact_observation_contract\": {") !=
-                    std::string::npos &&
-                metadata.find("\"primary_patch_rule\": \"maximum normal "
-                              "force; summary convenience only\"") !=
-                    std::string::npos,
-            "the successful artifact lacks its numerical execution contract");
+    const auto& contract = metadata_document.at("numerical_execution_contract");
+    Require(contract.at("integrator_recipe_identifier") == "cvode_bdf2" &&
+                contract.at("maximum_bdf_order") == 2 &&
+                contract.at("relative_tolerance") == 1e-6 &&
+                contract.at("generalized_position_absolute_tolerance") == 1e-7 &&
+                contract.at("generalized_velocity_absolute_tolerance") == 1e-6 &&
+                contract.at("series_force_absolute_tolerance_newtons") == 0.1,
+            "the artifact lost its actual method or physical tolerances");
+    const auto& floating_point = contract.at("floating_point_compilation_contract");
+    Require(floating_point.at("identifier") == "orvd.strict_ieee_no_fast_math.v1" &&
+                floating_point.at("cmake_external_flag_audit_passed") == true &&
+                floating_point.at("compile_command_audit_enabled") == true &&
+                floating_point.at("fast_math_macro_defined") == false &&
+                floating_point.at("finite_math_only_enabled") == false &&
+                !floating_point.at("compiler_id").get<std::string>().empty() &&
+                !floating_point.at("compiler_version").get<std::string>().empty(),
+            "the artifact lost its compiled strict floating-point identity");
+    const auto& execution = contract.at("execution_conditions_at_start");
+    Require(execution.at("openmp_runtime_maximum_threads") == 1 &&
+                execution.at("openmp_dynamic_teams_enabled") == false &&
+                execution.at("contact_batch_worker_cap") == 8 &&
+                execution.at("contact_batch_requested_worker_count") == 1 &&
+                (execution.at("cpu_affinity_at_start").is_null() ||
+                 execution.at("cpu_affinity_at_start").is_array()),
+            "the artifact lost its one-time execution-condition snapshot");
+    Require(metadata_document.contains("contact_observation_contract"),
+            "the artifact lost the contact observation units and frames");
 
     const std::string performance =
         ReadWholeFile(configuration.output_directory / "performance.json");
     Require(performance.find(
                 "\"integrator_recipe_identifier\": \"cvode_bdf2\"") !=
-                    std::string::npos &&
-                performance.find("\"qualification_case_identifier\": null") !=
                     std::string::npos &&
                 performance.find("\"integration_statistics\": {") !=
                     std::string::npos &&
@@ -620,11 +551,11 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
         const QualificationRunSummary candidate =
             RunGz18Qualification(comparison);
         Require(candidate.maximum_bdf_order == 2 &&
-                    candidate.integration_statistics
+                    candidate.integration_work.total_statistics()
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     requested_threads &&
-                    SameTrajectoryWork(summary.integration_statistics,
-                                       candidate.integration_statistics) &&
+                    SameTrajectoryWork(summary.integration_work.total_statistics(),
+                                       candidate.integration_work.total_statistics()) &&
                     SameTerminalState(summary, candidate),
                 "the 1/4/8/12/16/32-thread dense Jacobian changed the complete "
                 "GZ18 trajectory or numerical work");
@@ -639,89 +570,6 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 "physical artifact");
     }
 
-    omp_set_num_threads(1);
-    Gz18QualificationRunConfiguration radau5 = configuration;
-    radau5.output_directory = root / "real-gz18-radau5-fine";
-    radau5.duration_nanoseconds = 10'000'000;
-    radau5.sample_period_nanoseconds = 10'000'000;
-    radau5.time_integrator_qualification_case =
-        TimeIntegratorQualificationCase{
-            TimeIntegratorQualificationBackend::kRadau5,
-            TimeIntegratorQualificationToleranceTier::kFine};
-    const QualificationRunSummary radau5_summary =
-        RunGz18Qualification(radau5);
-    Require(radau5_summary.integration_recipe ==
-                    orvd::dynamics_qualification::
-                        QualificationIntegrationMethod::kRadau5 &&
-                radau5_summary.time_integrator_qualification_case ==
-                    radau5.time_integrator_qualification_case &&
-                !radau5_summary.maximum_bdf_order.has_value() &&
-                radau5_summary.sample_count == 2 &&
-                radau5_summary.integration_statistics
-                        .successful_internal_step_count > 0 &&
-                radau5_summary.integration_statistics
-                        .requested_dense_finite_difference_jacobian_worker_count ==
-                    1,
-            "the closed fine-tier GZ18 Radau5 artifact did not run");
-    const nlohmann::json radau5_metadata = nlohmann::json::parse(
-        ReadWholeFile(radau5.output_directory / "metadata.json"));
-    const auto& radau5_contract =
-        radau5_metadata.at("numerical_execution_contract");
-    const auto& radau5_floating_point_contract =
-        radau5_contract.at("floating_point_compilation_contract");
-    Require(radau5_contract.at("qualification_case_identifier") ==
-                    "radau5_fine" &&
-                radau5_contract.at("tolerance_tier_identifier") == "fine" &&
-                Near(radau5_contract
-                         .at("tolerance_scale_from_scenario_recipe")
-                         .get<double>(),
-                     0.1) &&
-                radau5_contract.at("integrator_recipe_identifier") ==
-                    "radau5" &&
-                radau5_contract.at("maximum_bdf_order").is_null() &&
-                Near(radau5_contract.at("relative_tolerance").get<double>(),
-                     1.0e-7) &&
-                Near(radau5_contract
-                         .at("generalized_position_absolute_tolerance")
-                         .get<double>(),
-                     1.0e-8) &&
-                Near(radau5_contract
-                         .at("generalized_velocity_absolute_tolerance")
-                         .get<double>(),
-                     1.0e-7) &&
-                Near(radau5_contract
-                         .at("series_force_absolute_tolerance_newtons")
-                         .get<double>(),
-                     1.0e-2),
-            "the fine-tier GZ18 Radau5 artifact misreported its numerical "
-            "case");
-    Require(radau5_floating_point_contract.at("identifier") ==
-                    "orvd.strict_ieee_no_fast_math.v1" &&
-                radau5_floating_point_contract
-                    .at("cmake_external_flag_audit_passed") == true &&
-                radau5_floating_point_contract
-                    .at("compile_command_audit_enabled") == true &&
-                radau5_floating_point_contract
-                    .at("fast_math_macro_defined") == false &&
-                radau5_floating_point_contract
-                    .at("finite_math_only_enabled") == false &&
-                radau5_floating_point_contract.at("build_type") ==
-                    "Release" &&
-                !radau5_floating_point_contract.at("compiler_id")
-                     .get<std::string>()
-                     .empty() &&
-                !radau5_floating_point_contract.at("compiler_version")
-                     .get<std::string>()
-                     .empty(),
-            "the GZ18 artifact did not publish its compiled strict "
-            "floating-point identity");
-    const nlohmann::json radau5_performance = nlohmann::json::parse(
-        ReadWholeFile(radau5.output_directory / "performance.json"));
-    Require(radau5_performance.at("integrator_recipe_identifier") ==
-                    "radau5" &&
-                radau5_performance.at("qualification_case_identifier") ==
-                    "radau5_fine",
-            "the fine-tier GZ18 performance record lost its case identity");
     omp_set_num_threads(original_openmp_max_threads);
     omp_set_dynamic(original_openmp_dynamic);
 }

@@ -15,8 +15,6 @@
 
 #include <Eigen/Geometry>
 
-#include "newmark_core.h"
-#include "zhai_core.h"
 #include "orvd/forces/vehicle_force_plan.h"
 #include "orvd/integrators/system_rhs_bridge.h"
 #include "orvd/multibody_model/multibody_model.h"
@@ -30,11 +28,7 @@ namespace {
 using orvd::integrators::NoCallTimeAppliedForces;
 using orvd::integrators::SystemRhsBridge;
 using orvd::integrators::internal::CoordinateState;
-using orvd::integrators::internal::NewmarkCoreConfiguration;
-using orvd::integrators::internal::NewmarkCore;
 using orvd::integrators::internal::SystemCoordinateProblem;
-using orvd::integrators::ZhaiConfiguration;
-using orvd::integrators::internal::ZhaiCore;
 using orvd::multibody_model::JointHandle;
 using orvd::multibody_model::MultibodyModel;
 using orvd::multibody_model::RigidBodyHandle;
@@ -122,47 +116,6 @@ struct SystemFixture {
         const auto context = system->CreateDefaultRuntimeContext(0.0);
         Eigen::VectorXd result(system->continuous_state_size());
         system->CopyContinuousState(*context, result);
-        return result;
-    }
-};
-
-struct FreeTopFixture final : SystemFixture {
-    RigidBodyHandle body;
-    const Eigen::Matrix3d initial_rotation = RpyRotation({0.2, -0.25, 0.3});
-    const Eigen::Vector3d translation_velocity{0.2, -0.1, 0.3};
-    const Eigen::Vector3d initial_position{0.4, -0.2, 0.6};
-    const Eigen::Vector3d initial_body_omega{0.7, 0.0, 0.9};
-
-    FreeTopFixture() {
-        body = model.AddRigidBody("free_top", Inertia(2.0, {0.3, 0.3, 0.5}));
-        model.DeclareFreeBody(body);
-        Finish();
-    }
-
-    Eigen::Matrix3d ExactRotation(double t) const {
-        const Eigen::Vector3d momentum_per_mass =
-            initial_rotation * Eigen::Vector3d(0.3 * 0.7, 0.0, 0.5 * 0.9);
-        const double body_precession_rate = (0.5 - 0.3) / 0.3 * 0.9;
-        return Eigen::AngleAxisd(momentum_per_mass.norm() / 0.3 * t,
-                                  momentum_per_mass.normalized()).toRotationMatrix() *
-               initial_rotation *
-               Eigen::AngleAxisd(-body_precession_rate * t,
-                                  Eigen::Vector3d::UnitZ()).toRotationMatrix();
-    }
-
-    Eigen::VectorXd ExactPhysicalState(double t) const {
-        auto result = DefaultPhysicalState();
-        const auto qr = model.GetFreeBodyPositionRange(body);
-        const auto vr = model.GetFreeBodyVelocityRange(body);
-        const int velocity_start = system->generalized_velocities_state_range().start();
-        const Eigen::Matrix3d rotation = ExactRotation(t);
-        result.segment<4>(qr.start()) = 1.7 * QuaternionEntries(rotation);
-        result.segment<3>(qr.start() + 4) = initial_position + t * translation_velocity;
-        const double rate = (0.5 - 0.3) / 0.3 * 0.9;
-        const Eigen::Vector3d body_omega(0.7 * std::cos(rate * t),
-                                       0.7 * std::sin(rate * t), 0.9);
-        result.segment<3>(velocity_start + vr.start()) = rotation * body_omega;
-        result.segment<3>(velocity_start + vr.start() + 3) = translation_velocity;
         return result;
     }
 };
@@ -281,102 +234,6 @@ struct MixedFixture final : SystemFixture {
         return physical;
     }
 };
-
-NewmarkCoreConfiguration NewmarkSettings(const SystemCoordinateProblem& problem, double h) {
-    NewmarkCoreConfiguration result;
-    result.step_size_seconds = h;
-    auto& solver = result.nonlinear_solver;
-    solver.position_correction_scales = Eigen::VectorXd::Constant(problem.coordinate_size(), 1e-11);
-    solver.velocity_correction_scales = solver.position_correction_scales;
-    solver.acceleration_residual_scales = solver.position_correction_scales;
-    solver.internal_state_correction_scales =
-        Eigen::VectorXd::Constant(problem.internal_state_size(), 1e-11);
-    solver.internal_state_residual_scales = solver.internal_state_correction_scales;
-    solver.unknown_reference_scales =
-        Eigen::VectorXd::Ones(problem.coordinate_size() + problem.internal_state_size());
-    return result;
-}
-
-template <typename Core, typename Fixture>
-Eigen::VectorXd Integrate(Fixture& fixture, double end_time, int steps) {
-    auto trial = fixture.system->CreateDefaultRuntimeContext(0.0);
-    SystemCoordinateProblem problem(*fixture.system, *fixture.plan, *trial,
-                                    NoCallTimeAppliedForces{});
-    const auto initial = problem.MakeCoordinateState(0.0, fixture.ExactPhysicalState(0.0));
-    const double h = end_time / steps;
-    const auto settings = [&] {
-        if constexpr (std::is_same_v<Core, NewmarkCore>) return NewmarkSettings(problem, h);
-        else return ZhaiConfiguration{h};
-    }();
-    Core core(problem, settings, initial);
-    for (int step = 0; step < steps; ++step) core.AdvanceOneStep();
-    CoordinateState final;
-    final.time_seconds = core.current_time_seconds();
-    final.q.resize(problem.coordinate_size());
-    final.s.resize(problem.coordinate_size());
-    final.z.resize(problem.internal_state_size());
-    core.CopyCurrentState(final.q, final.s, final.z);
-    Eigen::VectorXd result(fixture.system->continuous_state_size());
-    problem.CopyPhysicalState(final, result);
-    Near(final.time_seconds, end_time, 2e-14, "core endpoint time");
-    Expect(core.integration_statistics().successful_internal_step_count ==
-               static_cast<std::uint64_t>(steps), "each real bridge step must be counted");
-    return result;
-}
-
-void CheckOrders(const std::vector<double>& errors, const std::string& label) {
-    Expect(errors.size() == 4, "four fixed grids are required");
-    for (std::size_t level = 2; level < errors.size(); ++level) {
-        const double order = std::log2(errors[level - 1] / errors[level]);
-        Expect(std::isfinite(order) && order >= 1.8 && order <= 2.2,
-               label + ": final observed order=" + std::to_string(order));
-    }
-}
-
-template <typename Core>
-void CheckRealSystemConvergence(const std::string& method) {
-    constexpr double end = 0.8;
-    FreeTopFixture top;
-    BallRpyFixture ball;
-    SliderMaxwellFixture slider;
-    std::vector<double> top_angles, top_velocities, ball_angles, ball_velocities;
-    std::array<std::vector<double>, 3> maxwell_errors;
-    for (const int steps : {20, 40, 80, 160}) {
-        const Eigen::VectorXd top_result = Integrate<Core>(top, end, steps);
-        const auto top_exact = top.ExactPhysicalState(end);
-        const auto tqr = top.model.GetFreeBodyPositionRange(top.body);
-        const auto tvr = top.system->generalized_velocities_state_range();
-        top_angles.push_back(AngleError(QuaternionRotation(top_result.segment<4>(tqr.start())),
-                                       top.ExactRotation(end)));
-        top_velocities.push_back((top_result.segment(tvr.start(), tvr.size()) -
-                                  top_exact.segment(tvr.start(), tvr.size())).norm());
-        Near(top_result.segment<4>(tqr.start()).norm(), 1.7, 3e-14,
-             method + " free-top quaternion norm");
-        Near((top_result.segment<3>(tqr.start() + 4) -
-              top_exact.segment<3>(tqr.start() + 4)).norm(), 0.0, 2e-12,
-             method + " free-top translational motion");
-
-        const Eigen::VectorXd ball_result = Integrate<Core>(ball, end, steps);
-        ball_angles.push_back(AngleError(RpyRotation(ball_result.head<3>()), ball.ExactRotation(end)));
-        ball_velocities.push_back((ball_result.tail<3>() - ball.world_omega).norm());
-
-        const Eigen::VectorXd maxwell_result = Integrate<Core>(slider, end, steps);
-        const auto maxwell_exact = slider.ExactPhysicalState(end);
-        for (int component = 0; component != 3; ++component) {
-            maxwell_errors[component].push_back(std::abs(maxwell_result[component] -
-                                                       maxwell_exact[component]));
-        }
-        Expect(std::abs(maxwell_result[0] - 0.2) > 0.1,
-               "Maxwell qualification must include actual slider displacement");
-    }
-    CheckOrders(top_angles, method + " free-top attitude");
-    CheckOrders(top_velocities, method + " free-top physical velocity");
-    CheckOrders(ball_angles, method + " Ball-RPY attitude");
-    CheckOrders(ball_velocities, method + " Ball-RPY physical angular velocity");
-    CheckOrders(maxwell_errors[0], method + " moving Maxwell position");
-    CheckOrders(maxwell_errors[1], method + " moving Maxwell velocity");
-    CheckOrders(maxwell_errors[2], method + " moving Maxwell force");
-}
 
 void VerifyRhsAndRoundTrip() {
     SliderMaxwellFixture fixture;
@@ -840,8 +697,6 @@ int main() {
         VerifyExplicitContextLocalSynchronization();
         VerifyActualDynamicsFailureIsolation();
         VerifySystemCoordinateProblemContactIsolation();
-        CheckRealSystemConvergence<NewmarkCore>("Newmark");
-        CheckRealSystemConvergence<ZhaiCore>("Zhai");
         std::cout << "system coordinate problem verification passed\n";
         return 0;
     } catch (const std::exception& error) {

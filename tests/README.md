@@ -115,18 +115,15 @@ G50 把同一桥扩展为 `[q;v;z]`，并以真实车辆力元计划验证具名
 
 Radau5 核心测试除刚性、稠密输出和异常分类外，还直接复用生产 Newton 判定，锁定默认 `NIT=7`
 时第 6 次预测的 `dyth<1` 接受与 `dyth==1` 拒绝边界；四维串行 Jacobian 基线另锁定一列一任务、
-中间列 recoverable 只缩放并重试该列、fatal 不继续求后续列、RHS 计数分区和端点原子性。资格测试穷尽
-`TimeIntegratorQualificationCase` 的 8 个 backend/tier 组合及四档容差缩放；轻量 Python CTest
-另锁定三个 runner 的旧／新参数数量、输出目录位置，以及非法尾 case 的退出码，不以整车长窗承担
-命令行解析合同。轻量 CTest `verify_serial_qualification_comparison_contract` 严格校验
-INT-07A 冻结的 v2 串行 manifest `int07a_serial_baseline_v2`，并确定性展开 GZ18/IRW
-两个场景的 16 组 argv；它拒绝未知字段、非整数时钟、非串行身份、非严格浮点身份和性能排名，不执行
-长窗。独立工具链测试证明干净 Release 配置可通过，并让 `-ffast-math`、`-Ofast`、有限数学假设及
+中间列 recoverable 只缩放并重试该列、fatal 不继续求后续列、RHS 计数分区和端点原子性。正常调用测试覆盖五种方法的显式配置、场景默认值、三个 CLI 的位置参数与选项、
+完整状态输出和原子发布。两种机械方法在 GZ18 被动、IRW 被动与受控分支各保留一个短窗冒烟；
+公开入口的自由刚体、Ball-RPY 和运动 Maxwell 解析用例保留二阶收敛断言。
+独立工具链测试证明干净 Release 配置可通过，并让 `-ffast-math`、`-Ofast`、有限数学假设及
 已知等价选项失败；目录级 `-ffp-model=fast`、响应文件中的危险选项和不透明响应文件也会在最终编译
 命令处被拒绝，可读的安全相对响应文件则通过。测试还锁定不执行编译启动器的生成器和既存启动器链
 必须在配置期响亮失败。该 v1 合同是浮点安全类别而非跨构建逐位身份：编译器默认 contraction、
 `-ffp-contract=fast/off` 与融合乘加均允许；两个显式 contraction 选项都必须通过配置审计和最终编译
-启动器的真实构建正例。跨编译器／目标构建按协议数值预算比较；同一二进制在不同固定槽 worker 数
+启动器的真实构建正例。跨编译器／目标构建使用各测试明确的数值容差；同一二进制在不同固定槽 worker 数
 下仍必须逐位一致。
 
 独立正确性回归另覆盖每次正长度调用的一次性 stop 吸附及拒步后不重复吸附、持续阶段／误差修正
@@ -142,8 +139,7 @@ Newton 校正、定义边界延长和非法输入。
 真实 GZ18 与 IRW 被动/100 Hz 控制短窗把现有全串行运行作为 correctness oracle，再要求
 4/8/12/16/32-worker 的完整
 `continuous_states.tsv`、物理观测、接触斑、终态及数值统计保持一致。完整状态表按整数纳秒时钟无损
-保存 `[q;v;z]`；跨后端自由体与 Ball-RPY 姿态必须使用 INT-07 协议的 rotation-log 误差，不直接相减
-raw quaternion／Euler 坐标。
+保存 `[q;v;z]`；几何测试按旋转误差核对姿态，不直接相减 raw quaternion／Euler 坐标。
 
 ## 安装消费者
 

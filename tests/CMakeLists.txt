@@ -1202,9 +1202,10 @@ add_test(NAME verify_gz18_passive_short_window
 set_tests_properties(verify_gz18_passive_short_window
     PROPERTIES PROCESSORS 8)
 
-# Shared vehicle integration configuration and work-accounting contracts.
+# Source-private vehicle integration configuration and cost/attempt contracts.
 foreach(test_name IN ITEMS verify_qualification_integration_configuration
-                           verify_qualification_run_accounting)
+                           verify_qualification_run_accounting
+                           verify_vehicle_integrator_smoke)
     add_executable(${test_name} dynamics_qualification/${test_name}.cc)
     orvd_configure_first_party_target(${test_name})
     target_link_libraries(${test_name} PRIVATE orvd_dynamics_qualification_support
@@ -1218,6 +1219,12 @@ add_test(NAME verify_qualification_integration_configuration
 add_test(NAME verify_qualification_run_accounting
     COMMAND verify_qualification_run_accounting
         ${CMAKE_CURRENT_BINARY_DIR}/qualification-run-accounting-fixtures)
+add_test(NAME verify_vehicle_integrator_smoke
+    COMMAND verify_vehicle_integrator_smoke ${CMAKE_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/vehicle-integrator-smoke-fixtures)
+set_tests_properties(verify_vehicle_integrator_smoke PROPERTIES
+    ENVIRONMENT "OMP_NUM_THREADS=1;OMP_DYNAMIC=FALSE")
+
 # G58's non-installed qualification leaf. A 30 ms real GZ18 run with only its
 # two endpoints exercises multiple dense Jacobians, sequential observation
 # projection across the dense-state batch, the
@@ -1273,20 +1280,10 @@ add_test(
     NAME verify_time_integrator_qualification_cli
     COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/dynamics_qualification/verify_time_integrator_qualification_cli.py
-            --metrics-wrapper
-            ${CMAKE_SOURCE_DIR}/tools/dynamics_qualification/run_qualification_with_metrics.py
             --gz18 $<TARGET_FILE:orvd_gz18_dynamics_qualification>
             --irw-passive $<TARGET_FILE:orvd_irw_passive_scenario>
             --irw-guidance
             $<TARGET_FILE:orvd_irw_r300_aar5_v60_100hz_full_state_guidance>)
-
-# The serial qualification-comparison contract covers the frozen manifest,
-# all 16 runner argv expansions, wrapper preflight and artifact postflight. It
-# deliberately starts no long-window vehicle run and produces no timing rank.
-add_test(
-    NAME verify_serial_qualification_comparison_contract
-    COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/dynamics_qualification/verify_serial_qualification_comparison_contract.py)
 
 add_executable(verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios
     dynamics_qualification/verify_irw_aar5_v80_v100_aar6_v120_v160_and_erri_low_v200_passive_scenarios.cc)

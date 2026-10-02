@@ -51,8 +51,4 @@ void WriteQualificationContinuousStates(
 
 [[nodiscard]] nlohmann::json ContinuousStateObservationContract(
     const QualificationSampleClock& clock);
-[[nodiscard]] nlohmann::json ComparisonStateContract(
-    const Eigen::Ref<const Eigen::VectorXd>& initial_physical_state,
-    const Eigen::Ref<const Eigen::VectorXd>& terminal_physical_state);
-
 }  // namespace orvd::dynamics_qualification

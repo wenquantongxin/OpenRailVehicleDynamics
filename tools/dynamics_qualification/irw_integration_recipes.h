@@ -1,6 +1,6 @@
 #pragma once
 
-#include "qualification_integration_method.h"
+#include "qualification_integration_configuration.h"
 
 namespace orvd::dynamics_qualification::internal {
 
@@ -13,8 +13,7 @@ struct IrwIntegrationRecipe final {
         double position_absolute_tolerance_value,
         double velocity_absolute_tolerance_value,
         double series_force_absolute_tolerance_newtons_value,
-        dynamics_qualification::QualificationIntegrationMethod
-            default_integration_recipe_value)
+        OdeIntegrationMethod default_integration_recipe_value)
         : relative_tolerance(relative_tolerance_value),
           position_absolute_tolerance(position_absolute_tolerance_value),
           velocity_absolute_tolerance(velocity_absolute_tolerance_value),
@@ -27,8 +26,7 @@ struct IrwIntegrationRecipe final {
     double position_absolute_tolerance{};
     double velocity_absolute_tolerance{};
     double series_force_absolute_tolerance_newtons{};
-    dynamics_qualification::QualificationIntegrationMethod
-        default_integration_recipe;
+    OdeIntegrationMethod default_integration_recipe;
 };
 
 inline constexpr IrwIntegrationRecipe
@@ -37,8 +35,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-6,
         1.0e-5,
         1.0e-6,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf2,
+        OdeIntegrationMethod::kCvodeBdf2,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -47,8 +44,7 @@ inline constexpr IrwIntegrationRecipe
     1.0e-8,
     1.0e-7,
     1.0e-6,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -57,8 +53,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-6,
         1.0e-5,
         1.0e-6,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf2,
+        OdeIntegrationMethod::kCvodeBdf2,
     };
 
 // These higher-speed passive identities deliberately own separate recipes.
@@ -70,8 +65,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -80,8 +74,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -90,8 +83,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -100,8 +92,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -110,8 +101,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -120,8 +110,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 inline constexpr IrwIntegrationRecipe
@@ -130,8 +119,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-9,
         1.0e-8,
         1.0e-7,
-        dynamics_qualification::QualificationIntegrationMethod::
-            kCvodeBdf5,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 }  // namespace orvd::dynamics_qualification::internal

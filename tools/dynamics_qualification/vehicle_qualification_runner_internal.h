@@ -8,11 +8,9 @@
 #include <string_view>
 
 #include "qualification_run_summary.h"
-#include "qualification_sample_clock.h"
-#include "time_integrator_qualification_case.h"
+#include "qualification_integration_configuration.h"
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
-#include "qualification_integration_method.h"
 
 namespace orvd::dynamics_qualification::internal {
 
@@ -35,9 +33,6 @@ struct QualificationRunConfiguration final {
     std::filesystem::path output_directory;
     std::int64_t duration_nanoseconds{};
     std::int64_t sample_period_nanoseconds{};
-    std::optional<QualificationSampleRefinement> local_sample_refinement;
-    std::optional<TimeIntegratorQualificationCase>
-        time_integrator_qualification_case;
     // Publishes `<output>/scene_record/` from the same dense samples and
     // observation context the qualification observations use. It adds no
     // integrator stop and leaves every existing artefact unchanged.
@@ -56,8 +51,7 @@ struct VehicleQualificationRecipe final {
         double generalized_position_absolute_tolerance_value,
         double generalized_velocity_absolute_tolerance_value,
         double series_force_absolute_tolerance_newtons_value,
-        dynamics_qualification::QualificationIntegrationMethod
-            default_integration_recipe_value,
+        OdeIntegrationMethod default_integration_recipe_value,
         int expected_generalized_position_count_value,
         int expected_generalized_velocity_count_value,
         int expected_series_force_state_count_value,
@@ -94,8 +88,7 @@ struct VehicleQualificationRecipe final {
     double generalized_position_absolute_tolerance{};
     double generalized_velocity_absolute_tolerance{};
     double series_force_absolute_tolerance_newtons{};
-    dynamics_qualification::QualificationIntegrationMethod
-        default_integration_recipe;
+    OdeIntegrationMethod default_integration_recipe;
     int expected_generalized_position_count{};
     int expected_generalized_velocity_count{};
     int expected_series_force_state_count{};
@@ -103,12 +96,6 @@ struct VehicleQualificationRecipe final {
     TrackIrregularityRequirement track_irregularity_requirement{};
     ScenarioAssembler assemble_scenario{};
 };
-
-// Observes one real OpenMP team at the contact batch's fixed eight-interface
-// request. A multi-worker request that the runtime serializes is rejected;
-// a resolved one-worker request remains a valid serial execution identity.
-// The returned value is the number of distinct workers actually observed.
-[[nodiscard]] int RequireRealContactBatchParallelTeam();
 
 [[nodiscard]] QualificationRunSummary RunVehicleQualification(
     const QualificationRunConfiguration& configuration,

@@ -1,7 +1,6 @@
 These files are explicit trial inputs for the existing qualification runners.
 Their 25 μs step and Newton scales are trial values, not qualified vehicle defaults
-or accuracy claims. Use `--integration-config PATH`; this option and a trailing
-ODE qualification case are mutually exclusive.
+or accuracy claims. Use `--integration-config PATH` to select an explicit method configuration.
 
 The schema accepts `cvode_bdf2`, `cvode_bdf5`, `radau5`, `newmark` and `zhai`.
 The ODE methods take physical-state tolerances. Newmark and Zhai require a positive
@@ -18,8 +17,7 @@ acceleration residual and acceleration reference for finite differences.
 Quaternion values use stored quaternion units and the same time powers. Force
 correction, residual and reference scales all use N.
 
-`quaternion_scale_convention` must be `reference_norm_multiple`. All four
-quaternion values are multiplied by the owning free body's stored norm at the
+The quaternion convention is defined by the library. All four quaternion values are multiplied by the owning free body's stored norm at the
 latest successful initialization, including explicit synchronization. The library
 prepares the new reference and expanded scales together, commits both only after
 initialization succeeds, and retains both after failure. Scales remain fixed
@@ -31,5 +29,4 @@ The library expands scalar families through actual joint types and coordinate
 ranges. Expanded solver arrays stay private. Metadata records the declared
 families, coordinate ownership and initial quaternion norms for interpreting
 saved physical states. Newton scales are independent of physical-state ODE
-tolerances. A Newton refinement multiplies all correction and residual family
-values by 0.1 while keeping finite-difference references unchanged.
+tolerances.

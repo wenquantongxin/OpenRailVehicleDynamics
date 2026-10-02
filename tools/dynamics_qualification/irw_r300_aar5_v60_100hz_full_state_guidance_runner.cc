@@ -1,6 +1,5 @@
 #include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
 
-#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -20,7 +19,6 @@
 #include <vector>
 
 #include <Eigen/Core>
-#include <omp.h>
 
 #include "atomic_qualification_directory.h"
 #include "qualification_continuous_state_writer.h"
@@ -71,7 +69,6 @@ constexpr std::string_view kTorqueConditionerIdentifier =
     "irw_reference_wheel_drive_torque_conditioner";
 constexpr std::size_t kAxleCount = 4;
 constexpr std::size_t kWheelCount = 8;
-constexpr int kMaximumContactWorkerCount = 8;
 
 struct ResolvedConfiguration final {
     std::filesystem::path vehicle_definition_path;
@@ -97,16 +94,6 @@ struct ControlledObservation final {
     std::array<double, kWheelCount> rail_profile_reference_marker_track_station_meters{};
     std::array<Eigen::Vector3d, kWheelCount>
         total_forces_in_carrier_track_frame_newtons{};
-};
-
-struct ControlledEndpointDiagnostics final {
-    std::uint64_t held_torque_event_ordinal{};
-    double time_seconds{};
-    double state_derivative_inf_norm{};
-    double generalized_force_residual_inf_norm{};
-    double virtual_power_residual_watts{};
-    double position_derivative_slice_consistency_inf_norm{};
-    double series_force_derivative_slice_consistency_inf_norm{};
 };
 
 struct ControlledPatchObservation final {
@@ -194,25 +181,6 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
     return output.str();
 }
 
-[[nodiscard]] double WrenchPower(
-    const multibody_model::MultibodyModel& model,
-    const multibody_model::MultibodyEvaluationContext& context,
-    const AppliedBodyWrench& wrench) {
-    const auto pose = model.CalcPoseInWorld(context, wrench.body);
-    const auto velocity =
-        model.CalcBodyFrameSpatialVelocityRelativeToWorldExpressedInWorld(
-            context, wrench.body);
-    const Eigen::Vector3d point_offset_in_world =
-        pose.rotation() * wrench.point_position_in_body_frame_meters;
-    const Eigen::Vector3d point_velocity =
-        velocity.translational_velocity_at_frame_origin_meters_per_second() +
-        velocity.angular_velocity_radians_per_second().cross(
-            point_offset_in_world);
-    return wrench.torque_about_point_newton_metres.dot(
-               velocity.angular_velocity_radians_per_second()) +
-           wrench.force_newtons.dot(point_velocity);
-}
-
 [[nodiscard]] ControlledObservation ObserveControlledSample(
     const configuration::AssembledVehicleSystem& assembled,
     const configuration::IrwFullStateControlEventSession& event_session,
@@ -274,100 +242,6 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
         }
     }
     return observation;
-}
-
-[[nodiscard]] ControlledEndpointDiagnostics CalcControlledEndpointDiagnostics(
-    const configuration::AssembledVehicleSystem& assembled,
-    system_assembly::SystemRuntimeContext& context,
-    std::uint64_t held_torque_event_ordinal,
-    forces::WheelRailContactForceWorkspace& contact_workspace,
-    std::span<AppliedBodyWrench> vehicle_wrenches,
-    std::span<AppliedBodyWrench> contact_wrenches,
-    std::span<AppliedBodyWrench> active_wrenches,
-    Eigen::VectorXd* series_derivatives) {
-    auto component = assembled.system().GetMultibodyComponentView(
-        context, assembled.system().multibody_component());
-    assembled.force_plan().CalcAppliedForces(
-        component.context(), context.series_spring_damper_forces(),
-        context.nominal_forces(), vehicle_wrenches, *series_derivatives);
-    assembled.contact_force_plan()->CalcAppliedForces(
-        component.context(), contact_workspace,
-        context.wheel_rail_projection_station_hints_meters(),
-        contact_wrenches);
-    assembled.active_torque_plan()->CalcAppliedForces(
-        component.context(),
-        std::span<const double>(
-            context
-                .held_independent_wheel_active_torques_newton_metres()
-                .data(),
-            static_cast<std::size_t>(
-                context
-                    .held_independent_wheel_active_torques_newton_metres()
-                    .size())),
-        active_wrenches);
-
-    Eigen::VectorXd rhs(assembled.system().continuous_state_size());
-    assembled.compiled_plan().CalcStateTimeDerivatives(context, rhs);
-    if (!rhs.allFinite()) {
-        Reject("a controlled endpoint produced a non-finite 157-state RHS");
-    }
-
-    const int nq = assembled.model().num_generalized_positions();
-    const int nv = assembled.model().num_generalized_velocities();
-    Eigen::VectorXd projected_generalized_force = Eigen::VectorXd::Zero(nv);
-    Eigen::MatrixXd angular_jacobian(3, nv);
-    Eigen::MatrixXd translational_jacobian(3, nv);
-    double spatial_power = 0.0;
-    const auto accumulate_wrenches = [&](std::span<const AppliedBodyWrench> set) {
-        for (const AppliedBodyWrench& wrench : set) {
-            assembled.model()
-                .CalcRigidBodyPointSpatialVelocityJacobianRelativeToWorldExpressedInWorld(
-                    component.context(), wrench.body,
-                    wrench.point_position_in_body_frame_meters,
-                    &angular_jacobian, &translational_jacobian);
-            projected_generalized_force.noalias() +=
-                angular_jacobian.transpose() *
-                    wrench.torque_about_point_newton_metres +
-                translational_jacobian.transpose() * wrench.force_newtons;
-            spatial_power +=
-                WrenchPower(assembled.model(), component.context(), wrench);
-        }
-    };
-    accumulate_wrenches(vehicle_wrenches);
-    accumulate_wrenches(contact_wrenches);
-    accumulate_wrenches(active_wrenches);
-    Eigen::VectorXd required_generalized_force(nv);
-    assembled.model().CalcRequiredGeneralizedForces(
-        component.context(), rhs.segment(nq, nv),
-        required_generalized_force);
-
-    Eigen::VectorXd mapped_qdot(nq);
-    assembled.model().MapGeneralizedVelocitiesToPositionDerivatives(
-        component.context(), context.generalized_velocities(), &mapped_qdot);
-
-    ControlledEndpointDiagnostics diagnostics;
-    diagnostics.held_torque_event_ordinal = held_torque_event_ordinal;
-    diagnostics.time_seconds = context.time_seconds();
-    diagnostics.state_derivative_inf_norm = rhs.lpNorm<Eigen::Infinity>();
-    diagnostics.generalized_force_residual_inf_norm =
-        (projected_generalized_force - required_generalized_force)
-            .lpNorm<Eigen::Infinity>();
-    diagnostics.virtual_power_residual_watts =
-        projected_generalized_force.dot(context.generalized_velocities()) -
-        spatial_power;
-    diagnostics.position_derivative_slice_consistency_inf_norm =
-        (rhs.head(nq) - mapped_qdot).lpNorm<Eigen::Infinity>();
-    diagnostics.series_force_derivative_slice_consistency_inf_norm =
-        (rhs.tail(series_derivatives->size()) - *series_derivatives)
-            .lpNorm<Eigen::Infinity>();
-    if (!std::isfinite(diagnostics.position_derivative_slice_consistency_inf_norm) ||
-        !std::isfinite(diagnostics.series_force_derivative_slice_consistency_inf_norm) ||
-        !std::isfinite(diagnostics.state_derivative_inf_norm) ||
-        !std::isfinite(diagnostics.generalized_force_residual_inf_norm) ||
-        !std::isfinite(diagnostics.virtual_power_residual_watts)) {
-        Reject("a controlled endpoint diagnostic is not finite");
-    }
-    return diagnostics;
 }
 
 template <std::size_t Size>
@@ -634,32 +508,6 @@ void WritePatchObservations(
     CloseChecked(&output, path);
 }
 
-void WriteEndpointDiagnostics(
-    const std::filesystem::path& path,
-    const std::vector<ControlledEndpointDiagnostics>& diagnostics) {
-    std::ofstream output(path, std::ios::out | std::ios::trunc);
-    if (!output) {
-        Reject("could not open '" + path.string() + "'");
-    }
-    output << std::setprecision(17)
-           << "held_torque_event_ordinal\ttime_seconds"
-              "\tstate_derivative_inf_norm"
-              "\tgeneralized_force_residual_inf_norm"
-              "\tvirtual_power_residual_watts"
-              "\tposition_derivative_slice_consistency_inf_norm"
-              "\tseries_force_derivative_slice_consistency_inf_norm\n";
-    for (const auto& entry : diagnostics) {
-        output << entry.held_torque_event_ordinal << '\t'
-               << entry.time_seconds << '\t'
-               << entry.state_derivative_inf_norm << '\t'
-               << entry.generalized_force_residual_inf_norm << '\t'
-               << entry.virtual_power_residual_watts << '\t'
-               << entry.position_derivative_slice_consistency_inf_norm << '\t'
-               << entry.series_force_derivative_slice_consistency_inf_norm << '\n';
-    }
-    CloseChecked(&output, path);
-}
-
 [[nodiscard]] nlohmann::json PhysicalObservationContract(
     const configuration::AssembledVehicleSystem& assembled) {
     constexpr std::array<std::string_view, kAxleCount> kAxles{"ff", "fr", "rf", "rr"};
@@ -696,22 +544,6 @@ void WriteEndpointDiagnostics(
             {"carriers", std::move(carriers)}, {"interfaces", std::move(interfaces)}};
 }
 
-[[nodiscard]] nlohmann::json ComparisonEndpointDiagnostics(
-    const std::vector<ControlledEndpointDiagnostics>& diagnostics) {
-    double force = 0.0, power = 0.0, qdot = 0.0, series = 0.0;
-    for (const auto& entry : diagnostics) {
-        force = std::max(force, entry.generalized_force_residual_inf_norm);
-        power = std::max(power, std::abs(entry.virtual_power_residual_watts));
-        qdot = std::max(qdot, entry.position_derivative_slice_consistency_inf_norm);
-        series = std::max(series, entry.series_force_derivative_slice_consistency_inf_norm);
-    }
-    return {{"scope", "initial_and_all_arriving_hold_endpoints"},
-            {"generalized_force_residual_inf_norm", force},
-            {"absolute_virtual_power_residual_watts", power},
-            {"position_derivative_slice_consistency_inf_norm", qdot},
-            {"series_force_derivative_slice_consistency_inf_norm", series}};
-}
-
 void WriteMetadata(
     const std::filesystem::path& path,
     const ResolvedConfiguration& configuration,
@@ -720,16 +552,9 @@ void WriteMetadata(
     const configuration::IrwFullStateControlEventSession& session,
     const IrwR300Aar5V60At100HzFullStateGuidanceRunSummary& summary,
     const nlohmann::json& numerical_metadata,
-    int contact_batch_parallel_team_probe_worker_count,
     std::string_view controller_identifier,
     std::string_view conditioner_identifier,
-    const QualificationSampleClock& observation_clock,
-    const Eigen::Ref<const Eigen::VectorXd>& initial_state,
-    const std::vector<ControlledEndpointDiagnostics>& endpoint_diagnostics) {
-    const int requested_contact_worker_count = std::min(
-        {kMaximumContactWorkerCount,
-         assembled.contact_force_plan()->interface_count(),
-         omp_get_max_threads()});
+    const QualificationSampleClock& observation_clock) {
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
@@ -740,12 +565,8 @@ void WriteMetadata(
            << "  \"artifact_schema_identifier\": \"orvd.controlled_vehicle_qualification.v1\",\n"
            << "  \"continuous_state_observation_contract\": "
            << ContinuousStateObservationContract(observation_clock).dump() << ",\n"
-           << "  \"comparison_state_contract\": "
-           << ComparisonStateContract(initial_state, summary.terminal_continuous_state).dump() << ",\n"
            << "  \"physical_observation_contract\": "
            << PhysicalObservationContract(assembled).dump() << ",\n"
-           << "  \"comparison_endpoint_diagnostics\": "
-           << ComparisonEndpointDiagnostics(endpoint_diagnostics).dump() << ",\n"
            << "  \"qualification_vehicle_recipe\": "
            << JsonString(
                   "IRW_R300_AAR5_V60_100HZ_FULL_STATE_WHEEL_SPEED_GUIDANCE")
@@ -842,13 +663,7 @@ void WriteMetadata(
            << "      \"compiler_version\": "
            << JsonString(internal::kQualificationCxxCompilerVersion)
            << "\n"
-           << "    },\n"
-           << "    \"contact_batch_worker_cap\": "
-           << kMaximumContactWorkerCount << ",\n"
-           << "    \"contact_batch_requested_worker_count\": "
-           << requested_contact_worker_count << ",\n"
-           << "    \"contact_batch_parallel_team_probe_worker_count\": "
-           << contact_batch_parallel_team_probe_worker_count << "\n"
+           << "    }\n"
            << "  },\n"
            << "  \"input_paths\": {\n"
            << "    \"vehicle_definition\": "
@@ -877,93 +692,27 @@ void WriteMetadata(
 void WritePerformance(
     const std::filesystem::path& path,
     const IrwR300Aar5V60At100HzFullStateGuidanceRunSummary& summary,
-    std::int64_t duration_nanoseconds, std::size_t dense_state_peak_bytes,
-    std::size_t observation_buffer_bytes,
-    std::size_t patch_observation_buffer_bytes,
-    std::size_t endpoint_diagnostics_buffer_bytes) {
-    const auto& stats = summary.integration_statistics;
-    const double simulated_duration_seconds =
-        static_cast<double>(duration_nanoseconds) * 1.0e-9;
-    const double integrated_dynamics_wall_seconds =
-        summary.advance_and_synchronization_wall_seconds +
+    std::int64_t duration_nanoseconds) {
+    const double duration_seconds = static_cast<double>(duration_nanoseconds) * 1.0e-9;
+    const double dynamics_seconds = summary.advance_and_synchronization_wall_seconds +
         summary.control_wall_seconds;
-    const double qualification_compute_wall_seconds =
-        integrated_dynamics_wall_seconds + summary.observation_wall_seconds;
+    const double compute_seconds = dynamics_seconds + summary.observation_wall_seconds;
+    const nlohmann::json result{
+        {"integrator_recipe_identifier", summary.integrator_recipe_identifier},
+        {"advance_and_synchronization_wall_seconds", summary.advance_and_synchronization_wall_seconds},
+        {"control_wall_seconds", summary.control_wall_seconds},
+        {"observation_wall_seconds", summary.observation_wall_seconds},
+        {"data_and_metadata_write_wall_seconds", summary.data_and_metadata_write_wall_seconds},
+        {"simulated_duration_seconds", duration_seconds},
+        {"integrated_dynamics_wall_seconds", dynamics_seconds},
+        {"qualification_compute_wall_seconds", compute_seconds},
+        {"integrated_dynamics_realtime_factor", duration_seconds / dynamics_seconds},
+        {"qualification_compute_realtime_factor", duration_seconds / compute_seconds},
+        {"numerical_timings", summary.numerical_timings.ToJson()},
+        {"integration_work", summary.integration_work.ToJson()}};
     std::ofstream output(path, std::ios::out | std::ios::trunc);
-    if (!output) {
-        Reject("could not open '" + path.string() + "'");
-    }
-    output << std::setprecision(17)
-           << "{\n"
-           << "  \"integrator_recipe_identifier\": "
-           << JsonString(std::string(
-                  dynamics_qualification::IntegrationRecipeIdentifier(
-                      summary.integration_recipe)))
-           << ",\n"
-           << "  \"qualification_case_identifier\": ";
-    if (summary.time_integrator_qualification_case.has_value()) {
-        output << JsonString(TimeIntegratorQualificationCaseIdentifier(
-            *summary.time_integrator_qualification_case));
-    } else {
-        output << "null";
-    }
-    output << ",\n"
-           << "  \"advance_and_synchronization_wall_seconds\": "
-           << summary.advance_and_synchronization_wall_seconds << ",\n"
-           << "  \"control_wall_seconds\": "
-           << summary.control_wall_seconds << ",\n"
-           << "  \"observation_wall_seconds\": "
-           << summary.observation_wall_seconds << ",\n"
-           << "  \"data_and_metadata_write_wall_seconds\": "
-           << summary.data_and_metadata_write_wall_seconds << ",\n"
-           << "  \"simulated_duration_seconds\": "
-           << simulated_duration_seconds << ",\n"
-           << "  \"integrated_dynamics_wall_seconds\": "
-           << integrated_dynamics_wall_seconds
-           << ",\n"
-           << "  \"qualification_compute_wall_seconds\": "
-           << qualification_compute_wall_seconds
-           << ",\n"
-           << "  \"integrated_dynamics_realtime_factor\": "
-           << simulated_duration_seconds / integrated_dynamics_wall_seconds
-           << ",\n"
-           << "  \"qualification_compute_realtime_factor\": "
-           << simulated_duration_seconds / qualification_compute_wall_seconds
-           << ",\n"
-           << "  \"dense_state_peak_bytes\": " << dense_state_peak_bytes
-           << ",\n"
-           << "  \"observation_buffer_bytes\": "
-           << observation_buffer_bytes << ",\n"
-           << "  \"patch_observation_buffer_bytes\": "
-           << patch_observation_buffer_bytes << ",\n"
-           << "  \"endpoint_diagnostics_buffer_bytes\": "
-           << endpoint_diagnostics_buffer_bytes << ",\n"
-           << "  \"maximum_generalized_force_residual_inf_norm\": "
-           << summary.maximum_generalized_force_residual_inf_norm << ",\n"
-           << "  \"maximum_absolute_virtual_power_residual_watts\": "
-           << summary.maximum_absolute_virtual_power_residual_watts << ",\n"
-           << "  \"numerical_timings\": " << summary.numerical_timings.ToJson().dump() << ",\n"
-           << "  \"integration_work\": " << summary.integration_work.ToJson().dump() << ",\n"
-           << "  \"integration_statistics\": {"
-           << "\"successful_internal_step_count\": "
-           << stats.successful_internal_step_count
-           << ", \"right_hand_side_evaluation_count\": "
-           << stats.right_hand_side_evaluation_count
-           << ", \"linear_solver_right_hand_side_evaluation_count\": "
-           << stats.linear_solver_right_hand_side_evaluation_count
-           << ", \"error_test_failure_count\": "
-           << stats.error_test_failure_count
-           << ", \"nonlinear_solver_iteration_count\": "
-           << stats.nonlinear_solver_iteration_count
-           << ", \"nonlinear_solver_convergence_failure_count\": "
-           << stats.nonlinear_solver_convergence_failure_count
-           << ", \"linear_solver_setup_count\": "
-           << stats.linear_solver_setup_count
-           << ", \"jacobian_evaluation_count\": "
-           << stats.jacobian_evaluation_count
-           << ", \"requested_dense_finite_difference_jacobian_worker_count\": "
-           << stats.requested_dense_finite_difference_jacobian_worker_count
-           << "}\n}\n";
+    if (!output) Reject("could not open '" + path.string() + "'");
+    output << result.dump(2) << '\n';
     CloseChecked(&output, path);
 }
 
@@ -973,10 +722,8 @@ IrwR300Aar5V60At100HzFullStateGuidanceRunSummary
 RunIrwR300Aar5V60At100HzFullStateGuidance(
     const IrwR300Aar5V60At100HzFullStateGuidanceRunConfiguration& input) {
     const ResolvedConfiguration resolved = ResolveConfiguration(input);
-    const int contact_batch_parallel_team_probe_worker_count =
-        internal::RequireRealContactBatchParallelTeam();
     const auto integration_request = RequestIntegrationConfiguration(
-        input.integration_config_path, input.time_integrator_qualification_case);
+        input.integration_config_path);
     RequireFailureResultDestinationAvailable(resolved.output_directory);
     AtomicQualificationDirectory output_directory(
         resolved.output_directory);
@@ -1064,10 +811,6 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     std::vector<ControlledPatchObservation> patch_observations;
     patch_observations.reserve(observation_clock.sample_count() *
                                kWheelCount);
-    std::vector<ControlledEndpointDiagnostics> endpoint_diagnostics;
-    endpoint_diagnostics.reserve(
-        static_cast<std::size_t>(terminal_event_ordinal + 1));
-
     const Clock::time_point startup_control_begin = Clock::now();
     audits.push_back(event_session.ApplyInitializationUpdate(accepted));
     audits.push_back(event_session.ApplyPeriodicUpdate(accepted));
@@ -1080,14 +823,14 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     assembled.system().CopyContinuousState(accepted, integration_initial_state);
     auto numerics = ResolveIntegrationConfiguration(
         integration_request, assembled, integration_initial_state,
-        ScenarioOdeDefaults{numerical_recipe.default_integration_recipe,
+        ExplicitOdeRequest{numerical_recipe.default_integration_recipe,
             numerical_recipe.relative_tolerance,
             numerical_recipe.position_absolute_tolerance,
             numerical_recipe.velocity_absolute_tolerance,
             numerical_recipe.series_force_absolute_tolerance_newtons});
-    AddQualificationBudgetEstimate(numerics.metadata, numerics.step_size_nanoseconds,
-        static_cast<std::uint64_t>(kEventPeriodNanoseconds), terminal_event_ordinal,
-        numerics.configuration.maximum_internal_steps_per_advance);
+    numerics.metadata["execution_conditions_at_start"] =
+        CaptureQualificationExecutionConditions(
+            *assembled.contact_force_plan());
     auto failure_metadata = numerics.metadata;
     failure_metadata["input_paths"] = {
         {"vehicle_definition", resolved.vehicle_definition_path.string()},
@@ -1101,48 +844,30 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     QualificationIntegrationRun integration(resolved.output_directory, std::move(failure_metadata),
         std::move(numerics.configuration), assembled, accepted,
         observation_clock.terminal_time_seconds());
-    const auto actual_integration_recipe =
-        ParseIntegrationMethod(integration.advancer().method_identifier());
-    IrwR300Aar5V60At100HzFullStateGuidanceRunSummary summary(
-        actual_integration_recipe);
+    const auto method_identifier = integration.advancer().method_identifier();
+    IrwR300Aar5V60At100HzFullStateGuidanceRunSummary summary(method_identifier);
     summary.control_wall_seconds = startup_control_wall_seconds;
-    summary.time_integrator_qualification_case =
-        numerics.ode_numerics ? numerics.ode_numerics->qualification_case : std::nullopt;
-    summary.maximum_bdf_order =
-        dynamics_qualification::MaximumBdfOrderForRecipe(
-            summary.integration_recipe);
+    if (method_identifier == "cvode_bdf2") summary.maximum_bdf_order = 2;
+    if (method_identifier == "cvode_bdf5") summary.maximum_bdf_order = 5;
     event_session.ConfirmBackendSynchronized();
 
     auto contact_workspace = assembled.contact_force_plan()->CreateWorkspace();
-    std::vector<AppliedBodyWrench> vehicle_wrenches(
-        static_cast<std::size_t>(assembled.force_plan().body_wrench_count()));
     std::vector<AppliedBodyWrench> contact_wrenches(
         static_cast<std::size_t>(
             assembled.contact_force_plan()->body_wrench_count()));
-    std::vector<AppliedBodyWrench> active_wrenches(
-        static_cast<std::size_t>(
-            assembled.active_torque_plan()->body_wrench_count()));
-    Eigen::VectorXd series_derivatives(
-        assembled.force_plan().series_spring_damper_force_state_count());
     std::array<WheelRailContactInterfaceObservation, kWheelCount>
         contact_observations{};
     auto observation_context =
         assembled.system().CreateDefaultRuntimeContext(0.0);
     assembled.system().CopyContextLocalData(accepted, *observation_context);
-    Eigen::VectorXd initial_state(assembled.system().continuous_state_size());
-    assembled.system().CopyContinuousState(accepted, initial_state);
     assembled.system().SetTimeContinuousStateAndWheelRailProjectionHints(
-        *observation_context, 0.0, initial_state,
+        *observation_context, 0.0, integration_initial_state,
         accepted.wheel_rail_projection_station_hints_meters());
     const Clock::time_point initial_observation_begin = Clock::now();
     observations.push_back(ObserveControlledSample(
         assembled, event_session, *observation_context, 0, 0, 0.0,
         *contact_workspace, contact_wrenches, contact_observations,
         &patch_observations));
-    endpoint_diagnostics.push_back(CalcControlledEndpointDiagnostics(
-        assembled, *observation_context, 0, *contact_workspace,
-        vehicle_wrenches, contact_wrenches, active_wrenches,
-        &series_derivatives));
     summary.observation_wall_seconds +=
         ElapsedSeconds(initial_observation_begin, Clock::now());
     // Persist only the already requested dense samples, outside all numerical
@@ -1154,10 +879,9 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         assembled.model().num_generalized_positions(),
         assembled.model().num_generalized_velocities(),
         assembled.force_plan().series_spring_damper_force_state_count());
-    state_writer.Append(0, initial_state);
+    state_writer.Append(0, integration_initial_state);
     summary.data_and_metadata_write_wall_seconds +=
         ElapsedSeconds(state_writer_begin, Clock::now());
-    std::size_t dense_state_peak_bytes{};
     for (std::uint64_t ordinal = 1; ordinal <= terminal_event_ordinal;
          ++ordinal) {
         event_session.RequireReadyToAdvance();
@@ -1170,9 +894,6 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
             integration.Advance(
                 event_session.next_periodic_event_time_seconds(),
                 interval_sample_times);
-        dense_state_peak_bytes = std::max(
-            dense_state_peak_bytes,
-            static_cast<std::size_t>(dense_states.size()) * sizeof(double));
         const Clock::time_point state_write_begin = Clock::now();
         for (std::uint64_t local_sample = 1;
              local_sample <= kObservationsPerEventPeriod; ++local_sample) {
@@ -1202,10 +923,6 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
                 contact_wrenches, contact_observations,
                 &patch_observations));
         }
-        endpoint_diagnostics.push_back(CalcControlledEndpointDiagnostics(
-            assembled, *observation_context, ordinal - 1U,
-            *contact_workspace, vehicle_wrenches, contact_wrenches,
-            active_wrenches, &series_derivatives));
         summary.observation_wall_seconds +=
             ElapsedSeconds(observation_begin, Clock::now());
         const Clock::time_point control_begin = Clock::now();
@@ -1221,7 +938,6 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         }
     }
 
-    summary.integration_statistics = integration.ledger().total_statistics();
     summary.integration_work = integration.ledger();
     summary.numerical_timings = integration.timings();
     summary.advance_and_synchronization_wall_seconds =
@@ -1235,16 +951,6 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         assembled.system().continuous_state_size());
     assembled.system().CopyContinuousState(
         accepted, summary.terminal_continuous_state);
-    for (const ControlledEndpointDiagnostics& diagnostics :
-         endpoint_diagnostics) {
-        summary.maximum_generalized_force_residual_inf_norm = std::max(
-            summary.maximum_generalized_force_residual_inf_norm,
-            diagnostics.generalized_force_residual_inf_norm);
-        summary.maximum_absolute_virtual_power_residual_watts = std::max(
-            summary.maximum_absolute_virtual_power_residual_watts,
-            std::abs(diagnostics.virtual_power_residual_watts));
-    }
-
     const Clock::time_point write_begin = Clock::now();
     state_writer.Close();
     WriteControlAudits(output_directory.working_path() / "control_events.tsv",
@@ -1254,15 +960,11 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     WritePatchObservations(
         output_directory.working_path() / "contact_patches.tsv",
         patch_observations, assembled);
-    WriteEndpointDiagnostics(
-        output_directory.working_path() / "endpoint_diagnostics.tsv",
-        endpoint_diagnostics);
     WriteMetadata(output_directory.working_path() / "metadata.json",
                   resolved, startup, assembled, event_session, summary,
                   numerics.metadata,
-                  contact_batch_parallel_team_probe_worker_count,
                   controller_identifier, conditioner_identifier,
-                  observation_clock, integration_initial_state, endpoint_diagnostics);
+                  observation_clock);
     const std::filesystem::path complete_path =
         output_directory.working_path() / "COMPLETE";
     std::ofstream complete(complete_path, std::ios::out | std::ios::trunc);
@@ -1276,11 +978,7 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
         ElapsedSeconds(write_begin, write_end);
     WritePerformance(
         output_directory.working_path() / "performance.json", summary,
-        resolved.duration_nanoseconds, dense_state_peak_bytes,
-        observations.capacity() * sizeof(ControlledObservation),
-        patch_observations.capacity() * sizeof(ControlledPatchObservation),
-        endpoint_diagnostics.capacity() *
-            sizeof(ControlledEndpointDiagnostics));
+        resolved.duration_nanoseconds);
     output_directory.Publish();
     return summary;
 }

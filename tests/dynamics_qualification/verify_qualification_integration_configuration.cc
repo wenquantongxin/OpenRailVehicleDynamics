@@ -52,7 +52,6 @@ Json ExplicitOdeDocument(const char* method) {
 }
 
 
-
 void Parsing(const std::filesystem::path& examples, const std::filesystem::path& work) {
     const auto newmark_path = examples / "newmark_explicit_trial.json";
     const auto zhai_path = examples / "zhai_explicit_trial.json";
@@ -62,9 +61,8 @@ void Parsing(const std::filesystem::path& examples, const std::filesystem::path&
     Require(std::holds_alternative<dq::ZhaiRequest>(zhai.method), "Zhai tag was lost");
     Require(std::get<dq::NewmarkRequest>(newmark.method).step_size_nanoseconds == 25000,
             "integer step changed during parsing");
-    Require(dq::RequestMetadata(newmark).at("newton").at("quaternion_scale_convention") ==
-                "reference_norm_multiple",
-            "serialized quaternion scales lost the successful-initialization reference contract");
+    Require(!dq::RequestMetadata(newmark).at("newton").contains("quaternion_scale_convention"),
+            "tool configuration must not duplicate the library quaternion convention");
     const auto path = work / "invalid_configuration.json";
     const auto bad = [&](Json json) {
         Write(path, json.dump());
@@ -85,7 +83,7 @@ void Parsing(const std::filesystem::path& examples, const std::filesystem::path&
     altered = good; altered["newton"]["maximum_iterations"] = 0; bad(altered);
     altered = good; altered["newton"]["maximum_iterations"] = 2147483648ULL; bad(altered);
     altered = good; altered["newton"]["quaternion_scale_convention"] = "unit_norm"; bad(altered);
-    altered = good; altered["newton"]["quaternion_scale_convention"] = "initial_norm_multiple"; bad(altered);
+    altered = good; altered["newton"]["quaternion_scale_convention"] = "reference_norm_multiple"; bad(altered);
     altered = good; altered["newton"]["scales"].erase("angle"); bad(altered);
     altered = good; altered["newton"]["scales"]["quaternion"]["position_correction"] = 0; bad(altered);
     altered = good; altered["newton"]["scales"]["force"]["residual"] = "0.01"; bad(altered);
@@ -106,15 +104,12 @@ void Parsing(const std::filesystem::path& examples, const std::filesystem::path&
     Write(path, altered.dump());
     Require(dq::ReadIntegrationConfiguration(path).maximum_internal_steps_per_advance == ci::kDefaultMaximumInternalStepsPerAdvance,
             "default common budget changed");
-    const auto legacy = dq::ParseTimeIntegratorQualificationCase("radau5_fine");
-    Reject([&] { static_cast<void>(dq::RequestIntegrationConfiguration(newmark_path, legacy)); },
-           "new config and old case were not mutually exclusive");
     Require(std::holds_alternative<dq::ScenarioDefaultRequest>(
-                dq::RequestIntegrationConfiguration(std::nullopt, std::nullopt).method),
+                dq::RequestIntegrationConfiguration(std::nullopt).method),
             "no-option request lost scenario default");
-    Require(std::get<dq::TimeIntegratorQualificationCase>(
-                dq::RequestIntegrationConfiguration(std::nullopt, legacy).method) == *legacy,
-            "legacy request was changed");
+    Require(std::holds_alternative<dq::NewmarkRequest>(
+                dq::RequestIntegrationConfiguration(newmark_path).method),
+            "explicit configuration path lost its requested method");
     auto invalid = newmark;
     std::get<dq::NewmarkRequest>(invalid.method).force.reference =
         std::numeric_limits<double>::infinity();
@@ -134,11 +129,8 @@ void Parsing(const std::filesystem::path& examples, const std::filesystem::path&
                     ode_request.maximum_internal_steps_per_advance == 5000000,
                 "explicit ODE payload changed during parsing");
         const auto metadata = dq::RequestMetadata(ode_request);
-        Require(metadata.at("integrator_recipe_identifier") == method &&
-                    metadata.at("qualification_case_identifier").is_null() &&
-                    metadata.at("tolerance_tier_identifier").is_null() &&
-                    metadata.at("tolerance_scale_from_scenario_recipe").is_null(),
-                "explicit ODE request acquired a legacy identity");
+        Require(metadata.at("integrator_recipe_identifier") == method,
+                "explicit ODE request lost its method identity");
         for (const char* field : {"relative_tolerance", "generalized_position_absolute_tolerance",
                                  "generalized_velocity_absolute_tolerance", "series_force_absolute_tolerance_newtons"}) {
             altered = ode_json; altered.erase(field); bad(altered);
@@ -210,15 +202,15 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
     newmark.angle = {5e-8, 6e-7, 7e-6, 8.0};
     newmark.quaternion = {9e-8, 1e-6, 2e-5, 3.0};
     newmark.force = {0.02, 0.03, 40000};
-    const dq::ScenarioOdeDefaults defaults{dq::QualificationIntegrationMethod::kCvodeBdf2,
+    const dq::ExplicitOdeRequest defaults{dq::OdeIntegrationMethod::kCvodeBdf2,
                                          2e-7, 3e-8, 4e-8, 5e-3};
     const auto resolved = dq::ResolveIntegrationConfiguration(request, *assembled, initial, defaults);
     const auto layout = dq::BuildQualificationStateLayout(*assembled, initial);
     Require(resolved.metadata.at("coordinate_layout") == layout,
             "Newmark did not use the shared physical layout");
     const auto& actual = std::get<ci::NewmarkConfiguration>(resolved.configuration.method);
-    Require(!resolved.ode_numerics && resolved.step_size_nanoseconds == newmark.step_size_nanoseconds,
-            "mechanical configuration received ODE numerics");
+    Require(resolved.metadata.at("step_size_nanoseconds") == newmark.step_size_nanoseconds,
+            "declared integer step was not preserved in metadata");
     Require(actual.nominal_step_size_seconds == resolved.metadata.at("step_size_seconds").get<double>(),
             "recorded step does not equal the configured step");
     const int nq = system.generalized_positions_state_range().size();
@@ -231,10 +223,9 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
     Require(scales.force.correction == 0.02 && scales.force.residual == 0.03 &&
                 scales.force.reference == 40000,
             "public force family differs from the declared tool request");
-    for (const char* name : {"tolerance_tier_identifier", "tolerance_scale_from_scenario_recipe",
-                            "relative_tolerance", "generalized_position_absolute_tolerance",
+    for (const char* name : {"relative_tolerance", "generalized_position_absolute_tolerance",
                             "generalized_velocity_absolute_tolerance", "series_force_absolute_tolerance_newtons",
-                            "qualification_case_identifier", "maximum_bdf_order"}) {
+                            "maximum_bdf_order"}) {
         Require(resolved.metadata.at(name).is_null(), "mechanical metadata fabricated ODE values");
     }
     Require(!resolved.metadata.at("newton").contains("expanded_scales"),
@@ -313,10 +304,8 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
     Reject([&] { static_cast<void>(dq::ResolveIntegrationConfiguration(request, *assembled, invalid_initial, defaults)); },
            "zero quaternion silently normalized");
     const auto scenario_default = dq::ResolveIntegrationConfiguration(
-        dq::RequestIntegrationConfiguration(std::nullopt, std::nullopt), *assembled, initial, defaults);
-    Require(scenario_default.metadata.at("qualification_case_identifier").is_null() &&
-                scenario_default.metadata.at("tolerance_tier_identifier") == "scenario_default" &&
-                scenario_default.metadata.at("relative_tolerance") == defaults.relative_tolerance &&
+        dq::RequestIntegrationConfiguration(std::nullopt), *assembled, initial, defaults);
+    Require(scenario_default.metadata.at("relative_tolerance") == defaults.relative_tolerance &&
                 scenario_default.metadata.at("maximum_bdf_order") == 2,
             "no-option ODE defaults changed");
     Require(scenario_default.metadata.at("coordinate_layout") == layout,
@@ -328,12 +317,8 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
             method, 2e-11, 3e-12, 4e-12, 5e-9}, 5000000};
         const auto explicit_result = dq::ResolveIntegrationConfiguration(
             explicit_request, *assembled, initial, defaults);
-        Require(!explicit_result.ode_numerics && !explicit_result.step_size_nanoseconds &&
-                    explicit_result.configuration.maximum_internal_steps_per_advance == 5000000 &&
+        Require(explicit_result.configuration.maximum_internal_steps_per_advance == 5000000 &&
                     explicit_result.metadata.at("coordinate_layout") == layout &&
-                    explicit_result.metadata.at("qualification_case_identifier").is_null() &&
-                    explicit_result.metadata.at("tolerance_tier_identifier").is_null() &&
-                    explicit_result.metadata.at("tolerance_scale_from_scenario_recipe").is_null() &&
                     explicit_result.metadata.at("step_size_seconds").is_null() &&
                     explicit_result.metadata.at("newton").is_null(),
                 "explicit ODE acquired unrelated method data or lost its physical layout");
@@ -367,40 +352,6 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
                 }
             } else { Require(false, "explicit ODE request resolved to a mechanical method"); }
         }, explicit_result.configuration.method);
-    }
-    // All eight legacy cases preserve the original scalar resolver and physical
-    // q/v/z tolerance construction, including both scenario-specific BDF orders.
-    for (auto recipe : {dq::QualificationIntegrationMethod::kCvodeBdf2,
-                        dq::QualificationIntegrationMethod::kCvodeBdf5}) {
-        auto scenario = defaults; scenario.recipe = recipe;
-        for (const char* name : {"scenario_default_cvode_coarse", "scenario_default_cvode_nominal",
-                                "scenario_default_cvode_fine", "scenario_default_cvode_reference",
-                                "radau5_coarse", "radau5_nominal", "radau5_fine", "radau5_reference"}) {
-            const auto legacy = dq::ParseTimeIntegratorQualificationCase(name);
-            const auto ode = dq::ResolveIntegrationConfiguration(
-                dq::RequestIntegrationConfiguration(std::nullopt, legacy), *assembled, initial, scenario);
-            const auto expected = dq::ResolveTimeIntegratorQualificationNumerics(
-                legacy, recipe, scenario.relative_tolerance, scenario.generalized_position_absolute_tolerance,
-                scenario.generalized_velocity_absolute_tolerance, scenario.series_force_absolute_tolerance_newtons);
-            Require(ode.ode_numerics.has_value() && !ode.step_size_nanoseconds &&
-                        ode.metadata.at("qualification_case_identifier") == name &&
-                        ode.metadata.at("relative_tolerance") == expected.relative_tolerance &&
-                        ode.metadata.at("integrator_recipe_identifier") ==
-                            dq::IntegrationRecipeIdentifier(expected.integration_recipe), "legacy ODE resolver changed");
-            Require(ode.metadata.at("coordinate_layout") == layout,
-                    "legacy ODE case lost the shared physical layout");
-            std::visit([&](const auto& method) {
-                if constexpr (requires { method.tolerances; }) {
-                    const auto& values = method.tolerances.component_absolute_tolerances();
-                    Require(values.size() == initial.size() &&
-                                values.head(nq).isConstant(expected.generalized_position_absolute_tolerance),
-                            "legacy physical q tolerances changed");
-                    Require(values.segment(vr.start(), vr.size()).isConstant(expected.generalized_velocity_absolute_tolerance) &&
-                                values.segment(zr.start(), nz).isConstant(expected.series_force_absolute_tolerance_newtons),
-                            "legacy physical v/z tolerances changed");
-                } else { Require(false, "legacy request resolved to a mechanical method"); }
-            }, ode.configuration.method);
-        }
     }
     if (empty_force_state) Require(nz == 0, "empty-z fixture was not empty");
 }

@@ -327,6 +327,18 @@ WheelRailContactForcePlan::WheelRailContactForcePlan(
     }
 }
 
+int WheelRailContactForcePlan::maximum_worker_count() const noexcept {
+    return kMaximumContactWorkerCount;
+}
+
+int WheelRailContactForcePlan::requested_worker_count() const noexcept {
+    return omp_in_parallel() != 0
+               ? 1
+               : std::min({maximum_worker_count(),
+                           static_cast<int>(interfaces_.size()),
+                           omp_get_max_threads()});
+}
+
 const WheelRailContactCarrierDefinition&
 WheelRailContactForcePlan::carrier_definition(int index) const {
     if (index < 0 || index >= carrier_count()) {
@@ -918,12 +930,7 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             accumulated_in_inertial.force_newtons};
     };
 
-    const int worker_count =
-        omp_in_parallel() != 0
-            ? 1
-            : std::min({kMaximumContactWorkerCount,
-                        static_cast<int>(interfaces_.size()),
-                        omp_get_max_threads()});
+    const int worker_count = requested_worker_count();
     if (worker_count <= 1) {
         // Preserve the true serial path for one-thread qualification runs and
         // avoid paying for an OpenMP team when there is no parallel work.

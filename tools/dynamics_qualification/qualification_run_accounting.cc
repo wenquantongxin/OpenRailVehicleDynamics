@@ -10,6 +10,13 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
+#include <omp.h>
+
+#include "orvd/forces/wheel_rail_contact_force_plan.h"
+
+#if defined(__linux__)
+#include <sched.h>
+#endif
 
 namespace orvd::dynamics_qualification {
 namespace {
@@ -104,6 +111,28 @@ class OwnedFailureTemporaryDirectory final {
 
 }  // namespace
 
+nlohmann::json CaptureQualificationExecutionConditions(
+    const forces::WheelRailContactForcePlan& contact_plan) {
+    const int maximum_threads = omp_get_max_threads();
+    nlohmann::json affinity = nullptr;
+#if defined(__linux__)
+    cpu_set_t allowed;
+    CPU_ZERO(&allowed);
+    if (sched_getaffinity(0, sizeof(allowed), &allowed) == 0) {
+        affinity = nlohmann::json::array();
+        for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+            if (CPU_ISSET(cpu, &allowed)) affinity.push_back(cpu);
+        }
+    }
+#endif
+    return {{"openmp_runtime_maximum_threads", maximum_threads},
+            {"openmp_dynamic_teams_enabled", omp_get_dynamic() != 0},
+            {"contact_batch_worker_cap", contact_plan.maximum_worker_count()},
+            {"contact_batch_requested_worker_count",
+             contact_plan.requested_worker_count()},
+            {"cpu_affinity_at_start", std::move(affinity)}};
+}
+
 void QualificationIntegrationWorkLedger::BeginEpoch(
     const Statistics& current) {
     Account(current, true);
@@ -175,7 +204,6 @@ nlohmann::json QualificationIntegrationWorkLedger::ToJson() const {
         result["total_right_hand_side_evaluation_count"] = CheckedAdd(
             total_.right_hand_side_evaluation_count,
             total_.linear_solver_right_hand_side_evaluation_count);
-
     }
     return result;
 }

@@ -209,6 +209,10 @@ int main(int argc, char* argv[]) {
             irw_system.contact_force_plan() == nullptr ||
             irw_system.contact_force_plan()->carrier_count() != 4 ||
             irw_system.contact_force_plan()->interface_count() != 8 ||
+            irw_system.contact_force_plan()->maximum_worker_count() < 1 ||
+            irw_system.contact_force_plan()->requested_worker_count() < 1 ||
+            irw_system.contact_force_plan()->requested_worker_count() >
+                irw_system.contact_force_plan()->maximum_worker_count() ||
             irw_system.active_torque_plan() == nullptr ||
             irw_system.active_torque_plan()->channel_count() != 8 ||
             irw_system.active_torque_plan()->body_wrench_count() != 16 ||

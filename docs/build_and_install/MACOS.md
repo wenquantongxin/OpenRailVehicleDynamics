@@ -243,8 +243,8 @@ OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
 
 ## 已知边界与排障
 
-- `run_qualification_with_metrics.py` 依赖 Linux `sched_setaffinity` 和 POSIX 资源统计；macOS 会
-  fail closed。它不属于默认 87 项 CTest 的执行路径。
+- 车辆运行器不设置 CPU affinity；当前 macOS 路径将 `cpu_affinity_at_start` 记为 `null`，
+  OpenMP 请求配置仍正常记录。
 - 功能测试不要以 `OMP_PLACES`／`OMP_PROC_BIND` 为前提；Homebrew GCC 的 macOS libgomp affinity
   支持与 Linux 不同。
 - `FindOpenMP` 找不到 AppleClang OpenMP 时，先检查 `brew --prefix libomp` 和其中的 `include/omp.h`

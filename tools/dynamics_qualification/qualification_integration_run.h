@@ -47,10 +47,4 @@ class QualificationIntegrationRun final {
     std::unique_ptr<integrators::SystemContinuousStateAdvancer> advancer_;
 };
 
-// An estimate for the declared, real stop schedule; never a run admission gate.
-void AddQualificationBudgetEstimate(nlohmann::json& metadata,
-    std::optional<std::uint64_t> step_nanoseconds,
-    std::uint64_t interval_nanoseconds, std::uint64_t interval_count,
-    std::size_t budget);
-
 }  // namespace orvd::dynamics_qualification

@@ -196,12 +196,10 @@ OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
 - `verify_relocated_install_consumer` 通过；
 - 普通 DLL 全部可解析；
 - candidate 不加载共享 Drake；
-- Drake marker 阳性对照仍能被运行期依赖检查拒绝；
-- `verify_serial_qualification_comparison_contract` 通过，其 POSIX resource、affinity、subprocess 和
-  execute-permission 路径使用测试代理，不依赖 Windows 提供 Linux API。
+- Drake marker 阳性对照仍能被运行期依赖检查拒绝。
 
-`run_qualification_with_metrics.py` 的真实执行模式仍是 Linux research wrapper；Windows 默认 CTest
-只验证其参数布局和隔离后的执行合同，不把 Windows 冒充正式 affinity 性能平台。
+车辆 CLI 测试直接调用三个运行器。运行器不设置 CPU affinity；当前 Windows 路径将
+`cpu_affinity_at_start` 记为 `null`，不影响正常运行。
 
 ## 安装和运行期
 

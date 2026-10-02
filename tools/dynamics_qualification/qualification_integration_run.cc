@@ -103,18 +103,4 @@ void QualificationIntegrationRun::RecordFailure(
     }
 }
 
-void AddQualificationBudgetEstimate(nlohmann::json& metadata,
-    std::optional<std::uint64_t> step, std::uint64_t interval,
-    std::uint64_t count, std::size_t budget) {
-    metadata["scheduled_stop_interval_nanoseconds"] = interval;
-    metadata["scheduled_stop_interval_count"] = count;
-    metadata["fixed_step_budget_estimate"] = nullptr;
-    if (step) {
-        const auto steps = interval / *step + static_cast<std::uint64_t>(interval % *step != 0);
-        metadata["fixed_step_budget_estimate"] = {
-            {"steps_per_public_advance", steps}, {"exceeds_declared_budget", steps > budget},
-            {"role", "estimate_only_runtime_budget_failure_is_authoritative"}};
-    }
-}
-
 }  // namespace orvd::dynamics_qualification

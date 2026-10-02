@@ -30,20 +30,19 @@ int main(int argc, char** argv) {
     orvd::dynamics_qualification::internal::QualificationCliOptions options;
     try {
         options = orvd::dynamics_qualification::internal::ParseQualificationCliOptions(
-            argc, argv, 8);
+            argc, argv);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 2;
     }
     argc = static_cast<int>(options.positional_arguments.size());
     argv = options.positional_arguments.data();
-    if (argc != 9 && argc != 10) {
+    if (argc != 9) {
         std::fprintf(
             stderr,
             "usage: orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS [TIME_INTEGRATOR_QUALIFICATION_CASE | "
-            "--integration-config PATH]\n");
+            "SAMPLE_PERIOD_NS [--integration-config PATH]\n");
         return 2;
     }
     orvd::dynamics_qualification::Gz18QualificationRunConfiguration config;
@@ -61,27 +60,14 @@ int main(int argc, char** argv) {
                      "nanoseconds\n");
         return 2;
     }
-    if (argc == 10) {
-        config.time_integrator_qualification_case =
-            orvd::dynamics_qualification::
-                ParseTimeIntegratorQualificationCase(argv[9]);
-        if (!config.time_integrator_qualification_case.has_value()) {
-            std::fprintf(stderr,
-                         "unknown time-integrator qualification case: %s\n",
-                         argv[9]);
-            return 2;
-        }
-    }
-
     try {
         const auto summary =
             orvd::dynamics_qualification::RunGz18Qualification(config);
         std::printf(
             "published %zu samples; advance %.6f s, observations %.6f s, "
-            "endpoint diagnostics %.6f s, data+metadata write %.6f s\n",
+            "data+metadata write %.6f s\n",
             summary.sample_count, summary.advance_wall_seconds,
             summary.observation_wall_seconds,
-            summary.endpoint_diagnostics_wall_seconds,
             summary.data_and_metadata_write_wall_seconds);
         return 0;
     } catch (const std::exception& error) {
