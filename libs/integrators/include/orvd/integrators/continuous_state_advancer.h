@@ -32,8 +32,8 @@ class ContinuousStateNumericalFailure final : public std::runtime_error {
         kStepSizeUnderflow,
         kRepeatedSingularLinearSystem,
         kNonFiniteLinearSystem,
-        // A fixed-step method may fail without any retry. Keep these distinct
-        // from the existing repeated-failure classifications above.
+        // Keep single failures distinct from repeated failures, including when
+        // a backend supports retrying but terminates after one failed attempt.
         kNonFiniteState,
         kNonlinearConvergenceFailure,
         kSingularLinearSystem,

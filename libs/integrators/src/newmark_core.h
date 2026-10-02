@@ -15,6 +15,8 @@ namespace orvd::integrators::internal {
 // once, without projecting the supplied state.
 class NewmarkCore final {
    public:
+    enum class StepResult { kAccepted, kIterationLimit };
+
     NewmarkCore(CoordinateSecondOrderProblem& problem,
                 NewmarkCoreConfiguration configuration,
                 const CoordinateState& initial_state);
@@ -37,13 +39,17 @@ class NewmarkCore final {
                           Eigen::Ref<Eigen::VectorXd> s,
                           Eigen::Ref<Eigen::VectorXd> z) const;
 
-    void AdvanceOneStep();
+    // Only this core's exhausted Newton loop returns kIterationLimit. It
+    // preserves accepted state, derivatives, reference and incurred work and
+    // permits another legal attempt without reinitialization. All other
+    // numerical/callback failures throw and require reinitialization.
+    [[nodiscard]] StepResult AdvanceOneStep();
     // Explicit boundary adaptation, 0 < h <= configured nominal step.
-    void AdvanceOneStep(double step_size_seconds);
+    [[nodiscard]] StepResult AdvanceOneStep(double step_size_seconds);
     // The explicit endpoint may differ from current_time+h only by the shared
     // clock-rounding allowance. Formula coefficients still use h. Invalid
     // endpoint input is rejected before changing state or failure status.
-    void AdvanceOneStep(double step_size_seconds, double endpoint_time_seconds);
+    [[nodiscard]] StepResult AdvanceOneStep(double step_size_seconds, double endpoint_time_seconds);
 
     // A successful reinitialization resets work counters (including its one
     // initial B/G evaluation) and replaces the projection reference. Invalid

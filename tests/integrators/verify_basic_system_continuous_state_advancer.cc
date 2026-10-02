@@ -21,6 +21,8 @@
 #include "orvd/system_assembly/system_assembly_description.h"
 
 #include "system_integration_test_configuration.h"
+#include "newmark_continuous_state_advancer.h"
+#include "system_coordinate_problem.h"
 
 void VerifyBasicSystemHeldTorqueSynchronization();
 
@@ -516,6 +518,82 @@ void CheckRpyFailureTransaction(Recipe recipe) {
     Expect(accepted->time_seconds() == 0.01, "synchronization recovers from the RPY callback failure");
 }
 
+void CheckNewmarkRealRecovery() {
+    SliderMaxwellFixture fixture;
+    const auto initial = fixture.ExactPhysicalState(0.0);
+    auto configuration = orvd::integrators::test::NewmarkSettings(0.125, 0.01);
+    configuration.nonlinear_solver.maximum_iterations = 1;
+    configuration.nonlinear_solver.translation.acceleration_residual = 1e-7;
+    configuration.nonlinear_solver.force.residual = 1e-7;
+    auto trial = fixture.system->CreateDefaultRuntimeContext(0.0);
+    orvd::integrators::internal::SystemCoordinateProblem problem(
+        *fixture.system, *fixture.plan, *trial, NoCallTimeAppliedForces{});
+    orvd::integrators::internal::NewmarkContinuousStateAdvancer adapter(problem, 0.0, initial, configuration);
+    Eigen::Matrix3d a;
+    a << 0, 1, 0, 0, 0, -1, 0, 4, -2;
+    Eigen::VectorXd expected = initial;
+    Eigen::VectorXd endpoint(3);
+    std::uint64_t steps = 0;
+    while (adapter.current_time_seconds() < 0.25) {
+        Expect(++steps < 100, "real recovery must finish the short window");
+        const auto step = adapter.AdvanceOneInternalStepToward(0.25, endpoint);
+        const double h = step.end_time_seconds - step.start_time_seconds;
+        expected = (Eigen::Matrix3d::Identity() - 0.5 * h * a).fullPivLu().solve(
+            (Eigen::Matrix3d::Identity() + 0.5 * h * a) * expected).eval();
+        Expect((endpoint - expected).lpNorm<Eigen::Infinity>() < 1e-8,
+               "each recovered physical endpoint satisfies the independent trapezoidal solution");
+        Expect(adapter.integration_statistics().successful_internal_step_count == steps,
+               "every real recovery call publishes exactly one substep");
+    }
+    const auto direct_work = adapter.integration_statistics();
+    Expect(direct_work.nonlinear_solver_convergence_failure_count > 0 && steps > 2,
+           "the real coupled solve must actually reject and reduce H");
+    auto accepted = fixture.system->CreateDefaultRuntimeContext(0.0);
+    fixture.system->SetContinuousState(*accepted, initial);
+    auto advancer = Make(fixture, *accepted, Configuration{configuration, 100});
+    advancer->AdvanceTo(0.25);
+    Expect((Physical(fixture, *accepted).array() == endpoint.array()).all(),
+           "the public factory publishes the same recovered trajectory as the real adapter");
+    const auto work = advancer->integration_statistics();
+    Expect(work.successful_internal_step_count == steps &&
+               work.right_hand_side_evaluation_count == direct_work.right_hand_side_evaluation_count &&
+               work.linear_solver_right_hand_side_evaluation_count == direct_work.linear_solver_right_hand_side_evaluation_count &&
+               work.nonlinear_solver_convergence_failure_count == direct_work.nonlinear_solver_convergence_failure_count,
+           "the public transaction retains all accepted and rejected work");
+    auto sampled_context = fixture.system->CreateDefaultRuntimeContext(0.0);
+    fixture.system->SetContinuousState(*sampled_context, initial);
+    auto sampled = Make(fixture, *sampled_context, Configuration{configuration, 100});
+    const std::array<double, 5> sample_times{0.0, 0.031, 0.09, 0.17, 0.25};
+    const auto samples = sampled->AdvanceToWithDenseStateSamples(0.25, sample_times);
+    const auto sampled_work = sampled->integration_statistics();
+    Expect(samples.cols() == 5 && (Physical(fixture, *sampled_context).array() == endpoint.array()).all() &&
+               sampled_work.successful_internal_step_count == steps &&
+               sampled_work.right_hand_side_evaluation_count == work.right_hand_side_evaluation_count &&
+               sampled_work.linear_solver_right_hand_side_evaluation_count == work.linear_solver_right_hand_side_evaluation_count &&
+               sampled_work.nonlinear_solver_convergence_failure_count == work.nonlinear_solver_convergence_failure_count,
+           "dense sampling cannot change the recovered trajectory or its work");
+    // Synchronization rebuilds the real derivative/scale epoch. Replaying the
+    // original input must repeat the original nominal-first recovery path.
+    fixture.system->SetTimeAndContinuousState(*accepted, 0.0, initial);
+    advancer->SynchronizeAfterAcceptedContextChange();
+    advancer->AdvanceTo(0.25);
+    Expect((Physical(fixture, *accepted).array() == endpoint.array()).all() &&
+               advancer->integration_statistics().right_hand_side_evaluation_count == work.right_hand_side_evaluation_count &&
+               advancer->integration_statistics().nonlinear_solver_convergence_failure_count == work.nonlinear_solver_convergence_failure_count,
+           "successful synchronization reconstructs the same real recovery path and costs");
+
+    auto limited_context = fixture.system->CreateDefaultRuntimeContext(0.0);
+    fixture.system->SetContinuousState(*limited_context, initial);
+    auto limited = Make(fixture, *limited_context, Configuration{configuration, 1});
+    bool budget = false;
+    try { limited->AdvanceTo(0.25); }
+    catch (const Failure& failure) { budget = failure.reason() == Failure::Reason::kAdvanceWorkBudgetExhausted; }
+    Expect(budget && limited->integration_statistics().successful_internal_step_count == 1 &&
+               limited->integration_statistics().nonlinear_solver_convergence_failure_count > 0,
+           "budget counts successful substeps while retaining rejected costs");
+    Unchanged(fixture, *limited_context, 0.0, initial, "budget failure cannot commit the recovered intermediate state");
+}
+
 void CheckNewmarkFailureClassification() {
     SliderMaxwellFixture fixture;
     auto accepted = fixture.system->CreateDefaultRuntimeContext(0.0);
@@ -528,16 +606,16 @@ void CheckNewmarkFailureClassification() {
     try {
         advancer->AdvanceTo(0.125);
     } catch (const Failure& error) {
-        exhausted = error.reason() == Failure::Reason::kNonlinearConvergenceFailure;
+        exhausted = error.reason() == Failure::Reason::kRepeatedNonlinearConvergenceFailure;
     }
-    Expect(exhausted, "single full-Newton exhaustion has the precise non-repeated public failure reason");
+    Expect(exhausted, "exhausting the bounded retries reports repeated nonlinear failure");
     Unchanged(fixture, *accepted, 0.0, initial, "Newmark solve failure cannot commit a candidate endpoint");
     const auto statistics = advancer->integration_statistics();
     Expect(statistics.successful_internal_step_count == 0 &&
-               statistics.nonlinear_solver_iteration_count == 1 &&
-               statistics.nonlinear_solver_convergence_failure_count == 1 &&
-               statistics.linear_solver_right_hand_side_evaluation_count == 2,
-           "one unsuccessful full Newton round remains observable in factory statistics");
+               statistics.nonlinear_solver_iteration_count == 11 &&
+               statistics.nonlinear_solver_convergence_failure_count == 11 &&
+               statistics.linear_solver_right_hand_side_evaluation_count == 22,
+           "all eleven attempted steps down to H/1024 remain observable");
     Throws<std::logic_error>([&] { advancer->AdvanceTo(0.01); },
                              "Newton failure blocks the system advancer");
 }
@@ -663,6 +741,7 @@ int main() {
             CheckRealFactoryConvergence(recipe, name);
             CheckReplacedQuaternionReference(recipe);
         }
+        CheckNewmarkRealRecovery();
         CheckNewmarkFailureClassification();
         VerifyBasicSystemHeldTorqueSynchronization();
         std::cout << "basic system continuous-state advancer checks passed\n";

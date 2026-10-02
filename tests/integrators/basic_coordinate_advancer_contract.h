@@ -35,6 +35,15 @@ void Throws(Operation&& operation, const std::string& description) {
     try { operation(); } catch (const Exception&) { caught = true; }
     Require(caught, description);
 }
+template <typename Core, typename... Args>
+void RequireAcceptedCoreStep(Core& core, Args... args) {
+    if constexpr (std::is_same_v<Core, NewmarkCore>) {
+        Require(core.AdvanceOneStep(args...) == NewmarkCore::StepResult::kAccepted,
+                "Newmark core step must converge");
+    } else {
+        core.AdvanceOneStep(args...);
+    }
+}
 inline bool SameStatistics(const ContinuousStateIntegrationStatistics& a,
                            const ContinuousStateIntegrationStatistics& b) {
     return a.successful_internal_step_count == b.successful_internal_step_count &&
@@ -286,19 +295,19 @@ void CheckExplicitCoreClock() {
         }
     }();
     Core core(*fixture.problem, core_configuration, initial);
-    core.AdvanceOneStep();
-    core.AdvanceOneStep();
-    core.AdvanceOneStep(0.1, 0.3);
+    RequireAcceptedCoreStep(core);
+    RequireAcceptedCoreStep(core);
+    RequireAcceptedCoreStep(core, 0.1, 0.3);
     Require(core.current_time_seconds() == 0.3, "explicit core endpoint is used by accepted state");
     Near(fixture.trial->time_seconds(), 0.3, 0.0, "the actual RHS receives the snapped endpoint time");
     const auto before = core.integration_statistics();
-    Throws([&] { core.AdvanceOneStep(0.1, 0.45); }, "out-of-window explicit endpoint is a caller error");
+    Throws([&] { RequireAcceptedCoreStep(core, 0.1, 0.45); }, "out-of-window explicit endpoint is a caller error");
     Require(core.current_time_seconds() == 0.3 && SameStatistics(before, core.integration_statistics()),
             "illegal explicit endpoint leaves core clock, work and availability unchanged");
-    core.AdvanceOneStep(0.1, 0.4);
+    RequireAcceptedCoreStep(core, 0.1, 0.4);
     if constexpr (std::is_same_v<Core, ZhaiCore>) {
         Require(core.diagnostics().startup_step_count == 1, "explicit endpoint clock does not alter the Zhai h identity");
-        core.AdvanceOneStep(std::nextafter(0.1, 0.0));
+        RequireAcceptedCoreStep(core, std::nextafter(0.1, 0.0));
         Require(core.diagnostics().startup_step_count == 2,
                 "a genuinely different explicit h still restarts the unchanged basic core");
     }

@@ -159,7 +159,7 @@ void CheckCoordinateConvergence(Problem& problem, const std::string& name) {
     for (const int steps : {20, 40, 80, 160}) {
         NewmarkCore core(problem, Configuration(problem, end_time / steps),
                          problem.InitialState());
-        for (int i = 0; i < steps; ++i) core.AdvanceOneStep();
+        for (int i = 0; i < steps; ++i) Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
         const auto actual = ReadState(core, problem);
         const auto expected = problem.ExactState(end_time);
         q_errors.push_back((actual.q - expected.q).norm());
@@ -188,7 +188,7 @@ void CheckRotationConvergence(Problem& problem, const std::string& name,
         Expect(core.diagnostics().endpoint_projection_evaluation_count == 0,
                name + ": initialization must not project");
         for (int i = 0; i < steps; ++i) {
-            core.AdvanceOneStep();
+            Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
             if (quaternion) {
                 const auto current = ReadState(core, problem);
                 ExpectNear(current.q.norm(), initial.q.norm(), 2e-14,
@@ -223,7 +223,7 @@ void VerifyBasicFormulasAndConvergence() {
         const double q1 = ((1.0 - h * h) * expected.q[0] + h * expected.s[0]) /
                           (1.0 + h * h);
         const double s1 = expected.s[0] - 2.0 * h * (expected.q[0] + q1);
-        core.AdvanceOneStep(h);
+        Expect(core.AdvanceOneStep(h) == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
         const auto actual = ReadState(core, oscillator);
         ExpectNear(actual.q[0], q1, 5e-12, "average acceleration position");
         ExpectNear(actual.s[0], s1, 5e-12, "average acceleration velocity");
@@ -250,7 +250,7 @@ void VerifyBasicFormulasAndConvergence() {
         const int steps = level == 0 ? 80 : 160;
         NewmarkCore wrong(missing_bias, Configuration(missing_bias, 0.8 / steps),
                           missing_bias.InitialState());
-        for (int i = 0; i < steps; ++i) wrong.AdvanceOneStep();
+        for (int i = 0; i < steps; ++i) Expect(wrong.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
         const auto actual = ReadState(wrong, missing_bias);
         wrong_errors[level] = RotationAngleError(
             missing_bias.Rotation(actual.q), missing_bias.Rotation(missing_bias.ExactState(0.8).q));
@@ -269,7 +269,7 @@ void VerifyTrapezoidalInternalState() {
                      relaxation.InitialState(0.0, 0.0, 1.0));
     double force = 1.0;
     for (int i = 0; i < 3; ++i) {
-        core.AdvanceOneStep();
+        Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
         force *= -49.0 / 51.0;
         ExpectNear(ReadState(core, relaxation).z[0], force, 1e-12,
                    "basic trapezoidal z retains its stiff alternating mode");
@@ -287,12 +287,12 @@ void VerifyAcceptedDerivativeAndProjectionRefresh() {
     // not the old acceleration guess or the unknown used by the residual.
     NewmarkCore core(problem, Configuration(problem, 0.5, 10.0),
                      problem.InitialState(1.0, 0.0, 1.0));
-    core.AdvanceOneStep();
+    Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     auto state = ReadState(core, problem);
     ExpectNear(state.q[0], 0.875, 0.0, "permissive first position");
     ExpectNear(state.s[0], -0.5, 0.0, "permissive first rate");
     ExpectNear(state.z[0], 1.5, 0.0, "permissive first internal state");
-    core.AdvanceOneStep();
+    Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     state = ReadState(core, problem);
     ExpectNear(state.q[0], 0.515625, 0.0, "accepted B seeds the next position");
     ExpectNear(state.s[0], -0.9375, 0.0, "accepted B seeds the next rate");
@@ -320,7 +320,7 @@ void VerifyAcceptedDerivativeAndProjectionRefresh() {
         const double raw_z =
             (expected.z[0] + 0.5 * h * (expected.q[0] + expected.z[0] + raw_q)) /
             (1.0 - 0.5 * h);
-        projected_core.AdvanceOneStep();
+        Expect(projected_core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
         const auto actual = ReadState(projected_core, projected);
         ExpectNear(actual.q[0], raw_q + 1.0, 1e-11, "projected endpoint position");
         ExpectNear(actual.s[0], raw_s, 1e-11, "projected endpoint rate");
@@ -375,7 +375,7 @@ void VerifyFullQuaternionResidualBeforeProjection() {
     };
     NewmarkCore core(observed, Configuration(observed, h), previous);
     for (int step = 0; step < 6; ++step) {
-        core.AdvanceOneStep();
+        Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
         previous = ReadState(core, observed);
         quaternion.Evaluate(previous.time_seconds, previous.q, previous.s,
                             previous.z, previous_b, previous_g);
@@ -402,7 +402,7 @@ void VerifyFailedReinitializationTransaction() {
         return quaternion.ProjectEndpoint(reference, q, s);
     };
     NewmarkCore core(observed, Configuration(observed, 0.01), quaternion.InitialState());
-    core.AdvanceOneStep();
+    Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     const auto accepted = ReadState(core, observed);
     const auto prior_work = core.integration_statistics();
     const auto prior_projection = core.diagnostics();
@@ -433,7 +433,7 @@ void VerifyFailedReinitializationTransaction() {
     Expect(core.diagnostics().endpoint_projection_evaluation_count ==
                prior_projection.endpoint_projection_evaluation_count,
            "a failed reinitialization must not project a candidate");
-    ExpectThrows<std::logic_error>([&] { core.AdvanceOneStep(); },
+    ExpectThrows<std::logic_error>([&] { (void)core.AdvanceOneStep(); },
                                    "failed reinitialization blocks further advancement");
     ExpectNear(observed_reference_norm, accepted.q.norm(), 1e-14,
                "no new projection reference may be consumed before successful reinitialization");
@@ -445,7 +445,7 @@ void VerifyFailedReinitializationTransaction() {
     Expect(core.integration_statistics().right_hand_side_evaluation_count == 1 &&
                core.integration_statistics().successful_internal_step_count == 0,
            "successful recovery alone resets accumulated work");
-    core.AdvanceOneStep();
+    Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     ExpectNear(observed_reference_norm, accepted.q.norm(), 1e-14,
                "recovery with the old state retains its norm convention");
     core.Reinitialize(replacement, replacement_configuration);
@@ -454,11 +454,91 @@ void VerifyFailedReinitializationTransaction() {
            (core.configuration().nonlinear_solver.unknown_reference_scales.array() ==
             replacement_configuration.nonlinear_solver.unknown_reference_scales.array()).all(),
            "successful initialization must commit the prepared Newton configuration");
-    core.AdvanceOneStep();
+    Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     ExpectNear(observed_reference_norm, 2.4, 1e-14,
                "successful new initialization publishes the new projection reference");
     ExpectNear(ReadState(core, observed).q.norm(), 2.4, 1e-14,
                "the new projection reference governs subsequent accepted states");
+}
+
+void VerifyDirectRetry() {
+    HarmonicOscillatorProblem oscillator(1.0);
+    auto config = Configuration(oscillator, 1.0, 0.01);
+    config.nonlinear_solver.maximum_iterations = 1;
+    config.nonlinear_solver.acceleration_residual_scales.setConstant(1e-7);
+    auto initial = oscillator.InitialState();
+    NewmarkCore retried(oscillator, config, initial);
+    Expect(retried.AdvanceOneStep() == NewmarkCore::StepResult::kIterationLimit,
+           "a real Newton correction must exceed the large-step acceptance scale");
+    const auto failed_work = retried.integration_statistics();
+    ExpectStateUnchanged(ReadState(retried, oscillator), initial, "exhaustion preserves the accepted state");
+    Expect(retried.diagnostics().endpoint_projection_evaluation_count == 0,
+           "exhaustion never projects an unconverged endpoint");
+    ExpectThrows<std::invalid_argument>([&] { (void)retried.AdvanceOneStep(-1.0); },
+                                       "invalid retry interval is refused");
+    Expect(retried.AdvanceOneStep(0.25) == NewmarkCore::StepResult::kAccepted,
+           "a smaller step succeeds directly without reinitialization");
+    NewmarkCore direct(oscillator, config, initial);
+    Expect(direct.AdvanceOneStep(0.25) == NewmarkCore::StepResult::kAccepted,
+           "fresh core accepts the same smaller step");
+    ExpectStateUnchanged(ReadState(retried, oscillator), ReadState(direct, oscillator),
+                         "rejected candidates cannot contaminate accepted B/G or the next solve");
+    const auto actual = retried.integration_statistics();
+    const auto clean = direct.integration_statistics();
+    Expect(actual.successful_internal_step_count == 1 &&
+               actual.right_hand_side_evaluation_count == failed_work.right_hand_side_evaluation_count + clean.right_hand_side_evaluation_count - 1 &&
+               actual.linear_solver_right_hand_side_evaluation_count == failed_work.linear_solver_right_hand_side_evaluation_count + clean.linear_solver_right_hand_side_evaluation_count &&
+               actual.nonlinear_solver_iteration_count == failed_work.nonlinear_solver_iteration_count + clean.nonlinear_solver_iteration_count &&
+               actual.nonlinear_solver_convergence_failure_count == 1,
+           "retry retains incurred costs and does not insert an initialization RHS");
+
+    CallbackProblem callback(1, 0,
+        [](double t, ConstVector, ConstVector, ConstVector, MutableVector b, MutableVector) {
+            if (t > 0.0) throw CoordinateIntegrationFailure(
+                CoordinateIntegrationFailure::Reason::kNonlinearConvergenceFailure, "callback origin");
+            b[0] = 0.0;
+        });
+    NewmarkCore throwing(callback, Configuration(callback, 1.0), callback.InitialState());
+    ExpectFailure([&] { (void)throwing.AdvanceOneStep(); },
+                  CoordinateIntegrationFailure::Reason::kNonlinearConvergenceFailure,
+                  "a callback exception is not a retryable return status");
+    ExpectThrows<std::logic_error>([&] { (void)throwing.AdvanceOneStep(0.25); },
+                                   "callback failure still requires reinitialization");
+    QuaternionRotationProblem quaternion;
+    CallbackProblem observed(4, 0, [&](double t, ConstVector q, ConstVector v, ConstVector z,
+                                      MutableVector b, MutableVector g) {
+        quaternion.Evaluate(t, q, v, z, b, g);
+    });
+    auto rotation_initial = quaternion.InitialState();
+    rotation_initial.q *= 2.4;
+    rotation_initial.s *= 2.4;
+    observed.project = [&](ConstVector reference, MutableVector q, MutableVector v) {
+        Expect((reference.array() == rotation_initial.q.array()).all(),
+               "all rejected attempts preserve the exact nonunit reference");
+        return quaternion.ProjectEndpoint(reference, q, v);
+    };
+    auto rotation_config = Configuration(observed, 0.1, 1e-6);
+    rotation_config.nonlinear_solver.maximum_iterations = 1;
+    NewmarkCore rotation(observed, rotation_config, rotation_initial);
+    double h = 0.1;
+    unsigned rejected = 0;
+    while (rotation.AdvanceOneStep(h) == NewmarkCore::StepResult::kIterationLimit) {
+        Expect(++rejected < 20, "rotation retry must terminate");
+        ExpectStateUnchanged(ReadState(rotation, observed), rotation_initial,
+                             "quaternion exhaustion cannot commit a candidate");
+        Expect(observed.projection_count == 0, "rejected rotation attempts must not project");
+        h *= 0.5;
+    }
+    Expect(rejected > 0 && observed.projection_count == 1,
+           "rotation retry exercises true exhaustion followed by one projection");
+    Expect((rotation.configuration().nonlinear_solver.position_correction_scales.array() ==
+            rotation_config.nonlinear_solver.position_correction_scales.array()).all(),
+           "retry does not reexpand or replace Newton scales");
+    NewmarkCore direct_rotation(observed, rotation_config, rotation_initial);
+    Expect(direct_rotation.AdvanceOneStep(h) == NewmarkCore::StepResult::kAccepted,
+           "fresh rotation accepts the reduced interval");
+    ExpectStateUnchanged(ReadState(rotation, observed), ReadState(direct_rotation, observed),
+                         "rotation retries preserve accepted derivatives and paired projection");
 }
 
 void VerifyFailureTransactions() {
@@ -467,17 +547,18 @@ void VerifyFailureTransactions() {
     limited.nonlinear_solver.maximum_iterations = 1;
     NewmarkCore limited_core(nonlinear, limited, nonlinear.InitialState());
     const auto before = ReadState(limited_core, nonlinear);
-    ExpectFailure([&] { limited_core.AdvanceOneStep(); },
-                  CoordinateIntegrationFailure::Reason::kNonlinearConvergenceFailure,
-                  "iteration limit must fail");
+    Expect(limited_core.AdvanceOneStep() == NewmarkCore::StepResult::kIterationLimit,
+           "iteration limit must return a retryable result");
     ExpectStateUnchanged(ReadState(limited_core, nonlinear), before,
                          "failed Newton must not commit trial state");
     Expect(limited_core.integration_statistics().successful_internal_step_count == 0 &&
                limited_core.integration_statistics().nonlinear_solver_convergence_failure_count == 1 &&
                limited_core.integration_statistics().linear_solver_right_hand_side_evaluation_count > 0,
            "failed Newton work must remain visible");
-    ExpectThrows<std::logic_error>([&] { limited_core.AdvanceOneStep(); },
-                                   "continuation after failure must require reinitialization");
+    Expect(limited_core.AdvanceOneStep() == NewmarkCore::StepResult::kIterationLimit,
+           "iteration exhaustion permits a second attempt without initialization");
+    Expect(limited_core.integration_statistics().nonlinear_solver_convergence_failure_count == 2,
+           "repeated attempts must retain all failed work");
     limited_core.Reinitialize(before);
     Expect(limited_core.integration_statistics().right_hand_side_evaluation_count == 1 &&
                limited_core.integration_statistics().nonlinear_solver_iteration_count == 0,
@@ -490,7 +571,7 @@ void VerifyFailureTransactions() {
     const auto zero = singular.InitialState();
     NewmarkCore singular_core(singular, Configuration(singular, 1.0), zero);
     // With h=1 the residual is the nonzero constant -2: no endpoint exists.
-    ExpectFailure([&] { singular_core.AdvanceOneStep(); },
+    ExpectFailure([&] { (void)singular_core.AdvanceOneStep(); },
                   CoordinateIntegrationFailure::Reason::kSingularJacobian,
                   "singular endpoint Jacobian must be reported");
     ExpectStateUnchanged(ReadState(singular_core, singular), zero,
@@ -504,14 +585,14 @@ void VerifyFailureTransactions() {
         });
     NewmarkCore bad_core(nonfinite, Configuration(nonfinite, 0.1), nonfinite.InitialState());
     const auto bad_before = ReadState(bad_core, nonfinite);
-    ExpectFailure([&] { bad_core.AdvanceOneStep(); },
+    ExpectFailure([&] { (void)bad_core.AdvanceOneStep(); },
                   CoordinateIntegrationFailure::Reason::kNonFiniteEvaluation,
                   "non-finite trial evaluation must fail");
     ExpectStateUnchanged(ReadState(bad_core, nonfinite), bad_before,
                          "non-finite evaluation must not commit");
     fail_evaluation = false;
     bad_core.Reinitialize(bad_before);
-    bad_core.AdvanceOneStep();
+    Expect(bad_core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     ExpectNear(ReadState(bad_core, nonfinite).q[0], 0.005, 1e-16,
                "reinitialization restores usable acceleration history");
 
@@ -529,7 +610,7 @@ void VerifyFailureTransactions() {
     NewmarkCore projection_core(projection, Configuration(projection, 0.1),
                                 projection.InitialState());
     const auto projection_before = ReadState(projection_core, projection);
-    ExpectThrows<ProjectionFailure>([&] { projection_core.AdvanceOneStep(); },
+    ExpectThrows<ProjectionFailure>([&] { (void)projection_core.AdvanceOneStep(); },
                                      "the projection exception must propagate");
     ExpectStateUnchanged(ReadState(projection_core, projection), projection_before,
                          "projection mutation before failure must not leak");
@@ -541,7 +622,7 @@ void VerifyFailureTransactions() {
     auto distant = oscillator.InitialState();
     distant.time_seconds = 1e20;
     NewmarkCore underflow(oscillator, Configuration(oscillator, 0.1), distant);
-    ExpectFailure([&] { underflow.AdvanceOneStep(); },
+    ExpectFailure([&] { (void)underflow.AdvanceOneStep(); },
                   CoordinateIntegrationFailure::Reason::kStepSizeUnderflow,
                   "a step must advance representable time");
     ExpectStateUnchanged(ReadState(underflow, oscillator), distant,
@@ -563,7 +644,7 @@ void VerifyValidationAndQuaternionRestart() {
         "unknown reference scale dimensions must be checked");
     NewmarkCore core(oscillator, configuration, oscillator.InitialState());
     for (const double h : {0.0, -0.1, 0.2, std::numeric_limits<double>::quiet_NaN()}) {
-        ExpectThrows<std::invalid_argument>([&] { core.AdvanceOneStep(h); },
+        ExpectThrows<std::invalid_argument>([&] { (void)core.AdvanceOneStep(h); },
                                             "invalid step must be rejected before entry");
     }
     Expect(core.integration_statistics().right_hand_side_evaluation_count == 1,
@@ -579,7 +660,7 @@ void VerifyValidationAndQuaternionRestart() {
     malformed.s.resize(0);
     ExpectThrows<std::invalid_argument>([&] { core.Reinitialize(malformed); },
                                         "invalid initial state dimensions must be rejected");
-    core.AdvanceOneStep();
+    Expect(core.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     Expect(core.integration_statistics().successful_internal_step_count == 1,
            "invalid caller input must leave the core usable");
 
@@ -592,14 +673,14 @@ void VerifyValidationAndQuaternionRestart() {
                                         "initial radial rate must be rejected, not repaired");
     ExpectStateUnchanged(ReadState(rotation, quaternion), initial,
                          "rejected initial tangent constraint must preserve accepted state");
-    rotation.AdvanceOneStep();
+    Expect(rotation.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     auto restarted = quaternion.ExactState(0.37);
     restarted.q *= -2.4 / initial.q.norm();
     restarted.s *= -2.4 / initial.q.norm();
     rotation.Reinitialize(restarted);
     Expect(rotation.diagnostics().endpoint_projection_evaluation_count == 0,
            "reinitialization records the norm without endpoint projection");
-    rotation.AdvanceOneStep();
+    Expect(rotation.AdvanceOneStep() == NewmarkCore::StepResult::kAccepted, "Newmark step must converge");
     const auto actual = ReadState(rotation, quaternion);
     ExpectNear(actual.q.norm(), 2.4, 2e-14, "reinitialization replaces the recorded norm");
     ExpectNear(actual.q.dot(actual.s), 0.0, 2e-14, "restarted accepted rate remains tangent");
@@ -628,6 +709,7 @@ int main() {
         VerifyAcceptedDerivativeAndProjectionRefresh();
         VerifyFullQuaternionResidualBeforeProjection();
         VerifyFailedReinitializationTransaction();
+        VerifyDirectRetry();
         VerifyFailureTransactions();
         VerifyValidationAndQuaternionRestart();
         std::cout << "Newmark core verification passed\n";

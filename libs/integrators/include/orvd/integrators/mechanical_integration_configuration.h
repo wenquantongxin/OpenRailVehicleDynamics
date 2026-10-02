@@ -36,6 +36,11 @@ struct NewmarkNewtonConfiguration final {
 
 struct NewmarkConfiguration final {
     /// Positive finite nominal and maximum step size, in seconds.
+    /// Newton iteration exhaustion halves the attempted step, with retry floor
+    /// H/1024. Two successfully published substeps double the plan up to H;
+    /// successful synchronization restores H. This is nonlinear failure
+    /// recovery, not local truncation-error control. Stop-limited first attempts
+    /// may be shorter than the retry floor.
     double nominal_step_size_seconds{};
     NewmarkNewtonConfiguration nonlinear_solver;
 };

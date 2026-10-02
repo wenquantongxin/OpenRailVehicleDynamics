@@ -124,17 +124,18 @@ class NewmarkCore::Implementation final {
         residual_scales_.swap(prepared_residual_scales);
     }
 
-    void Advance(double h, std::optional<double> endpoint = std::nullopt) {
+    StepResult Advance(double h, std::optional<double> endpoint = std::nullopt) {
         state_.ValidateStepSize(h);
         if (endpoint.has_value()) state_.ValidateExplicitEndpoint(h, *endpoint);
         try {
             const double end = endpoint.has_value() ? *endpoint : state_.StepEnd(h);
-            Solve(h, end);
+            if (!Solve(h, end)) return StepResult::kIterationLimit;
             if (state_.ProjectCandidate()) {
                 state_.Evaluate(state_.candidate_, state_.candidate_b_,
                                 state_.candidate_g_, false);
             }
             state_.CommitCandidate();
+            return StepResult::kAccepted;
         } catch (...) {
             state_.requires_reinitialization_ = true;
             throw;
@@ -184,7 +185,7 @@ class NewmarkCore::Implementation final {
         return norm;
     }
 
-    void Solve(double h, double end) {
+    bool Solve(double h, double end) {
         const auto& solver = configuration_.nonlinear_solver;
         unknown_.head(state_.nq_) = state_.b_;
         unknown_.tail(state_.nz_) = state_.accepted_.z + h * state_.g_;
@@ -192,7 +193,7 @@ class NewmarkCore::Implementation final {
                  state_.candidate_g_, residual_, false);
         // The unchanged initial guess has zero correction.
         if (ScaledMaximum(residual_, residual_scales_) <= 1.0) {
-            return;
+            return true;
         }
 
         for (int iteration = 0; iteration < solver.maximum_iterations;
@@ -243,11 +244,11 @@ class NewmarkCore::Implementation final {
                      state_.candidate_g_, residual_, false);
             if (ScaledMaximum(residual_, residual_scales_) <= 1.0 &&
                 CorrectionNorm(h) <= 1.0) {
-                return;
+                return true;
             }
         }
-        Fail(CoordinateIntegrationFailure::Reason::kNonlinearConvergenceFailure,
-             "Newmark: endpoint Newton iteration limit reached");
+        ++state_.statistics_.nonlinear_solver_convergence_failure_count;
+        return false;
     }
 
     NewmarkCoreConfiguration configuration_;
@@ -294,16 +295,16 @@ void NewmarkCore::CopyCurrentState(Eigen::Ref<Eigen::VectorXd> q,
     implementation_->state_.CopyCurrentState(q, s, z);
 }
 
-void NewmarkCore::AdvanceOneStep() {
-    implementation_->Advance(implementation_->configuration_.step_size_seconds);
+NewmarkCore::StepResult NewmarkCore::AdvanceOneStep() {
+    return implementation_->Advance(implementation_->configuration_.step_size_seconds);
 }
 
-void NewmarkCore::AdvanceOneStep(double step_size_seconds) {
-    implementation_->Advance(step_size_seconds);
+NewmarkCore::StepResult NewmarkCore::AdvanceOneStep(double step_size_seconds) {
+    return implementation_->Advance(step_size_seconds);
 }
 
-void NewmarkCore::AdvanceOneStep(double step_size_seconds, double endpoint_time_seconds) {
-    implementation_->Advance(step_size_seconds, endpoint_time_seconds);
+NewmarkCore::StepResult NewmarkCore::AdvanceOneStep(double step_size_seconds, double endpoint_time_seconds) {
+    return implementation_->Advance(step_size_seconds, endpoint_time_seconds);
 }
 
 void NewmarkCore::Reinitialize(const CoordinateState& initial_state) {

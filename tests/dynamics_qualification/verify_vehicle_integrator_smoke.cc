@@ -56,10 +56,15 @@ Result Capture(const Summary& summary, const std::string& method,
     const std::uint64_t epochs = controlled ? 2 : 1;
     const auto steps = static_cast<std::uint64_t>(duration / kStepNanoseconds);
     Require(work.at("epoch_count") == epochs &&
-                statistics.successful_internal_step_count == steps,
+                (method == "newmark" ? statistics.successful_internal_step_count >= steps
+                                     : statistics.successful_internal_step_count == steps),
             "step or successful-synchronization accounting changed");
     Require(statistics.requested_dense_finite_difference_jacobian_worker_count ==
                 (method == "newmark" ? 1 : 0), "wrong mechanical worker identity");
+    if (method == "newmark") {
+        Require(statistics.nonlinear_solver_convergence_failure_count == 0,
+                "the normal Newmark wiring smoke must not require recovery");
+    }
     if (method == "zhai") {
         Require(statistics.right_hand_side_evaluation_count == steps + epochs &&
                     statistics.linear_solver_right_hand_side_evaluation_count == 0 &&

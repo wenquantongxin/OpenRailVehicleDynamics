@@ -9,9 +9,9 @@
 namespace orvd::integrators::internal {
 
 class NewmarkContinuousStateAdvancer::Implementation final
-    : public BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkCoreConfiguration> {
+    : public BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkCoreConfiguration, NewmarkRecoveryStepPolicy> {
    public:
-    using Base = BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkCoreConfiguration>;
+    using Base = BasicCoordinateAdvancerImplementation<NewmarkCore, NewmarkCoreConfiguration, NewmarkRecoveryStepPolicy>;
     Implementation(SystemCoordinateProblem& problem, double time,
                    const Eigen::VectorXd& state, NewmarkConfiguration configuration)
         : Base(problem, time, state,

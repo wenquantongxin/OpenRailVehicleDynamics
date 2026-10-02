@@ -9,15 +9,17 @@
 #include <string>
 #include <utility>
 
-#include "coordinate_step_time.h"
 #include "coordinate_numerical_failure.h"
+#include "coordinate_step_policy.h"
+#include "coordinate_step_time.h"
 #include "system_coordinate_problem.h"
 
 namespace orvd::integrators::internal {
 
 // Shared transaction/time/output adaptation, not a shared numerical method.
 // The real Core owns its own formulas, nonlinear solve and method history.
-template <typename Core, typename Configuration>
+template <typename Core, typename Configuration,
+          typename StepPolicy = FixedCoordinateStepPolicy>
 class BasicCoordinateAdvancerImplementation {
    public:
     BasicCoordinateAdvancerImplementation(SystemCoordinateProblem& problem,
@@ -28,7 +30,7 @@ class BasicCoordinateAdvancerImplementation {
                                           std::function<Configuration(const CoordinateState&)> prepare = {})
         : problem_(problem),
           physical_size_(problem.physical_state_size()),
-          nominal_h_(configuration.step_size_seconds),
+          step_policy_(configuration.step_size_seconds),
           method_name_(method_name),
           coordinate_(problem.MakeCoordinateState(initial_time, initial_physical)),
           prepare_configuration_(std::move(prepare)),
@@ -88,8 +90,22 @@ class BasicCoordinateAdvancerImplementation {
         dense_interval_.reset();
         try {
             const double start = public_time_;
-            const StepChoice step = ChooseStep(stop);
-            core_.AdvanceOneStep(step.h, step.end);
+            StepChoice step = ChooseStep(stop);
+            unsigned rejected = 0;
+            while (!StepPolicy::TryAdvance(core_, step.h, step.end)) {
+                ++rejected;
+                if (!step_policy_.ReduceAfterRejection(step.h)) {
+                    using Reason = ContinuousStateNumericalFailure::Reason;
+                    throw ContinuousStateNumericalFailure(
+                        rejected == 1 ? Reason::kNonlinearConvergenceFailure
+                                      : Reason::kRepeatedNonlinearConvergenceFailure,
+                        static_cast<int>(CoordinateIntegrationFailure::Reason::kNonlinearConvergenceFailure),
+                        "Newmark: Newton iteration limit reached at the retry step floor");
+                }
+                grid_anchor_ = public_time_;
+                grid_index_ = 0;
+                step = ChooseStep(stop);
+            }
             coordinate_.time_seconds = core_.current_time_seconds();
             core_.CopyCurrentState(coordinate_.q, coordinate_.s, coordinate_.z);
             problem_.CopyPhysicalState(coordinate_, candidate_physical_);
@@ -107,6 +123,10 @@ class BasicCoordinateAdvancerImplementation {
                 ++grid_index_;
             }
             ++successful_steps_;
+            if (step_policy_.AcceptedStep()) {
+                grid_anchor_ = step.end;
+                grid_index_ = 0;
+            }
             requires_reinitialization_ = false;
             output = public_state_;
             return {start, step.end, step.end == stop};
@@ -140,6 +160,7 @@ class BasicCoordinateAdvancerImplementation {
         grid_anchor_ = time;
         grid_index_ = 0;
         successful_steps_ = 0;
+        step_policy_.Reset();
         requires_reinitialization_ = false;
     }
 
@@ -185,21 +206,22 @@ class BasicCoordinateAdvancerImplementation {
 
     [[nodiscard]] StepChoice ChooseStep(double stop) const {
         if (grid_index_ == std::numeric_limits<std::uint64_t>::max()) TimeUnderflow();
-        const double next = std::fma(static_cast<double>(grid_index_ + 1), nominal_h_, grid_anchor_);
-        if (CoordinateStopCanUseNominalStep(public_time_, nominal_h_, next, stop)) {
-            return {nominal_h_, stop, true};
+        const double planned_h = step_policy_.step_size();
+        const double next = std::fma(static_cast<double>(grid_index_ + 1), planned_h, grid_anchor_);
+        if (CoordinateStopCanUseNominalStep(public_time_, planned_h, next, stop)) {
+            return {planned_h, stop, true};
         }
         // Do not subtract distant finite times merely to decide whether a
         // nominal step fits: that difference can overflow unnecessarily.
         if (stop < next) {
             const double h = stop - public_time_;
-            if (h > nominal_h_ || !CoordinateEndpointTimeIsCompatible(public_time_, h, stop)) {
+            if (h > planned_h || !CoordinateEndpointTimeIsCompatible(public_time_, h, stop)) {
                 TimeUnderflow();
             }
             return {h, stop, true};
         }
-        if (!CoordinateEndpointTimeIsCompatible(public_time_, nominal_h_, next)) TimeUnderflow();
-        return {nominal_h_, next, false};
+        if (!CoordinateEndpointTimeIsCompatible(public_time_, planned_h, next)) TimeUnderflow();
+        return {planned_h, next, false};
     }
 
     void ValidateOutput(const Eigen::Ref<Eigen::VectorXd>& output) const {
@@ -210,7 +232,7 @@ class BasicCoordinateAdvancerImplementation {
 
     SystemCoordinateProblem& problem_;
     const int physical_size_;
-    const double nominal_h_;
+    StepPolicy step_policy_;
     const char* const method_name_;
     CoordinateState coordinate_;
     const std::function<Configuration(const CoordinateState&)> prepare_configuration_;
