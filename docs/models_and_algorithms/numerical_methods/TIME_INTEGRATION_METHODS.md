@@ -2,7 +2,7 @@
 
 # BDF、Radau5、Newmark 与 Zhai 时间积分方法
 
-本文说明 BDF、三阶段五阶 Radau IIA、Newmark 与 Zhai 简单显式法如何把连续动力学方程推进为离散状态，并讨论它们的误差、稳定性以及与 ORVD 状态结构的相容关系。ORVD 生产系统当前采用最大阶数为 2 的 CVODE BDF，源码树中另有最大阶数为 5 的 CVODE BDF 与 Radau5 实现。Newmark 和 Zhai 尚未实现，本文将二者标为 **仅理论**。
+本文说明 BDF、三阶段五阶 Radau IIA、Newmark 平均加速度法与 Zhai 简单显式法如何把连续动力学方程推进为离散状态，并讨论它们的误差、稳定性以及与 ORVD 状态结构的相容关系。ORVD 实现了五个方法选项：最大阶数为 2 与 5 的 CVODE BDF、Radau5、带有界缩步恢复的 Newmark 平均加速度法和 Zhai 简单显式法，五者都由同一个公共系统积分配置显式选择。BDF 与 Radau5 直接作用于一阶状态；Newmark 与 Zhai 作用于第 1.3 节的坐标二阶形式。第 4.1、5.1 节的经典理论中未被 ORVD 采用的部分标为 **仅理论**。
 
 ## 1. 方程形态与共同记号
 
@@ -54,11 +54,45 @@ M(u)a+C(u,v)v+f_{\mathrm{int}}(u,v,z)=p(t),
 \dot u=v.
 $$
 
-这里 $u$ 是欧氏位移，与第 4、5 节的用法一致，不是第 1.1 节的广义位置 $q$；$a$ 是加速度，$p$ 是外载荷。$M$ 是系统质量矩阵；$C(u,v)v$ 汇集科氏、离心等速度相关惯性项以及黏性阻尼；$f_{\mathrm{int}}$ 是其余内力，含弹性恢复力与依赖内变量 $z$ 的力元力。
+这里 $u$ 是欧氏位移，与第 4.1、5.1 节的用法一致，不是第 1.1 节的广义位置 $q$；$a$ 是加速度，$p$ 是外载荷。$M$ 是系统质量矩阵；$C(u,v)v$ 汇集科氏、离心等速度相关惯性项以及黏性阻尼；$f_{\mathrm{int}}$ 是其余内力，含弹性恢复力与依赖内变量 $z$ 的力元力。
 
-这一形式天然适合位移、速度和加速度同维的欧氏坐标。对一般多体系统，位形必须通过切空间增量与 retraction 更新；一阶内变量 $z$ 也需要单独的离散方程。若不作这些扩展，把某个一阶积分公式直接作用于 $[q;v;z]$，得到的是另一种一阶状态方法，而不是经典 Newmark 或 Zhai 方法。
+这一形式天然适合位移、速度和加速度同维的欧氏坐标。把它用于含四元数与 Ball-RPY 的多体位形有两条途径：一是在切空间中形成位形增量，再经 retraction 回到位形流形；二是改用位形坐标本身的二阶方程，在存储坐标中积分，再把端点投影回约束集。ORVD 采用第二条，见第 1.3 节；第一条在本文中为 **仅理论**。无论哪条途径，一阶内变量 $z$ 都需要单独指定离散方法。
 
-### 1.3 误差尺度
+### 1.3 坐标二阶形式
+
+Newmark 与 Zhai 在 ORVD 中作用于位形坐标的二阶方程。定义坐标速度与坐标加速度
+
+$$
+s=\dot q=N(q)v,
+\qquad
+b=\ddot q=N(q)\dot v+\dot N(q,v)\,v,
+$$
+
+其中 $\dot N(q,v)$ 是 $N(q)$ 沿运动的时间导数。对自由体的四元数块，$s$ 的对应四个分量是存储四元数的时间导数，与物理角速度不同维；对单轴关节、Ball-RPY 与平动坐标，$s$ 就是对应坐标的时间导数。
+
+用坐标状态 $(q,s,z)$ 代替物理状态 $(q,v,z)$，完整右端改写为
+
+$$
+\dot q=s,
+\qquad
+\dot s=B(t,q,s,z),
+\qquad
+\dot z=G(t,q,s,z),
+$$
+
+$$
+B(t,q,s,z)=N(q)\,a\left(t,q,N^{+}(q)s,z\right)+\dot N\left(q,N^{+}(q)s\right)N^{+}(q)s,
+\qquad
+G(t,q,s,z)=g\left(t,q,N^{+}(q)s,z\right).
+$$
+
+这里 $a$、$g$ 是第 1.1 节右端的 $\dot v$ 与 $\dot z$ 分量，$N^{+}(q)$ 是速率映射的左伪逆，见[整车多体动力学方程](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.md)第 3.1 节。在精确解上 $s$ 位于 $N(q)$ 的值域内，$N^{+}$ 恰好还原物理速度。Newton 试算和显式预测会产生不在该值域内的 $s$，例如四元数块带有沿 $q$ 方向的径向分量；此时 $N^{+}$ 先把 $s$ 投到值域上再还原速度。这一延拓允许在合法位形域内使用非切向的坐标速度试算，并在精确解上与原方程一致；它不扩大速率映射、接触几何或其他物理求值的定义域。
+
+$B$ 的求值顺序是：由 $N^{+}$ 还原物理速度，按第 1.1 节求完整右端，取出 $\dot v$ 与 $\dot z$，再由多体模型把 $\dot v$ 映为坐标二阶导。质量矩阵只出现在前向动力学内部，即整车篇第 6 节的铰接体算法；积分公式本身不形成也不求解质量矩阵。
+
+坐标形式的代价是四元数的存储范数不再由离散方程保证。对每个四元数块，精确流满足 $q^{\mathsf T}s=0$，存储范数守恒；离散更新一般会使范数漂移。ORVD 在每个接受端点把四元数投影回参考范数，见第 4.4 节。零范数四元数以及 Ball-RPY 俯仰奇异域由几何与速率映射的定义域检查拒绝，积分器不作修复。
+
+### 1.4 误差尺度
 
 不同状态分量具有不同量纲。自适应方法可由相对容差和逐分量绝对容差形成权重
 
@@ -147,7 +181,7 @@ $$
 \end{cases}
 $$
 
-这里 $U$ 是 CVODE 的单位舍入，双精度下为 `DBL_EPSILON`；$w_j$ 是求解器本步持有、在本批差分中固定的误差权重，按第 1.3 节由 `rtol` 与 `atol` 对本步的参考状态 $y^{(w)}$ 形成，该参考状态不必是差分所在的试算点，$\lVert\cdot\rVert_{\mathrm{WRMS}}$ 是同节的加权范数；$h$ 是当前内部步长；$\mu=1000$ 是定义增量下限 $\Delta_{\min}$ 的无量纲常数。第一项使增量正比于分量自身的量级，是单边差商在截断误差与舍入误差之间的常规折中；第二项防止 $y_j$ 接近零时增量随之消失：$\Delta_{\min}$ 以 $\lvert h\rvert\,\lVert f\rVert_{\mathrm{WRMS}}$ 度量一步内状态变化的加权量级，再经 $1/w_j=\operatorname{rtol}\lvert y^{(w)}_j\rvert+\operatorname{atol}_j$ 换算到第 $j$ 个分量的量纲。差商的分母是名义增量 $\Delta_j$，不是浮点求和后实际实现的增量；这一点与第 3.5 节 Radau5 核的做法不同。
+这里 $U$ 是 CVODE 的单位舍入，双精度下为 `DBL_EPSILON`；$w_j$ 是求解器本步持有、在本批差分中固定的误差权重，按第 1.4 节由 `rtol` 与 `atol` 对本步的参考状态 $y^{(w)}$ 形成，该参考状态不必是差分所在的试算点，$\lVert\cdot\rVert_{\mathrm{WRMS}}$ 是同节的加权范数；$h$ 是当前内部步长；$\mu=1000$ 是定义增量下限 $\Delta_{\min}$ 的无量纲常数。第一项使增量正比于分量自身的量级，是单边差商在截断误差与舍入误差之间的常规折中；第二项防止 $y_j$ 接近零时增量随之消失：$\Delta_{\min}$ 以 $\lvert h\rvert\,\lVert f\rVert_{\mathrm{WRMS}}$ 度量一步内状态变化的加权量级，再经 $1/w_j=\operatorname{rtol}\lvert y^{(w)}_j\rvert+\operatorname{atol}_j$ 换算到第 $j$ 个分量的量纲。差商的分母是名义增量 $\Delta_j$，不是浮点求和后实际实现的增量；这一点与第 3.5 节 Radau5 核的做法不同。
 
 在实现上，这一差分有两条组织方式，二者按同一增量规则与同一分母定义同一个差分 Jacobian。一是 CVODE 稠密线性求解器的内建差商。二是 ORVD 的自有列提供者：[`dense_finite_difference_jacobian_provider.h`](../../../libs/integrators/src/dense_finite_difference_jacobian_provider.h) 的 `DenseFiniteDifferenceJacobianProvider` 只负责求各列的扰动导数 $f(t,y+\Delta_j\mathbf e_j)$，其系统实现是 [`system_continuous_state_backend.cc`](../../../libs/integrators/src/system_continuous_state_backend.cc) 的 `CalcPerturbedDerivatives`，它在独立的试算上下文中对每一列复制 $y$、加上 $\Delta_j$ 并调用第 1.1 节的完整右端；增量 $\Delta_j$、基线导数 $f(t,y)$ 与差商本身由 [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 的 `EvaluateDenseJacobian` 按上式持有，提供者内不含任何差分公式。
 
@@ -162,7 +196,7 @@ $$
 
 ### 2.5 ORVD 中的实现
 
-[`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 的 `CvodeContinuousStateAdvancer` 以 `CV_BDF` 构造 CVODE 后端，并把最大阶数固定为 2 或 5；生产系统当前采用最大二阶形式，源码树中同时保留最大五阶形式。完整 $[q;v;z]$ 状态到系统右端的映射见第 1.1 节所引的 `SystemRhsBridge::CalcTimeDerivatives`。稠密输出由 CVODE 在最近一个内部步上的历史多项式给出。
+[`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) 的 `CvodeContinuousStateAdvancer` 以 `CV_BDF` 构造 CVODE 后端，并把最大阶数固定为 2 或 5；最大阶数 2 与 5 分别对应公共配置中的两个方法选项。完整 $[q;v;z]$ 状态到系统右端的映射见第 1.1 节所引的 `SystemRhsBridge::CalcTimeDerivatives`。稠密输出由 CVODE 在最近一个内部步上的历史多项式给出。
 
 ## 3. Radau5：三阶段五阶 Radau IIA
 
@@ -240,7 +274,7 @@ $$
 
 ### 3.5 ORVD 中的实现
 
-[`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) 的 `radau5::Core::AdvanceOneAcceptedStepToward` 只实现常微分方程形式 $y'=f(t,y)$：经典 RADAU5 接口意义上的 ODE 质量矩阵取单位阵，源码中不设该项，也不支持一般质量矩阵形式；此处与第 1.2 节的机械质量矩阵 $M(u)$ 无关。该核心使用稠密 Jacobian、三阶段五阶 Radau IIA、自适应误差控制和最近成功步的配点稠密输出，并用一个实线性系统和一个复线性系统完成简化 Newton 迭代。[`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) 的 `Radau5ContinuousStateAdvancer` 把该核心接到与 BDF 相同的完整一阶状态右端。Radau5 已在源码树中实现，生产系统当前仍采用最大阶数为 2 的 CVODE BDF。
+[`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) 的 `radau5::Core::AdvanceOneAcceptedStepToward` 只实现常微分方程形式 $y'=f(t,y)$：经典 RADAU5 接口意义上的 ODE 质量矩阵取单位阵，源码中不设该项，也不支持一般质量矩阵形式；此处与第 1.2 节的机械质量矩阵 $M(u)$ 无关。该核心使用稠密 Jacobian、三阶段五阶 Radau IIA、自适应误差控制和最近成功步的配点稠密输出，并用一个实线性系统和一个复线性系统完成简化 Newton 迭代。[`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) 的 `Radau5ContinuousStateAdvancer` 把该核心接到与 BDF 相同的完整一阶状态右端。Radau5 同样作为公共配置中的一个方法选项。
 
 Radau5 核自行形成第 3.2 节所需的稠密 Jacobian，不借用第 2.3 节的列提供者：`radau5::Core` 的 `ComputeJacobian` 在当前已接受端点 $(t_n,y_n)$ 上对同一完整右端逐列取单边差商，扰动同样按存储分量施加，$t_n$ 与不属于连续状态的输入保持不变。第 $j$ 列的名义增量为
 
@@ -258,7 +292,11 @@ $$
 
 其中 $\hat y$ 只在第 $j$ 个分量上与 $y_n$ 不同。这样分母与实际施加的扰动一致，避免名义分母与实际扰动不匹配；右端求值本身的舍入误差仍在差商之中。所得 $J$ 进入第 3.2 节的实系统与复系统，并按该节所述在 Newton 迭代与相邻步之间复用。
 
-## 4. Newmark：二阶机械系统的一步法族（仅理论）
+## 4. Newmark：平均加速度法
+
+### 4.1 参考理论：Newmark 家族
+
+本节给出经典理论，作为第 4.2 至 4.6 节的出处。ORVD 只实现其中 $\beta=1/4$、$\gamma=1/2$ 的平均加速度成员；一般参数族、以有效刚度表达的线性解法和 $\beta=0$ 的显式分支为 **仅理论**。
 
 [Newmark 方法](https://doi.org/10.1061/JMCEA3.0000098)以端点加速度参数化位移和速度更新。给定 $u_n$、$v_n$、$a_n$ 与两个无量纲参数 $\beta$、$\gamma$，其基本公式为
 
@@ -270,61 +308,166 @@ $$
 v_{n+1}=v_n+h\left[(1-\gamma)a_n+\gamma a_{n+1}\right].
 $$
 
-### 4.1 隐式平衡
-
 隐式 Newmark 还要求新端点满足动力学平衡
 
 $$
 \mathbf r^{\mathrm{eq}}_{n+1}
 =p_{n+1}-M a_{n+1}-C v_{n+1}
--f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0.
+-f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0,
 $$
 
-初始加速度由初始动力学平衡确定，例如
+初始加速度由初始动力学平衡 $M a_0=p_0-Cv_0-f_{\mathrm{int}}(u_0,v_0,z_0)$ 确定。
 
-$$
-M a_0=p_0-Cv_0-f_{\mathrm{int}}(u_0,v_0,z_0).
-$$
-
-### 4.2 线性系统的有效刚度
-
-对常量 $M,C,K$、$f_{\mathrm{int}}=Ku$ 且 $\beta>0$ 的系统，定义
-
-$$
-\kappa_0=\frac{1}{\beta h^2},
-\qquad
-\kappa_1=\frac{\gamma}{\beta h},
-$$
-
-则以 $u_{n+1}$ 为未知量的有效刚度为
+对常量 $M,C,K$、$f_{\mathrm{int}}=Ku$ 且 $\beta>0$ 的系统，定义 $\kappa_0=1/(\beta h^2)$、$\kappa_1=\gamma/(\beta h)$，则以 $u_{n+1}$ 为未知量的有效刚度为
 
 $$
 K_{\mathrm{eff}}=K+\kappa_1C+\kappa_0M.
 $$
 
-非线性系统以端点平衡残差迭代；若 $M$、$C$ 或载荷依赖状态，一致切线还要包含这些项对 $u_{n+1}$ 的导数。$\beta=0$ 属于显式 Newmark 分支，不能使用含 $1/\beta$ 的有效刚度公式。
+非线性系统以端点平衡残差迭代；若 $M$、$C$ 或载荷依赖状态，一致切线还要包含这些项对 $u_{n+1}$ 的导数。$\beta=0$ 属于显式分支，不能使用含 $1/\beta$ 的有效刚度公式。
 
-### 4.3 参数、精度与稳定性
+参数、精度与稳定性：
 
 - $\gamma=1/2$ 时，标准 Newmark 家族为二阶；$\gamma>1/2$ 引入算法耗散并通常降为一阶。
 - 对线性无阻尼系统，$2\beta\ge\gamma\ge1/2$ 是常用的无条件稳定条件。
-- $\beta=1/4,\gamma=1/2$ 是平均加速度法；它对线性系统无条件稳定且没有算法高频耗散。
+- $\beta=1/4,\gamma=1/2$ 是平均加速度法；它对线性无阻尼振子无条件稳定且没有算法耗散。
 - $\beta=1/6,\gamma=1/2$ 是线性加速度法，其稳定性受步长限制。
 
-### 4.4 与 ORVD 状态的关系
+### 4.2 ORVD 的坐标形式
 
-经典公式假设 $u$、$v$、$a$ 同维且 $\dot u=v$。若将 Newmark 用于 ORVD 完整车辆，必须用切空间速度和加速度形成位形增量，再通过 retraction 更新含四元数和 Ball-RPY 的 $q$；同时还要为 $z$ 定义与端点平衡耦合的离散方程。因此，欧氏线性结构的有效刚度公式不能直接充当完整 ORVD 多体模型的离散方程。
+把第 1.3 节的坐标系统代入 $\beta=1/4$、$\gamma=1/2$ 的更新式，并对 $z$ 采用梯形离散：
 
-## 5. Zhai 简单显式二步法（仅理论）
+$$
+q_1=q_0+h s_0+\frac{h^2}{4}(b_0+b_1),
+\qquad
+s_1=s_0+\frac h2(b_0+b_1),
+\qquad
+z_1=z_0+\frac h2(g_0+g_1).
+$$
 
-[Zhai 简单显式法](https://doi.org/10.1002/(SICI)1097-0207(19961230)39:24%3C4199::AID-NME39%3E3.0.CO;2-Y)使用当前和前一端点的加速度，并引入两个无量纲参数 $\phi$、$\psi$：
+其中下标 0 表示已接受端点，$b_0$、$g_0$ 是在该端点求得的 $B$、$G$；$b_1$、$z_1$ 为未知量。把 $s_1$ 代回 $q_1$ 可得
+
+$$
+q_1=q_0+\frac h2\,(s_0+s_1),
+$$
+
+因此，在端点方程精确求解且尚未执行投影时，这一格式等价于对一阶系统 $(q,s,z)$ 使用梯形法则；该代数等价不限于线性系统。内变量与机械变量使用同一个离散规则。有限的求解残差和端点投影对实际发布状态的影响，须与基础格式的精度和稳定性质分开考虑，见第 4.4、4.6 节。
+
+端点方程写成未知量 $x=(b_1,z_1)$ 的残差
+
+$$
+\mathcal R(x)=
+\begin{bmatrix}
+b_1-B(t_1,q_1,s_1,z_1)\\
+z_1-z_0-\frac h2\left(g_0+G(t_1,q_1,s_1,z_1)\right)
+\end{bmatrix}
+=0,
+$$
+
+其中 $q_1$、$s_1$ 按上式由 $b_1$ 给出，$t_1$ 是第 6.1 节确定的端点时刻。与有效刚度形式不同，这里不把动力学拆成 $M$、$C$、$K$ 的线性结构，而是对完整残差做 Newton 迭代；接触、力元与主动载荷的全部非线性都保留在 $B$、$G$ 之内。
+
+### 4.3 带尺度的 Newton 迭代
+
+迭代从预测值 $b_1^{(0)}=b_0$、$z_1^{(0)}=z_0+h\,g_0$ 开始。每个残差分量配一个尺度 $\rho_i$，每个未知量配一个参考量级 $r_j$，残差用缩放最大范数度量：
+
+$$
+\lVert\mathcal R\rVert_{\rho}=\max_i\frac{\lvert\mathcal R_i\rvert}{\rho_i}.
+$$
+
+若预测值已满足 $\lVert\mathcal R\rVert_{\rho}\le1$，不迭代即接受。这一分支属于格式的一部分：被接受的端点只在尺度意义下满足端点方程。
+
+否则每次迭代都在当前迭代点重新形成 $\partial\mathcal R/\partial x$ 的前向差分。第 $j$ 列的名义增量为
+
+$$
+\Delta_j=\sqrt{U}\,\max\left(\lvert x_j\rvert,\,r_j\right),
+$$
+
+$U$ 取双精度常量 `DBL_EPSILON`。与第 3.5 节 Radau5 核相同，分母取浮点加法后实际实现的增量；若加法不改变存储值，则改取相邻的可表示数。缩放后的线性系统为
+
+$$
+\hat J_{ij}=\frac{r_j}{\rho_i}\,\frac{\partial\mathcal R_i}{\partial x_j},
+\qquad
+\hat J\,\hat\delta=-\left(\frac{\mathcal R_i}{\rho_i}\right)_i,
+\qquad
+\delta_j=r_j\,\hat\delta_j,
+$$
+
+以全主元 LU 求解后令 $x\leftarrow x+\delta$。修正量按它对端点位置与坐标速度的作用度量：
+
+$$
+\lVert\delta\rVert_{\mathrm{corr}}=
+\max\left(
+\max_i\frac{h^2\lvert\delta b_i\rvert}{4\,\pi_i},\;
+\max_i\frac{h\,\lvert\delta b_i\rvert}{2\,\sigma_i},\;
+\max_k\frac{\lvert\delta z_k\rvert}{\zeta_k}
+\right),
+$$
+
+$\pi_i$、$\sigma_i$、$\zeta_k$ 分别为位置修正、坐标速度修正与内变量修正尺度。迭代在 $\lVert\mathcal R\rVert_{\rho}\le1$ 且 $\lVert\delta\rVert_{\mathrm{corr}}\le1$ 时接受。
+
+尺度按坐标族给出：平动、角度、四元数、力四族各有一组标量。自由体的四个四元数分量取四元数族，三个平动分量取平动族；转动副与 Ball-RPY 坐标取角度族，移动副取平动族；内变量取力族。四元数族的标量乘以该刚体存储四元数在最近一次成功初始化时的范数，使判据与存储量纲一致；这里的初始化包括同步。参考量级 $r_j$ 对坐标取加速度参考，对内变量取力参考。这些尺度只决定 Newton 系统的缩放、迭代的停止与差分扰动，不是物理响应的全局容差。
+
+迭代达到上限仍未接受时，本次尝试被拒绝并交给第 4.5 节处理。差分矩阵奇异、出现非有限值、右端或投影求值失败都不属于可恢复情形。
+
+### 4.4 端点投影
+
+迭代接受后，对每个自由体的四元数块做位置与坐标速度的配对投影：
+
+$$
+\hat q=\frac{q_1}{\lVert q_1\rVert}\,\lVert q_{\mathrm{ref}}\rVert,
+\qquad
+\hat s=N(\hat q)\,N^{+}(q_1)\,s_1.
+$$
+
+位置按比例缩放回参考范数；坐标速度先在投影前的位形上还原为物理角速度，再在投影后的位形上映回坐标速度，所以物理角速度不变，且 $\hat s$ 与 $\hat q$ 正交。其他坐标块不参与投影。$q_{\mathrm{ref}}$ 是最近一次成功初始化时的存储四元数。
+
+投影实际改变了候选状态时，在投影后的端点重新求一次 $B$、$G$；未改变时，沿用收敛迭代最后一次残差求值得到的端点导数。已接受端点的历史 $b_1$、$g_1$ 始终取接受端点的真实 $B$、$G$。未发生投影改变时，加速度未知量与 $B$ 的差由加速度残差尺度约束；发生改变时，两者还包含投影引起的导数变化，历史以重新求值的结果为准。$G$ 本身不是 Newton 未知量。
+
+### 4.5 有界缩步恢复
+
+设名义步长 $H$ 同时是最大步长。一次尝试只在核自身的 Newton 迭代达到上限时被拒绝，处理规则为：
+
+- 被拒绝的尝试步长为 $h$ 时，从同一接受端点以 $h/2$ 重试；接受态、端点导数、投影参考与尺度都不变。
+- 重试步长不得小于 $H/1024$；若下一次重试会低于该下限，本次推进以非线性收敛失败结束。
+- 每连续接受并发布两个子步，计划步长加倍，最多回到 $H$。
+- 步长改变后，时间网格以当前接受端点为新起点重建，见第 6.1 节。
+- 真实停止边界造成的短步按实际剩余时间首次尝试，可以小于下限；它的成功计入连续成功数，但不把计划步长改为该短步。
+- 成功同步把计划步长恢复为 $H$。
+
+每次重试都以实际步长求解第 4.2 节的同一端点方程，收敛后执行同样的端点投影；恢复不更换离散公式。第 4.6 节的性质仍须在各自的适用条件下理解。这一机制只对非线性求解失败作出反应，不估计局部截断误差，也不据此调整步长；它不是误差自适应，也不提供全局精度保证。
+
+### 4.6 数学性质与适用条件
+
+- 梯形法则是二阶、A 稳定、非 L 稳定的。对线性无阻尼振子 $\ddot u=-\omega^2u$、$\omega>0$，放大矩阵的谱半径对任意 $h\omega$ 都等于 1：无条件稳定且没有算法耗散，相对相位误差在 $h\omega\to0$ 时为 $O((h\omega)^2)$。因此，这类高频振荡不会得到额外的算法衰减；这不排除物理阻尼本身的作用。
+- 对刚性的一阶衰减 $\dot z=-\lambda z$，单步放大因子为 $(1-h\lambda/2)/(1+h\lambda/2)$。当 $h\lambda\gg1$ 时它趋于 $-1$，刚性 Maxwell 模态以交替符号保留，而不是被压低。
+- 二阶结论要求解足够光滑，且非线性求解误差得到相应控制；上述放大因子与稳定性分析针对线性方程和未经投影的坐标更新。用于车辆时，它们刻画的是基础格式。端点投影、接触切换与力律折点、有限的 Newton 尺度包括零迭代接受，以及缩步恢复带来的变步长，都须在分析实际误差时计入。
+
+### 4.7 与经典形式的对照
+
+| 项目 | 经典 Newmark | ORVD 采用 |
+|---|---|---|
+| 变量 | 欧氏位移、速度、加速度 $u,v,a$ | 存储坐标 $q$、坐标速度 $s$、坐标加速度 $b$ |
+| 参数 | 一般 $\beta,\gamma$ | 固定 $\beta=1/4$、$\gamma=1/2$ |
+| 加速度 | 由 $Ma=p-Cv-f_{\mathrm{int}}$ 给出 | 由前向动力学与坐标二阶映射给出 $B$ |
+| 端点方程 | 平衡残差；线性情形用有效刚度 | 完整残差 $\mathcal R(b_1,z_1)$，每次迭代重建差分 Jacobian |
+| 内变量 | 通常不含 | $z$ 用梯形离散，与端点方程联立 |
+| 四元数 | 需另行规定 | 存储分量积分，端点配对投影 |
+| 步长 | 更新式使用本步的 $h$，不规定恢复策略 | 名义步长加有界缩步恢复 |
+
+## 5. Zhai 简单显式二步法
+
+### 5.1 参考理论
+
+本节给出经典理论，作为第 5.2、5.3 节的出处。ORVD 只采用常规步 $\varphi=\psi=1/2$ 与启动步 $\varphi=\psi=0$ 两组参数；其他参数取值为 **仅理论**。
+
+[Zhai 简单显式法](https://doi.org/10.1002/(SICI)1097-0207(19961230)39:24%3C4199::AID-NME39%3E3.0.CO;2-Y)使用当前和前一端点的加速度，并引入两个无量纲参数 $\varphi$、$\psi$：
 
 $$
 u_{n+1}=u_n+h v_n+\left(\frac12+\psi\right)h^2a_n-\psi h^2a_{n-1},
 $$
 
 $$
-v_{n+1}=v_n+(1+\phi)h a_n-\phi h a_{n-1}.
+v_{n+1}=v_n+(1+\varphi)h a_n-\varphi h a_{n-1}.
 $$
 
 随后由动力学方程显式求新加速度：
@@ -333,11 +476,9 @@ $$
 a_{n+1}=M^{-1}\left[p_{n+1}-C v_{n+1}-f_{\mathrm{int}}(u_{n+1},v_{n+1})\right].
 $$
 
-这里的“显式”表示在求 $a_{n+1}$ 之前，$u_{n+1}$ 与 $v_{n+1}$ 已由历史量确定。若要保持原方法不求解联立代数方程的计算形式，$M$ 还需是对角质量矩阵。
+这里的“显式”表示在求 $a_{n+1}$ 之前，$u_{n+1}$ 与 $v_{n+1}$ 已由历史量确定。原文要求对角质量矩阵，目的是逐自由度直接算出加速度、不求解联立方程；这是计算组织方式的要求，不是物理假设。
 
-### 5.1 启动与历史
-
-二步法在初始时没有 $a_{-1}$。常用自启动取 $\phi=\psi=0$：
+二步法在初始时没有 $a_{-1}$。常用自启动取 $\varphi=\psi=0$：
 
 $$
 u_1=u_0+h v_0+\frac12h^2a_0,
@@ -345,26 +486,93 @@ u_1=u_0+h v_0+\frac12h^2a_0,
 v_1=v_0+h a_0,
 $$
 
-其中 $a_0$ 由初始动力学平衡给出。正常步骤常取 $\phi=\psi=1/2$，并在形成 $u_{n+1}$、$v_{n+1}$ 后计算 $a_{n+1}$。只有新端点成为方法历史后，$a_n$ 与 $a_{n-1}$ 才向前滚动；改变步长或状态方程时，等步长二步系数不能继续沿用。
+其中 $a_0$ 由初始动力学平衡给出。正常步骤常取 $\varphi=\psi=1/2$。只有新端点成为方法历史后，$a_n$ 与 $a_{n-1}$ 才向前滚动；改变步长或状态方程时，等步长二步系数不能继续沿用。
 
-### 5.2 精度与稳定性
+精度与稳定性：
 
-- $\phi=\psi=1/2$ 的常用形式为二阶，在线性无阻尼分析中没有数值耗散，但存在相位误差。
-- 对无阻尼线性振子，该参数组合的稳定条件为 $h\omega<2$，等价于 $h<T_{\min}/\pi$。
-- 最高可解析频率会限制显式步长；轮轨接触刚度、悬挂刚度和一阶内变量都可能贡献高频时间尺度。
-- 原始公式是固定等步长方法；变步长、缩短末步和稠密输出都需要另行定义相应的数学公式。
+- $\varphi=\psi=1/2$ 的常用形式为二阶。对无阻尼线性振子，放大矩阵的谱半径在 $h\omega<2$ 时等于 1，没有数值耗散但存在相位误差；$h\omega>2$ 时不稳定。这是原文针对无阻尼单自由度问题给出的结论。
+- 对常量线性系统 $M\ddot u+Ku=0$，若 $M$、$K$ 均对称正定，可经实模态变换解耦为无阻尼标量振子，逐模态应用上式得到 $h\omega_{\max}<2$。这是该界推广到多自由度的一组充分条件。含陀螺项、非保守力或内变量耦合时，不能直接套用这一解耦结论。
+- 有阻尼时稳定域另有限制。对孤立标量衰减 $\dot v=-\mu v$、$\mu>0$，速度更新等同于二阶 Adams–Bashforth，衰减稳定区间为 $0<h\mu<1$；强阻尼时间尺度也可能限制步长。
+- 对一般耦合系统的线性稳定性分析，应从实际两步递推构造增广放大矩阵，检查其谱半径及单位圆上的根条件。位置行与速度行的离散系数不同，不能仅把一阶物理 Jacobian 的特征值代入统一的标量稳定域。轮轨接触刚度、悬挂阻尼和一阶内变量都可能影响这一判据。
+- 原始公式是固定等步长方法；变步长、缩短末步和稠密输出都需要另行定义。
 
-### 5.3 与 ORVD 状态的关系
+### 5.2 ORVD 的坐标形式
 
-对 ORVD 完整车辆，Zhai 方法同样需要在切空间中构造位形增量并 retraction 到新 $q$，还需要为 Maxwell 等内变量 $z$ 指定离散方法。把 AB2 直接作用于完整 $[q;v;z]$ 会得到普通一阶多步法，不能称为 Zhai 简单显式法。
+对第 1.3 节的坐标系统，常规步取 $\varphi=\psi=1/2$，内变量采用二阶 Adams–Bashforth：
 
-## 6. 方法比较
+$$
+q_1=q_0+h s_0+h^2\left(b_0-\frac12 b_{-1}\right),
+\qquad
+s_1=s_0+h\left(\frac32 b_0-\frac12 b_{-1}\right),
+\qquad
+z_1=z_0+h\left(\frac32 g_0-\frac12 g_{-1}\right).
+$$
 
-| 方法 | 基本方程 | 主阶数 | 隐式性 | 稳定性要点 | 历史结构 | ORVD 实现状态 |
-|---|---|---:|---|---|---|---|
-| CVODE BDF | 完整一阶 $\dot y=f(t,y)$ | 1–5 | 隐式 | BDF1–2 为 A-stable | 多步历史 | 生产系统最大阶数为 2；源码树另有最大阶数为 5 的实现 |
-| Radau5 | 完整一阶 $\dot y=f(t,y)$ | 5 | 三阶段全隐式 | A-stable、L-stable | 单步阶段与线性化历史 | 源码树已有实现；生产系统当前未采用 |
-| Newmark | 二阶机械平衡 | 通常 2 | 常用形式隐式 | 取决于 $\beta,\gamma$ | 单步端点量 | **仅理论** |
-| Zhai 简单显式法 | 二阶机械加速度 | 2 | 显式 | 受最高频率限制 | 两步加速度历史 | **仅理论** |
+首步以及实际步长与上一步不同的步改用自启动式
 
-BDF 和 Radau5 可直接消费 ORVD 的完整一阶右端。Newmark 与 Zhai 的原始公式利用二阶机械结构；把它们用于含流形位形和一阶内变量的车辆模型时，必须先明确扩展后的离散方程，否则方法名称与实际算法不再等价。
+$$
+q_1=q_0+h s_0+\frac{h^2}{2}\,b_0,
+\qquad
+s_1=s_0+h\,b_0,
+\qquad
+z_1=z_0+h\,g_0,
+$$
+
+即 $\varphi=\psi=0$ 与内变量的显式 Euler。形成 $q_1$、$s_1$ 后先做第 4.4 节的端点投影，再在投影后的端点求一次 $B$、$G$，作为下一步的历史。每个成功步求一次完整右端，不进行 Newton 迭代，也不形成差分 Jacobian。
+
+加速度由前向动力学给出，所以不需要对角质量阵也保持了显式性；前向动力学内部仍有线性代数运算。每次右端求值内部，各轮轨接口的接触计算彼此独立，可以同时进行；这是右端的结构性质，五个方法选项共用。一个 Zhai 步还包括状态递推、坐标转换、端点投影与接受态提交。
+
+### 5.3 数学性质与适用条件
+
+- 在光滑问题和稳定步长域内，常规步的局部状态误差为 $O(h^3)$，全局二阶。启动步的速度和内变量有 $O(h^2)$ 的局部状态误差；若固定时间窗内的启动次数在步长加密时保持有界，仍可保持二阶。固定的控制事件日程符合这一计数条件，但各段仍须满足光滑性、稳定传播及一致的事件处理条件。若每一步都因变步而重新启动，速度和内变量持续使用 Euler 更新，一般退为一阶。
+- 第 5.1 节的 $h\omega_{\max}<2$ 适用于可解耦的无阻尼振子。孤立的 Maxwell 内变量衰减 $\dot z=-(k/c)z$ 由 AB2 推进，其衰减稳定区间要求 $0<h<c/k$。机械与内变量联立后，实际限制应由完整递推的增广放大矩阵分析，不能只检查各孤立子问题或一阶物理 Jacobian 的谱。
+- 无算法耗散的结论只适用于正常等步递推下的无阻尼线性机械振子；它不推广到一般内变量耦合、启动或投影后的更新。
+- 端点投影、接触切换与力律折点同样会使实际误差偏离上述渐近结论。
+
+### 5.4 与经典形式的对照
+
+| 项目 | 经典 Zhai | ORVD 采用 |
+|---|---|---|
+| 变量 | 欧氏位移、速度、加速度 $u,v,a$ | 存储坐标 $q$、坐标速度 $s$、坐标加速度 $b$ |
+| 参数 | 一般 $\varphi,\psi$ | 常规步 $1/2$，启动步 $0$ |
+| 加速度 | $M^{-1}(\cdots)$，宜用对角 $M$ | 前向动力学与坐标二阶映射 |
+| 内变量 | 通常不含 | $z$ 用 AB2，启动步用 Euler |
+| 四元数 | 需另行规定 | 端点配对投影后再求值 |
+| 启动 | 首步自启动 | 首步、步长改变后与同步后自启动 |
+
+## 6. 坐标形式方法的共同部分
+
+### 6.1 时间网格与停止步
+
+两种方法都用网格起点 $t_{\mathrm a}$ 与整数步号 $k$ 构造端点时刻 $t_k=t_{\mathrm a}+k\,h$，以一次融合乘加计算，不累加浮点步长。若某个网格端点与外部停止时刻只相差浮点舍入的量级，端点直接取停止时刻；此时公式系数仍用 $h$，右端求值用该端点时刻。停止时刻落在两个网格端点之间时，最后一步取实际剩余时间。步长改变或到达停止边界后，网格以当前接受端点为新起点。
+
+### 6.2 采样插值
+
+采样时刻不成为积分停靠点。区间内的样本由两端已接受的物理状态逐分量线性插值；四元数块先把两端归一化，必要时翻转其中一端使两者处于同一半球，再线性插值、归一化并乘以参考范数。区间两端逐值复制。插值不求右端，也不改变方法历史或工作量。
+
+### 6.3 初始化与同步
+
+初始化不修复非法状态：四元数块的坐标速度必须与存储四元数正交。每次成功初始化，包括外部输入改变后的同步，都在给定状态上重新求 $B$、$G$，以给定四元数作投影参考，并按其范数重新展开四元数尺度；Newmark 的计划步长恢复为 $H$，Zhai 清空两步历史，下一步使用自启动式。
+
+## 7. 方法比较与源码映射
+
+| 方法 | 基本方程 | 主阶数 | 隐式性 | 稳定性要点 | 历史结构 |
+|---|---|---:|---|---|---|
+| CVODE BDF | 一阶 $\dot y=f(t,y)$ | 1–2 或 1–5 | 隐式 | BDF1–2 为 A 稳定 | 多步历史 |
+| Radau5 | 一阶 $\dot y=f(t,y)$ | 5 | 三阶段全隐式 | A 稳定、L 稳定 | 单步阶段与线性化历史 |
+| Newmark 平均加速度 | 坐标二阶 $(q,s,z)$ | 2 | 隐式，完整 Newton | 基础梯形格式 A 稳定；无阻尼振子无算法耗散 | 单步端点导数 |
+| Zhai | 坐标二阶 $(q,s,z)$ | 2 | 显式 | 条件稳定 | 两步加速度历史 |
+
+表中阶数与稳定性指基础离散格式，适用条件见各节。BDF 与 Radau5 可直接消费 ORVD 的完整一阶右端；Newmark 与 Zhai 经第 1.3 节的坐标桥接消费同一个右端。五个方法选项都由公共系统积分配置显式选择，库不设隐含的默认方法。
+
+| 理论对象 | 主要实现 |
+|---|---|
+| 坐标状态与物理状态的互换、$B$ 与 $G$ 的求值、端点投影、采样插值 | `SystemCoordinateProblem` 的 `MakeCoordinateState`、`CopyPhysicalState`、`Evaluate`、`ProjectEndpoint`、`CopyLinearlyInterpolatedPhysicalState`，见 [`system_coordinate_problem.cc`](../../../libs/integrators/src/system_coordinate_problem.cc) |
+| 速率映射、左伪逆与坐标二阶导 | `MultibodyModel` 的 `MapGeneralizedVelocitiesToPositionDerivatives`、`MapGeneralizedPositionDerivativesToVelocities`、`MapGeneralizedVelocityDerivativesToPositionSecondDerivatives`，见 [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) |
+| 接受态、候选态、投影参考与端点提交 | `CoordinateCoreState`，见 [`coordinate_core_state.h`](../../../libs/integrators/src/coordinate_core_state.h) |
+| Newmark 残差、预测值、差分 Jacobian、缩放 Newton 与修正范数 | `NewmarkCore` 实现中的 `Residual`、`Solve`、`CorrectionNorm`、`Advance`，见 [`newmark_core.cc`](../../../libs/integrators/src/newmark_core.cc) |
+| 四族尺度到坐标的展开 | `NewmarkCoordinateLayout::Expand`，见 [`newmark_coordinate_layout.cc`](../../../libs/integrators/src/newmark_coordinate_layout.cc) |
+| 有界缩步恢复 | `NewmarkRecoveryStepPolicy`，见 [`coordinate_step_policy.h`](../../../libs/integrators/src/coordinate_step_policy.h) |
+| Zhai 常规步与自启动式 | `ZhaiCore` 实现中的 `AdvanceOneStep`，见 [`zhai_core.cc`](../../../libs/integrators/src/zhai_core.cc) |
+| 时间网格、停止步、发布、采样与同步 | `BasicCoordinateAdvancerImplementation` 的 `ChooseStep`、`Advance`、`CopyDenseState`、`Reinitialize`，见 [`basic_coordinate_advancer.h`](../../../libs/integrators/src/basic_coordinate_advancer.h)；端点时刻判据见 [`coordinate_step_time.h`](../../../libs/integrators/src/coordinate_step_time.h) |
+| 公共方法配置 | `NewmarkConfiguration`、`ZhaiConfiguration`，见 [`mechanical_integration_configuration.h`](../../../libs/integrators/include/orvd/integrators/mechanical_integration_configuration.h)；`SystemIntegrationConfiguration`，见 [`system_integration_configuration.h`](../../../libs/integrators/include/orvd/integrators/system_integration_configuration.h) |

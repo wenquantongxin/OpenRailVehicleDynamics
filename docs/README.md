@@ -21,7 +21,7 @@
 | [models_and_algorithms/wheel_rail_contact/](models_and_algorithms/wheel_rail_contact/) | **轮轨接触链九篇**：型面与插值、位姿归约、接触几何、法向力、蠕滑与接触坐标系、Kalker 系数、FASTSIM、单轮模型组装与成对扳手、接触力计划的运动学装配。 |
 | [models_and_algorithms/force_elements/](models_and_algorithms/force_elements/) | **力元六篇**：连接运动学与空间扳手、三向平动弹簧—阻尼、侧滚弹簧—阻尼力偶、串联弹簧—黏性阻尼、奇对称饱和分段线性阻尼、半角中点 RPY 衬套。 |
 | [models_and_algorithms/vehicle_dynamics/](models_and_algorithms/vehicle_dynamics/) | **整车动力学两篇**：整车多体动力学方程（刚体树、速率映射、铰接体前向动力学与完整右端装配）、起动状态装配。 |
-| [models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md](models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md) | **时间积分方法**：BDF、Radau5、Newmark 与 Zhai 的计算公式、差分 Jacobian 的形成、误差稳定性及 ORVD 状态适用边界。 |
+| [models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md](models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md) | **时间积分方法**：一阶状态与坐标二阶两种方程形态；BDF 与 Radau5 的离散公式和差分 Jacobian；Newmark 与 Zhai 的经典参考理论及 ORVD 坐标形式；误差、稳定性与源码映射。 |
 
 ## 当前权威文件
 
@@ -32,9 +32,10 @@
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md](planning/rail_vehicle_dynamics_migration/MIGRATION_OBSERVATIONS.md) | **车辆迁移协作观察簿**：Codex、Claude 等共同维护的源码事实、规划初期五组只读清单快照、假设和开放问题。 |
 | [planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md](planning/rail_vehicle_dynamics_migration/SIMPACK_ORVD_MODEL_DIFFERENCE_WATCHLIST.md) | **参考模型差异观察表**：登记 GZ18／IRW 的 SIMPACK 参考模型与 ORVD 动力学模型之间可能被宏观闭合掩盖的差异及其筛查结论。 |
 | [planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md](planning/rail_vehicle_dynamics_migration/MIGRATION_ROADMAP.md) | **已完成车辆迁移路书**：覆盖 GZ18 首次短窗与不平顺长窗、IRW 被动、IRW 100 Hz 全状态控制与转矩指令调理，以及 G82 现有库跨平台构建与可重定位安装验证；现已封存。 |
-| [planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md](planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md) | **时间积分器迁移路书**：保留 CVODE BDF 默认，优先搬运并资格化 Radau5；Newmark 与 Zhai 仅登记为后续待做。 |
+| [planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md](planning/integrator_migration/INTEGRATOR_MIGRATION_ROADMAP.md) | **时间积分器迁移路书（历史记录）**：Radau5 搬运与资格化的实施顺序、完成门和阶段状态；现行五种方法经统一公共配置显式选择。 |
 | [performance/README.md](performance/README.md) | **计算性能文档入口**：统一计时术语、证据存放方式和直接替换纪律。 |
 | [performance/platform_evaluations/MACOS_APPLE_SILICON.md](performance/platform_evaluations/MACOS_APPLE_SILICON.md) | **macOS Apple silicon 计算评价**：工具链、多 worker、四工况计时、资源与固定槽确定性。 |
+| [performance/integrator_evaluations/LINUX_X86_64_SINGLE_THREAD.md](performance/integrator_evaluations/LINUX_X86_64_SINGLE_THREAD.md) | **时间积分方法单线程计算评价**：CVODE、Zhai、Newmark 在四个资格工况上的计算量、墙钟及相对 Radau5 参考轨迹的差值。 |
 | [performance/PERFORMANCE_MIGRATION_ROADMAP.md](performance/PERFORMANCE_MIGRATION_ROADMAP.md) | **现行计算性能路书**：把 GZ18 专项分支中可复用的轮轨接触、Jacobian 和观测优化重新落位到现行主线，按候选性质分层资格并以一个 GZ18、两个 IRW 代表长窗收口。 |
 | [performance/GZ18_PERFORMANCE_BRANCH_ARCHIVE.md](performance/GZ18_PERFORMANCE_BRANCH_ARCHIVE.md) | **GZ18 专项性能分支档案**：压缩记录历史最快组合、热点、已接受／否决方向及向 IRW 迁移的边界；不代表现行主线速度。 |
 | [engineering/FIRST_PARTY_ENGINEERING_RULES.md](engineering/FIRST_PARTY_ENGINEERING_RULES.md) | **第一方工程约束**：命名、兼容层、输入解析、检查深度、热路径与验收依据；即刻生效。 |

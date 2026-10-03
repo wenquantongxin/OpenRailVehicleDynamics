@@ -2,7 +2,7 @@
 
 # BDF, Radau5, Newmark and Zhai time-integration methods
 
-This chapter explains how BDF, the three-stage fifth-order Radau IIA method, Newmark methods and Zhai's simple explicit method advance continuous equations of motion to discrete states. It also discusses their error, stability and compatibility with ORVD's state structure. The ORVD production system currently uses CVODE BDF with maximum order 2, while the source tree also contains CVODE BDF with maximum order 5 and a Radau5 implementation. Newmark and Zhai have not been implemented and are marked **theory only** here.
+This chapter explains how BDF, the three-stage fifth-order Radau IIA method, the Newmark average-acceleration method and Zhai's simple explicit method advance continuous equations of motion to discrete states, and discusses their error, stability and compatibility with ORVD's state structure. ORVD implements five method options: CVODE BDF with maximum order 2 or 5, Radau5, the Newmark average-acceleration method with bounded step recovery, and Zhai's simple explicit method. All five are selected explicitly through one public system-integration configuration. BDF and Radau5 act directly on the first-order state; Newmark and Zhai act on the coordinate second-order form of section 1.3. Parts of the classical theory in sections 4.1 and 5.1 that ORVD does not adopt are marked **theory only**.
 
 ## 1. Equation forms and common notation
 
@@ -54,11 +54,45 @@ M(u)a+C(u,v)v+f_{\mathrm{int}}(u,v,z)=p(t),
 \dot u=v.
 $$
 
-Here $u$ is Euclidean displacement, used as in sections 4 and 5 and distinct from the generalized position $q$ of section 1.1; $a$ is acceleration and $p$ is the external load. $M$ is the system mass matrix. The product $C(u,v)v$ collects velocity-dependent inertial terms such as Coriolis and centrifugal effects together with viscous damping. $f_{\mathrm{int}}$ holds the remaining internal forces, including elastic restoring forces and element forces that depend on the internal variables $z$.
+Here $u$ is Euclidean displacement, used as in sections 4.1 and 5.1 and distinct from the generalized position $q$ of section 1.1; $a$ is acceleration and $p$ is the external load. $M$ is the system mass matrix. The product $C(u,v)v$ collects velocity-dependent inertial terms such as Coriolis and centrifugal effects together with viscous damping. $f_{\mathrm{int}}$ holds the remaining internal forces, including elastic restoring forces and element forces that depend on the internal variables $z$.
 
-This form is natural for Euclidean coordinates in which displacement, velocity and acceleration have equal dimensions. A general multibody system must instead update its configuration through a tangent-space increment and a retraction, while first-order internal variables $z$ require their own discrete equations. Without these extensions, directly applying a first-order integration formula to $[q;v;z]$ produces a different first-order state method rather than the classical Newmark or Zhai method.
+This form is natural for Euclidean coordinates in which displacement, velocity and acceleration have equal dimensions. There are two routes to a multibody configuration with quaternions and Ball-RPY coordinates. One forms the configuration increment in the tangent space and returns to the configuration manifold through a retraction. The other uses the second-order equation of the configuration coordinates themselves, integrates the stored coordinates and projects the endpoint back onto the constraint set. ORVD follows the second route, described in section 1.3; the first is **theory only** in this chapter. On either route the first-order internal variables $z$ need their own discretization.
 
-### 1.3 Error scaling
+### 1.3 Coordinate second-order form
+
+In ORVD, Newmark and Zhai act on the second-order equation of the configuration coordinates. Define the coordinate velocity and the coordinate acceleration
+
+$$
+s=\dot q=N(q)v,
+\qquad
+b=\ddot q=N(q)\dot v+\dot N(q,v)\,v,
+$$
+
+where $\dot N(q,v)$ is the time derivative of $N(q)$ along the motion. For the quaternion block of a free body, the corresponding four components of $s$ are the time derivatives of the stored quaternion and differ in dimension from the physical angular velocity; for single-axis joints, Ball-RPY and translational coordinates, $s$ is simply the time derivative of the coordinate.
+
+With the coordinate state $(q,s,z)$ in place of the physical state $(q,v,z)$, the complete right-hand side becomes
+
+$$
+\dot q=s,
+\qquad
+\dot s=B(t,q,s,z),
+\qquad
+\dot z=G(t,q,s,z),
+$$
+
+$$
+B(t,q,s,z)=N(q)\,a\left(t,q,N^{+}(q)s,z\right)+\dot N\left(q,N^{+}(q)s\right)N^{+}(q)s,
+\qquad
+G(t,q,s,z)=g\left(t,q,N^{+}(q)s,z\right).
+$$
+
+Here $a$ and $g$ are the $\dot v$ and $\dot z$ parts of the right-hand side in section 1.1, and $N^{+}(q)$ is the left pseudo-inverse of the rate map; see section 3.1 of [Multibody equations of motion](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.en.md). On an exact solution $s$ lies in the range of $N(q)$ and $N^{+}$ recovers the physical velocity exactly. Newton trials and explicit predictions produce values of $s$ outside that range, for example a quaternion block with a radial component along $q$; $N^{+}$ then projects $s$ onto the range before recovering the velocity. This extension permits trials with non-tangent coordinate velocities within the valid configuration domain and agrees with the original equation on exact solutions; it does not enlarge the domains of the rate maps, contact geometry or other physical evaluations.
+
+$B$ is evaluated in this order: recover the physical velocity through $N^{+}$, evaluate the complete right-hand side of section 1.1, take $\dot v$ and $\dot z$, and let the multibody model map $\dot v$ to the coordinate second derivative. The mass matrix appears only inside forward dynamics, the articulated-body algorithm of section 6 of the vehicle chapter; the integration formulas themselves never form or solve with a mass matrix.
+
+The price of the coordinate form is that the discrete equations no longer preserve the stored quaternion norm. For each quaternion block, the exact flow satisfies $q^{\mathsf T}s=0$ and keeps the stored norm constant, whereas a discrete update generally lets it drift. ORVD projects quaternions back to their reference norm at every accepted endpoint, as described in section 4.4. Zero-norm quaternions and the singular pitch domain of Ball-RPY are rejected by geometry and rate-map domain checks; the integrator does not repair them.
+
+### 1.4 Error scaling
 
 State components have different physical dimensions. An adaptive method can combine a relative tolerance and componentwise absolute tolerances into the weights
 
@@ -147,7 +181,7 @@ $$
 \end{cases}
 $$
 
-Here $U$ is CVODE's unit roundoff, `DBL_EPSILON` in double precision; $w_j$ is the error weight the solver holds for the current step and keeps fixed throughout this batch of differences, formed as in section 1.3 from `rtol` and `atol` at the step's reference state $y^{(w)}$, which need not be the trial point at which the differences are taken, and $\lVert\cdot\rVert_{\mathrm{WRMS}}$ is the weighted norm of the same section; $h$ is the current internal step size; and $\mu=1000$ is the dimensionless constant that defines the increment floor $\Delta_{\min}$. The first term makes the increment proportional to the magnitude of the component itself, the usual compromise of a one-sided difference between truncation and roundoff error. The second term keeps the increment from vanishing as $y_j$ approaches zero: $\Delta_{\min}$ measures, through $\lvert h\rvert\,\lVert f\rVert_{\mathrm{WRMS}}$, the weighted size of the state change over one step, and $1/w_j=\operatorname{rtol}\lvert y^{(w)}_j\rvert+\operatorname{atol}_j$ converts it to the units of component $j$. The denominator of the quotient is the nominal increment $\Delta_j$, not the increment actually realized after floating-point addition; this differs from the Radau5 core of section 3.5.
+Here $U$ is CVODE's unit roundoff, `DBL_EPSILON` in double precision; $w_j$ is the error weight the solver holds for the current step and keeps fixed throughout this batch of differences, formed as in section 1.4 from `rtol` and `atol` at the step's reference state $y^{(w)}$, which need not be the trial point at which the differences are taken, and $\lVert\cdot\rVert_{\mathrm{WRMS}}$ is the weighted norm of the same section; $h$ is the current internal step size; and $\mu=1000$ is the dimensionless constant that defines the increment floor $\Delta_{\min}$. The first term makes the increment proportional to the magnitude of the component itself, the usual compromise of a one-sided difference between truncation and roundoff error. The second term keeps the increment from vanishing as $y_j$ approaches zero: $\Delta_{\min}$ measures, through $\lvert h\rvert\,\lVert f\rVert_{\mathrm{WRMS}}$, the weighted size of the state change over one step, and $1/w_j=\operatorname{rtol}\lvert y^{(w)}_j\rvert+\operatorname{atol}_j$ converts it to the units of component $j$. The denominator of the quotient is the nominal increment $\Delta_j$, not the increment actually realized after floating-point addition; this differs from the Radau5 core of section 3.5.
 
 In the implementation the differencing is organized in one of two ways, both of which define the same finite-difference Jacobian by the same increment rule and the same denominator. The first is the built-in difference quotient of CVODE's dense linear solver. The second is ORVD's own column provider: `DenseFiniteDifferenceJacobianProvider` in [`dense_finite_difference_jacobian_provider.h`](../../../libs/integrators/src/dense_finite_difference_jacobian_provider.h) is responsible only for the perturbed derivatives $f(t,y+\Delta_j\mathbf e_j)$ of the columns, and its system implementation, `CalcPerturbedDerivatives` in [`system_continuous_state_backend.cc`](../../../libs/integrators/src/system_continuous_state_backend.cc), copies $y$ for each column in a separate trial context, adds $\Delta_j$ and calls the complete right-hand side of section 1.1; the increments $\Delta_j$, the baseline derivative $f(t,y)$ and the quotient itself are held by `EvaluateDenseJacobian` in [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) according to the formulas above, and the provider contains no differencing formula.
 
@@ -162,7 +196,7 @@ The finite-difference Jacobian does not change the BDF nonlinear residual equati
 
 ### 2.5 Implementation in ORVD
 
-`CvodeContinuousStateAdvancer` in [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) constructs the CVODE backend with `CV_BDF` and fixes the maximum order to either 2 or 5. The production system currently uses the maximum-order-two form, while the source tree also retains the maximum-order-five form. The map from the complete $[q;v;z]$ state to the system right-hand side is `SystemRhsBridge::CalcTimeDerivatives`, cited in section 1.1. Dense output is supplied by CVODE's history polynomial over the most recent internal step.
+`CvodeContinuousStateAdvancer` in [`cvode_continuous_state_advancer.cc`](../../../libs/integrators/src/cvode_continuous_state_advancer.cc) constructs the CVODE backend with `CV_BDF` and fixes the maximum order to either 2 or 5. Maximum orders 2 and 5 correspond to two method options of the public configuration. The map from the complete $[q;v;z]$ state to the system right-hand side is `SystemRhsBridge::CalcTimeDerivatives`, cited in section 1.1. Dense output is supplied by CVODE's history polynomial over the most recent internal step.
 
 ## 3. Radau5: three-stage fifth-order Radau IIA
 
@@ -240,7 +274,7 @@ The method is A-stable, and $\mathcal R(\zeta)\to0$ as $|\zeta|\to\infty$ in the
 
 ### 3.5 Implementation in ORVD
 
-`radau5::Core::AdvanceOneAcceptedStepToward` in [`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) implements only the ordinary-differential form $y'=f(t,y)$: the ODE mass matrix of the classical RADAU5 interface is the identity, the source carries no such term, and a general mass-matrix form is not supported. This is unrelated to the mechanical mass matrix $M(u)$ of section 1.2. The core uses a dense Jacobian, three-stage fifth-order Radau IIA, adaptive error control and collocation dense output over the latest successful step, and it performs simplified Newton iteration through one real and one complex linear system. `Radau5ContinuousStateAdvancer` in [`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) connects that core to the same complete first-order state right-hand side used by BDF. Radau5 is implemented in the source tree, while the production system currently remains on CVODE BDF with maximum order 2.
+`radau5::Core::AdvanceOneAcceptedStepToward` in [`radau5_core.cc`](../../../external/radau5/src/radau5_core.cc) implements only the ordinary-differential form $y'=f(t,y)$: the ODE mass matrix of the classical RADAU5 interface is the identity, the source carries no such term, and a general mass-matrix form is not supported. This is unrelated to the mechanical mass matrix $M(u)$ of section 1.2. The core uses a dense Jacobian, three-stage fifth-order Radau IIA, adaptive error control and collocation dense output over the latest successful step, and it performs simplified Newton iteration through one real and one complex linear system. `Radau5ContinuousStateAdvancer` in [`radau5_continuous_state_advancer.cc`](../../../libs/integrators/src/radau5_continuous_state_advancer.cc) connects that core to the same complete first-order state right-hand side used by BDF. Radau5 is likewise one method option of the public configuration.
 
 The Radau5 core forms the dense Jacobian required by section 3.2 itself and does not borrow the column provider of section 2.3: `ComputeJacobian` of `radau5::Core` takes one-sided difference quotients of the same complete right-hand side, column by column, at the current accepted endpoint $(t_n,y_n)$; the perturbation is again applied to stored components, and $t_n$ and the inputs that are not part of the continuous state are held fixed. The nominal increment of column $j$ is
 
@@ -258,9 +292,13 @@ $$
 
 where $\hat y$ differs from $y_n$ only in component $j$. The denominator thus agrees with the perturbation actually applied, avoiding a mismatch between the nominal denominator and the actual perturbation; the rounding error of the right-hand-side evaluations themselves remains in the quotient. The resulting $J$ enters the real and complex systems of section 3.2 and is reused across Newton iterations and neighboring steps as described there.
 
-## 4. Newmark: a family of one-step methods for second-order mechanical systems (theory only)
+## 4. Newmark: the average-acceleration method
 
-The [Newmark method](https://doi.org/10.1061/JMCEA3.0000098) parameterizes displacement and velocity updates by endpoint acceleration. Given $u_n$, $v_n$, $a_n$ and the two dimensionless parameters $\beta$ and $\gamma$, its basic formulas are
+### 4.1 Reference theory: the Newmark family
+
+This section states the classical theory as the source of sections 4.2 to 4.6. ORVD implements only the average-acceleration member $\beta=1/4$, $\gamma=1/2$; the general parameter family, the linear solution through an effective stiffness and the explicit branch $\beta=0$ are **theory only**.
+
+The [Newmark method](https://doi.org/10.1061/JMCEA3.0000098) parameterizes the displacement and velocity updates with endpoint accelerations. Given $u_n$, $v_n$, $a_n$ and two dimensionless parameters $\beta$ and $\gamma$, its basic formulas are
 
 $$
 u_{n+1}=u_n+h v_n+h^2\left[\left(\frac12-\beta\right)a_n+\beta a_{n+1}\right],
@@ -270,74 +308,177 @@ $$
 v_{n+1}=v_n+h\left[(1-\gamma)a_n+\gamma a_{n+1}\right].
 $$
 
-### 4.1 Implicit equilibrium
-
-Implicit Newmark also requires equilibrium at the new endpoint:
+Implicit Newmark also requires the new endpoint to satisfy dynamic equilibrium,
 
 $$
 \mathbf r^{\mathrm{eq}}_{n+1}
 =p_{n+1}-M a_{n+1}-C v_{n+1}
--f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0.
+-f_{\mathrm{int}}(u_{n+1},v_{n+1},z_{n+1})=0,
 $$
 
-The initial acceleration follows from the initial dynamic equilibrium, for example
+and the initial acceleration follows from initial equilibrium, $M a_0=p_0-Cv_0-f_{\mathrm{int}}(u_0,v_0,z_0)$.
 
-$$
-M a_0=p_0-Cv_0-f_{\mathrm{int}}(u_0,v_0,z_0).
-$$
-
-### 4.2 Effective stiffness for a linear system
-
-For constant $M,C,K$, $f_{\mathrm{int}}=Ku$ and $\beta>0$, define
-
-$$
-\kappa_0=\frac{1}{\beta h^2},
-\qquad
-\kappa_1=\frac{\gamma}{\beta h}.
-$$
-
-With $u_{n+1}$ as the unknown, the effective stiffness is
+For constant $M,C,K$, $f_{\mathrm{int}}=Ku$ and $\beta>0$, define $\kappa_0=1/(\beta h^2)$ and $\kappa_1=\gamma/(\beta h)$. The effective stiffness with $u_{n+1}$ as unknown is
 
 $$
 K_{\mathrm{eff}}=K+\kappa_1C+\kappa_0M.
 $$
 
-A nonlinear system iterates on the endpoint equilibrium residual. If $M$, $C$ or the load depends on state, a consistent tangent also contains the derivatives of those terms with respect to $u_{n+1}$. The case $\beta=0$ belongs to the explicit Newmark branch and cannot use an effective-stiffness expression containing $1/\beta$.
+A nonlinear system iterates on the endpoint equilibrium residual; when $M$, $C$ or the loads depend on the state, a consistent tangent must include their derivatives with respect to $u_{n+1}$. The case $\beta=0$ is the explicit branch and cannot use an effective-stiffness formula containing $1/\beta$.
 
-### 4.3 Parameters, accuracy and stability
+Parameters, accuracy and stability:
 
-- The standard Newmark family is second order when $\gamma=1/2$; $\gamma>1/2$ introduces algorithmic dissipation and is generally first order.
-- For a linear undamped system, $2\beta\ge\gamma\ge1/2$ is a commonly used unconditional-stability condition.
-- $\beta=1/4,\gamma=1/2$ gives the average-acceleration method, which is unconditionally stable for a linear system and has no algorithmic high-frequency dissipation.
-- $\beta=1/6,\gamma=1/2$ gives the linear-acceleration method, whose stability is step-size limited.
+- With $\gamma=1/2$ the standard Newmark family is second order; $\gamma>1/2$ introduces algorithmic dissipation and usually reduces the order to one.
+- For linear undamped systems, $2\beta\ge\gamma\ge1/2$ is the usual condition for unconditional stability.
+- $\beta=1/4,\gamma=1/2$ is the average-acceleration method; it is unconditionally stable for linear undamped oscillators and has no algorithmic dissipation.
+- $\beta=1/6,\gamma=1/2$ is the linear-acceleration method, whose stability is limited by the step size.
 
-### 4.4 Relation to ORVD's state
+### 4.2 The coordinate form in ORVD
 
-The classical formulas assume equal-dimensional $u$, $v$ and $a$ with $\dot u=v$. Applying Newmark to a complete ORVD vehicle would require forming configuration increments from tangent-space velocity and acceleration, retracting them to a $q$ that contains quaternion and Ball-RPY coordinates, then defining a discrete equation for $z$ coupled to endpoint equilibrium. The effective-stiffness formula for a Euclidean linear structure therefore cannot directly serve as the discrete equation for the complete ORVD multibody model.
+Substituting the coordinate system of section 1.3 into the updates with $\beta=1/4$, $\gamma=1/2$, and discretizing $z$ with the trapezoidal rule, gives
 
-## 5. Zhai's simple explicit two-step method (theory only)
+$$
+q_1=q_0+h s_0+\frac{h^2}{4}(b_0+b_1),
+\qquad
+s_1=s_0+\frac h2(b_0+b_1),
+\qquad
+z_1=z_0+\frac h2(g_0+g_1).
+$$
 
-[Zhai's simple explicit method](https://doi.org/10.1002/(SICI)1097-0207(19961230)39:24%3C4199::AID-NME39%3E3.0.CO;2-Y) uses the current and previous endpoint accelerations and introduces two dimensionless parameters $\phi$ and $\psi$:
+Subscript 0 denotes the accepted endpoint, where $b_0$ and $g_0$ are the evaluated $B$ and $G$; $b_1$ and $z_1$ are the unknowns. Substituting $s_1$ into $q_1$ gives
+
+$$
+q_1=q_0+\frac h2\,(s_0+s_1),
+$$
+
+Thus, when the endpoint equations are solved exactly and before projection, the scheme is equivalent to the trapezoidal rule applied to the first-order system $(q,s,z)$; this algebraic equivalence is not restricted to linear systems. The internal and mechanical variables share one discretization rule. The effects of finite solution residuals and endpoint projection on the published state must be considered separately from the accuracy and stability properties of the underlying scheme; see sections 4.4 and 4.6.
+
+The endpoint equation is the residual in the unknown $x=(b_1,z_1)$,
+
+$$
+\mathcal R(x)=
+\begin{bmatrix}
+b_1-B(t_1,q_1,s_1,z_1)\\
+z_1-z_0-\frac h2\left(g_0+G(t_1,q_1,s_1,z_1)\right)
+\end{bmatrix}
+=0,
+$$
+
+with $q_1$ and $s_1$ given by $b_1$ through the formulas above, and $t_1$ the endpoint time of section 6.1. Unlike the effective-stiffness form, the dynamics are not split into the linear structure $M$, $C$, $K$; Newton iteration acts on the complete residual, and all nonlinearity of contact, force elements and active loads stays inside $B$ and $G$.
+
+### 4.3 Scaled Newton iteration
+
+The iteration starts from the predictor $b_1^{(0)}=b_0$, $z_1^{(0)}=z_0+h\,g_0$. Each residual component has a scale $\rho_i$ and each unknown a reference magnitude $r_j$, and the residual is measured in the scaled maximum norm
+
+$$
+\lVert\mathcal R\rVert_{\rho}=\max_i\frac{\lvert\mathcal R_i\rvert}{\rho_i}.
+$$
+
+If the predictor already satisfies $\lVert\mathcal R\rVert_{\rho}\le1$, it is accepted without iteration. This branch is part of the scheme: an accepted endpoint satisfies the endpoint equation only in the sense of the scales.
+
+Otherwise each iteration forms a fresh forward-difference $\partial\mathcal R/\partial x$ at the current iterate. The nominal increment of column $j$ is
+
+$$
+\Delta_j=\sqrt{U}\,\max\left(\lvert x_j\rvert,\,r_j\right),
+$$
+
+where $U$ is the double-precision constant `DBL_EPSILON`. As in the Radau5 core of section 3.5, the divisor is the increment actually realized by the floating-point addition; if the addition leaves the stored value unchanged, the adjacent representable value is used. The scaled linear system is
+
+$$
+\hat J_{ij}=\frac{r_j}{\rho_i}\,\frac{\partial\mathcal R_i}{\partial x_j},
+\qquad
+\hat J\,\hat\delta=-\left(\frac{\mathcal R_i}{\rho_i}\right)_i,
+\qquad
+\delta_j=r_j\,\hat\delta_j,
+$$
+
+solved by fully pivoted LU, after which $x\leftarrow x+\delta$. The correction is measured by its effect on the endpoint position and coordinate velocity:
+
+$$
+\lVert\delta\rVert_{\mathrm{corr}}=
+\max\left(
+\max_i\frac{h^2\lvert\delta b_i\rvert}{4\,\pi_i},\;
+\max_i\frac{h\,\lvert\delta b_i\rvert}{2\,\sigma_i},\;
+\max_k\frac{\lvert\delta z_k\rvert}{\zeta_k}
+\right),
+$$
+
+where $\pi_i$, $\sigma_i$ and $\zeta_k$ are the position-correction, coordinate-velocity-correction and internal-variable-correction scales. An iterate is accepted when $\lVert\mathcal R\rVert_{\rho}\le1$ and $\lVert\delta\rVert_{\mathrm{corr}}\le1$.
+
+The scales are given per coordinate family: translation, angle, quaternion and force each carry one set of scalars. The four quaternion components of a free body take the quaternion family and its three translational components the translation family; revolute and Ball-RPY coordinates take the angle family and prismatic coordinates the translation family; internal variables take the force family. The quaternion-family scalars are multiplied by the stored quaternion norm of the body at the latest successful initialization, so that the criteria match the stored dimension; initialization here includes synchronization. The reference magnitude $r_j$ is the acceleration reference for coordinates and the force reference for internal variables. These scales only determine the scaling of the Newton system, the stopping of the iteration and the difference perturbations; they are not global tolerances on the physical response.
+
+When the iteration limit is reached without acceptance, the attempt is rejected and handled by section 4.5. A singular difference matrix, non-finite values and failures of the right-hand side or projection evaluations are not recoverable.
+
+### 4.4 Endpoint projection
+
+After acceptance, each free-body quaternion block receives a paired projection of position and coordinate velocity:
+
+$$
+\hat q=\frac{q_1}{\lVert q_1\rVert}\,\lVert q_{\mathrm{ref}}\rVert,
+\qquad
+\hat s=N(\hat q)\,N^{+}(q_1)\,s_1.
+$$
+
+The position is rescaled to the reference norm. The coordinate velocity is first recovered as a physical angular velocity on the unprojected configuration and then mapped back on the projected configuration, so the physical angular velocity is unchanged and $\hat s$ is orthogonal to $\hat q$. Other coordinate blocks are not projected. $q_{\mathrm{ref}}$ is the stored quaternion at the latest successful initialization.
+
+When the projection actually changes the candidate, $B$ and $G$ are evaluated once more at the projected endpoint; otherwise the endpoint derivatives from the last residual evaluation of the converged iteration are kept. The history $b_1$, $g_1$ always contains the actual $B$, $G$ at the accepted endpoint. Without a projection change, the difference between the acceleration unknown and $B$ is bounded by the acceleration residual scales. With a change, that difference also includes the change in the derivative caused by projection, and history uses the newly evaluated values. $G$ itself is not a Newton unknown.
+
+### 4.5 Bounded step recovery
+
+Let the nominal step $H$ also be the maximum step. An attempt is rejected only when the core's own Newton iteration reaches its limit, with these rules:
+
+- A rejected attempt of step $h$ is retried from the same accepted endpoint with $h/2$; the accepted state, endpoint derivatives, projection reference and scales are unchanged.
+- A retry step may not fall below $H/1024$; if the next retry would, the advance ends with a nonlinear convergence failure.
+- After every two consecutive accepted and published substeps, the planned step doubles, up to $H$.
+- After a step change, the time grid is rebuilt from the current accepted endpoint; see section 6.1.
+- A short step imposed by a genuine stop boundary is first attempted with the actual remaining time and may be below the floor; its success counts toward consecutive successes but does not set the planned step to that short step.
+- A successful synchronization restores the planned step to $H$.
+
+Each retry solves the same endpoint equations of section 4.2 with the actual step size and applies the same endpoint projection after convergence; recovery does not change the discretization formulas. The properties in section 4.6 remain subject to their stated conditions. The mechanism responds only to nonlinear solution failure; it estimates no local truncation error and does not adjust steps on such an estimate. It is not error adaptivity and gives no global accuracy guarantee.
+
+### 4.6 Mathematical properties and conditions of applicability
+
+- The trapezoidal rule is second order, A-stable and not L-stable. For the linear undamped oscillator $\ddot u=-\omega^2u$, $\omega>0$, the spectral radius of the amplification matrix equals 1 for every $h\omega$: the scheme is unconditionally stable without algorithmic dissipation, with relative phase error $O((h\omega)^2)$ as $h\omega\to0$. Such high-frequency oscillations receive no additional algorithmic damping; this does not exclude the effect of physical damping.
+- For a stiff first-order decay $\dot z=-\lambda z$, the one-step amplification factor is $(1-h\lambda/2)/(1+h\lambda/2)$. When $h\lambda\gg1$ it tends to $-1$, so stiff Maxwell modes persist with alternating sign instead of being suppressed.
+- Second-order accuracy requires a sufficiently smooth solution and corresponding control of nonlinear solution error; the amplification factors and stability analysis above concern linear equations and unprojected coordinate updates. For a vehicle they characterize the underlying scheme. Endpoint projection, contact switching and force-law kinks, finite Newton scales including zero-iteration acceptance, and the variable steps introduced by recovery must all be included when assessing the actual error.
+
+### 4.7 Comparison with the classical form
+
+| Item | Classical Newmark | Adopted in ORVD |
+|---|---|---|
+| Variables | Euclidean displacement, velocity, acceleration $u,v,a$ | Stored coordinates $q$, coordinate velocity $s$, coordinate acceleration $b$ |
+| Parameters | General $\beta,\gamma$ | Fixed $\beta=1/4$, $\gamma=1/2$ |
+| Acceleration | From $Ma=p-Cv-f_{\mathrm{int}}$ | $B$ from forward dynamics and the coordinate second-order map |
+| Endpoint equation | Equilibrium residual; effective stiffness in the linear case | Complete residual $\mathcal R(b_1,z_1)$ with a fresh difference Jacobian at every iteration |
+| Internal variables | Usually absent | $z$ discretized by the trapezoidal rule and solved together with the endpoint equation |
+| Quaternions | Must be specified separately | Stored components integrated, paired projection at the endpoint |
+| Step size | Updates use the current $h$ without specifying recovery | Nominal step with bounded step recovery |
+
+## 5. Zhai's simple explicit two-step method
+
+### 5.1 Reference theory
+
+This section states the classical theory as the source of sections 5.2 and 5.3. ORVD adopts only two parameter sets, $\varphi=\psi=1/2$ for regular steps and $\varphi=\psi=0$ for startup steps; other parameter values are **theory only**.
+
+[Zhai's simple explicit method](https://doi.org/10.1002/(SICI)1097-0207(19961230)39:24%3C4199::AID-NME39%3E3.0.CO;2-Y) uses the accelerations of the current and previous endpoints and introduces two dimensionless parameters $\varphi$ and $\psi$:
 
 $$
 u_{n+1}=u_n+h v_n+\left(\frac12+\psi\right)h^2a_n-\psi h^2a_{n-1},
 $$
 
 $$
-v_{n+1}=v_n+(1+\phi)h a_n-\phi h a_{n-1}.
+v_{n+1}=v_n+(1+\varphi)h a_n-\varphi h a_{n-1}.
 $$
 
-The new acceleration is then obtained explicitly from the equation of motion:
+The new acceleration then follows explicitly from the equation of motion:
 
 $$
 a_{n+1}=M^{-1}\left[p_{n+1}-C v_{n+1}-f_{\mathrm{int}}(u_{n+1},v_{n+1})\right].
 $$
 
-Here “explicit” means that $u_{n+1}$ and $v_{n+1}$ are already determined from history before $a_{n+1}$ is evaluated. Retaining the original method's computational form without solving simultaneous algebraic equations additionally requires a diagonal mass matrix $M$.
+"Explicit" means that $u_{n+1}$ and $v_{n+1}$ are fixed by history before $a_{n+1}$ is computed. The original method asks for a diagonal mass matrix so that accelerations are obtained degree of freedom by degree of freedom without solving coupled equations; this is a requirement of the computational organization, not a physical assumption.
 
-### 5.1 Startup and history
-
-The two-step method has no $a_{-1}$ at startup. A common self-starting choice takes $\phi=\psi=0$:
+A two-step method has no $a_{-1}$ at the start. The usual self-starting step takes $\varphi=\psi=0$:
 
 $$
 u_1=u_0+h v_0+\frac12h^2a_0,
@@ -345,26 +486,93 @@ u_1=u_0+h v_0+\frac12h^2a_0,
 v_1=v_0+h a_0,
 $$
 
-where $a_0$ follows from initial dynamic equilibrium. Normal steps commonly use $\phi=\psi=1/2$ and calculate $a_{n+1}$ after forming $u_{n+1}$ and $v_{n+1}$. The pair $a_n$ and $a_{n-1}$ advances only when the new endpoint becomes part of the method history. If the step size or state equation changes, the uniform-step two-step coefficients cannot continue unchanged.
+where $a_0$ follows from initial dynamic equilibrium. Regular steps commonly take $\varphi=\psi=1/2$. Only after a new endpoint enters the method history do $a_n$ and $a_{n-1}$ roll forward; when the step size or the equation changes, the uniform-step two-step coefficients cannot be reused.
 
-### 5.2 Accuracy and stability
+Accuracy and stability:
 
-- The common choice $\phi=\psi=1/2$ is second order and has no numerical dissipation in linear undamped analysis, although it has phase error.
-- For an undamped linear oscillator, this parameter choice is stable when $h\omega<2$, equivalently $h<T_{\min}/\pi$.
-- The highest resolved frequency limits the explicit step size. Wheel-rail contact stiffness, suspension stiffness and first-order internal variables can all contribute high-frequency time scales.
-- The original formula is a fixed-uniform-step method. Variable steps, a shortened terminal step and dense output each require separately defined mathematical formulas.
+- The common form $\varphi=\psi=1/2$ is second order. For an undamped linear oscillator the spectral radius of the amplification matrix equals 1 for $h\omega<2$, with no numerical dissipation but with phase error, and the scheme is unstable for $h\omega>2$. This is the result the original paper gives for the undamped single-degree-of-freedom problem.
+- For the constant linear system $M\ddot u+Ku=0$, symmetric positive-definite $M$ and $K$ permit a real modal transformation into independent undamped scalar oscillators, giving $h\omega_{\max}<2$ mode by mode. These are sufficient conditions for extending the bound to multiple degrees of freedom. Gyroscopic terms, nonconservative forces or internal-variable coupling prevent direct use of this decoupling argument.
+- Damping imposes further limits. For an isolated scalar decay $\dot v=-\mu v$, $\mu>0$, the velocity update is the second-order Adams–Bashforth method, with decay stability interval $0<h\mu<1$; strongly damped time scales can also limit the step.
+- For linear stability analysis of a general coupled system, construct the augmented amplification matrix from the actual two-step recurrence and check its spectral radius and root conditions on the unit circle. The position and velocity rows have different discretization coefficients, so inserting the eigenvalues of the first-order physical Jacobian into a single scalar stability region is insufficient. Wheel–rail contact stiffness, suspension damping and first-order internal variables can all affect this criterion.
+- The original formulas are a fixed uniform-step method; variable steps, shortened final steps and dense output need their own definitions.
 
-### 5.3 Relation to ORVD's state
+### 5.2 The coordinate form in ORVD
 
-For a complete ORVD vehicle, the Zhai method would likewise need to construct a configuration increment in the tangent space and retract it to the new $q$, while specifying a discrete method for Maxwell and other internal variables $z$. Applying AB2 directly to the complete $[q;v;z]$ state produces an ordinary first-order multistep method; it is not Zhai's simple explicit method.
+For the coordinate system of section 1.3, regular steps take $\varphi=\psi=1/2$ and the internal variables use the second-order Adams–Bashforth method:
 
-## 6. Comparison of the methods
+$$
+q_1=q_0+h s_0+h^2\left(b_0-\frac12 b_{-1}\right),
+\qquad
+s_1=s_0+h\left(\frac32 b_0-\frac12 b_{-1}\right),
+\qquad
+z_1=z_0+h\left(\frac32 g_0-\frac12 g_{-1}\right).
+$$
 
-| Method | Governing form | Principal order | Implicitness | Stability point | History structure | ORVD implementation status |
-|---|---|---:|---|---|---|---|
-| CVODE BDF | Complete first-order $\dot y=f(t,y)$ | 1–5 | Implicit | BDF1–2 are A-stable | Multistep history | Production maximum order is 2; a maximum-order-five implementation also exists in the source tree |
-| Radau5 | Complete first-order $\dot y=f(t,y)$ | 5 | Three-stage fully implicit | A-stable and L-stable | One-step stages and linearization history | Implemented in the source tree; not currently used by the production system |
-| Newmark | Second-order mechanical equilibrium | Usually 2 | Common forms are implicit | Depends on $\beta,\gamma$ | One-step endpoint quantities | **Theory only** |
-| Zhai simple explicit method | Second-order mechanical acceleration | 2 | Explicit | Limited by the highest frequency | Two-step acceleration history | **Theory only** |
+The first step, and any step whose actual size differs from the previous one, uses the self-starting form
 
-BDF and Radau5 can consume ORVD's complete first-order right-hand side directly. The original Newmark and Zhai formulas exploit second-order mechanical structure. Before either is applied to a vehicle model containing manifold configurations and first-order internal variables, its extended discrete equations must be defined explicitly; otherwise the method's name no longer describes the algorithm actually being used.
+$$
+q_1=q_0+h s_0+\frac{h^2}{2}\,b_0,
+\qquad
+s_1=s_0+h\,b_0,
+\qquad
+z_1=z_0+h\,g_0,
+$$
+
+that is, $\varphi=\psi=0$ and explicit Euler for the internal variables. After forming $q_1$ and $s_1$, the endpoint projection of section 4.4 is applied first, and $B$ and $G$ are then evaluated once at the projected endpoint to become the history of the next step. Each successful step evaluates the complete right-hand side once, with no Newton iteration or difference Jacobian construction.
+
+Because forward dynamics supplies the acceleration, the scheme stays explicit without a diagonal mass matrix; forward dynamics still performs linear algebra internally. Inside every right-hand-side evaluation, the contact computations of the individual wheel–rail interfaces are mutually independent and can proceed concurrently; this is a structural property of the right-hand side shared by all five method options. A Zhai step also includes the state recurrence, coordinate conversion, endpoint projection and accepted-state commit.
+
+### 5.3 Mathematical properties and conditions of applicability
+
+- For smooth problems within the stable step-size range, a regular step has local state error $O(h^3)$ and global order two. A startup step has local state error $O(h^2)$ in velocity and internal variables; second-order accuracy can be retained if the number of startups in a fixed time interval stays bounded under step refinement. A fixed control-event schedule meets this counting condition but still requires smoothness within each segment, stable error propagation and consistent event handling. If every step restarts because its size changes, velocity and internal variables continually use Euler updates and the order generally falls to one.
+- The bound $h\omega_{\max}<2$ of section 5.1 applies to decoupled undamped oscillators. An isolated Maxwell internal-variable decay $\dot z=-(k/c)z$ advanced by AB2 requires $0<h<c/k$ for decay stability. Once mechanics and internal variables are coupled, the actual restriction must be analyzed through the augmented amplification matrix of the complete recurrence, rather than by checking isolated subproblems or the spectrum of the first-order physical Jacobian alone.
+- The absence of algorithmic dissipation applies only to normal uniform-step recurrences for undamped linear mechanical oscillators; it does not extend to general internal-variable coupling, startup or updates after projection.
+- Endpoint projection, contact switching and force-law kinks likewise make the actual error depart from these asymptotic statements.
+
+### 5.4 Comparison with the classical form
+
+| Item | Classical Zhai | Adopted in ORVD |
+|---|---|---|
+| Variables | Euclidean displacement, velocity, acceleration $u,v,a$ | Stored coordinates $q$, coordinate velocity $s$, coordinate acceleration $b$ |
+| Parameters | General $\varphi,\psi$ | $1/2$ on regular steps, $0$ on startup steps |
+| Acceleration | $M^{-1}(\cdots)$, preferably with diagonal $M$ | Forward dynamics and the coordinate second-order map |
+| Internal variables | Usually absent | $z$ by AB2, Euler on startup steps |
+| Quaternions | Must be specified separately | Paired projection at the endpoint before evaluation |
+| Startup | Self-starting first step | On the first step, after a step-size change or after synchronization |
+
+## 6. Common parts of the coordinate-form methods
+
+### 6.1 Time grid and stop steps
+
+Both methods build endpoint times from a grid origin $t_{\mathrm a}$ and an integer step index $k$ as $t_k=t_{\mathrm a}+k\,h$, computed with one fused multiply-add rather than by accumulating floating-point steps. When a grid endpoint differs from an external stop time only by floating-point rounding, the endpoint takes the stop time exactly; the formula coefficients still use $h$, and the right-hand side is evaluated at that endpoint time. When a stop time falls between two grid endpoints, the final step takes the actual remaining time. After a step change or on reaching a stop boundary, the grid restarts from the current accepted endpoint.
+
+### 6.2 Sampling interpolation
+
+Sample times do not become integration stops. Samples inside an interval are linear interpolations, component by component, of the accepted physical states at its two ends. A quaternion block first normalizes both ends, flips one of them if necessary so that both lie in the same hemisphere, interpolates linearly, normalizes and multiplies by the reference norm. The two ends of the interval are copied exactly. Interpolation evaluates no right-hand side and changes neither the method history nor the work counts.
+
+### 6.3 Initialization and synchronization
+
+Initialization does not repair an invalid state: the coordinate velocity of a quaternion block must be orthogonal to the stored quaternion. Every successful initialization, including the synchronization after a change of external inputs, evaluates $B$ and $G$ at the given state, takes the given quaternions as the projection reference and re-expands the quaternion scales with their norms. Newmark restores the planned step to $H$; Zhai clears its two-step history, so the next step uses the self-starting form.
+
+## 7. Method comparison and source map
+
+| Method | Basic equation | Main order | Implicitness | Stability | History structure |
+|---|---|---:|---|---|---|
+| CVODE BDF | First-order $\dot y=f(t,y)$ | 1–2 or 1–5 | Implicit | BDF1–2 are A-stable | Multistep history |
+| Radau5 | First-order $\dot y=f(t,y)$ | 5 | Three-stage fully implicit | A-stable and L-stable | One-step stages and linearization history |
+| Newmark average acceleration | Coordinate second-order $(q,s,z)$ | 2 | Implicit, full Newton | Underlying trapezoidal scheme is A-stable; no algorithmic dissipation for undamped oscillators | One-step endpoint derivatives |
+| Zhai | Coordinate second-order $(q,s,z)$ | 2 | Explicit | Conditionally stable | Two-step acceleration history |
+
+The orders and stability properties in the table refer to the underlying schemes under the conditions stated in their respective sections. BDF and Radau5 consume ORVD's complete first-order right-hand side directly; Newmark and Zhai consume the same right-hand side through the coordinate bridge of section 1.3. All five method options are selected explicitly through the public system-integration configuration; the library has no implicit default method.
+
+| Theoretical object | Main implementation |
+|---|---|
+| Conversion between coordinate and physical states, evaluation of $B$ and $G$, endpoint projection, sampling interpolation | `MakeCoordinateState`, `CopyPhysicalState`, `Evaluate`, `ProjectEndpoint` and `CopyLinearlyInterpolatedPhysicalState` of `SystemCoordinateProblem` in [`system_coordinate_problem.cc`](../../../libs/integrators/src/system_coordinate_problem.cc) |
+| Rate map, left pseudo-inverse and coordinate second derivative | `MapGeneralizedVelocitiesToPositionDerivatives`, `MapGeneralizedPositionDerivativesToVelocities` and `MapGeneralizedVelocityDerivativesToPositionSecondDerivatives` of `MultibodyModel` in [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) |
+| Accepted state, candidate state, projection reference and endpoint commit | `CoordinateCoreState` in [`coordinate_core_state.h`](../../../libs/integrators/src/coordinate_core_state.h) |
+| Newmark residual, predictor, difference Jacobian, scaled Newton and correction norm | `Residual`, `Solve`, `CorrectionNorm` and `Advance` in the `NewmarkCore` implementation, [`newmark_core.cc`](../../../libs/integrators/src/newmark_core.cc) |
+| Expansion of the four scale families to coordinates | `NewmarkCoordinateLayout::Expand` in [`newmark_coordinate_layout.cc`](../../../libs/integrators/src/newmark_coordinate_layout.cc) |
+| Bounded step recovery | `NewmarkRecoveryStepPolicy` in [`coordinate_step_policy.h`](../../../libs/integrators/src/coordinate_step_policy.h) |
+| Zhai regular and self-starting steps | `AdvanceOneStep` in the `ZhaiCore` implementation, [`zhai_core.cc`](../../../libs/integrators/src/zhai_core.cc) |
+| Time grid, stop steps, publication, sampling and synchronization | `ChooseStep`, `Advance`, `CopyDenseState` and `Reinitialize` of `BasicCoordinateAdvancerImplementation` in [`basic_coordinate_advancer.h`](../../../libs/integrators/src/basic_coordinate_advancer.h); the endpoint-time criteria in [`coordinate_step_time.h`](../../../libs/integrators/src/coordinate_step_time.h) |
+| Public method configuration | `NewmarkConfiguration` and `ZhaiConfiguration` in [`mechanical_integration_configuration.h`](../../../libs/integrators/include/orvd/integrators/mechanical_integration_configuration.h); `SystemIntegrationConfiguration` in [`system_integration_configuration.h`](../../../libs/integrators/include/orvd/integrators/system_integration_configuration.h) |

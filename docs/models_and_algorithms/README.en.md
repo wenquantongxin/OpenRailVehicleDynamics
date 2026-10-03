@@ -84,4 +84,4 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 
 ### Numerical methods
 
-- [BDF, Radau5, Newmark and Zhai time-integration methods](numerical_methods/TIME_INTEGRATION_METHODS.en.md): discrete formulas, one-step and multistep advancement algorithms, formation of the finite-difference Jacobian, error and stability, as well as the conditions under which each method applies to the ORVD state structure.
+- [BDF, Radau5, Newmark and Zhai time-integration methods](numerical_methods/TIME_INTEGRATION_METHODS.en.md): the first-order state equation and the coordinate second-order form; discrete formulas of BDF and Radau5 and formation of the finite-difference Jacobian; the classical reference theory of Newmark and Zhai and their coordinate forms in ORVD, including scaled Newton iteration, endpoint projection, bounded step recovery and self-starting; error and stability; and the time grid, sampling interpolation and synchronization shared by the coordinate-form methods.

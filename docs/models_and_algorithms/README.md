@@ -84,4 +84,4 @@
 
 ### 数值方法
 
-- [BDF、Radau5、Newmark 与 Zhai 时间积分方法](numerical_methods/TIME_INTEGRATION_METHODS.md)：离散公式、单步与多步推进算法、差分 Jacobian 的形成、误差和稳定性，以及不同方法对 ORVD 状态结构的适用条件。
+- [BDF、Radau5、Newmark 与 Zhai 时间积分方法](numerical_methods/TIME_INTEGRATION_METHODS.md)：一阶状态方程与坐标二阶形式；BDF 与 Radau5 的离散公式和差分 Jacobian 的形成；Newmark 与 Zhai 的经典参考理论及 ORVD 坐标形式，包括带尺度的 Newton 迭代、端点投影、有界缩步恢复与自启动；误差与稳定性；坐标形式方法共同的时间网格、采样插值与同步。
