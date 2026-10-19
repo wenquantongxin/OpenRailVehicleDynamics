@@ -330,6 +330,7 @@ if(TARGET orvd_state_stream)
 endif()
 install(FILES
         NOTICE
+        LICENSE
         external/drake_mbtree/LICENSE.TXT
         external/drake_mbtree/LICENSE.Apache-2.0.txt
         external/drake_mbtree/DRAKE_SOURCE_MODIFICATIONS.md

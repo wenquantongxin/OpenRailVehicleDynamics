@@ -9,11 +9,10 @@ notice, not a grant.
 
 This NOTICE does not grant a license to ORVD first-party code.
 
-ORVD's own licence has not been chosen yet; see the "许可证" section of README.md.
-Until the project owner selects one, default copyright applies to the
-first-party sources in this repository, and nothing here should be read as
-permission to use, modify or redistribute them. Publishing a repository does not
-by itself grant those permissions.
+ORVD first-party code is licensed under the Business Source License 1.1. The
+parameters (Licensor, Additional Use Grant, Change Date 2029-10-19 and Change
+License Apache-2.0) are stated in LICENSE at the repository root. This NOTICE
+records third-party materials only.
 
 
 Redistributed source

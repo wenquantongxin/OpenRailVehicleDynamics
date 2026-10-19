@@ -74,7 +74,7 @@ topology 与 double 位姿数学目标。
 判断许可证原文是否保留、文件是否被修改。
 
 源码分发须携带 vendored 源码对应的材料；二进制包由后续发布工作流按其实际包含的代码与库
-重新收集许可证和 NOTICE。第一方代码自身的许可证尚未选定，见仓库根 `README.md`。
+重新收集许可证和 NOTICE。第一方代码以 Business Source License 1.1 授权，见仓库根 `LICENSE`。
 
 ## 边界闸门
 
