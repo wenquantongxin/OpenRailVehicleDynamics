@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -17,11 +18,27 @@ struct DestinationStatistics {
     std::uint64_t sent_bytes{0};
     std::uint64_t failed_datagrams{0};
     int last_error{0};
+    std::uint64_t would_block_events{0};
+    std::uint64_t retry_attempts{0};
+    /// Datagrams eventually sent after at least one additional send attempt.
+    std::uint64_t retried_datagrams{0};
+    double retry_wait_seconds{0.0};
 };
 struct StreamStatistics {
     std::uint64_t run_id{0};
     std::uint64_t attempted_state_frames{0};
     std::vector<DestinationStatistics> destinations;
+    std::optional<int> requested_socket_send_buffer_bytes;
+    int effective_socket_send_buffer_bytes{0};
+};
+
+struct UdpSendOptions {
+    /// Positive SO_SNDBUF request, or the operating system default when absent.
+    /// The effective value is reported separately; the kernel may adjust it.
+    std::optional<int> socket_send_buffer_bytes{};
+    /// One wall-clock budget shared by all fragments and destinations of each
+    /// Publish call. Zero never waits or retries. Only EAGAIN/EWOULDBLOCK retry.
+    double retry_budget_seconds{0.0};
 };
 
 // Explicit little-endian protocol, independent of ABI/padding. A state payload
@@ -34,11 +51,17 @@ struct StreamStatistics {
     std::uint16_t kind, std::uint64_t run_id, std::uint64_t sequence,
     double simulation_time_seconds, std::span<const std::uint8_t> payload);
 
-// Linux IPv4 unicast sender: explicit IP:port targets, nonblocking, no worker
-// thread, queue, acknowledgements or retries. Runtime network errors are counted.
+// Linux IPv4 unicast sender: explicit IP:port targets and nonblocking socket,
+// with optional bounded waiting for local send capacity. No worker thread,
+// queue, acknowledgements or receiver-driven retransmission. Runtime network
+// errors are counted; a temporary EAGAIN is not a failed datagram if retry succeeds.
 class UdpStateStream {
  public:
-    explicit UdpStateStream(const std::vector<std::string>& destinations);
+    // A caller may supply its already allocated run identity; zero is invalid.
+    // Otherwise one identity is allocated when this sender is constructed.
+    explicit UdpStateStream(const std::vector<std::string>& destinations,
+                            std::optional<std::uint64_t> run_id = std::nullopt,
+                            const UdpSendOptions& options = {});
     ~UdpStateStream();
     UdpStateStream(const UdpStateStream&) = delete;
     UdpStateStream& operator=(const UdpStateStream&) = delete;

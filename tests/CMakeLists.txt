@@ -1460,7 +1460,9 @@ if(TARGET orvd_state_stream)
     add_executable(verify_state_stream ../tools/state_stream/verify_state_stream.cc)
     orvd_configure_first_party_target(verify_state_stream)
     target_link_libraries(verify_state_stream PRIVATE orvd_state_stream)
+    target_link_options(verify_state_stream PRIVATE "LINKER:--wrap=sendto" "LINKER:--wrap=poll")
     add_test(NAME verify_state_stream COMMAND verify_state_stream)
+    set_tests_properties(verify_state_stream PROPERTIES TIMEOUT 30)
 endif()
 
 # The renderer-independent scene observation: free-body sampling against a
