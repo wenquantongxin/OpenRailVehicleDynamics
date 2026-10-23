@@ -4,21 +4,20 @@
 维护；操作系统命令分别进入 [Linux](LINUX.md)、[Windows](WINDOWS.md) 和
 [macOS](MACOS.md)，避免把一台机器的绝对路径或包管理器假设带到另一台机器。
 
-## 当前支持面与证据
+## 平台与工具链
 
-| 平台 | 当前支持的工具链 | 对应快照的注册测试 | 最近完整实测与当前状态 |
+| 平台 | 工具链 | 注册测试 | 验证结果 |
 |---|---|---:|---|
-| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 历史 87 | 历史资格快照两套均为 `87/87` |
+| Ubuntu 24.04 x86-64 | GCC 13.3.0＋libgomp | 101 | CMake 3.28.3、Release，`101/101` |
+| Ubuntu 24.04 x86-64 | Clang 20＋LLVM libomp | 历史 87 | 历史资格快照为 `87/87` |
 | Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | 99 | Windows 10 Pro，两套均 `99/99`；版本见 [Windows 手册](WINDOWS.md) |
 | macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 历史 87 | 历史资格快照两套均为 `87/87` |
 
-表中分别记录支持边界、对应快照的注册数量及实测结果。每次配置后用
-`ctest --test-dir <build> -N` 或 `--show-only=json-v1` 获取实际清单，再记录完整执行的通过数量。
-工具链与 generator 采用各平台手册列出的组合；项目以源码形式发布。
+各平台的构建、测试与安装命令见对应手册。
 
 ## 共同要求
 
-- 项目 CMake 语法下限为 3.24；各平台最近资格使用的版本见对应手册；
+- CMake 3.24 或更高版本；
 - Ninja，或使用 GNU 风格命令行的 Makefile generator；
 - 支持 C++23 的已列工具链；
 - 测试和组包需要 Python 3.10 或更高版本及 Git；
@@ -143,7 +142,7 @@ Windows 的 compiler、Git 和路径规则仍不同，不能把这段概念命�
 
 ## 构建树和本机配置纪律
 
-同一 Git commit 应形成彼此隔离的构建：
+同一份源码按工具链分别构建：
 
 ```text
 同一源码快照
@@ -170,8 +169,7 @@ install prefix。工具链或关键 CMake 逻辑变化后，用空 build tree �
 
 ## 防止跨平台反复修改源码
 
-平台文档和条件化 CMake 可以消除“到一台机器就改一次绝对路径或编译旗标”，但没有运行过的平台
-无法凭文档获得数学保证。当前不建立 macOS CI，因此采用以下纪律：
+跨平台改动遵循以下约定：
 
 1. 产品算法优先使用标准 C++23 和 imported targets；新增操作系统宏必须有真实 API／ABI 差异。
 2. 工具链路径和 dependency prefix 只作 configure 输入；macOS SDK 与 AppleClang libomp 由 CMake

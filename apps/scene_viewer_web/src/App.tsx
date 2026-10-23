@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { loadRecordFromFiles, loadRecordFromUrl } from './record/load_record.ts';
-import { frameIndexAtOrBefore, frameTimeSeconds, type SceneRecord } from './record/scene_record.ts';
+import type { SceneRecord } from './record/scene_record.ts';
 import { parseVisualDefinition, type VisualDefinition } from './record/visual_definition.ts';
 import { PlaybackController } from './playback/playback.ts';
 import { applyFrames, wheelSpinBindings } from './scene/apply_frame.ts';
-import { maximumWheelRotationBetweenFrames } from './scene/pose_interpolation.ts';
+import { summarizeRecord, type RecordSummary } from './ui/record_summary.ts';
 import { measureFramedExtents, presetAvailableFor, viewPresets, type FramedExtents, type ViewPreset } from './scene/camera_rig.ts';
 import type { SafeArea } from './scene/label_layer.ts';
 import { buildScene, type BuiltScene, type CarbodyMode } from './scene/scene_builder.ts';
 import { resolveVehicleDisplayBindings, type VehicleDisplayBindings } from './scene/vehicle_display_bindings.ts';
 import { EmptyState, Footer, MetaBar, Notice, ScalarsDrawer, TitleBlock } from './ui/Chrome.tsx';
-import { scenarioSubtitle, type Subtitle } from './ui/subtitle.ts';
+import { recordRangeSubtitle, type Subtitle } from './ui/subtitle.ts';
 import { DisplayCard, ViewsCard } from './ui/ControlCards.tsx';
 import { fixed } from './ui/format.ts';
 import { PlaybackCard, playbackRates } from './ui/PlaybackCard.tsx';
@@ -33,6 +33,7 @@ interface LoadedSceneReplay {
   scene: BuiltScene;
   playback: PlaybackController;
   readoutModel: VehicleReadoutModel;
+  summary: RecordSummary;
   /** Extents at the first displayed pose; presets and their availability come from these. */
   extents: FramedExtents;
   name: string;
@@ -131,13 +132,14 @@ export function App() {
 
   const install = useCallback((record: SceneRecord, name: string) => {
     const visualDefinition =
-      record.visualDefinitionText === null
+      record.definition.visualDefinitionText === null
         ? null
-        : parseVisualDefinition(record.visualDefinitionText, new Set(record.bodies.map((body) => body.name)));
-    const bindings = resolveVehicleDisplayBindings(record, visualDefinition);
-    const scene = buildScene(record, visualDefinition, bindings);
-    const playback = new PlaybackController(record);
-    const readoutModel = buildVehicleReadoutModel(record, scene.track, bindings);
+        : parseVisualDefinition(record.definition.visualDefinitionText, new Set(record.definition.bodies.map((body) => body.name)));
+    const bindings = resolveVehicleDisplayBindings(record.definition, visualDefinition);
+    const scene = buildScene(record.definition, visualDefinition, bindings);
+    const playback = new PlaybackController(record.samples);
+    const readoutModel = buildVehicleReadoutModel(record.definition, scene.track, bindings, record.samples.viewAt(0));
+    const summary = summarizeRecord(record.samples, readoutModel);
     const startTime = Number(query.get('t'));
     if (query.get('t') !== null && Number.isFinite(startTime)) {
       playback.seek(startTime);
@@ -145,17 +147,14 @@ export function App() {
     // Pose the scene at its first displayed time and measure what the camera
     // presets frame, so their availability is known before the viewport exists.
     const initial = playback.bracket();
-    applyFrames(record, scene, wheelSpinBindings(record), initial.firstFrameIndex, initial.secondFrameIndex, initial.alpha);
+    applyFrames(record.definition, scene, wheelSpinBindings(record.definition), record.samples.viewAt(initial.firstFrameIndex), record.samples.viewAt(initial.secondFrameIndex), initial.alpha);
     scene.root.updateMatrixWorld(true);
-    const extents = measureFramedExtents(record, scene, bindings);
+    const extents = measureFramedExtents(record.definition, scene, bindings);
     // Parts named in `hide` stay hidden whatever the display switches say.
     scene.setUserHidden(new Set((query.get('hide') ?? '').split(',').filter((part) => part !== '')));
-    const wheelBodies = record.wheelPlacements
-      .map((placement) => record.bodies.findIndex((body) => body.name === placement.wheelBodyName))
-      .filter((bodyIndex) => bodyIndex >= 0);
-    const coarsest = maximumWheelRotationBetweenFrames(record, wheelBodies);
+    const coarsest = summary.maximumWheelRotationRadians;
     const warning =
-      record.columns.wheelSpinAngleCount === 0 && coarsest > Math.PI / 2
+      record.samples.columns.wheelSpinAngleCount === 0 && coarsest > Math.PI / 2
         ? `No wheel spin angles and up to ${fixed(coarsest, 2)} rad of wheel turn between samples: in-between wheel poses are unreliable. 无轮自转角，插值方向不可靠。`
         : null;
     const wanted = requestedPreset();
@@ -167,14 +166,15 @@ export function App() {
       scene,
       playback,
       readoutModel,
+      summary,
       extents,
       name,
-      subtitle: scenarioSubtitle(readoutModel.carbodyStation, readoutModel.initialSpeedKmh, scene.track),
+      subtitle: recordRangeSubtitle(summary.carbodyStation),
       warning,
       initialPreset,
     });
     setPreset(initialPreset);
-    setFrameIndex(Math.max(0, frameIndexAtOrBefore(record, playback.timeSeconds)));
+    setFrameIndex(Math.max(0, record.samples.frameIndexAtOrBefore(playback.timeSeconds)));
     setTimeSeconds(playback.timeSeconds);
     setPlaying(false);
     setLoadState({ state: 'idle', message: '' });
@@ -244,7 +244,7 @@ export function App() {
       }
       loaded.playback.seek(time);
       setTimeSeconds(loaded.playback.timeSeconds);
-      setFrameIndex(Math.max(0, frameIndexAtOrBefore(loaded.record, loaded.playback.timeSeconds)));
+      setFrameIndex(Math.max(0, loaded.record.samples.frameIndexAtOrBefore(loaded.playback.timeSeconds)));
     },
     [loaded],
   );
@@ -256,10 +256,10 @@ export function App() {
       }
       const { record, playback } = loaded;
       playback.playing = false;
-      const current = Math.max(0, frameIndexAtOrBefore(record, playback.timeSeconds));
-      const onSample = Math.abs(frameTimeSeconds(record, current) - playback.timeSeconds) < 1e-9;
+      const current = Math.max(0, record.samples.frameIndexAtOrBefore(playback.timeSeconds));
+      const onSample = Math.abs(record.samples.timeAt(current) - playback.timeSeconds) < 1e-9;
       const target = direction > 0 ? current + 1 : onSample ? current - 1 : current;
-      seek(frameTimeSeconds(record, Math.min(record.frameCount - 1, Math.max(0, target))));
+      seek(record.samples.timeAt(Math.min(record.samples.frameCount - 1, Math.max(0, target))));
       setPlaying(false);
     },
     [loaded, seek],
@@ -335,12 +335,14 @@ export function App() {
 
   const readoutModel = loaded?.readoutModel ?? null;
   const track = loaded?.scene.track ?? null;
+  const sample = loaded?.record.samples.viewAt(frameIndex) ?? null;
   return (
     <div className="app" ref={appRef}>
       <div className="stage">
         {loaded !== null && (
           <SceneViewport
-            record={loaded.record}
+            definition={loaded.record.definition}
+            samples={loaded.record.samples}
             scene={loaded.scene}
             playback={loaded.playback}
             bindings={loaded.bindings}
@@ -349,6 +351,7 @@ export function App() {
             options={optionsRef}
             layout={layoutRef}
             commands={commands}
+            stationAt={loaded.readoutModel.stationAt}
             contactPatchesAt={loaded.readoutModel.contactPatchesAt}
             onDisplayFrame={onDisplayFrame}
           />
@@ -360,19 +363,18 @@ export function App() {
         <MetaBar
           record={loaded?.record ?? null}
           name={loaded?.name ?? ''}
-          code={loaded?.visualDefinition?.vehicleName ?? ''}
-          intervalSeconds={readoutModel?.sampleIntervalSeconds ?? 0}
+          intervalSeconds={loaded?.summary.sampleIntervalSeconds ?? 0}
           onPick={onPick}
         />
-        {loaded !== null && readoutModel !== null ? (
+        {loaded !== null && readoutModel !== null && sample !== null ? (
           <>
             <div className="col left">
-              <CarriersCard record={loaded.record} readoutModel={readoutModel} frameIndex={frameIndex} wheelWidth={loaded.visualDefinition?.wheelVisual.widthMeters ?? null} />
-              {track !== null && <TrackCard track={track} readoutModel={readoutModel} frameIndex={frameIndex} />}
+              <CarriersCard record={loaded.record.definition} readoutModel={readoutModel} sample={sample} wheelWidth={loaded.visualDefinition?.wheelVisual.widthMeters ?? null} />
+              {track !== null && <TrackCard track={track} readoutModel={readoutModel} sample={sample} startStationMeters={loaded.summary.carbodyStation[0] ?? Number.NaN} />}
             </div>
             <div className="col right">
-              <VehicleCard record={loaded.record} readoutModel={readoutModel} bindings={loaded.bindings} frameIndex={frameIndex} />
-              <WheelForceCard readoutModel={readoutModel} frameIndex={frameIndex} />
+              <VehicleCard record={loaded.record.definition} readoutModel={readoutModel} bindings={loaded.bindings} sample={sample} scales={loaded.summary.scales} />
+              <WheelForceCard readoutModel={readoutModel} sample={sample} scales={loaded.summary.scales} />
               <ViewsCard
                 current={preset}
                 available={availablePresets}
@@ -384,8 +386,8 @@ export function App() {
               <DisplayCard options={options} onChange={changeOptions} scalarsOpen={scalarsOpen} onToggleScalars={() => setScalarsOpen((open) => !open)} />
             </div>
             <PlaybackCard
-              record={loaded.record}
-              readoutModel={readoutModel}
+              record={loaded.record.samples}
+              summary={loaded.summary}
               track={track}
               frameIndex={frameIndex}
               timeSeconds={timeSeconds}
@@ -417,7 +419,7 @@ export function App() {
                 />
               )}
             </div>
-            {scalarsOpen && <ScalarsDrawer record={loaded.record} frameIndex={frameIndex} onClose={() => setScalarsOpen(false)} />}
+            {scalarsOpen && <ScalarsDrawer record={loaded.record.definition} currentSample={sample} onClose={() => setScalarsOpen(false)} />}
           </>
         ) : (
           <EmptyState state={loadState.state} message={loadState.message} onPick={onPick} />

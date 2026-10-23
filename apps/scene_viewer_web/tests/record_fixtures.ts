@@ -1,4 +1,7 @@
-import { ScalarStatus, type SceneRecord, type TrackTable, type WheelPlacement } from '../src/record/scene_record.ts';
+import type { SceneRecord } from '../src/record/scene_record.ts';
+import type { TrackTable, WheelPlacement } from '../src/record/scene_definition.ts';
+import { ScalarStatus } from '../src/record/scene_sample.ts';
+import { RecordedSamples } from '../src/record/recorded_samples.ts';
 
 // Small programmatic records for the tests: stated bodies, placements, scalars
 // and frames laid out exactly as the viewer's parser would lay them out. They
@@ -18,6 +21,7 @@ export interface FixtureFrame {
   phase?: number;
   poses?: Record<string, FixturePose>;
   scalarValues?: number[];
+  wheelSpinAngles?: number[];
   scalarStatuses?: number[];
 }
 
@@ -49,19 +53,18 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
   const bodyStatesColumnOffset = 4;
   const valuesPerBody = 13;
   const wheelSpinAnglesColumnOffset = bodyStatesColumnOffset + valuesPerBody * bodies.length;
-  const scalarValuesColumnOffset = wheelSpinAnglesColumnOffset;
+  const wheelSpinAngleCount = spec.frames.some((frame) => frame.wheelSpinAngles !== undefined) ? placements.length : 0;
+  const scalarValuesColumnOffset = wheelSpinAnglesColumnOffset + wheelSpinAngleCount;
   const rowValueCount = scalarValuesColumnOffset + scalars.length;
   const frameCount = spec.frames.length;
   const values = new Float64Array(frameCount * rowValueCount);
   const statuses = new Uint8Array(frameCount * scalars.length).fill(ScalarStatus.valid);
-  const timesSeconds = new Float64Array(frameCount);
   spec.frames.forEach((frame, frameIndex) => {
     const row = frameIndex * rowValueCount;
     values[row] = frame.timeSeconds;
     values[row + 1] = Math.round(frame.timeSeconds * 1e9);
     values[row + 2] = frame.sampleIndex ?? -1;
     values[row + 3] = frame.phase ?? 1;
-    timesSeconds[frameIndex] = frame.timeSeconds;
     bodies.forEach((name, bodyIndex) => {
       const base = row + bodyStatesColumnOffset + valuesPerBody * bodyIndex;
       const pose = frame.poses?.[name] ?? {};
@@ -70,6 +73,7 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
       values.set(pose.linearVelocity ?? [0, 0, 0], base + 7);
       values.set(pose.angularVelocity ?? [0, 0, 0], base + 10);
     });
+    if (frame.wheelSpinAngles !== undefined) values.set(frame.wheelSpinAngles, row + wheelSpinAnglesColumnOffset);
     if (frame.scalarValues !== undefined) {
       values.set(frame.scalarValues, row + scalarValuesColumnOffset);
     }
@@ -78,14 +82,15 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
     }
   });
   return {
-    worldFrame: 'test',
-    bodies: bodies.map((name) => ({ name, movesFreelyInWorld: true })),
-    wheelPlacements: placements,
-    scalars: scalars.map((name) => ({ name, unit: '1', referenceFrame: '', quantity: '', method: '', sampleSemantics: '' })),
-    visualDefinitionText: spec.visualDefinitionText ?? null,
-    track: spec.track ?? null,
-    frameCount,
-    columns: {
+    definition: {
+      worldFrame: 'test',
+      bodies: bodies.map((name) => ({ name, movesFreelyInWorld: true })),
+      wheelPlacements: placements,
+      scalars: scalars.map((name) => ({ name, unit: '1', referenceFrame: '', quantity: '', method: '', sampleSemantics: '' })),
+      visualDefinitionText: spec.visualDefinitionText ?? null,
+      track: spec.track ?? null,
+    },
+    samples: new RecordedSamples({
       timeSecondsColumnOffset: 0,
       timeNanosecondsColumnOffset: 1,
       sampleIndexColumnOffset: 2,
@@ -93,14 +98,11 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
       bodyStatesColumnOffset,
       valuesPerBody,
       wheelSpinAnglesColumnOffset,
-      wheelSpinAngleCount: 0,
+      wheelSpinAngleCount,
       scalarValuesColumnOffset,
       scalarCount: scalars.length,
       rowValueCount,
-    },
-    values,
-    statuses,
-    timesSeconds,
+    }, values, statuses),
   };
 }
 

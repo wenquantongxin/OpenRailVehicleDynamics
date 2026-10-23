@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { TrackTable } from '../src/record/scene_record.ts';
+import type { TrackTable } from '../src/record/scene_definition.ts';
 
 /** A straight line along inertial x with a planar curvature profile; rails at ±halfGauge. */
 export function straightTable(stations: number[], curvature: (s: number) => number, halfGauge = 0.75315): TrackTable {

@@ -1,5 +1,7 @@
-import type { SceneRecord } from '../record/scene_record.ts';
-import { ScalarStatus } from '../record/scene_record.ts';
+import type { SceneSampleView } from '../record/scene_sample.ts';
+import type { ReadoutScales } from './record_summary.ts';
+import type { SceneDefinition } from '../record/scene_definition.ts';
+import { ScalarStatus } from '../record/scene_sample.ts';
 import type { VehicleDisplayBindings } from '../scene/vehicle_display_bindings.ts';
 import { BilingualLabel, Card, DivergingBar } from './Card.tsx';
 import { fixed, signed } from './format.ts';
@@ -15,23 +17,24 @@ export const contactNames: Record<ContactState, { en: string; zh: string; color:
   loss: { en: 'Loss of contact', zh: '轮轨分离', color: 'var(--alert)' },
   incomplete: { en: 'Contact partly not ready', zh: '部分接触未就绪', color: 'var(--ink3)' },
   unknown: { en: 'Contact not ready', zh: '接触未就绪', color: 'var(--ink3)' },
+  notRecorded: { en: 'Contact not recorded', zh: '未记录接触量', color: 'var(--ink3)' },
 };
 
 /** The recorded definition of a scalar, for a header tooltip. */
-function definitionText(record: SceneRecord, ref: { index: number } | null): string | undefined {
+function definitionText(record: SceneDefinition, ref: { index: number } | null): string | undefined {
   const definition = ref === null ? undefined : record.scalars[ref.index];
   return definition === undefined ? undefined : `${definition.quantity}\n${definition.referenceFrame}\n${definition.method}`;
 }
 
-/** A reading in display units, the recorded status when it is not valid, or "not recorded" when the record never exported it. */
-export function shown(reading: Reading | null, scale: number, digits: number, withSign: boolean): string {
-  if (reading === null) {
-    return 'Not recorded 未记录';
+/** Missing values stay compact; their distinct meanings are available on hover. */
+function ReadingValue({ reading, scale, digits, withSign = false, unit }: { reading: Reading | null; scale: number; digits: number; withSign?: boolean; unit?: string }) {
+  if (reading?.valid !== true) {
+    const status = reading === null ? 'Not recorded 未记录'
+      : reading.status === ScalarStatus.placeholder ? 'Placeholder 占位' : 'Not ready 未就绪';
+    return <span title={status} aria-label={status}>—</span>;
   }
-  if (!reading.valid) {
-    return reading.status === ScalarStatus.placeholder ? 'Placeholder 占位' : 'Not ready 未就绪';
-  }
-  return withSign ? signed(reading.value * scale, digits) : fixed(reading.value * scale, digits);
+  const value = withSign ? signed(reading.value * scale, digits) : fixed(reading.value * scale, digits);
+  return <>{value}{unit === undefined ? null : <> <small>{unit}</small></>}</>;
 }
 
 function numeric(reading: Reading | null, scale: number): number | null {
@@ -39,7 +42,7 @@ function numeric(reading: Reading | null, scale: number): number | null {
 }
 
 /** Half the distance between the two recorded rail datums. */
-function halfDatumSpacingOf(record: SceneRecord): number | null {
+function halfDatumSpacingOf(record: SceneDefinition): number | null {
   const left = record.track?.leftRailDatumInInertialMeters[0];
   const right = record.track?.rightRailDatumInInertialMeters[0];
   if (left === undefined || right === undefined) {
@@ -97,8 +100,8 @@ function planPanels(readoutModel: VehicleReadoutModel): PlanPanel[] | null {
   return panels;
 }
 
-function CarrierPlan(props: { record: SceneRecord; readoutModel: VehicleReadoutModel; frameIndex: number; wheelWidth: number | null; panels: PlanPanel[] }) {
-  const { record, readoutModel, frameIndex, panels } = props;
+function CarrierPlan(props: { record: SceneDefinition; readoutModel: VehicleReadoutModel; sample: SceneSampleView; wheelWidth: number | null; panels: PlanPanel[] }) {
+  const { record, readoutModel, sample, panels } = props;
   const width = 236;
   const height = 124;
   const top = 20;
@@ -189,9 +192,9 @@ function CarrierPlan(props: { record: SceneRecord; readoutModel: VehicleReadoutM
           // its nominal place or unturned, drawn dashed. Dashed means missing,
           // never a measured zero. The recorded yaw scalar is shown unchanged
           // in the table.
-          const lateral = readoutModel.read(frameIndex, carrier.lateralScalar);
+          const lateral = readoutModel.read(sample, carrier.lateralScalar);
           const lateralKnown = lateral?.valid === true;
-          const heading = readoutModel.carrierHeadingAt(frameIndex, carrier);
+          const heading = readoutModel.carrierHeadingAt(sample, carrier);
           const measured = lateralKnown && heading !== null;
           const x = panel.xOf(offsetOf(carrier));
           const angle = heading === null ? 0 : (heading * 180) / Math.PI;
@@ -199,7 +202,7 @@ function CarrierPlan(props: { record: SceneRecord; readoutModel: VehicleReadoutM
           const leftY = lateralOf(carrier.leftWheel) * scale;
           const rightY = lateralOf(carrier.rightWheel) * scale;
           const wheel = (readout: WheelReadout | null, y: number) => {
-            const patches = readoutModel.read(frameIndex, readout?.contactPatchCountScalar ?? null);
+            const patches = readoutModel.read(sample, readout?.contactPatchCountScalar ?? null);
             const kind = patches?.valid !== true ? 'unknown' : patches.value === 0 ? 'loss' : patches.value >= 2 ? 'two' : 'single';
             return (
               <rect x={-radius * scale} y={y - 0.5 * wheelWidth * scale} width={2 * radius * scale} height={wheelWidth * scale} rx={0.6} className={`sch-wheel ${kind}`} />
@@ -226,11 +229,11 @@ function CarrierPlan(props: { record: SceneRecord; readoutModel: VehicleReadoutM
   );
 }
 
-export function CarriersCard(props: { record: SceneRecord; readoutModel: VehicleReadoutModel; frameIndex: number; wheelWidth: number | null }) {
-  const { readoutModel, frameIndex } = props;
-  const contact = readoutModel.contactAt(frameIndex);
+export function CarriersCard(props: { record: SceneDefinition; readoutModel: VehicleReadoutModel; sample: SceneSampleView; wheelWidth: number | null }) {
+  const { readoutModel, sample } = props;
+  const contact = readoutModel.contactAt(sample);
   const name = contactNames[contact.state];
-  const coverage = `${contact.known} / ${contact.total}`;
+  const coverage = contact.state === 'notRecorded' ? '—' : `${contact.known} / ${contact.total}`;
   const detail =
     contact.state === 'two' || contact.state === 'loss'
       ? contact.known < contact.total
@@ -250,7 +253,7 @@ export function CarriersCard(props: { record: SceneRecord; readoutModel: Vehicle
       </div>
       {panels !== null && panels.length > 0 ? (
         <>
-          <CarrierPlan record={props.record} readoutModel={readoutModel} frameIndex={frameIndex} wheelWidth={props.wheelWidth} panels={panels} />
+          <CarrierPlan record={props.record} readoutModel={readoutModel} sample={sample} wheelWidth={props.wheelWidth} panels={panels} />
           <p className="caption">
             PLAN · TRUE SCALE · MID-SPAN OMITTED
             <span className="zh">俯视原比例，转向架间断开省略；转角取自记录的车轮轴向；横移未记录的载体画在标称位置，航向不可得的不转动，两者缺一即虚线</span>
@@ -273,8 +276,8 @@ export function CarriersCard(props: { record: SceneRecord; readoutModel: Vehicle
             <span className="axle-number" title={`${carrier.displayName.en} ${carrier.displayName.zh} (${carrier.bodyName})`}>
               {carrier.number}
             </span>
-            <b>{shown(readoutModel.read(frameIndex, carrier.lateralScalar), 1000, 1, true)}</b>
-            <b>{shown(readoutModel.read(frameIndex, carrier.yawScalar), 1000, 2, true)}</b>
+            <b><ReadingValue reading={readoutModel.read(sample, carrier.lateralScalar)} scale={1000} digits={1} withSign /></b>
+            <b><ReadingValue reading={readoutModel.read(sample, carrier.yawScalar)} scale={1000} digits={2} withSign /></b>
           </div>
         ))}
       </div>
@@ -286,29 +289,29 @@ export function CarriersCard(props: { record: SceneRecord; readoutModel: Vehicle
   );
 }
 
-function BodyRows({ body, readoutModel, frameIndex, yawTitle }: { body: TrackBodyReadout; readoutModel: VehicleReadoutModel; frameIndex: number; yawTitle: string | undefined }) {
-  const lateral = readoutModel.read(frameIndex, body.lateralScalar);
-  const yaw = readoutModel.read(frameIndex, body.yawScalar);
+function BodyRows({ body, readoutModel, sample, yawTitle, scales }: { body: TrackBodyReadout; readoutModel: VehicleReadoutModel; sample: SceneSampleView; yawTitle: string | undefined; scales: ReadoutScales }) {
+  const lateral = readoutModel.read(sample, body.lateralScalar);
+  const yaw = readoutModel.read(sample, body.yawScalar);
   return (
     <div className="body-block">
       <BilingualLabel en={body.displayName.en} zh={body.displayName.zh} className="body-name" />
       <div className="brow">
         <span className="q">LAT</span>
-        <DivergingBar value={numeric(lateral, 1000)} scale={readoutModel.scales.bodyLateralMm} />
-        <b>{shown(lateral, 1000, 1, true)} <small>mm</small></b>
+        <DivergingBar value={numeric(lateral, 1000)} scale={scales.bodyLateralMm} />
+        <b><ReadingValue reading={lateral} scale={1000} digits={1} withSign unit="mm" /></b>
       </div>
       <div className="brow">
         <span className="q" title={yawTitle}>
           YAW
         </span>
-        <DivergingBar value={numeric(yaw, 1000)} scale={readoutModel.scales.bodyYawMrad} />
-        <b>{shown(yaw, 1000, 2, true)} <small>mrad</small></b>
+        <DivergingBar value={numeric(yaw, 1000)} scale={scales.bodyYawMrad} />
+        <b><ReadingValue reading={yaw} scale={1000} digits={2} withSign unit="mrad" /></b>
       </div>
     </div>
   );
 }
 
-export function VehicleCard({ record, readoutModel, bindings, frameIndex }: { record: SceneRecord; readoutModel: VehicleReadoutModel; bindings: VehicleDisplayBindings; frameIndex: number }) {
+export function VehicleCard({ record, readoutModel, bindings, sample, scales }: { record: SceneDefinition; readoutModel: VehicleReadoutModel; bindings: VehicleDisplayBindings; sample: SceneSampleView; scales: ReadoutScales }) {
   const bodies = [readoutModel.carbody, ...readoutModel.bogies].filter((body): body is TrackBodyReadout => body !== null);
   return (
     <Card index="03" en="Vehicle" zh="车辆">
@@ -327,7 +330,7 @@ export function VehicleCard({ record, readoutModel, bindings, frameIndex }: { re
         </div>
       </div>
       <p className="caption">
-        RELATIVE TO TRACK · ±{readoutModel.scales.bodyLateralMm} mm · ±{readoutModel.scales.bodyYawMrad} mrad
+        RELATIVE TO TRACK · ±{scales.bodyLateralMm} mm · ±{scales.bodyYawMrad} mrad
         <span className="zh">相对线路，横移以右为正</span>
       </p>
       {bodies.length === 0 ? (
@@ -337,7 +340,7 @@ export function VehicleCard({ record, readoutModel, bindings, frameIndex }: { re
         </p>
       ) : (
         bodies.map((body) => (
-          <BodyRows key={body.bodyName} body={body} readoutModel={readoutModel} frameIndex={frameIndex} yawTitle={definitionText(record, body.yawScalar)} />
+          <BodyRows scales={scales} key={body.bodyName} body={body} readoutModel={readoutModel} sample={sample} yawTitle={definitionText(record, body.yawScalar)} />
         ))
       )}
     </Card>
@@ -350,7 +353,7 @@ function ContactDots({ reading }: { reading: Reading | null }) {
   }
   if (!reading.valid) {
     return (
-      <span className="dots" title="Not ready 未就绪">
+      <span className="dots" title="Not ready">
         <i className="unknown" />
       </span>
     );
@@ -371,10 +374,17 @@ function ContactDots({ reading }: { reading: Reading | null }) {
   );
 }
 
-export function WheelForceCard({ readoutModel, frameIndex }: { readoutModel: VehicleReadoutModel; frameIndex: number }) {
-  const scale = readoutModel.scales.forceKn;
+export function WheelForceCard({ readoutModel, sample, scales }: { readoutModel: VehicleReadoutModel; sample: SceneSampleView; scales: ReadoutScales }) {
+  const scale = scales.forceKn;
+  if (readoutModel.wheels.every((wheel) => wheel.verticalSupportForceScalar === null)) {
+    return (
+      <Card index="04" en="Wheel loads" zh="轮重">
+        <p className="caption">NOT RECORDED<span className="zh">未记录轮轨力</span></p>
+      </Card>
+    );
+  }
   const bar = (wheel: WheelReadout | null, side: 'left' | 'right') => {
-    const force = numeric(readoutModel.read(frameIndex, wheel?.verticalSupportForceScalar ?? null), 0.001);
+    const force = numeric(readoutModel.read(sample, wheel?.verticalSupportForceScalar ?? null), 0.001);
     const width = force === null ? 0 : Math.max(0, Math.min(100, (100 * force) / scale));
     return (
       <span className={`bf-bar ${side}`}>
@@ -390,15 +400,15 @@ export function WheelForceCard({ readoutModel, frameIndex }: { readoutModel: Veh
       </div>
       {readoutModel.carriers.map((carrier) => (
         <div className="bf-row" key={carrier.number}>
-          <b className="bf-value">{shown(readoutModel.read(frameIndex, carrier.leftWheel?.verticalSupportForceScalar ?? null), 0.001, 1, false)}</b>
+          <b className="bf-value"><ReadingValue reading={readoutModel.read(sample, carrier.leftWheel?.verticalSupportForceScalar ?? null)} scale={0.001} digits={1} /></b>
           {bar(carrier.leftWheel, 'left')}
           <span className="bf-axle">
-            <ContactDots reading={readoutModel.read(frameIndex, carrier.leftWheel?.contactPatchCountScalar ?? null)} />
+            <ContactDots reading={readoutModel.read(sample, carrier.leftWheel?.contactPatchCountScalar ?? null)} />
             <b>{carrier.number}</b>
-            <ContactDots reading={readoutModel.read(frameIndex, carrier.rightWheel?.contactPatchCountScalar ?? null)} />
+            <ContactDots reading={readoutModel.read(sample, carrier.rightWheel?.contactPatchCountScalar ?? null)} />
           </span>
           {bar(carrier.rightWheel, 'right')}
-          <b className="bf-value right">{shown(readoutModel.read(frameIndex, carrier.rightWheel?.verticalSupportForceScalar ?? null), 0.001, 1, false)}</b>
+          <b className="bf-value right"><ReadingValue reading={readoutModel.read(sample, carrier.rightWheel?.verticalSupportForceScalar ?? null)} scale={0.001} digits={1} /></b>
         </div>
       ))}
       <p className="caption">

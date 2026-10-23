@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { bodyAngularVelocity, bodyPose, frameTimeSeconds, wheelSpinAngle, type SceneRecord } from '../record/scene_record.ts';
+import type { SceneSampleView } from '../record/scene_sample.ts';
 
 // Display interpolation between two recorded frames. Positions are linear.
 // An orientation is the shortest-path slerp, except for a wheel whose record
@@ -21,41 +21,41 @@ export interface WheelSpinBinding {
 }
 
 export function interpolatePosition(
-  record: SceneRecord,
-  firstFrameIndex: number,
-  secondFrameIndex: number,
+  firstSample: SceneSampleView,
+  secondSample: SceneSampleView,
   alpha: number,
   bodyIndex: number,
   out: THREE.Vector3,
 ): void {
-  const first = bodyPose(record, firstFrameIndex, bodyIndex);
+  const first = firstSample.bodyPose(bodyIndex);
   out.set(...first.position);
-  if (secondFrameIndex !== firstFrameIndex && alpha > 0) {
-    const second = bodyPose(record, secondFrameIndex, bodyIndex);
-    out.lerp(new THREE.Vector3(...second.position), alpha);
+  if (secondSample.timeSeconds !== firstSample.timeSeconds && alpha > 0) {
+    const second = secondSample.bodyPose(bodyIndex);
+    if (alpha >= 1) out.set(...second.position);
+    else out.lerp(new THREE.Vector3(...second.position), alpha);
   }
 }
 
 export function interpolateOrientation(
-  record: SceneRecord,
-  firstFrameIndex: number,
-  secondFrameIndex: number,
+  firstSample: SceneSampleView,
+  secondSample: SceneSampleView,
   alpha: number,
   bodyIndex: number,
   spin: WheelSpinBinding | undefined,
   out: THREE.Quaternion,
 ): void {
-  const first = bodyPose(record, firstFrameIndex, bodyIndex);
+  const first = firstSample.bodyPose(bodyIndex);
   const [wA, xA, yA, zA] = first.orientationWxyz;
   out.set(xA, yA, zA, wA);
-  if (secondFrameIndex === firstFrameIndex || alpha <= 0) {
+  if (secondSample.timeSeconds === firstSample.timeSeconds || alpha <= 0) {
     return;
   }
-  const second = bodyPose(record, secondFrameIndex, bodyIndex);
+  const second = secondSample.bodyPose(bodyIndex);
   const [wB, xB, yB, zB] = second.orientationWxyz;
+  if (alpha >= 1) { out.set(xB, yB, zB, wB); return; }
   scratch.set(xB, yB, zB, wB);
-  const angleA = spin === undefined ? null : wheelSpinAngle(record, firstFrameIndex, spin.wheelPlacementIndex);
-  const angleB = spin === undefined ? null : wheelSpinAngle(record, secondFrameIndex, spin.wheelPlacementIndex);
+  const angleA = spin === undefined ? null : firstSample.wheelSpinAngle(spin.wheelPlacementIndex);
+  const angleB = spin === undefined ? null : secondSample.wheelSpinAngle(spin.wheelPlacementIndex);
   if (spin === undefined || angleA === null || angleB === null) {
     out.slerp(scratch, alpha);
     return;
@@ -68,21 +68,4 @@ export function interpolateOrientation(
   scratch.multiply(spinFull);
   spinStep.setFromAxisAngle(spinAxis, delta * alpha);
   out.slerp(scratch, alpha).multiply(spinStep);
-}
-
-/**
- * The largest rotation, in radians, that the recorded angular velocities imply
- * for any wheel between two consecutive frames. Above a half turn a display
- * cannot choose the spin branch from the orientations alone.
- */
-export function maximumWheelRotationBetweenFrames(record: SceneRecord, wheelBodyIndices: number[]): number {
-  let maximum = 0;
-  for (let frameIndex = 1; frameIndex < record.frameCount; ++frameIndex) {
-    const interval = frameTimeSeconds(record, frameIndex) - frameTimeSeconds(record, frameIndex - 1);
-    for (const bodyIndex of wheelBodyIndices) {
-      const [x, y, z] = bodyAngularVelocity(record, frameIndex, bodyIndex);
-      maximum = Math.max(maximum, Math.hypot(x, y, z) * interval);
-    }
-  }
-  return maximum;
 }

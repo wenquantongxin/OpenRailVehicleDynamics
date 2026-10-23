@@ -1,17 +1,14 @@
-import type { TrackModel } from '../scene/track_model.ts';
-import { fixed } from './format.ts';
+import { chainage } from './format.ts';
 
-// The title's second line: what the recorded run covers. Values come from the
-// recorded line table and the first frame; loops are used throughout because a
-// long record has hundreds of thousands of frames, too many to spread into
-// Math.min/Math.max arguments.
+// Record coverage belongs in the title; current radius, cant and speed belong
+// in the track card. A long route is not represented by a single curve radius.
 
 export interface Subtitle {
   en: string;
   zh: string;
 }
 
-export function scenarioSubtitle(carbodyStation: Float64Array, initialSpeedKmh: number | null, track: TrackModel | null): Subtitle | null {
+export function recordRangeSubtitle(carbodyStation: Float64Array): Subtitle | null {
   let low = Infinity;
   let high = -Infinity;
   for (const stationMeters of carbodyStation) {
@@ -20,42 +17,5 @@ export function scenarioSubtitle(carbodyStation: Float64Array, initialSpeedKmh: 
       high = Math.max(high, stationMeters);
     }
   }
-  const en: string[] = [];
-  const zh: string[] = [];
-  if (track !== null && low <= high) {
-    const sections = track.sections.filter((section) => section.endStationMeters >= low && section.startStationMeters <= high);
-    let radius = Infinity;
-    let circular = false;
-    for (const section of sections) {
-      if (section.kind === 'circular') {
-        circular = true;
-        radius = Math.min(radius, section.radiusMeters ?? Infinity);
-      }
-    }
-    if (circular) {
-      let cant = 0;
-      track.stationsMeters.forEach((stationMeters, stationIndex) => {
-        if (stationMeters >= low && stationMeters <= high) {
-          cant = Math.max(cant, Math.abs(track.superelevationMeters[stationIndex] ?? 0));
-        }
-      });
-      en.push('CURVE NEGOTIATION');
-      if (Number.isFinite(radius)) {
-        en.push(`R ${fixed(radius, 0)} m`);
-      }
-      en.push(`CANT ${fixed(1000 * cant, 0)} mm`);
-      zh.push('曲线通过');
-    } else if (sections.some((section) => section.kind === 'transition')) {
-      en.push('TRANSITION CURVE');
-      zh.push('缓和曲线');
-    } else {
-      en.push('TANGENT TRACK');
-      zh.push('直线运行');
-    }
-  }
-  if (initialSpeedKmh !== null) {
-    en.push(`INITIAL SPEED ${fixed(initialSpeedKmh, 1)} km/h`);
-    zh.push(`初速 ${fixed(initialSpeedKmh, 1)} km/h`);
-  }
-  return en.length === 0 ? null : { en: en.join(' · '), zh: zh.join(' · ') };
+  return low <= high ? { en: `RECORDED RANGE · ${chainage(low)} – ${chainage(high)}`, zh: '回放里程范围' } : null;
 }

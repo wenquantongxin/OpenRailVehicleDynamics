@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { TrackTable } from '../record/scene_record.ts';
+import type { TrackTable } from '../record/scene_definition.ts';
 
 // Reads the line table that ORVD sampled into the record. Everything here is in
 // the track inertial frame I (x along increasing station at the line origin,
@@ -220,26 +220,22 @@ export class TrackModel {
     return trackFrame;
   }
 
-  /** Centreline points in the horizontal plane (inertial x, y), every `stationStep` samples, ends included. */
-  planPointsEvery(stationStep: number): { x: number; y: number; stationMeters: number }[] {
-    const points: { x: number; y: number; stationMeters: number }[] = [];
-    const push = (stationIndex: number): void => {
-      const c = this.centres[stationIndex] as THREE.Vector3;
-      points.push({ x: c.x, y: c.y, stationMeters: this.stationsMeters[stationIndex] as number });
-    };
-    const step = Math.max(1, stationStep);
-    for (let stationIndex = 0; stationIndex < this.stationCount; stationIndex += step) {
-      push(stationIndex);
-    }
-    if ((this.stationCount - 1) % step !== 0) {
-      push(this.stationCount - 1);
-    }
-    return points;
+  /** Bounded overview, preserving endpoints and derived element points. */
+  overviewPoints(): { x: number; y: number; stationMeters: number }[] {
+    const stations = new Set<number>([this.firstStationMeters, this.lastStationMeters]);
+    const step = Math.max(1, Math.ceil((this.stationCount - 1) / 1023));
+    for (let index = 0; index < this.stationCount; index += step) stations.add(this.stationsMeters[index] as number);
+    this.elementPoints.forEach((point) => stations.add(point.stationMeters));
+    return [...stations].sort((a, b) => a - b).map((stationMeters) => {
+      const { x, y } = this.trackFrameAtStation(stationMeters).position;
+      return { x, y, stationMeters };
+    });
   }
 
   /** The station whose centreline point is nearest to an inertial position, searched near the last answer. */
   stationNearestToInertialPosition(position: THREE.Vector3): number {
     const centres = this.centres;
+    if (centres.length === 1) return this.firstStationMeters;
     const distance = (stationIndex: number): number => {
       const c = centres[stationIndex] as THREE.Vector3;
       return (c.x - position.x) ** 2 + (c.y - position.y) ** 2;

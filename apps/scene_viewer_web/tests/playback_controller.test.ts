@@ -2,16 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { PlaybackController } from '../src/playback/playback.ts';
-import type { SceneRecord } from '../src/record/scene_record.ts';
+import { makeRecord } from './record_fixtures.ts';
 
 // The controller owns the playing state. Reaching the end stops it; one
 // toggle after seeking back resumes; one toggle at the end restarts.
 
-function recordWithTimes(times: number[]): SceneRecord {
-  return {
-    frameCount: times.length,
-    timesSeconds: Float64Array.from(times),
-  } as unknown as SceneRecord;
+function recordWithTimes(times: number[]) {
+  return makeRecord({ bodies: ['body'], frames: times.map((timeSeconds) => ({ timeSeconds })) }).samples;
 }
 
 test('reaching the end stops playback and one toggle resumes after a seek back', () => {

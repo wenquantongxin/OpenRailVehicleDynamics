@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 
-import { ScalarStatus, bodyLinearVelocity, frameTimeSeconds, type SceneRecord, type WheelSide } from '../record/scene_record.ts';
+import type { SceneDefinition, WheelSide } from '../record/scene_definition.ts';
+import { ScalarStatus, type SceneSampleView } from '../record/scene_sample.ts';
 import type { BilingualName } from '../record/visual_definition.ts';
 import type { TrackModel } from '../scene/track_model.ts';
 import type { BoundBody, VehicleDisplayBindings } from '../scene/vehicle_display_bindings.ts';
-import { niceCeiling } from './format.ts';
 
 // Maps the record's scalars onto the cards through the resolved display
 // bindings. Nothing here discovers the vehicle: which body is the carbody,
 // which are bogie frames and which carrier owns which wheels all come from the
 // bindings. Nothing here computes a new physical quantity either: values are
 // recorded samples, converted to display units, and the only derived numbers
-// are the carbody speed (the norm of its recorded velocity), record-wide scale
-// ceilings, initial longitudinal offsets along the carbody axis and the plan
+// are the carbody speed (the norm of its recorded velocity), initial longitudinal
+// offsets along the carbody axis and the plan
 // headings used to draw the carrier plan: a carrier's from its wheel axle, a
 // body's from its longitudinal axis. A scalar that is not ready
 // stays unknown; a scalar the record never exported is a null reference and
@@ -61,19 +61,13 @@ export interface CarrierReadoutBinding extends TrackBodyReadout {
   rightWheel: WheelReadout | null;
 }
 
-export interface ContactSpan {
-  startFrameIndex: number;
-  endFrameIndex: number;
-  patches: number;
-  code: string;
-}
-
 /**
  * single: every wheel recorded, all with one contact point. incomplete: some
  * wheels not ready and none of the recorded ones in two-point contact or loss.
- * unknown: no wheel recorded at this sample.
+ * unknown: no wheel has a valid count at this sample. notRecorded: the record
+ * exports no contact counts at all.
  */
-export type ContactState = 'single' | 'two' | 'loss' | 'incomplete' | 'unknown';
+export type ContactState = 'single' | 'two' | 'loss' | 'incomplete' | 'unknown' | 'notRecorded';
 
 export interface ContactSummary {
   state: ContactState;
@@ -95,18 +89,14 @@ export interface VehicleReadoutModel {
   wheels: WheelReadout[];
   carbody: TrackBodyReadout | null;
   bogies: TrackBodyReadout[];
-  scales: { forceKn: number; bodyLateralMm: number; bodyYawMrad: number };
-  contactSpans: ContactSpan[];
-  /** Carbody chainage at every frame; NaN throughout without a carbody binding. */
-  carbodyStation: Float64Array;
   carbodyBodyIndex: number | null;
-  initialSpeedKmh: number | null;
-  sampleIntervalSeconds: number;
-  read: (frameIndex: number, ref: ScalarRef | null) => Reading | null;
-  speedKmhAt: (frameIndex: number) => number | null;
-  contactAt: (frameIndex: number) => ContactSummary;
+  /** Display location only; a geometric fallback is never a physical readout. */
+  stationAt: (sample: SceneSampleView) => number | null;
+  read: (sample: SceneSampleView, ref: ScalarRef | null) => Reading | null;
+  speedKmhAt: (sample: SceneSampleView) => number | null;
+  contactAt: (sample: SceneSampleView) => ContactSummary;
   /** Loaded contact patch count per wheel placement; NaN where it is not ready. */
-  contactPatchesAt: (frameIndex: number, out: Float64Array) => void;
+  contactPatchesAt: (sample: SceneSampleView, out: Float64Array) => void;
   /**
    * Plan heading of a body that does not spin, such as the carbody or a bogie
    * frame, relative to the track at its station, radians, positive when its
@@ -114,7 +104,7 @@ export interface VehicleReadoutModel {
    * and the recorded track frame; null without a track. Not for wheelsets:
    * their +x axis turns with the rolling spin.
    */
-  headingAt: (frameIndex: number, body: TrackBodyReadout) => number | null;
+  headingAt: (sample: SceneSampleView, body: TrackBodyReadout) => number | null;
   /**
    * Plan heading of a carrier from the recorded pose of one of its wheels:
    * the wheel's spin axis taken into the inertial frame, projected onto the
@@ -124,26 +114,23 @@ export interface VehicleReadoutModel {
    * rotating wheels and rigid wheelsets alike. null without a track, without
    * a wheel, or when the axis has no horizontal part.
    */
-  carrierHeadingAt: (frameIndex: number, carrier: CarrierReadoutBinding) => number | null;
+  carrierHeadingAt: (sample: SceneSampleView, carrier: CarrierReadoutBinding) => number | null;
 }
 
 /** Below this horizontal projection of the axle, radians of heading would be round-off. */
 const smallestHorizontalAxleProjection = 1e-6;
 
-function bodyPosition(record: SceneRecord, frameIndex: number, bodyIndex: number): THREE.Vector3 {
-  const base = frameIndex * record.columns.rowValueCount + record.columns.bodyStatesColumnOffset + bodyIndex * record.columns.valuesPerBody;
-  const v = record.values;
-  return new THREE.Vector3(v[base] as number, v[base + 1] as number, v[base + 2] as number);
+function bodyPosition(sample: SceneSampleView, bodyIndex: number): THREE.Vector3 {
+  return new THREE.Vector3(...sample.bodyPose(bodyIndex).position);
 }
 
-function bodyQuaternion(record: SceneRecord, frameIndex: number, bodyIndex: number): THREE.Quaternion {
-  const base = frameIndex * record.columns.rowValueCount + record.columns.bodyStatesColumnOffset + bodyIndex * record.columns.valuesPerBody + 3;
-  const v = record.values;
-  return new THREE.Quaternion(v[base + 1] as number, v[base + 2] as number, v[base + 3] as number, v[base] as number);
+function bodyQuaternion(sample: SceneSampleView, bodyIndex: number): THREE.Quaternion {
+  const [w, x, y, z] = sample.bodyPose(bodyIndex).orientationWxyz;
+  return new THREE.Quaternion(x, y, z, w);
 }
 
-export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel | null, bindings: VehicleDisplayBindings): VehicleReadoutModel {
-  const scalarIndex = new Map(record.scalars.map((definition, index) => [definition.name, index]));
+export function buildVehicleReadoutModel(definition: SceneDefinition, track: TrackModel | null, bindings: VehicleDisplayBindings, initialSample: SceneSampleView): VehicleReadoutModel {
+  const scalarIndex = new Map(definition.scalars.map((scalar, index) => [scalar.name, index]));
   const ref = (name: string): ScalarRef | null => {
     const index = scalarIndex.get(name);
     return index === undefined ? null : { index };
@@ -152,10 +139,10 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
 
   // Longitudinal offsets along the carbody x axis at the first frame; without
   // a carbody there is no such reference and the offsets stay null.
-  const origin = carbodyBodyIndex === null ? null : bodyPosition(record, 0, carbodyBodyIndex);
-  const axis = carbodyBodyIndex === null ? null : new THREE.Vector3(1, 0, 0).applyQuaternion(bodyQuaternion(record, 0, carbodyBodyIndex));
+  const origin = carbodyBodyIndex === null ? null : bodyPosition(initialSample, carbodyBodyIndex);
+  const axis = carbodyBodyIndex === null ? null : new THREE.Vector3(1, 0, 0).applyQuaternion(bodyQuaternion(initialSample, carbodyBodyIndex));
   const offsetOf = (bodyIndex: number): number | null =>
-    origin === null || axis === null ? null : bodyPosition(record, 0, bodyIndex).sub(origin).dot(axis);
+    origin === null || axis === null ? null : bodyPosition(initialSample, bodyIndex).sub(origin).dot(axis);
   const trackBody = (bound: BoundBody): TrackBodyReadout => ({
     bodyName: bound.bodyName,
     bodyIndex: bound.bodyIndex,
@@ -171,12 +158,12 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
     if (placementIndex === null) {
       return null;
     }
-    const placement = record.wheelPlacements[placementIndex];
+    const placement = definition.wheelPlacements[placementIndex];
     if (placement === undefined) {
       throw new Error(`display bindings refer to wheel placement ${placementIndex}, which the record does not have`);
     }
     const name = placement.interfaceName;
-    const wheelBodyIndex = record.bodies.findIndex((body) => body.name === placement.wheelBodyName);
+    const wheelBodyIndex = definition.bodies.findIndex((body) => body.name === placement.wheelBodyName);
     if (wheelBodyIndex < 0) {
       throw new Error(`wheel placement '${name}' names wheel body '${placement.wheelBodyName}', which the record does not list`);
     }
@@ -206,49 +193,20 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
   const carbody = bindings.carbody === null ? null : trackBody(bindings.carbody);
   const bogies = bindings.bogies.map((bogie) => trackBody(bogie));
 
-  const columns = record.columns;
-  const read = (frameIndex: number, scalar: ScalarRef | null): Reading | null => {
-    if (scalar === null) {
-      return null;
-    }
-    const value = record.values[frameIndex * columns.rowValueCount + columns.scalarValuesColumnOffset + scalar.index] as number;
-    const status = record.statuses[frameIndex * columns.scalarCount + scalar.index] as number;
+  const read = (sample: SceneSampleView, scalar: ScalarRef | null): Reading | null => {
+    if (scalar === null) return null;
+    const { value, status } = sample.scalar(scalar.index);
     return { value, status, valid: status === ScalarStatus.valid && Number.isFinite(value) };
   };
 
-  // Record-wide ceilings for bars; only valid samples count.
-  let forceMax = 0;
-  let lateralMax = 0;
-  let yawMax = 0;
-  for (let frameIndex = 0; frameIndex < record.frameCount; ++frameIndex) {
-    for (const wheel of wheels) {
-      const force = read(frameIndex, wheel.verticalSupportForceScalar);
-      if (force?.valid === true) {
-        forceMax = Math.max(forceMax, Math.abs(force.value));
-      }
-    }
-    for (const body of [carbody, ...bogies]) {
-      if (body === null) {
-        continue;
-      }
-      const lateral = read(frameIndex, body.lateralScalar);
-      const yaw = read(frameIndex, body.yawScalar);
-      if (lateral?.valid === true) {
-        lateralMax = Math.max(lateralMax, Math.abs(lateral.value));
-      }
-      if (yaw?.valid === true) {
-        yawMax = Math.max(yawMax, Math.abs(yaw.value));
-      }
-    }
-  }
-
-  const contactAt = (frameIndex: number): ContactSummary => {
+  const contactRecorded = wheels.some((wheel) => wheel.contactPatchCountScalar !== null);
+  const contactAt = (sample: SceneSampleView): ContactSummary => {
     const loss: string[] = [];
     const two: string[] = [];
     let known = 0;
     const total = wheels.length;
     for (const wheel of wheels) {
-      const patches = read(frameIndex, wheel.contactPatchCountScalar);
+      const patches = read(sample, wheel.contactPatchCountScalar);
       if (patches?.valid !== true) {
         continue;
       }
@@ -260,7 +218,7 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
       }
     }
     if (known === 0) {
-      return { state: 'unknown', codes: [], known, total };
+      return { state: contactRecorded ? 'unknown' : 'notRecorded', codes: [], known, total };
     }
     if (loss.length > 0) {
       return { state: 'loss', codes: loss, known, total };
@@ -271,33 +229,10 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
     return { state: known === total ? 'single' : 'incomplete', codes: [], known, total };
   };
 
-  const contactSpans: ContactSpan[] = [];
-  for (const wheel of wheels) {
-    let open: ContactSpan | null = null;
-    for (let frameIndex = 0; frameIndex < record.frameCount; ++frameIndex) {
-      const patches = read(frameIndex, wheel.contactPatchCountScalar);
-      // A sample that is not ready is no event and ends any open span.
-      if (patches?.valid !== true) {
-        open = null;
-        continue;
-      }
-      const count = patches.value;
-      if (count !== 1) {
-        if (open !== null && open.patches === count && open.endFrameIndex === frameIndex - 1) {
-          open.endFrameIndex = frameIndex;
-        } else {
-          open = { startFrameIndex: frameIndex, endFrameIndex: frameIndex, patches: count, code: wheel.code };
-          contactSpans.push(open);
-        }
-      }
-    }
-  }
-  contactSpans.sort((a, b) => a.startFrameIndex - b.startFrameIndex);
-
-  const contactPatchesAt = (frameIndex: number, out: Float64Array): void => {
+  const contactPatchesAt = (sample: SceneSampleView, out: Float64Array): void => {
     out.fill(Number.NaN);
     for (const wheel of wheels) {
-      const patches = read(frameIndex, wheel.contactPatchCountScalar);
+      const patches = read(sample, wheel.contactPatchCountScalar);
       if (patches?.valid === true) {
         out[wheel.placementIndex] = patches.value;
       }
@@ -306,30 +241,30 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
 
   const forward = new THREE.Vector3();
   const headingPosition = new THREE.Vector3();
-  const headingAt = (frameIndex: number, body: TrackBodyReadout): number | null => {
+  const headingAt = (sample: SceneSampleView, body: TrackBodyReadout): number | null => {
     if (track === null) {
       return null;
     }
-    const recordedStation = read(frameIndex, body.stationScalar);
-    headingPosition.copy(bodyPosition(record, frameIndex, body.bodyIndex));
+    const recordedStation = read(sample, body.stationScalar);
+    headingPosition.copy(bodyPosition(sample, body.bodyIndex));
     const stationMeters = recordedStation?.valid === true ? recordedStation.value : track.stationNearestToInertialPosition(headingPosition);
     const trackFrame = track.trackFrameAtStation(stationMeters);
     // Every ORVD body frame has +x forward, whatever its y and z basis.
-    forward.set(1, 0, 0).applyQuaternion(bodyQuaternion(record, frameIndex, body.bodyIndex));
+    forward.set(1, 0, 0).applyQuaternion(bodyQuaternion(sample, body.bodyIndex));
     return Math.atan2(forward.dot(trackFrame.right), forward.dot(trackFrame.tangent));
   };
 
   const axle = new THREE.Vector3();
-  const carrierHeadingAt = (frameIndex: number, carrier: CarrierReadoutBinding): number | null => {
+  const carrierHeadingAt = (sample: SceneSampleView, carrier: CarrierReadoutBinding): number | null => {
     const wheel = carrier.leftWheel ?? carrier.rightWheel;
     if (track === null || wheel === null) {
       return null;
     }
-    const recordedStation = read(frameIndex, carrier.stationScalar);
-    headingPosition.copy(bodyPosition(record, frameIndex, carrier.bodyIndex));
+    const recordedStation = read(sample, carrier.stationScalar);
+    headingPosition.copy(bodyPosition(sample, carrier.bodyIndex));
     const stationMeters = recordedStation?.valid === true ? recordedStation.value : track.stationNearestToInertialPosition(headingPosition);
     const trackFrame = track.trackFrameAtStation(stationMeters);
-    axle.set(...wheel.spinAxisInWheelBodyFrame).normalize().applyQuaternion(bodyQuaternion(record, frameIndex, wheel.wheelBodyIndex));
+    axle.set(...wheel.spinAxisInWheelBodyFrame).normalize().applyQuaternion(bodyQuaternion(sample, wheel.wheelBodyIndex));
     let along = axle.dot(trackFrame.tangent);
     let across = axle.dot(trackFrame.right);
     if (Math.hypot(along, across) < smallestHorizontalAxleProjection) {
@@ -345,51 +280,28 @@ export function buildVehicleReadoutModel(record: SceneRecord, track: TrackModel 
     return Math.atan2(-along, across);
   };
 
-  const carbodyStation = new Float64Array(record.frameCount);
-  const stationRef = carbody?.stationScalar ?? null;
-  const scratch = new THREE.Vector3();
-  for (let frameIndex = 0; frameIndex < record.frameCount; ++frameIndex) {
-    const recorded = read(frameIndex, stationRef);
-    if (recorded?.valid === true) {
-      carbodyStation[frameIndex] = recorded.value;
-    } else if (track !== null && carbodyBodyIndex !== null) {
-      scratch.copy(bodyPosition(record, frameIndex, carbodyBodyIndex));
-      carbodyStation[frameIndex] = track.stationNearestToInertialPosition(scratch);
-    } else {
-      carbodyStation[frameIndex] = Number.NaN;
-    }
-  }
+  const stationAt = (sample: SceneSampleView): number | null => {
+    const recorded = read(sample, carbody?.stationScalar ?? null);
+    if (recorded?.valid === true) return recorded.value;
+    return track !== null && carbodyBodyIndex !== null
+      ? track.stationNearestToInertialPosition(bodyPosition(sample, carbodyBodyIndex)) : null;
+  };
 
-  const speedKmhAt = (frameIndex: number): number | null => {
+  const speedKmhAt = (sample: SceneSampleView): number | null => {
     if (carbodyBodyIndex === null) {
       return null;
     }
-    const [x, y, z] = bodyLinearVelocity(record, frameIndex, carbodyBodyIndex);
+    const [x, y, z] = sample.bodyLinearVelocity(carbodyBodyIndex);
     return 3.6 * Math.hypot(x, y, z);
   };
-
-  const intervals: number[] = [];
-  for (let frameIndex = 1; frameIndex < Math.min(record.frameCount, 200); ++frameIndex) {
-    intervals.push(frameTimeSeconds(record, frameIndex) - frameTimeSeconds(record, frameIndex - 1));
-  }
-  intervals.sort((a, b) => a - b);
 
   return {
     carriers,
     wheels,
     carbody,
     bogies,
-    // Display floors keep numerical noise on a quiet record from filling a bar.
-    scales: {
-      forceKn: niceCeiling(Math.max(10, forceMax / 1000)),
-      bodyLateralMm: niceCeiling(Math.max(1, lateralMax * 1000)),
-      bodyYawMrad: niceCeiling(Math.max(1, yawMax * 1000)),
-    },
-    contactSpans,
-    carbodyStation,
+    stationAt,
     carbodyBodyIndex,
-    initialSpeedKmh: speedKmhAt(0),
-    sampleIntervalSeconds: intervals[intervals.length >> 1] ?? 0,
     read,
     speedKmhAt,
     contactAt,

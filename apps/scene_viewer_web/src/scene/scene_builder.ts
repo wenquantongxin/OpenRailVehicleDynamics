@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-import type { SceneRecord } from '../record/scene_record.ts';
+import type { SceneDefinition } from '../record/scene_definition.ts';
 import type { PartLabel, VisualDefinition, VisualPart, WheelVisual } from '../record/visual_definition.ts';
 import { createPalette, stageColors, type ScenePalette } from './materials.ts';
-import { buildTrack } from './track_builder.ts';
+import { TrackStage } from './track_stage.ts';
 import { TrackModel } from './track_model.ts';
 import type { VehicleDisplayBindings } from './vehicle_display_bindings.ts';
 import { buildWheel, buildWheelSection, type WheelSection } from './wheel_geometry.ts';
 
-// Builds the Three.js objects once from the record. Every body is an empty
+// Builds the Three.js objects once from the definition. Every body is an empty
 // Object3D whose pose is written from the frames; parts hang under their body
 // in that body's own frame. The root group turns the ORVD inertial frame
 // (x forward, y right, z down) into Three.js Y-up: a rotation of +90 degrees
@@ -52,6 +52,7 @@ export interface BuiltScene {
   visualDefinition: VisualDefinition | null;
   labels: SceneLabel[];
   track: TrackModel | null;
+  trackStage: TrackStage | null;
   palette: ScenePalette;
   setDisplay: (state: DisplayState) => void;
   /** Parts hidden by name (the `hide` deep link); they stay hidden whatever the display switches say. */
@@ -214,7 +215,7 @@ function defaultWheelVisual(radius: number): WheelVisual {
 
 type CarbodyRole = 'shell' | 'glass' | 'floor' | null;
 
-export function buildScene(record: SceneRecord, visualDefinition: VisualDefinition | null, bindings: VehicleDisplayBindings): BuiltScene {
+export function buildScene(definition: SceneDefinition, visualDefinition: VisualDefinition | null, bindings: VehicleDisplayBindings): BuiltScene {
   const palette = createPalette();
   const carbodyBodyName = bindings.carbody?.bodyName ?? null;
   const root = new THREE.Group();
@@ -222,7 +223,7 @@ export function buildScene(record: SceneRecord, visualDefinition: VisualDefiniti
   const bodyObjects = new Map<string, THREE.Object3D>();
   const parts: ScenePart[] = [];
   const labels: SceneLabel[] = [];
-  for (const body of record.bodies) {
+  for (const body of definition.bodies) {
     const object = new THREE.Object3D();
     object.name = body.name;
     root.add(object);
@@ -278,7 +279,7 @@ export function buildScene(record: SceneRecord, visualDefinition: VisualDefiniti
 
   const treads: THREE.Mesh[] = [];
   const sections = new Map<number, WheelSection>();
-  record.wheelPlacements.forEach((placement) => {
+  definition.wheelPlacements.forEach((placement) => {
     const body = bodyObjects.get(placement.wheelBodyName);
     if (body === undefined) {
       throw new Error(`wheel placement names unknown body '${placement.wheelBodyName}'`);
@@ -301,9 +302,11 @@ export function buildScene(record: SceneRecord, visualDefinition: VisualDefiniti
   });
 
   let track: TrackModel | null = null;
-  if (record.track !== null) {
-    track = new TrackModel(record.track);
-    const built = buildTrack(track, palette);
+  let trackStage: TrackStage | null = null;
+  if (definition.track !== null) {
+    track = new TrackModel(definition.track);
+    const built = new TrackStage(track, palette);
+    trackStage = built;
     root.add(built.group);
     root.add(built.ground);
     parts.push({ name: 'track', bodyName: '', group: 'track', object: built.group });
@@ -365,6 +368,7 @@ export function buildScene(record: SceneRecord, visualDefinition: VisualDefiniti
   };
 
   const dispose = (): void => {
+    trackStage?.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     root.traverse((object) => {
       if (object instanceof THREE.AxesHelper) {
@@ -388,5 +392,5 @@ export function buildScene(record: SceneRecord, visualDefinition: VisualDefiniti
     palette.dispose();
   };
 
-  return { root, bodyObjects, parts, visualDefinition, labels, track, palette, setDisplay, setUserHidden, setContactStates, dispose };
+  return { root, bodyObjects, parts, visualDefinition, labels, track, trackStage, palette, setDisplay, setUserHidden, setContactStates, dispose };
 }

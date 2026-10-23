@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-import type { SceneRecord } from '../record/scene_record.ts';
+import type { SceneDefinition } from '../record/scene_definition.ts';
 import { fitDistanceMeters, type ViewportArea } from './camera_framing.ts';
 import {
   anchorLocalFrame,
@@ -75,7 +75,9 @@ const presets: Record<ViewPreset, PresetSpec> = {
       return [extent.maxForward, left, extent.minUp + 0.17 * extentHeightMeters(extent)];
     },
   },
-  plan: { fit: 'vehicle', direction: [0, -0.0008, 1], fov: 32, margin: 0.06, target: (extent) => extentCentre(extent) },
+  // A small lean keeps OrbitControls away from its vertical singularity.
+  // The rig rotates this direction to retain the user's horizontal heading.
+  plan: { fit: 'vehicle', direction: [0, 0.0008, 1], fov: 32, margin: 0.06, target: (extent) => extentCentre(extent) },
   side: {
     fit: 'vehicle',
     direction: [0, 1, 0.16],
@@ -160,7 +162,7 @@ export function presetAvailableFor(preset: ViewPreset, extents: FramedExtents, b
  * Measures the vehicle and the first bound bogie at the scene's current pose,
  * each in the local frame of its anchor. Body matrices must be up to date.
  */
-export function measureFramedExtents(record: SceneRecord, scene: BuiltScene, bindings: VehicleDisplayBindings): FramedExtents {
+export function measureFramedExtents(definition: SceneDefinition, scene: BuiltScene, bindings: VehicleDisplayBindings): FramedExtents {
   const anchors = cameraAnchorsFor(scene, bindings);
   const vehicleOrigin = anchorOriginWorld('carbody', anchors);
   const vehicle =
@@ -175,7 +177,7 @@ export function measureFramedExtents(record: SceneRecord, scene: BuiltScene, bin
       : measureDisplayExtent(
           scene.parts,
           anchorLocalFrame(bogieOrigin, scene.track, scene.root, anchorForwardWorld('bogie', anchors)),
-          new Set(firstBogie.memberBodyIndices.map((bodyIndex) => record.bodies[bodyIndex]?.name ?? '')),
+          new Set(firstBogie.memberBodyIndices.map((bodyIndex) => definition.bodies[bodyIndex]?.name ?? '')),
         );
   return { vehicle, bogie };
 }
@@ -187,12 +189,11 @@ export function presetTaste(preset: ViewPreset): { direction: [number, number, n
 }
 
 /** Target and camera in the anchor frame; the preset's own framing rule. */
-export function presetDestination(preset: ViewPreset, extent: DisplayExtent, viewport: ViewportArea): { camera: THREE.Vector3; target: THREE.Vector3 } {
+export function presetDestination(preset: ViewPreset, extent: DisplayExtent, viewport: ViewportArea, direction: [number, number, number] = presets[preset].direction): { camera: THREE.Vector3; target: THREE.Vector3 } {
   const spec = presets[preset];
   const target = spec.target(extent);
-  const distance = fitDistanceMeters(extentCorners(extent), target, spec.direction, spec.fov, viewport, spec.margin);
-  const direction = new THREE.Vector3(...spec.direction).normalize();
-  return { camera: new THREE.Vector3(...target).addScaledVector(direction, distance), target: new THREE.Vector3(...target) };
+  const distance = fitDistanceMeters(extentCorners(extent), target, direction, spec.fov, viewport, spec.margin);
+  return { camera: new THREE.Vector3(...target).addScaledVector(new THREE.Vector3(...direction).normalize(), distance), target: new THREE.Vector3(...target) };
 }
 
 function sameViewport(a: ViewportArea | null, b: ViewportArea): boolean {
@@ -215,11 +216,22 @@ function easeInOutCubic(s: number): number {
   return s < 0.5 ? 4 * s * s * s : 1 - (-2 * s + 2) ** 3 / 2;
 }
 
+/** Orbit around the target instead of taking a chord through the vertical pole. */
+function interpolateViewOffset(start: THREE.Vector3, end: THREE.Vector3, fraction: number): THREE.Vector3 {
+  const startAzimuth = Math.atan2(start.y, start.x);
+  const delta = Math.atan2(end.y, end.x) - startAzimuth;
+  const azimuth = startAzimuth + fraction * Math.atan2(Math.sin(delta), Math.cos(delta));
+  const polar = THREE.MathUtils.lerp(Math.atan2(Math.hypot(start.x, start.y), start.z), Math.atan2(Math.hypot(end.x, end.y), end.z), fraction);
+  const radius = THREE.MathUtils.lerp(start.length(), end.length(), fraction);
+  return new THREE.Vector3(radius * Math.sin(polar) * Math.cos(azimuth), radius * Math.sin(polar) * Math.sin(azimuth), radius * Math.cos(polar));
+}
+
 export class CameraRig {
   follow = true;
   private preset: ViewPreset = 'overview';
+  private planDirection: [number, number, number] = [...presets.plan.direction];
   private tween: {
-    startCamera: THREE.Vector3;
+    startOffset: THREE.Vector3;
     startTarget: THREE.Vector3;
     startFov: number;
     elapsed: number;
@@ -278,7 +290,7 @@ export class CameraRig {
   }
 
   private place(preset: ViewPreset, extent: DisplayExtent, anchorFrame: LocalFrame, viewport: ViewportArea): void {
-    const destination = presetDestination(preset, extent, viewport);
+    const destination = presetDestination(preset, extent, viewport, preset === 'plan' ? this.planDirection : undefined);
     this.toWorld(anchorFrame, destination.camera, this.camera.position);
     this.toWorld(anchorFrame, destination.target, this.controls.target);
     this.camera.fov = presets[preset].fov;
@@ -297,14 +309,23 @@ export class CameraRig {
     if (anchorFrame === null) {
       return false;
     }
+    const startTarget = this.toLocal(anchorFrame, this.controls.target, new THREE.Vector3());
+    const startOffset = this.toLocal(anchorFrame, this.camera.position, new THREE.Vector3()).sub(startTarget);
+    if (preset === 'plan') {
+      const horizontal = Math.hypot(startOffset.x, startOffset.y);
+      if (horizontal > 1e-8 * startOffset.length()) {
+        const lean = Math.hypot(presets.plan.direction[0], presets.plan.direction[1]);
+        this.planDirection = [lean * startOffset.x / horizontal, lean * startOffset.y / horizontal, 1];
+      }
+    }
     this.preset = preset;
     this.userAdjusted = false;
     if (immediate) {
       this.place(preset, fit.extent, anchorFrame, viewport);
     } else {
       this.tween = {
-        startCamera: this.toLocal(anchorFrame, this.camera.position, new THREE.Vector3()),
-        startTarget: this.toLocal(anchorFrame, this.controls.target, new THREE.Vector3()),
+        startOffset,
+        startTarget,
         startFov: this.camera.fov,
         elapsed: 0,
         duration: 0.9,
@@ -341,9 +362,9 @@ export class CameraRig {
     if (this.tween !== null) {
       this.tween.elapsed += wallDeltaSeconds;
       const s = easeInOutCubic(Math.min(1, this.tween.elapsed / this.tween.duration));
-      const destination = presetDestination(this.preset, fit.extent, viewport);
-      const cameraLocal = this.tween.startCamera.clone().lerp(destination.camera, s);
+      const destination = presetDestination(this.preset, fit.extent, viewport, this.preset === 'plan' ? this.planDirection : undefined);
       const targetLocal = this.tween.startTarget.clone().lerp(destination.target, s);
+      const cameraLocal = interpolateViewOffset(this.tween.startOffset, destination.camera.sub(destination.target), s).add(targetLocal);
       this.toWorld(anchorFrame, cameraLocal, this.camera.position);
       this.toWorld(anchorFrame, targetLocal, this.controls.target);
       this.camera.fov = THREE.MathUtils.lerp(this.tween.startFov, presets[this.preset].fov, s);

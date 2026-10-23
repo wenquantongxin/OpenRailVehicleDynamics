@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as THREE from 'three';
 
-import { bodyPose, frameTimeSeconds, parseSceneRecord } from '../src/record/scene_record.ts';
+import { parseSceneRecord } from '../src/record/scene_record.ts';
 import { wheelSpinBindings } from '../src/scene/apply_frame.ts';
 import { interpolateOrientation } from '../src/scene/pose_interpolation.ts';
 
@@ -35,38 +35,43 @@ async function main(): Promise<void> {
     toArrayBuffer(await readFile(join(directory, String(statusTable['file'])))),
     null,
   );
-  if (record.frameCount < 11) {
+  if (record.samples.frameCount < 11) {
     throw new Error('the record needs at least eleven frames');
+  }
+  if (record.samples.columns.wheelSpinAngleCount === 0) {
+    throw new Error('the record carries no wheel spin angles; nothing to verify');
   }
   const firstFrameIndex = 0;
   const secondFrameIndex = 10;
   const middleFrameIndex = 5;
+  const first = record.samples.viewAt(firstFrameIndex);
+  const second = record.samples.viewAt(secondFrameIndex);
+  const middle = record.samples.viewAt(middleFrameIndex);
   const alpha =
-    (frameTimeSeconds(record, middleFrameIndex) - frameTimeSeconds(record, firstFrameIndex)) /
-    (frameTimeSeconds(record, secondFrameIndex) - frameTimeSeconds(record, firstFrameIndex));
-  const bindings = wheelSpinBindings(record);
+    (middle.timeSeconds - first.timeSeconds) / (second.timeSeconds - first.timeSeconds);
+  const bindings = wheelSpinBindings(record.definition);
   const interpolated = new THREE.Quaternion();
   const recorded = new THREE.Quaternion();
   let worstBody = 0;
   let worstWheelWithSpin = 0;
   let worstWheelShortestPath = 0;
-  record.bodies.forEach((_body, bodyIndex) => {
-    const [w, x, y, z] = bodyPose(record, middleFrameIndex, bodyIndex).orientationWxyz;
+  record.definition.bodies.forEach((_body, bodyIndex) => {
+    const [w, x, y, z] = middle.bodyPose(bodyIndex).orientationWxyz;
     recorded.set(x, y, z, w);
     const binding = bindings.get(bodyIndex);
-    interpolateOrientation(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, binding, interpolated);
+    interpolateOrientation(first, second, alpha, bodyIndex, binding, interpolated);
     const error = geodesicAngle(interpolated, recorded);
     if (binding === undefined) {
       worstBody = Math.max(worstBody, error);
     } else {
       worstWheelWithSpin = Math.max(worstWheelWithSpin, error);
-      interpolateOrientation(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, undefined, interpolated);
+      interpolateOrientation(first, second, alpha, bodyIndex, undefined, interpolated);
       worstWheelShortestPath = Math.max(worstWheelShortestPath, geodesicAngle(interpolated, recorded));
     }
   });
   const report = {
     frame_indices: [firstFrameIndex, middleFrameIndex, secondFrameIndex],
-    interval_seconds: frameTimeSeconds(record, secondFrameIndex) - frameTimeSeconds(record, firstFrameIndex),
+    interval_seconds: record.samples.timeAt(secondFrameIndex) - record.samples.timeAt(firstFrameIndex),
     wheels_with_spin_angles: bindings.size,
     worst_non_wheel_error_radians: worstBody,
     worst_wheel_error_with_spin_angles_radians: worstWheelWithSpin,

@@ -1,3 +1,4 @@
+import type { SceneSampleView } from '../record/scene_sample.ts';
 import { useMemo } from 'react';
 
 import { sectionNames, type TrackModel } from '../scene/track_model.ts';
@@ -15,7 +16,7 @@ const mapHeight = 118;
 /** The line seen from above, turned so its principal axis runs left to right in the direction of increasing station. */
 function usePlan(track: TrackModel) {
   return useMemo(() => {
-    const points = track.planPointsEvery(4);
+    const points = track.overviewPoints();
     const count = Math.max(1, points.length);
     const meanX = points.reduce((sum, point) => sum + point.x, 0) / count;
     const meanY = points.reduce((sum, point) => sum + point.y, 0) / count;
@@ -64,10 +65,9 @@ function usePlan(track: TrackModel) {
   }, [track]);
 }
 
-export function TrackCard({ track, readoutModel, frameIndex }: { track: TrackModel; readoutModel: VehicleReadoutModel; frameIndex: number }) {
+export function TrackCard({ track, readoutModel, sample, startStationMeters }: { track: TrackModel; readoutModel: VehicleReadoutModel; sample: SceneSampleView; startStationMeters: number }) {
   const plan = usePlan(track);
-  const stationMeters = readoutModel.carbodyStation[frameIndex] ?? Number.NaN;
-  const startStationMeters = readoutModel.carbodyStation[0] ?? Number.NaN;
+  const stationMeters = readoutModel.stationAt(sample) ?? Number.NaN;
   const known = Number.isFinite(stationMeters);
   const section = known ? track.sectionAtStation(stationMeters) : null;
   const curvature = known ? track.curvatureAtStation(stationMeters) : 0;
@@ -86,7 +86,7 @@ export function TrackCard({ track, readoutModel, frameIndex }: { track: TrackMod
           ? `${fixed(1 / Math.abs(curvature), 0)} m`
           : '∞';
   const hand = section === null || section.direction === 0 ? '' : section.direction > 0 ? ' · right-hand 右转' : ' · left-hand 左转';
-  const speed = readoutModel.speedKmhAt(frameIndex);
+  const speed = readoutModel.speedKmhAt(sample);
   return (
     <Card index="02" en="Track" zh="线路">
       <svg className="plan" width={mapWidth} height={mapHeight} viewBox={`0 0 ${mapWidth} ${mapHeight}`} aria-label="Line plan">

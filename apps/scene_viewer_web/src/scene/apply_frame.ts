@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-import type { SceneRecord } from '../record/scene_record.ts';
+import type { SceneDefinition } from '../record/scene_definition.ts';
+import type { SceneSampleView } from '../record/scene_sample.ts';
 import { interpolateOrientation, interpolatePosition, type WheelSpinBinding } from './pose_interpolation.ts';
 import type { BuiltScene } from './scene_builder.ts';
 
@@ -9,14 +10,11 @@ import type { BuiltScene } from './scene_builder.ts';
 const position = new THREE.Vector3();
 const orientation = new THREE.Quaternion();
 
-/** Which body slots are wheels with a recorded spin angle, by body index. */
-export function wheelSpinBindings(record: SceneRecord): Map<number, WheelSpinBinding> {
+/** Wheel axes and angle slots by body index; each sample determines angle availability. */
+export function wheelSpinBindings(definition: SceneDefinition): Map<number, WheelSpinBinding> {
   const bindings = new Map<number, WheelSpinBinding>();
-  if (record.columns.wheelSpinAngleCount === 0) {
-    return bindings;
-  }
-  record.wheelPlacements.forEach((placement, wheelPlacementIndex) => {
-    const bodyIndex = record.bodies.findIndex((candidate) => candidate.name === placement.wheelBodyName);
+  definition.wheelPlacements.forEach((placement, wheelPlacementIndex) => {
+    const bodyIndex = definition.bodies.findIndex((candidate) => candidate.name === placement.wheelBodyName);
     if (bodyIndex >= 0) {
       bindings.set(bodyIndex, { wheelPlacementIndex, spinAxisInBody: placement.spinAxisInWheelBodyFrame });
     }
@@ -25,20 +23,20 @@ export function wheelSpinBindings(record: SceneRecord): Map<number, WheelSpinBin
 }
 
 export function applyFrames(
-  record: SceneRecord,
+  definition: SceneDefinition,
   scene: BuiltScene,
   bindings: Map<number, WheelSpinBinding>,
-  firstFrameIndex: number,
-  secondFrameIndex: number,
+  firstSample: SceneSampleView,
+  secondSample: SceneSampleView,
   alpha: number,
 ): void {
-  record.bodies.forEach((body, bodyIndex) => {
+  definition.bodies.forEach((body, bodyIndex) => {
     const object = scene.bodyObjects.get(body.name);
     if (object === undefined) {
       return;
     }
-    interpolatePosition(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, position);
-    interpolateOrientation(record, firstFrameIndex, secondFrameIndex, alpha, bodyIndex, bindings.get(bodyIndex), orientation);
+    interpolatePosition(firstSample, secondSample, alpha, bodyIndex, position);
+    interpolateOrientation(firstSample, secondSample, alpha, bodyIndex, bindings.get(bodyIndex), orientation);
     object.position.copy(position);
     object.quaternion.copy(orientation);
   });

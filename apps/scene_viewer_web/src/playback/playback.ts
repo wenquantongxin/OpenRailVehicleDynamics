@@ -1,4 +1,4 @@
-import { frameIndexAtOrBefore, frameTimeSeconds, type SceneRecord } from '../record/scene_record.ts';
+import type { RecordedSamples } from '../record/recorded_samples.ts';
 
 // The display clock. It advances with wall time scaled by the playback rate,
 // clamps to the record's time span, and resolves a display time to the two
@@ -16,12 +16,12 @@ export class PlaybackController {
   speed = 1;
   readonly startSeconds: number;
   readonly endSeconds: number;
-  private readonly record: SceneRecord;
+  private readonly samples: RecordedSamples;
 
-  constructor(record: SceneRecord) {
-    this.record = record;
-    this.startSeconds = frameTimeSeconds(record, 0);
-    this.endSeconds = frameTimeSeconds(record, record.frameCount - 1);
+  constructor(samples: RecordedSamples) {
+    this.samples = samples;
+    this.startSeconds = samples.timeAt(0);
+    this.endSeconds = samples.timeAt(samples.frameCount - 1);
     this.timeSeconds = this.startSeconds;
   }
 
@@ -57,13 +57,13 @@ export class PlaybackController {
   }
 
   bracket(): FrameBracket {
-    const firstFrameIndex = Math.max(0, frameIndexAtOrBefore(this.record, this.timeSeconds));
-    const secondFrameIndex = Math.min(this.record.frameCount - 1, firstFrameIndex + 1);
+    const firstFrameIndex = Math.max(0, this.samples.frameIndexAtOrBefore(this.timeSeconds));
+    const secondFrameIndex = Math.min(this.samples.frameCount - 1, firstFrameIndex + 1);
     if (secondFrameIndex === firstFrameIndex) {
       return { firstFrameIndex, secondFrameIndex, alpha: 0 };
     }
-    const first = frameTimeSeconds(this.record, firstFrameIndex);
-    const second = frameTimeSeconds(this.record, secondFrameIndex);
+    const first = this.samples.timeAt(firstFrameIndex);
+    const second = this.samples.timeAt(secondFrameIndex);
     const alpha = Math.min(1, Math.max(0, (this.timeSeconds - first) / (second - first)));
     return { firstFrameIndex, secondFrameIndex, alpha };
   }

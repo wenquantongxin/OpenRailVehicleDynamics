@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 import { CameraRig, presetAvailableFor, type CameraAnchors, type FramedExtents } from '../src/scene/camera_rig.ts';
 import type { ViewportArea } from '../src/scene/camera_framing.ts';
@@ -10,7 +10,7 @@ import type { ViewportArea } from '../src/scene/camera_framing.ts';
 // picture until the user takes over, an unframeable preset is refused without
 // moving the camera, and following carries the camera with its anchor.
 
-function makeRig() {
+function makeRig(realControls = false) {
   const root = new THREE.Group();
   root.rotation.x = Math.PI / 2;
   const carbody = new THREE.Object3D();
@@ -20,14 +20,15 @@ function makeRig() {
   const anchors: CameraAnchors = { root, carbody, bogie: null, bodies: [carbody] };
   const extents: FramedExtents = { vehicle: { minForward: -11, maxForward: 11, minLeft: -1.3, maxLeft: 1.3, minUp: 0, maxUp: 3.8 }, bogie: null };
   const listeners: Record<string, () => void> = {};
-  const controls = {
+  const camera = new THREE.PerspectiveCamera(30, 1400 / 900, 0.1, 2500);
+  const controls = realControls ? new OrbitControls(camera, null) : {
     target: new THREE.Vector3(),
     update: () => undefined,
     addEventListener: (type: string, listener: () => void) => {
       listeners[type] = listener;
     },
   } as unknown as OrbitControls;
-  const camera = new THREE.PerspectiveCamera(30, 1400 / 900, 0.1, 2500);
+  controls.maxPolarAngle = Math.PI / 2 - 0.01;
   const rig = new CameraRig(camera, controls, anchors, null, extents);
   return { rig, camera, controls, listeners, carbody, root, extents };
 }
@@ -84,4 +85,39 @@ test('following carries the camera with the anchor', () => {
   const moved = camera.position.clone().sub(controls.target);
   assert.ok(moved.distanceTo(offset) < 1e-9, 'the camera keeps its offset from the target');
   assert.ok(Math.abs(camera.position.x - offset.x - controls.target.x) < 1e-9);
+});
+
+test('entering plan retains horizontal orientation without a pole flip', () => {
+  for (const from of ['overview', 'headon', 'side'] as const) {
+    for (const oppositeSide of [false, true]) {
+      const { rig, camera, controls } = makeRig(true);
+      rig.applyPreset(from, wide, true);
+      if (oppositeSide) {
+        const offset = camera.position.clone().sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+        camera.position.copy(controls.target).add(offset);
+        controls.update();
+      }
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      const previous = camera.quaternion.clone();
+      rig.applyPreset('plan', wide, false);
+      for (let frame = 0; frame < 60; ++frame) {
+        rig.update(1 / 60, wide);
+        assert.ok(previous.angleTo(camera.quaternion) < 0.15, `${from}: no abrupt turn between frames`);
+        previous.copy(camera.quaternion);
+      }
+      assert.ok(right.dot(new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)) > 1 - 1e-10, `${from}: screen-right is preserved`);
+      rig.refit(narrow);
+      assert.ok(right.dot(new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)) > 1 - 1e-10, 'resizing preserves the chosen heading');
+      rig.applyPreset('plan', narrow, false);
+      for (let frame = 0; frame < 60; ++frame) rig.update(1 / 60, narrow);
+      assert.ok(right.dot(new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)) > 1 - 1e-10, 'choosing plan again does not rotate it');
+      previous.copy(camera.quaternion);
+      rig.applyPreset('side', wide, false);
+      for (let frame = 0; frame < 60; ++frame) {
+        rig.update(1 / 60, wide);
+        assert.ok(previous.angleTo(camera.quaternion) < 0.2, 'leaving plan takes a smooth orbit');
+        previous.copy(camera.quaternion);
+      }
+    }
+  }
 });

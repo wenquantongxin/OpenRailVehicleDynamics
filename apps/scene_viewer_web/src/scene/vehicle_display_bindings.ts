@@ -1,4 +1,4 @@
-import type { SceneRecord, WheelSide } from '../record/scene_record.ts';
+import type { SceneDefinition, WheelSide } from '../record/scene_definition.ts';
 import type { BilingualName, VisualDefinition } from '../record/visual_definition.ts';
 
 // One resolution of the record's explicit relations and the visual
@@ -15,7 +15,7 @@ export interface BoundBody {
 }
 
 export interface BoundCarrier extends BoundBody {
-  /** Index into `record.wheelPlacements` of the carrier's wheel of that side; null when it has none. */
+  /** Index into `definition.wheelPlacements` of the carrier's wheel of that side; null when it has none. */
   leftWheelPlacementIndex: number | null;
   rightWheelPlacementIndex: number | null;
   /** Index into `bogies` of the display group whose member list names this carrier; null when none does. */
@@ -44,8 +44,8 @@ interface CarrierWheels {
   right: number | null;
 }
 
-export function resolveVehicleDisplayBindings(record: SceneRecord, visualDefinition: VisualDefinition | null): VehicleDisplayBindings {
-  const bodyIndexByName = new Map(record.bodies.map((body, index) => [body.name, index]));
+export function resolveVehicleDisplayBindings(definition: SceneDefinition, visualDefinition: VisualDefinition | null): VehicleDisplayBindings {
+  const bodyIndexByName = new Map(definition.bodies.map((body, index) => [body.name, index]));
   const requireBody = (name: string, what: string): number => {
     const index = bodyIndexByName.get(name);
     if (index === undefined) {
@@ -56,7 +56,7 @@ export function resolveVehicleDisplayBindings(record: SceneRecord, visualDefinit
 
   // Carriers come from the record's wheel placements, in order of first appearance.
   const carrierWheels = new Map<string, CarrierWheels>();
-  record.wheelPlacements.forEach((placement, placementIndex) => {
+  definition.wheelPlacements.forEach((placement, placementIndex) => {
     const what = `wheel placement '${placement.interfaceName}'`;
     requireBody(placement.wheelBodyName, what);
     const bodyIndex = requireBody(placement.carrierBodyName, what);
@@ -104,7 +104,7 @@ export function resolveVehicleDisplayBindings(record: SceneRecord, visualDefinit
           displayName: bindings.carbody.displayName,
         };
 
-  const bogieIndexOfBody = new Int32Array(record.bodies.length).fill(-1);
+  const bogieIndexOfBody = new Int32Array(definition.bodies.length).fill(-1);
   const bogies: BoundBogie[] = (bindings?.bogies ?? []).map((bogie, bogieIndex) => {
     const what = `bogie binding '${bogie.bodyName}'`;
     const bodyIndex = requireBody(bogie.bodyName, what);
@@ -119,7 +119,7 @@ export function resolveVehicleDisplayBindings(record: SceneRecord, visualDefinit
       }
       for (const placementIndex of [wheels.left, wheels.right]) {
         if (placementIndex !== null) {
-          members.add(bodyIndexByName.get((record.wheelPlacements[placementIndex] as SceneRecord['wheelPlacements'][number]).wheelBodyName) as number);
+          members.add(bodyIndexByName.get((definition.wheelPlacements[placementIndex] as SceneDefinition['wheelPlacements'][number]).wheelBodyName) as number);
         }
       }
     }
@@ -127,7 +127,7 @@ export function resolveVehicleDisplayBindings(record: SceneRecord, visualDefinit
     for (const memberIndex of memberBodyIndices) {
       const existing = bogieIndexOfBody[memberIndex] as number;
       if (existing !== -1 && existing !== bogieIndex) {
-        throw new Error(`body '${(record.bodies[memberIndex] as SceneRecord['bodies'][number]).name}' is listed under two bogies`);
+        throw new Error(`body '${(definition.bodies[memberIndex] as SceneDefinition['bodies'][number]).name}' is listed under two bogies`);
       }
       bogieIndexOfBody[memberIndex] = bogieIndex;
     }

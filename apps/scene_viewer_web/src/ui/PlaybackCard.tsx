@@ -1,10 +1,11 @@
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { frameTimeSeconds, framePhase, frameSampleIndex, type SceneRecord } from '../record/scene_record.ts';
+import type { RecordedSamples } from '../record/recorded_samples.ts';
 import { sectionNames, type TrackModel } from '../scene/track_model.ts';
 import { Card } from './Card.tsx';
 import { chainage, clock, fixed } from './format.ts';
-import type { VehicleReadoutModel } from './vehicle_readout_model.ts';
+import type { RecordSummary } from './record_summary.ts';
+import { elementLabelWidthPixels, layoutElementLabels } from './timeline_labels.ts';
 
 // Card 07. The timeline carries only recorded facts: the curvature under the
 // carbody, the line's element points and the samples where a wheel had two
@@ -20,8 +21,8 @@ const phaseNames: Record<number, { en: string; zh: string }> = {
 };
 
 interface Props {
-  record: SceneRecord;
-  readoutModel: VehicleReadoutModel;
+  record: RecordedSamples;
+  summary: RecordSummary;
   track: TrackModel | null;
   frameIndex: number;
   timeSeconds: number;
@@ -34,9 +35,9 @@ interface Props {
 }
 
 export function PlaybackCard(props: Props) {
-  const { record, readoutModel, track, frameIndex } = props;
-  const start = frameTimeSeconds(record, 0);
-  const end = frameTimeSeconds(record, record.frameCount - 1);
+  const { record, summary, track, frameIndex } = props;
+  const start = record.timeAt(0);
+  const end = record.timeAt(record.frameCount - 1);
   const span = Math.max(1e-9, end - start);
   const fraction = Math.min(1, Math.max(0, (props.timeSeconds - start) / span));
 
@@ -46,7 +47,7 @@ export function PlaybackCard(props: Props) {
     const values: number[] = [];
     for (let i = 0; i < samples; ++i) {
       const rowIndex = Math.round((i / (samples - 1)) * (record.frameCount - 1));
-      const stationMeters = readoutModel.carbodyStation[rowIndex] ?? Number.NaN;
+      const stationMeters = summary.carbodyStation[rowIndex] ?? Number.NaN;
       const k = track !== null && Number.isFinite(stationMeters) ? Math.abs(track.curvatureAtStation(stationMeters)) : 0;
       values.push(k);
       kmax = Math.max(kmax, k);
@@ -58,20 +59,32 @@ export function PlaybackCard(props: Props) {
     // Element points: the first frame at which the carbody reaches the point.
     const elements = (track?.elementPoints ?? []).flatMap((point) => {
       for (let rowIndex = 0; rowIndex < record.frameCount; ++rowIndex) {
-        if ((readoutModel.carbodyStation[rowIndex] ?? Number.NaN) >= point.stationMeters) {
-          return [{ ...point, at: (frameTimeSeconds(record, rowIndex) - start) / span }];
+        if ((summary.carbodyStation[rowIndex] ?? Number.NaN) >= point.stationMeters) {
+          return [{ ...point, at: (record.timeAt(rowIndex) - start) / span }];
         }
       }
       return [];
     });
-    const events = readoutModel.contactSpans.map((spanEntry) => ({
-      at: (frameTimeSeconds(record, spanEntry.startFrameIndex) - start) / span,
+    const events = summary.contactSpans.map((spanEntry) => ({
+      at: (record.timeAt(spanEntry.startFrameIndex) - start) / span,
       loss: spanEntry.patches === 0,
     }));
     return { area, elements, events };
-  }, [record, readoutModel, track, start, span]);
+  }, [record, summary, track, start, span]);
 
   const barRef = useRef<HTMLDivElement>(null);
+  const [barWidth, setBarWidth] = useState(0);
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    if (bar === null) return;
+    const measure = (): void => setBarWidth(bar.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
+  const labels = useMemo(() => layoutElementLabels(strip.elements, barWidth), [strip.elements, barWidth]);
+  const labelledPoints = new Set(labels.map((label) => label.point));
   const seekFromPointer = (clientX: number): void => {
     const bar = barRef.current;
     if (bar === null) {
@@ -82,7 +95,7 @@ export function PlaybackCard(props: Props) {
     props.onSeek(start + f * span);
   };
 
-  const stationMeters = readoutModel.carbodyStation[frameIndex] ?? Number.NaN;
+  const stationMeters = summary.carbodyStation[frameIndex] ?? Number.NaN;
   const section = track !== null && Number.isFinite(stationMeters) ? track.sectionAtStation(stationMeters) : null;
   let current = '';
   if (section !== null && track !== null) {
@@ -96,10 +109,10 @@ export function PlaybackCard(props: Props) {
     }
     current = parts.join(' · ');
   }
-  const firstStationMeters = readoutModel.carbodyStation[0] ?? Number.NaN;
-  const lastStationMeters = readoutModel.carbodyStation[record.frameCount - 1] ?? Number.NaN;
-  const phase = phaseNames[framePhase(record, frameIndex)] ?? { en: 'Unknown phase', zh: '未知阶段' };
-  const sampleIndex = frameSampleIndex(record, frameIndex);
+  const firstStationMeters = summary.carbodyStation[0] ?? Number.NaN;
+  const lastStationMeters = summary.carbodyStation[record.frameCount - 1] ?? Number.NaN;
+  const phase = phaseNames[record.viewAt(frameIndex).phase] ?? { en: 'Unknown phase', zh: '未知阶段' };
+  const sampleIndex = record.viewAt(frameIndex).sampleIndex;
 
   return (
     <Card index="07" en="Playback" zh="回放" className="playback">
@@ -144,14 +157,16 @@ export function PlaybackCard(props: Props) {
               <svg viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true">
                 <path d={strip.area} className="curvature" />
                 {strip.elements.map((point) => (
-                  <line key={`${point.code}-${point.stationMeters}`} x1={1000 * point.at} x2={1000 * point.at} y1={4} y2={34} className="element" />
+                  <line key={`${point.code}-${point.stationMeters}`} x1={1000 * point.at} x2={1000 * point.at} y1={12} y2={labelledPoints.has(point) ? 34 : 18} className="element">
+                    <title>{point.code} · {chainage(point.stationMeters)}</title>
+                  </line>
                 ))}
                 {strip.events.map((event, index) => (
                   <line key={index} x1={1000 * event.at} x2={1000 * event.at} y1={26} y2={34} className={event.loss ? 'loss' : 'two'} />
                 ))}
               </svg>
-              {strip.elements.map((point) => (
-                <span key={`${point.code}-${point.stationMeters}`} className="element-code" style={{ left: `${100 * point.at}%` }}>
+              {labels.map(({ point, leftPixels }) => (
+                <span key={`${point.code}-${point.stationMeters}`} className="element-code" title={`${point.code} · ${chainage(point.stationMeters)}`} style={{ left: leftPixels, width: elementLabelWidthPixels }}>
                   {point.code}
                 </span>
               ))}

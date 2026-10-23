@@ -4,6 +4,7 @@ import { chainage } from '../ui/format.ts';
 import type { ScenePalette } from './materials.ts';
 import { stageColors } from './materials.ts';
 import type { TrackFrame, TrackModel } from './track_model.ts';
+import { ownedGridStations, ownsStation, segmentSurfaceStations, type TrackSegment, type TrackDetail } from './track_segments.ts';
 
 // Display geometry for the sampled line. Every section is written in Track-T
 // coordinates (lateral offset to the right, depth offset downwards) about a
@@ -104,10 +105,11 @@ function signedArea(loop: [number, number][]): number {
 function extrudeSection(
   model: TrackModel,
   loop: [number, number][],
-  offsetAt: (stationIndex: number) => [number, number],
+  offsetAt: (stationMeters: number) => [number, number],
   isHead: (w0: number, w1: number) => boolean,
+  stationsMeters: number[],
+  anchor: THREE.Vector3,
 ): THREE.BufferGeometry {
-  const stationsMeters = Array.from(model.stationsMeters);
   const edgeCount = loop.length;
   const orientation = signedArea(loop) > 0 ? 1 : -1;
   const positions: number[] = [];
@@ -118,9 +120,9 @@ function extrudeSection(
   const point = new THREE.Vector3();
   const normal = new THREE.Vector3();
   const vertexIndex = (stationIndex: number, edge: number, end: number): number => (stationIndex * edgeCount + edge) * 2 + end;
-  stationsMeters.forEach((stationMeters, stationIndex) => {
+  stationsMeters.forEach((stationMeters) => {
     model.trackFrameAtStation(stationMeters, trackFrame);
-    const [lateralOffset, depthOffset] = offsetAt(stationIndex);
+    const [lateralOffset, depthOffset] = offsetAt(stationMeters);
     for (let edge = 0; edge < edgeCount; ++edge) {
       const [v0, w0] = loop[edge] as [number, number];
       const [v1, w1] = loop[(edge + 1) % edgeCount] as [number, number];
@@ -135,7 +137,7 @@ function extrudeSection(
           .copy(trackFrame.position)
           .addScaledVector(trackFrame.right, lateralOffset + v)
           .addScaledVector(trackFrame.down, depthOffset + w);
-        positions.push(point.x, point.y, point.z);
+        positions.push(point.x - anchor.x, point.y - anchor.y, point.z - anchor.z);
         normals.push(normal.x, normal.y, normal.z);
       }
     }
@@ -208,7 +210,7 @@ function datumMidpoint(model: TrackModel, stationMeters: number): [number, numbe
   return [0.5 * (vl + vr), 0.5 * (wl + wr)];
 }
 
-function ballastGeometry(model: TrackModel): THREE.BufferGeometry {
+function ballastGeometry(model: TrackModel, stripStations: number[], anchor: THREE.Vector3): THREE.BufferGeometry {
   // Left slope, crib top and right slope, each a strip with its own normals.
   // Widths follow the recorded datum spacing; depths are below the rail datum level.
   const halfSpacing = 0.5 * model.medianRailDatumSpacingMeters;
@@ -225,7 +227,6 @@ function ballastGeometry(model: TrackModel): THREE.BufferGeometry {
   const trackFrame = model.trackFrameAtStation(model.firstStationMeters);
   const point = new THREE.Vector3();
   const normal = new THREE.Vector3();
-  const stripStations = stripStationsMeters(model.firstStationMeters, model.lastStationMeters, 1.0);
   const stripCount = stripStations.length;
   const faces = profile.length - 1;
   for (let stripIndex = 0; stripIndex < stripCount; ++stripIndex) {
@@ -242,7 +243,7 @@ function ballastGeometry(model: TrackModel): THREE.BufferGeometry {
       normal.copy(trackFrame.right).multiplyScalar(dw / length).addScaledVector(trackFrame.down, -dv / length).normalize();
       for (const [v, w] of [[v0, w0], [v1, w1]] as const) {
         point.copy(trackFrame.position).addScaledVector(trackFrame.right, vMid + v).addScaledVector(trackFrame.down, wMid + w);
-        positions.push(point.x, point.y, point.z);
+        positions.push(point.x - anchor.x, point.y - anchor.y, point.z - anchor.z);
         normals.push(normal.x, normal.y, normal.z);
         uvs.push(v / 1.2, stationMeters / 1.2);
       }
@@ -276,11 +277,11 @@ function horizontalRight(trackFrame: Pick<TrackFrame, 'tangent' | 'right'>, out:
 }
 
 /** Ground texture coordinates in world metres, matching the ground plane's mapping. */
-function groundUv(x: number, y: number, centreX: number, centreY: number): [number, number] {
-  return [(x - centreX) / 10 + groundSize / 20, -(y - centreY) / 10 + groundSize / 20];
+function groundUv(x: number, y: number): [number, number] {
+  return [x / 10 + groundSize / 20, -y / 10 + groundSize / 20];
 }
 
-function formationGeometry(model: TrackModel, planeZ: number, halfWidth: number, centreX: number, centreY: number): THREE.BufferGeometry {
+function formationGeometry(model: TrackModel, planeZ: number, halfWidth: number, stripStations: number[], anchor: THREE.Vector3): THREE.BufferGeometry {
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
@@ -288,7 +289,6 @@ function formationGeometry(model: TrackModel, planeZ: number, halfWidth: number,
   const trackFrame = model.trackFrameAtStation(model.firstStationMeters);
   const lateral = new THREE.Vector3();
   const normal = new THREE.Vector3();
-  const stripStations = stripStationsMeters(model.firstStationMeters, model.lastStationMeters, 1.0);
   const stripCount = stripStations.length;
   const faces = 3;
   for (let stripIndex = 0; stripIndex < stripCount; ++stripIndex) {
@@ -321,9 +321,9 @@ function formationGeometry(model: TrackModel, planeZ: number, halfWidth: number,
       for (const [u, z] of [[u0, z0], [u1, z1]] as const) {
         const x = trackFrame.position.x + lateral.x * u;
         const y = trackFrame.position.y + lateral.y * u;
-        positions.push(x, y, z);
+        positions.push(x - anchor.x, y - anchor.y, z - anchor.z);
         normals.push(normal.x, normal.y, normal.z);
-        uvs.push(...groundUv(x, y, centreX, centreY));
+        uvs.push(...groundUv(x, y));
       }
     }
   }
@@ -364,6 +364,7 @@ function placeAlong(
   mesh: THREE.InstancedMesh,
   offsetsAt: (stationMeters: number) => [number, number][],
   stationsMeters: number[],
+  anchor: THREE.Vector3,
 ): void {
   const trackFrame = model.trackFrameAtStation(model.firstStationMeters);
   const matrix = new THREE.Matrix4();
@@ -373,7 +374,7 @@ function placeAlong(
     model.trackFrameAtStation(stationMeters, trackFrame);
     for (const [v, w] of offsetsAt(stationMeters)) {
       point.copy(trackFrame.position).addScaledVector(trackFrame.right, v).addScaledVector(trackFrame.down, w);
-      matrix.makeBasis(trackFrame.tangent, trackFrame.right, trackFrame.down).setPosition(point);
+      matrix.makeBasis(trackFrame.tangent, trackFrame.right, trackFrame.down).setPosition(point.sub(anchor));
       mesh.setMatrixAt(instance++, matrix);
     }
   }
@@ -423,92 +424,81 @@ function signSprite(lines: { text: string; color: string; weight: number; size: 
   return sprite;
 }
 
-export interface BuiltTrack {
-  group: THREE.Group;
-  ground: THREE.Mesh;
-  signs: THREE.Group;
-}
-
-export function buildTrack(model: TrackModel, palette: ScenePalette): BuiltTrack {
+export function buildTrackSegment(model: TrackModel, palette: ScenePalette, segment: TrackSegment, detail: TrackDetail): THREE.Group {
   const group = new THREE.Group();
-  group.name = 'track';
+  group.name = `track segment ${segment.id} ${detail}`;
+  const anchor = model.trackFrameAtStation(segment.start).position.clone();
+  group.position.copy(anchor);
+  const stations = segmentSurfaceStations(model, segment, detail);
+  const strips = detail === 'detailed' ? stripStationsMeters(segment.start, segment.end, 1) : stations;
   const halfSpacing = 0.5 * model.medianRailDatumSpacingMeters;
 
   const loop = railSection();
   const isHead = (w0: number, w1: number): boolean => w0 < 0.0045 && w1 < 0.0045;
   for (const side of ['left', 'right'] as const) {
-    const lateralOffsets = side === 'left' ? model.leftRailLateralOffsetsMeters : model.rightRailLateralOffsetsMeters;
-    const depthOffsets = side === 'left' ? model.leftRailDepthOffsetsMeters : model.rightRailDepthOffsetsMeters;
     const geometry = extrudeSection(
       model,
       loop,
-      (stationIndex) => [lateralOffsets[stationIndex] as number, depthOffsets[stationIndex] as number],
-      isHead,
+      (stationMeters) => model.railDatumOffsetAtStation(stationMeters, side),
+      isHead, stations, anchor,
     );
     const rail = new THREE.Mesh(geometry, [palette.railHead, palette.railBody]);
+    rail.name = `${side} rail`;
     rail.castShadow = true;
     rail.receiveShadow = true;
     group.add(rail);
   }
 
-  const firstSleeper = Math.ceil(model.firstStationMeters / sleeperSpacing) * sleeperSpacing;
-  const sleeperStationsMeters: number[] = [];
-  for (let stationMeters = firstSleeper; stationMeters <= model.lastStationMeters; stationMeters += sleeperSpacing) {
-    sleeperStationsMeters.push(stationMeters);
-  }
-  const sleepers = new THREE.InstancedMesh(sleeperGeometry(model.medianRailDatumSpacingMeters + 1.1), palette.sleeper, sleeperStationsMeters.length);
-  placeAlong(
-    model,
-    sleepers,
-    (stationMeters) => {
-      const [vMid, wMid] = datumMidpoint(model, stationMeters);
-      return [[vMid, wMid + railDepth + padThickness + 0.5 * sleeperHeight]];
-    },
-    sleeperStationsMeters,
-  );
-  sleepers.castShadow = true;
-  sleepers.receiveShadow = true;
-  group.add(sleepers);
+  if (detail === 'detailed') {
+    const sleeperStationsMeters = ownedGridStations(segment, sleeperSpacing);
+    const sleepers = new THREE.InstancedMesh(sleeperGeometry(model.medianRailDatumSpacingMeters + 1.1), palette.sleeper, sleeperStationsMeters.length);
+    placeAlong(
+      model,
+      sleepers,
+      (stationMeters) => {
+        const [vMid, wMid] = datumMidpoint(model, stationMeters);
+        return [[vMid, wMid + railDepth + padThickness + 0.5 * sleeperHeight]];
+      },
+      sleeperStationsMeters, anchor,
+    );
+    sleepers.name = 'sleepers';
+    sleepers.castShadow = true;
+    sleepers.receiveShadow = true;
+    group.add(sleepers);
 
-  const railFeet = (stationMeters: number, depth: number, lateral: number[]): [number, number][] => {
-    const result: [number, number][] = [];
-    for (const side of ['left', 'right'] as const) {
-      const [v, w] = model.railDatumOffsetAtStation(stationMeters, side);
-      for (const offset of lateral) {
-        result.push([v + offset, w + depth]);
+    const railFeet = (stationMeters: number, depth: number, lateral: number[]): [number, number][] => {
+      const result: [number, number][] = [];
+      for (const side of ['left', 'right'] as const) {
+        const [v, w] = model.railDatumOffsetAtStation(stationMeters, side);
+        for (const offset of lateral) {
+          result.push([v + offset, w + depth]);
+        }
       }
-    }
-    return result;
-  };
-  const pads = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 0.17, padThickness), palette.fastener, sleeperStationsMeters.length * 2);
-  placeAlong(model, pads, (stationMeters) => railFeet(stationMeters, railDepth + 0.5 * padThickness, [0]), sleeperStationsMeters);
-  pads.receiveShadow = true;
-  group.add(pads);
+      return result;
+    };
+    const pads = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 0.17, padThickness), palette.fastener, sleeperStationsMeters.length * 2);
+    placeAlong(model, pads, (stationMeters) => railFeet(stationMeters, railDepth + 0.5 * padThickness, [0]), sleeperStationsMeters, anchor);
+    pads.receiveShadow = true;
+    group.add(pads);
 
-  const clips = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.05, 0.034), palette.fastener, sleeperStationsMeters.length * 4);
-  placeAlong(model, clips, (stationMeters) => railFeet(stationMeters, railDepth - 0.012, [-0.092, 0.092]), sleeperStationsMeters);
-  clips.castShadow = true;
-  group.add(clips);
+    const clips = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.05, 0.034), palette.fastener, sleeperStationsMeters.length * 4);
+    placeAlong(model, clips, (stationMeters) => railFeet(stationMeters, railDepth - 0.012, [-0.092, 0.092]), sleeperStationsMeters, anchor);
+    clips.castShadow = true;
+    group.add(clips);
+  }
 
-  const ballast = new THREE.Mesh(ballastGeometry(model), palette.ballast);
+  const ballast = new THREE.Mesh(ballastGeometry(model, strips, anchor), palette.ballast);
+  ballast.name = 'ballast';
   ballast.receiveShadow = true;
   group.add(ballast);
 
-  // Ground plane under the lowest point of the line, and the formation strip.
-  const centre = model.trackFrameAtStation(0.5 * (model.firstStationMeters + model.lastStationMeters)).position.clone();
   const planeZ = model.lowestCentrelineInertialZMeters + groundDepth;
-  const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize);
-  groundGeometry.rotateX(Math.PI);
-  const uv = groundGeometry.getAttribute('uv');
-  for (let i = 0; i < uv.count; ++i) {
-    uv.setXY(i, uv.getX(i) * (groundSize / 10), uv.getY(i) * (groundSize / 10));
-  }
-  const ground = new THREE.Mesh(groundGeometry, palette.ground);
-  ground.position.set(centre.x, centre.y, planeZ);
-  ground.receiveShadow = true;
-  const formation = new THREE.Mesh(formationGeometry(model, planeZ, halfSpacing + 2.85, centre.x, centre.y), palette.formation);
+  const formation = new THREE.Mesh(formationGeometry(model, planeZ, halfSpacing + 2.85, strips, anchor), palette.formation);
+  formation.name = 'formation';
   formation.receiveShadow = true;
   group.add(formation);
+
+  if (detail === 'simplified') return group;
 
   // Chainage posts every 50 m, and element points in the accent colour. Posts
   // stand on the formation beside the ballast.
@@ -516,28 +506,31 @@ export function buildTrack(model: TrackModel, palette: ScenePalette): BuiltTrack
   signs.name = 'track signs';
   const trackFrame = model.trackFrameAtStation(model.firstStationMeters);
   const lateral = new THREE.Vector3();
-  const postGeometry = new THREE.CylinderGeometry(0.03, 0.03, 1.1, 12);
-  postGeometry.rotateX(Math.PI / 2);
+  let postGeometry: THREE.CylinderGeometry | null = null;
   const postOffset = halfSpacing + 2.15;
   const addPost = (stationMeters: number, side: -1 | 1, material: THREE.Material, sprite: THREE.Sprite): void => {
     model.trackFrameAtStation(stationMeters, trackFrame);
     horizontalRight(trackFrame, lateral);
     const base = trackFrame.position.clone().addScaledVector(lateral, side * postOffset);
     const baseZ = trackFrame.position.z + groundDepth;
+    if (postGeometry === null) {
+      postGeometry = new THREE.CylinderGeometry(0.03, 0.03, 1.1, 12);
+      postGeometry.rotateX(Math.PI / 2);
+    }
     const post = new THREE.Mesh(postGeometry, material);
-    post.position.set(base.x, base.y, baseZ - 0.55);
+    post.position.set(base.x, base.y, baseZ - 0.55).sub(anchor);
     post.castShadow = true;
     signs.add(post);
-    sprite.position.set(base.x, base.y, baseZ - 1.1 - 0.5 * sprite.scale.y);
+    sprite.position.set(base.x, base.y, baseZ - 1.1 - 0.5 * sprite.scale.y).sub(anchor);
     signs.add(sprite);
   };
-  const firstPost = Math.ceil(model.firstStationMeters / 50) * 50;
-  for (let stationMeters = firstPost; stationMeters <= model.lastStationMeters; stationMeters += 50) {
+  for (const stationMeters of ownedGridStations(segment, 50)) {
     const sprite = signSprite([{ text: chainage(stationMeters, 0), color: stageColors.ink, weight: 700, size: 15, font: monoFont }], false);
     addPost(stationMeters, 1, palette.post, sprite);
   }
-  const markGeometry = new THREE.BoxGeometry(0.08, model.medianRailDatumSpacingMeters + 1.6, 0.008);
+  let markGeometry: THREE.BoxGeometry | null = null;
   for (const point of model.elementPoints) {
+    if (!ownsStation(segment, point.stationMeters)) continue;
     const sprite = signSprite(
       [
         { text: `${point.code}  ${point.zh}`, color: stageColors.accent, weight: 700, size: 15, font: `${monoFont}, ${cjkFont}` },
@@ -548,15 +541,55 @@ export function buildTrack(model: TrackModel, palette: ScenePalette): BuiltTrack
     addPost(point.stationMeters, -1, palette.elementMark, sprite);
     model.trackFrameAtStation(point.stationMeters, trackFrame);
     const [vMid, wMid] = datumMidpoint(model, point.stationMeters);
+    markGeometry ??= new THREE.BoxGeometry(0.08, model.medianRailDatumSpacingMeters + 1.6, 0.008);
     const mark = new THREE.Mesh(markGeometry, palette.elementMark);
     // A paint line across the sleeper tops, under the rail feet.
     mark.position
       .copy(trackFrame.position)
       .addScaledVector(trackFrame.right, vMid)
-      .addScaledVector(trackFrame.down, wMid + railDepth + padThickness - 0.004);
+      .addScaledVector(trackFrame.down, wMid + railDepth + padThickness - 0.004).sub(anchor);
     mark.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(trackFrame.tangent, trackFrame.right, trackFrame.down));
     signs.add(mark);
   }
   group.add(signs);
-  return { group, ground, signs };
+  return group;
+}
+
+/** One finite ground plane; texture coordinates retain their world phase as it moves. */
+export function buildGround(model: TrackModel, palette: ScenePalette): THREE.Mesh {
+  const geometry = new THREE.PlaneGeometry(groundSize, groundSize);
+  geometry.rotateX(Math.PI);
+  const ground = new THREE.Mesh(geometry, palette.ground);
+  ground.position.z = model.lowestCentrelineInertialZMeters + groundDepth;
+  ground.receiveShadow = true;
+  return ground;
+}
+
+export function moveGround(ground: THREE.Mesh, x: number, y: number): void {
+  if (ground.position.x === x && ground.position.y === y && ground.userData['positioned']) return;
+  ground.position.x = x;
+  ground.position.y = y;
+  const position = ground.geometry.getAttribute('position');
+  const uv = ground.geometry.getAttribute('uv');
+  for (let index = 0; index < position.count; ++index) {
+    uv.setXY(index, ...groundUv(x + position.getX(index), y + position.getY(index)));
+  }
+  uv.needsUpdate = true;
+  ground.userData['positioned'] = true;
+}
+
+/** Dispose only section-owned GPU resources; palette materials belong to the scene. */
+export function disposeTrackSegment(group: THREE.Group): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  group.traverse((object) => {
+    if (object instanceof THREE.InstancedMesh) object.dispose();
+    if (object instanceof THREE.Mesh) geometries.add(object.geometry);
+    if (object instanceof THREE.Sprite) {
+      object.material.map?.dispose();
+      object.material.dispose();
+    }
+  });
+  geometries.forEach((geometry) => geometry.dispose());
+  group.clear();
+  group.removeFromParent();
 }

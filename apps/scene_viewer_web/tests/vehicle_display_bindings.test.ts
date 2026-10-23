@@ -48,7 +48,7 @@ const explicitBindings = {
 
 function resolve(bindings: unknown) {
   const text = visualDefinitionWithBindings(bindings);
-  const rec = record(text);
+  const rec = record(text).definition;
   return resolveVehicleDisplayBindings(rec, parseVisualDefinition(text, new Set(rec.bodies.map((body) => body.name))));
 }
 
@@ -81,7 +81,7 @@ test('explicit bindings pair wheels through carriers and keep the stated order',
 
 test('reversing the placement array changes nothing about the pairing', () => {
   const text = visualDefinitionWithBindings(explicitBindings);
-  const base = record(text);
+  const base = record(text).definition;
   const reversed = { ...base, wheelPlacements: [...base.wheelPlacements].reverse() };
   const bindings = resolveVehicleDisplayBindings(reversed, parseVisualDefinition(text, new Set(bodies)));
   const bridge = bindings.carriers[1];
@@ -91,7 +91,7 @@ test('reversing the placement array changes nothing about the pairing', () => {
 });
 
 test('without a visual definition carriers keep their raw names and there are no roles', () => {
-  const rec = record(null);
+  const rec = record(null).definition;
   const bindings = resolveVehicleDisplayBindings(rec, null);
   assert.equal(bindings.hasVisualDefinition, false);
   assert.equal(bindings.carbody, null);
@@ -127,7 +127,7 @@ test('a wrong reference is refused; an omitted role is an absence', () => {
 });
 
 test('a record whose placement names an unlisted carrier body is refused', () => {
-  const rec = record(null);
+  const rec = record(null).definition;
   const broken = { ...rec, wheelPlacements: [placement('if', 'body_d', 'body_missing', 'left')] };
   assert.throws(() => resolveVehicleDisplayBindings(broken, null), /does not list/);
   const doubled = { ...rec, wheelPlacements: [placement('if1', 'body_d', 'body_c', 'left'), placement('if2', 'body_e', 'body_c', 'left')] };

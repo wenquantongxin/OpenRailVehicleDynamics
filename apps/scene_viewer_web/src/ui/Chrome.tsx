@@ -1,6 +1,8 @@
 import { useRef } from 'react';
 
-import { ScalarStatus, scalarSample, type SceneRecord } from '../record/scene_record.ts';
+import type { SceneRecord } from '../record/scene_record.ts';
+import type { SceneDefinition } from '../record/scene_definition.ts';
+import { ScalarStatus, type SceneSampleView } from '../record/scene_sample.ts';
 import type { VisualDefinition } from '../record/visual_definition.ts';
 import { Card } from './Card.tsx';
 import { clock, fixed } from './format.ts';
@@ -68,12 +70,11 @@ function FolderButton({ onPick, en, zh, className }: { onPick: (files: FileList)
 export function MetaBar(props: {
   record: SceneRecord | null;
   name: string;
-  code: string;
   intervalSeconds: number;
   onPick: (files: FileList) => void;
 }) {
   const { record } = props;
-  const duration = record === null ? 0 : (record.timesSeconds[record.frameCount - 1] ?? 0) - (record.timesSeconds[0] ?? 0);
+  const duration = record === null ? 0 : (record.samples.timesSeconds[record.samples.frameCount - 1] ?? 0) - (record.samples.timesSeconds[0] ?? 0);
   return (
     <div className="meta-bar">
       {record !== null && (
@@ -84,7 +85,7 @@ export function MetaBar(props: {
           </span>
           <span className="meta">
             <span className="k">Frames</span>
-            <span className="v">{record.frameCount}</span>
+            <span className="v">{record.samples.frameCount}</span>
           </span>
           <span className="meta">
             <span className="k">Δt</span>
@@ -94,8 +95,6 @@ export function MetaBar(props: {
             <span className="k">Span</span>
             <span className="v">{clock(duration)}</span>
           </span>
-          <span className="hatch">//////</span>
-          <span className="code">{props.code}</span>
         </>
       )}
       <FolderButton onPick={props.onPick} en="Open record" zh="打开记录" className="chip open" />
@@ -162,7 +161,7 @@ export function EmptyState(props: { state: 'idle' | 'loading' | 'error'; message
   );
 }
 
-export function ScalarsDrawer({ record, frameIndex, onClose }: { record: SceneRecord; frameIndex: number; onClose: () => void }) {
+export function ScalarsDrawer({ record, currentSample, onClose }: { record: SceneDefinition; currentSample: SceneSampleView; onClose: () => void }) {
   const groups = new Map<string, number[]>();
   record.scalars.forEach((definition, index) => {
     const owner = definition.name.includes('.') ? definition.name.slice(0, definition.name.indexOf('.')) : '';
@@ -190,9 +189,9 @@ export function ScalarsDrawer({ record, frameIndex, onClose }: { record: SceneRe
             if (definition === undefined) {
               return null;
             }
-            const sample = scalarSample(record, frameIndex, index);
+            const sample = currentSample.scalar(index);
             const status =
-              sample.status === ScalarStatus.valid ? null : sample.status === ScalarStatus.placeholder ? 'Placeholder 占位' : 'Not ready 未就绪';
+              sample.status === ScalarStatus.valid ? null : sample.status === ScalarStatus.placeholder ? 'Placeholder 占位' : 'Not ready';
             return (
               <div className="drawer-row" key={definition.name} title={`${definition.quantity}\n${definition.referenceFrame}\n${definition.method}`}>
                 <span className="name">{definition.name.slice(owner.length + (owner === '' ? 0 : 1))}</span>

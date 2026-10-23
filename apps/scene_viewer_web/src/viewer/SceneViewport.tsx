@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-import type { SceneRecord } from '../record/scene_record.ts';
+import type { SceneDefinition } from '../record/scene_definition.ts';
+import type { RecordedSamples } from '../record/recorded_samples.ts';
+import type { SceneSampleView } from '../record/scene_sample.ts';
 import type { PlaybackController } from '../playback/playback.ts';
 import { applyFrames, wheelSpinBindings } from '../scene/apply_frame.ts';
 import { viewOffsetPixels, type ViewportArea } from '../scene/camera_framing.ts';
@@ -29,7 +31,8 @@ export interface ViewportCommands {
 }
 
 interface Props {
-  record: SceneRecord;
+  definition: SceneDefinition;
+  samples: RecordedSamples;
   scene: BuiltScene;
   playback: PlaybackController;
   /** Camera anchors and label obstacle groups come from here, never from body names. */
@@ -42,12 +45,13 @@ interface Props {
   layout: React.MutableRefObject<SafeArea>;
   commands: React.MutableRefObject<ViewportCommands | null>;
   /** Fills the loaded contact patch count of every wheel placement at a frame. */
-  contactPatchesAt: ((frameIndex: number, out: Float64Array) => void) | null;
+  contactPatchesAt: ((sample: SceneSampleView, out: Float64Array) => void) | null;
+  stationAt: (sample: SceneSampleView) => number | null;
   onDisplayFrame: (frameIndex: number, timeSeconds: number, playing: boolean) => void;
 }
 
 export function SceneViewport(props: Props) {
-  const { record, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, onDisplayFrame } = props;
+  const { definition, samples, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, stationAt, onDisplayFrame } = props;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -171,12 +175,12 @@ export function SceneViewport(props: Props) {
       bottom: viewport.height - viewport.free.y1,
     });
 
-    const spinBindings = wheelSpinBindings(record);
-    const patches = new Float64Array(record.wheelPlacements.length);
+    const spinBindings = wheelSpinBindings(definition);
+    const patches = new Float64Array(definition.wheelPlacements.length);
     const applyPose = (firstFrameIndex: number, secondFrameIndex: number, alpha: number): void => {
-      applyFrames(record, scene, spinBindings, firstFrameIndex, secondFrameIndex, alpha);
+      applyFrames(definition, scene, spinBindings, samples.viewAt(firstFrameIndex), samples.viewAt(secondFrameIndex), alpha);
       if (contactPatchesAt !== null) {
-        contactPatchesAt(firstFrameIndex, patches);
+        contactPatchesAt(samples.viewAt(firstFrameIndex), patches);
         scene.setContactStates(patches);
       }
       scene.root.updateMatrixWorld(true);
@@ -192,7 +196,7 @@ export function SceneViewport(props: Props) {
       if (body === undefined) {
         return [];
       }
-      const memberNames = new Set(bound.memberBodyIndices.map((bodyIndex) => record.bodies[bodyIndex]?.name));
+      const memberNames = new Set(bound.memberBodyIndices.map((bodyIndex) => definition.bodies[bodyIndex]?.name));
       return [{ body, memberNames, box: new THREE.Box3() }];
     });
     const partBox = new THREE.Box3();
@@ -283,6 +287,19 @@ export function SceneViewport(props: Props) {
       sun.position.copy(sunAnchor).add(sunOffset);
       sun.target.updateMatrixWorld();
     };
+    const focus = new THREE.Vector3();
+    const updateTrack = (first: SceneSampleView, second: SceneSampleView, alpha: number): void => {
+      if (scene.track === null || scene.trackStage === null) return;
+      // OrbitControls targets are world positions; the track table uses I.
+      scene.root.worldToLocal(focus.copy(controls.target));
+      let station: number | null = null;
+      if (options.current.follow) {
+        const a = stationAt(first);
+        const b = stationAt(second);
+        if (a !== null) station = b === null ? a : a + alpha * (b - a);
+      }
+      scene.trackStage.update(station ?? scene.track.stationNearestToInertialPosition(focus), focus);
+    };
     let previousWall = performance.now();
     let lastReportWall = 0;
     let lastReportedFrameIndex = -1;
@@ -301,6 +318,7 @@ export function SceneViewport(props: Props) {
       const viewport = currentViewport();
       rig.refit(viewport);
       rig.update(wallDelta, viewport);
+      updateTrack(samples.viewAt(bracket.firstFrameIndex), samples.viewAt(bracket.secondFrameIndex), bracket.alpha);
       updateSun();
       sky.position.copy(camera.position);
       renderer.render(threeScene, camera);
@@ -334,7 +352,7 @@ export function SceneViewport(props: Props) {
       renderer.domElement.remove();
       commands.current = null;
     };
-  }, [record, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, onDisplayFrame]);
+  }, [definition, samples, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, stationAt, onDisplayFrame]);
 
   return <div ref={containerRef} className="viewport" />;
 }

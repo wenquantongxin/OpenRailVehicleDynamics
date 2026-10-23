@@ -254,18 +254,6 @@ button {
   letter-spacing: 0.04em;
 }
 
-.meta-bar .hatch {
-  font: 800 13px var(--mono);
-  letter-spacing: -0.12em;
-  color: var(--ink3);
-}
-
-.meta-bar .code {
-  font: 800 30px/1 var(--sans);
-  color: var(--accent);
-  letter-spacing: -0.01em;
-}
-
 /* ---------- cards ---------- */
 
 .col {
@@ -668,6 +656,7 @@ button {
 .bf-value {
   font: 700 11.5px var(--mono);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .bf-value.right {
@@ -1006,6 +995,7 @@ button {
 .tl-strip line.element {
   stroke: var(--ink3);
   stroke-dasharray: 2 2;
+  opacity: 0.65;
 }
 
 .tl-strip line.two {
@@ -1021,7 +1011,8 @@ button {
 .element-code {
   position: absolute;
   top: -1px;
-  transform: translateX(3px);
+  text-align: center;
+  white-space: nowrap;
   font: 800 8px var(--mono);
   letter-spacing: 0.08em;
   color: var(--ink2);

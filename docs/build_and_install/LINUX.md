@@ -1,8 +1,7 @@
 # Linux／Ubuntu：源码构建与安装
 
-本页给出 Linux 的资格化构建路径。共同依赖、归档下载、CMake 平台机制和跨平台纪律见
-[构建、安装与平台支持](README.md)。最近完整验证宿主为 Ubuntu 24.04 x86-64；这不是对所有 Linux
-发行版和版本的无条件承诺。
+本页给出 Ubuntu 24.04 x86-64 的构建与安装命令。共同依赖、归档下载和 CMake 平台机制见
+[构建、安装与平台支持](README.md)。
 
 ## 支持边界
 
@@ -10,11 +9,9 @@
 - Clang 20＋LLVM libomp；
 - CMake 3.24 或更高版本；
 - Ninja／Makefile generator；
-- 默认产品和测试不需要 SIMPACK；可选 SIMPACK Realtime adapter 只支持 Linux；
-- 默认配置关闭 Drake reference tests，当前注册数量以配置后的 CTest 清单为准。
+- SIMPACK Realtime adapter 为 Linux 可选组件。
 
-历史资格快照中，GCC 13 与 Clang 20 均通过 `87/87`。当前源码按配置后的 CTest 清单执行完整
-测试，并记录对应工具链和实际通过数量。
+GCC 13.3.0＋libgomp、CMake 3.28.3、Ninja Release 构建通过 101 项测试。
 
 ## 安装工具链
 
