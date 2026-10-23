@@ -163,6 +163,10 @@ struct SignedTorqueAdvance {
 };
 
 double Interpolate(double low, double high, double fraction) {
+    // Preserve constant table segments exactly.
+    if (low == high) {
+        return low;
+    }
     return (1.0 - fraction) * low + fraction * high;
 }
 

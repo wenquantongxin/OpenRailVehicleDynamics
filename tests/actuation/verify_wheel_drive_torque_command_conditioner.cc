@@ -415,6 +415,56 @@ void CheckEqualRateDegeneracyAndCompletedReversal() {
             "an unresolved sub-nanonewton-metre residual was not reported");
 }
 
+void CheckConstantTableBoundaries() {
+    auto config = MakeConfig();
+    for (auto* table : {&config.traction, &config.regeneration}) {
+        table->dynamic_limit_drive_side_newton_metres.fill(1500.0);
+        table->dynamic_advisory.fill(false);
+        table->magnitude_increase_rate_drive_side_newton_metres_per_second
+            .fill(1000.0);
+        table->magnitude_decrease_rate_drive_side_newton_metres_per_second
+            .fill(2000.0);
+    }
+    const WheelDriveTorqueCommandConditioner conditioner(std::move(config));
+    const double above_limit =
+        std::nextafter(10.0, std::numeric_limits<double>::infinity());
+    const WheelDriveTorqueChannelValues requested{
+        10.0, above_limit, 0.0, -10.0, -10.0, -above_limit, 0.0, 10.0};
+    const WheelDriveTorqueChannelValues previous{
+        0.0, 0.0, 20.0, 20.0, 0.0, 0.0, -20.0, -20.0};
+    const WheelDriveTorqueChannelValues expected{
+        10.0, 10.0, 0.0, 0.0, -10.0, -10.0, 0.0, 0.0};
+    const std::array<bool, orvd::actuation::kWheelDriveTorqueChannelCount>
+        expected_limited{false, true, false, true, false, true, false, true};
+
+    for (const double rpm : {107.0, 250.0}) {
+        WheelDriveTorqueChannelValues speeds{};
+        speeds.fill(WheelSpeedForDriveRpm(rpm));
+        const auto result = conditioner.Step(requested, speeds, previous);
+        for (std::size_t index = 0; index < requested.size(); ++index) {
+            RequireNear(result.actual_wheel_torques_newton_metres[index],
+                        expected[index], 0.0,
+                        "constant-rate boundary changed the wheel torque");
+            RequireNear(result.next_drive_side_torque_memory_newton_metres[index],
+                        expected[index], 0.0,
+                        "constant-rate boundary changed the stored torque");
+            RequireNear(result.wheel_dynamic_torque_limits_newton_metres[index],
+                        requested[index] == 0.0 ? 0.0 : 1500.0, 0.0,
+                        "a constant dynamic limit changed during interpolation");
+            const auto expected_flags = expected_limited[index]
+                                            ? WheelDriveTorqueLimitFlag::kSlewLimited
+                                            : WheelDriveTorqueLimitFlag::kNone;
+            Require(result.limit_flags[index] == expected_flags,
+                    "constant-rate boundary reported the wrong limit flags");
+            if (expected[index] == 0.0) {
+                Require(!std::signbit(result.actual_wheel_torques_newton_metres[index]) &&
+                            !std::signbit(result.next_drive_side_torque_memory_newton_metres[index]),
+                        "a constant-rate boundary did not produce positive zero");
+            }
+        }
+    }
+}
+
 void CheckDeadbandDecayOutsideTheSpeedTable() {
     const WheelDriveTorqueCommandConditioner conditioner(MakeConfig());
     WheelDriveTorqueChannelValues requested{};
@@ -690,6 +740,7 @@ int main(int argc, char* argv[]) {
         CheckDecreaseRateAndUnavailableEndpoint();
         CheckFourInterpolatedRatesAndDirectionReversal();
         CheckEqualRateDegeneracyAndCompletedReversal();
+        CheckConstantTableBoundaries();
         CheckDeadbandDecayOutsideTheSpeedTable();
         CheckZeroRateReversalSegments();
         CheckStrictAssetAndLoader(argv[1], argv[2]);
