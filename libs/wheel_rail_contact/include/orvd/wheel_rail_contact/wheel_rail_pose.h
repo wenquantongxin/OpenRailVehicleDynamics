@@ -16,7 +16,7 @@
 //
 // Two frames are involved and they are deliberately different. The offsets are
 // resolved in the rail's own axes, which are the track axes rolled by the
-// laying cant. The pair roll is measured against a third frame — the local
+// laying cant plus roll excitation. The pair roll is measured against the local
 // tangential rail frame, which is the cant frame further yawed and pitched by
 // the alignment and level irregularity slopes. A single frame for all three
 // would be tidier and would misplace the wheel.
@@ -31,7 +31,9 @@
 //
 // The rail does not run exactly where the line says it runs, and the reference
 // model carries the difference as four numbers per wheel station: a lateral and
-// a vertical displacement of the rail, and their two longitudinal slopes. All
+// a vertical displacement of the rail, and their two longitudinal slopes. The
+// total gauge narrowing and common roll first place the nominal rail datum;
+// gauge slopes enter each side's lateral slope with opposite half signs. All
 // four are inputs to this construction, and they are what `TrackIrregularity`
 // below is. `WheelRailContactForcePlan` now samples an immutable station field
 // and passes these quantities through the general construction; an explicitly
@@ -83,8 +85,9 @@ enum class RailProfileOriginMode {
     const Eigen::Vector3d& wheel_body_origin_in_track_meters,
     double effective_station_offset_meters);
 
-// The fixed geometry one wheel/rail pair carries. Every one of these is either
-// a property of the vehicle or derived from the rail asset; none is state.
+// The datum geometry one wheel/rail pair carries. A personality owns nominal
+// constants; ApplyGaugeAndRollIrregularity produces the local rail placement
+// for one station without modifying those nominal constants.
 struct WheelRailPoseConstants {
     // Where the rail profile's origin sits across and along the track's
     // vertical, and how the rail is rolled. The first and third come from the
@@ -103,6 +106,15 @@ struct WheelRailPoseConstants {
     // its own and not on whether the irregularity rates are used elsewhere.
     bool apply_pitch_correction{true};
 };
+
+// Places the nominal rail datum using the reference model's track excitation
+// convention: rotate about track x, then translate +/- half the total gauge
+// narrowing in track y. LAT/VER translations are supplied separately through
+// TrackIrregularity. The rail laying cant gains roll_radians; the rotation
+// uses the actual profile datum.
+[[nodiscard]] WheelRailPoseConstants ApplyGaugeAndRollIrregularity(
+    const WheelRailPoseConstants& nominal, WheelSide side,
+    double gauge_narrowing_meters, double roll_radians);
 
 // The wheelset's placement in the track frame at the station being evaluated.
 // The roll and yaw are the first two of the roll-yaw-pitch resolution of the

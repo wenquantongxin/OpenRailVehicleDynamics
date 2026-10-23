@@ -14,19 +14,17 @@ namespace orvd::configuration {
 //
 //   <data_root>/track_library/irregularities/<field_identifier>.json
 //
-// and names one lateral and one vertical series. Each series is read from
+// and names one lateral and one vertical series, with optional gauge and roll
+// series. Omitted gauge/roll channels are zero. Each series is read from
 //
 //   <data_root>/track_library/irregularities/series/<series_identifier>.json
 //
-// There is no current-directory, environment-variable or source-tree fallback.
-// The two series own independent station grids; each grid must be finite and
-// strictly increasing, but the grids need not have the same size, knots or
-// domain. Their roles come from the manifest keys. The loader does not infer a
-// role from the values or attempt to correct a caller that binds the two series
-// in the wrong order.
+// Paths are resolved exclusively under data_root. Each series has an independent
+// finite, strictly increasing station grid; manifest keys assign channel roles.
 //
-// All three documents use the common strict JSON rules. The returned value owns
-// both splines and retains neither a DOM nor a reference to any input file.
+// Lateral, vertical and gauge use displacement_meters; positive gauge narrows
+// the track. Roll uses angle_radians; positive roll lowers the right rail.
+// Documents use the common strict JSON rules. The returned value owns its splines.
 //
 // Throws std::runtime_error when a required file cannot be read. Throws
 // std::invalid_argument for every other refusal, including an invalid or

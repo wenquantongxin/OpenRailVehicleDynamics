@@ -184,7 +184,7 @@ class WheelRailContactForceWorkspace {
         // or structure padding. One changed bit, including the sign of zero,
         // is a miss.
         bool valid{false};
-        std::array<std::uint64_t, 36> input_key{};
+        std::array<std::uint64_t, 37> input_key{};
         wheel_rail_contact::WheelRailContactResult result;
     };
 

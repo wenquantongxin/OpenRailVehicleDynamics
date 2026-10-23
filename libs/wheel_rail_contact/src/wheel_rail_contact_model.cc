@@ -109,7 +109,8 @@ WheelRailContactResult WheelRailContactModel::Evaluate(
         // One frame, built once, used by all three of the closing speed, the
         // creepages and the wrench. Building it three times is how the three
         // end up disagreeing.
-        const double frame_angle = patch.rail_slope_angle_radians;
+        const double frame_angle = patch.rail_slope_angle_radians +
+                                   input.rail_roll_excitation_radians;
         const ContactFrame frame = MakeContactFrame(frame_angle);
 
         NormalContactGeometry normal_geometry;

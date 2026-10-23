@@ -99,12 +99,12 @@ std::string SideName(WheelSide side) {
     return side == WheelSide::kRight ? "right" : "left";
 }
 
-std::array<std::uint64_t, 36> MakeContactInputKey(
+std::array<std::uint64_t, 37> MakeContactInputKey(
     const WheelRailContactInput& input) {
     // Keep this centralized list in lockstep with WheelRailContactInput and
     // its nested value types. Do not replace it with a raw comparison of
     // Eigen objects or structure padding.
-    std::array<std::uint64_t, 36> key{};
+    std::array<std::uint64_t, 37> key{};
     std::size_t slot = 0;
     const auto append = [&key, &slot](double value) {
         key[slot++] = std::bit_cast<std::uint64_t>(value);
@@ -117,6 +117,7 @@ std::array<std::uint64_t, 36> MakeContactInputKey(
     };
 
     append(input.pose.roll_radians);
+    append(input.rail_roll_excitation_radians);
     append(input.pose.yaw_radians);
     append(input.pose.lateral_offset_meters);
     append(input.pose.vertical_raise_meters);
@@ -669,7 +670,10 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         const InterfaceBinding& interface = interfaces_[ordinal];
         const auto& carrier = workspace.carriers_[interface.carrier_ordinal];
         const auto& wheel = workspace.interfaces_[ordinal];
-        const auto& constants = personality_->pose_constants(interface.side);
+        const auto& nominal_constants =
+            personality_->pose_constants(interface.side);
+        const double gauge_sign =
+            interface.side == wheel_rail_contact::WheelSide::kLeft ? 1.0 : -1.0;
 
         // The active GZ18/WRL personality selects the wheel cross-section in
         // two stages. The shared carrier station supplies the alignment slope
@@ -682,7 +686,10 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                 track_geometry::TrackStationRegion::kWithinDefinedInterval) {
             lateral_slope_at_shared =
                 track_irregularity_->LateralSlopeMetersPerMeter(
-                    carrier.track_station_meters);
+                    carrier.track_station_meters) +
+                gauge_sign * 0.5 *
+                    track_irregularity_->GaugeSlopeMetersPerMeter(
+                        carrier.track_station_meters);
         }
         const double lateral_rate_at_shared =
             lateral_slope_at_shared *
@@ -691,7 +698,7 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             carrier.yaw_radians -
             SafeAtan2Ratio(lateral_rate_at_shared,
                            carrier.station_rate_meters_per_second);
-        const double sigma = constants.wheel_lateral_datum_meters;
+        const double sigma = nominal_constants.wheel_lateral_datum_meters;
         const double longitudinal_offset =
             -std::sin(effective_yaw) * sigma;
         const double lateral_at_profile =
@@ -714,6 +721,8 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
             carrier.rotation_inertial_from_track.transpose();
 
         TrackIrregularity irregularity;
+        double gauge_narrowing_meters = 0.0;
+        double roll_irregularity_radians = 0.0;
         double lateral_slope_at_profile = 0.0;
         double vertical_slope_at_profile = 0.0;
         if (track_irregularity_ != nullptr &&
@@ -727,10 +736,17 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                     effective_station);
             lateral_slope_at_profile =
                 track_irregularity_->LateralSlopeMetersPerMeter(
-                    effective_station);
+                    effective_station) +
+                gauge_sign * 0.5 *
+                    track_irregularity_->GaugeSlopeMetersPerMeter(
+                        effective_station);
             vertical_slope_at_profile =
                 track_irregularity_->VerticalSlopeMetersPerMeter(
                     effective_station);
+            gauge_narrowing_meters =
+                track_irregularity_->GaugeNarrowingMeters(effective_station);
+            roll_irregularity_radians =
+                track_irregularity_->RollRadians(effective_station);
             irregularity.lateral_rate_meters_per_second =
                 lateral_slope_at_profile *
                 carrier.station_rate_meters_per_second;
@@ -738,6 +754,12 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
                 vertical_slope_at_profile *
                 carrier.station_rate_meters_per_second;
         }
+        const auto constants = wheel_rail_contact::ApplyGaugeAndRollIrregularity(
+            nominal_constants, interface.side, gauge_narrowing_meters,
+            roll_irregularity_radians);
+
+        // SIMPACK track-related yaw/pitch use the input slopes y' +/- g'/2
+        // and z'; roll is the laying cant plus phi.
 
         WheelRailPoseInput pose_input;
         pose_input.placement = WheelsetPlacement{
@@ -832,9 +854,10 @@ void WheelRailContactForcePlan::CalcAppliedForcesImpl(
         input.pose = BuildContactPoseScalars(constants, pose_input);
         input.rail_frame = rail_frame;
         input.wheel = wheel_motion;
+        input.rail_roll_excitation_radians = roll_irregularity_radians;
         WheelRailContactForceWorkspace::InterfaceEvaluationCache& cache =
             workspace.interface_evaluation_caches_[ordinal];
-        const std::array<std::uint64_t, 36> input_key =
+        const std::array<std::uint64_t, 37> input_key =
             MakeContactInputKey(input);
         if (!cache.valid || cache.input_key != input_key) {
             WheelRailContactResult evaluated =

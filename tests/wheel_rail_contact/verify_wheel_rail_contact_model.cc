@@ -199,6 +199,52 @@ int main() {
         }
     }
 
+    {
+        // Rigidly roll both contacting profiles and all physical velocities.
+        // Relative geometry and contact scalars stay fixed; the resulting
+        // force must rotate by the same angle. This catches applying track
+        // roll to geometry while leaving the normal/creepage frame unrolled.
+        auto moving = resting;
+        moving.wheel.origin_velocity_track_meters_per_second =
+            Eigen::Vector3d(kSpeed, 0.03, 0.02);
+        moving.wheel.angular_velocity_track_radians_per_second =
+            Eigen::Vector3d(0.01, -kSpeed / kNominalRadius, 0.02);
+        moving.wheel.arc_rate_meters_per_second = kSpeed;
+        moving.wheel.wheel_pitch_rate_radians_per_second =
+            -kSpeed / kNominalRadius;
+        const auto original = model.Evaluate(moving, workspace);
+        constexpr double kRoll = 0.02;
+        const Eigen::Matrix3d rotation =
+            Eigen::AngleAxisd(kRoll, Eigen::Vector3d::UnitX()).toRotationMatrix();
+        auto rolled = moving;
+        rolled.rail_roll_excitation_radians = kRoll;
+        rolled.rail_frame.origin_track_meters =
+            rotation * moving.rail_frame.origin_track_meters;
+        rolled.rail_frame.rotation_track_from_profile =
+            rotation * moving.rail_frame.rotation_track_from_profile;
+        rolled.wheel.origin_track_meters = rotation * moving.wheel.origin_track_meters;
+        rolled.wheel.rotation_track_from_profile =
+            rotation * moving.wheel.rotation_track_from_profile;
+        rolled.wheel.origin_velocity_track_meters_per_second =
+            rotation * moving.wheel.origin_velocity_track_meters_per_second;
+        rolled.wheel.angular_velocity_track_radians_per_second =
+            rotation * moving.wheel.angular_velocity_track_radians_per_second;
+        const auto transformed = model.Evaluate(rolled, workspace);
+        Require(original.count == 1 && transformed.count == 1,
+                "rigid track roll lost the loaded contact patch");
+        if (original.count == 1 && transformed.count == 1) {
+            const auto& a = original.patches[0];
+            const auto& b = transformed.patches[0];
+            Require((b.wrench.rail_on_wheel.force_newtons -
+                     rotation * a.wrench.rail_on_wheel.force_newtons).norm() < 1e-8,
+                    "track roll did not rotate the normal and tangential force frame");
+            Require(std::abs(b.creepages.lateral - a.creepages.lateral) < 1e-14 &&
+                        std::abs(b.creepages.spin_per_meter -
+                                 a.creepages.spin_per_meter) < 1e-14,
+                    "rigid track roll changed the physical creepages");
+        }
+    }
+
     // Rolling forward. The wheel's rotation rate is chosen so that the contact
     // point's own velocity vanishes — pure rolling — which leaves the spin as
     // the only creepage. Finding it needs the contact point, so the fixture

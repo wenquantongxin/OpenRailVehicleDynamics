@@ -13,9 +13,9 @@
 
 namespace orvd::configuration {
 
-/// Selects one of the three existing, immutable AAR5/AAR6/ERRI field manifests
-/// below the explicit ORVD data root. Any other identifier is rejected. The
-/// selected field already contains its historical station placement and must
+/// Selects one of the immutable AAR5/AAR6/ERRI field manifests, including the
+/// GZ18 AAR6 four-channel export, below the explicit ORVD data root. The
+/// selected field already contains its station placement and must
 /// not receive another envelope.
 struct FrozenTrackIrregularityFieldSource {
     std::string track_irregularity_identifier;

@@ -113,6 +113,9 @@ void CheckIndependentNonuniformSeriesAndLifetime(
     std::filesystem::remove_all(data_root);
 
     constexpr double kStation = 1.25;
+    Require(field.GaugeNarrowingMeters(kStation) == 0.0 &&
+                field.RollRadians(kStation) == 0.0,
+            "an omitted physical channel must be zero");
     Require(std::abs(field.LateralDisplacementMeters(kStation) - 3.5) < 1.0e-14,
             "lateral values did not use the lateral series");
     Require(std::abs(field.LateralSlopeMetersPerMeter(kStation) - 2.0) < 1.0e-14,
@@ -128,6 +131,44 @@ void CheckIndependentNonuniformSeriesAndLifetime(
                 field.VerticalSlopeMetersPerMeter(9.0) == 0.0,
             "an excitation remains active outside its declared station "
             "interval");
+}
+
+void CheckGaugeAndRoll(const std::filesystem::path& data_root) {
+    const auto paths = WriteValidAssets(data_root);
+    const std::string manifest = ReplaceOnce(
+        std::string(kManifest), "\"synthetic_vertical\"",
+        "\"synthetic_vertical\",\n"
+        "  \"gauge_series_identifier\": \"synthetic_gauge\",\n"
+        "  \"roll_series_identifier\": \"synthetic_roll\"");
+    Write(paths.manifest, manifest);
+    const auto series = paths.lateral.parent_path();
+    Write(series / "synthetic_gauge.json", R"json({
+      "series_identifier":"synthetic_gauge",
+      "track_station_meters":[0,2],"displacement_meters":[0.002,0.006]
+    })json");
+    Write(series / "synthetic_roll.json", R"json({
+      "series_identifier":"synthetic_roll",
+      "track_station_meters":[-1,3],"angle_radians":[-0.001,0.003]
+    })json");
+    const auto field = LoadTrackIrregularityFieldFromDataRoot(
+        data_root, "synthetic_nonuniform");
+    Require(std::abs(field.GaugeNarrowingMeters(1.0) - 0.004) < 1e-16 &&
+                std::abs(field.RollRadians(1.0) - 0.001) < 1e-16 &&
+                std::abs(field.GaugeSlopeMetersPerMeter(1.0) - 0.002) < 1e-16 &&
+                std::abs(field.RollSlopeRadiansPerMeter(1.0) - 0.001) < 1e-16,
+            "gauge and roll bindings, units or independent grids were lost");
+    Write(series / "synthetic_roll.json", R"json({
+      "series_identifier":"synthetic_roll",
+      "track_station_meters":[-1,3],"displacement_meters":[-0.001,0.003]
+    })json");
+    bool rejected = false;
+    try {
+        static_cast<void>(LoadTrackIrregularityFieldFromDataRoot(
+            data_root, "synthetic_nonuniform"));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    Require(rejected, "a roll series using length units was accepted");
 }
 
 void CheckStrictRejections(const std::filesystem::path& data_root) {
@@ -316,6 +357,7 @@ int main(int argc, char* argv[]) {
             source_data_root, "erri_low_irregularity", 50.0, 500.0, 250.0,
             -0.00098561313483934172, -0.00064517544482042041);
         CheckIndependentNonuniformSeriesAndLifetime(data_root);
+        CheckGaugeAndRoll(data_root);
         CheckStrictRejections(data_root);
         CheckMissingSeriesFailsLoudly(data_root);
         std::filesystem::remove_all(data_root);

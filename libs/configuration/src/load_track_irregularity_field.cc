@@ -21,6 +21,7 @@ using strict_json::RequireArray;
 using strict_json::RequireExactKeys;
 using strict_json::RequireFiniteNumber;
 using strict_json::RequireIdentifier;
+using strict_json::RequireObject;
 using strict_json::RequireString;
 using strict_json::ThrowExpected;
 
@@ -29,7 +30,7 @@ constexpr std::string_view kCoordinateFrame =
 
 struct SeriesRecord {
     std::vector<double> track_station_meters;
-    std::vector<double> displacement_meters;
+    std::vector<double> values;
 };
 
 std::string RequireCallerIdentifier(std::string_view identifier) {
@@ -54,14 +55,15 @@ std::vector<double> RequireFiniteColumn(const Json& root,
 }
 
 SeriesRecord LoadSeries(const std::filesystem::path& series_directory,
-                        const std::string& expected_identifier) {
+                        const std::string& expected_identifier,
+                        std::string_view value_key = "displacement_meters") {
     const std::filesystem::path path =
         series_directory / (expected_identifier + ".json");
     const Json root =
         ParseStrictJson(ReadWholeFile(path, "track irregularity series"));
     RequireExactKeys(root, "$",
                      {"series_identifier", "track_station_meters",
-                      "displacement_meters"});
+                      value_key});
 
     const std::string identifier = RequireIdentifier(
         root.at("series_identifier"), "$.series_identifier",
@@ -76,20 +78,19 @@ SeriesRecord LoadSeries(const std::filesystem::path& series_directory,
     SeriesRecord result;
     result.track_station_meters =
         RequireFiniteColumn(root, "track_station_meters");
-    result.displacement_meters =
-        RequireFiniteColumn(root, "displacement_meters");
+    result.values = RequireFiniteColumn(root, value_key);
     if (result.track_station_meters.size() !=
-        result.displacement_meters.size()) {
+        result.values.size()) {
         throw std::invalid_argument(
-            "$.track_station_meters and $.displacement_meters must have the "
-            "same length, but there are " +
+            "$.track_station_meters and $." + std::string(value_key) +
+            " must have the same length, but there are " +
             std::to_string(result.track_station_meters.size()) + " and " +
-            std::to_string(result.displacement_meters.size()));
+            std::to_string(result.values.size()));
     }
     if (result.track_station_meters.size() < 2) {
         throw std::invalid_argument(
-            "$.track_station_meters and $.displacement_meters must each "
-            "contain at least two values");
+            "$.track_station_meters and $." + std::string(value_key) +
+            " must each contain at least two values");
     }
     for (std::size_t index = 1; index < result.track_station_meters.size();
          ++index) {
@@ -121,7 +122,12 @@ LoadTrackIrregularityFieldFromDataRoot(
         field_directory / (requested_identifier + ".json");
     const Json root = ParseStrictJson(
         ReadWholeFile(manifest_path, "track irregularity field manifest"));
-    RequireExactKeys(root, "$",
+    RequireObject(root, "$");
+    // Gauge and roll are optional; reject unknown manifest keys.
+    Json required_fields = root;
+    required_fields.erase("gauge_series_identifier");
+    required_fields.erase("roll_series_identifier");
+    RequireExactKeys(required_fields, "$",
                      {"track_irregularity_identifier",
                       "coordinate_frame", "lateral_series_identifier",
                       "vertical_series_identifier"});
@@ -155,10 +161,29 @@ LoadTrackIrregularityFieldFromDataRoot(
     const std::filesystem::path series_directory = field_directory / "series";
     SeriesRecord lateral = LoadSeries(series_directory, lateral_identifier);
     SeriesRecord vertical = LoadSeries(series_directory, vertical_identifier);
+    SeriesRecord gauge;
+    SeriesRecord roll;
+    if (root.contains("gauge_series_identifier")) {
+        gauge = LoadSeries(
+            series_directory,
+            RequireIdentifier(root.at("gauge_series_identifier"),
+                              "$.gauge_series_identifier",
+                              "gauge track irregularity series identifier"));
+    }
+    if (root.contains("roll_series_identifier")) {
+        roll = LoadSeries(
+            series_directory,
+            RequireIdentifier(root.at("roll_series_identifier"),
+                              "$.roll_series_identifier",
+                              "roll track irregularity series identifier"),
+            "angle_radians");
+    }
 
     return wheel_rail_contact::TrackIrregularityField(
-        lateral.track_station_meters, lateral.displacement_meters,
-        vertical.track_station_meters, vertical.displacement_meters);
+        lateral.track_station_meters, lateral.values,
+        vertical.track_station_meters, vertical.values,
+        gauge.track_station_meters, gauge.values,
+        roll.track_station_meters, roll.values);
 }
 
 }  // namespace orvd::configuration

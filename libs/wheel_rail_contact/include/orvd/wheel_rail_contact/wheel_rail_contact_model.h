@@ -116,6 +116,10 @@ struct WheelRailContactInput {
     ContactPoseScalars pose;
     RailProfileFrame rail_frame;
     WheelProfileRigidMotion wheel;
+    // Track roll added to the contact angle for the force/creepage frame.
+    // rail_frame must already include this roll; the geometry's contact angle
+    // includes the nominal laying cant.
+    double rail_roll_excitation_radians{0.0};
 };
 
 struct WheelRailContactPatchResult {

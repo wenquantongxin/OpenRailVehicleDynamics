@@ -645,13 +645,19 @@ int main(int argc, char** argv) {
     constexpr std::array<double, 9> fixture_vertical{
         7.0e-6, -5.0e-6, 5.0e-6, -7.0e-6, 1.0e-6,
         8.0e-6, -4.0e-6, 4.0e-6, -6.0e-6};
+    constexpr std::array<double, 9> fixture_gauge{
+        1e-6, -2e-6, 3e-6, -4e-6, 5e-6, -6e-6, 7e-6, -8e-6, 9e-6};
+    constexpr std::array<double, 9> fixture_roll{
+        -1e-6, 2e-6, -3e-6, 4e-6, -5e-6, 6e-6, -7e-6, 8e-6, -9e-6};
     const orvd::wheel_rail_contact::TrackIrregularityField fixture_oracle(
         fixture_stations, fixture_lateral, fixture_stations,
-        fixture_vertical);
+        fixture_vertical, fixture_stations, fixture_gauge,
+        fixture_stations, fixture_roll);
     auto fixture_irregularity = std::make_unique<
         orvd::wheel_rail_contact::TrackIrregularityField>(
         fixture_stations, fixture_lateral, fixture_stations,
-        fixture_vertical);
+        fixture_vertical, fixture_stations, fixture_gauge,
+        fixture_stations, fixture_roll);
     const auto* const fixture_irregularity_address =
         fixture_irregularity.get();
     constexpr double kFixtureGrade = 0.02;
@@ -748,9 +754,6 @@ int main(int argc, char** argv) {
             "station rate");
     const double shared_lateral_slope =
         fixture_oracle.LateralSlopeMetersPerMeter(shared_station);
-    const double effective_yaw =
-        angles.yaw_radians -
-        SafeAtan2Ratio(shared_lateral_slope * station_rate, station_rate);
     const Eigen::Matrix3d rotation_track_from_wheel_profile =
         Eigen::AngleAxisd(angles.roll_radians, Eigen::Vector3d::UnitX())
             .toRotationMatrix() *
@@ -765,7 +768,13 @@ int main(int argc, char** argv) {
         double vertical_slope_meters_per_meter{0.0};
     };
     const auto RebuildInterface = [&](WheelSide side) {
-        const auto& constants = independent_personality->pose_constants(side);
+        auto constants = independent_personality->pose_constants(side);
+        const double gauge_sign = side == WheelSide::kLeft ? 1.0 : -1.0;
+        const double effective_yaw = angles.yaw_radians - SafeAtan2Ratio(
+            (shared_lateral_slope + gauge_sign * 0.5 *
+                 fixture_oracle.GaugeSlopeMetersPerMeter(shared_station)) *
+                station_rate,
+            station_rate);
         const double effective_offset =
             -std::sin(effective_yaw) *
             constants.wheel_lateral_datum_meters;
@@ -786,9 +795,25 @@ int main(int argc, char** argv) {
         const double irregularity_vertical =
             fixture_oracle.VerticalDisplacementMeters(effective_station);
         const double lateral_slope =
-            fixture_oracle.LateralSlopeMetersPerMeter(effective_station);
+            fixture_oracle.LateralSlopeMetersPerMeter(effective_station) +
+            gauge_sign * 0.5 *
+                fixture_oracle.GaugeSlopeMetersPerMeter(effective_station);
         const double vertical_slope =
             fixture_oracle.VerticalSlopeMetersPerMeter(effective_station);
+
+        // Independently place the nominal datum with a vector rotation and a
+        // subsequent track-axis gauge translation. Do not call the production
+        // placement helper when constructing this force-plan oracle.
+        const double roll = fixture_oracle.RollRadians(effective_station);
+        const Eigen::Vector3d rotated_datum =
+            Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()) *
+            Eigen::Vector3d(0.0, constants.rail_lateral_datum_meters,
+                            constants.rail_vertical_datum_meters);
+        constants.rail_lateral_datum_meters = rotated_datum.y() +
+            gauge_sign * 0.5 *
+                fixture_oracle.GaugeNarrowingMeters(effective_station);
+        constants.rail_vertical_datum_meters = rotated_datum.z();
+        constants.rail_roll_radians += roll;
 
         const Eigen::Vector3d wheel_profile_offset =
             rotation_track_from_wheel_profile *
@@ -863,6 +888,7 @@ int main(int argc, char** argv) {
         contact_input.pose = BuildContactPoseScalars(constants, pose_input);
         contact_input.rail_frame = rail_frame;
         contact_input.wheel = wheel_motion;
+        contact_input.rail_roll_excitation_radians = roll;
         orvd::wheel_rail_contact::WheelRailContactWorkspace contact_workspace;
         independent_personality->model(side).PrepareWorkspace(contact_workspace);
         const auto contact_result =

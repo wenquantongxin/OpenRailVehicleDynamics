@@ -23,7 +23,7 @@
 | 分类 | 内容 |
 |---|---|
 | `track_geometry/` | 线路平纵断面、超高、轨道坐标系、站位投影和竖向剖面 |
-| `track_irregularity_spectra/` | 轨道不平顺 PSD、有限空间频带、随机实现和多方向相关性 |
+| `track_irregularity_spectra/` | 轨道不平顺的四个分量、AAR 与 ERRI 谱、有限频带、随机实现与左右轨施加 |
 | `wheel_rail_contact/` | 型面与插值、位姿归约、接触几何、法向力、蠕滑、Kalker 系数、FASTSIM、扳手组装与接触力计划运动学 |
 | `force_elements/` | 连接运动学与扳手、三向平动弹簧—阻尼、侧滚力偶、串联 Maxwell、饱和折线阻尼与半角中点 RPY 衬套 |
 | `vehicle_dynamics/` | 整车多体动力学方程、铰接体前向动力学、完整右端装配与起动状态构造 |
@@ -54,7 +54,7 @@
 
 ### 轨道不平顺
 
-- [轨道不平顺谱及其空间随机实现](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)：空间频率、FRA/AAR 谱、有限频带、随机实现和多方向关系。
+- [轨道不平顺谱及其空间随机实现](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)：不平顺分量与单位、AAR 与 ERRI B176 谱、有限频带与方差、随机相位实现、空间包络与左右轨放置。
 
 ### 轮轨接触
 

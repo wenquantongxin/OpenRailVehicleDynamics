@@ -18,6 +18,7 @@ vehicle.startvel                                                    = { 60/3.6 }
 vehicle.applystartvel                                               = 1                       ! Apply vehicle initial velocity at solver start
 glob.compat.flxnodeori                                              = 0                       ! Flexbody Node Orientation Method
 glob.compat.afcf                                                    = 0                       ! References Frame for Joint and Force Element Forces and Torques
+glob.compat.track.excit                                             = 0                       ! Preserve the effective Simpack 2021x track excitation convention
 rw.cont.meth                                                        = 2                       ! MISCPAR_RW_CONTACT_METHOD
 rw.linear                                                           = 0                       ! MISCPAR_RW_PROFILE_LINEARIZATION_METHOD
 time                                                                = 0.00000000000000000E+00 ! Time
@@ -197,6 +198,7 @@ view.motion.orient (      4 ,       $V_Top_Orthographic_Moved     ) = 1.05239450
 ! Solver Settings
 !**********************************************************************
 slv.kin.task (                      $SLV_SolverSettings           ) = 3                       ! KIN_INTPAR_TASK
+slv.meas.prec.dbl (                 $SLV_SolverSettings           ) = 1                       ! Preserve double precision in reference results and track stations
 slv.kin.tout.n (                    $SLV_SolverSettings           ) = 201                     ! KIN_INTPAR_NUM_STEPS
 slv.kin.tol (                       $SLV_SolverSettings           ) = 9.99999999999999955E-07 ! Kinematics tolerance
 slv.integ.fix.driftstab (           $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_INTPAR_FIXINT_CONSTAB
@@ -544,16 +546,20 @@ psd.plot.par (            1 ,   2 , $PSD_AAR6_VER                 ) = 1.00000000
 psd.plot.par (            1 ,   3 , $PSD_AAR6_VER                 ) = 3.00000000000000000E+04 ! [-] Unknown plot parameter
 psd.plot.par (            1 ,   4 ,   1 , $PSD_AAR6_VER           ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
 
+! AAR6 gauge / cross-level: Lei Eq. 5.11, k=0.25, Av=0.0339 cm^2 rad/m,
+! omega_c=0.8245 rad/m, omega_s=0.4380 rad/m; one-sided angular PSD in SI.
+! Gauge excitation is a length; positive values narrow the gauge.
 psd.type (                          $PSD_AAR6_GAU                 ) = 1                       ! Type
+psd.txt (                           $PSD_AAR6_GAU                 ) = 'AAR6 gauge/cross-level PSD: 4*k*Av*wc^2/((Omega^2+wc^2)*(Omega^2+ws^2)); k=0.25, Av=0.0339 cm^2 rad/m, wc=0.8245 rad/m, ws=0.4380 rad/m. Coefficients converted to SI. Positive gauge excitation narrows the track.'
 psd.par (                 1 ,       $PSD_AAR6_GAU                 ) = 0.00000000000000000E+00 ! [-] Numerator degree
 psd.par (                 2 ,       $PSD_AAR6_GAU                 ) = 4.00000000000000000E+00 ! [-] Denominator degree
 psd.par (                 3 ,       $PSD_AAR6_GAU                 ) = 0.00000000000000000E+00 ! [-] Representation of independent
 psd.par (                 4 ,       $PSD_AAR6_GAU                 ) = 2.00000000000000000E+00 ! [-] Free factor alpha
 psd.par (                 5 ,       $PSD_AAR6_GAU                 ) = 0.00000000000000000E+00 ! [-] Sides
-psd.par (                10 ,       $PSD_AAR6_GAU                 ) = 5.76130711900000031E-07 ! [-] Numerator coeff. for degree 0
-psd.par (                20 ,       $PSD_AAR6_GAU                 ) = 1.27337354900000005E-01 ! [-] Denomin. coeff. for degree 0
+psd.par (                10 ,       $PSD_AAR6_GAU                 ) = 2.30452284750000000E-06 ! 4*k*Av*1e-4*omega_c^2
+psd.par (                20 ,       $PSD_AAR6_GAU                 ) = 1.30415599161000000E-01 ! omega_c^2*omega_s^2
 psd.par (                21 ,       $PSD_AAR6_GAU                 ) = 0.00000000000000000E+00 ! [-] Denomin. coeff. for degree 1
-psd.par (                22 ,       $PSD_AAR6_GAU                 ) = 8.67116090000000006E-01 ! [-] Denomin. coeff. for degree 2
+psd.par (                22 ,       $PSD_AAR6_GAU                 ) = 8.71644250000000000E-01 ! omega_c^2+omega_s^2
 psd.par (                23 ,       $PSD_AAR6_GAU                 ) = 0.00000000000000000E+00 ! [-] Denomin. coeff. for degree 3
 psd.par (                24 ,       $PSD_AAR6_GAU                 ) = 1.00000000000000000E+00 ! [-] Denomin. coeff. for degree 4
 psd.plot.par (            1 ,       $PSD_AAR6_GAU                 ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
@@ -562,6 +568,27 @@ psd.plot.par (            1 ,   2 , $PSD_AAR6_GAU                 ) = 1.00000000
 psd.plot.par (            1 ,   3 , $PSD_AAR6_GAU                 ) = 3.00000000000000000E+04 ! [-] Unknown plot parameter
 psd.plot.par (            1 ,   4 ,   1 , $PSD_AAR6_GAU           ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
 
+! Roll PSD is the cross-level length PSD divided by b_ref^2, b_ref=1.5 m.
+! This is a small-angle conversion convention, not the rail-origin spacing.
+psd.type (                          $PSD_AAR6_ROL                 ) = 1                       ! Type
+psd.txt (                           $PSD_AAR6_ROL                 ) = 'AAR6 cross-level PSD converted to roll-angle PSD by division by b_ref^2, b_ref=1.5 m. Small-angle convention; b_ref is not the rail-profile origin spacing. Excitation values are radians about track +x, with y right and z down.'
+psd.par (                 1 ,       $PSD_AAR6_ROL                 ) = 0.00000000000000000E+00 ! Numerator degree
+psd.par (                 2 ,       $PSD_AAR6_ROL                 ) = 4.00000000000000000E+00 ! Denominator degree
+psd.par (                 3 ,       $PSD_AAR6_ROL                 ) = 0.00000000000000000E+00 ! Angular frequency
+psd.par (                 4 ,       $PSD_AAR6_ROL                 ) = 2.00000000000000000E+00 ! Free factor alpha: 2*pi
+psd.par (                 5 ,       $PSD_AAR6_ROL                 ) = 0.00000000000000000E+00 ! One-sided
+psd.par (                10 ,       $PSD_AAR6_ROL                 ) = 1.02423237666666667E-06 ! Gauge/cross-level b0 divided by (1.5 m)^2
+psd.par (                20 ,       $PSD_AAR6_ROL                 ) = 1.30415599161000000E-01 ! Denominator degree 0
+psd.par (                21 ,       $PSD_AAR6_ROL                 ) = 0.00000000000000000E+00 ! Denominator degree 1
+psd.par (                22 ,       $PSD_AAR6_ROL                 ) = 8.71644250000000000E-01 ! Denominator degree 2
+psd.par (                23 ,       $PSD_AAR6_ROL                 ) = 0.00000000000000000E+00 ! Denominator degree 3
+psd.par (                24 ,       $PSD_AAR6_ROL                 ) = 1.00000000000000000E+00 ! Denominator degree 4
+psd.plot.par (            1 ,       $PSD_AAR6_ROL                 ) = 1.00000000000000000E+00
+psd.plot.par (            1 ,   1 , $PSD_AAR6_ROL                 ) = 1.00000000000000000E+03
+psd.plot.par (            1 ,   2 , $PSD_AAR6_ROL                 ) = 1.00000000000000002E-03
+psd.plot.par (            1 ,   3 , $PSD_AAR6_ROL                 ) = 3.00000000000000000E+04
+psd.plot.par (            1 ,   4 ,   1 , $PSD_AAR6_ROL           ) = 1.00000000000000000E+00
+
 !**********************************************************************
 ! Tracks
 !**********************************************************************
@@ -569,14 +596,14 @@ track.type (                        $Trk_AAR6_120kmph             ) = 2         
 track.kind (                        $Trk_AAR6_120kmph             ) = 1                       ! Kind
 track.excit.lat (                   $Trk_AAR6_120kmph             ) = $E_AAR6_LAT             ! Track::EXC_TRACK_LATERAL
 track.excit.vert (                  $Trk_AAR6_120kmph             ) = $E_AAR6_VER             ! Track::EXC_TRACK_VERTICAL
-track.excit.roll (                  $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_TRACK_ROLL
+track.excit.roll (                  $Trk_AAR6_120kmph             ) = $E_AAR6_ROL             ! Track::EXC_TRACK_ROLL
 track.excit.left.lat (              $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_RAIL_LATERAL_LEFT
 track.excit.left.vert (             $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_RAIL_VERTICAL_LEFT
 track.excit.left.roll (             $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_RAIL_ROLL_LEFT
 track.excit.right.lat (             $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_RAIL_LATERAL_RIGHT
 track.excit.right.vert (            $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_RAIL_VERTICAL_RIGHT
 track.excit.right.roll (            $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_RAIL_ROLL_RIGHT
-track.excit.gauge (                 $Trk_AAR6_120kmph             ) = null                    ! Track::EXC_TRACK_GAUGE
+track.excit.gauge (                 $Trk_AAR6_120kmph             ) = $E_AAR6_GAU             ! Track::EXC_TRACK_GAUGE
 track.meas.superelev.kind (         $Trk_AAR6_120kmph             ) = 1                       ! Superelevation kind (measured track)
 track.meas.superelev.reflen (       $Trk_AAR6_120kmph             ) = 0.00000000000000000E+00 ! Superelevation reference length (measured track)
 track.meas.len (                    $Trk_AAR6_120kmph             ) = 0.00000000000000000E+00 ! Total measured length
@@ -1069,11 +1096,11 @@ excit.plot.par (          1 ,   8 ,   1 , $E_AAR6_VER             ) = 1.00000000
 
 excit.type (                        $E_AAR6_GAU                   ) = 108                     ! Type
 excit.par (               1 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Amplitude description
-excit.par (               2 ,       $E_AAR6_GAU                   ) = 2.00000000000000000E+00 ! [-] Random generator start value
+excit.par (               2 ,       $E_AAR6_GAU                   ) = 4.00000000000000000E+00 ! Distinct seed >0.05 required by the 2021x-build107 solver
 excit.par (               3 ,       $E_AAR6_GAU                   ) = $PSD_AAR6_GAU           ! [-] Power Spectral Density
 excit.par (               4 ,       $E_AAR6_GAU                   ) = 1.92000000000000000E+03 ! [-] Number of frequencies
-excit.par (               5 ,       $E_AAR6_GAU                   ) = 6.56000000000000028E-01 ! [m⁻¹] Upper frequency limit
-excit.par (               6 ,       $E_AAR6_GAU                   ) = 2.00000000000000004E-02 ! [m⁻¹] Lower frequency limit
+excit.par (               5 ,       $E_AAR6_GAU                   ) = 3.33000000000000018E-01 ! [m⁻¹] Upper frequency limit
+excit.par (               6 ,       $E_AAR6_GAU                   ) = 2.40000000000000005E-02 ! [m⁻¹] Lower frequency limit
 excit.par (               7 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Delay
 excit.par (               9 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Relative amplitude limit
 excit.par (              11 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [m] Start position of excitation
@@ -1082,16 +1109,44 @@ excit.par (              17 ,       $E_AAR6_GAU                   ) = null      
 excit.par (              28 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [m] Range for averaging
 excit.par (              30 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Start/End distance given
 excit.par (              31 ,       $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [m] Start distance
-excit.par (              32 ,       $E_AAR6_GAU                   ) = 2.00000000000000000E+03 ! [m] End distance
+excit.par (              32 ,       $E_AAR6_GAU                   ) = 3.00000000000000000E+03 ! [m] End distance
 excit.plot.par (          1 ,       $E_AAR6_GAU                   ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
-excit.plot.par (          1 ,   1 , $E_AAR6_GAU                   ) = 1.02400000000000000E+03 ! [-] Unknown plot parameter
+excit.plot.par (          1 ,   1 , $E_AAR6_GAU                   ) = 3.00100000000000000E+03 ! Number of plot points
 excit.plot.par (          1 ,   2 , $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Unknown plot parameter
 excit.plot.par (          1 ,   3 , $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Unknown plot parameter
 excit.plot.par (          1 ,   4 , $E_AAR6_GAU                   ) = 0.00000000000000000E+00 ! [-] Unknown plot parameter
-excit.plot.par (          1 ,   5 , $E_AAR6_GAU                   ) = 1.00000000000000000E+02 ! [-] Unknown plot parameter
+excit.plot.par (          1 ,   5 , $E_AAR6_GAU                   ) = 3.00000000000000000E+02 ! [m] Plot end
 excit.plot.par (          1 ,   6 ,   1 , $E_AAR6_GAU             ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
 excit.plot.par (          1 ,   7 ,   1 , $E_AAR6_GAU             ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
 excit.plot.par (          1 ,   8 ,   1 , $E_AAR6_GAU             ) = 1.00000000000000000E+00 ! [-] Unknown plot parameter
+
+! Roll excitation values are radians about track +x (y right, z down).
+! Track start/end/fade are applied by $Trk_AAR6_120kmph, not here.
+excit.type (                        $E_AAR6_ROL                   ) = 108                     ! Type
+excit.par (               1 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! Power Spectral Density
+excit.par (               2 ,       $E_AAR6_ROL                   ) = 5.00000000000000000E+00 ! Distinct seed >0.05 required by the 2021x-build107 solver
+excit.par (               3 ,       $E_AAR6_ROL                   ) = $PSD_AAR6_ROL           ! Power Spectral Density
+excit.par (               4 ,       $E_AAR6_ROL                   ) = 1.92000000000000000E+03 ! Number of frequencies
+excit.par (               5 ,       $E_AAR6_ROL                   ) = 3.33000000000000018E-01 ! [m^-1] Upper frequency limit
+excit.par (               6 ,       $E_AAR6_ROL                   ) = 2.40000000000000005E-02 ! [m^-1] Lower frequency limit
+excit.par (               7 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! Delay disabled
+excit.par (               9 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! Relative amplitude limit
+excit.par (              11 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! [m] Start position of excitation
+excit.par (              15 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! Equidistant frequency intervals
+excit.par (              17 ,       $E_AAR6_ROL                   ) = null                    ! No correlated Excitation-108
+excit.par (              28 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! [m] Range for averaging
+excit.par (              30 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! Manual precomputation interval
+excit.par (              31 ,       $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! [m] Start distance
+excit.par (              32 ,       $E_AAR6_ROL                   ) = 3.00000000000000000E+03 ! [m] End distance
+excit.plot.par (          1 ,       $E_AAR6_ROL                   ) = 1.00000000000000000E+00
+excit.plot.par (          1 ,   1 , $E_AAR6_ROL                   ) = 3.00100000000000000E+03 ! Number of plot points
+excit.plot.par (          1 ,   2 , $E_AAR6_ROL                   ) = 0.00000000000000000E+00
+excit.plot.par (          1 ,   3 , $E_AAR6_ROL                   ) = 0.00000000000000000E+00
+excit.plot.par (          1 ,   4 , $E_AAR6_ROL                   ) = 0.00000000000000000E+00 ! [m] Plot start
+excit.plot.par (          1 ,   5 , $E_AAR6_ROL                   ) = 3.00000000000000000E+02 ! [m] Plot end
+excit.plot.par (          1 ,   6 ,   1 , $E_AAR6_ROL             ) = 1.00000000000000000E+00
+excit.plot.par (          1 ,   7 ,   1 , $E_AAR6_ROL             ) = 1.00000000000000000E+00
+excit.plot.par (          1 ,   8 ,   1 , $E_AAR6_ROL             ) = 1.00000000000000000E+00
 
 excit.type (                        $E_CriticalVelocity           ) = 101                     ! Type
 excit.par (               1 ,       $E_CriticalVelocity           ) = 0.00000000000000000E+00 ! [-] Offset f0

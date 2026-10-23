@@ -23,7 +23,7 @@ A theory document may state a model's mathematical assumptions and conditions of
 | Category | Content |
 |---|---|
 | `track_geometry/` | horizontal and vertical alignment, superelevation, track frames, station projection and vertical profiles |
-| `track_irregularity_spectra/` | track-irregularity PSD, finite spatial bands, random realizations and multi-direction correlation |
+| `track_irregularity_spectra/` | the four irregularity components, AAR and ERRI spectra, finite bands, random realization and placement on the two rails |
 | `wheel_rail_contact/` | profiles and interpolation, pose reduction, contact geometry, normal force, creepage, Kalker coefficients, FASTSIM, wrench assembly and contact-force-plan kinematics |
 | `force_elements/` | connection kinematics and wrenches, translational spring-damper, roll couple, series Maxwell element, saturated piecewise-linear damper and half-angle midpoint RPY bushing |
 | `vehicle_dynamics/` | multibody equations of motion, articulated-body forward dynamics, assembly of the complete right-hand side, and startup state construction |
@@ -54,7 +54,7 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 
 ### Track irregularity
 
-- [Track-irregularity spectra and their spatial random realization](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.en.md): spatial frequency, FRA/AAR spectra, finite bands, random realization and multi-direction relationships.
+- [Track-irregularity spectra and their spatial random realization](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.en.md): irregularity components and units, AAR and ERRI B176 spectra, finite band and variance, random-phase realization, spatial envelope and placement on the two rails.
 
 ### Wheel-rail contact
 

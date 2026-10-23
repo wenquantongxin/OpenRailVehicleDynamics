@@ -56,6 +56,24 @@ double ComputePairRoll(double wheelset_roll, double wheelset_yaw,
 
 }  // namespace
 
+WheelRailPoseConstants ApplyGaugeAndRollIrregularity(
+    const WheelRailPoseConstants& nominal, WheelSide side,
+    double gauge_narrowing_meters, double roll_radians) {
+    WheelRailPoseConstants placed = nominal;
+    const double cosine = std::cos(roll_radians);
+    const double sine = std::sin(roll_radians);
+    const double gauge_sign = side == WheelSide::kLeft ? 1.0 : -1.0;
+    placed.rail_lateral_datum_meters =
+        cosine * nominal.rail_lateral_datum_meters -
+        sine * nominal.rail_vertical_datum_meters +
+        gauge_sign * 0.5 * gauge_narrowing_meters;
+    placed.rail_vertical_datum_meters =
+        sine * nominal.rail_lateral_datum_meters +
+        cosine * nominal.rail_vertical_datum_meters;
+    placed.rail_roll_radians += roll_radians;
+    return placed;
+}
+
 Eigen::Vector3d PlaceRailProfileLongitudinalOrigin(
     RailProfileOriginMode mode,
     const Eigen::Vector3d& rail_origin_in_track_meters,

@@ -76,18 +76,18 @@ $$
 
 ### 2.4 钢轨侧参考系与型面放置
 
-轨底坡系 $T_c$ 是位姿标量编码与二维接触几何使用的横截面参考系。它相对当前轨型系 T 只含按侧带符号的轨底坡滚转：
+轨底坡系 $T_c$ 是位姿标量编码与二维接触几何使用的横截面参考系。它相对当前轨型系 T 含按侧带符号的轨底坡滚转 $\phi_r$ 与滚转不平顺 $\phi_\epsilon$ 之和：
 
 $$
-R_{TT_c}=R_x(\phi_r)
+R_{TT_c}=R_x(\phi_r+\phi_\epsilon)
 $$
 
-轮、轨型面基准之间的横竖分离、二维接触几何中的高度比较，以及竖向穿透与其法向投影，都按这个横截面参考表达。$T_c$ 不是钢轨型面在三维空间中的完整放置系：钢轨型面的放置原点另记为 $\mathbf o_c$，放置姿态记为 $R_{T\mathrm{rail}}$。后者除轨底坡外还含方向与高低不平顺的两个斜率角，并含承载站位与有效型面站位两处轨型系之间的姿态差，因此不能写成 $R_{TT_c}$。
+轮、轨型面基准之间的横竖分离、二维接触几何中的高度比较，以及竖向穿透与其法向投影，都按这个横截面参考表达。$T_c$ 不是钢轨型面在三维空间中的完整放置系：钢轨型面的放置原点另记为 $\mathbf o_c$，由名义轨型原点先绕轨型系 $x$ 轴转 $\phi_\epsilon$、再叠加横向与竖向不平顺 $y_\epsilon$、$z_\epsilon$ 以及按侧带符号的半轨距变窄量 $\pm g_\epsilon/2$ 得到；放置姿态记为 $R_{T\mathrm{rail}}$。后者除轨底坡与滚转不平顺外还含方向与高低不平顺的两个斜率角，并含承载站位与有效型面站位两处轨型系之间的姿态差，因此不能写成 $R_{TT_c}$。
 
-局部切向钢轨系 $T_\ell$ 是位姿滚转提取所用的另一个参考系；它在纯轨底坡姿态之上再叠加两个由不平顺空间斜率形成的角：方向不平顺角 $\psi_\epsilon$ 与高低不平顺角 $\theta_\epsilon$，
+局部切向钢轨系 $T_\ell$ 是位姿滚转提取所用的另一个参考系；它在轨底坡与滚转不平顺的姿态之上再叠加两个由不平顺空间斜率形成的角：由该侧横向坡度 $y_\epsilon'\pm g_\epsilon'/2$ 形成的方向不平顺角 $\psi_\epsilon$ 与由竖向坡度 $z_\epsilon'$ 形成的高低不平顺角 $\theta_\epsilon$，
 
 $$
-R_{TT_\ell}=R_z(\psi_\epsilon)R_y(\theta_\epsilon)R_x(\phi_r)
+R_{TT_\ell}=R_z(\psi_\epsilon)R_y(\theta_\epsilon)R_x(\phi_r+\phi_\epsilon)
 $$
 
 其中 $\theta_\epsilon$ 的符号取法使钢轨沿站位下降对应绕 $+y$ 的负转角。在位姿归约内，$T_\ell$ 只用于度量位姿滚转 $\varphi$，横竖分离不在其中度量；两个不平顺斜率为零时，同一站位上的 $T_\ell$ 与 $T_c$ 重合。两角的构造见[轮轨位姿归约与不平顺输入](wheel_rail_contact/WHEEL_RAIL_POSE_REDUCTION.md)。
@@ -122,36 +122,42 @@ $g>0$ 表示未变形曲面发生几何互穿；接触判定另取一个间隙�
 
 竖向穿透 $\delta_v$（`vertical_penetration_meters`）是沿 $T_c$ 竖向的最深重叠；法向穿透 $\delta_n$（`normal_penetration_meters`）是同一深度在局部轨面法向上的投影；等效穿透 $\delta_{\mathrm{eq}}$（`equivalent_penetration_meters`）是法向力律实际使用的穿透。
 
-每个斑保留两种角：公法线角 $\gamma$（`common_normal_angle_radians`）用于纵向尺度构造，接触坐标系角 $\alpha$（`rail_slope_angle_radians`）用于接触坐标系和力的表达。两者不能互换。轨面在斑形心处的自身坡角记为 $\alpha_r$，是接触几何的内部量。
+每个斑保留两种角：公法线角 $\gamma$（`common_normal_angle_radians`）用于纵向尺度构造，几何接触角 $\alpha_{\mathrm{geom}}$（`rail_slope_angle_radians`）是接触坐标系角的几何部分，第 2.8 节在其上叠加滚转不平顺后得到接触坐标系和力的表达系。两者不能互换。轨面在斑形心处的自身坡角记为 $\alpha_r$，是接触几何的内部量。
 
 滚动半径使用小写字母：标称滚动半径记为 $r_0$（`nominal_rolling_radius_meters`），接触处的局部滚动半径记为 $r$（`rolling_radius_meters`）。旋转矩阵使用大写 $R$；材料参考点 `R` 只作为点标号或位置向量下标出现。
 
 ### 2.8 接触坐标系 C
 
-接触坐标系 C 相对轨型系 T 只绕纵向轴转过接触坐标系角 $\alpha$：
+接触坐标系 C 相对轨型系 T 只绕纵向轴转过接触坐标系角 $\alpha_C$：
 
 $$
 R_{TC}=
 \begin{bmatrix}
 1&0&0\\
-0&\cos\alpha&-\sin\alpha\\
-0&\sin\alpha&\cos\alpha
+0&\cos\alpha_C&-\sin\alpha_C\\
+0&\sin\alpha_C&\cos\alpha_C
 \end{bmatrix}
 $$
 
-其第三轴是接触法向。接触几何链另以 $c_r$ 记自身采用的轨底坡幅值（`ContactGeometryConfiguration::rail_cant_radians`），于是
+其第三轴是接触法向。接触几何链另以 $c_r$ 记自身采用的轨底坡幅值（`ContactGeometryConfiguration::rail_cant_radians`），于是接触几何的输出角为
 
 $$
-\alpha=\alpha_r-\varsigma c_r.
+\alpha_{\mathrm{geom}}=\alpha_r-\varsigma c_r.
 $$
 
-当前实现有意分别保存 $c_r$ 与位姿链的 $\phi_c$；二者代表相同类型的几何角，但不能在推导中直接视为同一个数。公法线角 $\gamma$ 则由接触几何在消去配对滚转与冲角后形成，用于纵向尺度构造；它与 $\alpha$ 不是同一个角。
+接触坐标系在其上再加该站位的滚转不平顺 $\phi_\epsilon$：
 
-纵向与横向蠕滑率记为 $\xi_x$、$\xi_y$（`longitudinal`、`lateral`），自旋蠕滑率记为 $\xi_{sp}$（`spin_per_meter`），单位为 $\mathrm{m}^{-1}$；三者与切向力都在 C 中表达。`ContactFrame` 与 `Creepages` 的代码定义见 [`contact_creepage.h`](../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h)。$R_{TC}$ 的构造实现见 [`contact_creepage.cc`](../../libs/wheel_rail_contact/src/contact_creepage.cc) 的 `MakeContactFrame`。
+$$
+\alpha_C=\alpha_{\mathrm{geom}}+\phi_\epsilon,\qquad R_{TC}=R_x(\alpha_C).
+$$
+
+法向、接触力与蠕滑率都在由 $\alpha_C$ 构造的 C 中表达。当前实现有意分别保存 $c_r$ 与位姿链的 $\phi_c$；二者代表相同类型的几何角，但不能在推导中直接视为同一个数。公法线角 $\gamma$ 则由接触几何在消去配对滚转与冲角后形成，用于纵向尺度构造；它与 $\alpha_C$ 不是同一个角。
+
+纵向与横向蠕滑率记为 $\xi_x$、$\xi_y$（`longitudinal`、`lateral`），自旋蠕滑率记为 $\xi_{sp}$（`spin_per_meter`），单位为 $\mathrm{m}^{-1}$；三者与切向力都在 C 中表达。`ContactFrame` 与 `Creepages` 的代码定义见 [`contact_creepage.h`](../../libs/wheel_rail_contact/include/orvd/wheel_rail_contact/contact_creepage.h)。$\alpha_C$ 的合成见 [`wheel_rail_contact_model.cc`](../../libs/wheel_rail_contact/src/wheel_rail_contact_model.cc)，$R_{TC}$ 的构造实现见 [`contact_creepage.cc`](../../libs/wheel_rail_contact/src/contact_creepage.cc) 的 `MakeContactFrame`。
 
 ### 2.9 轨道不平顺的表达系
 
-横向和竖向不平顺位移在轨型系中表达，横向向右、竖向向下为正，自变量仍为站位 $s$。空间斜率乘以站位速率形成相应的采样变化率；该变化率描述车辆沿固定空间场取样，不自动等同于钢轨材料点速度。
+轨道不平顺以四个分量在轨型系中表达，自变量仍为站位 $s$：横向位移 $y_\epsilon$ 向右为正，竖向位移 $z_\epsilon$ 向下为正，轨距变窄量 $g_\epsilon$ 以正值表示变窄且左右轨各向中心线移动一半，滚转角 $\phi_\epsilon$ 绕 $+x$ 正转使右轨下沉。下标 $\epsilon$ 标明不平顺量，把它们与第 2.1 节的纵坡 $g$ 和第 2.2 节的超高角 $\phi$ 区分开；谱文档在自身范围内把这四个量写作 $y$、$z$、$g$、$\phi$。四个分量的谱、生成与左右轨施加见[轨道不平顺谱及其空间随机实现](track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)。空间斜率乘以站位速率形成相应的采样变化率；该变化率描述车辆沿固定空间场取样，不自动等同于钢轨材料点速度。
 
 ## 3. 站位、弧长与速率
 

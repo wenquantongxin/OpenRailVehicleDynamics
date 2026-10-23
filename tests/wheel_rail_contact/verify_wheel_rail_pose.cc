@@ -90,6 +90,35 @@ WheelRailPoseInput Running(const WheelsetPlacement& placement) {
 }  // namespace
 
 int main() {
+    // Independent SIMPACK constant-input experiment: g=4 mm, phi=2 mrad,
+    // compatibility=0. The nominal z offset must rotate with the rail datum,
+    // and the gauge shift must follow the rotation rather than precede it.
+    for (const WheelSide side : {WheelSide::kLeft, WheelSide::kRight}) {
+        const bool left = side == WheelSide::kLeft;
+        WheelRailPoseConstants nominal;
+        nominal.rail_lateral_datum_meters =
+            left ? -0.7531523046603634 : 0.7531523046603634;
+        nominal.rail_vertical_datum_meters = -0.00030563576342206955;
+        nominal.rail_roll_radians = (left ? 1.0 : -1.0) * std::atan(0.025);
+        nominal.wheel_lateral_datum_meters = left ? -0.75 : 0.75;
+        nominal.nominal_rolling_radius_meters = 0.46;
+        const auto placed = orvd::wheel_rail_contact::ApplyGaugeAndRollIrregularity(
+            nominal, side, 0.004, 0.002);
+        const double expected_y =
+            left ? -0.7511501870851369 : 0.7511514096273755;
+        const double expected_z =
+            left ? -0.0018119387572686013 : 0.0012006684529671083;
+        Require(std::abs(placed.rail_lateral_datum_meters - expected_y) < 1e-14 &&
+                    std::abs(placed.rail_vertical_datum_meters - expected_z) < 1e-14 &&
+                    std::abs(placed.rail_roll_radians -
+                             nominal.rail_roll_radians - 0.002) < 1e-14,
+                "gauge/roll placement differs from native rail-marker experiment");
+        Require(placed.wheel_lateral_datum_meters ==
+                    nominal.wheel_lateral_datum_meters &&
+                    placed.nominal_rolling_radius_meters ==
+                    nominal.nominal_rolling_radius_meters,
+                "track excitation changed the wheel geometry");
+    }
     {
         // Profile-coordinate placement is measured from the wheel BODY origin,
         // not from the authored wheel-profile datum.  At non-zero yaw the two

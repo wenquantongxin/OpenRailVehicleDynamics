@@ -1,5 +1,4 @@
-// The two-channel station field, checked with distinct non-uniform affine
-// series so the four public quantities have independent analytic answers.
+// Independent station grids, explicit units and absent-channel semantics.
 
 #include <array>
 #include <cmath>
@@ -91,6 +90,35 @@ int main() {
     RequireNear(field.VerticalDisplacementMeters(6.0), -0.008, 2.0e-17,
                 "the vertical channel did not remain live above the lateral "
                 "domain");
+
+    constexpr std::array<double, 3> gauge_stations{0.0, 0.8, 4.0};
+    constexpr std::array<double, 3> gauge_values{0.003, 0.0038, 0.007};
+    constexpr std::array<double, 3> roll_stations{-1.0, 0.6, 2.0};
+    constexpr std::array<double, 3> roll_values{0.0004, 0.00056, 0.0007};
+    const TrackIrregularityField four_channels(
+        lateral_stations, lateral_displacements, vertical_stations,
+        vertical_displacements, gauge_stations, gauge_values, roll_stations,
+        roll_values);
+    for (double station : {0.0, 0.5, 1.0, 1.5, 2.0}) {
+        RequireNear(four_channels.GaugeNarrowingMeters(station),
+                    0.003 + 0.001 * station, 2e-17, "gauge values or units");
+        RequireNear(four_channels.GaugeSlopeMetersPerMeter(station),
+                    0.001, 2e-17, "gauge spatial slope");
+        RequireNear(four_channels.RollRadians(station),
+                    0.0005 + 0.0001 * station, 2e-17, "roll values or units");
+        RequireNear(four_channels.RollSlopeRadiansPerMeter(station),
+                    0.0001, 2e-17, "roll spatial slope");
+        Require(field.GaugeNarrowingMeters(station) == 0.0 &&
+                    field.GaugeSlopeMetersPerMeter(station) == 0.0 &&
+                    field.RollRadians(station) == 0.0 &&
+                    field.RollSlopeRadiansPerMeter(station) == 0.0,
+                "omitted gauge/roll channels must be zero");
+    }
+    Require(four_channels.GaugeNarrowingMeters(-0.1) == 0.0 &&
+                four_channels.GaugeSlopeMetersPerMeter(4.1) == 0.0 &&
+                four_channels.RollRadians(2.1) == 0.0 &&
+                four_channels.RollSlopeRadiansPerMeter(-1.1) == 0.0,
+            "gauge/roll must use their own activation boundaries");
 
     return failures == 0 ? 0 : 1;
 }
