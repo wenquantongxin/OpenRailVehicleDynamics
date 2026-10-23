@@ -6,15 +6,15 @@
 
 ## 当前支持面与证据
 
-| 平台 | 当前支持的工具链 | 默认注册测试 | 最近完整实测与当前状态 |
+| 平台 | 当前支持的工具链 | 对应快照的注册测试 | 最近完整实测与当前状态 |
 |---|---|---:|---|
-| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 87 | 两套工具链均为 `87/87` |
-| Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | 85 | 当前注册数为 85；本次 macOS 收口后仍需在 Windows 复验 |
-| macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 87 | 两套工具链均为 `87/87` |
+| Ubuntu 24.04 x86-64 | GCC 13；Clang 20＋LLVM libomp | 历史 87 | 历史资格快照两套均为 `87/87` |
+| Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | 99 | Windows 10 Pro，两套均 `99/99`；版本见 [Windows 手册](WINDOWS.md) |
+| macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 历史 87 | 历史资格快照两套均为 `87/87` |
 
-这里把“支持边界”“当前 CMake 会注册多少测试”和“最近在哪台机器实测”分开记录。没有运行某平台
-就不能把推导出的测试数写成已通过。当前不支持原生 MSVC、clang-cl、Intel Mac、universal2、
-Xcode generator 或 Visual Studio generator；项目只发布源码，不发布预编译二进制。
+表中分别记录支持边界、对应快照的注册数量及实测结果。每次配置后用
+`ctest --test-dir <build> -N` 或 `--show-only=json-v1` 获取实际清单，再记录完整执行的通过数量。
+工具链与 generator 采用各平台手册列出的组合；项目以源码形式发布。
 
 ## 共同要求
 
@@ -42,7 +42,7 @@ ORVD 不复制三套目标图，也不在产品算法中按操作系统维护三
 |---|---|
 | `WIN32` | 拒绝 MSVC／clang-cl 风格 frontend；当前资格支持限定为 MSYS2 UCRT64 GCC 与 CLANG64 Clang；运行期依赖检查识别 Windows API-set |
 | `UNIX`＋GNU frontend＋非交叉编译 | 注册两个直接调用本机构建编译器的开发期源码探针 |
-| `CMAKE_SYSTEM_NAME STREQUAL Linux` | 可选 SIMPACK Realtime adapter 只在 Linux 构建 |
+| `CMAKE_SYSTEM_NAME STREQUAL Linux` | 可选 SIMPACK Realtime adapter 和 state_stream 只在 Linux 构建 |
 | `CMAKE_CXX_COMPILER_ID` | 选择 GNU／Clang／AppleClang 告警策略，并识别 AppleClang OpenMP forwarding |
 | `CMAKE_CXX_COMPILER_FRONTEND_VARIANT` | 区分 GNU 风格和 MSVC 风格命令行，不根据操作系统猜编译器 |
 | `find_package(... CONFIG REQUIRED)` | 通过 imported target 恢复 Eigen、fmt、SUNDIALS 和 JSON |
@@ -107,6 +107,10 @@ bundle 后，四份固定归档不联网、不更新、也不回退到系统同�
 这是资格化和首次安装的推荐入口。超级构建按同一工具链依次构建四个依赖和 ORVD，并安装到一个
 隔离 prefix。Linux、Windows 和 macOS 的完整命令见各自平台页。
 
+开发时先在工作树干净时组包，构建四个 `orvd_dependency_*` 目标及 `orvd_dependency_licenses`，
+再编辑并从工作树直建。bundle 保留组包时的产品快照，默认 `orvd_product` 关闭测试；
+当前修改的完整 CTest 由工作树构建执行。
+
 ### 已有依赖 prefix 的源码直建
 
 开发者已有由 bundle 产生的工具链匹配 prefix 时，可以直接配置仓库根：
@@ -118,7 +122,9 @@ cmake -S "$ORVD_SOURCE_ROOT" -B /absolute/path/to/product-build -G Ninja \
   -DCMAKE_PREFIX_PATH=/absolute/path/to/dependency-prefix \
   -DCMAKE_INSTALL_PREFIX=/absolute/path/to/orvd-prefix \
   -DBUILD_TESTING=ON \
-  -DORVD_BUILD_DRAKE_REFERENCE_TESTS=OFF
+  -DORVD_BUILD_DRAKE_REFERENCE_TESTS=OFF \
+  -DORVD_BUILD_SIMPACK_REALTIME_TOOLS=OFF \
+  -DORVD_BUILD_STATE_STREAM=OFF
 
 cmake --build /absolute/path/to/product-build
 OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
@@ -129,6 +135,11 @@ cmake --install /absolute/path/to/product-build
 
 macOS 根项目会自动选择 macOS SDK并设置 arm64 目标架构，AppleClang 会从已安装的 Homebrew libomp 公式恢复 OpenMP；
 Windows 的 compiler、Git 和路径规则仍不同，不能把这段概念命令直接当作平台页的替代。
+
+安装应使用干净的产品前缀：覆盖安装不会清除已退出公共接口的旧头文件。当前积分公共入口为
+`SystemContinuousStateAdvancer` 和 `SystemIntegrationConfiguration`，具体 CVODE 类已归源码私有；
+五种方法共用该入口，见[积分器说明](../../libs/integrators/README.md)。重定位安装门实际运行七个
+消费者，包含五种积分方法和场景记录读写，并逐个检查运行期依赖；Drake marker 单独作阳性对照。
 
 ## 构建树和本机配置纪律
 
@@ -149,9 +160,13 @@ install prefix。工具链或关键 CMake 逻辑变化后，用空 build tree �
 同一工具链树中增量构建，最终发布前仍应做一次干净配置。
 
 机器绝对路径只进入命令行、环境变量或被 `.gitignore` 排除的 `CMakeUserPresets.json`。仓库中的
-`CMakePresets.json` 只提供通用目标；每台机器可在自己的 user preset 中继承它并填写 compiler、
-dependency prefix、install prefix，以及必要时的显式工具链覆盖。不要把 user preset、build 目录或
-依赖 prefix 提交到 Git。
+`CMakePresets.json` 只提供通用配置，默认 build 和 install 分别位于源码同级的
+`<源码目录名>-build/<预设名>` 与 `<源码目录名>-install/<预设名>`。预设不准备依赖，也不选择本机
+编译器；调用方必须通过命令行或 user preset 提供匹配的 compiler 和 `CMAKE_PREFIX_PATH`。
+同机验证多个工具链时，为每套建立独立命名的 user preset（例如 `ucrt-release`、`clang-release`），
+继承 `release` 并填写各自的 compiler、dependency prefix、binaryDir 和 installDir；不要用同一个
+`release` 构建目录轮换编译器。Windows 的完整验证仍以 [Windows 手册](WINDOWS.md) 的显式命令
+为入口。不要把 user preset、build 目录或依赖 prefix 提交到 Git。
 
 ## 防止跨平台反复修改源码
 
@@ -162,7 +177,7 @@ dependency prefix、install prefix，以及必要时的显式工具链覆盖。�
 2. 工具链路径和 dependency prefix 只作 configure 输入；macOS SDK 与 AppleClang libomp 由 CMake
    自动发现。任何显式覆盖仍只进入命令行或 toolchain file，不写进项目源码。
 3. 一次提交若修改公共头、数值实现、OpenMP、安装导出或 CMake，应在可用平台上运行各自完整门。
-4. Windows 当前快照未复验时明确写“待复验”，不能把推导出的 85 项冒充 `85/85`。
+4. 分别记录配置后的测试清单、实测通过数量和验证环境，旧快照的结果标为历史记录。
 5. 平台间不要求逐位一致；同一二进制的固定槽并行合同仍必须逐位一致。
 6. 依赖来源 URL、归档名和版本决策以 `dependency_sources.cmake` 为权威；升级时同步根项目与安装
    Config 的精确消费约束，平台文档不建立另一套版本裁决。

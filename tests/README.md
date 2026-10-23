@@ -14,7 +14,7 @@
 | `system_assembly/` | 不可变系统描述、唯一状态所有权与静态求值/事件计划 |
 | `orvd_candidate/` | ORVD 候选观测端及其已构建产物的共享 Drake 动态闭包检查 |
 | `drake_reference/` | Drake 参考发射器、跨进程比较与缓存失效语义探针，默认不构建 |
-| `installation/` | 安装前缀迁移、独立 `find_package` + CVODE 消费者及共享 Drake 依赖判别 |
+| `installation/` | 安装前缀迁移、七个独立 `find_package` 消费者、五种积分方法、场景记录读写及共享 Drake 依赖判别 |
 | `unit/` | 逐模块单元测试 |
 
 测试由 CTest 注册。`BUILD_TESTING=OFF` 时整个测试树不进入构建。
@@ -41,11 +41,14 @@
 若两侧各自声明验收规则，共享同一个错误规则的两侧就能互相背书。
 
 Drake 是迁移期的比较参照，不是本项目交付物的依赖，因此
-`ORVD_BUILD_DRAKE_REFERENCE_TESTS` 默认关闭。开启需用 `drake-reference` 预设，Drake
-位置由标准 `CMAKE_PREFIX_PATH` 提供，仓库不写入任何机器路径：
+`ORVD_BUILD_DRAKE_REFERENCE_TESTS` 默认关闭，开启还需要宿主支持 POSIX 进程原语。在按
+[平台手册](../docs/build_and_install/README.md)准备好同一工具链的依赖后，可用 `drake-reference`
+预设启用；ORVD 依赖与 Drake 的位置均由 `CMAKE_PREFIX_PATH` 提供，仓库不写入机器路径：
 
 ```bash
-cmake --preset drake-reference -DCMAKE_PREFIX_PATH=<drake 安装前缀>
+cmake --preset drake-reference \
+  -DCMAKE_CXX_COMPILER=/absolute/path/to/cxx \
+  "-DCMAKE_PREFIX_PATH=/absolute/path/to/orvd-dependencies;/absolute/path/to/drake"
 cmake --build --preset drake-reference
 ctest --preset drake-reference --output-on-failure
 ```
@@ -143,11 +146,23 @@ Newton 校正、定义边界延长和非法输入。
 
 ## 安装消费者
 
-G46 的安装测试先把当前构建安装到临时前缀，再整体迁移该前缀；随后从独立源码目录仅通过
-`find_package(OpenRailVehicleDynamics CONFIG REQUIRED)` 构建程序。程序用公共门面建立阻尼
-转子，经系统组装和真实 CVODE 后端推进，并与解析解比较。安装元数据不得含原安装前缀、源码
-路径或 `/opt`。同一测试用 CMake 的平台运行期依赖解析检查已运行消费者的动态闭包；未解析边
-明确失败，并由一个实际装载的 Drake 标识共享库证明判别会响。测试不使用 `ldd`、`readelf`
-或 GNU 链接器参数。测试夹具显式复用当前构建实际采用的 Eigen、fmt 与 SUNDIALS 配置目录，
+安装测试先把当前构建安装到临时前缀，再整体迁移该前缀；随后从独立源码目录仅通过
+`find_package(OpenRailVehicleDynamics CONFIG REQUIRED)` 构建七个正常消费者：
+
+| 消费者 | 实际运行内容 |
+|---|---|
+| `orvd_installation_smoke` | 阻尼转子分别用 CVODE BDF2／BDF5、Radau5、Newmark、Zhai 推进并对照解析解；线路、Ball-RPY 映射及数值失败合同 |
+| `configuration_installation_smoke` | 仅链接配置目标，加载已安装的线路、车型、启动状态及关联资产 |
+| `track_geometry_installation_smoke` | 仅链接线路目标并执行公共几何计算 |
+| `track_irregularity_installation_smoke` | 仅链接不平顺目标并执行空间实现生成 |
+| `wheel_rail_contact_installation_smoke` | 仅链接轮轨接触目标并执行公共接触入口 |
+| `forces_installation_smoke` | 仅链接力元目标并构造、求值公共力元 |
+| `scene_record_installation_smoke` | 从单刚体模型采样，写入临时场景记录，再读取并核对刚体名称和位置 |
+
+每个消费者必须实际执行且退出码为零；日志逐项记录运行和通过结果。安装元数据不得含原安装前缀、
+源码路径或 `/opt`。七个程序统一用现有 CMake 平台运行期依赖检查器检查动态闭包，普通未解析
+依赖和共享 Drake 均明确失败。另一个已实际装载 Drake marker 共享库的程序是阳性对照，必须
+返回非零退出码，且诊断中明确指出共享 Drake 依赖。测试夹具显式复用当前构建实际采用的
+Eigen、fmt 与 SUNDIALS 配置目录，
 因此同样适用于依赖位于自定义离线目录的开发环境；安装元数据另行钉住 fmt 查找不得受 `PATH`
 上其他工具链污染。

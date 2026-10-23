@@ -10,7 +10,8 @@
       "name": "base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}"
+      "binaryDir": "${sourceParentDir}/${sourceDirName}-build/${presetName}",
+      "installDir": "${sourceParentDir}/${sourceDirName}-install/${presetName}"
     },
     {
       "name": "dev",

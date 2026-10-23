@@ -8,9 +8,26 @@
 ## 运行
 
 ```bash
-npm install
+npm install --package-lock=false
 npm run dev
 ```
+
+Windows PowerShell 使用 `npm.cmd`，避免脚本执行策略拦截 `npm.ps1`：
+
+```powershell
+npm.cmd install --package-lock=false
+npm.cmd test
+npm.cmd run build
+npm.cmd run dev
+```
+
+依赖按现有 `package.json` 声明解析，不保存带依赖摘要的锁文件。C++ 构建与场景导出命令见
+[Windows 手册](../../docs/build_and_install/WINDOWS.md)。Windows 可直接选择记录文件夹，
+不必为 `public/records` 创建软链接。
+
+Windows 10 Pro 22H2（10.0.19045.7663）、Node 24.21.0、npm 11.19.0 环境的实测结果：
+48 项测试全部通过；TypeScript 5.9.3 类型检查及 Vite 8.3.5 生产构建通过。构建报告主 JS 包
+约 902 kB（gzip 247 kB），有超过 500 kB 的体积提示。
 
 两种加载方式：
 
@@ -24,6 +41,7 @@ npm run dev
 
 `npm run build` 先做类型检查再打包到 `dist/`，`npm run preview` 提供打包结果。
 `npm run check-record -- <记录目录>` 用查看器自己的解析器与显示绑定解析读一份记录并打印摘要；
+摘要中标量样本的 `status: 1` 表示有效数据；命令执行结果以进程退出码判定。
 `npm run check-interpolation -- <记录目录>` 用相隔十个样本的两帧插值到中间样本时刻并与记录比较，
 车轮误差必须小于 0.05 rad；`npm test` 覆盖播放状态归属、插值端点、显示绑定解析、读数模型与轮轴航向、
 线路分段与道床采样、障碍框近平面裁剪、显示范围测量、取景拟合、布局实测、相机重构图与副标题。
@@ -40,10 +58,12 @@ IRW 已有资格运行器场景导出入口；GZ18 当前完成示意资产与�
 
 ## 生成记录
 
-IRW 被动资格运行器带 `--scene-record` 时在其输出目录下写 `scene_record/`，例如从仓库根目录：
+IRW 被动资格运行器带 `--scene-record` 时在其输出目录下写 `scene_record/`。下面从仓库根目录运行，
+`ORVD_BUILD` 指向按平台手册生成的源码树外产品构建目录：
 
 ```bash
-OMP_NUM_THREADS=4 ./build/tools/dynamics_qualification/orvd_irw_passive_scenario \
+export ORVD_BUILD=/absolute/path/to/product-build
+OMP_NUM_THREADS=4 "$ORVD_BUILD/tools/dynamics_qualification/orvd_irw_passive_scenario" \
   irw_r300_no_irregularity_v60_passive \
   vehicle_library/irw/vehicle_definition.json \
   vehicle_library/irw/startup_states/moving_startup_60kmh.json \

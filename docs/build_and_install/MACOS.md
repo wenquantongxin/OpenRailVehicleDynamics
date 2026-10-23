@@ -13,9 +13,9 @@
 - 支持 Ninja／Makefile generator，不支持 Xcode generator；
 - generic Release 不添加 `-mcpu=native`；本机优化必须使用独立 build tree 和 prefix。
 
-最近实测环境为 macOS 26.6.2 arm64、AppleClang 21、Homebrew GCC 15.2、CMake 4.2.3。
-AppleClang 和 GCC 的默认 Release 测试均为 `87/87`。版本号记录证据，不表示未来只能使用这一个
-补丁版本。
+既有资格快照的实测环境为 macOS 26.6.2 arm64、AppleClang 21、Homebrew GCC 15.2、CMake 4.2.3。
+该历史快照的 AppleClang 和 GCC 默认 Release 测试均为 `87/87`。当前源码按配置后的 CTest 清单
+执行完整测试，并记录对应工具链版本和实际通过数量。
 
 ## 安装工具链
 
@@ -118,12 +118,14 @@ cmake -S "$ORVD_SOURCE_ROOT" -B "$ORVD_APPLE_TEST_BUILD" -G Ninja \
 
 cmake --build "$ORVD_APPLE_TEST_BUILD"
 
+ctest --test-dir "$ORVD_APPLE_TEST_BUILD" -N
 OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
   ctest --test-dir "$ORVD_APPLE_TEST_BUILD" \
         --output-on-failure -j1
 ```
 
-预期注册 87 项。`verify_openmp_parallel_execution` 必须观察到真实团队，
+先以 `ctest -N` 获取实际注册清单，再执行全部测试并记录通过数量。
+`verify_openmp_parallel_execution` 必须观察到真实团队，
 `verify_relocated_install_consumer` 必须完成安装迁移、独立 consumer 构建和运行期闭包检查。
 
 ### 下游 consumer
@@ -193,6 +195,7 @@ cmake -S "$ORVD_SOURCE_ROOT" -B "$ORVD_GCC_TEST_BUILD" -G Ninja \
 
 cmake --build "$ORVD_GCC_TEST_BUILD"
 
+ctest --test-dir "$ORVD_GCC_TEST_BUILD" -N
 OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
   ctest --test-dir "$ORVD_GCC_TEST_BUILD" \
         --output-on-failure -j1

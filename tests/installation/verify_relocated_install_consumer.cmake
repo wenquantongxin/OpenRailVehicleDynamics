@@ -22,6 +22,7 @@ if(NOT EXISTS "${OPENMP_REFERENCE_CACHE}")
 endif()
 
 function(run_checked label)
+    message(STATUS "${label}")
     execute_process(
         COMMAND ${ARGN}
         RESULT_VARIABLE result
@@ -30,6 +31,10 @@ function(run_checked label)
     if(NOT "${result}" STREQUAL "0")
         message(FATAL_ERROR
             "${label} failed with exit code ${result}:\n${output}${errors}")
+    endif()
+    message(STATUS "${label} passed")
+    if(NOT "${output}${errors}" STREQUAL "")
+        message("${output}${errors}")
     endif()
 endfunction()
 
@@ -44,6 +49,22 @@ function(find_single_executable output_variable basename search_root)
     endif()
     list(GET candidates 0 executable)
     set(${output_variable} "${executable}" PARENT_SCOPE)
+endfunction()
+
+function(run_installed_consumer basename)
+    find_single_executable(executable "${basename}" "${consumer_build}")
+    run_checked("running installed consumer ${basename}" "${executable}" ${ARGN})
+    get_filename_component(runtime_directory "${executable}" DIRECTORY)
+    # Preserve the list inside one -D argument across run_checked's function
+    # boundary so the checker receives both the executable and toolchain dirs.
+    string(REPLACE ";" "\\;" runtime_directories_argument
+           "${runtime_directory};${toolchain_runtime_directory}")
+    run_checked(
+        "checking runtime dependencies of ${basename}"
+        "${CMAKE_COMMAND}"
+        "-DCHECKED_EXECUTABLE=${executable}"
+        "-DRUNTIME_SEARCH_DIRECTORIES=${runtime_directories_argument}"
+        -P "${INSTALLATION_SOURCE_DIR}/verify_runtime_dependencies.cmake")
 endfunction()
 
 if("${WORK_ROOT}" STREQUAL "${ORVD_BUILD_DIR}" OR
@@ -357,66 +378,33 @@ run_checked(
     "building the relocated independent consumer"
     "${CMAKE_COMMAND}" --build "${consumer_build}" --config "${BUILD_CONFIG}")
 
-find_single_executable(smoke_executable orvd_installation_smoke
-                       "${consumer_build}")
-find_single_executable(configuration_smoke_executable
-                       configuration_installation_smoke "${consumer_build}")
-find_single_executable(track_geometry_smoke_executable
-                       track_geometry_installation_smoke "${consumer_build}")
-find_single_executable(track_irregularity_smoke_executable
-                       track_irregularity_installation_smoke
-                       "${consumer_build}")
-find_single_executable(wheel_rail_contact_smoke_executable
-                       wheel_rail_contact_installation_smoke "${consumer_build}")
-find_single_executable(forces_smoke_executable forces_installation_smoke
-                       "${consumer_build}")
-find_single_executable(drake_probe_executable drake_loading_probe
-                       "${consumer_build}")
-get_filename_component(smoke_runtime_directory "${smoke_executable}" DIRECTORY)
-get_filename_component(drake_probe_runtime_directory
-                       "${drake_probe_executable}" DIRECTORY)
 get_filename_component(toolchain_runtime_directory
                        "${CMAKE_CXX_COMPILER_PATH}" DIRECTORY)
-set(smoke_runtime_directories
-    "${smoke_runtime_directory};${toolchain_runtime_directory}")
+
+run_installed_consumer(orvd_installation_smoke)
+run_installed_consumer(configuration_installation_smoke
+    "${installed_track_geometry}" "${installed_vehicle_definition}"
+    "${installed_startup_state}" "${installed_data_root}"
+    "${installed_irw_vehicle_definition}" "${installed_irw_startup_state}")
+run_installed_consumer(track_geometry_installation_smoke)
+run_installed_consumer(track_irregularity_installation_smoke)
+run_installed_consumer(wheel_rail_contact_installation_smoke)
+run_installed_consumer(forces_installation_smoke)
+run_installed_consumer(scene_record_installation_smoke)
+
+find_single_executable(drake_probe_executable drake_loading_probe
+                       "${consumer_build}")
+get_filename_component(drake_probe_runtime_directory
+                       "${drake_probe_executable}" DIRECTORY)
 set(drake_probe_runtime_directories
     "${drake_probe_runtime_directory};${toolchain_runtime_directory}")
-# These lists cross an execute_process() function boundary below.  Preserve the
-# semicolon inside one -D argument; otherwise CMake expands the toolchain
-# directory into a second command-line argument and the checker only receives
-# the executable directory.
-string(REPLACE ";" "\\;" smoke_runtime_directories_argument
-       "${smoke_runtime_directories}")
-string(REPLACE ";" "\\;" drake_probe_runtime_directories_argument
-       "${drake_probe_runtime_directories}")
-
-run_checked("running the relocated independent consumer" "${smoke_executable}")
-run_checked("running the configuration-only installed consumer"
-            "${configuration_smoke_executable}" "${installed_track_geometry}"
-            "${installed_vehicle_definition}" "${installed_startup_state}"
-            "${installed_data_root}" "${installed_irw_vehicle_definition}"
-            "${installed_irw_startup_state}")
-run_checked("running the track-geometry-only installed consumer"
-            "${track_geometry_smoke_executable}")
-run_checked("running the track-irregularity-only installed consumer"
-            "${track_irregularity_smoke_executable}")
-run_checked("running the wheel-rail-contact-only installed consumer"
-            "${wheel_rail_contact_smoke_executable}")
-run_checked("running the forces-only installed consumer"
-            "${forces_smoke_executable}")
 run_checked("running the Drake-marker positive control"
             "${drake_probe_executable}")
-run_checked(
-    "checking the installed consumer runtime dependency closure"
-    "${CMAKE_COMMAND}"
-    "-DCHECKED_EXECUTABLE=${smoke_executable}"
-    "-DRUNTIME_SEARCH_DIRECTORIES=${smoke_runtime_directories_argument}"
-    -P "${INSTALLATION_SOURCE_DIR}/verify_runtime_dependencies.cmake")
 
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
             "-DCHECKED_EXECUTABLE=${drake_probe_executable}"
-            "-DRUNTIME_SEARCH_DIRECTORIES=${drake_probe_runtime_directories_argument}"
+            "-DRUNTIME_SEARCH_DIRECTORIES=${drake_probe_runtime_directories}"
             -P "${INSTALLATION_SOURCE_DIR}/verify_runtime_dependencies.cmake"
     RESULT_VARIABLE positive_control_result
     OUTPUT_VARIABLE positive_control_output
@@ -434,5 +422,8 @@ if(NOT "${positive_control_output}${positive_control_errors}" MATCHES
 endif()
 
 message(STATUS
-    "relocated find_package consumer, real CVODE smoke and runtime dependency "
-    "discrimination all passed")
+    "Drake-marker positive control rejected because its runtime dependency "
+    "closure contains shared Drake")
+message(STATUS
+    "seven relocated find_package consumers, five integration methods, scene "
+    "record round trip and runtime dependency discrimination all passed")

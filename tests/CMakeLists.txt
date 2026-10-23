@@ -701,9 +701,10 @@ add_test(NAME verify_basic_system_continuous_state_advancer
          COMMAND verify_basic_system_continuous_state_advancer)
 
 # G46's installed-package qualification.  This test moves an actual installation
-# to a second prefix, configures an independent public-header-only consumer,
-# advances a damped rotor with the real CVODE backend, and then walks the
-# resulting executable's runtime dependency closure.  The sibling marker
+# to a second prefix and configures seven independent public-header-only
+# consumers. They exercise all five integration methods, configuration, track,
+# contact, forces and a scene-record round trip. Each consumer runs and then
+# passes the same runtime dependency closure check. The sibling marker
 # executable proves that the same closure check rejects a real shared library
 # whose file identity is Drake.  It is a native execution test, not a cross-build
 # substitute for running on the target platform.

@@ -11,7 +11,10 @@
 - CMake 3.24 或更高版本；
 - Ninja／Makefile generator；
 - 默认产品和测试不需要 SIMPACK；可选 SIMPACK Realtime adapter 只支持 Linux；
-- 默认配置关闭 Drake reference tests，注册 87 项 CTest。
+- 默认配置关闭 Drake reference tests，当前注册数量以配置后的 CTest 清单为准。
+
+历史资格快照中，GCC 13 与 Clang 20 均通过 `87/87`。当前源码按配置后的 CTest 清单执行完整
+测试，并记录对应工具链和实际通过数量。
 
 ## 安装工具链
 
@@ -88,12 +91,13 @@ cmake -S "$ORVD_SOURCE_ROOT" -B "$ORVD_GCC_TEST_BUILD" -G Ninja \
 
 cmake --build "$ORVD_GCC_TEST_BUILD"
 
+ctest --test-dir "$ORVD_GCC_TEST_BUILD" -N
 OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
   ctest --test-dir "$ORVD_GCC_TEST_BUILD" \
         --output-on-failure -j1
 ```
 
-预期 `87/87`。额外查看真实 OpenMP 团队探针：
+以 `ctest -N` 获取实际注册清单，再执行全部测试并记录通过数量。额外查看真实 OpenMP 团队探针：
 
 ```sh
 OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
@@ -150,6 +154,7 @@ cmake -S "$ORVD_SOURCE_ROOT" -B "$ORVD_CLANG_TEST_BUILD" -G Ninja \
 
 cmake --build "$ORVD_CLANG_TEST_BUILD"
 
+ctest --test-dir "$ORVD_CLANG_TEST_BUILD" -N
 OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
   ctest --test-dir "$ORVD_CLANG_TEST_BUILD" \
         --output-on-failure -j1
@@ -243,4 +248,4 @@ target_link_libraries(my_closed_loop PRIVATE ORVD::simpack_realtime)
 
 只有构建 ORVD 时启用了该组件、安装包包含对应目标、且消费端能找到 `spck_rt.h` 和
 `linux64/libspck_rt.a` 时，请求才会成功。CMake 在非 Linux 宿主会直接拒绝构建选项。默认 ORVD
-产品、安装包和 87 项测试不依赖 SIMPACK。
+产品、安装包和默认测试集合不依赖 SIMPACK。
