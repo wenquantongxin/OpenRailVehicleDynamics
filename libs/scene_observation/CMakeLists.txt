@@ -7,6 +7,7 @@
 
 add_library(orvd_scene_observation STATIC
     src/body_state.cc
+    src/scene_description.cc
     src/scene_topology.cc
     src/track_sampling.cc
     src/wheel_spin_sampling.cc)
@@ -23,7 +24,8 @@ target_link_libraries(orvd_scene_observation
         orvd_forces
         orvd_multibody_model
         orvd_track_geometry
-        orvd_wheel_rail_contact)
+        orvd_wheel_rail_contact
+    PRIVATE $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>)
 
 set_target_properties(orvd_scene_observation PROPERTIES
     EXPORT_NAME scene_observation)

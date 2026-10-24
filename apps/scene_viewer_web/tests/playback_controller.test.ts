@@ -40,3 +40,16 @@ test('one toggle at the end restarts from the beginning', () => {
   playback.togglePlay();
   assert.equal(playback.playing, false);
 });
+
+test('unchanged playback time keeps display sample references stable', () => {
+  const record = makeRecord({ bodies: ['body'], frames: [{ timeSeconds: 0 }, { timeSeconds: 1 }] });
+  const controller = new PlaybackController(record.samples);
+  const initial = controller.interval();
+  controller.advance(1);
+  assert.equal(controller.interval(), initial);
+  controller.seek(0.5);
+  const middle = controller.interval();
+  assert.notEqual(middle, initial);
+  assert.equal(controller.interval(), middle);
+  assert.equal(middle.alpha, 0.5);
+});

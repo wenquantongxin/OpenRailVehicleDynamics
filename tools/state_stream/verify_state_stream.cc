@@ -1,11 +1,10 @@
 #include "orvd/state_stream/state_stream.h"
+#include "orvd/scene_stream/scene_stream.h"
 
 #include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <filesystem>
-#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <thread>
@@ -122,7 +121,7 @@ void VerifySendOptions(
     // Publish must still be able to retry using its own budget. Both use the same
     // send path and retain the exact wire bytes.
     const std::string description = "{\"text\":\"" + std::string(2400, 'x') + "\"}";
-    const auto description_packets = orvd::state_stream::Packetize(
+    const auto description_packets = orvd::scene_stream::Packetize(
         1, run_id, 40, 0.4, std::span(
             reinterpret_cast<const std::uint8_t*>(description.data()), description.size()));
     std::this_thread::sleep_for(retry_budget);
@@ -177,7 +176,7 @@ extern "C" int __wrap_poll(pollfd* descriptors, nfds_t count, int timeout) {
 
 // The wire protocol and sender boundary of the optional UDP component. Body
 // sampling itself is verified with the public scene_observation library.
-int main(int argc, char** argv) {
+int main() {
     using namespace orvd;
     try {
         scene_observation::BodyState state;
@@ -194,18 +193,18 @@ int main(int argc, char** argv) {
         scalars.values[1] = 2.75;
         scalars.statuses[2] = 0;
         scalars.statuses[3] = 2;
-        const auto payload = state_stream::EncodeState(many, scalars);
+        const auto payload = scene_stream::EncodeState(many, scalars);
         if (payload.size() != 3004 || payload[4 + 7 * 8 + 7] != 128 ||
             payload[2608 + 7] != 128 || payload[2960 + 2] != 0 || payload[2960 + 3] != 2)
             throw std::runtime_error("wire layout lost a signed zero");
-        if (state_stream::EncodeState({}, {}).size() != 8)
+        if (scene_stream::EncodeState({}, {}).size() != 8)
             throw std::runtime_error("empty state counts missing");
         bool bad_scalar = false;
-        try { (void)state_stream::EncodeState({}, {{1.0}, {2}}); }
+        try { (void)scene_stream::EncodeState({}, {{1.0}, {2}}); }
         catch (const std::invalid_argument&) { bad_scalar = true; }
         if (!bad_scalar) throw std::runtime_error("nonzero placeholder accepted");
         constexpr std::uint64_t run_id = 9223372038880858309ULL;
-        const auto packets = state_stream::Packetize(2, run_id, 37, 0.37, payload);
+        const auto packets = scene_stream::Packetize(2, run_id, 37, 0.37, payload);
         std::vector<std::uint8_t> recovered;
         for (const auto& packet : packets) {
             if (packet.size() > 1200 || packet.size() < 40)
@@ -214,11 +213,6 @@ int main(int argc, char** argv) {
         }
         if (packets.size() != 3 || recovered != payload)
             throw std::runtime_error("fragmentation changed payload");
-        const std::string description = state_stream::UdpStateStream::Describe(
-            {"test_body"}, "world", {{"speed", "m/s", "world", "speed", "sampled", "instantaneous"}});
-        if (description.find("orvd.state-stream") == std::string::npos ||
-            description.find("\"speed\"") == std::string::npos)
-            throw std::runtime_error("description lost its schema or scalar names");
         bool invalid_rejected = false;
         try { state_stream::UdpStateStream invalid({"127.0.0.1:70000"}); }
         catch (const std::invalid_argument&) { invalid_rejected = true; }
@@ -239,14 +233,6 @@ int main(int argc, char** argv) {
         if (encoded_run_id != identified.statistics().run_id)
             throw std::runtime_error("wire run identity differs from sender identity");
         VerifySendOptions(many, scalars, packets, run_id);
-        if (argc == 2) {
-            std::filesystem::create_directories(argv[1]);
-            for (std::size_t i = 0; i < packets.size(); ++i) {
-                std::ofstream out(std::filesystem::path(argv[1]) / (std::to_string(i) + ".bin"), std::ios::binary);
-                out.write(reinterpret_cast<const char*>(packets[i].data()), static_cast<std::streamsize>(packets[i].size()));
-                if (!out) throw std::runtime_error("fixture write failed");
-            }
-        }
         std::puts("state_stream encoding, fragments, send buffer and bounded retries passed");
         return 0;
     } catch (const std::exception& error) {

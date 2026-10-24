@@ -31,6 +31,9 @@ struct TrackSampleTable {
     std::vector<double> superelevation_meters;
     std::vector<std::array<double, 3>> left_rail_datum_in_inertial_meters;
     std::vector<std::array<double, 3>> right_rail_datum_in_inertial_meters;
+    /// The actual constant placements supplied to SampleTrackGeometry.
+    RailDatumPlacement left_rail_datum_in_track;
+    RailDatumPlacement right_rail_datum_in_track;
 };
 
 /// Samples the line at the given stations. The stations must be non-empty and

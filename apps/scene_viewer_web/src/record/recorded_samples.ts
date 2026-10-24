@@ -1,4 +1,5 @@
-import type { BodyPose, SceneSampleView, ScalarSample } from './scene_sample.ts';
+import type { SceneDescription } from './scene_definition.ts';
+import { ScalarStatus, type BodyPose, type SceneSampleView, type ScalarSample } from './scene_sample.ts';
 
 /** Column offsets within one row of the frame table. */
 export interface FrameColumns {
@@ -24,7 +25,16 @@ export class RecordedSamples {
   readonly values: Float64Array;
   readonly statuses: Uint8Array;
 
-  constructor(columns: FrameColumns, values: Float64Array, statuses: Uint8Array) {
+  readonly wheelSpinScalarBindings: ReadonlyArray<{ scalarIndex: number; sign: 1 | -1 } | null>;
+
+  constructor(columns: FrameColumns, values: Float64Array, statuses: Uint8Array, description?: Pick<SceneDescription, 'scalars' | 'wheelPlacements'>) {
+    const scalarIndices = new Map(description?.scalars.map((scalar, index) => [scalar.name, index]));
+    this.wheelSpinScalarBindings = description?.wheelPlacements.map((wheel) => {
+      if (wheel.spinAngleScalar === null) return null;
+      const scalarIndex = scalarIndices.get(wheel.spinAngleScalar.name);
+      if (scalarIndex === undefined) throw new Error(`unknown wheel spin scalar '${wheel.spinAngleScalar.name}'`);
+      return { scalarIndex, sign: wheel.spinAngleScalar.sign };
+    }) ?? [];
     this.columns = columns;
     this.values = values;
     this.statuses = statuses;
@@ -33,11 +43,16 @@ export class RecordedSamples {
       values[index * columns.rowValueCount + columns.timeSecondsColumnOffset] as number);
   }
 
+  /** Whether this wheel has a dedicated column or a resolved scalar binding. */
+  hasWheelSpinAngle(index: number): boolean {
+    return (index >= 0 && index < this.columns.wheelSpinAngleCount) || this.wheelSpinScalarBindings[index] != null;
+  }
+
   timeAt(frameIndex: number): number {
     return this.timesSeconds[frameIndex] as number;
   }
 
-  viewAt(frameIndex: number): SceneSampleView {
+  viewAt(frameIndex: number): RecordedSampleView {
     if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex >= this.frameCount) {
       throw new RangeError(`sample row ${frameIndex} is outside the recording`);
     }
@@ -72,9 +87,12 @@ class RecordedSampleView implements SceneSampleView {
 
   private at(offset: number): number { return this.samples.values[this.row + offset] as number; }
   get timeSeconds(): number { return this.at(this.samples.columns.timeSecondsColumnOffset); }
-  get timeNanoseconds(): number { return this.at(this.samples.columns.timeNanosecondsColumnOffset); }
-  get sampleIndex(): number { return this.at(this.samples.columns.sampleIndexColumnOffset); }
-  get phase(): number { return this.at(this.samples.columns.phaseColumnOffset); }
+  get identity() {
+    return { kind: 'record' as const,
+      timeNanoseconds: this.at(this.samples.columns.timeNanosecondsColumnOffset),
+      sampleIndex: this.at(this.samples.columns.sampleIndexColumnOffset),
+      phase: this.at(this.samples.columns.phaseColumnOffset) };
+  }
   private bodyStart(bodyIndex: number): number {
     return this.samples.columns.bodyStatesColumnOffset + bodyIndex * this.samples.columns.valuesPerBody;
   }
@@ -92,8 +110,15 @@ class RecordedSampleView implements SceneSampleView {
     return [this.at(b), this.at(b + 1), this.at(b + 2)];
   }
   wheelSpinAngle(index: number): number | null {
-    return this.samples.columns.wheelSpinAngleCount === 0 ? null :
-      this.at(this.samples.columns.wheelSpinAnglesColumnOffset + index);
+    if (!Number.isInteger(index) || index < 0) return null;
+    if (index < this.samples.columns.wheelSpinAngleCount) {
+      const angle = this.at(this.samples.columns.wheelSpinAnglesColumnOffset + index);
+      return Number.isFinite(angle) ? angle : null;
+    }
+    const binding = this.samples.wheelSpinScalarBindings[index];
+    if (binding === undefined || binding === null) return null;
+    const sample = this.scalar(binding.scalarIndex);
+    return sample.status === ScalarStatus.valid && Number.isFinite(sample.value) ? binding.sign * sample.value : null;
   }
   scalar(index: number): ScalarSample {
     return { value: this.at(this.samples.columns.scalarValuesColumnOffset + index),

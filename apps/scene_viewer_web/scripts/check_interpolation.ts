@@ -11,7 +11,7 @@ import * as THREE from 'three';
 
 import { parseSceneRecord } from '../src/record/scene_record.ts';
 import { wheelSpinBindings } from '../src/scene/apply_frame.ts';
-import { interpolateOrientation } from '../src/scene/pose_interpolation.ts';
+import { interpolateOrientation, selectWheelSpin } from '../src/scene/pose_interpolation.ts';
 
 function geodesicAngle(a: THREE.Quaternion, b: THREE.Quaternion): number {
   const dot = Math.min(1, Math.abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w));
@@ -29,16 +29,17 @@ async function main(): Promise<void> {
   const statusTable = scene['scalar_status_table'] as Record<string, unknown>;
   const toArrayBuffer = (buffer: Buffer): ArrayBuffer =>
     buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+  const visualFile = (scene['assets'] as Record<string, unknown>)['visual_definition_file'];
   const record = parseSceneRecord(
-    sceneText,
+    scene,
     toArrayBuffer(await readFile(join(directory, String(frameTable['file'])))),
     toArrayBuffer(await readFile(join(directory, String(statusTable['file'])))),
-    null,
+    typeof visualFile === 'string' ? await readFile(join(directory, visualFile), 'utf8') : null,
   );
   if (record.samples.frameCount < 11) {
     throw new Error('the record needs at least eleven frames');
   }
-  if (record.samples.columns.wheelSpinAngleCount === 0) {
+  if (!record.definition.wheelPlacements.some((_, index) => record.samples.hasWheelSpinAngle(index))) {
     throw new Error('the record carries no wheel spin angles; nothing to verify');
   }
   const firstFrameIndex = 0;
@@ -61,6 +62,9 @@ async function main(): Promise<void> {
     const binding = bindings.get(bodyIndex);
     interpolateOrientation(first, second, alpha, bodyIndex, binding, interpolated);
     const error = geodesicAngle(interpolated, recorded);
+    if (binding !== undefined && selectWheelSpin(first, second, binding) === null) {
+      throw new Error(`wheel body ${bodyIndex} lacks a spin angle candidate valid at both interval endpoints`);
+    }
     if (binding === undefined) {
       worstBody = Math.max(worstBody, error);
     } else {
@@ -72,7 +76,7 @@ async function main(): Promise<void> {
   const report = {
     frame_indices: [firstFrameIndex, middleFrameIndex, secondFrameIndex],
     interval_seconds: record.samples.timeAt(secondFrameIndex) - record.samples.timeAt(firstFrameIndex),
-    wheels_with_spin_angles: bindings.size,
+    wheel_bodies_with_spin_angles: bindings.size,
     worst_non_wheel_error_radians: worstBody,
     worst_wheel_error_with_spin_angles_radians: worstWheelWithSpin,
     worst_wheel_error_shortest_path_radians: worstWheelShortestPath,

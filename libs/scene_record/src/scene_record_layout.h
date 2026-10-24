@@ -9,6 +9,7 @@
 namespace orvd::scene_record::internal {
 
 inline constexpr std::string_view kRecordIdentifier = "orvd.scene_record";
+inline constexpr std::string_view kBundleIdentifier = "orvd.scene_bundle";
 inline constexpr std::string_view kSceneFileName = "scene.json";
 inline constexpr std::string_view kFramesFileName = "frames.f64le";
 inline constexpr std::string_view kStatusesFileName = "scalar_statuses.u8";

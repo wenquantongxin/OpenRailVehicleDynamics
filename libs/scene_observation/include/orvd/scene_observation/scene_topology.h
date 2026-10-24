@@ -22,6 +22,14 @@ struct SceneBody {
     bool moves_freely_in_world{false};
 };
 
+/// Names a scalar containing a wheel's unwrapped spin angle in radians.
+/// Multiplying its value by sign gives rotation about the placement's spin
+/// axis; sign is exactly +1 or -1.
+struct WheelSpinScalarBinding {
+    std::string name;
+    double sign{1.0};
+};
+
 /// Where one wheel's profile datum sits on its rigid body, in that body's own
 /// frame, derived from the contact plan's frozen constants rather than authored
 /// by hand. A viewer places its wheel geometry at the datum, along the spin
@@ -52,6 +60,9 @@ struct SceneWheelPlacement {
     /// relative to its carrier; absent for a rigid wheelset, whose spin lives
     /// in the wheelset body's own orientation.
     std::optional<std::string> spin_joint_name;
+    /// Optional scalar source for the continuous rotation branch between
+    /// samples. The body's orientation already includes the wheel's spin.
+    std::optional<WheelSpinScalarBinding> spin_angle_scalar;
 };
 
 struct SceneTopology {

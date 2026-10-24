@@ -1,3 +1,4 @@
+import type { DisplayDriver, DisplayInterval } from './display_driver.ts';
 import type { RecordedSamples } from '../record/recorded_samples.ts';
 
 // The display clock. It advances with wall time scaled by the playback rate,
@@ -10,13 +11,14 @@ export interface FrameBracket {
   alpha: number;
 }
 
-export class PlaybackController {
+export class PlaybackController implements DisplayDriver {
   timeSeconds: number;
   playing = false;
   speed = 1;
   readonly startSeconds: number;
   readonly endSeconds: number;
   private readonly samples: RecordedSamples;
+  private displayed: DisplayInterval | null = null;
 
   constructor(samples: RecordedSamples) {
     this.samples = samples;
@@ -54,6 +56,14 @@ export class PlaybackController {
       this.timeSeconds = this.startSeconds;
     }
     this.playing = true;
+  }
+
+  interval(): DisplayInterval {
+    if (this.displayed?.displayTimeSeconds === this.timeSeconds) return this.displayed;
+    const bracket = this.bracket();
+    this.displayed = { first: this.samples.viewAt(bracket.firstFrameIndex), second: this.samples.viewAt(bracket.secondFrameIndex),
+      alpha: bracket.alpha, displayTimeSeconds: this.timeSeconds };
+    return this.displayed;
   }
 
   bracket(): FrameBracket {

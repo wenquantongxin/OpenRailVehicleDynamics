@@ -111,8 +111,10 @@ export function PlaybackCard(props: Props) {
   }
   const firstStationMeters = summary.carbodyStation[0] ?? Number.NaN;
   const lastStationMeters = summary.carbodyStation[record.frameCount - 1] ?? Number.NaN;
-  const phase = phaseNames[record.viewAt(frameIndex).phase] ?? { en: 'Unknown phase', zh: '未知阶段' };
-  const sampleIndex = record.viewAt(frameIndex).sampleIndex;
+  const identity = record.viewAt(frameIndex).identity;
+  if (identity.kind !== 'record') throw new Error('playback requires recorded sample identity');
+  const phase = phaseNames[identity.phase] ?? { en: 'Unknown phase', zh: '未知阶段' };
+  const sampleIndex = identity.sampleIndex;
 
   return (
     <Card index="07" en="Playback" zh="回放" className="playback">

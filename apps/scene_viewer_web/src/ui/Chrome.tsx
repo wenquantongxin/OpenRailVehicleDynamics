@@ -10,7 +10,7 @@ import type { Subtitle } from './subtitle.ts';
 
 // Title block, record meta, footer, the load screen and the scalar drawer.
 
-export function TitleBlock({ definition, subtitle }: { definition: VisualDefinition | null; subtitle: Subtitle | null }) {
+export function TitleBlock({ definition, subtitle, live = false }: { definition: VisualDefinition | null; subtitle: Subtitle | null; live?: boolean }) {
   const code = definition?.vehicleName ?? 'ORVD';
   return (
     <div className="brand">
@@ -24,7 +24,7 @@ export function TitleBlock({ definition, subtitle }: { definition: VisualDefinit
       </div>
       <div className="titles">
         <div className="overline">
-          ORVD · Scene record replay <span className="zh">场景记录回放</span>
+          ORVD · {live ? 'Live scene' : 'Scene record replay'} <span className="zh">{live ? '实时场景' : '场景记录回放'}</span>
         </div>
         <h1 className="title">
           {definition?.displayName.en ?? 'Scene viewer'}
@@ -71,6 +71,7 @@ export function MetaBar(props: {
   record: SceneRecord | null;
   name: string;
   intervalSeconds: number;
+  live?: boolean;
   onPick: (files: FileList) => void;
 }) {
   const { record } = props;
@@ -97,19 +98,19 @@ export function MetaBar(props: {
           </span>
         </>
       )}
-      <FolderButton onPick={props.onPick} en="Open record" zh="打开记录" className="chip open" />
+      {!props.live && <FolderButton onPick={props.onPick} en="Open record" zh="打开记录" className="chip open" />}
     </div>
   );
 }
 
-export function Footer({ loaded }: { loaded: boolean }) {
+export function Footer({ loaded, live = false }: { loaded: boolean; live?: boolean }) {
   return (
     <footer className="footer">
       <span>
-        ORVD scene record · parametric schematic model · readouts are recorded samples
-        <span className="zh">参数化示意模型，读数为记录样本</span>
+        ORVD scene · parametric schematic model · readouts are {live ? 'received' : 'recorded'} samples
+        <span className="zh">参数化示意模型，读数为{live ? '接收' : '记录'}样本</span>
       </span>
-      {loaded && <span className="keys">Space play · ← → sample · 1–5 views · L labels · X carbody</span>}
+      {loaded && <span className="keys">{live ? 'Space pause · 1–5 views · L labels · X carbody' : 'Space play · ← → sample · 1–5 views · L labels · X carbody'}</span>}
       <span>
         Schematic dimensions, not as-built <span className="zh">示意尺寸</span> <b>////</b>
       </span>
@@ -136,7 +137,8 @@ export function Notice(props: { kind: 'loading' | 'error' | 'info'; en: string; 
   );
 }
 
-export function EmptyState(props: { state: 'idle' | 'loading' | 'error'; message: string; onPick: (files: FileList) => void }) {
+export function EmptyState(props: { state: 'idle' | 'loading' | 'error'; message: string; onPick: (files: FileList) => void; live?: boolean }) {
+  if (props.live) return <div className="empty"><Card index="00" en="Live scene" zh="实时场景"><p className="empty-text" role="status">{props.message || 'Waiting for a scene and states. 等待场景与状态。'}</p></Card></div>;
   return (
     <div className="empty">
       <Card index="00" en="Scene record" zh="场景记录">
@@ -152,7 +154,7 @@ export function EmptyState(props: { state: 'idle' | 'loading' | 'error'; message
               <code>?record=/records/&lt;name&gt;/</code>.
               <span className="zh">选择由 ORVD 场景记录写出的文件夹，或用 record 参数打开已部署的记录。</span>
             </p>
-            {props.state === 'error' && <p className="empty-error">{props.message}</p>}
+            {props.message !== '' && <p className={props.state === 'error' ? 'empty-error' : 'empty-text'}>{props.message}</p>}
             <FolderButton onPick={props.onPick} en="Choose record folder" zh="选择记录文件夹" className="chip on" />
           </>
         )}

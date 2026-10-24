@@ -5,6 +5,7 @@ import type { TrackTable } from '../src/record/scene_definition.ts';
 /** A straight line along inertial x with a planar curvature profile; rails at ±halfGauge. */
 export function straightTable(stations: number[], curvature: (s: number) => number, halfGauge = 0.75315): TrackTable {
   return {
+    railDatums: { left: { lateralMeters: -halfGauge, verticalMeters: -0.00018 }, right: { lateralMeters: halfGauge, verticalMeters: -0.00018 } },
     stationsMeters: stations,
     curvatureRadiansPerMeter: stations.map(curvature),
     superelevationMeters: stations.map(() => 0),
@@ -37,6 +38,7 @@ export function turnedTable(stations: number[], headingRadians: number, cantRoll
   const centre = (s: number): THREE.Vector3 => new THREE.Vector3(s, 0, 0).applyQuaternion(rotation);
   const rail = (s: number, lateral: number): number[] => centre(s).add(new THREE.Vector3(0, lateral, -0.00018).applyQuaternion(rotation)).toArray();
   return {
+    railDatums: { left: { lateralMeters: -halfGauge, verticalMeters: -0.00018 }, right: { lateralMeters: halfGauge, verticalMeters: -0.00018 } },
     stationsMeters: stations,
     curvatureRadiansPerMeter: stations.map(() => 0),
     superelevationMeters: stations.map(() => 0),

@@ -351,16 +351,12 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 struct SceneRecordExport final {
     SceneRecordExport(const configuration::AssembledVehicleSystem& assembled,
                       const std::filesystem::path& directory,
-                      scene_observation::SceneTopology topology,
-                      std::vector<scene_observation::ScalarDefinition>
-                          scalar_definitions,
-                      std::string visual_definition_json)
+                      scene_observation::SceneDescription description,
+                      scene_record::SceneAssets assets)
         : sampler(assembled.model()),
-          spin_sampler(assembled.model(), topology),
-          wheel_body_slots(ResolveWheelBodySlots(topology)),
-          writer(directory, std::move(topology),
-                 std::move(scalar_definitions),
-                 std::move(visual_definition_json),
+          spin_sampler(assembled.model(), description.topology),
+          wheel_body_slots(ResolveWheelBodySlots(description.topology)),
+          writer(directory, std::move(description), std::move(assets),
                  spin_sampler.available()) {}
 
     [[nodiscard]] static std::vector<std::size_t> ResolveWheelBodySlots(
@@ -1107,10 +1103,16 @@ QualificationRunSummary RunVehicleQualification(
             "visualization" / "visual_definition.json";
         scene_export.emplace(
             assembled, output_directory.working_path() / "scene_record",
-            scene_observation::DescribeSceneTopology(
-                assembled.model(), assembled.contact_force_plan()),
-            MakeSceneScalarDefinitions(assembled, recipe),
-            ReadVisualDefinitionText(visual_definition_path));
+            scene_observation::SceneDescription{
+                .topology = scene_observation::DescribeSceneTopology(
+                    assembled.model(), assembled.contact_force_plan()),
+                .scalar_definitions = MakeSceneScalarDefinitions(assembled, recipe),
+                .nominal_sample_period_seconds =
+                    static_cast<double>(sample_clock.sample_period_nanoseconds()) *
+                    1e-9},
+            scene_record::SceneAssets{
+                .visual_definition_json =
+                    ReadVisualDefinitionText(visual_definition_path)});
     }
 
     std::vector<QualificationObservation> observations;

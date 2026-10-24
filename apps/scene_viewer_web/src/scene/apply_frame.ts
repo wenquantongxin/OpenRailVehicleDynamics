@@ -10,13 +10,18 @@ import type { BuiltScene } from './scene_builder.ts';
 const position = new THREE.Vector3();
 const orientation = new THREE.Quaternion();
 
-/** Wheel axes and angle slots by body index; each sample determines angle availability. */
-export function wheelSpinBindings(definition: SceneDefinition): Map<number, WheelSpinBinding> {
-  const bindings = new Map<number, WheelSpinBinding>();
+/** All wheel angle candidates per body; shared wheelsets may use either side. */
+export function wheelSpinBindings(definition: SceneDefinition): Map<number, WheelSpinBinding[]> {
+  const bindings = new Map<number, WheelSpinBinding[]>();
   definition.wheelPlacements.forEach((placement, wheelPlacementIndex) => {
     const bodyIndex = definition.bodies.findIndex((candidate) => candidate.name === placement.wheelBodyName);
     if (bodyIndex >= 0) {
-      bindings.set(bodyIndex, { wheelPlacementIndex, spinAxisInBody: placement.spinAxisInWheelBodyFrame });
+      let candidates = bindings.get(bodyIndex);
+      if (candidates === undefined) {
+        candidates = [];
+        bindings.set(bodyIndex, candidates);
+      }
+      candidates.push({ wheelPlacementIndex, spinAxisInBody: placement.spinAxisInWheelBodyFrame });
     }
   });
   return bindings;
@@ -25,7 +30,7 @@ export function wheelSpinBindings(definition: SceneDefinition): Map<number, Whee
 export function applyFrames(
   definition: SceneDefinition,
   scene: BuiltScene,
-  bindings: Map<number, WheelSpinBinding>,
+  bindings: Map<number, WheelSpinBinding[]>,
   firstSample: SceneSampleView,
   secondSample: SceneSampleView,
   alpha: number,

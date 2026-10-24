@@ -24,7 +24,7 @@
 | 控制与作动 | 全状态轮速导向、纵向巡航控制与转矩整形；周期控制事件在接受态上原子提交 |
 | 时间积分 | CVODE BDF2／BDF5、Radau5、带有界缩步恢复的 Newmark、Zhai；统一强类型配置、目标时刻推进、步内采样与接受态事务 |
 | 高效计算 | 八处轮轨接触的 OpenMP 并行求值，固定槽发布、无跨轮浮点归约，结果不随工作者数量变化；CVODE 稠密差分 Jacobian 按列并行 |
-| 集成与展示 | JSON 定义装配、可重定位 CMake 安装、位置无关静态归档、离线依赖源码包；`scene_observation` 采样、`scene_record` 记录、`state_stream` UDP 发送、浏览器三维回放 |
+| 集成与展示 | JSON 定义装配、可重定位 CMake 安装、位置无关静态归档、离线依赖源码包；`scene_observation` 采样、`scene_record` 记录与资源、`scene_stream` 编码、`state_stream` UDP 发送、浏览器三维回放 |
 
 ```mermaid
 flowchart LR
@@ -166,11 +166,11 @@ target_link_libraries(my_vehicle_simulation PRIVATE ORVD::integrators)
 <details>
 <summary><strong>安装包导出的目标</strong></summary>
 
-按依赖层级组织的 13 个产品模块目标：`control`、`actuation`、`track_geometry`、`track_irregularity`、`wheel_rail_contact`、`configuration`、`multibody_runtime`、`multibody_model`、`forces`、`system_assembly`、`integrators`，以及面向三维观察的 `scene_observation`（刚体世界状态采样、车轮放置与线路采样）和 `scene_record`（可携带的场景记录读写）；使用时添加 `ORVD::` 命名空间。它们依赖的 vendored 刚体多体树一并安装为位置无关静态归档。
+按依赖层级组织的 14 个产品模块目标：`control`、`actuation`、`track_geometry`、`track_irregularity`、`wheel_rail_contact`、`configuration`、`multibody_runtime`、`multibody_model`、`forces`、`system_assembly`、`integrators`，以及面向三维观察的 `scene_observation`（刚体世界状态采样、车轮放置与线路采样）、`scene_record`（场景记录与资源包读写）和 `scene_stream`（可移植 OSTS 编解码）；使用时添加 `ORVD::` 命名空间。它们依赖的 vendored 刚体多体树一并安装为位置无关静态归档。
 
 </details>
 
-Linux 可显式构建并安装 `ORVD::simpack_realtime` 可选组件，以机械观测和四轴差动转矩回调驱动本机 SIMPACK Realtime 模型；默认产品及普通安装消费者不依赖 SIMPACK 或其专有 ABI，完整命令见 [Linux 构建说明](docs/build_and_install/LINUX.md#可选-simpack-realtime-组件)。Linux 另有默认关闭的 `ORVD::state_stream` 组件，把 `scene_observation` 采样到的具名刚体位姿与速度编码分片后以非阻塞 UDP 发送给独立显示器，通过 `-DORVD_BUILD_STATE_STREAM=ON` 构建安装；协议与 Python 接收示例见 [state_stream](tools/state_stream/README.md)。
+Linux 可显式构建并安装 `ORVD::simpack_realtime` 可选组件，以机械观测和四轴差动转矩回调驱动本机 SIMPACK Realtime 模型；默认产品及普通安装消费者不依赖 SIMPACK 或其专有 ABI，完整命令见 [Linux 构建说明](docs/build_and_install/LINUX.md#可选-simpack-realtime-组件)。Linux 另有默认关闭的 `ORVD::state_stream` 组件，把 `scene_stream` 编码的观测以非阻塞 UDP 发送给独立显示器，通过 `-DORVD_BUILD_STATE_STREAM=ON` 构建安装；可移植协议与 Python 接收示例见 [scene_stream](libs/scene_stream/README.md)。
 
 Linux、Windows 与 macOS 的依赖安装、离线构建、测试及消费命令见[分平台构建与安装说明](docs/build_and_install/README.md)；离线源码包的内部结构见[依赖超级构建说明](distribution/dependencies/README.md)。
 

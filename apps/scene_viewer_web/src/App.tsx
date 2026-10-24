@@ -4,7 +4,16 @@ import { loadRecordFromFiles, loadRecordFromUrl } from './record/load_record.ts'
 import type { SceneRecord } from './record/scene_record.ts';
 import { parseVisualDefinition, type VisualDefinition } from './record/visual_definition.ts';
 import { PlaybackController } from './playback/playback.ts';
+import type { DisplayDriver, DisplayInterval } from './playback/display_driver.ts';
+import type { SceneDefinition } from './record/scene_definition.ts';
+import type { SceneSampleView } from './record/scene_sample.ts';
+import { LiveConnection, type LiveConnectionStatus } from './live/live_connection.ts';
+import { LiveController } from './live/live_controller.ts';
+import { LiveSample, resolveLiveSpinBindings } from './live/live_samples.ts';
+import { LiveReadoutScales } from './live/live_readout_scales.ts';
+import { LiveCard } from './ui/LiveCard.tsx';
 import { applyFrames, wheelSpinBindings } from './scene/apply_frame.ts';
+import { selectWheelSpin } from './scene/pose_interpolation.ts';
 import { summarizeRecord, type RecordSummary } from './ui/record_summary.ts';
 import { measureFramedExtents, presetAvailableFor, viewPresets, type FramedExtents, type ViewPreset } from './scene/camera_rig.ts';
 import type { SafeArea } from './scene/label_layer.ts';
@@ -21,19 +30,19 @@ import { CarriersCard, VehicleCard, WheelForceCard } from './ui/VehicleCards.tsx
 import { measureCardLayout, type EdgeRect } from './viewer/card_layout.ts';
 import { SceneViewport, type ViewportCommands, type ViewportOptions } from './viewer/SceneViewport.tsx';
 
-// The replay: load a record, parse its visual definition, resolve the display
-// bindings once, build the scene and the readout model from that one
-// resolution, measure what the camera presets frame, drive body poses from
-// the display clock, and show only what the record carries.
+// File and live sources share scene construction, sampled readouts and camera controls.
 
-interface LoadedSceneReplay {
-  record: SceneRecord;
+interface LoadedScene {
+  record: SceneRecord | null;
+  definition: SceneDefinition;
+  driver: DisplayDriver;
+  live: { controller: LiveController; scales: LiveReadoutScales; runId: bigint; spins: ReturnType<typeof resolveLiveSpinBindings>; startStation: number } | null;
   visualDefinition: VisualDefinition | null;
   bindings: VehicleDisplayBindings;
   scene: BuiltScene;
-  playback: PlaybackController;
+  playback: PlaybackController | null;
   readoutModel: VehicleReadoutModel;
-  summary: RecordSummary;
+  summary: RecordSummary | null;
   /** Extents at the first displayed pose; presets and their availability come from these. */
   extents: FramedExtents;
   name: string;
@@ -63,7 +72,7 @@ function requestedPreset(): ViewPreset {
 }
 
 /** The one availability rule, shared with the rig: a bound anchor with a measured extent. */
-function presetAvailable(preset: ViewPreset, loaded: Pick<LoadedSceneReplay, 'bindings' | 'extents' | 'scene'>): boolean {
+function presetAvailable(preset: ViewPreset, loaded: Pick<LoadedScene, 'bindings' | 'extents' | 'scene'>): boolean {
   const firstBogie = loaded.bindings.bogies[0];
   const bogieBound = firstBogie !== undefined && loaded.scene.bodyObjects.has(firstBogie.bodyName);
   return presetAvailableFor(preset, loaded.extents, bogieBound);
@@ -82,9 +91,31 @@ function recordNameFromUrl(url: string): string {
   return parts[parts.length - 1] ?? url;
 }
 
+/** Build the common scene once its definition and first display interval are ready. */
+function prepareScene(definition: SceneDefinition, initial: SceneSampleView, interval: DisplayInterval) {
+  const visualDefinition = definition.visualDefinitionText === null ? null :
+    parseVisualDefinition(definition.visualDefinitionText, new Set(definition.bodies.map((body) => body.name)));
+  const bindings = resolveVehicleDisplayBindings(definition, visualDefinition);
+  const scene = buildScene(definition, visualDefinition, bindings);
+  const readoutModel = buildVehicleReadoutModel(definition, scene.track, bindings, initial);
+  applyFrames(definition, scene, wheelSpinBindings(definition), interval.first, interval.second, interval.alpha);
+  scene.root.updateMatrixWorld(true);
+  const extents = measureFramedExtents(definition, scene, bindings);
+  scene.setUserHidden(new Set((query.get('hide') ?? '').split(',').filter((part) => part !== '')));
+  const wanted = requestedPreset();
+  const initialPreset = presetAvailable(wanted, { bindings, extents, scene }) ? wanted : 'overview';
+  return { visualDefinition, bindings, scene, readoutModel, extents, initialPreset };
+}
+
 export function App() {
-  const [loaded, setLoaded] = useState<LoadedSceneReplay | null>(null);
+  const [loaded, setLoaded] = useState<LoadedScene | null>(null);
   const [loadState, setLoadState] = useState<{ state: 'idle' | 'loading' | 'error'; message: string }>({ state: 'idle', message: '' });
+  const loadedRef = useRef<LoadedScene | null>(null);
+  const [liveWarning, setLiveWarning] = useState<string | null>(null);
+  const [displaySample, setDisplaySample] = useState<SceneSampleView | null>(null);
+  const [liveStatus, setLiveStatus] = useState<LiveConnectionStatus>({ state: 'connecting', message: '' });
+  const [, refreshLive] = useState(0);
+  const liveMode = query.get('live') === '1';
   const [frameIndex, setFrameIndex] = useState(0);
   const [timeSeconds, setTimeSeconds] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -131,49 +162,33 @@ export function App() {
   }, [loaded]);
 
   const install = useCallback((record: SceneRecord, name: string) => {
-    const visualDefinition =
-      record.definition.visualDefinitionText === null
-        ? null
-        : parseVisualDefinition(record.definition.visualDefinitionText, new Set(record.definition.bodies.map((body) => body.name)));
-    const bindings = resolveVehicleDisplayBindings(record.definition, visualDefinition);
-    const scene = buildScene(record.definition, visualDefinition, bindings);
     const playback = new PlaybackController(record.samples);
-    const readoutModel = buildVehicleReadoutModel(record.definition, scene.track, bindings, record.samples.viewAt(0));
-    const summary = summarizeRecord(record.samples, readoutModel);
     const startTime = Number(query.get('t'));
     if (query.get('t') !== null && Number.isFinite(startTime)) {
       playback.seek(startTime);
     }
-    // Pose the scene at its first displayed time and measure what the camera
-    // presets frame, so their availability is known before the viewport exists.
-    const initial = playback.bracket();
-    applyFrames(record.definition, scene, wheelSpinBindings(record.definition), record.samples.viewAt(initial.firstFrameIndex), record.samples.viewAt(initial.secondFrameIndex), initial.alpha);
-    scene.root.updateMatrixWorld(true);
-    const extents = measureFramedExtents(record.definition, scene, bindings);
-    // Parts named in `hide` stay hidden whatever the display switches say.
-    scene.setUserHidden(new Set((query.get('hide') ?? '').split(',').filter((part) => part !== '')));
+    const initial = playback.interval();
+    const prepared = prepareScene(record.definition, record.samples.viewAt(0), initial);
+    const summary = summarizeRecord(record.samples, prepared.readoutModel);
     const coarsest = summary.maximumWheelRotationRadians;
     const warning =
-      record.samples.columns.wheelSpinAngleCount === 0 && coarsest > Math.PI / 2
-        ? `No wheel spin angles and up to ${fixed(coarsest, 2)} rad of wheel turn between samples: in-between wheel poses are unreliable. 无轮自转角，插值方向不可靠。`
+      summary.hasMissingWheelSpinAngles && coarsest > Math.PI / 2
+        ? `Missing wheel spin angles and up to ${fixed(coarsest, 2)} rad of wheel turn between samples: in-between wheel poses are unreliable. 无轮自转角，插值方向不可靠。`
         : null;
-    const wanted = requestedPreset();
-    const initialPreset = presetAvailable(wanted, { bindings, extents, scene }) ? wanted : 'overview';
     setLoaded({
       record,
-      visualDefinition,
-      bindings,
-      scene,
+      definition: record.definition,
+      driver: playback,
+      live: null,
+      ...prepared,
       playback,
-      readoutModel,
       summary,
-      extents,
       name,
       subtitle: recordRangeSubtitle(summary.carbodyStation),
       warning,
-      initialPreset,
     });
-    setPreset(initialPreset);
+    setDisplaySample(initial.first);
+    setPreset(prepared.initialPreset);
     setFrameIndex(Math.max(0, record.samples.frameIndexAtOrBefore(playback.timeSeconds)));
     setTimeSeconds(playback.timeSeconds);
     setPlaying(false);
@@ -185,13 +200,18 @@ export function App() {
   // effect run in development, or a re-run) neither installs its record nor
   // writes its outcome over the current load state.
   useEffect(() => {
+    if (liveMode) {
+      if (query.has('record')) setLoadState({ state: 'error', message: 'Choose either live or record. live 与 record 不能同时使用。' });
+      return;
+    }
     const url = query.get('record');
     if (url === null) {
+      if (query.has('bundle')) setLoadState({ state: 'idle', message: 'A resource bundle needs a scene record. Choose a record folder or add a record URL. 资源包需要配合场景记录；请选择记录文件夹或指定 record 地址。' });
       return;
     }
     const controller = new AbortController();
     setLoadState({ state: 'loading', message: '' });
-    loadRecordFromUrl(url, controller.signal)
+    loadRecordFromUrl(url, controller.signal, query.get('bundle'))
       .then((record) => {
         if (!controller.signal.aborted) {
           install(record, recordNameFromUrl(url));
@@ -203,7 +223,58 @@ export function App() {
         }
       });
     return () => controller.abort();
-  }, [install]);
+  }, [install, liveMode]);
+
+  useEffect(() => {
+    if (!liveMode || query.has('record')) return;
+    const connection = new LiveConnection({
+      ready: (definition, description, message) => {
+        const previous = loadedRef.current;
+        const live = previous?.live;
+        if (live !== null && live !== undefined && live.runId === description.header.runId) {
+          const first = new LiveSample(message, live.spins);
+          if (!live.controller.reconnect(first)) return;
+          live.scales.observe(first);
+          const interval = live.controller.interval();
+          setDisplaySample(interval.first);
+          setTimeSeconds(interval.displayTimeSeconds);
+          setPlaying(live.controller.playing);
+          setLoadState({ state: 'idle', message: '' });
+          return;
+        }
+        const spins = resolveLiveSpinBindings(definition);
+        const first = new LiveSample(message, spins);
+        const controller = new LiveController(first);
+        const interval = controller.interval();
+        const prepared = prepareScene(definition, first, interval);
+        const scales = new LiveReadoutScales(prepared.readoutModel);
+        scales.observe(first);
+        const next: LoadedScene = { record: null, definition, driver: controller,
+          live: { controller, scales, runId: description.header.runId, spins,
+            startStation: prepared.readoutModel.stationAt(first) ?? Number.NaN },
+          ...prepared, playback: null, summary: null,
+          name: description.header.runId.toString(), subtitle: null, warning: null };
+        loadedRef.current = next;
+        setLoaded(next);
+        setDisplaySample(interval.first);
+        setTimeSeconds(interval.displayTimeSeconds);
+        setPlaying(controller.playing);
+        setPreset(prepared.initialPreset);
+        setLoadState({ state: 'idle', message: '' });
+        setDefinitionNoticeOpen(true);
+      },
+      state: (message) => {
+        const current = loadedRef.current;
+        if (current?.live === null || current?.live === undefined || current.live.runId !== message.header.runId) return;
+        const sample = new LiveSample(message, current.live.spins);
+        if (current.live.controller.append(sample)) current.live.scales.observe(sample);
+      },
+      status: setLiveStatus,
+      disconnected: () => loadedRef.current?.live?.controller.disconnect(),
+    }, query.get('bundle'));
+    connection.start();
+    return () => connection.dispose();
+  }, [liveMode]);
 
   const onPick = useCallback(
     (files: FileList) => {
@@ -217,31 +288,48 @@ export function App() {
     [install],
   );
 
-  const onDisplayFrame = useCallback((displayedFrameIndex: number, time: number, nowPlaying: boolean) => {
-    setFrameIndex(displayedFrameIndex);
-    setTimeSeconds(time);
+  const onDisplayFrame = useCallback((interval: DisplayInterval, nowPlaying: boolean) => {
+    const current = loadedRef.current;
+    if (current?.live !== null && current?.live !== undefined &&
+      (interval.first.identity.kind !== 'stream' || interval.first.identity.runId !== current.live.runId)) return;
+    if (current?.record !== null && current?.record !== undefined) {
+      setFrameIndex(Math.max(0, current.record.samples.frameIndexAtOrBefore(interval.first.timeSeconds)));
+    }
+    setDisplaySample(interval.first);
+    setTimeSeconds(interval.displayTimeSeconds);
     setPlaying(nowPlaying);
+    if (current?.live !== null && current?.live !== undefined) {
+      const dt = interval.second.timeSeconds - interval.first.timeSeconds;
+      const missing = [...wheelSpinBindings(current.definition)].some(([bodyIndex, candidates]) =>
+        selectWheelSpin(interval.first, interval.second, candidates) === null &&
+        Math.hypot(...interval.second.bodyAngularVelocity(bodyIndex)) * dt > Math.PI / 2);
+      setLiveWarning(missing ? 'Missing wheel spin angles: in-between wheel poses are unreliable. 无轮自转角，当前区间插值方向不可靠。' : null);
+      refreshLive((value) => value + 1);
+    }
   }, []);
 
   useEffect(() => {
-    if (loaded !== null) {
+    if (loaded?.playback !== null && loaded?.playback !== undefined) {
       loaded.playback.speed = playbackRates[rateIndex] ?? 1;
     }
   }, [loaded, rateIndex]);
 
   const togglePlay = useCallback(() => {
-    if (loaded === null) {
+    if (loaded === null) return;
+    if (loaded.live !== null) {
+      const driver = loaded.live.controller;
+      if (driver.isPaused) driver.resume(); else driver.pause();
+      refreshLive((value) => value + 1);
       return;
     }
+    if (loaded.playback === null) return;
     loaded.playback.togglePlay();
     setPlaying(loaded.playback.playing);
   }, [loaded]);
 
   const seek = useCallback(
     (time: number) => {
-      if (loaded === null) {
-        return;
-      }
+      if (loaded?.playback === null || loaded?.playback === undefined || loaded.record === null) return;
       loaded.playback.seek(time);
       setTimeSeconds(loaded.playback.timeSeconds);
       setFrameIndex(Math.max(0, loaded.record.samples.frameIndexAtOrBefore(loaded.playback.timeSeconds)));
@@ -251,9 +339,7 @@ export function App() {
 
   const step = useCallback(
     (direction: -1 | 1) => {
-      if (loaded === null) {
-        return;
-      }
+      if (loaded === null || loaded.record === null || loaded.playback === null) return;
       const { record, playback } = loaded;
       playback.playing = false;
       const current = Math.max(0, record.samples.frameIndexAtOrBefore(playback.timeSeconds));
@@ -295,7 +381,7 @@ export function App() {
       if (key === ' ') {
         event.preventDefault();
         togglePlay();
-      } else if (key === 'arrowleft' || key === 'arrowright') {
+      } else if ((key === 'arrowleft' || key === 'arrowright') && loaded.playback !== null) {
         event.preventDefault();
         const direction = key === 'arrowleft' ? -1 : 1;
         if (event.shiftKey) {
@@ -331,20 +417,21 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [loaded, togglePlay, seek, step, selectPreset, changeOptions]);
 
+  loadedRef.current = loaded;
   useEffect(() => () => loaded?.scene.dispose(), [loaded]);
 
   const readoutModel = loaded?.readoutModel ?? null;
   const track = loaded?.scene.track ?? null;
-  const sample = loaded?.record.samples.viewAt(frameIndex) ?? null;
+  const sample = displaySample;
+  const scales = loaded?.live?.scales.scales ?? loaded?.summary?.scales;
   return (
     <div className="app" ref={appRef}>
       <div className="stage">
         {loaded !== null && (
           <SceneViewport
-            definition={loaded.record.definition}
-            samples={loaded.record.samples}
+            definition={loaded.definition}
             scene={loaded.scene}
-            playback={loaded.playback}
+            driver={loaded.driver}
             bindings={loaded.bindings}
             extents={loaded.extents}
             initialPreset={loaded.initialPreset}
@@ -359,22 +446,23 @@ export function App() {
       </div>
       <div className="vignette" />
       <div className="hud">
-        <TitleBlock definition={loaded?.visualDefinition ?? null} subtitle={loaded?.subtitle ?? null} />
+        <TitleBlock definition={loaded?.visualDefinition ?? null} subtitle={loaded?.subtitle ?? null} live={liveMode} />
         <MetaBar
           record={loaded?.record ?? null}
+          live={liveMode}
           name={loaded?.name ?? ''}
-          intervalSeconds={loaded?.summary.sampleIntervalSeconds ?? 0}
+          intervalSeconds={loaded?.summary?.sampleIntervalSeconds ?? 0}
           onPick={onPick}
         />
-        {loaded !== null && readoutModel !== null && sample !== null ? (
+        {loaded !== null && readoutModel !== null && sample !== null && scales !== undefined ? (
           <>
             <div className="col left">
-              <CarriersCard record={loaded.record.definition} readoutModel={readoutModel} sample={sample} wheelWidth={loaded.visualDefinition?.wheelVisual.widthMeters ?? null} />
-              {track !== null && <TrackCard track={track} readoutModel={readoutModel} sample={sample} startStationMeters={loaded.summary.carbodyStation[0] ?? Number.NaN} />}
+              <CarriersCard record={loaded.definition} readoutModel={readoutModel} sample={sample} wheelWidth={loaded.visualDefinition?.wheelVisual.widthMeters ?? null} />
+              {track !== null && <TrackCard track={track} readoutModel={readoutModel} sample={sample} startStationMeters={loaded.live?.startStation ?? loaded.summary?.carbodyStation[0] ?? Number.NaN} />}
             </div>
             <div className="col right">
-              <VehicleCard record={loaded.record.definition} readoutModel={readoutModel} bindings={loaded.bindings} sample={sample} scales={loaded.summary.scales} />
-              <WheelForceCard readoutModel={readoutModel} sample={sample} scales={loaded.summary.scales} />
+              <VehicleCard record={loaded.definition} readoutModel={readoutModel} bindings={loaded.bindings} sample={sample} scales={scales} />
+              <WheelForceCard readoutModel={readoutModel} sample={sample} scales={scales} />
               <ViewsCard
                 current={preset}
                 available={availablePresets}
@@ -385,7 +473,7 @@ export function App() {
               />
               <DisplayCard options={options} onChange={changeOptions} scalarsOpen={scalarsOpen} onToggleScalars={() => setScalarsOpen((open) => !open)} />
             </div>
-            <PlaybackCard
+            {loaded.record !== null && loaded.summary !== null && <PlaybackCard
               record={loaded.record.samples}
               summary={loaded.summary}
               track={track}
@@ -397,8 +485,9 @@ export function App() {
               onSeek={seek}
               onStep={step}
               onRate={setRateIndex}
-            />
-            {loaded.warning !== null && <div className="warning">{loaded.warning}</div>}
+            />}
+            {loaded.live !== null && <LiveCard controller={loaded.live.controller} status={liveStatus} sample={sample} timeSeconds={timeSeconds} onToggle={togglePlay} />}
+            {(loaded.live !== null ? liveWarning : loaded.warning) !== null && <div className="warning">{loaded.live !== null ? liveWarning : loaded.warning}</div>}
             <div className="notices">
               {loadState.state === 'loading' && <Notice kind="loading" en="Reading the record…" zh="正在读取记录" />}
               {loadState.state === 'error' && (
@@ -413,18 +502,18 @@ export function App() {
               {loaded.visualDefinition === null && definitionNoticeOpen && (
                 <Notice
                   kind="info"
-                  en="No visual definition in this record: bodies are shown as axes and wheels from their placements; carbody and bogie readouts and the bogie view are unavailable"
-                  zh="记录中没有视觉定义：刚体以坐标轴显示，车轮按记录放置绘出；车体与构架读数、转向架视角不可用"
+                  en="No visual definition: bodies are shown as axes and wheels from their placements"
+                  zh="场景没有视觉定义：刚体显示为坐标轴，车轮按描述绘出"
                   onDismiss={() => setDefinitionNoticeOpen(false)}
                 />
               )}
             </div>
-            {scalarsOpen && <ScalarsDrawer record={loaded.record.definition} currentSample={sample} onClose={() => setScalarsOpen(false)} />}
+            {scalarsOpen && <ScalarsDrawer record={loaded.definition} currentSample={sample} onClose={() => setScalarsOpen(false)} />}
           </>
         ) : (
-          <EmptyState state={loadState.state} message={loadState.message} onPick={onPick} />
+          <EmptyState state={loadState.state} message={loadState.message || liveStatus.message} onPick={onPick} live={liveMode} />
         )}
-        <Footer loaded={loaded !== null} />
+        <Footer loaded={loaded !== null} live={liveMode} />
       </div>
     </div>
   );

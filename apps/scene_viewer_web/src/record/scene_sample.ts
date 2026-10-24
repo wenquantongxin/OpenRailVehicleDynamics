@@ -11,12 +11,14 @@ export interface ScalarSample {
   status: number;
 }
 
+export type SceneSampleIdentity =
+  | { readonly kind: 'record'; readonly timeNanoseconds: number; readonly sampleIndex: number; readonly phase: number }
+  | { readonly kind: 'stream'; readonly runId: bigint; readonly sequence: bigint };
+
 /** A borrowed sample; its binding remains stable while other samples are read. */
 export interface SceneSampleView {
   readonly timeSeconds: number;
-  readonly timeNanoseconds: number;
-  readonly sampleIndex: number;
-  readonly phase: number;
+  readonly identity: SceneSampleIdentity;
   bodyPose(bodyIndex: number): BodyPose;
   bodyLinearVelocity(bodyIndex: number): [number, number, number];
   bodyAngularVelocity(bodyIndex: number): [number, number, number];

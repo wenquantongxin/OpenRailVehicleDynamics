@@ -121,3 +121,53 @@ test('entering plan retains horizontal orientation without a pole flip', () => {
     }
   }
 });
+
+test('re-enabling follow smoothly returns to the selected preset without restarting it', () => {
+  for (const preset of ['overview', 'side', 'headon'] as const) {
+    const { rig, camera, controls, listeners, carbody, root } = makeRig();
+    rig.applyPreset(preset, wide, true);
+    rig.setFollowing(false, wide);
+    listeners.start!();
+    camera.position.add(new THREE.Vector3(40, 10, 10));
+    controls.target.x += 40;
+    const free = camera.position.clone();
+    carbody.position.x += 100;
+    root.updateMatrixWorld(true);
+    rig.update(1 / 60, wide);
+    assert.ok(camera.position.equals(free), 'disabled follow leaves the camera in place');
+    rig.setFollowing(true, wide);
+    assert.ok(camera.position.equals(free), 'the transition does not jump on activation');
+    rig.update(.2, wide);
+    assert.ok(!camera.position.equals(free));
+    for (let frame = 0; frame < 60; ++frame) {
+      rig.setFollowing(true, wide);
+      rig.refit(wide);
+      rig.update(1 / 60, wide);
+    }
+    const returned = camera.position.clone();
+    const target = controls.target.clone();
+    rig.applyPreset(preset, wide, true);
+    assert.ok(returned.distanceTo(camera.position) < 1e-9, 'repeated enable must allow the tween to finish');
+    assert.ok(target.distanceTo(controls.target) < 1e-9);
+    listeners.start!();
+    camera.position.x += 3;
+    const adjusted = camera.position.clone();
+    rig.setFollowing(true, wide);
+    rig.update(1, wide);
+    assert.ok(camera.position.distanceTo(adjusted) < 1e-9, 'an unchanged follow option retains a manual view');
+  }
+});
+
+test('returning to follow in a stationary plan view preserves its horizontal heading', () => {
+  const { rig, camera, controls } = makeRig(true);
+  rig.applyPreset('plan', wide, true);
+  rig.setFollowing(false, wide);
+  camera.position.x += 40;
+  controls.target.x += 40;
+  controls.update();
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+  rig.setFollowing(true, wide);
+  for (let frame = 0; frame < 60; ++frame) rig.update(1 / 60, wide);
+  assert.ok(right.dot(new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion)) > 1 - 1e-10);
+  assert.equal(rig.currentPreset, 'plan');
+});

@@ -326,14 +326,16 @@ button {
   color: var(--ink3);
 }
 
-.caption {
+.caption,
+.unrecorded-force {
   margin: 4px 0 6px;
   font: 600 8.5px/1.45 var(--mono);
   letter-spacing: 0.08em;
   color: var(--ink3);
 }
 
-.caption .zh {
+.caption .zh,
+.unrecorded-force .zh {
   display: block;
   font-size: 9.5px;
   letter-spacing: 0.02em;
@@ -1498,3 +1500,9 @@ button {
   stroke: var(--ink3);
   stroke-dasharray: 3 2;
 }
+
+.live-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.live-controls strong { font: 11px var(--mono); letter-spacing: .04em; }
+.live-clock { margin-left: auto; font: 12px var(--mono); }
+.live-identity { margin-top: 10px; color: var(--ink2); font: 10px var(--mono); overflow-wrap: anywhere; }
+.live-error { margin: 8px 0 0; font-size: 11px; overflow-wrap: anywhere; }

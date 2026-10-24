@@ -1,3 +1,4 @@
+import { selectWheelSpin, type WheelSpinBinding } from '../scene/pose_interpolation.ts';
 import type { RecordedSamples } from '../record/recorded_samples.ts';
 import type { VehicleReadoutModel } from './vehicle_readout_model.ts';
 import { niceCeiling } from './format.ts';
@@ -18,11 +19,22 @@ export interface RecordSummary {
   carbodyStation: Float64Array;
   sampleIntervalSeconds: number;
   maximumWheelRotationRadians: number;
+  hasMissingWheelSpinAngles: boolean;
 }
 
 export function summarizeRecord(samples: RecordedSamples, model: VehicleReadoutModel): RecordSummary {
   const { wheels, carbody, bogies } = model;
   // Record-wide ceilings for bars; only valid samples count.
+  let hasMissingWheelSpinAngles = false;
+  const spinCandidatesByBody = new Map<number, WheelSpinBinding[]>();
+  for (const wheel of wheels) {
+    let candidates = spinCandidatesByBody.get(wheel.wheelBodyIndex);
+    if (candidates === undefined) {
+      candidates = [];
+      spinCandidatesByBody.set(wheel.wheelBodyIndex, candidates);
+    }
+    candidates.push({ wheelPlacementIndex: wheel.placementIndex, spinAxisInBody: wheel.spinAxisInWheelBodyFrame });
+  }
   let forceMax = 0;
   let lateralMax = 0;
   let yawMax = 0;
@@ -82,10 +94,12 @@ export function summarizeRecord(samples: RecordedSamples, model: VehicleReadoutM
   let maximumWheelRotationRadians = 0;
   for (let index = 1; index < samples.frameCount; ++index) {
     const sample = samples.viewAt(index);
-    const dt = sample.timeSeconds - samples.timeAt(index - 1);
-    for (const wheel of wheels) {
+    const previous = samples.viewAt(index - 1);
+    const dt = sample.timeSeconds - previous.timeSeconds;
+    for (const [bodyIndex, candidates] of spinCandidatesByBody) {
+      if (selectWheelSpin(previous, sample, candidates) === null) hasMissingWheelSpinAngles = true;
       maximumWheelRotationRadians = Math.max(maximumWheelRotationRadians,
-        Math.hypot(...sample.bodyAngularVelocity(wheel.wheelBodyIndex)) * dt);
+        Math.hypot(...sample.bodyAngularVelocity(bodyIndex)) * dt);
     }
   }
   return {
@@ -95,7 +109,7 @@ export function summarizeRecord(samples: RecordedSamples, model: VehicleReadoutM
       bodyLateralMm: niceCeiling(Math.max(1, lateralMax * 1000)),
       bodyYawMrad: niceCeiling(Math.max(1, yawMax * 1000)),
     },
-    contactSpans, carbodyStation, maximumWheelRotationRadians,
+    contactSpans, carbodyStation, maximumWheelRotationRadians, hasMissingWheelSpinAngles,
     sampleIntervalSeconds: intervals[intervals.length >> 1] ?? 0,
   };
 }

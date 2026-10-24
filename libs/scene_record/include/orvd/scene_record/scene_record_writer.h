@@ -4,9 +4,8 @@
 /// Writes one portable scene record directory.
 ///
 /// The directory holds:
-///   scene.json               topology, units, scalar definitions, the frame
-///                            table layout, the sampled track table and the
-///                            phase and status codes;
+///   scene.json               public description, static assets and the
+///                            frame and scalar status table layouts;
 ///   frames.f64le             one row per frame of little-endian binary64:
 ///                            [time_seconds, time_nanoseconds, sample_index,
 ///                            phase, 13 values per body in slot order,
@@ -26,30 +25,26 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "orvd/scene_observation/scalar_definition.h"
+#include "orvd/scene_observation/scene_description.h"
 #include "orvd/scene_observation/scene_frame.h"
-#include "orvd/scene_observation/scene_topology.h"
-#include "orvd/scene_observation/track_sampling.h"
+#include "orvd/scene_record/scene_assets.h"
 
 namespace orvd::scene_record {
 
 class SceneRecordWriter {
    public:
     /// Creates `directory`, which must not exist yet. A non-empty
-    /// `visual_definition_json` must be one JSON object and is copied
+    /// `assets.visual_definition_json` must be one JSON object and is copied
     /// verbatim; the writer does not interpret it.
     /// `with_wheel_spin_angles` states whether every frame carries one
     /// unwrapped spin angle per wheel placement; a frame must then supply
     /// exactly that many, and none otherwise.
     SceneRecordWriter(
         const std::filesystem::path& directory,
-        scene_observation::SceneTopology topology,
-        std::vector<scene_observation::ScalarDefinition> scalar_definitions,
-        std::string visual_definition_json, bool with_wheel_spin_angles);
+        scene_observation::SceneDescription description,
+        SceneAssets assets, bool with_wheel_spin_angles);
     ~SceneRecordWriter();
 
     SceneRecordWriter(const SceneRecordWriter&) = delete;
@@ -62,7 +57,8 @@ class SceneRecordWriter {
     /// carry the value zero; every number must be finite.
     void WriteFrame(const scene_observation::SceneFrame& frame);
 
-    /// Stores the sampled line for the record; at most once, before Close().
+    /// Stores the sampled line once, before Close(); assets must not already
+    /// contain a track table.
     void WriteTrackSampleTable(
         const scene_observation::TrackSampleTable& table);
 
@@ -78,11 +74,9 @@ class SceneRecordWriter {
 
    private:
     std::filesystem::path directory_;
-    scene_observation::SceneTopology topology_;
-    std::vector<scene_observation::ScalarDefinition> scalar_definitions_;
-    bool has_visual_definition_{false};
+    scene_observation::SceneDescription description_;
+    SceneAssets assets_;
     std::size_t wheel_spin_angle_count_{0};
-    std::optional<scene_observation::TrackSampleTable> track_;
     std::ofstream frames_;
     std::ofstream statuses_;
     std::vector<unsigned char> row_bytes_;

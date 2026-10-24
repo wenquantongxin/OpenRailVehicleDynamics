@@ -154,6 +154,7 @@ set(ORVD_PRODUCT_MODULE_DIRECTORIES
     libs/configuration
     libs/scene_observation
     libs/scene_record
+    libs/scene_stream
     libs/equilibrium)
 foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${product_module_relative_path}/CMakeLists.txt")
@@ -161,10 +162,11 @@ foreach(product_module_relative_path IN LISTS ORVD_PRODUCT_MODULE_DIRECTORIES)
     endif()
 endforeach()
 
-# Development-time tooling. These two directories are not product modules:
+# Development-time tooling. These directories are not product modules:
 # nothing in them is installed or exported, and no product target links them.
 add_subdirectory(tools/profile_conversion)
 add_subdirectory(tools/dynamics_qualification)
+add_subdirectory(tools/scene_export)
 
 option(ORVD_BUILD_SIMPACK_REALTIME_TOOLS
        "Build the optional SIMPACK Realtime component and tools" OFF)
@@ -232,6 +234,7 @@ set(ORVD_INSTALL_TARGETS
     orvd_integrators
     orvd_scene_observation
     orvd_scene_record
+    orvd_scene_stream
     orvd_rigid_multibody_tree)
 install(TARGETS ${ORVD_INSTALL_TARGETS}
         EXPORT OpenRailVehicleDynamicsTargets
@@ -242,7 +245,7 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
 foreach(orvd_public_module
         control actuation track_geometry track_irregularity wheel_rail_contact
         configuration multibody_runtime multibody_model forces system_assembly
-        integrators scene_observation scene_record)
+        integrators scene_observation scene_record scene_stream)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -325,9 +328,11 @@ if(TARGET orvd_state_stream)
     install(DIRECTORY tools/state_stream/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
     install(EXPORT OpenRailVehicleDynamicsStateStreamTargets NAMESPACE ORVD::
         DESTINATION "${ORVD_INSTALL_CMAKEDIR}")
-    install(FILES tools/state_stream/README.md tools/state_stream/receive_state_stream.py
+    install(FILES tools/state_stream/README.md
         DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/OpenRailVehicleDynamics/state_stream")
 endif()
+install(FILES libs/scene_stream/README.md libs/scene_stream/receive_state_stream.py
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/OpenRailVehicleDynamics/scene_stream")
 install(FILES
         NOTICE
         LICENSE

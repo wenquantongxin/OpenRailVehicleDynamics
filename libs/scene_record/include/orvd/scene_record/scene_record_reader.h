@@ -6,24 +6,17 @@
 /// uses must be present and consistent, and anything else is ignored.
 
 #include <filesystem>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "orvd/scene_observation/scalar_definition.h"
+#include "orvd/scene_observation/scene_description.h"
 #include "orvd/scene_observation/scene_frame.h"
-#include "orvd/scene_observation/scene_topology.h"
-#include "orvd/scene_observation/track_sampling.h"
+#include "orvd/scene_record/scene_assets.h"
 
 namespace orvd::scene_record {
 
 struct SceneRecord {
-    scene_observation::SceneTopology topology;
-    std::vector<scene_observation::ScalarDefinition> scalar_definitions;
-    /// The visual definition text as copied by the writer; empty when the
-    /// record carries none.
-    std::string visual_definition_json;
-    std::optional<scene_observation::TrackSampleTable> track;
+    scene_observation::SceneDescription description;
+    SceneAssets assets;
     std::vector<scene_observation::SceneFrame> frames;
 };
 

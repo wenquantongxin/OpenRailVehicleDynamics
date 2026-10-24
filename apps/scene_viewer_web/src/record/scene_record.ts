@@ -1,46 +1,17 @@
-// Reads the existing ORVD record layout; static definitions and packed history
-// have separate owners after parsing. No renderer needs the complete history.
-import type { SceneDefinition, SceneBody, WheelPlacement, ScalarDefinition, TrackTable } from './scene_definition.ts';
+import { parseSceneDefinition, type SceneDefinition } from './scene_definition.ts';
 import { RecordedSamples, type FrameColumns } from './recorded_samples.ts';
+import { composeSceneDefinition, parseSceneAssets, type SceneAssets } from './scene_assets.ts';
+import * as field from './json_fields.ts';
 
-export interface SceneRecord {
-  definition: SceneDefinition;
-  samples: RecordedSamples;
-}
+export interface SceneRecord { definition: SceneDefinition; samples: RecordedSamples; }
 
-function requireNumber(value: unknown, what: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`scene.json: ${what} is not a finite number`);
+export function parseRecordEnvelope(value: unknown): Record<string, unknown> {
+  const scene = field.object(value, 'scene.json');
+  field.exact(scene['schema'], 'orvd.scene_record', 'scene.json.schema');
+  if ('record' in scene || 'bodies' in scene || 'track' in scene || 'world_frame' in scene || 'visual_definition_file' in scene) {
+    throw new Error('scene.json: legacy record fields are not supported');
   }
-  return value;
-}
-
-function requireString(value: unknown, what: string): string {
-  if (typeof value !== 'string') {
-    throw new Error(`scene.json: ${what} is not a string`);
-  }
-  return value;
-}
-
-function requireArray(value: unknown, what: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`scene.json: ${what} is not an array`);
-  }
-  return value;
-}
-
-function requireTriple(value: unknown, what: string): [number, number, number] {
-  const array = requireArray(value, what);
-  if (array.length !== 3) {
-    throw new Error(`scene.json: ${what} does not have three entries`);
-  }
-  return [requireNumber(array[0], what), requireNumber(array[1], what), requireNumber(array[2], what)];
-}
-
-function numberRows(value: unknown, what: string): number[][] {
-  return requireArray(value, what).map((row, index) =>
-    requireArray(row, `${what}[${index}]`).map((entry) => requireNumber(entry, `${what}[${index}]`)),
-  );
+  return scene;
 }
 
 function hostIsLittleEndian(): boolean {
@@ -63,77 +34,39 @@ function decodeLittleEndianDoubles(buffer: ArrayBuffer): Float64Array {
 }
 
 export function parseSceneRecord(
-  sceneJsonText: string,
+  sceneDocument: unknown,
   framesBuffer: ArrayBuffer,
   statusesBuffer: ArrayBuffer,
   visualDefinitionText: string | null,
+  bundleAssets: SceneAssets | null = null,
 ): SceneRecord {
-  const scene = JSON.parse(sceneJsonText) as Record<string, unknown>;
-  if (scene['record'] !== 'orvd.scene_record') {
-    throw new Error('scene.json is not an ORVD scene record');
-  }
-  const bodies: SceneBody[] = requireArray(scene['bodies'], 'bodies').map((entry, index) => {
-    const body = entry as Record<string, unknown>;
-    return {
-      name: requireString(body['name'], `bodies[${index}].name`),
-      movesFreelyInWorld: body['moves_freely_in_world'] === true,
-    };
-  });
-  if (bodies.length === 0) {
-    throw new Error('scene.json names no rigid body');
-  }
-  const wheelPlacements: WheelPlacement[] = requireArray(scene['wheel_placements'], 'wheel_placements').map(
-    (entry, index) => {
-      const wheel = entry as Record<string, unknown>;
-      const what = `wheel_placements[${index}]`;
-      const side = requireString(wheel['side'], `${what}.side`);
-      if (side !== 'left' && side !== 'right') {
-        throw new Error(`scene.json: unknown wheel side '${side}'`);
-      }
-      return {
-        interfaceName: requireString(wheel['interface_name'], `${what}.interface_name`),
-        wheelBodyName: requireString(wheel['wheel_body_name'], `${what}.wheel_body_name`),
-        carrierBodyName: requireString(wheel['carrier_body_name'], `${what}.carrier_body_name`),
-        side,
-        datumInWheelBodyFrameMeters: requireTriple(wheel['datum_in_wheel_body_frame_meters'], `${what}.datum`),
-        spinAxisInWheelBodyFrame: requireTriple(wheel['spin_axis_in_wheel_body_frame'], `${what}.spin axis`),
-        nominalRollingRadiusMeters: requireNumber(wheel['nominal_rolling_radius_meters'], `${what}.rolling radius`),
-      };
-    },
-  );
-  const scalars: ScalarDefinition[] = requireArray(scene['scalars'], 'scalars').map((entry) => {
-    const definition = entry as Record<string, unknown>;
-    return {
-      name: requireString(definition['name'], 'scalar name'),
-      unit: requireString(definition['unit'], 'scalar unit'),
-      referenceFrame: requireString(definition['reference_frame'], 'scalar reference_frame'),
-      quantity: requireString(definition['quantity'], 'scalar quantity'),
-      method: requireString(definition['method'], 'scalar method'),
-      sampleSemantics: requireString(definition['sample_semantics'], 'scalar sample_semantics'),
-    };
-  });
-
-  const frameTable = scene['frame_table'] as Record<string, unknown>;
-  const columnsJson = frameTable['columns'] as Record<string, unknown>;
-  const bodyColumns = columnsJson['body_states'] as Record<string, unknown>;
-  const spinColumns = columnsJson['wheel_spin_angles'] as Record<string, unknown>;
-  const scalarColumns = columnsJson['scalar_values'] as Record<string, unknown>;
+  const scene = parseRecordEnvelope(sceneDocument);
+  const description = parseSceneDefinition(scene['description']);
+  const { bodies, wheelPlacements, scalars } = description;
+  const definition = composeSceneDefinition(description, parseSceneAssets(scene['assets'], visualDefinitionText), bundleAssets);
+  const frameTable = field.object(scene['frame_table'], 'frame_table');
+  const columnsJson = field.object(frameTable['columns'], 'columns');
+  const bodyColumns = field.object(columnsJson['body_states'], 'body_states');
+  const spinColumns = field.object(columnsJson['wheel_spin_angles'], 'wheel_spin_angles');
+  const scalarColumns = field.object(columnsJson['scalar_values'], 'scalar_values');
   const columns: FrameColumns = {
-    timeSecondsColumnOffset: requireNumber(columnsJson['time_seconds'], 'columns.time_seconds'),
-    timeNanosecondsColumnOffset: requireNumber(columnsJson['time_nanoseconds'], 'columns.time_nanoseconds'),
-    sampleIndexColumnOffset: requireNumber(columnsJson['sample_index'], 'columns.sample_index'),
-    phaseColumnOffset: requireNumber(columnsJson['phase'], 'columns.phase'),
-    bodyStatesColumnOffset: requireNumber(bodyColumns['offset'], 'body_states.offset'),
-    valuesPerBody: requireNumber(bodyColumns['values_per_body'], 'body_states.values_per_body'),
-    wheelSpinAnglesColumnOffset: requireNumber(spinColumns['offset'], 'wheel_spin_angles.offset'),
-    wheelSpinAngleCount: requireNumber(spinColumns['count'], 'wheel_spin_angles.count'),
-    scalarValuesColumnOffset: requireNumber(scalarColumns['offset'], 'scalar_values.offset'),
-    scalarCount: requireNumber(scalarColumns['count'], 'scalar_values.count'),
-    rowValueCount: requireNumber(frameTable['row_value_count'], 'row_value_count'),
+    timeSecondsColumnOffset: field.integer(columnsJson['time_seconds'], 'columns.time_seconds'),
+    timeNanosecondsColumnOffset: field.integer(columnsJson['time_nanoseconds'], 'columns.time_nanoseconds'),
+    sampleIndexColumnOffset: field.integer(columnsJson['sample_index'], 'columns.sample_index'),
+    phaseColumnOffset: field.integer(columnsJson['phase'], 'columns.phase'),
+    bodyStatesColumnOffset: field.integer(bodyColumns['offset'], 'body_states.offset'),
+    valuesPerBody: field.integer(bodyColumns['values_per_body'], 'body_states.values_per_body'),
+    wheelSpinAnglesColumnOffset: field.integer(spinColumns['offset'], 'wheel_spin_angles.offset'),
+    wheelSpinAngleCount: field.integer(spinColumns['count'], 'wheel_spin_angles.count'),
+    scalarValuesColumnOffset: field.integer(scalarColumns['offset'], 'scalar_values.offset'),
+    scalarCount: field.integer(scalarColumns['count'], 'scalar_values.count'),
+    rowValueCount: field.integer(frameTable['row_value_count'], 'row_value_count'),
   };
-  const frameCount = requireNumber(frameTable['frame_count'], 'frame_count');
-  const bodyCount = requireNumber(bodyColumns['body_count'], 'body_states.body_count');
+  const frameCount = field.integer(frameTable['frame_count'], 'frame_count');
+  const bodyCount = field.integer(bodyColumns['body_count'], 'body_states.body_count');
   if (
+    frameCount === 0 || columns.timeSecondsColumnOffset !== 0 || columns.timeNanosecondsColumnOffset !== 1 ||
+    columns.sampleIndexColumnOffset !== 2 || columns.phaseColumnOffset !== 3 || columns.bodyStatesColumnOffset !== 4 ||
     bodyCount !== bodies.length ||
     columns.valuesPerBody !== 13 ||
     columns.wheelSpinAnglesColumnOffset !== columns.bodyStatesColumnOffset + columns.valuesPerBody * bodyCount ||
@@ -152,7 +85,12 @@ export function parseSceneRecord(
   if (statuses.length !== frameCount * columns.scalarCount) {
     throw new Error('scalar status file length disagrees with the frame and scalar counts');
   }
-  const samples = new RecordedSamples(columns, values, statuses);
+  const statusTable = field.object(scene['scalar_status_table'], 'scalar_status_table');
+  if (field.integer(statusTable['frame_count'], 'status frame_count') !== frameCount || field.integer(statusTable['scalar_count'], 'status scalar_count') !== scalars.length) {
+    throw new Error('scalar status table layout disagrees with the frame table');
+  }
+  if (statuses.some((status) => status > 2)) throw new Error('scalar status table contains an unknown status');
+  const samples = new RecordedSamples(columns, values, statuses, description);
   for (let index = 0; index < frameCount; ++index) {
     const time = samples.timeAt(index);
     if (!Number.isFinite(time) || (index > 0 && time <= samples.timeAt(index - 1))) {
@@ -160,41 +98,5 @@ export function parseSceneRecord(
     }
   }
 
-  let track: TrackTable | null = null;
-  const trackJson = scene['track'];
-  if (trackJson !== null && trackJson !== undefined) {
-    const table = trackJson as Record<string, unknown>;
-    track = {
-      stationsMeters: requireArray(table['stations_meters'], 'track.stations_meters').map((entry) =>
-        requireNumber(entry, 'station'),
-      ),
-      centerlineInInertialMeters: numberRows(table['centerline_in_inertial_meters'], 'track.centerline'),
-      rotationInertialFromTrackWxyz: numberRows(table['rotation_inertial_from_track_wxyz'], 'track.rotation'),
-      curvatureRadiansPerMeter: requireArray(table['curvature_radians_per_meter'], 'track.curvature').map(
-        (entry) => requireNumber(entry, 'curvature'),
-      ),
-      superelevationMeters: requireArray(table['superelevation_meters'], 'track.superelevation').map(
-        (entry) => requireNumber(entry, 'superelevation'),
-      ),
-      leftRailDatumInInertialMeters: numberRows(table['left_rail_datum_in_inertial_meters'], 'track.left rail'),
-      rightRailDatumInInertialMeters: numberRows(table['right_rail_datum_in_inertial_meters'], 'track.right rail'),
-    };
-    const count = track.stationsMeters.length;
-    if (
-      count === 0 ||
-      track.centerlineInInertialMeters.length !== count ||
-      track.leftRailDatumInInertialMeters.length !== count ||
-      track.rightRailDatumInInertialMeters.length !== count
-    ) {
-      throw new Error('scene.json: the track table columns disagree in length');
-    }
-  }
-
-  return {
-    definition: {
-      worldFrame: requireString(scene['world_frame'], 'world_frame'),
-      bodies, wheelPlacements, scalars, visualDefinitionText, track,
-    },
-    samples,
-  };
+  return { definition, samples };
 }

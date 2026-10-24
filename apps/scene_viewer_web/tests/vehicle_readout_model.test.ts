@@ -125,12 +125,12 @@ test('frame rows are looked up by row number while the sample identity is only s
     frame(0.01, { patches: [0, 1], statuses: [ScalarStatus.valid, ScalarStatus.valid], sampleIndex: 105 }),
     frame(0.02, { patches: [1, 1], statuses: [ScalarStatus.valid, ScalarStatus.valid], sampleIndex: 901 }),
   ]);
-  assert.deepEqual([0, 1, 2].map((frameIndex) => record.samples.viewAt(frameIndex).sampleIndex), [42, 105, 901]);
+  assert.deepEqual([0, 1, 2].map((frameIndex) => record.samples.viewAt(frameIndex).identity.sampleIndex), [42, 105, 901]);
   assert.equal(record.samples.frameIndexAtOrBefore(0.015), 1, 'seeking resolves to the row, not the identity');
   assert.deepEqual(summarizeRecord(record.samples, model).contactSpans.map((span) => [span.startFrameIndex, span.endFrameIndex]), [[1, 1]]);
   assert.deepEqual(model.contactAt(record.samples.viewAt(1)).codes, ['1L']);
   const absent = makeRecord({ bodies, frames: [{ timeSeconds: 0 }] });
-  assert.equal(absent.samples.viewAt(0).sampleIndex, -1, 'an absent identity keeps its stated meaning');
+  assert.equal(absent.samples.viewAt(0).identity.sampleIndex, -1, 'an absent identity keeps its stated meaning');
 });
 
 test('the carrier order and names come from the bindings; offsets follow the carbody axis', () => {

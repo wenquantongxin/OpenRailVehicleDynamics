@@ -24,7 +24,7 @@
 | Control and actuation | Full-state wheel-speed guidance, longitudinal cruise control and torque shaping; periodic control events committed atomically on the accepted state |
 | Time integration | CVODE BDF2/BDF5, Radau5, Newmark with bounded step recovery, Zhai; unified strongly typed configuration, advancement to target times, within-step sampling and accepted-state transactions |
 | Efficient computation | OpenMP parallel evaluation of the eight wheel–rail contacts with fixed-slot publication and no cross-wheel floating-point reduction, so results do not depend on the worker count; column-parallel dense finite-difference Jacobian for CVODE |
-| Integration and display | Assembly from JSON definitions, relocatable CMake installation, position-independent static archives, offline dependency source bundles; `scene_observation` sampling, `scene_record` recording, `state_stream` UDP sending and 3-D replay in the browser |
+| Integration and display | Assembly from JSON definitions, relocatable CMake installation, position-independent static archives, offline dependency source bundles; `scene_observation` sampling, `scene_record` records and resources, `scene_stream` encoding, `state_stream` UDP sending and 3-D replay in the browser |
 
 ```mermaid
 flowchart LR
@@ -166,11 +166,11 @@ target_link_libraries(my_vehicle_simulation PRIVATE ORVD::integrators)
 <details>
 <summary><strong>Targets exported by the installation</strong></summary>
 
-13 product module targets organised by dependency level: `control`, `actuation`, `track_geometry`, `track_irregularity`, `wheel_rail_contact`, `configuration`, `multibody_runtime`, `multibody_model`, `forces`, `system_assembly`, `integrators`, plus `scene_observation` (rigid-body world-state sampling, wheel placement and track sampling) and `scene_record` (portable scene record reading and writing) for 3-D observation; add the `ORVD::` namespace when linking. The vendored rigid multibody tree they depend on is installed alongside as a position-independent static archive.
+14 product module targets organised by dependency level: `control`, `actuation`, `track_geometry`, `track_irregularity`, `wheel_rail_contact`, `configuration`, `multibody_runtime`, `multibody_model`, `forces`, `system_assembly`, `integrators`, plus `scene_observation` (rigid-body world-state sampling, wheel placement and track sampling), `scene_record` (portable scene records and resource bundles) and `scene_stream` (portable OSTS encoding and decoding) for 3-D observation; add the `ORVD::` namespace when linking. The vendored rigid multibody tree they depend on is installed alongside as a position-independent static archive.
 
 </details>
 
-On Linux the optional `ORVD::simpack_realtime` component can be built and installed explicitly to drive a local SIMPACK Realtime model through mechanical observation and four-axle differential-torque callbacks; the default product and ordinary install consumers do not depend on SIMPACK or its proprietary ABI, see the [Linux build guide](docs/build_and_install/LINUX.md#可选-simpack-realtime-组件) (Chinese). Linux also has the `ORVD::state_stream` component, off by default, which encodes and fragments the named rigid-body poses and velocities sampled by `scene_observation` and sends them over non-blocking UDP to an independent display; build and install it with `-DORVD_BUILD_STATE_STREAM=ON`; the protocol and a Python receiver example are in [state_stream](tools/state_stream/README.md) (Chinese).
+On Linux the optional `ORVD::simpack_realtime` component can be built and installed explicitly to drive a local SIMPACK Realtime model through mechanical observation and four-axle differential-torque callbacks; the default product and ordinary install consumers do not depend on SIMPACK or its proprietary ABI, see the [Linux build guide](docs/build_and_install/LINUX.md#可选-simpack-realtime-组件) (Chinese). Linux also has the `ORVD::state_stream` component, off by default, which sends the observations encoded by `scene_stream` over non-blocking UDP to an independent display; build and install it with `-DORVD_BUILD_STATE_STREAM=ON`; the portable protocol and Python receiver example are documented in [scene_stream](libs/scene_stream/README.md).
 
 Dependency installation, offline builds, tests and consumption commands for Linux, Windows and macOS are in the [build and install guide](docs/build_and_install/README.md) (Chinese); the layout of the offline source bundle is in the [dependency superbuild guide](distribution/dependencies/README.md) (Chinese).
 

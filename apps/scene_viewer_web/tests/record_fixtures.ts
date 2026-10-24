@@ -1,3 +1,4 @@
+import { sceneOrientation, scalarStatusCodes, phaseCodes } from '../src/record/scene_definition.ts';
 import type { SceneRecord } from '../src/record/scene_record.ts';
 import type { TrackTable, WheelPlacement } from '../src/record/scene_definition.ts';
 import { ScalarStatus } from '../src/record/scene_sample.ts';
@@ -29,6 +30,7 @@ export interface RecordFixtureSpec {
   bodies: string[];
   placements?: WheelPlacement[];
   scalars?: string[];
+  scalarUnits?: string[];
   frames: FixtureFrame[];
   track?: TrackTable | null;
   visualDefinitionText?: string | null;
@@ -43,6 +45,8 @@ export function placement(interfaceName: string, wheelBodyName: string, carrierB
     datumInWheelBodyFrameMeters: [0, side === 'left' ? 0.7465 : -0.7465, 0],
     spinAxisInWheelBodyFrame: [0, spinAxisY, 0],
     nominalRollingRadiusMeters: 0.43,
+    spinJointName: null,
+    spinAngleScalar: null,
   };
 }
 
@@ -83,10 +87,11 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
   });
   return {
     definition: {
-      worldFrame: 'test',
+      worldFrame: 'test', lengthUnit: 'meter', timeUnit: 'second', angleUnit: 'radian',
+      orientation: sceneOrientation, nominalSamplePeriodSeconds: null, scalarStatusCodes, phaseCodes,
       bodies: bodies.map((name) => ({ name, movesFreelyInWorld: true })),
       wheelPlacements: placements,
-      scalars: scalars.map((name) => ({ name, unit: '1', referenceFrame: '', quantity: '', method: '', sampleSemantics: '' })),
+      scalars: scalars.map((name, index) => ({ name, unit: spec.scalarUnits?.[index] ?? '1', referenceFrame: 'test', quantity: 'test', method: 'test', sampleSemantics: 'instantaneous' })),
       visualDefinitionText: spec.visualDefinitionText ?? null,
       track: spec.track ?? null,
     },
@@ -102,7 +107,7 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
       scalarValuesColumnOffset,
       scalarCount: scalars.length,
       rowValueCount,
-    }, values, statuses),
+    }, values, statuses, { scalars: scalars.map((name, index) => ({ name, unit: spec.scalarUnits?.[index] ?? '1', referenceFrame: 'test', quantity: 'test', method: 'test', sampleSemantics: 'instantaneous' })), wheelPlacements: placements }),
   };
 }
 
@@ -110,6 +115,7 @@ export function makeRecord(spec: RecordFixtureSpec): SceneRecord {
 export function visualDefinitionWithBindings(bindings: unknown): string {
   return JSON.stringify({
     vehicle_name: 'FIXTURE',
+    length_unit: 'meter',
     display_name: { en: 'Fixture vehicle', zh: '夹具车辆' },
     wheel_visual: {
       width_meters: 0.135,

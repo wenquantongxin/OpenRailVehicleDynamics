@@ -17,9 +17,9 @@ test('borrowed views keep separate row bindings and all recorded identities', ()
   const first = record.samples.viewAt(0);
   const second = record.samples.viewAt(1);
   assert.notEqual(first, second);
-  assert.deepEqual([first.timeSeconds, first.timeNanoseconds, first.sampleIndex, first.phase], [0.013, 13000000, 83, 2]);
-  assert.equal(second.sampleIndex, -1);
-  assert.equal(second.phase, 1);
+  assert.deepEqual([first.timeSeconds, first.identity.timeNanoseconds, first.identity.sampleIndex, first.identity.phase], [0.013, 13000000, 83, 2]);
+  assert.equal(second.identity.sampleIndex, -1);
+  assert.equal(second.identity.phase, 1);
   assert.deepEqual(first.bodyPose(0).position, [1, 2, 3]);
   assert.deepEqual(first.bodyLinearVelocity(0), [4, 5, 6]);
   assert.deepEqual(first.bodyAngularVelocity(0), [7, 8, 9]);
@@ -34,7 +34,7 @@ test('rendering and current readouts consume a sample without recorded history',
   const definition = makeRecord({ bodies: ['wheel'], placements: [placement('if', 'wheel', 'wheel', 'left')],
     scalars: ['if.contact_patch_count'], frames: [] }).definition;
   const sample: SceneSampleView = {
-    timeSeconds: 2, timeNanoseconds: 2000000000, sampleIndex: -1, phase: 2,
+    timeSeconds: 2, identity: { kind: 'stream', runId: 9007199254740993n, sequence: 9007199254740997n },
     bodyPose: () => ({ position: [0.1, 0.2, 0.3], orientationWxyz: [0.5, 0.5, 0.5, 0.5] }),
     bodyLinearVelocity: () => [1, 2, 3], bodyAngularVelocity: () => [0, 0, 0],
     wheelSpinAngle: () => null, scalar: () => ({ value: 2, status: ScalarStatus.valid }),

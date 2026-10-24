@@ -1494,6 +1494,7 @@ add_test(NAME verify_irw_scene_topology
 # A scene record written from stated values reads back bit for bit; an
 # unclosed record is refused; the writer rejects what it must.
 add_executable(verify_scene_record_round_trip
+    scene_record/scene_assets_header_self_containment.cc
     scene_record/scene_record_writer_header_self_containment.cc
     scene_record/scene_record_reader_header_self_containment.cc
     scene_record/verify_scene_record_round_trip.cc)
@@ -1502,3 +1503,16 @@ target_link_libraries(verify_scene_record_round_trip PRIVATE orvd_scene_record)
 add_test(NAME verify_scene_record_round_trip
          COMMAND verify_scene_record_round_trip
              ${CMAKE_CURRENT_BINARY_DIR}/scene-record-fixtures)
+
+add_test(NAME verify_track_bundle_export
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/scene_record/verify_track_bundle_export.py
+        $<TARGET_FILE:orvd_export_track_bundle>
+        ${PROJECT_SOURCE_DIR})
+
+add_executable(verify_scene_description
+    scene_observation/scene_description_header_self_containment.cc
+    scene_observation/verify_scene_description.cc)
+orvd_configure_first_party_target(verify_scene_description)
+target_link_libraries(verify_scene_description PRIVATE orvd_scene_observation)
+add_test(NAME verify_scene_description COMMAND verify_scene_description)

@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -33,14 +35,24 @@ scene_observation::SceneTopology MakeTopology() {
     wheel.datum_in_wheel_body_frame_meters = Eigen::Vector3d(0.0, -0.7465, 0.0);
     wheel.spin_axis_in_wheel_body_frame = Eigen::Vector3d(0.0, -1.0, 0.0);
     wheel.nominal_rolling_radius_meters = 0.43;
+    wheel.spin_joint_name = "wheel_spin";
+    wheel.spin_angle_scalar = scene_observation::WheelSpinScalarBinding{"a", -1.0};
     topology.wheel_placements.push_back(wheel);
     return topology;
 }
 
 std::vector<scene_observation::ScalarDefinition> MakeDefinitions() {
-    return {{"a", "m", "world", "length", "stated", "instantaneous"},
+    return {{"a", "rad", "wheel", "spin", "stated", "instantaneous"},
             {"b", "N", "world", "force", "stated", "instantaneous"},
             {"c", "1", "none", "count", "stated", "instantaneous"}};
+}
+
+scene_observation::SceneDescription MakeDescription() {
+    scene_observation::SceneDescription description;
+    description.topology = MakeTopology();
+    description.scalar_definitions = MakeDefinitions();
+    description.nominal_sample_period_seconds = 0.01;
+    return description;
 }
 
 // Sample identities come from the run program and need not equal the frame
@@ -82,7 +94,148 @@ scene_observation::TrackSampleTable MakeTrack() {
                                                 {5.0, -0.75, 0.0}};
     table.right_rail_datum_in_inertial_meters = {{-5.0, 0.75, 0.0},
                                                  {5.0, 0.75, 0.0}};
+    table.left_rail_datum_in_track = {-0.75, 0.0};
+    table.right_rail_datum_in_track = {0.75, 0.0};
     return table;
+}
+
+template <typename Function>
+void ExpectRefused(Function action, const std::string& detail) {
+    try {
+        action();
+    } catch (const std::exception&) {
+        return;
+    }
+    Fail(detail);
+}
+
+void VerifyAssets(const std::filesystem::path& fixtures,
+                  const scene_record::SceneAssets& recorded_assets) {
+    const auto bundle_directory = fixtures / "bundle";
+    scene_record::WriteSceneBundle(bundle_directory, recorded_assets);
+    if (std::filesystem::exists(bundle_directory / "frames.f64le") ||
+        std::filesystem::exists(bundle_directory / "scalar_statuses.u8") ||
+        std::filesystem::exists(bundle_directory / "scene.json.pending")) {
+        Fail("a bundle contains frame tables or an unpublished scene document");
+    }
+    const auto bundle = scene_record::ReadSceneBundle(bundle_directory);
+    const auto bundle_assets =
+        scene_record::ReadSceneAssets(bundle_directory / "scene.json");
+    if (!bundle.track || !bundle_assets.track ||
+        bundle.world_frame != recorded_assets.world_frame ||
+        bundle.visual_definition_json != recorded_assets.visual_definition_json ||
+        bundle.track->stations_meters != recorded_assets.track->stations_meters ||
+        bundle_assets.track->left_rail_datum_in_track.lateral_meters != -0.75 ||
+        bundle_assets.track->right_rail_datum_in_track.lateral_meters != 0.75) {
+        Fail("bundle assets did not round-trip");
+    }
+    ExpectRefused([&] {
+        scene_record::WriteSceneBundle(bundle_directory, recorded_assets);
+    }, "a bundle overwrote an existing directory");
+    ExpectRefused([&] {
+        (void)scene_record::ReadSceneBundle(fixtures / "record");
+    }, "ReadSceneBundle accepted a scene record");
+    ExpectRefused([&] {
+        (void)scene_record::ReadSceneRecord(bundle_directory);
+    }, "ReadSceneRecord accepted a bundle");
+
+    // Static asset extraction must not open either binary table.
+    const auto assets_only_directory = fixtures / "record_assets_only";
+    std::filesystem::copy(fixtures / "record", assets_only_directory,
+                          std::filesystem::copy_options::recursive);
+    std::filesystem::remove(assets_only_directory / "frames.f64le");
+    std::filesystem::remove(assets_only_directory / "scalar_statuses.u8");
+    const auto assets_only =
+        scene_record::ReadSceneAssets(assets_only_directory / "scene.json");
+    if (!assets_only.track ||
+        assets_only.visual_definition_json != recorded_assets.visual_definition_json) {
+        Fail("static asset extraction depended on frame tables");
+    }
+    ExpectRefused([&] {
+        (void)scene_record::ReadSceneRecord(assets_only_directory);
+    }, "a record without its frame tables was accepted for playback");
+
+    scene_record::SceneAssets selected;
+    const auto inherited = scene_record::ComposeSceneAssets(recorded_assets, selected);
+    if (!inherited.track ||
+        inherited.visual_definition_json != recorded_assets.visual_definition_json) {
+        Fail("missing selected assets did not retain the base assets");
+    }
+    selected.visual_definition_json = "{ \"vehicle_name\": \"selected\" }\n";
+    const auto visual_override =
+        scene_record::ComposeSceneAssets(recorded_assets, selected);
+    if (!visual_override.track ||
+        visual_override.visual_definition_json != selected.visual_definition_json) {
+        Fail("selected visual definition did not override just the visual asset");
+    }
+    selected.visual_definition_json.clear();
+    selected.track = MakeTrack();
+    selected.track->superelevation_meters = {0.01, 0.02};
+    const auto track_override =
+        scene_record::ComposeSceneAssets(recorded_assets, selected);
+    if (track_override.track->superelevation_meters != std::vector<double>{0.01, 0.02} ||
+        track_override.visual_definition_json != recorded_assets.visual_definition_json) {
+        Fail("selected track did not override just the track asset");
+    }
+    selected.visual_definition_json = "{\"vehicle_name\":\"both\"}";
+    const auto both_override =
+        scene_record::ComposeSceneAssets(recorded_assets, selected);
+    if (both_override.track->superelevation_meters != std::vector<double>{0.01, 0.02} ||
+        both_override.visual_definition_json != selected.visual_definition_json) {
+        Fail("selected track and visual definition did not override both assets");
+    }
+    selected.world_frame = "another world";
+    ExpectRefused([&] {
+        (void)scene_record::ComposeSceneAssets(recorded_assets, selected);
+    }, "assets from different world frames were composed");
+    ExpectRefused([&] {
+        scene_record::SceneRecordWriter writer(
+            fixtures / "different_world", MakeDescription(), selected, false);
+    }, "record description and assets with different frames were accepted");
+    if (std::filesystem::exists(fixtures / "different_world")) {
+        Fail("invalid record inputs created a directory");
+    }
+
+    const auto empty_directory = fixtures / "empty_bundle";
+    scene_record::WriteSceneBundle(empty_directory, {});
+    const auto empty = scene_record::ReadSceneBundle(empty_directory);
+    if (empty.track || !empty.visual_definition_json.empty()) {
+        Fail("absent bundle assets did not round-trip");
+    }
+    auto invalid = recorded_assets;
+    invalid.track->left_rail_datum_in_track.vertical_meters =
+        std::numeric_limits<double>::quiet_NaN();
+    ExpectRefused([&] {
+        scene_record::WriteSceneBundle(fixtures / "invalid_datum", invalid);
+    }, "a nonfinite rail datum was accepted");
+    invalid = recorded_assets;
+    invalid.track->centerline_in_inertial_meters.pop_back();
+    ExpectRefused([&] {
+        scene_record::WriteSceneBundle(fixtures / "invalid_track", invalid);
+    }, "track columns of different lengths were accepted");
+    invalid = recorded_assets;
+    invalid.track->stations_meters = {5.0, -5.0};
+    ExpectRefused([&] {
+        scene_record::WriteSceneBundle(fixtures / "unordered_track", invalid);
+    }, "track stations that are not increasing were accepted");
+    invalid = recorded_assets;
+    invalid.visual_definition_json = "[]";
+    ExpectRefused([&] {
+        scene_record::WriteSceneBundle(fixtures / "invalid_visual", invalid);
+    }, "a non-object visual definition was accepted");
+    if (std::filesystem::exists(fixtures / "invalid_datum") ||
+        std::filesystem::exists(fixtures / "invalid_track") ||
+        std::filesystem::exists(fixtures / "invalid_visual") ||
+        std::filesystem::exists(fixtures / "unordered_track")) {
+        Fail("invalid bundle inputs created a directory");
+    }
+    const auto legacy_directory = fixtures / "legacy";
+    std::filesystem::create_directory(legacy_directory);
+    std::ofstream(legacy_directory / "scene.json") <<
+        "{\"record\":\"orvd.scene_record\"}";
+    ExpectRefused([&] {
+        (void)scene_record::ReadSceneAssets(legacy_directory / "scene.json");
+    }, "legacy record assets were accepted");
 }
 
 }  // namespace
@@ -102,9 +255,9 @@ int main(int argc, char** argv) {
             "{\"vehicle_name\": \"stated\", \"parts\": []}\n";
         {
             scene_record::SceneRecordWriter writer(record_directory,
-                                                   MakeTopology(),
-                                                   MakeDefinitions(),
-                                                   visual_json, true);
+                                                   MakeDescription(),
+                                                   {.visual_definition_json = visual_json},
+                                                   true);
             for (int index = 0; index < 3; ++index) {
                 writer.WriteFrame(MakeFrame(index));
             }
@@ -162,8 +315,7 @@ int main(int argc, char** argv) {
         bool existing_refused = false;
         try {
             scene_record::SceneRecordWriter again(record_directory,
-                                                  MakeTopology(),
-                                                  MakeDefinitions(), "", true);
+                                                  MakeDescription(), {}, true);
         } catch (const std::runtime_error&) {
             existing_refused = true;
         }
@@ -171,8 +323,7 @@ int main(int argc, char** argv) {
         {
             const std::filesystem::path plain_directory = fixtures / "plain";
             scene_record::SceneRecordWriter plain(plain_directory,
-                                                  MakeTopology(),
-                                                  MakeDefinitions(), "", false);
+                                                  MakeDescription(), {}, false);
             scene_observation::SceneFrame frame = MakeFrame(0);
             frame.wheel_spin_angles_radians.clear();
             plain.WriteFrame(frame);
@@ -180,7 +331,7 @@ int main(int argc, char** argv) {
             const auto plain_record = scene_record::ReadSceneRecord(plain_directory);
             if (plain_record.frames.size() != 1 ||
                 !plain_record.frames[0].wheel_spin_angles_radians.empty() ||
-                plain_record.visual_definition_json != "") {
+                plain_record.assets.visual_definition_json != "") {
                 Fail("a record without spin angles did not round-trip");
             }
         }
@@ -190,13 +341,13 @@ int main(int argc, char** argv) {
         // A placement whose carrier body the topology does not list is
         // refused before anything is written.
         {
-            auto unlisted = MakeTopology();
-            unlisted.wheel_placements[0].carrier_body_name = "missing";
+            auto unlisted = MakeDescription();
+            unlisted.topology.wheel_placements[0].carrier_body_name = "missing";
             bool refused = false;
             try {
                 scene_record::SceneRecordWriter bad(fixtures / "unlisted",
                                                     std::move(unlisted),
-                                                    MakeDefinitions(), "", false);
+                                                    {}, false);
             } catch (const std::runtime_error&) {
                 refused = true;
             }
@@ -206,30 +357,38 @@ int main(int argc, char** argv) {
         }
 
         const auto record = scene_record::ReadSceneRecord(record_directory);
-        if (record.topology.bodies.size() != 2 ||
-            record.topology.bodies[0].name != "carrier" ||
-            !record.topology.bodies[0].moves_freely_in_world ||
-            record.topology.bodies[1].moves_freely_in_world ||
-            record.topology.wheel_placements.size() != 1 ||
-            record.topology.wheel_placements[0].wheel_body_name != "wheel" ||
-            record.topology.wheel_placements[0].carrier_body_name != "carrier" ||
-            record.topology.wheel_placements[0].datum_in_wheel_body_frame_meters !=
+        if (record.description.topology.bodies.size() != 2 ||
+            record.description.topology.bodies[0].name != "carrier" ||
+            !record.description.topology.bodies[0].moves_freely_in_world ||
+            record.description.topology.bodies[1].moves_freely_in_world ||
+            record.description.topology.wheel_placements.size() != 1 ||
+            record.description.topology.wheel_placements[0].wheel_body_name != "wheel" ||
+            record.description.topology.wheel_placements[0].carrier_body_name != "carrier" ||
+            record.description.topology.wheel_placements[0].datum_in_wheel_body_frame_meters !=
                 Eigen::Vector3d(0.0, -0.7465, 0.0) ||
-            record.topology.wheel_placements[0].nominal_rolling_radius_meters !=
-                0.43) {
+            record.description.topology.wheel_placements[0].nominal_rolling_radius_meters !=
+                0.43 ||
+            record.description.topology.wheel_placements[0].spin_joint_name !=
+                std::optional<std::string>("wheel_spin") ||
+            !record.description.topology.wheel_placements[0].spin_angle_scalar ||
+            record.description.topology.wheel_placements[0].spin_angle_scalar->name != "a" ||
+            record.description.topology.wheel_placements[0].spin_angle_scalar->sign != -1.0 ||
+            record.description.nominal_sample_period_seconds != std::optional<double>(0.01)) {
             Fail("the topology did not round-trip");
         }
-        if (record.scalar_definitions.size() != 3 ||
-            record.scalar_definitions[1].name != "b" ||
-            record.scalar_definitions[1].unit != "N" ||
-            record.visual_definition_json != visual_json) {
+        if (record.description.scalar_definitions.size() != 3 ||
+            record.description.scalar_definitions[1].name != "b" ||
+            record.description.scalar_definitions[1].unit != "N" ||
+            record.assets.visual_definition_json != visual_json) {
             Fail("scalar definitions or the visual definition did not "
                  "round-trip");
         }
-        if (!record.track.has_value() ||
-            record.track->stations_meters != std::vector<double>{-5.0, 5.0} ||
-            record.track->right_rail_datum_in_inertial_meters[1] !=
-                std::array<double, 3>{5.0, 0.75, 0.0}) {
+        if (!record.assets.track.has_value() ||
+            record.assets.track->stations_meters != std::vector<double>{-5.0, 5.0} ||
+            record.assets.track->right_rail_datum_in_inertial_meters[1] !=
+                std::array<double, 3>{5.0, 0.75, 0.0} ||
+            record.assets.track->left_rail_datum_in_track.lateral_meters != -0.75 ||
+            record.assets.track->right_rail_datum_in_track.lateral_meters != 0.75) {
             Fail("the track table did not round-trip");
         }
         if (record.frames.size() != 3) {
@@ -268,7 +427,9 @@ int main(int argc, char** argv) {
                 Fail("scalar values, statuses or spin angles did not round-trip");
             }
         }
-        std::puts("scene record round trip, incomplete-record refusal and "
+        VerifyAssets(fixtures, record.assets);
+        std::puts("scene record and bundle round trip, asset composition, "
+                  "incomplete-record refusal and "
                   "writer rejections passed");
         return 0;
     } catch (const std::exception& error) {

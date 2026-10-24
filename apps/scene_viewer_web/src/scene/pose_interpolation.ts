@@ -20,6 +20,22 @@ export interface WheelSpinBinding {
   spinAxisInBody: [number, number, number];
 }
 
+/** Use one placement with valid angles at both endpoints; never mix sides within an interval. */
+export function selectWheelSpin(
+  firstSample: SceneSampleView,
+  secondSample: SceneSampleView,
+  candidates: readonly WheelSpinBinding[] | undefined,
+): { binding: WheelSpinBinding; delta: number } | null {
+  for (const binding of candidates ?? []) {
+    const first = firstSample.wheelSpinAngle(binding.wheelPlacementIndex);
+    const second = secondSample.wheelSpinAngle(binding.wheelPlacementIndex);
+    if (first !== null && second !== null && Number.isFinite(first) && Number.isFinite(second)) {
+      return { binding, delta: second - first };
+    }
+  }
+  return null;
+}
+
 export function interpolatePosition(
   firstSample: SceneSampleView,
   secondSample: SceneSampleView,
@@ -41,7 +57,7 @@ export function interpolateOrientation(
   secondSample: SceneSampleView,
   alpha: number,
   bodyIndex: number,
-  spin: WheelSpinBinding | undefined,
+  candidates: readonly WheelSpinBinding[] | undefined,
   out: THREE.Quaternion,
 ): void {
   const first = firstSample.bodyPose(bodyIndex);
@@ -54,16 +70,15 @@ export function interpolateOrientation(
   const [wB, xB, yB, zB] = second.orientationWxyz;
   if (alpha >= 1) { out.set(xB, yB, zB, wB); return; }
   scratch.set(xB, yB, zB, wB);
-  const angleA = spin === undefined ? null : firstSample.wheelSpinAngle(spin.wheelPlacementIndex);
-  const angleB = spin === undefined ? null : secondSample.wheelSpinAngle(spin.wheelPlacementIndex);
-  if (spin === undefined || angleA === null || angleB === null) {
+  const spin = selectWheelSpin(firstSample, secondSample, candidates);
+  if (spin === null) {
     out.slerp(scratch, alpha);
     return;
   }
   // q_B * spin(-delta) has the same spin phase as q_A. Interpolate these
   // aligned orientations first: carrier rotation and wheel spin do not commute.
-  const delta = angleB - angleA;
-  spinAxis.set(...spin.spinAxisInBody).normalize();
+  const { delta } = spin;
+  spinAxis.set(...spin.binding.spinAxisInBody).normalize();
   spinFull.setFromAxisAngle(spinAxis, -delta);
   scratch.multiply(spinFull);
   spinStep.setFromAxisAngle(spinAxis, delta * alpha);

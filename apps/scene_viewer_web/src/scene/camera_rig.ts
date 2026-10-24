@@ -227,7 +227,7 @@ function interpolateViewOffset(start: THREE.Vector3, end: THREE.Vector3, fractio
 }
 
 export class CameraRig {
-  follow = true;
+  private follow = true;
   private preset: ViewPreset = 'overview';
   private planDirection: [number, number, number] = [...presets.plan.direction];
   private tween: {
@@ -264,6 +264,12 @@ export class CameraRig {
 
   get currentPreset(): ViewPreset {
     return this.preset;
+  }
+
+  setFollowing(enabled: boolean, viewport: ViewportArea): void {
+    if (enabled === this.follow) return;
+    this.follow = enabled;
+    if (enabled) this.applyPreset(this.preset, viewport, false);
   }
 
   presetAvailable(preset: ViewPreset): boolean {

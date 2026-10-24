@@ -379,7 +379,7 @@ export function WheelForceCard({ readoutModel, sample, scales }: { readoutModel:
   if (readoutModel.wheels.every((wheel) => wheel.verticalSupportForceScalar === null)) {
     return (
       <Card index="04" en="Wheel loads" zh="轮重">
-        <p className="caption">NOT RECORDED<span className="zh">未记录轮轨力</span></p>
+        <p className="unrecorded-force">NOT RECORDED<span className="zh">未记录轮轨力</span></p>
       </Card>
     );
   }

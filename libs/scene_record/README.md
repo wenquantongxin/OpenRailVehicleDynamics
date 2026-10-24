@@ -1,28 +1,48 @@
 # scene_record
 
-`ORVD::scene_record` 把公共场景观察（`ORVD::scene_observation`）的拓扑、逐帧刚体状态、
-标量与线路采样写成一个可携带的目录，并能把它读回来。它不依赖 UDP、React 或 Three.js，
-也不依赖 `tools/dynamics_qualification`；运行器只是它的一个调用方。
-接口见 [`scene_record_writer.h`](include/orvd/scene_record/scene_record_writer.h) 与
-[`scene_record_reader.h`](include/orvd/scene_record/scene_record_reader.h)，本文只说明契约，不另立规格。
+`ORVD::scene_record` 读写场景记录与静态资源包，保存公共场景观察（`ORVD::scene_observation`）的
+拓扑、逐帧刚体状态、标量与线路采样。
+接口见 [`scene_record_writer.h`](include/orvd/scene_record/scene_record_writer.h)、
+[`scene_record_reader.h`](include/orvd/scene_record/scene_record_reader.h) 与
+[`scene_assets.h`](include/orvd/scene_record/scene_assets.h)。公共描述编解码属于
+[`scene_observation`](../scene_observation/README.md)。
 
 ## 目录组成
 
 | 文件 | 内容 |
 |---|---|
-| `scene.json` | 记录标识、世界系与单位、刚体列表、车轮放置、标量定义、帧表布局、状态码、线路采样表、视觉定义文件名 |
+| `scene.json` | `schema`、公共 `description`、静态 `assets`、`frame_table` 与 `scalar_status_table` |
 | `frames.f64le` | 帧表：每帧一行小端 binary64 |
 | `scalar_statuses.u8` | 每帧每标量一个状态字节：0 未就绪、1 有效、2 占位 |
-| `visual_definition.json` | 调用方提供的参数化视觉定义，原样复制、不解析；可以没有 |
+| `visual_definition.json` | 调用方提供的参数化视觉定义，校验为 JSON 对象后原样复制；可以没有 |
 
-`Close()` 最后写 `scene.json`。没有 `scene.json` 的目录是未完成记录，读取器拒绝；写入器也拒绝已存在的目录。
+`SceneRecordWriter(directory, description, assets, with_wheel_spin_angles)` 写入记录，
+`ReadSceneRecord(directory)` 返回 `SceneRecord{description, assets, frames}`。
+记录的 `schema` 为 `orvd.scene_record`。写入目录须不存在；`Close()` 发布 `scene.json`，
+读取器以该文件识别完整记录。
+
+## 静态资源包
+
+`SceneAssets` 包含可选 `track`、原样视觉定义文本 `visual_definition_json` 与 `world_frame`。
+空视觉文本表示缺省。`WriteSceneBundle(directory, assets)` 写入不含帧表的目录，最后发布的
+`scene.json` 只有 `schema: "orvd.scene_bundle"` 和 `assets`；`ReadSceneBundle(directory)` 读取它。
+`ReadSceneAssets(scene_json_path)` 可从记录或资源包读取静态资源，无需帧文件。
+
+`assets` 对象包含 `world_frame`、`length_unit: "meter"`、`angle_unit: "radian"`、
+可空 `track` 和可空 `visual_definition_file`。轨道包含七列采样数组，并保存
+`rail_datums.left/right.{lateral_meters,vertical_meters}`，即采样时实际使用的轨道系轨面基准。
+所有列等长非空，里程严格递增，几何数值有限；轨道姿态为单位四元数。
+轨道可在构造时提供，或在关闭记录前通过 `WriteTrackSampleTable` 写入一次。
+
+`ComposeSceneAssets(base, selected)` 按资产项覆盖：selected 有轨道便替换轨道，有视觉文本便替换视觉，
+缺省项沿用 base；双方世界系必须相同。记录的 description 与 assets 世界系也必须一致。
 
 ## 帧表布局
 
 一行的列依次为：`time_seconds`、`time_nanoseconds`、`sample_index`、`phase`，
 然后每个刚体 13 个值（位置 3、四元数 `w,x,y,z` 4、原点线速度 3、角速度 3），
 然后每个车轮放置一个未折返自转角（记录带自转角列时），然后每个标量一个值。
-各块的偏移与个数写在 `scene.json` 的 `frame_table.columns` 中，读取方按文件所述布局读，不假设。
+各块的偏移与个数由 `scene.json` 的 `frame_table.columns` 声明。
 
 - **帧行号与样本身份**：帧行号是帧表的 0 起行序，定位与插值用它；`sample_index` 是运行程序给出的样本身份，
   可与行号不同，缺失时为 `-1`（`absent_integer_identity`），只用于显示。`time_nanoseconds` 同理。
@@ -34,25 +54,23 @@
 
 ## 车轮放置
 
-`wheel_placements` 每项来自接触计划的定义，不由名字推断：`interface_name`、`wheel_body_name`、
+`description.wheel_placements` 每项来自接触计划：`interface_name`、`wheel_body_name`、
 `carrier_body_name`、`side`、`datum_in_wheel_body_frame_meters`、`spin_axis_in_wheel_body_frame`、
-`nominal_rolling_radius_meters`。`carrier_body_name` 是承载该轮非自转型面系的刚体：独立旋转车轮的轴桥，
-或刚性轮对自身（此时等于 `wheel_body_name`）。显示端通过它把同一载体的左右轮配对。写入器拒绝引用拓扑未列出刚体的放置。
+`nominal_rolling_radius_meters`、可空 `spin_joint_name` 与可空 `spin_angle_scalar`。`carrier_body_name` 是承载该轮非自转型面系的刚体：独立旋转车轮的轴桥，
+或刚性轮对自身（此时等于 `wheel_body_name`）。显示端通过它把同一载体的左右轮配对。公共描述编解码拒绝引用拓扑未列出刚体的放置。
+`spin_angle_scalar` 用 `{name, sign}` 引用单位为 `rad` 的标量，sign 为 +1 或 -1。
 
 ## 标量命名约定
 
-`scene_record` 只保存调用方给出的标量定义、数值与状态，不检查名称。资格运行器导出的车辆标量按下列约定命名，
+`scene_record` 保存调用方给出的标量定义、数值与状态；公共描述要求标量名非空且唯一。资格运行器导出的车辆标量按下列约定命名，
 查看器据此查找：
 
-- 刚体的轨道坐标：`<刚体名>.track_station_meters`、`<刚体名>.lateral_meters`、`<刚体名>.yaw_radians`；
-  当前导出接触计划的载体和配方的代表刚体。
+- 轨道坐标：`<名称>.track_station_meters`、`<名称>.lateral_meters`、`<名称>.yaw_radians`。
 - 车轮的接触结果：`<接口名>.contact_patch_count`、`<接口名>.vertical_support_force_on_wheel_newtons`、`<接口名>.normal_force_newtons`。
 
-生产端状态：载体标量的前缀目前取接触计划的 carrier 名，两个闭合场景里它恰好等于载体刚体名；
-运行器改为显式取载体定义的 `body_name` 是后续收口项，见
-[三维场景显示综合完善计划](../../docs/planning/scene_visualization/SCENE_VISUALIZATION_IMPROVEMENT_PLAN.md)。
+资格运行器的载体通道以接触载体名为前缀，代表刚体通道以刚体名为前缀。
 
 ## 消费方
 
 安装后通过 `find_package(OpenRailVehicleDynamics CONFIG REQUIRED)` 链接 `ORVD::scene_record`。
-自包含查看器 [`apps/scene_viewer_web`](../../apps/scene_viewer_web/README.md) 用自己的解析器读同一目录，不链接 C++。
+查看器见 [`apps/scene_viewer_web`](../../apps/scene_viewer_web/README.md)。

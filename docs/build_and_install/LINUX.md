@@ -11,7 +11,7 @@
 - Ninja／Makefile generator；
 - SIMPACK Realtime adapter 为 Linux 可选组件。
 
-GCC 13.3.0＋libgomp、CMake 3.28.3、Ninja Release 构建通过 101 项测试。
+GCC 13.3.0＋libgomp、CMake 3.28.3、Ninja Release 构建通过 105 项测试。
 
 ## 安装工具链
 

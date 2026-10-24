@@ -1,0 +1,4 @@
+add_executable(orvd_export_track_bundle export_track_bundle.cc)
+orvd_configure_first_party_target(orvd_export_track_bundle)
+target_link_libraries(orvd_export_track_bundle
+    PRIVATE orvd_configuration orvd_scene_record)

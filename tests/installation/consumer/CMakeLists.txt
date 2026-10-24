@@ -79,6 +79,10 @@ add_executable(scene_record_installation_smoke
 target_compile_features(scene_record_installation_smoke PRIVATE cxx_std_23)
 target_link_libraries(scene_record_installation_smoke PRIVATE ORVD::scene_record)
 
+add_executable(scene_stream_installation_smoke scene_stream_installation_smoke.cc)
+target_compile_features(scene_stream_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(scene_stream_installation_smoke PRIVATE ORVD::scene_stream)
+
 # This pair is a positive control for the installed-artifact dependency gate.
 # The executable calls an exported function, so linkers cannot discard the
 # Drake-identified shared library as unused.

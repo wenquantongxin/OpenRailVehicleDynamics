@@ -31,6 +31,8 @@ void SampleTrackGeometry(const track_geometry::TrackGeometry& line,
             "track sampling: rail datum placement must be finite");
     }
     const std::size_t count = stations_meters.size();
+    output.left_rail_datum_in_track = left_rail;
+    output.right_rail_datum_in_track = right_rail;
     output.stations_meters.assign(stations_meters.begin(),
                                   stations_meters.end());
     output.centerline_in_inertial_meters.resize(count);

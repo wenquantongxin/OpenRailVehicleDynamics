@@ -4,6 +4,7 @@
 # neither the integrator nor any transport.
 
 add_library(orvd_scene_record STATIC
+    src/scene_assets.cc
     src/scene_record_reader.cc
     src/scene_record_writer.cc)
 

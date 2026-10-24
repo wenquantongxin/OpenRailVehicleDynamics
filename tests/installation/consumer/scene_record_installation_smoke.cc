@@ -56,18 +56,33 @@ int main() {
         frame.bodies = sampler.Sample(*context);
 
         const std::filesystem::path directory = FreshTemporaryDirectory();
+        const orvd::scene_observation::SceneDescription description{
+            .topology = orvd::scene_observation::DescribeSceneTopology(
+                model, nullptr),
+            .nominal_sample_period_seconds = 0.01};
+        const auto decoded_description =
+            orvd::scene_observation::DecodeSceneDescription(
+                orvd::scene_observation::EncodeSceneDescription(description));
         {
             orvd::scene_record::SceneRecordWriter writer(
-                directory,
-                orvd::scene_observation::DescribeSceneTopology(model, nullptr),
-                {}, "", false);
+                directory, decoded_description,
+                {.visual_definition_json = "{ \"parts\": [] }\n"}, false);
             writer.WriteFrame(frame);
             writer.Close();
         }
         const auto record = orvd::scene_record::ReadSceneRecord(directory);
+        const auto bundle_directory = FreshTemporaryDirectory();
+        orvd::scene_record::WriteSceneBundle(bundle_directory, record.assets);
+        const auto bundle = orvd::scene_record::ReadSceneBundle(bundle_directory);
+        const auto assets = orvd::scene_record::ComposeSceneAssets(
+            bundle, orvd::scene_record::ReadSceneAssets(directory / "scene.json"));
         std::filesystem::remove_all(directory);
-        if (record.frames.size() != 1 || record.topology.bodies.size() != 1 ||
-            record.topology.bodies[0].name != "smoke_body" ||
+        std::filesystem::remove_all(bundle_directory);
+        if (record.frames.size() != 1 ||
+            record.description.topology.bodies.size() != 1 ||
+            record.description.topology.bodies[0].name != "smoke_body" ||
+            record.description.nominal_sample_period_seconds != 0.01 ||
+            assets.visual_definition_json != "{ \"parts\": [] }\n" ||
             record.frames[0].bodies[0].position_meters !=
                 std::array<double, 3>{3.0, -1.0, 0.25}) {
             std::fprintf(stderr,

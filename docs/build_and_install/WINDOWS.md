@@ -173,15 +173,12 @@ OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
   ctest --test-dir "$ORVD_BUILD" -j1 --output-on-failure
 ```
 
-当前 Windows 默认配置注册 99 项，以配置后 `ctest -N`／JSON 清单为准。四项 Drake reference
-测试默认关闭；两个 UNIX 开发源码探针及 Linux 可选组件测试不属于此默认集合。
-完整测试执行已注册的全部测试，采用现行数值断言，并分别记录注册数量与实测通过数量。
-完整输出位于构建目录 `Testing/Temporary/LastTest.log`，应与配置、构建日志一起保留。
+CTest 完整输出位于构建目录 `Testing/Temporary/LastTest.log`。
 
 `verify_openmp_parallel_execution` 必须观测到至少两个真实 worker。
-`verify_relocated_install_consumer` 会安装到测试专用临时前缀、迁移前缀，再构建和运行七个独立
-消费者，覆盖五种积分方法、配置与资产、线路、不平顺、轮轨接触、力元、场景采样及记录写入／读取。
-七个程序均须通过普通 DLL 完整解析和无共享 Drake 检查；Drake marker 阳性对照须因含共享 Drake
+`verify_relocated_install_consumer` 会安装到测试专用临时前缀、迁移前缀，再构建和运行八个独立
+消费者，覆盖五种积分方法、配置与资产、线路、不平顺、轮轨接触、力元、场景记录与资源读写、可移植状态流编解码。
+八个程序均须通过普通 DLL 完整解析和无共享 Drake 检查；Drake marker 阳性对照须因含共享 Drake
 而被拒绝。需要详细诊断时可单独运行这两项：
 
 ```sh

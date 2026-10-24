@@ -214,6 +214,7 @@ function displayBindings(value: unknown): DisplayBindings {
 
 export function parseVisualDefinition(textValue: string, bodyNames: ReadonlySet<string>): VisualDefinition {
   const json = JSON.parse(textValue) as Record<string, unknown>;
+  if (json['length_unit'] !== 'meter') throw new Error('visual definition: length_unit must be meter');
   const parts: VisualPart[] = array(json['parts'], 'parts').map((entry, index) => {
     const part = entry as Record<string, unknown>;
     const name = typeof part['name'] === 'string' ? part['name'] : `part_${index}`;

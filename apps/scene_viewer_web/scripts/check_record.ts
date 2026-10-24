@@ -19,13 +19,13 @@ async function main(): Promise<void> {
   const scene = JSON.parse(sceneText) as Record<string, unknown>;
   const frameTable = scene['frame_table'] as Record<string, unknown>;
   const statusTable = scene['scalar_status_table'] as Record<string, unknown>;
-  const visualFile = scene['visual_definition_file'];
+  const visualFile = (scene['assets'] as Record<string, unknown>)['visual_definition_file'];
   const toArrayBuffer = (buffer: Buffer): ArrayBuffer =>
     buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
   const frames = toArrayBuffer(await readFile(join(directory, String(frameTable['file']))));
   const statuses = toArrayBuffer(await readFile(join(directory, String(statusTable['file']))));
   const visualText = typeof visualFile === 'string' ? await readFile(join(directory, visualFile), 'utf8') : null;
-  const record = parseSceneRecord(sceneText, frames, statuses, visualText);
+  const record = parseSceneRecord(scene, frames, statuses, visualText);
   const visualDefinition = visualText === null ? null : parseVisualDefinition(visualText, new Set(record.definition.bodies.map((body) => body.name)));
   const bindings = resolveVehicleDisplayBindings(record.definition, visualDefinition);
   const lastFrameIndex = record.samples.frameCount - 1;

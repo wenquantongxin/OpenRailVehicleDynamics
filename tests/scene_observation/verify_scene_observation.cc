@@ -262,6 +262,10 @@ void VerifyTrackSampling() {
     scene_observation::SampleTrackGeometry(MakeLine(0.0), stations, left,
                                            right, table);
     if (table.stations_meters.size() != 3 ||
+        table.left_rail_datum_in_track.lateral_meters != left.lateral_meters ||
+        table.left_rail_datum_in_track.vertical_meters != left.vertical_meters ||
+        table.right_rail_datum_in_track.lateral_meters != right.lateral_meters ||
+        table.right_rail_datum_in_track.vertical_meters != right.vertical_meters ||
         table.centerline_in_inertial_meters[1] !=
             std::array<double, 3>{40.0, 0.0, 0.0} ||
         !Near(table.left_rail_datum_in_inertial_meters[1][1], -0.75, 1e-15) ||

@@ -4,9 +4,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import type { SceneDefinition } from '../record/scene_definition.ts';
-import type { RecordedSamples } from '../record/recorded_samples.ts';
 import type { SceneSampleView } from '../record/scene_sample.ts';
-import type { PlaybackController } from '../playback/playback.ts';
+import type { DisplayDriver, DisplayInterval } from '../playback/display_driver.ts';
 import { applyFrames, wheelSpinBindings } from '../scene/apply_frame.ts';
 import { viewOffsetPixels, type ViewportArea } from '../scene/camera_framing.ts';
 import { CameraRig, cameraAnchorsFor, type FramedExtents, type ViewPreset } from '../scene/camera_rig.ts';
@@ -32,9 +31,8 @@ export interface ViewportCommands {
 
 interface Props {
   definition: SceneDefinition;
-  samples: RecordedSamples;
   scene: BuiltScene;
-  playback: PlaybackController;
+  driver: DisplayDriver;
   /** Camera anchors and label obstacle groups come from here, never from body names. */
   bindings: VehicleDisplayBindings;
   /** Vehicle and bogie extents measured at the load boundary; the presets frame these. */
@@ -47,11 +45,11 @@ interface Props {
   /** Fills the loaded contact patch count of every wheel placement at a frame. */
   contactPatchesAt: ((sample: SceneSampleView, out: Float64Array) => void) | null;
   stationAt: (sample: SceneSampleView) => number | null;
-  onDisplayFrame: (frameIndex: number, timeSeconds: number, playing: boolean) => void;
+  onDisplayFrame: (interval: DisplayInterval, playing: boolean) => void;
 }
 
 export function SceneViewport(props: Props) {
-  const { definition, samples, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, stationAt, onDisplayFrame } = props;
+  const { definition, scene, driver, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, stationAt, onDisplayFrame } = props;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -177,16 +175,15 @@ export function SceneViewport(props: Props) {
 
     const spinBindings = wheelSpinBindings(definition);
     const patches = new Float64Array(definition.wheelPlacements.length);
-    const applyPose = (firstFrameIndex: number, secondFrameIndex: number, alpha: number): void => {
-      applyFrames(definition, scene, spinBindings, samples.viewAt(firstFrameIndex), samples.viewAt(secondFrameIndex), alpha);
+    const applyPose = (interval: DisplayInterval): void => {
+      applyFrames(definition, scene, spinBindings, interval.first, interval.second, interval.alpha);
       if (contactPatchesAt !== null) {
-        contactPatchesAt(samples.viewAt(firstFrameIndex), patches);
+        contactPatchesAt(interval.first, patches);
         scene.setContactStates(patches);
       }
       scene.root.updateMatrixWorld(true);
     };
-    const initial = playback.bracket();
-    applyPose(initial.firstFrameIndex, initial.secondFrameIndex, initial.alpha);
+    applyPose(driver.interval());
 
     // Each bound bogie's running gear, as a box in its frame body's coordinates
     // taken at the first displayed pose from the parts of the bodies its
@@ -257,13 +254,11 @@ export function SceneViewport(props: Props) {
     const applyOptions = (): void => {
       const next = options.current;
       if (applied !== null && applied.carbody === next.carbody && applied.track === next.track && applied.axes === next.axes && applied.labels === next.labels) {
-        rig.follow = next.follow;
         controls.autoRotate = next.orbit;
         return;
       }
       scene.setDisplay({ carbody: next.carbody, track: next.track, axes: next.axes });
       labels.setVisible(next.labels);
-      rig.follow = next.follow;
       controls.autoRotate = next.orbit;
       applied = { ...next };
     };
@@ -302,8 +297,8 @@ export function SceneViewport(props: Props) {
     };
     let previousWall = performance.now();
     let lastReportWall = 0;
-    let lastReportedFrameIndex = -1;
-    let lastReportedPlaying = !playback.playing;
+    let lastReportedSample: SceneSampleView | null = null;
+    let lastReportedPlaying = !driver.playing;
     let lastReportedTime = Number.NaN;
     let animationFrame = 0;
     const loop = (): void => {
@@ -312,13 +307,14 @@ export function SceneViewport(props: Props) {
       const wallDelta = Math.min(0.1, (now - previousWall) / 1000);
       previousWall = now;
       applyOptions();
-      playback.advance(wallDelta);
-      const bracket = playback.bracket();
-      applyPose(bracket.firstFrameIndex, bracket.secondFrameIndex, bracket.alpha);
+      driver.advance(wallDelta);
+      const interval = driver.interval();
+      applyPose(interval);
       const viewport = currentViewport();
+      rig.setFollowing(options.current.follow, viewport);
       rig.refit(viewport);
       rig.update(wallDelta, viewport);
-      updateTrack(samples.viewAt(bracket.firstFrameIndex), samples.viewAt(bracket.secondFrameIndex), bracket.alpha);
+      updateTrack(interval.first, interval.second, interval.alpha);
       updateSun();
       sky.position.copy(camera.position);
       renderer.render(threeScene, camera);
@@ -327,13 +323,13 @@ export function SceneViewport(props: Props) {
       }
       labels.update(camera, width, height, safeAreaOf(viewport), obstacles);
       const changed =
-        bracket.firstFrameIndex !== lastReportedFrameIndex || playback.playing !== lastReportedPlaying || playback.timeSeconds !== lastReportedTime;
-      if (changed && (!playback.playing || now - lastReportWall > 32 || playback.playing !== lastReportedPlaying)) {
+        interval.first !== lastReportedSample || driver.playing !== lastReportedPlaying || interval.displayTimeSeconds !== lastReportedTime;
+      if ((changed && (!driver.playing || now - lastReportWall > 32)) || now - lastReportWall > 250) {
         lastReportWall = now;
-        lastReportedFrameIndex = bracket.firstFrameIndex;
-        lastReportedPlaying = playback.playing;
-        lastReportedTime = playback.timeSeconds;
-        onDisplayFrame(bracket.firstFrameIndex, playback.timeSeconds, playback.playing);
+        lastReportedSample = interval.first;
+        lastReportedPlaying = driver.playing;
+        lastReportedTime = interval.displayTimeSeconds;
+        onDisplayFrame(interval, driver.playing);
       }
     };
     loop();
@@ -352,7 +348,7 @@ export function SceneViewport(props: Props) {
       renderer.domElement.remove();
       commands.current = null;
     };
-  }, [definition, samples, scene, playback, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, stationAt, onDisplayFrame]);
+  }, [definition, scene, driver, bindings, extents, initialPreset, options, layout, commands, contactPatchesAt, stationAt, onDisplayFrame]);
 
   return <div ref={containerRef} className="viewport" />;
 }

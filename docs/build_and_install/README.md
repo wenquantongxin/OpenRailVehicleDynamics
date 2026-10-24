@@ -1,14 +1,13 @@
 # 构建、安装与平台支持
 
-本目录是 ORVD 面向使用者和 code agent 的构建入口。共同依赖、CMake 机制和跨平台纪律只在本页
-维护；操作系统命令分别进入 [Linux](LINUX.md)、[Windows](WINDOWS.md) 和
-[macOS](MACOS.md)，避免把一台机器的绝对路径或包管理器假设带到另一台机器。
+本页说明共同依赖与构建机制。平台命令见 [Linux](LINUX.md)、[Windows](WINDOWS.md) 和
+[macOS](MACOS.md)。
 
 ## 平台与工具链
 
 | 平台 | 工具链 | 注册测试 | 验证结果 |
 |---|---|---:|---|
-| Ubuntu 24.04 x86-64 | GCC 13.3.0＋libgomp | 101 | CMake 3.28.3、Release，`101/101` |
+| Ubuntu 24.04 x86-64 | GCC 13.3.0＋libgomp | 105 | CMake 3.28.3、Release，`105/105` |
 | Ubuntu 24.04 x86-64 | Clang 20＋LLVM libomp | 历史 87 | 历史资格快照为 `87/87` |
 | Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | 99 | Windows 10 Pro，两套均 `99/99`；版本见 [Windows 手册](WINDOWS.md) |
 | macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 历史 87 | 历史资格快照两套均为 `87/87` |
@@ -24,9 +23,8 @@
 - Eigen 3.4.0、fmt 9.1.0、nlohmann/json 3.12.0、SUNDIALS 7.7.0；
 - 能被 CMake `find_package(OpenMP COMPONENTS CXX)` 找到的 OpenMP 编译语义和运行时。
 
-四个 C/C++ 依赖使用精确版本。OpenMP 属于编译器工具链，不是第五份源码归档：GCC 使用
-libgomp，Clang／AppleClang 使用 LLVM libomp。ORVD 安装包不会复制 OpenMP 动态运行时；下游
-consumer 必须使用兼容工具链，并能再次解析 `OpenMP::OpenMP_CXX`。
+四个 C/C++ 依赖使用精确版本。OpenMP 由工具链提供：GCC 使用 libgomp，Clang／AppleClang
+使用 LLVM libomp。下游需提供兼容工具链与 `OpenMP::OpenMP_CXX`。
 
 依赖版本、归档名和上游 URL 的唯一权威是
 [`distribution/dependencies/dependency_sources.cmake`](../../distribution/dependencies/dependency_sources.cmake)。
@@ -34,27 +32,24 @@ consumer 必须使用兼容工具链，并能再次解析 `OpenMP::OpenMP_CXX`�
 
 ## CMake 如何区分平台
 
-ORVD 不复制三套目标图，也不在产品算法中按操作系统维护三份实现。CMake 先识别目标系统、编译器身份
-和命令行前端，再只在确有不同语义的边界处分支：
+CMake 根据目标系统、编译器和命令行前端配置平台差异：
 
 | CMake 条件或能力 | 用途 |
 |---|---|
 | `WIN32` | 拒绝 MSVC／clang-cl 风格 frontend；当前资格支持限定为 MSYS2 UCRT64 GCC 与 CLANG64 Clang；运行期依赖检查识别 Windows API-set |
 | `UNIX`＋GNU frontend＋非交叉编译 | 注册两个直接调用本机构建编译器的开发期源码探针 |
-| `CMAKE_SYSTEM_NAME STREQUAL Linux` | 可选 SIMPACK Realtime adapter 和 state_stream 只在 Linux 构建 |
+| `CMAKE_SYSTEM_NAME STREQUAL Linux` | 可选 SIMPACK Realtime adapter 和 `state_stream` UDP 发送组件 |
 | `CMAKE_CXX_COMPILER_ID` | 选择 GNU／Clang／AppleClang 告警策略，并识别 AppleClang OpenMP forwarding |
-| `CMAKE_CXX_COMPILER_FRONTEND_VARIANT` | 区分 GNU 风格和 MSVC 风格命令行，不根据操作系统猜编译器 |
+| `CMAKE_CXX_COMPILER_FRONTEND_VARIANT` | 区分 GNU 风格和 MSVC 风格命令行 |
 | `find_package(... CONFIG REQUIRED)` | 通过 imported target 恢复 Eigen、fmt、SUNDIALS 和 JSON |
-| `find_package(OpenMP REQUIRED)` | 以能力检测得到编译旗标、头文件和运行时，不在源码中手写 |
-| `CMAKE_OSX_*` | 原生 macOS 在启用编译器前设置 arm64 目标架构，并按显式 sysroot、`SDKROOT`、`xcrun` 的顺序选择 macOS SDK，再传给离线子构建；Windows／Linux 不会收到这些参数 |
+| `find_package(OpenMP REQUIRED)` | 检测编译旗标、头文件和运行时 |
+| `CMAKE_OSX_*` | macOS 设置 arm64 目标架构，按显式 sysroot、`SDKROOT`、`xcrun` 的顺序选择 SDK，并传给离线子构建 |
 
-第一方产品代码没有 `_WIN32`、`__APPLE__` 或 `__linux__` 算法分支。少数平台条件位于构建、测试
-夹具或可选工具边界；这比让每次平台开发都改一遍数值实现更容易审查。
+`scene_stream` 编解码默认在各平台构建安装。
 
 ## 获取固定依赖归档
 
-POSIX shell 可使用以下示例。目录必须在源码树外；第三份归档在下载时直接保存为声明名称，不能
-保留上游的 `json.tar.xz` 文件名。
+POSIX shell 下载示例，归档保存在源码树外：
 
 ```sh
 export ORVD_SOURCE_ROOT=/absolute/path/OpenRailVehicleDynamics
@@ -94,10 +89,8 @@ python3 "$ORVD_SOURCE_ROOT/tools/package_distribution/assemble_source_bundle.py"
   --sundials-archive "$ORVD_ARCHIVE_ROOT/sundials-7.7.0.tar.gz"
 ```
 
-组包器要求可见的 tracked 和 untracked 状态都干净，输出目录必须位于源码树外且事先不存在。生成
-bundle 后，四份固定归档不联网、不更新、也不回退到系统同名开发包；OpenMP 是明确的工具链依赖，
-仍由 CMake 从所选 compiler/runtime 环境发现。仓库根 `tmp/` 已被 Git 忽略，
-短期放归档不会污染状态；长期工作目录仍推荐使用仓库外的 `orvd-work/archives`。
+组包要求源码工作区干净，输出目录位于源码树外且事先不存在。
+bundle 使用所附的四份依赖归档离线构建，OpenMP 由所选工具链提供。
 
 ## 两种构建入口
 
@@ -132,12 +125,11 @@ OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
 cmake --install /absolute/path/to/product-build
 ```
 
-macOS 根项目会自动选择 macOS SDK并设置 arm64 目标架构，AppleClang 会从已安装的 Homebrew libomp 公式恢复 OpenMP；
-Windows 的 compiler、Git 和路径规则仍不同，不能把这段概念命令直接当作平台页的替代。
+macOS 自动选择 SDK 和 arm64 目标架构，AppleClang 从 Homebrew libomp 获取 OpenMP。
+Windows 命令见 [Windows 手册](WINDOWS.md)。
 
-安装应使用干净的产品前缀：覆盖安装不会清除已退出公共接口的旧头文件。当前积分公共入口为
-`SystemContinuousStateAdvancer` 和 `SystemIntegrationConfiguration`，具体 CVODE 类已归源码私有；
-五种方法共用该入口，见[积分器说明](../../libs/integrators/README.md)。重定位安装门实际运行七个
+使用空目录作为安装前缀。五种积分方法共用 `SystemContinuousStateAdvancer` 和
+`SystemIntegrationConfiguration`，见[积分器说明](../../libs/integrators/README.md)。重定位安装测试运行八个
 消费者，包含五种积分方法和场景记录读写，并逐个检查运行期依赖；Drake marker 单独作阳性对照。
 
 ## 构建树和本机配置纪律
@@ -167,7 +159,7 @@ install prefix。工具链或关键 CMake 逻辑变化后，用空 build tree �
 `release` 构建目录轮换编译器。Windows 的完整验证仍以 [Windows 手册](WINDOWS.md) 的显式命令
 为入口。不要把 user preset、build 目录或依赖 prefix 提交到 Git。
 
-## 防止跨平台反复修改源码
+## 跨平台开发
 
 跨平台改动遵循以下约定：
 
@@ -177,11 +169,5 @@ install prefix。工具链或关键 CMake 逻辑变化后，用空 build tree �
 3. 一次提交若修改公共头、数值实现、OpenMP、安装导出或 CMake，应在可用平台上运行各自完整门。
 4. 分别记录配置后的测试清单、实测通过数量和验证环境，旧快照的结果标为历史记录。
 5. 平台间不要求逐位一致；同一二进制的固定槽并行合同仍必须逐位一致。
-6. 依赖来源 URL、归档名和版本决策以 `dependency_sources.cmake` 为权威；升级时同步根项目与安装
-   Config 的精确消费约束，平台文档不建立另一套版本裁决。
-7. 若将来需要远端自动阻止回归，可增加 Linux＋Windows CI matrix；macOS 仍可维持人工资格，除非
-   项目负责人改变“不建立 macOS CI”的决定。
-
-这意味着 Windows／Linux 拉取包含 macOS 支持的提交后，应只需要选择本平台工具链和新建本平台
-build tree，不应修改产品源码“改回去”。若确实需要修改源码，应该被当作可移植性缺陷修复，并由
-所有平台共同保留，而不是形成来回翻转的补丁。
+6. 依赖来源 URL、归档名和版本以 `dependency_sources.cmake` 为准；升级时同步根项目与安装
+   Config 的消费约束。

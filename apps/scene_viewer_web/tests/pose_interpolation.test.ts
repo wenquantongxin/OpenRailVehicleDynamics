@@ -19,13 +19,13 @@ test('sample endpoints preserve stored coordinates and quaternion signs exactly'
   for (const alpha of [0, 1]) {
     const expected = alpha === 0 ? first : second;
     interpolatePosition(first, second, alpha, 0, position);
-    interpolateOrientation(first, second, alpha, 0, binding, orientation);
+    interpolateOrientation(first, second, alpha, 0, [binding], orientation);
     assert.deepEqual(position.toArray(), expected.bodyPose(0).position);
     const [w, x, y, z] = expected.bodyPose(0).orientationWxyz;
     assert.deepEqual(orientation.toArray(), [x, y, z, w]);
   }
   // Separate views of the same row must not perform another interpolation.
-  interpolateOrientation(second, record.samples.viewAt(1), 0.5, 0, binding, orientation);
+  interpolateOrientation(second, record.samples.viewAt(1), 0.5, 0, [binding], orientation);
   assert.deepEqual(orientation.toArray(), [-0.5, -0.5, -0.5, -0.5]);
 });
 
@@ -50,7 +50,7 @@ for (const flipped of [false, true]) {
 
       for (const alpha of [0, 0.25, 0.5, 0.75, 1]) {
         const actual = new THREE.Quaternion();
-        interpolateOrientation(record.samples.viewAt(0), record.samples.viewAt(1), alpha, 0, binding, actual);
+        interpolateOrientation(record.samples.viewAt(0), record.samples.viewAt(1), alpha, 0, [binding], actual);
         const relative = pose(alpha).invert().multiply(actual);
         const error = 2 * Math.atan2(Math.hypot(relative.x, relative.y, relative.z), Math.abs(relative.w));
         assert.ok(error < 1e-12, `orientation error ${error} at delta=${delta}, alpha=${alpha}`);
