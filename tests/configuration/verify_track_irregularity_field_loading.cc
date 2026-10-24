@@ -133,6 +133,36 @@ void CheckIndependentNonuniformSeriesAndLifetime(
             "interval");
 }
 
+void CheckAarComponents(const std::filesystem::path& data_root,
+                        std::string_view grade, double station,
+                        double expected_gauge, double expected_roll) {
+    const std::string prefix(grade);
+    const auto complete = LoadTrackIrregularityFieldFromDataRoot(
+        data_root, prefix + "_irregularity");
+    const auto lateral_vertical = LoadTrackIrregularityFieldFromDataRoot(
+        data_root, prefix + "_lateral_vertical_irregularity");
+    Require(std::abs(complete.GaugeNarrowingMeters(station) - expected_gauge) <
+                    1e-14 &&
+                std::abs(complete.RollRadians(station) - expected_roll) < 1e-14,
+            "AAR gauge and roll do not match the exported physical channels");
+    for (const double s : {0.0, station - 0.037, station, 1200.0}) {
+        Require(complete.LateralDisplacementMeters(s) ==
+                        lateral_vertical.LateralDisplacementMeters(s) &&
+                    complete.VerticalDisplacementMeters(s) ==
+                        lateral_vertical.VerticalDisplacementMeters(s) &&
+                    complete.LateralSlopeMetersPerMeter(s) ==
+                        lateral_vertical.LateralSlopeMetersPerMeter(s) &&
+                    complete.VerticalSlopeMetersPerMeter(s) ==
+                        lateral_vertical.VerticalSlopeMetersPerMeter(s),
+                "AAR component selection changed the shared displacement series");
+        Require(lateral_vertical.GaugeNarrowingMeters(s) == 0.0 &&
+                    lateral_vertical.GaugeSlopeMetersPerMeter(s) == 0.0 &&
+                    lateral_vertical.RollRadians(s) == 0.0 &&
+                    lateral_vertical.RollSlopeRadiansPerMeter(s) == 0.0,
+                "the lateral/vertical asset acquired gauge or roll excitation");
+    }
+}
+
 void CheckGaugeAndRoll(const std::filesystem::path& data_root) {
     const auto paths = WriteValidAssets(data_root);
     const std::string manifest = ReplaceOnce(
@@ -347,6 +377,10 @@ int main(int argc, char* argv[]) {
         }
         const std::filesystem::path source_data_root = argv[1];
         const std::filesystem::path data_root = argv[2];
+        CheckAarComponents(source_data_root, "aar5", 450.0,
+                           -0.006384464714496854, -1.3781017167144373e-05);
+        CheckAarComponents(source_data_root, "aar6", 150.0,
+                           -0.0013136027358179728, 0.001840068145765628);
         CheckPublicIrregularityAsset(
             source_data_root, "aar5_irregularity", 160.0, 1100.0, 450.0,
             -0.0061332119664511799, -0.0039961637977636083);

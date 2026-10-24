@@ -39,10 +39,10 @@ The chapter answers four questions: how the station of a carrier on the line is 
 | $\Omega$ | Wheel pitch-rate scalar handed to the contact model | Creepage chapter §1 |
 | $\sigma$ | Signed wheel-profile lateral datum along the axle | Pose-reduction chapter §2 |
 | $\mathbf o_W$, $\mathbf v_o$ | Position and velocity of the wheel-profile datum | Single-wheel chapter §3.1 |
-| $y_\epsilon$, $z_\epsilon$, $y_\epsilon'$, $z_\epsilon'$, $\dot y_\epsilon$, $\dot z_\epsilon$ | Irregularity displacements, spatial slopes and time rates | Pose-reduction chapter §3.9 |
+| $y_\epsilon$, $z_\epsilon$, $Y_\epsilon'$, $z_\epsilon'$, $\dot Y_\epsilon$, $\dot z_\epsilon$ | Lateral and vertical displacements, side-specific alignment and vertical slopes, and auxiliary rates | Pose-reduction chapter §3.9 |
 | $I_T$ | Defined interval of the line | Pose-reduction chapter §3.9 |
 | $\psi_e$ | Yaw corrected by the alignment slope at $s_c$ | Pose-reduction chapter §3.9 |
-| $y_r$, $z_r$, $\phi_r$ | Lateral and vertical rail-profile datums and signed rail cant | Pose-reduction chapter §2 |
+| $y_r^\ast$, $z_r^\ast$, $\phi_r^\ast$ | Rail-profile datums and roll after gauge and roll placement | Pose-reduction chapter §2 |
 | $\mathbf o_c$, $R_{T\mathrm{rail}}$ | Placement origin and placement attitude of the rail profile | Pose-reduction chapter §3.8 |
 | $\widehat\psi_\epsilon$, $\widehat\theta_\epsilon$ | Alignment and vertical spatial-slope angles at the effective station | Pose-reduction chapter §3.8 |
 | $\varphi$, $\beta$, $d_y$, $d_z^{\uparrow}$ | The four pose scalars | Conventions §2.6 |
@@ -71,7 +71,7 @@ For a rigid wheelset $R_{TB}$ turns with the wheel, so $R_{TW}$ contains the spi
 
 An interface consists of four items: a carrier, a wheel body, one of the two sides, and an optional revolute joint. The interface of a rigid wheelset carries no revolute joint and its wheel body is the carrier body; an interface with an independently rotating wheel must name the revolute joint that attaches the wheel to the carrier, and that joint owns exactly one generalized position and one generalized velocity, see Section 2.1 of [Multibody equations of motion](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.en.md). A carrier may carry one interface on each of its two sides, and the two sides share all the carrier quantities of Sections 3 and 4.
 
-Each side has one contact model and one set of fixed geometry: the rail-profile datums $y_r$ and $z_r$, the signed rail cant $\phi_r$, the wheel-profile lateral datum $\sigma$, the nominal rolling radius $r_0$ and the pitch-correction choice of Section 3.4 of the pose-reduction chapter; the longitudinal-origin convention of the rail profile is shared by both sides. They are fixed once when the plan is constructed and none of them is state. Every interface writes exactly one body wrench per evaluation, so the number of body wrenches the plan writes equals the number of interfaces.
+Each side has one contact model and one set of fixed geometry: the nominal rail-profile datums $y_r$ and $z_r$, the signed rail cant $\phi_r$, the wheel-profile lateral datum $\sigma$, the nominal rolling radius $r_0$ and the pitch-correction choice of Section 3.4 of the pose-reduction chapter; the longitudinal-origin convention of the rail profile is shared by both sides. The nominal quantities are fixed at construction; each evaluation forms $y_r^\ast,z_r^\ast,\phi_r^\ast$ from gauge and roll. These geometric quantities are not integration states. Every interface writes exactly one body wrench per evaluation, so the number of body wrenches the plan writes equals the number of interfaces.
 
 ## 3. Projection of the carrier station
 
@@ -226,10 +226,12 @@ The quantities below are formed interface by interface, with the fixed geometry 
 
 ### 6.1 Effective yaw and effective station
 
+The side-specific alignment field is $Y_\epsilon=y_\epsilon-\varsigma g_\epsilon/2$, with $\varsigma=+1$ on the right and $-1$ on the left.
+
 The profile cross-section is selected in two stages as in Section 3.9 of the pose-reduction chapter. First the spatial slope of the lateral irregularity is sampled at the shared station $s_c$ and corrects the carrier yaw:
 
 $$
-\psi_e=\psi_w-\operatorname{SafeAtan2Ratio}\!\left(y_\epsilon'(s_c)\,\dot s_c,\ \dot s_c\right),
+\psi_e=\psi_w-\operatorname{SafeAtan2Ratio}\!\left(Y_\epsilon'(s_c)\,\dot s_c,\ \dot s_c\right),
 $$
 
 then the corrected direction selects the effective station of the side:
@@ -242,18 +244,20 @@ $\operatorname{SafeAtan2Ratio}$ is the ratio angle with a denominator floor of S
 
 ### 6.2 Sampling the irregularity
 
-The fields entering this assembly are $y_\epsilon$ and $z_\epsilon$ of Section 3.9 of the pose-reduction chapter: the natural cubic spline inside the intersection of the channel's domain with $I_T$, and zero outside; without an irregularity field all four quantities are identically zero. Apart from the one lateral slope taken at $s_c$ in Section 6.1, the displacements and both slopes of the side are sampled at the effective station: $y_\epsilon(s_e)$, $z_\epsilon(s_e)$, $y_\epsilon'(s_e)$ and $z_\epsilon'(s_e)$. Whether $s_e$ lies in $I_T$ is decided independently of $s_c$. The time rates are formed with the carrier's station rate:
+The fields entering this assembly are $y_\epsilon,z_\epsilon,g_\epsilon,\phi_\epsilon$ of Section 3.9 of the pose-reduction chapter: each component is its natural cubic spline inside the intersection of its domain with $I_T$, and zero outside. Without a field all components are zero. Apart from the side-specific alignment slope sampled at $s_c$, the four components and the alignment and vertical slopes are sampled at $s_e$. Gauge and roll form $y_r^\ast,z_r^\ast,\phi_r^\ast$ as defined in Section 2 of the pose-reduction chapter; the slopes are $Y_\epsilon'(s_e)$ and $z_\epsilon'(s_e)$. Whether $s_e$ lies in $I_T$ is decided independently of $s_c$. The auxiliary rates use the carrier station rate:
 
 $$
-\dot y_\epsilon=y_\epsilon'(s_e)\,\dot s_c,\qquad
+\dot Y_\epsilon=Y_\epsilon'(s_e)\,\dot s_c,\qquad
 \dot z_\epsilon=z_\epsilon'(s_e)\,\dot s_c.
 $$
 
-A strict chain rule would give $y_\epsilon'(s_e)\,\dot s_e$; the implementation does not form $\dot s_e$ and uses the carrier's $\dot s_c$. The two rates are auxiliary inputs formed for the downstream construction of the direction angles, paired with the carrier station rate; they are not the complete time derivatives of the values sampled at the effective station. Within the pose reduction this pairing has no further consequence: the two rates enter the pose reduction only through the ratios $\operatorname{SafeAtan2Ratio}(\dot y_\epsilon,\dot s_c)$ and $\operatorname{SafeAtan2Ratio}(\dot z_\epsilon,\dot s_c)$ of Section 3.2 of the pose-reduction chapter, whose denominator is the same $\dot s_c$, so the resulting direction angles depend only on the spatial slopes at $s_e$ and on the sign of $\dot s_c$ and whether it exceeds the floor. Nor are they a velocity of the rail material; the contact model keeps the rail material velocity at zero as in Section 2 of the single-wheel chapter.
+A strict chain rule would give $Y_\epsilon'(s_e)\,\dot s_e$; the implementation does not form $\dot s_e$ and uses the carrier's $\dot s_c$. The two rates are auxiliary inputs formed for the downstream construction of the direction angles, paired with the carrier station rate; they are not the complete time derivatives of the values sampled at the effective station. Within the pose reduction this pairing has no further consequence: the two rates enter the pose reduction only through the ratios $\operatorname{SafeAtan2Ratio}(\dot Y_\epsilon,\dot s_c)$ and $\operatorname{SafeAtan2Ratio}(\dot z_\epsilon,\dot s_c)$ of Section 3.2 of the pose-reduction chapter, whose denominator is the same $\dot s_c$, so the resulting direction angles depend only on the spatial slopes at $s_e$ and on the sign of $\dot s_c$ and whether it exceeds the floor. Nor are they a velocity of the rail material; the contact model keeps the rail material velocity at zero as in Section 2 of the single-wheel chapter.
 
 ### 6.3 Input to the pose reduction
 
-The input of Section 3 of the pose-reduction chapter is assembled here as: the carrier placement $(y_B,z_B,\phi_w,\psi_w)$, that is, the lateral and vertical coordinates of the body origin in $T$ and the two angles of the spin-free attitude; the station rate $\dot s_c$; the irregularity displacements and rates of Section 6.2; and the fixed geometry of the side. With independently rotating wheels the placement is still the carrier's, not the wheel body's, as Section 1 of the pose-reduction chapter states. $\sigma$ and the rolling radius are applied inside the reduction by Section 3.5 of that chapter and are not added to the placement in advance. The reduction returns the four pose scalars $\varphi$, $\beta$, $d_y$ and $d_z^{\uparrow}$, which are the first part of the contact input.
+The input of Section 3 of the pose-reduction chapter is assembled here as: the carrier placement $(y_B,z_B,\phi_w,\psi_w)$, that is, the lateral and vertical coordinates of the body origin in $T$ and the two angles of the spin-free attitude; the station rate $\dot s_c$; the irregularity displacements and rates of Section 6.2; and the geometry of the side after gauge and roll placement. With independently rotating wheels the placement is still the carrier's, not the wheel body's, as Section 1 of the pose-reduction chapter states. $\sigma$ and the rolling radius are applied inside the reduction by Section 3.5 of that chapter and are not added to the placement in advance. The reduction returns the four pose scalars $\varphi$, $\beta$, $d_y$ and $d_z^{\uparrow}$, which are the first part of the contact input.
+
+Roll $\phi_\epsilon$ is also passed to the contact model to form $\alpha_C=\alpha_{\mathrm{geom}}+\phi_\epsilon$, as in Section 2.8 of the conventions.
 
 ### 6.4 Rigid motion of the wheel profile
 
@@ -273,10 +277,10 @@ Geometric de-spinning and material de-spinning must be kept apart here. The atti
 The third part of the contact input is the rigid placement of the rail profile in $T$. The profile origin is first placed in the track frame at the effective station $s_e$, at the lateral and vertical coordinates datum plus irregularity displacement, and then taken into $T$:
 
 $$
-\mathbf o_c=R_{IT}^{\mathsf T}\left(\mathbf C(s_e)+R_{IT}(s_e)\begin{bmatrix}0\\ y_r+y_\epsilon(s_e)\\ z_r+z_\epsilon(s_e)\end{bmatrix}-\mathbf C(s_c)\right).
+\mathbf o_c=R_{IT}^{\mathsf T}\left(\mathbf C(s_e)+R_{IT}(s_e)\begin{bmatrix}0\\ y_r^\ast+y_\epsilon(s_e)\\ z_r^\ast+z_\epsilon(s_e)\end{bmatrix}-\mathbf C(s_c)\right).
 $$
 
-The placement attitude is the five-factor product $R_{T\mathrm{rail}}=R_{IT}^{\mathsf T}R_{IT}(s_e)\,R_z(\widehat\psi_\epsilon)\,R_y(\widehat\theta_\epsilon)\,R_x(\phi_r)$ of Section 3.8 of the pose-reduction chapter, whose two hatted angles are formed directly from the spatial slopes $y_\epsilon'(s_e)$ and $z_\epsilon'(s_e)$ at $s_e$. The longitudinal-origin convention is applied as in that section too: the profile-coordinate convention translates $\mathbf o_c$ with the wheel-body origin $\mathbf o_{\mathrm{wheel}}$ as reference and $\Delta s=s_e-s_c$ as the target longitudinal coordinate, while the track-station convention leaves $\mathbf o_c$ unchanged; the reference must be the wheel-body origin and not the datum $\mathbf o_W$, which already contains $\sigma$, for the reason given there. The complete derivation of the effective station and of the rail-profile placement is in Sections 3.8 to 3.10 of the pose-reduction chapter, and this chapter only links to it.
+The placement attitude is the five-factor product $R_{T\mathrm{rail}}=R_{IT}^{\mathsf T}R_{IT}(s_e)\,R_z(\widehat\psi_\epsilon)\,R_y(\widehat\theta_\epsilon)\,R_x(\phi_r^\ast)$ of Section 3.8 of the pose-reduction chapter, whose two hatted angles are formed directly from the spatial slopes $Y_\epsilon'(s_e)$ and $z_\epsilon'(s_e)$ at $s_e$. The longitudinal-origin convention is applied as in that section too: the profile-coordinate convention translates $\mathbf o_c$ with the wheel-body origin $\mathbf o_{\mathrm{wheel}}$ as reference and $\Delta s=s_e-s_c$ as the target longitudinal coordinate, while the track-station convention leaves $\mathbf o_c$ unchanged; the reference must be the wheel-body origin and not the datum $\mathbf o_W$, which already contains $\sigma$, for the reason given there. The complete derivation of the effective station and of the rail-profile placement is in Sections 3.8 to 3.10 of the pose-reduction chapter, and this chapter only links to it.
 
 The four pose scalars, the rail-profile placement and the rigid motion of the wheel profile together form the contact input listed in Section 2 of the single-wheel chapter, and the contact model returns the paired wrenches of zero, one or several contact patches by the algorithm of Section 6 of that chapter.
 

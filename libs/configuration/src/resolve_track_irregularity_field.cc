@@ -20,9 +20,10 @@ inline constexpr bool kAlwaysFalse = false;
 
 void ValidateFrozenTrackIrregularityIdentifier(
     std::string_view track_irregularity_identifier) {
-    constexpr std::array<std::string_view, 4> kAuthorizedIdentifiers{
+    constexpr std::array<std::string_view, 5> kAuthorizedIdentifiers{
         "aar5_irregularity", "aar6_irregularity", "erri_low_irregularity",
-        "aar6_four_channel_irregularity"};
+        "aar5_lateral_vertical_irregularity",
+        "aar6_lateral_vertical_irregularity"};
     for (const std::string_view authorized : kAuthorizedIdentifiers) {
         if (track_irregularity_identifier == authorized) {
             return;
@@ -31,7 +32,8 @@ void ValidateFrozenTrackIrregularityIdentifier(
     throw std::invalid_argument(
         "track-irregularity source resolution: frozen field identifier must "
         "select aar5_irregularity, aar6_irregularity, "
-        "aar6_four_channel_irregularity, or "
+        "aar5_lateral_vertical_irregularity, "
+        "aar6_lateral_vertical_irregularity, or "
         "erri_low_irregularity");
 }
 

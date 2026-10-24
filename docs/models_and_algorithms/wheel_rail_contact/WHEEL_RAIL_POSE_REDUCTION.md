@@ -2,11 +2,11 @@
 
 # 轮轨位姿归约与不平顺输入
 
-本篇说明 ORVD 如何把不自旋轮型面的载体在轨型系中的三维状态归约为接触几何使用的四个位姿标量：配对滚转、配对摇头、横向偏移与竖向抬升；同时说明轨道方向、高低不平顺如何进入该归约。刚性轮对路径中该载体就是轮对，独立旋转轮路径中则是车轴桥。理论模型由 [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc)、[roll_yaw_pitch.cc](../../../libs/wheel_rail_contact/src/roll_yaw_pitch.cc)、[track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) 与 [rail_gauge_datum.cc](../../../libs/wheel_rail_contact/src/rail_gauge_datum.cc) 实现。
+本篇说明 ORVD 如何把不自旋轮型面的载体在轨型系中的三维状态归约为接触几何使用的四个位姿标量：配对滚转、配对摇头、横向偏移与竖向抬升；同时说明横向、竖向、轨距与侧滚不平顺如何进入该归约。刚性轮对路径中该载体就是轮对，独立旋转轮路径中则是车轴桥。理论模型由 [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc)、[roll_yaw_pitch.cc](../../../libs/wheel_rail_contact/src/roll_yaw_pitch.cc)、[track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) 与 [rail_gauge_datum.cc](../../../libs/wheel_rail_contact/src/rail_gauge_datum.cc) 实现。
 
 ## 1. 范围
 
-归约的输入由载体放置、平面站位速率、横竖向不平顺的位移与时间变化率，以及每一侧轮轨对的固定几何量组成。源码中的输入类型名为 `WheelsetPlacement`；在独立旋转轮路径上，它承载的是车轴桥给出的不自旋型面位姿，而不是独立车轮刚体的自转姿态。输出只描述当前横截面内的相对位姿，不包含轨型面的完整刚体位姿、有效取样站位或轮轨材料点相对速度；这些量由车辆力组装层并行形成。
+归约的输入由载体放置、平面站位速率、横竖向不平顺的位移、该侧方向与高低斜率对应的速率，以及经轨距和侧滚放置后的每侧几何量组成。源码中的输入类型名为 `WheelsetPlacement`；在独立旋转轮路径上，它承载的是车轴桥给出的不自旋型面位姿，而不是独立车轮刚体的自转姿态。输出只描述当前横截面内的相对位姿，不包含轨型面的完整刚体位姿、有效取样站位或轮轨材料点相对速度；这些量由车辆力组装层并行形成。
 
 不平顺的谱与随机实现见[轨道不平顺谱及其空间随机实现](../track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md)，四个位姿标量的几何消费见[接触几何](CONTACT_GEOMETRY.md)，接触坐标系与蠕滑率见[蠕滑率与接触坐标系](CREEPAGE_AND_CONTACT_FRAME.md)。
 
@@ -23,18 +23,36 @@
 | $\phi_w,\psi_w$ | $R_{TW}$ 的 X-Z-Y 滚转与摇头 | `roll_radians`、`yaw_radians` |
 | $\dot s$ | 带符号的平面站位速率 | `track_station_rate_meters_per_second` |
 | $y_\epsilon,z_\epsilon$ | 横向与竖向不平顺位移 | `TrackIrregularity` 的位移量 |
-| $\dot y_\epsilon,\dot z_\epsilon$ | 沿车辆行进采样不平顺的时间变化率 | `TrackIrregularity` 的速率量 |
-| $\phi_r$ | 该侧带符号的轨底坡滚转 | `rail_roll_radians` |
-| $y_r,z_r$ | 轨型面原点在 $T$ 中的固定基准 | `rail_lateral_datum_meters`、`rail_vertical_datum_meters` |
+| $\dot Y_\epsilon,\dot z_\epsilon$ | 该侧方向与高低斜率乘以载体站位速率 | `TrackIrregularity` 的速率量 |
+| $\phi_r^\ast$ | 该侧轨底坡与侧滚不平顺的合成滚转 | `rail_roll_radians` |
+| $y_r^\ast,z_r^\ast$ | 经轨距与侧滚放置后的轨型面原点基准 | `rail_lateral_datum_meters`、`rail_vertical_datum_meters` |
 | $\sigma$ | 沿车轴带符号的轮型面横向基准 | `wheel_lateral_datum_meters` |
 | $r_0,r$ | 标称与俯仰修正后的滚动半径 | `nominal_rolling_radius_meters` 及其俯仰修正值 |
 | $\kappa$ | 本篇指线路平面曲率 | `curvature_radians_per_meter` |
-| $T_c$ | 轨底坡系，$R_{TT_c}=R_x(\phi_r)$ | 轨底坡横截面 |
+| $T_c$ | 轨底坡系，$R_{TT_c}=R_x(\phi_r^\ast)$ | 轨底坡横截面 |
 | $T_\ell$ | 局部切向钢轨系 | 方向、高低与轨底坡的合成姿态 |
 | $\varphi,\beta$ | 配对滚转与配对摇头（即冲角） | `ContactPoseScalars::roll_radians`、`ContactPoseScalars::yaw_radians` |
 | $d_y,d_z^{\uparrow}$ | 四标量中编码后的横向偏移与向上为正的竖向抬升 | `ContactPoseScalars::lateral_offset_meters`、`ContactPoseScalars::vertical_raise_meters` |
 | $\ell_c,v_c$ | 轨底坡系内的横、竖分离 | 编码前的中间量 |
 | $s_c,s_e$ | 共享载体站位与该侧有效型面站位 | 力组装层的站位量 |
+
+轨距不平顺 $g_\epsilon$ 以变窄为正，侧滚不平顺 $\phi_\epsilon$ 绕 $+x_T$ 为正。以 $y_r,z_r,\phi_r$ 表示名义轨型基准与轨底坡，各侧使用下列横向斜率场和放置量：
+
+$$
+Y_\epsilon=y_\epsilon-\varsigma g_\epsilon/2,\qquad
+\varsigma=\begin{cases}+1,&\text{right},\\-1,&\text{left},\end{cases}
+$$
+
+$$
+\begin{bmatrix}y_r^\ast\\z_r^\ast\end{bmatrix}
+=\begin{bmatrix}\cos\phi_\epsilon&-\sin\phi_\epsilon\\
+\sin\phi_\epsilon&\cos\phi_\epsilon\end{bmatrix}
+\begin{bmatrix}y_r\\z_r\end{bmatrix}
++\begin{bmatrix}-\varsigma g_\epsilon/2\\0\end{bmatrix},
+\qquad\phi_r^\ast=\phi_r+\phi_\epsilon.
+$$
+
+以下归约公式使用带星号的放置量。横竖平移 $y_\epsilon,z_\epsilon$ 另行叠加；轨距位移已包含在 $y_r^\ast$ 中。$Y_\epsilon$ 用于方向斜率，不重复加入位置。
 
 ## 3. 模型
 
@@ -63,7 +81,7 @@ $$
 方向与高低不平顺角分别为
 
 $$
-\psi_\epsilon=\operatorname{SafeAtan2Ratio}(\dot y_\epsilon,\dot s),
+\psi_\epsilon=\operatorname{SafeAtan2Ratio}(\dot Y_\epsilon,\dot s),
 \qquad
 \theta_\epsilon=-\operatorname{SafeAtan2Ratio}(\dot z_\epsilon,\dot s).
 $$
@@ -81,7 +99,7 @@ $$
 局部切向钢轨系为
 
 $$
-R_{TT_\ell}=R_z(\psi_\epsilon)R_y(\theta_\epsilon)R_x(\phi_r).
+R_{TT_\ell}=R_z(\psi_\epsilon)R_y(\theta_\epsilon)R_x(\phi_r^\ast).
 $$
 
 物理车轴沿不自旋轮型面系自身的横向轴，其在 $T$ 中的方向为 $\mathbf a=R_{TW}\mathbf e_2$，即
@@ -128,7 +146,7 @@ $$
 这里必须使用载体自身角 $\phi_w,\psi_w$，因为这两个杠杆属于不自旋轮型面载体，而不是轮轨相对姿态。轨型面实际基准为
 
 $$
-y_{rd}=y_r+y_\epsilon,\qquad z_{rd}=z_r+z_\epsilon.
+y_{rd}=y_r^\ast+y_\epsilon,\qquad z_{rd}=z_r^\ast+z_\epsilon.
 $$
 
 ### 3.6 分离量与配对编码
@@ -139,8 +157,8 @@ $$
 \begin{bmatrix}\ell_c\\v_c\end{bmatrix}
 =
 \begin{bmatrix}
-\cos\phi_r & \sin\phi_r\\
--\sin\phi_r & \cos\phi_r
+\cos\phi_r^\ast & \sin\phi_r^\ast\\
+-\sin\phi_r^\ast & \cos\phi_r^\ast
 \end{bmatrix}
 \begin{bmatrix}
 y_{wd}-y_{rd}\\z_{wd}-z_{rd}
@@ -184,7 +202,7 @@ $$
 这里 $R_{T\mathrm{rail}}$ 不是单独的轨底坡旋转。令 $R_{IT(s)}$ 为站位 $s$ 处轨型系到惯性系的姿态，并定义有效站位上的空间斜率角
 
 $$
-\widehat\psi_\epsilon=\operatorname{atan2}\!\left(y_\epsilon'(s_e),1\right),
+\widehat\psi_\epsilon=\operatorname{atan2}\!\left(Y_\epsilon'(s_e),1\right),
 \qquad
 \widehat\theta_\epsilon=-\operatorname{atan2}\!\left(z_\epsilon'(s_e),1\right).
 $$
@@ -196,10 +214,10 @@ R_{T\mathrm{rail}}
 =R_{IT(s_c)}^{\mathsf T}R_{IT(s_e)}
  R_z(\widehat\psi_\epsilon)
  R_y(\widehat\theta_\epsilon)
- R_x(\phi_r).
+ R_x(\phi_r^\ast).
 $$
 
-前两个因子换算两处站位的轨型系，后三个因子依次加入方向斜率、高低斜率与轨底坡。带帽角由空间斜率直接形成，不应无条件等同于 §3.2 的速率比角；前进且站位速率高于分母地板时二者才一致。
+前两个因子换算两处站位的轨型系，后三个因子依次加入方向斜率、高低斜率与轨底坡和侧滚的合成角。带帽角由空间斜率直接形成，不应无条件等同于 §3.2 的速率比角；前进且站位速率高于分母地板时二者才一致。
 
 记放置到有效站位的钢轨型面原点为 $\mathbf o_c$，轮刚体原点为 $\mathbf o_{\mathrm{wheel}}$。型面坐标约定的平移式对任意正交的 $R_{T\mathrm{rail}}$ 成立：
 
@@ -221,7 +239,7 @@ $$
 
 ### 3.9 不平顺场与有效站位
 
-横、竖向不平顺分别由独立自然三次样条 $\eta_y(s)$、$\eta_z(s)$ 表示，两者可以有不同节点和定义域。记通道定义域为闭区间 $I_q=[s_0^q,s_n^q]$，线路自身的定义区间为 $I_T$。对任一通道 $q\in\{y,z\}$，实际进入本接触组装的场为
+四个不平顺分量分别由自然三次样条 $\eta_y(s)$、$\eta_z(s)$、$\eta_g(s)$、$\eta_\phi(s)$ 表示，各分量可以有不同节点和定义域。记通道定义域为闭区间 $I_q=[s_0^q,s_n^q]$，线路自身的定义区间为 $I_T$。对任一通道 $q\in\{y,z,g,\phi\}$，实际进入本接触组装的场为
 
 $$
 q_\epsilon(s)=
@@ -237,12 +255,12 @@ q_\epsilon'(s)=
 \end{cases}
 $$
 
-不平顺包装层先在 $I_q$ 外给出零位移、零斜率，而接触组装再在 $I_T$ 外把该通道置零；这不同于底层自然样条的端值平延。属于两个闭区间的边界节点仍取样条节点值与单侧内部斜率；若在任一激活边界上的位移非零，拼接后的场在那里不连续。
+不平顺包装层先在 $I_q$ 外给出零值、零斜率，而接触组装再在 $I_T$ 外把该通道置零；这不同于底层自然样条的端值平延。属于两个闭区间的边界节点仍取样条节点值与单侧内部斜率；若在任一激活边界上的位移非零，拼接后的场在那里不连续。
 
-方向修正在共享站位 $s_c$ 单独取横向斜率；该侧的位移、两条斜率及其时间变化率随后在有效站位 $s_e$ 重新取样，并形成
+方向修正在共享站位 $s_c$ 取该侧横向斜率 $Y_\epsilon'(s_c)$；随后在有效站位 $s_e$ 取四个分量及方向、高低斜率，并形成归约所用的辅助速率
 
 $$
-\dot y_\epsilon=y_\epsilon'(s_e)\dot s,\qquad
+\dot Y_\epsilon=Y_\epsilon'(s_e)\dot s,\qquad
 \dot z_\epsilon=z_\epsilon'(s_e)\dot s.
 $$
 
@@ -250,7 +268,7 @@ $$
 
 $$
 \psi_e=\psi_w-
-\operatorname{SafeAtan2Ratio}\!\left(y_\epsilon'(s_c)\dot s,\dot s\right),
+\operatorname{SafeAtan2Ratio}\!\left(Y_\epsilon'(s_c)\dot s,\dot s\right),
 $$
 
 $$
@@ -311,7 +329,7 @@ $$
 
 - 当 $|\dot s|$ 穿过分母地板时，斜率角从零切换到 atan2 值；若分子不为零，该切换不连续。
 - atan2 在负实轴上有 $\pm\pi$ 分支。倒行时，速率零的符号也会影响所得分支，因此倒行不能简单套用前进的平直轨极限。
-- 平直轨且前进时，$\theta_\epsilon=0$、$\beta=\psi_w$；在 $\cos\psi_w>0$ 时有 $\varphi=\phi_w-\phi_r$。
+- 平直轨且前进时，$\theta_\epsilon=0$、$\beta=\psi_w$；在 $\cos\psi_w>0$ 时有 $\varphi=\phi_w-\phi_r^\ast$。
 - 不平顺在支撑交集 $I_q\cap I_T$ 的边界由零函数切换到样条；非零端值或端点斜率会产生跳变。
 - X-Z-Y 解析在 $\cos\psi=0$ 处奇异，角速率逆映射同样含这一奇异性。
 - 有效站位映射要求 $1-\kappa(y_w+\sigma\cos\psi_e)\ne0$；该分母趋近零时，横向偏置到中心线站位的局部映射发生几何奇异。
@@ -325,7 +343,7 @@ $$
 | 四标量位姿归约与配对滚转 | `BuildContactPoseScalars`，见 [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc) |
 | 纵向原点约定的施加 | `PlaceRailProfileLongitudinalOrigin`，见 [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc) |
 | X-Z-Y 姿态解析与速率映射 | `ResolveRollYawPitch` 与 `ResolveRollYawPitchRates`，见 [roll_yaw_pitch.cc](../../../libs/wheel_rail_contact/src/roll_yaw_pitch.cc) |
-| 两通道不平顺场 | `TrackIrregularityField`，见 [track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |
+| 四分量不平顺场 | `TrackIrregularityField`，见 [track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |
 | 轨距面与左右轨基准 | `ComputeRailGaugeDatum`，见 [rail_gauge_datum.cc](../../../libs/wheel_rail_contact/src/rail_gauge_datum.cc) |
 | 有效站位、型面放置与输入形成 | `WheelRailContactForcePlan::CalcAppliedForces`，见 [wheel_rail_contact_force_plan.cc](../../../libs/forces/src/wheel_rail_contact_force_plan.cc) |
 | 四标量的下游解码 | `ContactGeometrySolver::Solve`，见 [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |

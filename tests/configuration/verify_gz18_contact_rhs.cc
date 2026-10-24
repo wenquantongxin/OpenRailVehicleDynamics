@@ -100,10 +100,10 @@ TrackVerticalProfile ConstantVerticalProfile(double length_meters,
         {});
 }
 
-TrackGeometry MakeConstantGradeLine(double grade) {
+TrackGeometry MakeCantedCurveWithGrade(double grade) {
     constexpr double kLengthMeters = 2000.0;
-    return TrackGeometry(ConstantProfile(kLengthMeters, 0.0),
-                         ConstantProfile(kLengthMeters, 0.0),
+    return TrackGeometry(ConstantProfile(kLengthMeters, 1.0 / 300.0),
+                         ConstantProfile(kLengthMeters, 0.06),
                          ConstantVerticalProfile(kLengthMeters, grade), 1.5,
                          0.5);
 }
@@ -615,7 +615,7 @@ int main(int argc, char** argv) {
     }
     assembled.system().SetContinuousState(runtime_context, original_state);
 
-    // A non-zero-yaw, non-zero-grade, curved-irregularity fixture checks both
+    // A yawed, graded, canted-curve irregularity fixture checks both
     // stages of the frozen WRL/GZ18 station selection at the real force-plan
     // call site. The shared carrier station first supplies the lateral slope
     // that corrects yaw; the corrected yaw then chooses the side-specific
@@ -662,11 +662,11 @@ int main(int argc, char** argv) {
         fixture_irregularity.get();
     constexpr double kFixtureGrade = 0.02;
     const auto yawed_scenario = AssembleGz18ContactScenario(
-        vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
+        vehicle, yawed_startup, MakeCantedCurveWithGrade(kFixtureGrade),
         std::filesystem::path(argv[4]), kReferenceStationMeters,
         std::move(fixture_irregularity));
     const auto yawed_zero_field_scenario = AssembleGz18ContactScenario(
-        vehicle, yawed_startup, MakeConstantGradeLine(kFixtureGrade),
+        vehicle, yawed_startup, MakeCantedCurveWithGrade(kFixtureGrade),
         std::filesystem::path(argv[4]), kReferenceStationMeters);
     const auto* yawed_plan =
         yawed_scenario->vehicle_system().contact_force_plan();
@@ -734,8 +734,6 @@ int main(int argc, char** argv) {
         body_velocity.angular_velocity_radians_per_second();
     const auto angles = ResolveRollYawPitch(
         rotation_track_from_inertial * body_pose.rotation());
-    const auto rates = ResolveRollYawPitchRates(
-        body_omega_in_track, angles.roll_radians, angles.yaw_radians);
     const Eigen::Vector3d centerline_derivative_in_track =
         rotation_track_from_inertial *
         shared_track.centerline_derivative_in_inertial_meters_per_meter();
@@ -746,6 +744,9 @@ int main(int argc, char** argv) {
         body_velocity_in_track.x() /
         (centerline_derivative_in_track.x() +
          track_rotation_rate_in_track.cross(body_origin_in_track).x());
+    const auto rates = ResolveRollYawPitchRates(
+        body_omega_in_track - track_rotation_rate_in_track * station_rate,
+        angles.roll_radians, angles.yaw_radians);
     const double path_rate =
         shared_track.centerline_derivative_in_inertial_meters_per_meter().norm() *
         station_rate;
@@ -866,12 +867,13 @@ int main(int argc, char** argv) {
             independent_personality->rail_profile_origin_mode(),
             rail_frame.origin_track_meters,
             rail_frame.rotation_track_from_profile, body_origin_in_track,
-            effective_offset);
+            effective_station - shared_station);
         const double actual_profile_coordinate =
             (rail_frame.rotation_track_from_profile.transpose() *
              (rail_frame.origin_track_meters - body_origin_in_track))
                 .x();
-        Require(std::abs(actual_profile_coordinate - effective_offset) <
+        Require(std::abs(actual_profile_coordinate -
+                         (effective_station - shared_station)) <
                     1.0e-14,
                 "the non-zero-yaw rail origin does not satisfy the profile "
                 "coordinate invariant");

@@ -102,6 +102,34 @@ int main() {
         nominal.rail_roll_radians = (left ? 1.0 : -1.0) * std::atan(0.025);
         nominal.wheel_lateral_datum_meters = left ? -0.75 : 0.75;
         nominal.nominal_rolling_radius_meters = 0.46;
+        const auto zero = orvd::wheel_rail_contact::ApplyGaugeAndRollIrregularity(
+            nominal, side, 0.0, 0.0);
+        Require(zero.rail_lateral_datum_meters ==
+                    nominal.rail_lateral_datum_meters &&
+                    zero.rail_vertical_datum_meters ==
+                        nominal.rail_vertical_datum_meters &&
+                    zero.rail_roll_radians == nominal.rail_roll_radians,
+                "zero irregularity changed the rail placement");
+        const auto gauge = orvd::wheel_rail_contact::ApplyGaugeAndRollIrregularity(
+            nominal, side, 0.004, 0.0);
+        Require(std::abs(std::abs(gauge.rail_lateral_datum_meters) -
+                         std::abs(nominal.rail_lateral_datum_meters) + 0.002) <
+                    1e-14 &&
+                    gauge.rail_vertical_datum_meters ==
+                        nominal.rail_vertical_datum_meters &&
+                    gauge.rail_roll_radians == nominal.rail_roll_radians,
+                "positive gauge excitation must move each rail inward");
+        const auto roll = orvd::wheel_rail_contact::ApplyGaugeAndRollIrregularity(
+            nominal, side, 0.0, 0.002);
+        Require(std::abs(std::hypot(roll.rail_lateral_datum_meters,
+                                    roll.rail_vertical_datum_meters) -
+                         std::hypot(nominal.rail_lateral_datum_meters,
+                                    nominal.rail_vertical_datum_meters)) < 1e-14 &&
+                    (left ? roll.rail_vertical_datum_meters <
+                                nominal.rail_vertical_datum_meters
+                          : roll.rail_vertical_datum_meters >
+                                nominal.rail_vertical_datum_meters),
+                "positive roll must preserve radius and lower the right rail");
         const auto placed = orvd::wheel_rail_contact::ApplyGaugeAndRollIrregularity(
             nominal, side, 0.004, 0.002);
         const double expected_y =

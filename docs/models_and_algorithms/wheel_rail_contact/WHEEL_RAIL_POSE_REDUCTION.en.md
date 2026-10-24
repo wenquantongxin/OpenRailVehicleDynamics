@@ -2,11 +2,11 @@
 
 # Wheel-rail pose reduction and irregularity inputs
 
-This document explains how ORVD reduces the three-dimensional state of the non-spinning wheel-profile carrier in the track frame to the four pose scalars used by contact geometry: pair roll, pair yaw, lateral offset and vertical raise. The carrier is the wheelset on the rigid-wheelset path and the axle bridge on the independently rotating wheel path. The document also explains how alignment and vertical irregularities enter that reduction. The model is implemented by [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc), [roll_yaw_pitch.cc](../../../libs/wheel_rail_contact/src/roll_yaw_pitch.cc), [track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) and [rail_gauge_datum.cc](../../../libs/wheel_rail_contact/src/rail_gauge_datum.cc).
+This document explains how ORVD reduces the three-dimensional state of the non-spinning wheel-profile carrier in the track frame to the four pose scalars used by contact geometry: pair roll, pair yaw, lateral offset and vertical raise. The carrier is the wheelset on the rigid-wheelset path and the axle bridge on the independently rotating wheel path. The document also explains how lateral, vertical, gauge and roll irregularities enter that reduction. The model is implemented by [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc), [roll_yaw_pitch.cc](../../../libs/wheel_rail_contact/src/roll_yaw_pitch.cc), [track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) and [rail_gauge_datum.cc](../../../libs/wheel_rail_contact/src/rail_gauge_datum.cc).
 
 ## 1. Scope
 
-The reduction takes a carrier placement, a planar station rate, the lateral and vertical irregularity displacements with their time rates and the fixed geometry of one wheel-rail side. The source input type is named `WheelsetPlacement`; on the independently rotating wheel path it carries the axle bridge's non-spinning profile pose, not the independent wheel body's spin attitude. The output describes only relative pose in the current cross-section. It does not contain the full rigid pose of the rail profile, the effective sampling station or wheel-to-rail material-point velocity; the vehicle force assembly forms those quantities in parallel.
+The reduction takes a carrier placement, a planar station rate, lateral and vertical displacements, rates formed from the side-specific alignment and vertical slopes, and the geometry of one wheel-rail side after gauge and roll placement. The source input type is named `WheelsetPlacement`; on the independently rotating wheel path it carries the axle bridge's non-spinning profile pose, not the independent wheel body's spin attitude. The output describes only relative pose in the current cross-section. It does not contain the full rigid pose of the rail profile, the effective sampling station or wheel-to-rail material-point velocity; the vehicle force assembly forms those quantities in parallel.
 
 The spectrum and stochastic realization of irregularities are covered in [Track-irregularity spectra and their spatial random realization](../track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.en.md). Consumption of the four pose scalars is covered in [Contact geometry](CONTACT_GEOMETRY.en.md), and the contact frame and creepages in [Creepages and the contact frame](CREEPAGE_AND_CONTACT_FRAME.en.md).
 
@@ -23,18 +23,36 @@ The four pose scalars keep the shared symbols $\varphi,\beta,d_y,d_z^{\uparrow}$
 | $\phi_w,\psi_w$ | X-Z-Y roll and yaw resolved from $R_{TW}$ | `roll_radians`, `yaw_radians` |
 | $\dot s$ | Signed planar station rate | `track_station_rate_meters_per_second` |
 | $y_\epsilon,z_\epsilon$ | Lateral and vertical irregularity displacements | displacement fields of `TrackIrregularity` |
-| $\dot y_\epsilon,\dot z_\epsilon$ | Time rates obtained while traversing the irregularity field | rate fields of `TrackIrregularity` |
-| $\phi_r$ | Signed rail-cant roll for the selected side | `rail_roll_radians` |
-| $y_r,z_r$ | Fixed rail-profile origin datum in $T$ | `rail_lateral_datum_meters`, `rail_vertical_datum_meters` |
+| $\dot Y_\epsilon,\dot z_\epsilon$ | Side-specific alignment and vertical slopes multiplied by the carrier station rate | rate fields of `TrackIrregularity` |
+| $\phi_r^\ast$ | Rail cant plus roll irregularity for the selected side | `rail_roll_radians` |
+| $y_r^\ast,z_r^\ast$ | Rail-profile origin datum after gauge and roll placement | `rail_lateral_datum_meters`, `rail_vertical_datum_meters` |
 | $\sigma$ | Signed wheel-profile lateral datum along the axle | `wheel_lateral_datum_meters` |
 | $r_0,r$ | Nominal and pitch-corrected rolling radii | `nominal_rolling_radius_meters` and its pitch-corrected value |
 | $\kappa$ | Planar track curvature, in this document | `curvature_radians_per_meter` |
-| $T_c$ | Rail-cant frame, $R_{TT_c}=R_x(\phi_r)$ | canted rail cross-section |
+| $T_c$ | Rail-cant frame, $R_{TT_c}=R_x(\phi_r^\ast)$ | canted rail cross-section |
 | $T_\ell$ | Local tangential rail frame | combined alignment, vertical-slope and cant attitude |
 | $\varphi,\beta$ | Pair roll and pair yaw, the latter being the angle of attack | `ContactPoseScalars::roll_radians`, `ContactPoseScalars::yaw_radians` |
 | $d_y,d_z^{\uparrow}$ | Encoded lateral offset and upward-positive vertical raise in the four pose scalars | `ContactPoseScalars::lateral_offset_meters`, `ContactPoseScalars::vertical_raise_meters` |
 | $\ell_c,v_c$ | Lateral and vertical separation inside the rail-cant frame | intermediate quantity formed before the encoding |
 | $s_c,s_e$ | Shared carrier station and side-specific effective profile station | station quantities formed by force assembly |
+
+Gauge irregularity $g_\epsilon$ is positive for narrowing; roll irregularity $\phi_\epsilon$ is positive about $+x_T$. Let $y_r,z_r,\phi_r$ denote the nominal rail-profile datum and cant. Each side uses the following lateral slope field and placed geometry:
+
+$$
+Y_\epsilon=y_\epsilon-\varsigma g_\epsilon/2,\qquad
+\varsigma=\begin{cases}+1,&\text{right},\\-1,&\text{left},\end{cases}
+$$
+
+$$
+\begin{bmatrix}y_r^\ast\\z_r^\ast\end{bmatrix}
+=\begin{bmatrix}\cos\phi_\epsilon&-\sin\phi_\epsilon\\
+\sin\phi_\epsilon&\cos\phi_\epsilon\end{bmatrix}
+\begin{bmatrix}y_r\\z_r\end{bmatrix}
++\begin{bmatrix}-\varsigma g_\epsilon/2\\0\end{bmatrix},
+\qquad\phi_r^\ast=\phi_r+\phi_\epsilon.
+$$
+
+The reduction below uses the starred quantities. Lateral and vertical translations $y_\epsilon,z_\epsilon$ are added separately; gauge displacement is already included in $y_r^\ast$. $Y_\epsilon$ supplies the alignment slope and is not added again to position.
 
 ## 3. Model
 
@@ -63,7 +81,7 @@ $$
 The alignment and vertical irregularity angles are
 
 $$
-\psi_\epsilon=\operatorname{SafeAtan2Ratio}(\dot y_\epsilon,\dot s),
+\psi_\epsilon=\operatorname{SafeAtan2Ratio}(\dot Y_\epsilon,\dot s),
 \qquad
 \theta_\epsilon=-\operatorname{SafeAtan2Ratio}(\dot z_\epsilon,\dot s).
 $$
@@ -81,7 +99,7 @@ Using a ratio of rates rather than passing a spatial slope separately concentrat
 The local tangential rail attitude is
 
 $$
-R_{TT_\ell}=R_z(\psi_\epsilon)R_y(\theta_\epsilon)R_x(\phi_r).
+R_{TT_\ell}=R_z(\psi_\epsilon)R_y(\theta_\epsilon)R_x(\phi_r^\ast).
 $$
 
 The physical axle lies along the non-spinning wheel-profile frame's own lateral axis, so its direction in $T$ is $\mathbf a=R_{TW}\mathbf e_2$, that is
@@ -128,7 +146,7 @@ $$
 The carrier angles $\phi_w,\psi_w$ must be used because these lever arms belong to the non-spinning wheel-profile carrier rather than to the relative wheel-rail pose. The actual rail-profile datum is
 
 $$
-y_{rd}=y_r+y_\epsilon,\qquad z_{rd}=z_r+z_\epsilon.
+y_{rd}=y_r^\ast+y_\epsilon,\qquad z_{rd}=z_r^\ast+z_\epsilon.
 $$
 
 ### 3.6 Separation and pair encoding
@@ -139,8 +157,8 @@ $$
 \begin{bmatrix}\ell_c\\v_c\end{bmatrix}
 =
 \begin{bmatrix}
-\cos\phi_r & \sin\phi_r\\
--\sin\phi_r & \cos\phi_r
+\cos\phi_r^\ast & \sin\phi_r^\ast\\
+-\sin\phi_r^\ast & \cos\phi_r^\ast
 \end{bmatrix}
 \begin{bmatrix}
 y_{wd}-y_{rd}\\z_{wd}-z_{rd}
@@ -184,7 +202,7 @@ There are two mathematical conventions for the longitudinal origin of a rail cro
 The attitude $R_{T\mathrm{rail}}$ is not merely a rail-cant rotation. Let $R_{IT(s)}$ be the attitude from the track frame at station $s$ to the inertial frame, and define the spatial-slope angles at the effective station by
 
 $$
-\widehat\psi_\epsilon=\operatorname{atan2}\!\left(y_\epsilon'(s_e),1\right),
+\widehat\psi_\epsilon=\operatorname{atan2}\!\left(Y_\epsilon'(s_e),1\right),
 \qquad
 \widehat\theta_\epsilon=-\operatorname{atan2}\!\left(z_\epsilon'(s_e),1\right).
 $$
@@ -196,10 +214,10 @@ R_{T\mathrm{rail}}
 =R_{IT(s_c)}^{\mathsf T}R_{IT(s_e)}
  R_z(\widehat\psi_\epsilon)
  R_y(\widehat\theta_\epsilon)
- R_x(\phi_r).
+ R_x(\phi_r^\ast).
 $$
 
-The first two factors convert between the track frames at the two stations; the remaining factors add alignment slope, vertical slope and rail cant in that order. The hatted angles come directly from spatial slopes and must not be identified unconditionally with the rate-ratio angles of section 3.2. They coincide during forward travel when the station rate is above its denominator floor.
+The first two factors convert between the track frames at the two stations; the remaining factors add alignment slope, vertical slope and the combined cant and roll angle in that order. The hatted angles come directly from spatial slopes and must not be identified unconditionally with the rate-ratio angles of section 3.2. They coincide during forward travel when the station rate is above its denominator floor.
 
 Let the rail-profile origin placed at the effective station be $\mathbf o_c$, and let the wheel body origin be $\mathbf o_{\mathrm{wheel}}$. The profile-coordinate translation below holds for any orthogonal $R_{T\mathrm{rail}}$:
 
@@ -221,7 +239,7 @@ The reference must be the wheel body origin. Substituting a wheel-profile datum 
 
 ### 3.9 Irregularity field and effective station
 
-Lateral and vertical irregularities are represented by independent natural cubic splines $\eta_y(s)$ and $\eta_z(s)$; their knots and domains need not coincide. Let the closed domain of a channel be $I_q=[s_0^q,s_n^q]$ and the line's own defined interval be $I_T$. For either channel $q\in\{y,z\}$, the field that actually enters this contact assembly is
+The four components are represented by natural cubic splines $\eta_y(s)$, $\eta_z(s)$, $\eta_g(s)$ and $\eta_\phi(s)$; their knots and domains need not coincide. Let the closed domain of a channel be $I_q=[s_0^q,s_n^q]$ and the line's own defined interval be $I_T$. For each component $q\in\{y,z,g,\phi\}$, the field that actually enters this contact assembly is
 
 $$
 q_\epsilon(s)=
@@ -237,12 +255,12 @@ q_\epsilon'(s)=
 \end{cases}
 $$
 
-The irregularity wrapper first supplies zero displacement and zero slope outside $I_q$, and contact assembly independently zeros the channel outside $I_T$; this differs from the endpoint-value continuation of the underlying natural spline. At a boundary belonging to both closed intervals, it still returns the knot value and the one-sided interior slope. A nonzero value at either activation boundary therefore creates a discontinuity in the assembled field.
+The irregularity wrapper first supplies zero value and zero slope outside $I_q$, and contact assembly independently zeros the channel outside $I_T$; this differs from the endpoint-value continuation of the underlying natural spline. At a boundary belonging to both closed intervals, it still returns the knot value and the one-sided interior slope. A nonzero value at either activation boundary therefore creates a discontinuity in the assembled field.
 
-The directional correction samples the lateral slope separately at the shared station $s_c$. The side-specific displacements, both slopes and their time rates are then resampled at the effective station $s_e$, with
+The direction correction samples the side-specific alignment slope $Y_\epsilon'(s_c)$ at the shared station. The four components and the alignment and vertical slopes are then sampled at $s_e$, forming the auxiliary reduction rates
 
 $$
-\dot y_\epsilon=y_\epsilon'(s_e)\dot s,\qquad
+\dot Y_\epsilon=Y_\epsilon'(s_e)\dot s,\qquad
 \dot z_\epsilon=z_\epsilon'(s_e)\dot s.
 $$
 
@@ -250,7 +268,7 @@ The effective station depends on the shared carrier station, the corrected direc
 
 $$
 \psi_e=\psi_w-
-\operatorname{SafeAtan2Ratio}\!\left(y_\epsilon'(s_c)\dot s,\dot s\right),
+\operatorname{SafeAtan2Ratio}\!\left(Y_\epsilon'(s_c)\dot s,\dot s\right),
 $$
 
 $$
@@ -311,7 +329,7 @@ The reduction itself contains a constant number of trigonometric operations, dot
 
 - When $|\dot s|$ crosses the denominator floor, a slope angle switches between zero and its atan2 value; this switch is discontinuous when the numerator is nonzero.
 - atan2 has a $\pm\pi$ branch on the negative real axis. During reverse travel, even the sign bit of a zero rate can select a different branch, so the forward smooth-track limit cannot simply be reused.
-- On smooth track during forward travel, $\theta_\epsilon=0$ and $\beta=\psi_w$; when $\cos\psi_w>0$, $\varphi=\phi_w-\phi_r$.
+- On smooth track during forward travel, $\theta_\epsilon=0$ and $\beta=\psi_w$; when $\cos\psi_w>0$, $\varphi=\phi_w-\phi_r^\ast$.
 - Each irregularity channel switches between the zero function and its spline at a boundary of the support intersection $I_q\cap I_T$; a nonzero endpoint value or slope creates a jump.
 - X-Z-Y resolution is singular at $\cos\psi=0$, and the inverse rate map contains the same singularity.
 - The effective-station map requires $1-\kappa(y_w+\sigma\cos\psi_e)\ne0$; as this denominator approaches zero, the local map from transverse offset to centerline station becomes geometrically singular.
@@ -325,7 +343,7 @@ The reduction itself contains a constant number of trigonometric operations, dot
 | Four-scalar pose reduction and pair roll | `BuildContactPoseScalars`, in [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc) |
 | Application of the longitudinal-origin convention | `PlaceRailProfileLongitudinalOrigin`, in [wheel_rail_pose.cc](../../../libs/wheel_rail_contact/src/wheel_rail_pose.cc) |
 | X-Z-Y attitude resolution and rate map | `ResolveRollYawPitch` and `ResolveRollYawPitchRates`, in [roll_yaw_pitch.cc](../../../libs/wheel_rail_contact/src/roll_yaw_pitch.cc) |
-| Two-channel irregularity field | `TrackIrregularityField`, in [track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |
+| Four-component irregularity field | `TrackIrregularityField`, in [track_irregularity_field.cc](../../../libs/wheel_rail_contact/src/track_irregularity_field.cc) |
 | Gauge face and left/right rail datums | `ComputeRailGaugeDatum`, in [rail_gauge_datum.cc](../../../libs/wheel_rail_contact/src/rail_gauge_datum.cc) |
 | Effective station, profile placement and input construction | `WheelRailContactForcePlan::CalcAppliedForces`, in [wheel_rail_contact_force_plan.cc](../../../libs/forces/src/wheel_rail_contact_force_plan.cc) |
 | Downstream decoding of the four scalars | `ContactGeometrySolver::Solve`, in [contact_geometry.cc](../../../libs/wheel_rail_contact/src/contact_geometry.cc) |

@@ -39,10 +39,10 @@
 | $\Omega$ | 交给接触模型的车轮俯仰率标量 | 蠕滑篇 §1 |
 | $\sigma$ | 沿车轴带符号的轮型面横向基准 | 位姿归约篇 §2 |
 | $\mathbf o_W$、$\mathbf v_o$ | 轮型面基准点的位置与速度 | 单轮篇 §3.1 |
-| $y_\epsilon$、$z_\epsilon$、$y_\epsilon'$、$z_\epsilon'$、$\dot y_\epsilon$、$\dot z_\epsilon$ | 不平顺位移、空间斜率与时间变化率 | 位姿归约篇 §3.9 |
+| $y_\epsilon$、$z_\epsilon$、$Y_\epsilon'$、$z_\epsilon'$、$\dot Y_\epsilon$、$\dot z_\epsilon$ | 横竖位移、该侧方向与高低斜率及其辅助速率 | 位姿归约篇 §3.9 |
 | $I_T$ | 线路的定义区间 | 位姿归约篇 §3.9 |
 | $\psi_e$ | 以 $s_c$ 处方向斜率修正后的摇头 | 位姿归约篇 §3.9 |
-| $y_r$、$z_r$、$\phi_r$ | 钢轨型面的横、竖基准与带符号轨底坡 | 位姿归约篇 §2 |
+| $y_r^\ast$、$z_r^\ast$、$\phi_r^\ast$ | 经轨距与侧滚放置后的钢轨型面横竖基准与滚转 | 位姿归约篇 §2 |
 | $\mathbf o_c$、$R_{T\mathrm{rail}}$ | 钢轨型面的放置原点与放置姿态 | 位姿归约篇 §3.8 |
 | $\widehat\psi_\epsilon$、$\widehat\theta_\epsilon$ | 有效站位上的方向与高低空间斜率角 | 位姿归约篇 §3.8 |
 | $\varphi$、$\beta$、$d_y$、$d_z^{\uparrow}$ | 四个位姿标量 | 基座 §2.6 |
@@ -71,7 +71,7 @@ $$
 
 接口由四项组成：一个载体、一个车轮刚体、左右侧之一、一个可选的回转副。刚性轮对的接口不带回转副，其车轮刚体就是载体刚体；带独立旋转车轮的接口必须命名把车轮连到载体的回转副，该回转副恰有一个广义位置与一个广义速度，见[整车多体动力学方程](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.md)第 2.1 节。一个载体的左右两侧各可带一个接口，两侧共用第 3 节与第 4 节的全部载体量。
 
-每一侧各有一个接触模型与一组固定几何量：钢轨型面基准 $y_r$、$z_r$，带符号轨底坡 $\phi_r$，轮型面横向基准 $\sigma$，标称滚动半径 $r_0$ 与位姿归约篇第 3.4 节的俯仰修正选择；钢轨型面纵向原点约定对两侧共用。它们随计划构造一次确定，都不是状态。每个接口在每次求值中恰写出一条体扳手，因此计划写出的体扳手条数等于接口数。
+每一侧各有一个接触模型与一组名义几何量：钢轨型面基准 $y_r$、$z_r$，带符号轨底坡 $\phi_r$，轮型面横向基准 $\sigma$，标称滚动半径 $r_0$ 与位姿归约篇第 3.4 节的俯仰修正选择；钢轨型面纵向原点约定对两侧共用。名义量随计划构造一次确定；每次求值再由轨距与侧滚形成放置量 $y_r^\ast,z_r^\ast,\phi_r^\ast$。这些几何量均不是积分状态。每个接口在每次求值中恰写出一条体扳手，因此计划写出的体扳手条数等于接口数。
 
 ## 3. 载体站位投影
 
@@ -226,10 +226,10 @@ $$
 
 ### 6.1 有效摇头与有效站位
 
-型面横截面按位姿归约篇第 3.9 节分两阶段选取。先在共享站位 $s_c$ 取横向不平顺的空间斜率，修正载体摇头：
+型面横截面按位姿归约篇第 3.9 节分两阶段选取。先在共享站位 $s_c$ 取该侧横向斜率 $Y_\epsilon'=y_\epsilon'-\varsigma g_\epsilon'/2$（右侧 $\varsigma=+1$，左侧 $-1$），修正载体摇头：
 
 $$
-\psi_e=\psi_w-\operatorname{SafeAtan2Ratio}\!\left(y_\epsilon'(s_c)\,\dot s_c,\ \dot s_c\right),
+\psi_e=\psi_w-\operatorname{SafeAtan2Ratio}\!\left(Y_\epsilon'(s_c)\,\dot s_c,\ \dot s_c\right),
 $$
 
 再由修正后的方向选出该侧的有效站位：
@@ -242,18 +242,18 @@ $\operatorname{SafeAtan2Ratio}$ 是位姿归约篇第 3.2 节带分母地板的�
 
 ### 6.2 不平顺取样
 
-进入本装配的场是位姿归约篇第 3.9 节的 $y_\epsilon$、$z_\epsilon$：在各通道定义域与 $I_T$ 的交集内取自然三次样条，其外取零；没有不平顺场时四个量恒为零。除第 6.1 节在 $s_c$ 取的一条横向斜率外，该侧的位移与两条斜率都在有效站位取样：$y_\epsilon(s_e)$、$z_\epsilon(s_e)$、$y_\epsilon'(s_e)$、$z_\epsilon'(s_e)$。$s_e$ 是否在 $I_T$ 内与 $s_c$ 分别判定。时间变化率以载体站位速率形成：
+进入本装配的场是位姿归约篇第 3.9 节的 $y_\epsilon$、$z_\epsilon$、$g_\epsilon$、$\phi_\epsilon$：在各通道定义域与 $I_T$ 的交集内取自然三次样条，其外取零；没有不平顺场时四个量恒为零。除第 6.1 节在 $s_c$ 取的一条横向斜率外，四个分量与该侧方向、高低斜率均在 $s_e$ 取样。轨距与侧滚按位姿归约篇第 2 节形成 $y_r^\ast,z_r^\ast,\phi_r^\ast$，方向斜率取 $Y_\epsilon'(s_e)$，高低斜率取 $z_\epsilon'(s_e)$。$s_e$ 是否在 $I_T$ 内与 $s_c$ 分别判定。时间变化率以载体站位速率形成：
 
 $$
-\dot y_\epsilon=y_\epsilon'(s_e)\,\dot s_c,\qquad
+\dot Y_\epsilon=Y_\epsilon'(s_e)\,\dot s_c,\qquad
 \dot z_\epsilon=z_\epsilon'(s_e)\,\dot s_c.
 $$
 
-严格的链式法则会给出 $y_\epsilon'(s_e)\,\dot s_e$；实现不形成 $\dot s_e$，而用载体的 $\dot s_c$。这两条变化率是为下游方向角构造而形成的辅助输入，与载体站位速率配对，不是有效站位取样值的完整时间导数。在位姿归约之内这一配对没有额外后果：这两条变化率只以位姿归约篇第 3.2 节的比值 $\operatorname{SafeAtan2Ratio}(\dot y_\epsilon,\dot s_c)$、$\operatorname{SafeAtan2Ratio}(\dot z_\epsilon,\dot s_c)$ 进入位姿归约，其分母正是同一个 $\dot s_c$，所以所得方向角只依赖 $s_e$ 处的空间斜率以及 $\dot s_c$ 的符号与其是否高于地板。它们也不是钢轨材料点的速度；接触模型仍按单轮篇第 2 节取钢轨材料速度为零。
+严格的链式法则会给出 $Y_\epsilon'(s_e)\,\dot s_e$；实现不形成 $\dot s_e$，而用载体的 $\dot s_c$。这两条辅助速率用于下游方向角构造，与载体站位速率配对，不是有效站位取样值的完整时间导数。在位姿归约之内这一配对没有额外后果：这两条辅助速率只以位姿归约篇第 3.2 节的比值 $\operatorname{SafeAtan2Ratio}(\dot Y_\epsilon,\dot s_c)$、$\operatorname{SafeAtan2Ratio}(\dot z_\epsilon,\dot s_c)$ 进入位姿归约，其分母正是同一个 $\dot s_c$，所以所得方向角只依赖 $s_e$ 处的空间斜率以及 $\dot s_c$ 的符号与其是否高于地板。它们也不是钢轨材料点的速度；接触模型仍按单轮篇第 2 节取钢轨材料速度为零。
 
 ### 6.3 位姿归约的输入
 
-位姿归约篇第 3 节的输入在此装配为：载体放置 $(y_B,z_B,\phi_w,\psi_w)$，即体原点在 $T$ 中的横竖坐标与去自转姿态的两个角；站位速率 $\dot s_c$；第 6.2 节的不平顺位移与变化率；该侧的固定几何量。带独立旋转车轮时放置仍取载体的量，不取车轮刚体的，位姿归约篇第 1 节已说明这一点。$\sigma$ 与滚动半径在归约内部按该篇第 3.5 节施加，这里不预先加到放置上。归约输出四个位姿标量 $\varphi$、$\beta$、$d_y$、$d_z^{\uparrow}$，是接触输入的第一部分。
+位姿归约篇第 3 节的输入在此装配为：载体放置 $(y_B,z_B,\phi_w,\psi_w)$，即体原点在 $T$ 中的横竖坐标与去自转姿态的两个角；站位速率 $\dot s_c$；第 6.2 节的不平顺位移与变化率；该侧经轨距与侧滚放置后的几何量。带独立旋转车轮时放置仍取载体的量，不取车轮刚体的，位姿归约篇第 1 节已说明这一点。$\sigma$ 与滚动半径在归约内部按该篇第 3.5 节施加，这里不预先加到放置上。归约输出四个位姿标量 $\varphi$、$\beta$、$d_y$、$d_z^{\uparrow}$，是接触输入的第一部分。侧滚 $\phi_\epsilon$ 同时传给接触模型，用于合成接触坐标系角 $\alpha_C=\alpha_{\mathrm{geom}}+\phi_\epsilon$，见基座第 2.8 节。
 
 ### 6.4 轮型面刚体运动
 
@@ -273,10 +273,10 @@ $$
 接触输入的第三部分是钢轨型面在 $T$ 中的刚体放置。型面原点先放在有效站位 $s_e$ 的轨型系中、横竖坐标为基准加不平顺位移之处，再换到 $T$：
 
 $$
-\mathbf o_c=R_{IT}^{\mathsf T}\left(\mathbf C(s_e)+R_{IT}(s_e)\begin{bmatrix}0\\ y_r+y_\epsilon(s_e)\\ z_r+z_\epsilon(s_e)\end{bmatrix}-\mathbf C(s_c)\right).
+\mathbf o_c=R_{IT}^{\mathsf T}\left(\mathbf C(s_e)+R_{IT}(s_e)\begin{bmatrix}0\\ y_r^\ast+y_\epsilon(s_e)\\ z_r^\ast+z_\epsilon(s_e)\end{bmatrix}-\mathbf C(s_c)\right).
 $$
 
-放置姿态是位姿归约篇第 3.8 节的五因子乘积 $R_{T\mathrm{rail}}=R_{IT}^{\mathsf T}R_{IT}(s_e)\,R_z(\widehat\psi_\epsilon)\,R_y(\widehat\theta_\epsilon)\,R_x(\phi_r)$，其中两个带帽角由 $s_e$ 处的空间斜率 $y_\epsilon'(s_e)$、$z_\epsilon'(s_e)$ 直接形成。纵向原点约定也按该节施加：型面坐标约定以车轮刚体原点 $\mathbf o_{\mathrm{wheel}}$ 为参照、以 $\Delta s=s_e-s_c$ 为目标纵向坐标平移 $\mathbf o_c$，轨道站位约定保持 $\mathbf o_c$ 不变；参照点必须是车轮刚体原点而不是已含 $\sigma$ 的基准 $\mathbf o_W$，理由见该节。有效站位与钢轨型面放置的完整推导在位姿归约篇第 3.8 节到第 3.10 节，本篇只链接。
+放置姿态是位姿归约篇第 3.8 节的五因子乘积 $R_{T\mathrm{rail}}=R_{IT}^{\mathsf T}R_{IT}(s_e)\,R_z(\widehat\psi_\epsilon)\,R_y(\widehat\theta_\epsilon)\,R_x(\phi_r^\ast)$，其中两个带帽角由 $s_e$ 处的空间斜率 $Y_\epsilon'(s_e)$、$z_\epsilon'(s_e)$ 直接形成。纵向原点约定也按该节施加：型面坐标约定以车轮刚体原点 $\mathbf o_{\mathrm{wheel}}$ 为参照、以 $\Delta s=s_e-s_c$ 为目标纵向坐标平移 $\mathbf o_c$，轨道站位约定保持 $\mathbf o_c$ 不变；参照点必须是车轮刚体原点而不是已含 $\sigma$ 的基准 $\mathbf o_W$，理由见该节。有效站位与钢轨型面放置的完整推导在位姿归约篇第 3.8 节到第 3.10 节，本篇只链接。
 
 四个位姿标量、钢轨型面放置与轮型面刚体运动合起来就是单轮篇第 2 节列出的接触输入，接触模型按该篇第 6 节的算法给出零个、一个或多个接触斑的成对扳手。
 

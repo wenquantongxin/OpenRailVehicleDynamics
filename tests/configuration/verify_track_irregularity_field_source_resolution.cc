@@ -58,11 +58,12 @@ void CheckFrozenSource(const std::filesystem::path& data_root) {
         std::string_view identifier;
         std::array<double, 3> comparison_stations_meters;
     };
-    constexpr std::array<FrozenFixture, 4> fixtures{{
+    constexpr std::array<FrozenFixture, 5> fixtures{{
         {"aar5_irregularity", {160.1, 450.0, 1099.9}},
         {"aar6_irregularity", {50.1, 150.0, 299.9}},
         {"erri_low_irregularity", {50.1, 250.0, 499.9}},
-        {"aar6_four_channel_irregularity", {50.1, 150.0, 299.9}},
+        {"aar5_lateral_vertical_irregularity", {160.1, 450.0, 1099.9}},
+        {"aar6_lateral_vertical_irregularity", {50.1, 150.0, 299.9}},
     }};
 
     for (const FrozenFixture& fixture : fixtures) {

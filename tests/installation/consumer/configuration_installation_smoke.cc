@@ -305,6 +305,32 @@ int main(int argc, char* argv[]) {
         // personality its direct RHS consumes.
         const auto startup =
             orvd::configuration::LoadResolvedStartupStateFromJsonFile(argv[3]);
+        for (const std::string_view grade : {"aar5", "aar6"}) {
+            const std::string prefix(grade);
+            const double station = grade == "aar5" ? 450.0 : 150.0;
+            const auto complete =
+                orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
+                    argv[4], prefix + "_irregularity");
+            const auto lateral_vertical =
+                orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
+                    argv[4], prefix + "_lateral_vertical_irregularity");
+            if (!std::isfinite(complete.GaugeNarrowingMeters(station)) ||
+                !std::isfinite(complete.RollRadians(station)) ||
+                !std::isfinite(complete.GaugeSlopeMetersPerMeter(station)) ||
+                !std::isfinite(complete.RollSlopeRadiansPerMeter(station)) ||
+                complete.GaugeNarrowingMeters(station) == 0.0 ||
+                complete.RollRadians(station) == 0.0 ||
+                lateral_vertical.GaugeNarrowingMeters(station) != 0.0 ||
+                lateral_vertical.RollRadians(station) != 0.0 ||
+                complete.LateralDisplacementMeters(station) !=
+                    lateral_vertical.LateralDisplacementMeters(station) ||
+                complete.VerticalDisplacementMeters(station) !=
+                    lateral_vertical.VerticalDisplacementMeters(station)) {
+                std::fprintf(stderr,
+                             "installed AAR component bindings are invalid\n");
+                return 1;
+            }
+        }
         const auto aar6_irregularity =
             orvd::configuration::LoadTrackIrregularityFieldFromDataRoot(
                 argv[4], "aar6_irregularity");
