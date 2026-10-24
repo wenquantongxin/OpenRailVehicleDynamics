@@ -47,15 +47,15 @@ SIMPACK serves as the vehicle-level reference. Wheel–rail forces are summed pe
 | Vehicle | Mechanical topology | Case | Reference solver |
 |---|---|---|---|
 | GZ18 | 17 bodies, four rigid wheelsets | Tangent track + AAR6, 60 km/h, 20 s | SIMPACK Time Integration with Measurements |
-| GZ18 | 17 bodies, four rigid wheelsets | R300 + AAR5, 60 km/h, 16 s | SIMPACK Time Integration with Measurements |
-| IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, zero-torque passive, 60 km/h, 30 s | SIMPACK Time Integration with Measurements |
-| IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, 100 Hz full-state controlled, 60 km/h, 30 s | SIMPACK Realtime |
+| GZ18 | 17 bodies, four rigid wheelsets | R300 + AAR5, 60 km/h, 50 s | SIMPACK Time Integration with Measurements |
+| IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, zero-torque passive, 60 km/h, 50 s | SIMPACK Time Integration with Measurements |
+| IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, 100 Hz full-state controlled, 60 km/h, 50 s | SIMPACK Realtime |
 
 ### GZ18: rigid-wheelset vehicle
 
-The 109-dimensional continuous state of GZ18 covers the carbody, two bogie frames, four rigid wheelsets, the suspension force elements and eight wheel–rail contacts. After entering the R300 curve, the steady offset, the difference between the leading and trailing bogies and the response to the AAR5 excitation agree on all four wheelsets, which shows that track geometry, superelevation, profiles and vehicle dynamics close in one time series.
+The 109-dimensional continuous state of GZ18 covers the carbody, two bogie frames, four rigid wheelsets, the suspension force elements and eight wheel–rail contacts. The figure shows lateral and yaw responses of all four wheelsets through the initial tangent, entry transition, circular curve, exit transition and final tangent.
 
-![GZ18 R300 AAR5 16 s wheelset lateral displacement and yaw comparison](docs/figures/gz18/gz18_r300_aar5_16s_wheelset_response.png)
+![GZ18 R300 AAR5 50 s wheelset lateral displacement and yaw comparison](docs/figures/gz18/gz18_r300_aar5_50s_wheelset_response.png)
 
 <details>
 <summary><strong>Expand: GZ18 tangent-track case, accuracy overview and all-wheel three-component wheel–rail forces</strong></summary>
@@ -68,10 +68,8 @@ The 109-dimensional continuous state of GZ18 covers the carbody, two bogie frame
 
 | Case | Lateral (µm) | Yaw (µrad) | `N` (kN) | `Tx` (kN) | `Ty` (kN) |
 |---|---:|---:|---:|---:|---:|
-| Tangent track + AAR6 | `15.16–19.02 / 66.08` | `5.20–6.57 / 33.38` | `0.654 / 12.320` | `0.080 / 1.617` | `0.055 / 1.348` |
-| R300 + AAR5 | `7.43–8.94 / 56.76` | `3.73–5.46 / 40.44` | `0.540 / 22.372` | `0.105 / 4.128` | `0.115 / 4.881` |
-
-The maximum force differences of the R300 case concentrate in point-like wheel–rail force spikes during the AAR5 fade-in; the RMS values show that the main response over the full series stays within sub-kilonewton differences.
+| Tangent track + AAR6 | `14.01–22.00 / 126.43` | `5.44–6.58 / 36.48` | `0.669 / 17.702` | `0.094 / 1.607` | `0.059 / 1.274` |
+| R300 + AAR5 | `26.16–33.78 / 187.47` | `13.16–15.54 / 132.02` | `0.798 / 44.230` | `0.184 / 8.353` | `0.166 / 10.623` |
 
 **All-wheel three-component wheel–rail forces**
 
@@ -81,41 +79,35 @@ Tangent track + AAR6:
 
 R300 + AAR5:
 
-![GZ18 R300 AAR5 16 s all-wheel three-component wheel–rail force comparison](docs/figures/gz18/gz18_r300_aar5_16s_wheel_force_response.png)
+![GZ18 R300 AAR5 50 s all-wheel three-component wheel–rail force comparison](docs/figures/gz18/gz18_r300_aar5_50s_wheel_force_response.png)
 
 </details>
 
 ### IRW: independently rotating wheel vehicle
 
-The 157-dimensional continuous state of IRW contains four axle bridges and eight independently rotating wheels. Without the wheel-speed constraint of a rigid wheelset, the flange–rail boundary, track irregularity and active wheel-speed guidance form dynamic modes that differ markedly from a conventional wheelset vehicle. With full-state wheel-speed guidance and torque shaping engaged on the same vehicle, the figure shows the axle-bridge lateral and yaw response under 100 Hz closed-loop control.
+The 157-dimensional continuous state of IRW contains four axle bridges and eight independently rotating wheels. No drive torque is applied to any wheel throughout the run. The figure shows the axle-bridge lateral and yaw response on the R300 curve under AAR5 excitation.
 
-![IRW 100 Hz controlled 30 s axle-bridge lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_30s_axlebridge_response.png)
+![IRW R300 AAR5 passive 50 s axle-bridge lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_50s_axlebridge_response.png)
 
 <details>
-<summary><strong>Expand: IRW zero-torque passive case, accuracy overview and all-wheel three-component wheel–rail forces</strong></summary>
+<summary><strong>Expand full comparison</strong></summary>
 
-**Zero-torque passive run**: no drive torque is applied to any of the eight wheels throughout. The figure shows the axle-bridge lateral and yaw response of the independently rotating wheels on the R300 curve under AAR5 excitation, and how closely ORVD and SIMPACK reproduce the natural evolution.
+**Zero-torque passive: wheel–rail forces**
 
-![IRW R300 AAR5 passive 30 s axle-bridge lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_30s_axlebridge_response.png)
+![IRW R300 AAR5 passive 50 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_50s_wheel_force_response.png)
+
+**100 Hz full-state control**: the vehicle uses full-state wheel-speed guidance and torque shaping.
+
+![IRW 100 Hz controlled 50 s axle-bridge lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_axlebridge_response.png)
+
+![IRW 100 Hz controlled 50 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_wheel_force_response.png)
 
 **Accuracy overview**: each cell lists RMS / maximum difference; kinematic RMS values give the range over the four axle bridges.
 
 | Case | Lateral (mm) | Yaw (mrad) | `N` (kN) | `Tx` (kN) | `Ty` (kN) |
 |---|---:|---:|---:|---:|---:|
-| Zero-torque passive | `0.010–0.023 / 0.366` | `0.015–0.023 / 0.236` | `0.169 / 13.674` | `0.030 / 1.665` | `0.077 / 8.497` |
-| 100 Hz full-state controlled | `0.067–0.273 / 3.144` | `0.060–0.169 / 1.525` | `3.667 / 198.480` | `0.414 / 13.679` | `0.990 / 45.294` |
-
-In the zero-torque passive case the lateral and yaw RMS values stay within `0.023 mm` and `0.023 mrad`; in the closed-loop case the lateral and yaw responses also close axle by axle, while force spikes at discrete contact transitions still set the global maximum differences.
-
-**All-wheel three-component wheel–rail forces**
-
-Zero-torque passive:
-
-![IRW R300 AAR5 passive 30 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_30s_wheel_force_response.png)
-
-100 Hz full-state controlled:
-
-![IRW 100 Hz controlled 30 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_30s_wheel_force_response.png)
+| Zero-torque passive | `0.079–0.241 / 4.169` | `0.077–0.193 / 1.931` | `9.170 / 288.691` | `0.778 / 37.055` | `2.142 / 66.533` |
+| 100 Hz full-state controlled | `2.956–3.592 / 22.962` | `1.323–2.724 / 23.125` | `12.488 / 405.409` | `1.604 / 37.934` | `4.880 / 93.233` |
 
 </details>
 

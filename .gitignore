@@ -37,6 +37,19 @@ __pycache__/
 # take part in acceptance.
 *.npz
 
+# Binary artifacts; retain PNGs linked directly from README files.
+*.bin
+*.png
+!/apps/scene_viewer_web/screenshots/irw_r300_overview.png
+!/docs/figures/gz18/gz18_aar6_20s_wheel_force_response.png
+!/docs/figures/gz18/gz18_aar6_20s_wheelset_response.png
+!/docs/figures/gz18/gz18_r300_aar5_50s_wheel_force_response.png
+!/docs/figures/gz18/gz18_r300_aar5_50s_wheelset_response.png
+!/docs/figures/irw/irw_r300_aar5_50s_axlebridge_response.png
+!/docs/figures/irw/irw_r300_aar5_50s_wheel_force_response.png
+!/docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_axlebridge_response.png
+!/docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_wheel_force_response.png
+
 # SIMPACK generated solver metadata and result databases.
 *.intinfo
 *.licreq.log
