@@ -47,7 +47,7 @@ npm run serve -- --bundle demo=/absolute/path/to/record-or-bundle
 ## 记录与显示
 
 记录格式见 [scene_record](../../libs/scene_record/README.md)。
-IRW 被动运行器使用 `--scene-record` 导出 `scene_record/`，命令参数见
+GZ18 与 IRW 被动运行器使用 `--scene-record` 导出 `scene_record/`，命令参数见
 [运行工具说明](../../tools/dynamics_qualification/README.md)。
 
 车辆外观与角色由记录中的视觉定义指定，IRW 与 GZ18 共用查看器。

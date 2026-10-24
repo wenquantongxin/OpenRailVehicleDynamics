@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
     orvd::dynamics_qualification::internal::QualificationCliOptions options;
     try {
         options = orvd::dynamics_qualification::internal::ParseQualificationCliOptions(
-            argc, argv);
+            argc, argv, true);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 2;
@@ -42,11 +42,12 @@ int main(int argc, char** argv) {
             stderr,
             "usage: orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE "
             "DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS [--integration-config PATH]\n");
+            "SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record]\n");
         return 2;
     }
     orvd::dynamics_qualification::Gz18QualificationRunConfiguration config;
     config.integration_config_path = options.integration_config_path;
+    config.publish_scene_record = options.publish_scene_record;
     config.vehicle_definition_path = argv[1];
     config.resolved_startup_state_path = argv[2];
     config.track_geometry_path = argv[3];
@@ -69,6 +70,11 @@ int main(int argc, char** argv) {
             summary.sample_count, summary.advance_wall_seconds,
             summary.observation_wall_seconds,
             summary.data_and_metadata_write_wall_seconds);
+        if (config.publish_scene_record) {
+            std::printf("scene record: %zu frames in %.6f s\n",
+                        summary.scene_record_frame_count,
+                        summary.scene_record_wall_seconds);
+        }
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "GZ18 qualification failed: %s\n", error.what());

@@ -8,7 +8,7 @@ not installed and do not define another simulation or solver API.
 The three executables keep their positional arguments:
 
 ```text
-orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS [--integration-config PATH]
+orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record]
 orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_ID_OR_NONE OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record]
 orvd_irw_r300_aar5_v60_100hz_full_state_guidance VEHICLE STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER OUTPUT_DIRECTORY DURATION_NS [--integration-config PATH]
 ```
@@ -71,7 +71,7 @@ by the runtime. Sampling does not add integration stops.
 
 Each successful run publishes `metadata.json`, `performance.json`,
 `continuous_states.tsv`, `observations.tsv`, `contact_patches.tsv`, and
-`COMPLETE`. Controlled runs also publish `control_events.tsv`. The IRW passive
+`COMPLETE`. Controlled runs also publish `control_events.tsv`. The GZ18 and IRW passive
 `--scene-record` option publishes `scene_record/` from the same observation
 samples; it does not change integration stops or the scene format.
 

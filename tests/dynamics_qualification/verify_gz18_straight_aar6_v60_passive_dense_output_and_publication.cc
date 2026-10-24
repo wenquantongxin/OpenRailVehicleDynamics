@@ -19,6 +19,7 @@
 #include "atomic_qualification_directory.h"
 #include "gz18_qualification_runner.h"
 #include "qualification_sample_clock.h"
+#include "scene_record_checks.h"
 #include "station_series_projection.h"
 
 namespace {
@@ -543,6 +544,19 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
         configuration.output_directory / "observations.tsv");
     const std::string serial_patches = ReadWholeFile(
         configuration.output_directory / "contact_patches.tsv");
+    auto recorded_configuration = configuration;
+    recorded_configuration.output_directory = root / "real-gz18-recorded";
+    recorded_configuration.publish_scene_record = true;
+    const auto recorded = RunGz18Qualification(recorded_configuration);
+    Require(recorded.scene_record_frame_count == summary.sample_count &&
+                SameTrajectoryWork(summary.integration_work.total_statistics(),
+                                   recorded.integration_work.total_statistics()) &&
+                SameTerminalState(summary, recorded),
+            "scene export changed the GZ18 trajectory or integration work");
+    scene_record_checks::CheckExport(configuration.output_directory,
+                                    recorded_configuration.output_directory,
+                                    configuration.duration_nanoseconds,
+                                    configuration.sample_period_nanoseconds, false);
     for (const int requested_threads : {4, 8, 12, 16, 32}) {
         omp_set_num_threads(requested_threads);
         Gz18QualificationRunConfiguration comparison = configuration;

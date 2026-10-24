@@ -21,6 +21,7 @@ struct Gz18QualificationRunConfiguration final {
     std::int64_t duration_nanoseconds{};
     std::int64_t sample_period_nanoseconds{};
     std::optional<std::filesystem::path> integration_config_path;
+    bool publish_scene_record{false};
 };
 
 // Runs one qualification in a private assembled system. The input files are

@@ -34,7 +34,7 @@ QualificationRunSummary RunGz18Qualification(
             input.output_directory,
             input.duration_nanoseconds,
             input.sample_period_nanoseconds,
-            false,
+            input.publish_scene_record,
             input.integration_config_path},
         kRecipe);
 }

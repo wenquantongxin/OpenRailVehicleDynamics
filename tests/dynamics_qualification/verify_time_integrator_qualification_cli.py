@@ -60,7 +60,8 @@ def main() -> int:
     parser.add_argument("--irw-guidance", type=Path, required=True)
     arguments = parser.parse_args()
     check_options(arguments.gz18,
-                  ["vehicle", "startup", "line", "data", "irregularity", "output", "1", "1"])
+                  ["vehicle", "startup", "line", "data", "irregularity", "output", "1", "1"],
+                  scene_record=True)
     check_options(arguments.irw_passive,
                   ["scenario", "vehicle", "startup", "line", "data", "none", "output", "1", "1"],
                   scene_record=True)

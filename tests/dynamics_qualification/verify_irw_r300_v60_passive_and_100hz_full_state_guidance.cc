@@ -21,6 +21,7 @@
 #include "irw_passive_scenario_runs.h"
 #include "irw_r300_aar5_v60_100hz_full_state_guidance_run.h"
 #include "qualification_continuous_state_writer.h"
+#include "scene_record_checks.h"
 
 namespace {
 
@@ -521,6 +522,20 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
             "the per-patch artifact omits a frozen IRW interface");
     Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the IRW runner overwrote an existing successful artifact");
+
+    auto recorded_configuration = configuration;
+    recorded_configuration.output_directory = root / "real-irw-recorded";
+    recorded_configuration.publish_scene_record = true;
+    const auto recorded = RunIrwPassiveScenario(recorded_configuration);
+    Require(recorded.scene_record_frame_count == summary.sample_count &&
+                SameTrajectoryWork(summary.integration_work.total_statistics(),
+                                   recorded.integration_work.total_statistics()) &&
+                SameTerminalState(summary, recorded),
+            "scene export changed the IRW trajectory or integration work");
+    scene_record_checks::CheckExport(configuration.output_directory,
+                                    recorded_configuration.output_directory,
+                                    configuration.duration_nanoseconds,
+                                    configuration.sample_period_nanoseconds, true);
 
     configuration.output_directory = root / "real-irw-aar5";
     configuration.duration_nanoseconds = 100'000;

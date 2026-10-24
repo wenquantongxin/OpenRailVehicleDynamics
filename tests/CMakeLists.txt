@@ -1491,6 +1491,14 @@ target_link_libraries(verify_irw_scene_topology
 add_test(NAME verify_irw_scene_topology
          COMMAND verify_irw_scene_topology ${CMAKE_SOURCE_DIR})
 
+add_executable(verify_gz18_scene_topology
+    scene_observation/verify_gz18_scene_topology.cc)
+orvd_configure_first_party_target(verify_gz18_scene_topology)
+target_link_libraries(verify_gz18_scene_topology
+    PRIVATE orvd_scene_observation orvd_configuration)
+add_test(NAME verify_gz18_scene_topology
+         COMMAND verify_gz18_scene_topology ${CMAKE_SOURCE_DIR})
+
 # A scene record written from stated values reads back bit for bit; an
 # unclosed record is refused; the writer rejects what it must.
 add_executable(verify_scene_record_round_trip

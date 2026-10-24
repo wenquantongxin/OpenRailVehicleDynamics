@@ -428,7 +428,7 @@ MakeSceneScalarDefinitions(
             kDenseSample});
     };
     for (int carrier = 0; carrier < contact_plan->carrier_count(); ++carrier) {
-        add_track_coordinates(std::string(contact_plan->carrier_name(carrier)));
+        add_track_coordinates(contact_plan->carrier_definition(carrier).body_name);
     }
     for (int interface = 0; interface < contact_plan->interface_count();
          ++interface) {
@@ -1063,13 +1063,13 @@ QualificationRunSummary RunVehicleQualification(
     const std::array<multibody_model::RigidBodyHandle, kCarrierCount>
         carrier_bodies{
             assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_name(0)),
+                assembled.contact_force_plan()->carrier_definition(0).body_name),
             assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_name(1)),
+                assembled.contact_force_plan()->carrier_definition(1).body_name),
             assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_name(2)),
+                assembled.contact_force_plan()->carrier_definition(2).body_name),
             assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_name(3))};
+                assembled.contact_force_plan()->carrier_definition(3).body_name)};
     std::array<ProjectionHistory, kCarrierCount> carrier_projection_histories{};
     for (std::size_t index = 0; index < carrier_projection_histories.size();
          ++index) {
