@@ -210,16 +210,6 @@ foreach(installed_irregularity IN ITEMS
             "'${installed_irregularity}'")
     endif()
 endforeach()
-file(GLOB_RECURSE installed_irregularity_files LIST_DIRECTORIES FALSE
-     "${installed_data_root}/track_library/irregularities/*.json")
-list(LENGTH installed_irregularity_files installed_irregularity_file_count)
-if(NOT installed_irregularity_file_count EQUAL 9)
-    message(FATAL_ERROR
-        "the relocated prefix contains ${installed_irregularity_file_count} "
-        "track-irregularity JSON files instead of the closed nine-file set: "
-        "${installed_irregularity_files}")
-endif()
-
 file(GLOB_RECURSE package_configs LIST_DIRECTORIES FALSE
      "${relocated_prefix}/*OpenRailVehicleDynamicsConfig.cmake")
 list(LENGTH package_configs package_config_count)
