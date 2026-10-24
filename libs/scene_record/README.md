@@ -65,7 +65,7 @@
 `scene_record` 保存调用方给出的标量定义、数值与状态；公共描述要求标量名非空且唯一。资格运行器导出的车辆标量按下列约定命名，
 查看器据此查找：
 
-- 轨道坐标：`<名称>.track_station_meters`、`<名称>.lateral_meters`、`<名称>.yaw_radians`。
+- 轨道坐标：`<名称>.track_station_meters`、`<名称>.lateral_meters`、`<名称>.yaw_radians`；摇头为 Track-T 平面内右偏为正的方向角，车体／构架取前向轴，轮对／轴桥取轮轴的法向。
 - 车轮的接触结果：`<接口名>.contact_patch_count`、`<接口名>.vertical_support_force_on_wheel_newtons`、`<接口名>.normal_force_newtons`。
 
 资格运行器的载体通道以接触载体名为前缀，代表刚体通道以刚体名为前缀。

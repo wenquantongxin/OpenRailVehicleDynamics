@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
@@ -9,6 +10,7 @@
 #include "orvd/scene_observation/body_state.h"
 #include "orvd/scene_observation/scene_frame.h"
 #include "orvd/scene_observation/scene_topology.h"
+#include "orvd/scene_observation/track_heading.h"
 #include "orvd/scene_record/scene_record_reader.h"
 #include "orvd/scene_record/scene_record_writer.h"
 
@@ -35,6 +37,9 @@ std::filesystem::path FreshTemporaryDirectory() {
 
 int main() {
     try {
+        if (std::abs(orvd::scene_observation::ForwardHeadingRadians({1.0, 1.0, 0.2}) -
+                     orvd::scene_observation::AxleHeadingRadians({1.0, -1.0, 0.3})) > 1e-14)
+            throw std::runtime_error("installed track headings disagree");
         orvd::multibody_model::MultibodyModel model;
         orvd::multibody_runtime::RigidBodyInertiaParameters inertia;
         inertia.mass_kilograms = 2.0;

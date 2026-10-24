@@ -230,7 +230,7 @@ void CheckStateArtifact(
         }
         Require(carrier.at("yaw_basis") ==
                     (controlled ? "physical_axle_bridge_source_body_relative_to_track_T" :
-                                  "assembled_carrier_body_relative_to_track_T"),
+                                  "wheel_axle_heading_in_track_T_positive_right"),
                 "physical yaw mapping lost its actual source basis");
     }
     for (const auto& interface : physical.at("interfaces")) {

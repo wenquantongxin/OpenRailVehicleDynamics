@@ -1474,6 +1474,7 @@ add_executable(verify_scene_observation
     scene_observation/scalar_definition_header_self_containment.cc
     scene_observation/scene_frame_header_self_containment.cc
     scene_observation/scene_topology_header_self_containment.cc
+    scene_observation/track_heading_header_self_containment.cc
     scene_observation/track_sampling_header_self_containment.cc
     scene_observation/wheel_spin_sampling_header_self_containment.cc
     scene_observation/verify_scene_observation.cc)

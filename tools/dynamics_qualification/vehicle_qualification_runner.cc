@@ -44,11 +44,11 @@
 #include "orvd/scene_observation/body_state.h"
 #include "orvd/scene_observation/scene_frame.h"
 #include "orvd/scene_observation/scene_topology.h"
+#include "orvd/scene_observation/track_heading.h"
 #include "orvd/scene_observation/track_sampling.h"
 #include "orvd/scene_observation/wheel_spin_sampling.h"
 #include "orvd/scene_record/scene_record_writer.h"
 #include "orvd/track_geometry/track_geometry.h"
-#include "orvd/wheel_rail_contact/roll_yaw_pitch.h"
 
 namespace orvd::dynamics_qualification::internal {
 namespace {
@@ -68,6 +68,11 @@ struct CarrierObservation final {
     double track_station_meters{};
     double lateral_meters{};
     double yaw_radians{};
+};
+
+struct CarrierHeadingBinding final {
+    multibody_model::RigidBodyHandle wheel_body;
+    Eigen::Vector3d spin_axis_in_body;
 };
 
 struct RepresentativeBodyObservation final {
@@ -297,7 +302,8 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
 [[nodiscard]] CarrierObservation ObserveCarrier(
     const configuration::AssembledVehicleSystem& assembled,
     const multibody_model::MultibodyEvaluationContext& context,
-    multibody_model::RigidBodyHandle body, double track_station_meters) {
+    multibody_model::RigidBodyHandle body, double track_station_meters,
+    const CarrierHeadingBinding& heading) {
     const auto* contact_plan = assembled.contact_force_plan();
     const auto track =
         contact_plan->track_geometry().EvaluateTrackFrame(track_station_meters);
@@ -308,10 +314,12 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
         rotation_track_from_inertial *
         (body_pose.translation() -
          track.pose().origin_in_inertial_meters());
-    const auto angles = wheel_rail_contact::ResolveRollYawPitch(
-        rotation_track_from_inertial * body_pose.rotation());
+    const Eigen::Vector3d axle_in_track = rotation_track_from_inertial *
+        assembled.model().CalcPoseInWorld(context, heading.wheel_body).rotation() *
+        heading.spin_axis_in_body;
     CarrierObservation observation{
-        track_station_meters, origin_in_track.y(), angles.yaw_radians};
+        track_station_meters, origin_in_track.y(),
+        scene_observation::AxleHeadingRadians(axle_in_track)};
     RequireFinite(observation.lateral_meters, "wheelset lateral position");
     RequireFinite(observation.yaw_radians, "wheelset yaw");
     return observation;
@@ -333,10 +341,11 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
         rotation_track_from_inertial *
         (body_pose.translation() -
          track.pose().origin_in_inertial_meters());
-    const auto angles = wheel_rail_contact::ResolveRollYawPitch(
-        rotation_track_from_inertial * body_pose.rotation());
+    const Eigen::Vector3d forward_in_track =
+        rotation_track_from_inertial * body_pose.rotation().col(0);
     RepresentativeBodyObservation observation{
-        track_station_meters, origin_in_track.y(), angles.yaw_radians};
+        track_station_meters, origin_in_track.y(),
+        scene_observation::ForwardHeadingRadians(forward_in_track)};
     RequireFinite(observation.track_station_meters,
                   "representative-body station");
     RequireFinite(observation.lateral_meters,
@@ -412,7 +421,7 @@ MakeSceneScalarDefinitions(
         "Track-T at the body's projected station; +y right, +z down";
     std::vector<ScalarDefinition> definitions;
     const auto* contact_plan = assembled.contact_force_plan();
-    const auto add_track_coordinates = [&](const std::string& body) {
+    const auto add_track_coordinates = [&](const std::string& body, bool carrier) {
         definitions.push_back(ScalarDefinition{
             body + ".track_station_meters", "m", "track inertial frame",
             "planar projected track station of the body origin",
@@ -423,12 +432,13 @@ MakeSceneScalarDefinitions(
             "body origin expressed in Track-T", kDenseSample});
         definitions.push_back(ScalarDefinition{
             body + ".yaw_radians", "rad", kCarrierTrackFrame,
-            "yaw of the body about the track vertical",
-            "X-Z-Y roll-yaw-pitch resolution of R_TB in the ORVD body basis",
+            "heading in the Track-T plane; positive towards the right rail",
+            carrier ? "atan2(-axle_x, axle_y), axle oriented towards Track-T +y" :
+                      "atan2(forward_y, forward_x), body +x expressed in Track-T",
             kDenseSample});
     };
     for (int carrier = 0; carrier < contact_plan->carrier_count(); ++carrier) {
-        add_track_coordinates(contact_plan->carrier_definition(carrier).body_name);
+        add_track_coordinates(contact_plan->carrier_definition(carrier).body_name, true);
     }
     for (int interface = 0; interface < contact_plan->interface_count();
          ++interface) {
@@ -449,7 +459,7 @@ MakeSceneScalarDefinitions(
             kDenseSample});
     }
     for (const std::string_view body : recipe.representative_body_names) {
-        add_track_coordinates(std::string(body));
+        add_track_coordinates(std::string(body), false);
     }
     return definitions;
 }
@@ -707,7 +717,7 @@ nlohmann::json PhysicalObservationContract(
                             {"station_column", name + ".track_station_meters"},
                             {"lateral_column", name + ".lateral_meters"},
                             {"yaw_column", name + ".yaw_radians"},
-                            {"yaw_basis", "assembled_carrier_body_relative_to_track_T"}});
+                            {"yaw_basis", "wheel_axle_heading_in_track_T_positive_right"}});
     }
     for (int i = 0; i < contact.interface_count(); ++i) {
         const std::string name(contact.interface_name(i));
@@ -1070,6 +1080,22 @@ QualificationRunSummary RunVehicleQualification(
                 assembled.contact_force_plan()->carrier_definition(2).body_name),
             assembled.model().GetRigidBodyByName(
                 assembled.contact_force_plan()->carrier_definition(3).body_name)};
+    const auto scene_topology = scene_observation::DescribeSceneTopology(
+        assembled.model(), assembled.contact_force_plan());
+    std::vector<CarrierHeadingBinding> carrier_headings;
+    for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
+        const auto& name = assembled.contact_force_plan()->carrier_definition(
+            static_cast<int>(carrier)).body_name;
+        const scene_observation::SceneWheelPlacement* selected = nullptr;
+        for (const auto& wheel : scene_topology.wheel_placements) {
+            if (wheel.carrier_body_name != name) continue;
+            if (!selected || wheel.side == wheel_rail_contact::WheelSide::kLeft) selected = &wheel;
+            if (wheel.side == wheel_rail_contact::WheelSide::kLeft) break;
+        }
+        if (!selected) Reject("carrier has no wheel placement: " + name);
+        carrier_headings.push_back({assembled.model().GetRigidBodyByName(selected->wheel_body_name),
+                                   selected->spin_axis_in_wheel_body_frame});
+    }
     std::array<ProjectionHistory, kCarrierCount> carrier_projection_histories{};
     for (std::size_t index = 0; index < carrier_projection_histories.size();
          ++index) {
@@ -1104,8 +1130,7 @@ QualificationRunSummary RunVehicleQualification(
         scene_export.emplace(
             assembled, output_directory.working_path() / "scene_record",
             scene_observation::SceneDescription{
-                .topology = scene_observation::DescribeSceneTopology(
-                    assembled.model(), assembled.contact_force_plan()),
+                .topology = scene_topology,
                 .scalar_definitions = MakeSceneScalarDefinitions(assembled, recipe),
                 .nominal_sample_period_seconds =
                     static_cast<double>(sample_clock.sample_period_nanoseconds()) *
@@ -1168,7 +1193,7 @@ QualificationRunSummary RunVehicleQualification(
         for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
             observation.carriers[carrier] = ObserveCarrier(
                 assembled, component.context(), carrier_bodies[carrier],
-                station_hints[carrier]);
+                station_hints[carrier], carrier_headings[carrier]);
         }
         for (std::size_t interface = 0; interface < kInterfaceCount;
              ++interface) {

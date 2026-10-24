@@ -9,6 +9,7 @@ add_library(orvd_scene_observation STATIC
     src/body_state.cc
     src/scene_description.cc
     src/scene_topology.cc
+    src/track_heading.cc
     src/track_sampling.cc
     src/wheel_spin_sampling.cc)
 

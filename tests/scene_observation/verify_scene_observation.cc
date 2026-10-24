@@ -1,5 +1,7 @@
 #include <cmath>
 #include <cstdio>
+#include <limits>
+#include <numbers>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -10,6 +12,7 @@
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/scene_observation/body_state.h"
 #include "orvd/scene_observation/scene_topology.h"
+#include "orvd/scene_observation/track_heading.h"
 #include "orvd/scene_observation/track_sampling.h"
 #include "orvd/scene_observation/wheel_spin_sampling.h"
 #include "orvd/track_geometry/track_geometry.h"
@@ -28,6 +31,41 @@ using namespace orvd;
 
 bool Near(double measured, double expected, double absolute_tolerance) {
     return std::abs(measured - expected) <= absolute_tolerance;
+}
+
+void VerifyTrackHeadings() {
+    using scene_observation::AxleHeadingRadians;
+    using scene_observation::ForwardHeadingRadians;
+    const Eigen::Matrix3d flipped = Eigen::Vector3d(1.0, -1.0, -1.0).asDiagonal();
+    for (double heading : {-0.13, 0.21}) {
+        const Eigen::Matrix3d turn = Eigen::AngleAxisd(heading, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+        const Eigen::Matrix3d roll = Eigen::AngleAxisd(0.17, Eigen::Vector3d::UnitX()).toRotationMatrix();
+        const Eigen::Matrix3d pitch = Eigen::AngleAxisd(-0.23, Eigen::Vector3d::UnitY()).toRotationMatrix();
+        for (const Eigen::Matrix3d& basis : {Eigen::Matrix3d::Identity().eval(), flipped}) {
+            const Eigen::Matrix3d body = turn * pitch * roll * basis;
+            if (!Near(ForwardHeadingRadians(body.col(0)), heading, 1e-14))
+                Fail("forward heading changed with body basis, roll or pitch");
+            for (int step = 0; step <= 72; ++step) {
+                const Eigen::Matrix3d wheel = turn * roll *
+                    Eigen::AngleAxisd(step * std::numbers::pi / 36.0, Eigen::Vector3d::UnitY()).toRotationMatrix() * basis;
+                const Eigen::Vector3d axle = wheel * basis.transpose() * Eigen::Vector3d::UnitY();
+                for (double sign : {-1.0, 1.0}) {
+                    if (!Near(AxleHeadingRadians(sign * axle), heading, 1e-14))
+                        Fail("wheel heading changed during spin or axle reversal");
+                }
+            }
+        }
+    }
+    for (const auto function : {ForwardHeadingRadians, AxleHeadingRadians}) {
+        for (const Eigen::Vector3d& direction : {
+                 Eigen::Vector3d::Zero().eval(), Eigen::Vector3d::UnitZ().eval(),
+                 Eigen::Vector3d(std::numeric_limits<double>::quiet_NaN(), 1.0, 0.0)}) {
+            bool rejected = false;
+            try { (void)function(direction); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            if (!rejected) Fail("undefined track heading accepted");
+        }
+    }
 }
 
 void VerifyFreeBodySampling() {
@@ -324,6 +362,7 @@ void VerifyTrackSampling() {
 int main() {
     try {
         VerifyFreeBodySampling();
+        VerifyTrackHeadings();
         VerifyWheelPlacement();
         VerifyWheelSpinSampling(Eigen::Vector3d(1.0, -1.0, -1.0).asDiagonal(),
                                 Eigen::Vector3d::UnitY(), -1.0);

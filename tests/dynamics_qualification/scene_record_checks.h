@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -10,6 +11,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include <Eigen/Geometry>
 
 #include "orvd/scene_record/scene_record_reader.h"
 
@@ -70,6 +73,16 @@ inline void CheckExport(const std::filesystem::path& plain,
     std::string line;
     std::getline(observations, line);
     const auto columns = split(line);
+    const auto& track = *record.assets.track;
+    const auto quaternion = [](const auto& wxyz) {
+        return Eigen::Quaterniond(wxyz[0], wxyz[1], wxyz[2], wxyz[3]);
+    };
+    const auto body_slot = [&](const std::string& name) {
+        const auto found = std::find_if(description.topology.bodies.begin(),
+            description.topology.bodies.end(), [&](const auto& body) { return body.name == name; });
+        require(found != description.topology.bodies.end(), "heading body missing from topology");
+        return static_cast<std::size_t>(found - description.topology.bodies.begin());
+    };
     for (std::size_t sample = 0; sample < count; ++sample) {
         require(static_cast<bool>(std::getline(observations, line)), "missing observation row");
         const auto row = split(line);
@@ -90,6 +103,40 @@ inline void CheckExport(const std::filesystem::path& plain,
             require(frame.scalars.values.at(index) == std::stod(row.at(column - columns.begin())) &&
                         frame.scalars.statuses.at(index) == static_cast<std::uint8_t>(orvd::scene_observation::ScalarStatus::kValid),
                     "scene scalar differs from the recorded physical observation");
+            const auto& name = description.scalar_definitions[index].name;
+            if (!name.ends_with(".yaw_radians")) continue;
+            const auto body = name.substr(0, name.rfind('.'));
+            const auto station_field = std::find_if(description.scalar_definitions.begin(),
+                description.scalar_definitions.end(), [&](const auto& field) {
+                    return field.name == body + ".track_station_meters";
+                });
+            require(station_field != description.scalar_definitions.end(), "heading station missing");
+            const double station = frame.scalars.values.at(station_field - description.scalar_definitions.begin());
+            const auto upper = std::upper_bound(track.stations_meters.begin(), track.stations_meters.end(), station);
+            const auto next = std::clamp<std::size_t>(upper - track.stations_meters.begin(), 1, track.stations_meters.size() - 1);
+            const auto previous = next - 1;
+            const double fraction = std::clamp((station - track.stations_meters[previous]) /
+                (track.stations_meters[next] - track.stations_meters[previous]), 0.0, 1.0);
+            const auto track_rotation = quaternion(track.rotation_inertial_from_track_wxyz[previous]).slerp(
+                fraction, quaternion(track.rotation_inertial_from_track_wxyz[next])).toRotationMatrix();
+            const auto wheel = std::find_if(description.topology.wheel_placements.begin(),
+                description.topology.wheel_placements.end(), [&](const auto& placement) {
+                    return placement.carrier_body_name == body;
+                });
+            Eigen::Vector3d direction;
+            double expected;
+            if (wheel == description.topology.wheel_placements.end()) {
+                direction = track_rotation.transpose() *
+                    quaternion(frame.bodies[body_slot(body)].orientation_wxyz).toRotationMatrix().col(0);
+                expected = std::atan2(direction.y(), direction.x());
+            } else {
+                direction = track_rotation.transpose() *
+                    quaternion(frame.bodies[body_slot(wheel->wheel_body_name)].orientation_wxyz).toRotationMatrix() *
+                    wheel->spin_axis_in_wheel_body_frame;
+                expected = std::atan(-direction.x() / direction.y());
+            }
+            require(std::abs(frame.scalars.values[index] - expected) < 1e-10,
+                    "recorded heading disagrees with the body or wheel geometry");
         }
     }
 }
