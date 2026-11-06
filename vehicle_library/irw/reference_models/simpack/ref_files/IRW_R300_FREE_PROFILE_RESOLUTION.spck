@@ -1,8 +1,4 @@
 !file.version=3.6! Removing this line will make the file unreadable
-! IRW research persona: balanced_nominal_preload
-! Accepted source SHA256: fb6b24d5360fae3ee2b27ab9fb1f156cc7a422e3ba025aeec6528f23ed2777de
-! Published role: balanced_irw_dependency
-! Historical zero-preload persona is not permitted by production entry points
 
 !**********************************************************************
 ! Simpack Version Information
@@ -641,13 +637,13 @@ marker.ang (              2 ,       $M_AxleBridge_BRF_1           ) = { 180deg }
 marker.type (                       $M_AxleBridge_LongiBar_A      ) = 2                       ! Type
 marker.parent (                     $M_AxleBridge_LongiBar_A      ) = $B_AxleBridge           ! Body
 marker.pos (              1 ,       $M_AxleBridge_LongiBar_A      ) = 0.00000000000000000E+00 ! Position
-marker.pos (              2 ,       $M_AxleBridge_LongiBar_A      ) = { -420/2000 }           ! Position
+marker.pos (              2 ,       $M_AxleBridge_LongiBar_A      ) = -2.88163999999999976E-01 ! Position
 marker.pos (              3 ,       $M_AxleBridge_LongiBar_A      ) = 7.00000000000000067E-02 ! Position
 
 marker.type (                       $M_AxleBridge_LongiBar_B      ) = 2                       ! Type
 marker.parent (                     $M_AxleBridge_LongiBar_B      ) = $B_AxleBridge           ! Body
 marker.pos (              1 ,       $M_AxleBridge_LongiBar_B      ) = 0.00000000000000000E+00 ! Position
-marker.pos (              2 ,       $M_AxleBridge_LongiBar_B      ) = { 420/2000 }            ! Position
+marker.pos (              2 ,       $M_AxleBridge_LongiBar_B      ) = 2.88163999999999976E-01 ! Position
 marker.pos (              3 ,       $M_AxleBridge_LongiBar_B      ) = 7.00000000000000067E-02 ! Position
 
 marker.type (                       $M_AxleBridge_FRONT05         ) = 2                       ! Type
