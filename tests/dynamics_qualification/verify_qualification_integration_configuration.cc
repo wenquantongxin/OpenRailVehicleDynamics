@@ -176,7 +176,18 @@ void CheckScales(const dq::CoordinateNewtonScales& expected,
 void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationRequest& input,
              bool empty_force_state) {
     auto definition = orvd::configuration::LoadVehicleDefinitionFromJsonFile(vehicle_path);
-    if (empty_force_state) definition.series_spring_viscous_dampers.clear();
+    const auto& linear = definition.series_spring_viscous_dampers.at(0);
+    const int linear_count = static_cast<int>(definition.series_spring_viscous_dampers.size());
+    const int existing_point_to_point_count = static_cast<int>(
+        definition.point_to_point_series_spring_bilinear_dampers.size());
+    const std::string point_to_point_name = "test_point_to_point_series_damper";
+    definition.point_to_point_series_spring_bilinear_dampers.push_back(
+        {point_to_point_name, linear.reference_frame_name, linear.opposite_frame_name,
+         1.079e7, 776988.0, 1e4, 5e4});
+    if (empty_force_state) {
+        definition.series_spring_viscous_dampers.clear();
+        definition.point_to_point_series_spring_bilinear_dampers.clear();
+    }
     // Reverse the caller's declaration order: resolution must follow actual
     // model ranges, not vector position or assumptions about a particular car.
     std::reverse(definition.mechanical_track_station_layout.free_body_station_offsets.begin(),
@@ -216,6 +227,8 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
     const int nq = system.generalized_positions_state_range().size();
     const auto zr = system.series_spring_damper_force_state_range();
     const int nz = zr.size();
+    Require(nz == (empty_force_state ? 0 : linear_count + existing_point_to_point_count + 1),
+            "mixed force-state fixture lost a family");
     const auto& scales = actual.nonlinear_solver;
     CheckScales(newmark.translation, scales.translation);
     CheckScales(newmark.angle, scales.angle);
@@ -234,10 +247,33 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
                 binding.free_body_station_offsets.size(), "metadata lost per-body quaternion norms");
     const auto vr = system.generalized_velocities_state_range();
     std::vector<bool> velocity_covered(static_cast<std::size_t>(vr.size()), false);
+    std::vector<bool> force_covered(static_cast<std::size_t>(nz), false);
     for (const auto& block : resolved.metadata.at("coordinate_layout").at("coordinate_blocks")) {
         const auto family = block.at("family").get<std::string>();
         if (family == "force") {
-            Require(block.at("joint_kind") == "series_force", "force state lost its layout kind");
+            const auto owner = block.at("owner").get<std::string>();
+            const bool point_to_point = std::find(
+                binding.point_to_point_series_spring_bilinear_damper_names.begin(),
+                binding.point_to_point_series_spring_bilinear_damper_names.end(), owner) !=
+                binding.point_to_point_series_spring_bilinear_damper_names.end();
+            const auto range = point_to_point
+                ? system.series_spring_damper_force_state_range(
+                      system.GetPointToPointSeriesSpringBilinearDamperIndexByName(owner))
+                : system.series_spring_damper_force_state_range(
+                      system.GetSeriesSpringViscousDamperIndexByName(owner));
+            const int start = range.start() - zr.start();
+            Require(block.at("joint_kind") == "series_force" &&
+                        block.at("unit") == "N" && block.at("size") == 1 &&
+                        block.at("internal_state_start") == start &&
+                        block.at("physical_state_start") == range.start(),
+                    "force state lost its named range, kind or unit");
+            Require(!force_covered.at(static_cast<std::size_t>(start)),
+                    "metadata force blocks overlap");
+            force_covered[static_cast<std::size_t>(start)] = true;
+            if (owner == point_to_point_name) {
+                Require(start == linear_count + existing_point_to_point_count,
+                        "point-to-point state did not follow the linear series states");
+            }
             continue;
         }
         const auto owner = block.at("owner").get<std::string>();
@@ -287,6 +323,8 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
     }
     Require(std::all_of(velocity_covered.begin(), velocity_covered.end(), [](bool value) { return value; }),
             "metadata velocity blocks omit a physical velocity");
+    Require(std::all_of(force_covered.begin(), force_covered.end(), [](bool value) { return value; }),
+            "metadata force blocks omit a series force");
     dq::IntegrationRequest zhai{dq::ZhaiRequest{25000}, 1000000};
     const auto zrsl = dq::ResolveIntegrationConfiguration(zhai, *assembled, initial, defaults);
     Require(zrsl.metadata.at("newton").is_null() &&

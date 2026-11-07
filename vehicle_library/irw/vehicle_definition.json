@@ -344,161 +344,161 @@
     {
       "name": "longibar_front_A",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_front_B",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_front_C",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_front_D",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_rear_A",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_rear_B",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_rear_C",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
       "name": "longibar_rear_D",
       "moves_freely_in_world": false,
-      "mass_kilograms": 23.958904243295922,
+      "mass_kilograms": 18.820124124383078,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 1.3841101530761446,
-        "y": 0.014019477425825506,
-        "z": 1.3841101530761446
+        "x": 0.6729769337412805,
+        "y": 0.011012536664854763,
+        "z": 0.6729769337412805
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "x": -2.4934532384798466e-18,
+        "y": -2.5973471234165235e-20,
+        "z": -4.0741416771330933e-17
       }
     },
     {
@@ -643,7 +643,7 @@
       "name": "mk_dum_front__M_DUM_AntiHuntingDmp_A",
       "body_name": "dum_front",
       "position_in_body_frame_meters": {
-        "x": 0.0,
+        "x": 0.6,
         "y": 1.13,
         "z": -0.2
       },
@@ -655,7 +655,7 @@
       "name": "mk_dum_front__M_DUM_AntiHuntingDmp_B",
       "body_name": "dum_front",
       "position_in_body_frame_meters": {
-        "x": 0.0,
+        "x": -0.6,
         "y": -1.13,
         "z": -0.2
       },
@@ -811,8 +811,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_A",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": 0.4275,
-        "y": 0.12,
+        "x": 0.621331,
+        "y": 0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -823,8 +823,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_B",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": 0.4275,
-        "y": -0.12,
+        "x": 0.621331,
+        "y": -0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -835,8 +835,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_C",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": -0.4275,
-        "y": 0.12,
+        "x": -0.621331,
+        "y": 0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -847,8 +847,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_D",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": -0.4275,
-        "y": -0.12,
+        "x": -0.621331,
+        "y": -0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -956,11 +956,28 @@
       "body_name": "longibar_front_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": -0.26710977876009584,
+            "y": 0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": -0.9636661071609464,
+            "y": -0.26710977876009584,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -968,11 +985,28 @@
       "body_name": "longibar_front_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": 0.2671097787600962,
+            "y": 0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": -0.9636661071609464,
+            "y": 0.2671097787600962,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -980,11 +1014,28 @@
       "body_name": "longibar_front_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": -0.26710977876009584,
+            "y": -0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": 0.9636661071609464,
+            "y": -0.26710977876009584,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -992,11 +1043,28 @@
       "body_name": "longibar_front_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": 0.2671097787600962,
+            "y": -0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": 0.9636661071609464,
+            "y": 0.2671097787600962,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -1075,7 +1143,7 @@
       "name": "mk_dum_rear__M_DUM_AntiHuntingDmp_A",
       "body_name": "dum_rear",
       "position_in_body_frame_meters": {
-        "x": 0.0,
+        "x": 0.6,
         "y": 1.13,
         "z": -0.2
       },
@@ -1087,7 +1155,7 @@
       "name": "mk_dum_rear__M_DUM_AntiHuntingDmp_B",
       "body_name": "dum_rear",
       "position_in_body_frame_meters": {
-        "x": 0.0,
+        "x": -0.6,
         "y": -1.13,
         "z": -0.2
       },
@@ -1243,8 +1311,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_A",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": 0.4275,
-        "y": 0.12,
+        "x": 0.621331,
+        "y": 0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1255,8 +1323,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_B",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": 0.4275,
-        "y": -0.12,
+        "x": 0.621331,
+        "y": -0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1267,8 +1335,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_C",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": -0.4275,
-        "y": 0.12,
+        "x": -0.621331,
+        "y": 0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1279,8 +1347,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_D",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": -0.4275,
-        "y": -0.12,
+        "x": -0.621331,
+        "y": -0.113909,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1388,11 +1456,28 @@
       "body_name": "longibar_rear_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": -0.26710977876009584,
+            "y": 0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": -0.9636661071609464,
+            "y": -0.26710977876009584,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -1400,11 +1485,28 @@
       "body_name": "longibar_rear_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": 0.2671097787600962,
+            "y": 0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": -0.9636661071609464,
+            "y": 0.2671097787600962,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -1412,11 +1514,28 @@
       "body_name": "longibar_rear_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": -0.26710977876009584,
+            "y": -0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": 0.9636661071609464,
+            "y": -0.26710977876009584,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -1424,11 +1543,28 @@
       "body_name": "longibar_rear_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.41525030102337074,
-        "z": -0.0
+        "y": 0.3261861112103028,
+        "z": 0.0
       },
       "rotation_in_body_frame": {
-        "form": "aligned_with_body"
+        "form": "matrix_rows",
+        "rows": [
+          {
+            "x": 0.2671097787600962,
+            "y": -0.9636661071609464,
+            "z": 0.0
+          },
+          {
+            "x": 0.9636661071609464,
+            "y": 0.2671097787600962,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        ]
       }
     },
     {
@@ -2364,7 +2500,7 @@
       "body_name": "axlebridge_ff",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.235,
+        "y": 0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2376,7 +2512,7 @@
       "body_name": "longibar_front_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2388,7 +2524,7 @@
       "body_name": "axlebridge_ff",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.235,
+        "y": -0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2400,7 +2536,7 @@
       "body_name": "longibar_front_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2412,7 +2548,7 @@
       "body_name": "axlebridge_fr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.235,
+        "y": 0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2424,7 +2560,7 @@
       "body_name": "longibar_front_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2436,7 +2572,7 @@
       "body_name": "axlebridge_fr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.235,
+        "y": -0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2448,7 +2584,7 @@
       "body_name": "longibar_front_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2460,7 +2596,7 @@
       "body_name": "axlebridge_rf",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.235,
+        "y": 0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2472,7 +2608,7 @@
       "body_name": "longibar_rear_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2484,7 +2620,7 @@
       "body_name": "axlebridge_rf",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.235,
+        "y": -0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2496,7 +2632,7 @@
       "body_name": "longibar_rear_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2508,7 +2644,7 @@
       "body_name": "axlebridge_rr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.235,
+        "y": 0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2520,7 +2656,7 @@
       "body_name": "longibar_rear_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2532,7 +2668,7 @@
       "body_name": "axlebridge_rr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.235,
+        "y": -0.288164,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2544,8 +2680,104 @@
       "body_name": "longibar_rear_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.4152503010233705,
+        "y": -0.3261861112103028,
         "z": 0.0
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_front__M_Frame_LatDamper_A",
+      "body_name": "frame_front",
+      "position_in_body_frame_meters": {
+        "x": 1.25,
+        "y": 0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_front__M_Frame_LatDamper_B",
+      "body_name": "frame_front",
+      "position_in_body_frame_meters": {
+        "x": 1.25,
+        "y": -0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_front__M_Frame_LatDamper_C",
+      "body_name": "frame_front",
+      "position_in_body_frame_meters": {
+        "x": -1.25,
+        "y": 0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_front__M_Frame_LatDamper_D",
+      "body_name": "frame_front",
+      "position_in_body_frame_meters": {
+        "x": -1.25,
+        "y": -0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_rear__M_Frame_LatDamper_A",
+      "body_name": "frame_rear",
+      "position_in_body_frame_meters": {
+        "x": 1.25,
+        "y": 0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_rear__M_Frame_LatDamper_B",
+      "body_name": "frame_rear",
+      "position_in_body_frame_meters": {
+        "x": 1.25,
+        "y": -0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_rear__M_Frame_LatDamper_C",
+      "body_name": "frame_rear",
+      "position_in_body_frame_meters": {
+        "x": -1.25,
+        "y": 0.5881639999999999,
+        "z": -0.07
+      },
+      "rotation_in_body_frame": {
+        "form": "aligned_with_body"
+      }
+    },
+    {
+      "name": "mk_frame_rear__M_Frame_LatDamper_D",
+      "body_name": "frame_rear",
+      "position_in_body_frame_meters": {
+        "x": -1.25,
+        "y": -0.5881639999999999,
+        "z": -0.07
       },
       "rotation_in_body_frame": {
         "form": "aligned_with_body"
@@ -2650,7 +2882,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -4.57347190844519
+        "z": 1.8411889124573215
       }
     },
     {
@@ -2660,7 +2892,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -4.8513060523241895
+        "z": 1.3004037411324723
       }
     },
     {
@@ -2670,7 +2902,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.7097133987343966
+        "z": -1.841188912457321
       }
     },
     {
@@ -2680,7 +2912,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.4318792548553965
+        "z": -1.3004037411324718
       }
     },
     {
@@ -2690,7 +2922,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -4.57347190844519
+        "z": 1.8411889124573215
       }
     },
     {
@@ -2700,7 +2932,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -4.8513060523241895
+        "z": 1.3004037411324723
       }
     },
     {
@@ -2710,7 +2942,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.7097133987343966
+        "z": -1.841188912457321
       }
     },
     {
@@ -2720,7 +2952,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.4318792548553965
+        "z": -1.3004037411324718
       }
     }
   ],
@@ -2742,14 +2974,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseA1",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2757,14 +2989,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseB1",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2772,14 +3004,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseC1",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2787,14 +3019,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseD1",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2802,14 +3034,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseA2",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2817,14 +3049,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseB2",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2832,14 +3064,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseC2",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2847,14 +3079,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseD2",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -2869,7 +3101,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -2884,7 +3116,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -2899,7 +3131,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -2914,7 +3146,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -2922,14 +3154,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_AirSpring_A",
       "opposite_frame_name": "mk_dum_front__M_DUM_AirSpring_A",
       "stiffness_newtons_per_meter": {
-        "x": 15000.0,
-        "y": 15000.0,
-        "z": 50000.0
+        "x": 100107.0,
+        "y": 100107.0,
+        "z": 150061.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 6500.0
+        "z": 19313.9
       }
     },
     {
@@ -2937,14 +3169,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_AirSpring_B",
       "opposite_frame_name": "mk_dum_front__M_DUM_AirSpring_B",
       "stiffness_newtons_per_meter": {
-        "x": 15000.0,
-        "y": 15000.0,
-        "z": 50000.0
+        "x": 100107.0,
+        "y": 100107.0,
+        "z": 150061.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 6500.0
+        "z": 19313.9
       }
     },
     {
@@ -2952,27 +3184,12 @@
       "reference_frame_name": "mk_dum_front__M_DUM_TractionRod_A",
       "opposite_frame_name": "mk_frame_front__M_Frame_TractionRod_A",
       "stiffness_newtons_per_meter": {
-        "x": 20000000.0,
+        "x": 10000000.0,
         "y": 0.0,
         "z": 0.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      }
-    },
-    {
-      "name": "front_ss_antihunting_A",
-      "reference_frame_name": "mk_dum_front__M_DUM_AntiHuntingDmp_A",
-      "opposite_frame_name": "mk_frame_front__M_Frame_AntiHuntingDmp_A",
-      "stiffness_newtons_per_meter": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "damping_newton_seconds_per_meter": {
-        "x": 300000.0,
         "y": 0.0,
         "z": 0.0
       }
@@ -2982,27 +3199,12 @@
       "reference_frame_name": "mk_dum_front__M_DUM_TractionRod_B",
       "opposite_frame_name": "mk_frame_front__M_Frame_TractionRod_B",
       "stiffness_newtons_per_meter": {
-        "x": 20000000.0,
+        "x": 10000000.0,
         "y": 0.0,
         "z": 0.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      }
-    },
-    {
-      "name": "front_ss_antihunting_B",
-      "reference_frame_name": "mk_dum_front__M_DUM_AntiHuntingDmp_B",
-      "opposite_frame_name": "mk_frame_front__M_Frame_AntiHuntingDmp_B",
-      "stiffness_newtons_per_meter": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "damping_newton_seconds_per_meter": {
-        "x": 300000.0,
         "y": 0.0,
         "z": 0.0
       }
@@ -3012,14 +3214,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseA1",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3027,14 +3229,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseB1",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3042,14 +3244,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseC1",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3057,14 +3259,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseD1",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3072,14 +3274,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseA2",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3087,14 +3289,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseB2",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3102,14 +3304,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseC2",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3117,14 +3319,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseD2",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 50000.0,
-        "y": 50000.0,
-        "z": 830000.0
+        "x": 750810.0,
+        "y": 750810.0,
+        "z": 646797.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 7000.0
+        "z": 5000.0
       }
     },
     {
@@ -3139,7 +3341,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -3154,7 +3356,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -3169,7 +3371,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -3184,7 +3386,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 5000000.0
+        "z": 49676.6
       }
     },
     {
@@ -3192,14 +3394,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_AirSpring_A",
       "opposite_frame_name": "mk_dum_rear__M_DUM_AirSpring_A",
       "stiffness_newtons_per_meter": {
-        "x": 15000.0,
-        "y": 15000.0,
-        "z": 50000.0
+        "x": 100107.0,
+        "y": 100107.0,
+        "z": 150061.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 6500.0
+        "z": 19313.9
       }
     },
     {
@@ -3207,14 +3409,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_AirSpring_B",
       "opposite_frame_name": "mk_dum_rear__M_DUM_AirSpring_B",
       "stiffness_newtons_per_meter": {
-        "x": 15000.0,
-        "y": 15000.0,
-        "z": 50000.0
+        "x": 100107.0,
+        "y": 100107.0,
+        "z": 150061.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 6500.0
+        "z": 19313.9
       }
     },
     {
@@ -3222,27 +3424,12 @@
       "reference_frame_name": "mk_dum_rear__M_DUM_TractionRod_A",
       "opposite_frame_name": "mk_frame_rear__M_Frame_TractionRod_A",
       "stiffness_newtons_per_meter": {
-        "x": 20000000.0,
+        "x": 10000000.0,
         "y": 0.0,
         "z": 0.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      }
-    },
-    {
-      "name": "rear_ss_antihunting_A",
-      "reference_frame_name": "mk_dum_rear__M_DUM_AntiHuntingDmp_A",
-      "opposite_frame_name": "mk_frame_rear__M_Frame_AntiHuntingDmp_A",
-      "stiffness_newtons_per_meter": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "damping_newton_seconds_per_meter": {
-        "x": 300000.0,
         "y": 0.0,
         "z": 0.0
       }
@@ -3252,27 +3439,12 @@
       "reference_frame_name": "mk_dum_rear__M_DUM_TractionRod_B",
       "opposite_frame_name": "mk_frame_rear__M_Frame_TractionRod_B",
       "stiffness_newtons_per_meter": {
-        "x": 20000000.0,
+        "x": 10000000.0,
         "y": 0.0,
         "z": 0.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      }
-    },
-    {
-      "name": "rear_ss_antihunting_B",
-      "reference_frame_name": "mk_dum_rear__M_DUM_AntiHuntingDmp_B",
-      "opposite_frame_name": "mk_frame_rear__M_Frame_AntiHuntingDmp_B",
-      "stiffness_newtons_per_meter": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "damping_newton_seconds_per_meter": {
-        "x": 300000.0,
         "y": 0.0,
         "z": 0.0
       }
@@ -3283,15 +3455,125 @@
       "name": "front_ss_antiroll",
       "reference_frame_name": "mk_dum_front__M_DUM_AntiRoll",
       "opposite_frame_name": "mk_frame_front__M_Frame_AntiRoll",
-      "stiffness_newton_meters_per_radian": 2500000.0,
-      "damping_newton_meter_seconds_per_radian": 25000.0
+      "stiffness_newton_meters_per_radian": 1039880.0,
+      "damping_newton_meter_seconds_per_radian": 0.0
     },
     {
       "name": "rear_ss_antiroll",
       "reference_frame_name": "mk_dum_rear__M_DUM_AntiRoll",
       "opposite_frame_name": "mk_frame_rear__M_Frame_AntiRoll",
-      "stiffness_newton_meters_per_radian": 2500000.0,
-      "damping_newton_meter_seconds_per_radian": 25000.0
+      "stiffness_newton_meters_per_radian": 1039880.0,
+      "damping_newton_meter_seconds_per_radian": 0.0
+    }
+  ],
+  "point_to_point_series_spring_bilinear_dampers": [
+    {
+      "name": "front_ss_antihunting_A",
+      "reference_frame_name": "mk_dum_front__M_DUM_AntiHuntingDmp_A",
+      "opposite_frame_name": "mk_frame_front__M_Frame_AntiHuntingDmp_A",
+      "series_stiffness_newtons_per_meter": 10790000.0,
+      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "front_ss_antihunting_B",
+      "reference_frame_name": "mk_dum_front__M_DUM_AntiHuntingDmp_B",
+      "opposite_frame_name": "mk_frame_front__M_Frame_AntiHuntingDmp_B",
+      "series_stiffness_newtons_per_meter": 10790000.0,
+      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "rear_ss_antihunting_A",
+      "reference_frame_name": "mk_dum_rear__M_DUM_AntiHuntingDmp_A",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_AntiHuntingDmp_A",
+      "series_stiffness_newtons_per_meter": 10790000.0,
+      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "rear_ss_antihunting_B",
+      "reference_frame_name": "mk_dum_rear__M_DUM_AntiHuntingDmp_B",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_AntiHuntingDmp_B",
+      "series_stiffness_newtons_per_meter": 10790000.0,
+      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "front_ps_latdamper_A",
+      "reference_frame_name": "F_longibar_front_A_on_axlebridge_ff",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LatDamper_A",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "front_ps_latdamper_B",
+      "reference_frame_name": "F_longibar_front_B_on_axlebridge_ff",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LatDamper_B",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "front_ps_latdamper_C",
+      "reference_frame_name": "F_longibar_front_C_on_axlebridge_fr",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LatDamper_C",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "front_ps_latdamper_D",
+      "reference_frame_name": "F_longibar_front_D_on_axlebridge_fr",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LatDamper_D",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "rear_ps_latdamper_A",
+      "reference_frame_name": "F_longibar_rear_A_on_axlebridge_rf",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LatDamper_A",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "rear_ps_latdamper_B",
+      "reference_frame_name": "F_longibar_rear_B_on_axlebridge_rf",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LatDamper_B",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "rear_ps_latdamper_C",
+      "reference_frame_name": "F_longibar_rear_C_on_axlebridge_rr",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LatDamper_C",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    },
+    {
+      "name": "rear_ps_latdamper_D",
+      "reference_frame_name": "F_longibar_rear_D_on_axlebridge_rr",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LatDamper_D",
+      "series_stiffness_newtons_per_meter": 30000000.0,
+      "damping_below_knee_newton_seconds_per_meter": 1500000.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
     }
   ],
   "series_spring_viscous_dampers": [
@@ -3300,218 +3582,178 @@
       "reference_frame_name": "mk_dum_front__M_DUM_SSLatDmp",
       "opposite_frame_name": "mk_frame_front__M_Frame_SSLatDmp",
       "axis": "lateral",
-      "series_stiffness_newtons_per_meter": 8000000.0,
-      "series_damping_newton_seconds_per_meter": 50000.0
+      "series_stiffness_newtons_per_meter": 9099530.0,
+      "series_damping_newton_seconds_per_meter": 23289.3
     },
     {
       "name": "sslatdmp_1_mk_rear_BF_SLD",
       "reference_frame_name": "mk_dum_rear__M_DUM_SSLatDmp",
       "opposite_frame_name": "mk_frame_rear__M_Frame_SSLatDmp",
       "axis": "lateral",
-      "series_stiffness_newtons_per_meter": 8000000.0,
-      "series_damping_newton_seconds_per_meter": 50000.0
+      "series_stiffness_newtons_per_meter": 9099530.0,
+      "series_damping_newton_seconds_per_meter": 23289.3
     }
   ],
   "saturated_piecewise_linear_dampers": [],
-  "half_angle_midpoint_roll_pitch_yaw_bushings": [
+  "reference_frame_linear_bushings": [
     {
       "name": "front_ps_barfixed_A",
-      "frame_a_name": "mk_longibar_front_A__M_LongiBar_A_FrameSide",
-      "frame_c_name": "mk_frame_front__M_Frame_LongiBar_A",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_front_A__M_LongiBar_A_FrameSide",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LongiBar_A",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "front_ps_barfixed_B",
-      "frame_a_name": "mk_longibar_front_B__M_LongiBar_B_FrameSide",
-      "frame_c_name": "mk_frame_front__M_Frame_LongiBar_B",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_front_B__M_LongiBar_B_FrameSide",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LongiBar_B",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "front_ps_barfixed_C",
-      "frame_a_name": "mk_longibar_front_C__M_LongiBar_C_FrameSide",
-      "frame_c_name": "mk_frame_front__M_Frame_LongiBar_C",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_front_C__M_LongiBar_C_FrameSide",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LongiBar_C",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "front_ps_barfixed_D",
-      "frame_a_name": "mk_longibar_front_D__M_LongiBar_D_FrameSide",
-      "frame_c_name": "mk_frame_front__M_Frame_LongiBar_D",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_front_D__M_LongiBar_D_FrameSide",
+      "opposite_frame_name": "mk_frame_front__M_Frame_LongiBar_D",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "rear_ps_barfixed_A",
-      "frame_a_name": "mk_longibar_rear_A__M_LongiBar_A_FrameSide",
-      "frame_c_name": "mk_frame_rear__M_Frame_LongiBar_A",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_rear_A__M_LongiBar_A_FrameSide",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LongiBar_A",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "rear_ps_barfixed_B",
-      "frame_a_name": "mk_longibar_rear_B__M_LongiBar_B_FrameSide",
-      "frame_c_name": "mk_frame_rear__M_Frame_LongiBar_B",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_rear_B__M_LongiBar_B_FrameSide",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LongiBar_B",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "rear_ps_barfixed_C",
-      "frame_a_name": "mk_longibar_rear_C__M_LongiBar_C_FrameSide",
-      "frame_c_name": "mk_frame_rear__M_Frame_LongiBar_C",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_rear_C__M_LongiBar_C_FrameSide",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LongiBar_C",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     },
     {
       "name": "rear_ps_barfixed_D",
-      "frame_a_name": "mk_longibar_rear_D__M_LongiBar_D_FrameSide",
-      "frame_c_name": "mk_frame_rear__M_Frame_LongiBar_D",
-      "rotational_stiffness_newton_meters_per_radian": {
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
-      },
-      "rotational_damping_newton_meter_seconds_per_radian": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
-      },
+      "reference_frame_name": "mk_longibar_rear_D__M_LongiBar_D_FrameSide",
+      "opposite_frame_name": "mk_frame_rear__M_Frame_LongiBar_D",
       "translational_stiffness_newtons_per_meter": {
         "x": 100000000.0,
         "y": 100000000.0,
         "z": 100000000.0
       },
       "translational_damping_newton_seconds_per_meter": {
-        "x": 100.0,
-        "y": 100.0,
-        "z": 100.0
+        "x": 1000000.0,
+        "y": 1000000.0,
+        "z": 1000000.0
+      },
+      "rotational_damping_newton_meter_seconds_per_radian": {
+        "x": 10000.0,
+        "y": 10000.0,
+        "z": 10000.0
       }
     }
   ]

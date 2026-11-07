@@ -12,11 +12,9 @@
 //
 // Every element connects two named frames, but the constitutive frame and the
 // wrench application points belong to the element family. The translational,
-// series and clipped families below use a reference end and its balancing
-// support moment. The half-angle bushing instead uses named A/C ends and applies
-// both wrenches at one instantaneous common midpoint. Keeping those contracts
-// on their own types prevents a shared endpoint vocabulary from silently
-// turning into one shared — and wrong — force law.
+// fixed-axis series, clipped and bushing families use a reference end and its
+// balancing support moment. Point-to-point elements act along the line joining
+// their attachment points without an additional couple.
 
 namespace orvd::forces {
 
@@ -74,9 +72,8 @@ struct RollSpringDamperCouple {
 //
 //     dF/dt = stiffness * relative velocity - (stiffness / damping) * F
 //
-// with time constant damping / stiffness. This is the only family in this
-// header that carries continuous state, and it is the reason the system's state
-// has a third block at all.
+// with time constant damping / stiffness. The series families carry their force
+// states in the system's third continuous-state block.
 struct SeriesSpringViscousDamper {
     std::string name;
     ForceElementEnd reference_end;
@@ -84,6 +81,24 @@ struct SeriesSpringViscousDamper {
     ForceElementAxis axis{ForceElementAxis::kLateral};
     double series_stiffness_newtons_per_meter{0.0};
     double series_damping_newton_seconds_per_meter{0.0};
+};
+
+// A linear spring in series with an odd bilinear damper, acting along the
+// instantaneous line between its two attachment points. Positive force pulls
+// the points together; neither endpoint carries an additional couple.
+//
+// The damping slopes below and above the positive knee force are C and C2.
+// The inverse damping law is F/C inside the knee, and
+// sign(F) * (Fb/C + (abs(F) - Fb)/C2) outside it. The tensile force F is the
+// state, with dF/dt = K * (length_rate - inverse_damping(F)).
+struct PointToPointSeriesSpringBilinearDamper {
+    std::string name;
+    ForceElementEnd reference_end;
+    ForceElementEnd opposite_end;
+    double series_stiffness_newtons_per_meter{0.0};
+    double damping_below_knee_newton_seconds_per_meter{0.0};
+    double knee_force_newtons{0.0};
+    double damping_above_knee_newton_seconds_per_meter{0.0};
 };
 
 // A damper whose force law is a piecewise linear odd function of the relative
@@ -110,27 +125,23 @@ struct SaturatedPiecewiseLinearDamper {
     std::vector<SaturatedPiecewiseLinearDamperPoint> curve;
 };
 
-// A six-component linear bushing with the execution semantics frozen by the
-// IRW reference path.
+// A bushing with diagonal translational stiffness, translational damping and
+// rotational damping expressed in the reference frame. Translation and its
+// derivative are measured in that rotating frame; rotational damping uses the
+// physical relative angular velocity, without an Euler-angle rate map.
 //
-// Translation is stated in the half-angle frame between A and C. Rotation is
-// represented by space-fixed XYZ roll-pitch-yaw coordinates of C in A; their
-// rates are generalized speeds, not the components of angular velocity. The
-// resulting force and physical torque are applied as equal-and-opposite
-// wrenches at the instantaneous world-space midpoint between the two frame
-// origins. In particular, this family does not carry the reference-end support
-// moment used by the translational families above.
-struct HalfAngleMidpointRollPitchYawBushing {
+// Forces act at the two attachment points. The reference end also carries
+// (p_opposite - p_reference) x force_on_reference. The rotational damping
+// moment acts as an equal-and-opposite couple on the two bodies.
+struct ReferenceFrameLinearBushing {
     std::string name;
-    ForceElementEnd frame_a_end;
-    ForceElementEnd frame_c_end;
-    Eigen::Vector3d rotational_stiffness_newton_meters_per_radian{
-        Eigen::Vector3d::Zero()};
-    Eigen::Vector3d rotational_damping_newton_meter_seconds_per_radian{
-        Eigen::Vector3d::Zero()};
+    ForceElementEnd reference_end;
+    ForceElementEnd opposite_end;
     Eigen::Vector3d translational_stiffness_newtons_per_meter{
         Eigen::Vector3d::Zero()};
     Eigen::Vector3d translational_damping_newton_seconds_per_meter{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d rotational_damping_newton_meter_seconds_per_radian{
         Eigen::Vector3d::Zero()};
 };
 
@@ -143,10 +154,11 @@ struct VehicleForceElementCollection {
     std::vector<TranslationalSpringDamper> translational_spring_dampers;
     std::vector<RollSpringDamperCouple> roll_spring_damper_couples;
     std::vector<SeriesSpringViscousDamper> series_spring_viscous_dampers;
+    std::vector<PointToPointSeriesSpringBilinearDamper>
+        point_to_point_series_spring_bilinear_dampers;
     std::vector<SaturatedPiecewiseLinearDamper>
         saturated_piecewise_linear_dampers;
-    std::vector<HalfAngleMidpointRollPitchYawBushing>
-        half_angle_midpoint_roll_pitch_yaw_bushings;
+    std::vector<ReferenceFrameLinearBushing> reference_frame_linear_bushings;
 };
 
 }  // namespace orvd::forces

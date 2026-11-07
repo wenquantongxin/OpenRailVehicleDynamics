@@ -248,8 +248,8 @@ void Run(const std::filesystem::path& vehicle_path,
             "event");
     Eigen::VectorXd rhs(assembled.system().continuous_state_size());
     assembled.compiled_plan().CalcStateTimeDerivatives(accepted, rhs);
-    Require(rhs.size() == 157 && rhs.allFinite(),
-            "the terminal cruise-controlled 157-state RHS is not finite");
+    Require(rhs.size() == 169 && rhs.allFinite(),
+            "the terminal cruise-controlled 169-state RHS is not finite");
 }
 
 }  // namespace

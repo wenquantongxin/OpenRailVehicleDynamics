@@ -89,6 +89,9 @@ constexpr std::string_view kRecord = R"json({
   "series_spring_viscous_damper_force_states": [
     {"element_name": "series", "reference_end_axial_force_newtons": -37.5}
   ],
+  "point_to_point_series_spring_bilinear_damper_force_states": [
+    {"element_name": "point_to_point", "reference_end_axial_force_newtons": 125.0}
+  ],
   "translational_spring_damper_nominal_forces": [
     {
       "element_name": "spring",
@@ -238,6 +241,11 @@ int main(int argc, char** argv) {
                             .force_on_reference_end_in_reference_frame_newtons ==
                         Eigen::Vector3d(11.0, -22.0, 33.0),
                 "a named force state or nominal force was not mapped");
+        const auto& point_to_point =
+            state.point_to_point_series_spring_bilinear_damper_force_states.front();
+        Require(point_to_point.element_name == "point_to_point" &&
+                    point_to_point.reference_end_axial_force_newtons == 125.0,
+                "the point-to-point force state was not mapped");
         Require(state.wheel_pair_target_support_forces.front()
                             .station_reference_body_name == "wheelset" &&
                     state.wheel_pair_target_support_forces.front()
@@ -312,6 +320,33 @@ int main(int argc, char** argv) {
             "{\"element_name\": \"series\", \"reference_end_axial_force_newtons\": -37.5},\n    "
             "{\"element_name\": \"series\", \"reference_end_axial_force_newtons\": 1.0}"),
         "more than once", "a repeated named series state was accepted");
+
+    ExpectRefusal(
+        path,
+        ReplaceOnce(valid,
+                    "\"element_name\": \"point_to_point\", ", ""),
+        "element_name is required",
+        "a point-to-point state without its name was accepted");
+    ExpectRefusal(
+        path,
+        ReplaceOnce(valid,
+                    "{\"element_name\": \"point_to_point\", \"reference_end_axial_force_newtons\": 125.0}",
+                    "{\"element_name\": \"point_to_point\", \"reference_end_axial_force_newtons\": 125.0},\n    "
+                    "{\"element_name\": \"point_to_point\", \"reference_end_axial_force_newtons\": -25.0}"),
+        "more than once",
+        "a repeated point-to-point state name was accepted");
+    ExpectRefusal(
+        path,
+        ReplaceOnce(valid, "\"reference_end_axial_force_newtons\": 125.0",
+                    "\"reference_end_axial_force_newtons\": \"infinity\""),
+        "finite JSON number",
+        "a nonnumeric point-to-point force was accepted");
+    ExpectRefusal(
+        path,
+        ReplaceOnce(valid,
+                    "\"point_to_point_series_spring_bilinear_damper_force_states\"",
+                    "\"point_to_point_force_states\""),
+        "unknown key", "an unknown point-to-point array key was accepted");
 
     std::filesystem::remove(path, ignored);
     if (failures != 0) {

@@ -67,7 +67,7 @@ AssembleVehicleMultibodyModel(
 // series element requires both strictly positive, since with either at zero it
 // has no time constant and is an algebraic element of a different family.  A
 // clipped damper curve must start at the origin, ascend strictly in velocity
-// and state finite non-negative force. A half-angle bushing requires four
+// and state finite non-negative force. A reference-frame bushing requires three
 // finite non-negative three-axis constant vectors. The world frame cannot be a
 // force-element end.
 [[nodiscard]] std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(

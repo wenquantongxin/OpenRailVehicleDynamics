@@ -186,8 +186,8 @@ void CheckStateArtifact(
     const auto observation_header = SplitTabs(observation_line);
     Require(header.size() == static_cast<std::size_t>(terminal.size()) + 3 &&
                 header[3] == "q.0" && header[84] == "v.0" &&
-                header[158] == "z.0" && header.back() == "z.1",
-            "full-state artifact did not preserve frozen IRW q/v/z order");
+                header[158] == "z.0" && header.back() == "z.13",
+            "full-state artifact did not preserve IRW q/v/z order");
     std::size_t sample = 0;
     std::vector<double> last;
     while (std::getline(states, line)) {
@@ -334,13 +334,13 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     while (std::getline(continuous_state_input, line)) {
         continuous_state_rows.push_back(SplitTabs(line));
     }
-    Require(continuous_state_header.size() == 3 + 81 + 74 + 2 &&
+    Require(continuous_state_header.size() == 3 + 81 + 74 + 14 &&
                 continuous_state_header[3] == "q.0" &&
                 continuous_state_header[3 + 80] == "q.80" &&
                 continuous_state_header[3 + 81] == "v.0" &&
                 continuous_state_header[3 + 81 + 73] == "v.73" &&
                 continuous_state_header[3 + 81 + 74] == "z.0" &&
-                continuous_state_header.back() == "z.1" &&
+                continuous_state_header.back() == "z.13" &&
                 continuous_state_rows.size() == 101,
             "the IRW continuous-state artifact has the wrong [q;v;z] "
             "layout or sample count");
@@ -409,8 +409,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     constexpr std::array<std::string_view, 4> kCarrierNames{
         "axlebridge_ff", "axlebridge_fr", "axlebridge_rf", "axlebridge_rr"};
     constexpr std::array<double, 4> kInitialStations{
-        10.000008398803899, 7.5000084046506323,
-        -7.4999916011961005, -9.9999915953493677};
+        9.999999996527368, 7.500000003472632,
+        -7.5000000034726302, -9.9999999965273716};
     for (std::size_t carrier = 0; carrier < kCarrierNames.size(); ++carrier) {
         const std::size_t station = FindColumn(
             header, std::string(kCarrierNames[carrier]) +
@@ -492,18 +492,18 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                 metadata.find(
                     "\"series_force_absolute_tolerance_newtons\": 9.9999999999999995e-07") !=
                     std::string::npos,
-            "the frozen IRW A-layer tolerance identity is absent");
+            "the IRW A-layer tolerance identity is absent");
     Require(metadata.find("\"generalized_position_count\": 81") !=
                     std::string::npos &&
                 metadata.find("\"generalized_velocity_count\": 74") !=
                     std::string::npos &&
-                metadata.find("\"series_force_state_count\": 2") !=
+                metadata.find("\"series_force_state_count\": 14") !=
                     std::string::npos &&
-                metadata.find("\"vehicle_body_wrench_count\": 96") !=
+                metadata.find("\"vehicle_body_wrench_count\": 112") !=
                     std::string::npos &&
                 metadata.find("\"contact_body_wrench_count\": 8") !=
                     std::string::npos,
-            "the passive q81/v74/z2 and 96+8 wrench identity is absent");
+            "the passive q81/v74/z14 and 112+8 wrench identity is absent");
     const auto& input_paths = metadata_document.at("input_paths");
     Require(input_paths.at("vehicle_definition").get<std::string>() ==
                     std::filesystem::canonical(argv[1]).string() &&
@@ -519,7 +519,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
         ReadWholeFile(configuration.output_directory / "contact_patches.tsv");
     Require(patches.find("wheel_ff_l") != std::string::npos &&
                 patches.find("wheel_rr_r") != std::string::npos,
-            "the per-patch artifact omits a frozen IRW interface");
+            "the per-patch artifact omits an IRW interface");
     Require(Throws([&] { (void)RunIrwPassiveScenario(configuration); }),
             "the IRW runner overwrote an existing successful artifact");
 
@@ -577,7 +577,7 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
                 aar5_metadata.find(
                     "\"series_force_absolute_tolerance_newtons\": "
                     "9.9999999999999995e-07") != std::string::npos,
-            "the frozen IRW B-layer tolerance or uniform-clock identity is "
+            "the IRW B-layer tolerance or uniform-clock identity is "
             "absent");
     configuration.output_directory = root / "empty-irregularity";
     configuration.track_irregularity_identifier = "";
@@ -663,9 +663,9 @@ void CheckPassiveDenseJacobianThreading(
                     candidate.integration_work.total_statistics()
                             .requested_dense_finite_difference_jacobian_worker_count ==
                         requested_threads &&
-                    candidate.terminal_continuous_state.size() == 157,
+                    candidate.terminal_continuous_state.size() == 169,
                 "the passive IRW 1/4/8/12/16/32-thread run did not exercise "
-                "the requested 157-state dense Jacobian");
+                "the requested 169-state dense Jacobian");
         const std::string observations = ReadWholeFile(
             configuration.output_directory / "observations.tsv");
         const std::string patches = ReadWholeFile(
@@ -721,7 +721,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                 summary.integration_work.total_statistics()
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     1 &&
-                summary.terminal_continuous_state.size() == 157,
+                summary.terminal_continuous_state.size() == 169,
             "the 20 ms control recipe did not produce initialization, "
             "U0..U2, two holds and one nonterminal synchronization");
     Require(summary.integration_work.total_statistics().successful_internal_step_count > 0 &&

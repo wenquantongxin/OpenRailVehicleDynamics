@@ -160,6 +160,7 @@
     }
   ],
   "ball_rpy_joint_startup_states": [],
+  "point_to_point_series_spring_bilinear_damper_force_states": [],
   "series_spring_viscous_damper_force_states": [
     {
       "element_name": "front_lateral_damper",

@@ -93,6 +93,22 @@ class SeriesSpringViscousDamperIndex {
     int ordinal_{-1};
 };
 
+/// One point-to-point series spring-bilinear damper's force-state component.
+class PointToPointSeriesSpringBilinearDamperIndex {
+   public:
+    [[nodiscard]] bool operator==(
+        const PointToPointSeriesSpringBilinearDamperIndex&) const = default;
+
+   private:
+    friend class SystemInstance;
+    PointToPointSeriesSpringBilinearDamperIndex(
+        internal::SystemIdentity system_identity, int ordinal)
+        : system_identity_(system_identity), ordinal_(ordinal) {}
+
+    internal::SystemIdentity system_identity_{0};
+    int ordinal_{-1};
+};
+
 /// One frozen block in the whole-system continuous vector.
 class SystemContinuousStateRange {
    public:
@@ -133,9 +149,8 @@ class SystemRuntimeContext {
     [[nodiscard]] const Eigen::VectorXd& generalized_positions() const;
     [[nodiscard]] const Eigen::VectorXd& generalized_velocities() const;
 
-    /// The force of each series spring-viscous damper, in newtons, acting on
-    /// that element's reference end along its stated axis.  Empty when the
-    /// system declares no such element.
+    /// Each series element's reference-end force in newtons, along its
+    /// declared axis or its current endpoint line according to its family.
     [[nodiscard]] const Eigen::VectorXd& series_spring_damper_forces() const {
         return series_spring_damper_forces_;
     }
@@ -280,7 +295,7 @@ class SystemInstance {
     [[nodiscard]] SystemContinuousStateRange generalized_velocities_state_range()
         const;
 
-    /// Where the series spring-viscous dampers' force state sits in the
+    /// Where all series dampers' force state sits in the
     /// contiguous vector.  A size of zero says the system declared none.
     [[nodiscard]] SystemContinuousStateRange
     series_spring_damper_force_state_range() const;
@@ -291,11 +306,17 @@ class SystemInstance {
     GetTranslationalSpringDamperIndexByName(std::string_view name) const;
     [[nodiscard]] SeriesSpringViscousDamperIndex
     GetSeriesSpringViscousDamperIndexByName(std::string_view name) const;
+    [[nodiscard]] PointToPointSeriesSpringBilinearDamperIndex
+    GetPointToPointSeriesSpringBilinearDamperIndexByName(
+        std::string_view name) const;
 
     /// The one-component state range belonging to a named series element.
     [[nodiscard]] SystemContinuousStateRange
     series_spring_damper_force_state_range(
         SeriesSpringViscousDamperIndex element) const;
+    [[nodiscard]] SystemContinuousStateRange
+    series_spring_damper_force_state_range(
+        PointToPointSeriesSpringBilinearDamperIndex element) const;
 
     [[nodiscard]] int continuous_state_size() const;
 

@@ -1,10 +1,6 @@
-// The IRW contact personality at its real S1002/UIC60 asset boundary.
-//
-// G68 stops before the eight independent wheel bodies are connected to the
-// vehicle RHS. This gate therefore checks the closed vehicle personality, the
-// common equal-arc wheel preparation and a real static contact without
-// inventing G69's axle-bridge kinematics.
+// IRW S1002/UIC60 binding, prepared profiles and startup contact geometry.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -112,12 +108,12 @@ void CopyAsset(const fs::path& source_root, const fs::path& destination_root,
 }
 
 WheelRailContactInput MakeStaticInput(const IrwWheelRailContact& contact,
-                                      WheelSide side) {
+                                      WheelSide side, double axle_height) {
     const auto& constants = contact.pose_constants(side);
     WheelRailPoseInput pose_input;
     pose_input.placement = WheelsetPlacement{
         .lateral_meters = 0.0,
-        .vertical_meters = -constants.nominal_rolling_radius_meters,
+        .vertical_meters = axle_height,
         .roll_radians = 0.0,
         .yaw_radians = 0.0,
     };
@@ -133,7 +129,7 @@ WheelRailContactInput MakeStaticInput(const IrwWheelRailContact& contact,
             .toRotationMatrix();
     input.wheel.origin_track_meters = Eigen::Vector3d(
         0.0, constants.wheel_lateral_datum_meters,
-        -constants.nominal_rolling_radius_meters);
+        axle_height);
     input.wheel.rotation_track_from_profile = Eigen::Matrix3d::Identity();
     return input;
 }
@@ -257,7 +253,7 @@ void CheckPersonality(const IrwWheelRailContact& contact,
                     startup.rail_profile_reference_vertical_offset_meters &&
                     constants.nominal_rolling_radius_meters == 0.43 &&
                     constants.apply_pitch_correction,
-                "an IRW side lost its H3 rail offset or nominal radius");
+                "an IRW side lost its startup rail offset or nominal radius");
     }
 }
 
@@ -276,18 +272,26 @@ WheelRailContactResult EvaluatePrepared(const IrwWheelRailContact& contact,
     return result;
 }
 
-void CheckRealEvaluation(const IrwWheelRailContact& contact) {
+void CheckRealEvaluation(const IrwWheelRailContact& contact,
+                         const ResolvedStartupState& startup) {
+    const auto body = std::find_if(startup.free_body_startup_states.begin(),
+                                   startup.free_body_startup_states.end(),
+                                   [](const auto& state) { return state.body_name == "axlebridge_ff"; });
+    if (body == startup.free_body_startup_states.end()) {
+        throw std::runtime_error("startup lacks the front axle bridge");
+    }
+    const double axle_height = body->vertical_offset_in_local_track_frame_meters;
     std::size_t allocations = 0;
     const auto right = EvaluatePrepared(
         contact, WheelSide::kRight,
-        MakeStaticInput(contact, WheelSide::kRight), &allocations);
+        MakeStaticInput(contact, WheelSide::kRight, axle_height), &allocations);
     const auto left = EvaluatePrepared(
         contact, WheelSide::kLeft,
-        MakeStaticInput(contact, WheelSide::kLeft), &allocations);
+        MakeStaticInput(contact, WheelSide::kLeft, axle_height), &allocations);
     Require(allocations == 0,
             "a prepared real-profile IRW evaluation called ordinary C++ new");
     Require(right.count == 1 && left.count == 1,
-            "the H3 static profile placement did not produce one patch per side");
+            "the resolved static profile placement did not produce one patch per side");
     if (right.count == 1 && left.count == 1) {
         const auto& right_patch = right.patches[0];
         const auto& left_patch = left.patches[0];
@@ -392,7 +396,7 @@ int main(int argc, char* argv[]) {
             data_root, startup.wheel_rail_binding,
             startup.rail_profile_reference_vertical_offset_meters);
         CheckPersonality(*contact, startup, data_root);
-        CheckRealEvaluation(*contact);
+        CheckRealEvaluation(*contact, startup);
         CheckIdentityRefusals(data_root, startup, argv[3]);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "IRW contact binding threw: %s\n", error.what());

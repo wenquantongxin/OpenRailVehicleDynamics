@@ -29,8 +29,8 @@ constexpr internal::VehicleQualificationRecipe MakeIrwRecipe(
         integration.default_integration_recipe,
         81,
         74,
-        2,
-        96,
+        14,
+        112,
         irregularity_requirement,
         &configuration::AssembleIrwContactScenario};
 }

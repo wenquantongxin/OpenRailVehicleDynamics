@@ -19,7 +19,8 @@ namespace {
 
 using orvd::forces::ForceElementAxis;
 using orvd::forces::ForceElementEnd;
-using orvd::forces::HalfAngleMidpointRollPitchYawBushing;
+using orvd::forces::ReferenceFrameLinearBushing;
+using orvd::forces::PointToPointSeriesSpringBilinearDamper;
 using orvd::forces::RollSpringDamperCouple;
 using orvd::forces::SaturatedPiecewiseLinearDamper;
 using orvd::forces::SaturatedPiecewiseLinearDamperPoint;
@@ -231,6 +232,14 @@ VehicleForceElementCollection WithSeriesElements(
     return collection;
 }
 
+VehicleForceElementCollection WithPointToPointSeriesElements(
+    std::vector<PointToPointSeriesSpringBilinearDamper> elements) {
+    VehicleForceElementCollection collection;
+    collection.point_to_point_series_spring_bilinear_dampers =
+        std::move(elements);
+    return collection;
+}
+
 VehicleForceElementCollection WithClippedElements(
     std::vector<SaturatedPiecewiseLinearDamper> elements) {
     VehicleForceElementCollection collection;
@@ -239,9 +248,9 @@ VehicleForceElementCollection WithClippedElements(
 }
 
 VehicleForceElementCollection WithBushingElements(
-    std::vector<HalfAngleMidpointRollPitchYawBushing> elements) {
+    std::vector<ReferenceFrameLinearBushing> elements) {
     VehicleForceElementCollection collection;
-    collection.half_angle_midpoint_roll_pitch_yaw_bushings =
+    collection.reference_frame_linear_bushings =
         std::move(elements);
     return collection;
 }
@@ -370,6 +379,112 @@ void CheckFullWrenchAndPower() {
     Expect((reference_angular - opposite_angular).cwiseAbs().maxCoeff() > 0.1,
            "the two ends turn at different rates, which is the condition under "
            "which the power identity can see a misplaced application point");
+}
+
+void CheckReferenceFrameBushing() {
+    const TwoBodyFixture fixture;
+    const Eigen::Vector3d stiffness(31000.0, 17000.0, 23000.0);
+    const Eigen::Vector3d damping(410.0, 230.0, 370.0);
+    const Eigen::Vector3d rotational_damping(170.0, 290.0, 430.0);
+    const VehicleForcePlan plan(
+        *fixture.model,
+        WithBushingElements({ReferenceFrameLinearBushing{
+            "test_bushing", fixture.reference_end, fixture.opposite_end,
+            stiffness, damping, rotational_damping}}));
+    Eigen::VectorXd no_state(0);
+    Eigen::VectorXd no_nominal(0);
+    Eigen::VectorXd derivatives(0);
+    const auto wrenches =
+        Evaluate(fixture, plan, no_state, no_nominal, derivatives);
+    const MotionSample motion = SampleMotion(fixture);
+
+    // Reconstruct the rotating-frame derivative from absolute endpoint motion.
+    const Eigen::Vector3d reference_angular =
+        AngularVelocityInWorld(fixture, fixture.reference_end);
+    const Eigen::Vector3d opposite_angular =
+        AngularVelocityInWorld(fixture, fixture.opposite_end);
+    const Eigen::Vector3d relative_velocity =
+        motion.rotation_of_reference_in_world.transpose() *
+        (PointVelocityInWorld(fixture, fixture.opposite_end) -
+         PointVelocityInWorld(fixture, fixture.reference_end) -
+         reference_angular.cross(motion.displacement_in_world));
+    const Eigen::Vector3d relative_angular =
+        motion.rotation_of_reference_in_world.transpose() *
+        (opposite_angular - reference_angular);
+    const Eigen::Vector3d force_in_reference =
+        stiffness.cwiseProduct(motion.displacement_in_reference) +
+        damping.cwiseProduct(relative_velocity);
+    const Eigen::Vector3d moment_in_reference =
+        rotational_damping.cwiseProduct(relative_angular);
+    const Eigen::Vector3d force_in_world =
+        motion.rotation_of_reference_in_world * force_in_reference;
+    const Eigen::Vector3d moment_in_world =
+        motion.rotation_of_reference_in_world * moment_in_reference;
+    const Eigen::Vector3d support_moment =
+        motion.displacement_in_world.cross(force_in_world);
+    const double force_scale = force_in_world.norm();
+    const double moment_scale = support_moment.norm() + moment_in_world.norm();
+
+    Expect(plan.reference_frame_linear_bushing_count() == 1 &&
+               plan.body_wrench_count() == 2 &&
+               plan.series_spring_damper_force_state_count() == 0 &&
+               plan.nominal_force_component_count() == 0,
+           "the reference-frame bushing has two wrenches and no state or "
+           "nominal-force slot");
+    Expect(support_moment.norm() > 1.0 && moment_in_world.norm() > 1.0 &&
+               reference_angular.cross(motion.displacement_in_world).norm() >
+                   0.01,
+           "bushing checks exercise noncentral force, rotational damping and "
+           "a rotating reference frame");
+    Expect((wrenches[0].force_newtons - force_in_world).norm() <=
+               1.0e-9 * force_scale &&
+               (wrenches[1].force_newtons + force_in_world).norm() <=
+                   1.0e-9 * force_scale,
+           "bushing force follows the three reference-frame coefficients");
+    Expect((wrenches[0].torque_about_point_newton_metres - support_moment -
+            moment_in_world).norm() <= 1.0e-9 * moment_scale &&
+               (wrenches[1].torque_about_point_newton_metres + moment_in_world)
+                       .norm() <= 1.0e-9 * moment_scale,
+           "only the reference end carries support torque; rotational damping "
+           "uses physical angular velocity and opposite pure moments");
+    const auto reference_point = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+        *fixture.context, fixture.reference_end.frame);
+    const auto opposite_point = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+        *fixture.context, fixture.opposite_end.frame);
+    Expect(wrenches[0].body == reference_point.body &&
+               wrenches[1].body == opposite_point.body &&
+               wrenches[0].point_position_in_body_frame_meters ==
+                   reference_point.position_in_body_frame_meters &&
+               wrenches[1].point_position_in_body_frame_meters ==
+                   opposite_point.position_in_body_frame_meters &&
+               wrenches[0].expressed_in_frame == fixture.model->world_frame() &&
+               wrenches[1].expressed_in_frame == fixture.model->world_frame(),
+           "bushing forces act at the actual attachment points in world axes");
+
+    const Eigen::Vector3d origin(0.83, -1.27, 0.44);
+    const Eigen::Vector3d total_moment =
+        wrenches[0].torque_about_point_newton_metres +
+        wrenches[1].torque_about_point_newton_metres +
+        (motion.reference_point_in_world - origin)
+            .cross(wrenches[0].force_newtons) +
+        (motion.opposite_point_in_world - origin)
+            .cross(wrenches[1].force_newtons);
+    Expect((wrenches[0].force_newtons + wrenches[1].force_newtons).norm() <=
+               1.0e-9 * force_scale &&
+               total_moment.norm() <= 1.0e-9 * moment_scale,
+           "bushing wrenches balance about an arbitrary point");
+    const double stored_energy_rate =
+        stiffness.cwiseProduct(motion.displacement_in_reference)
+            .dot(relative_velocity);
+    const double dissipated_power =
+        damping.cwiseProduct(relative_velocity).dot(relative_velocity) +
+        rotational_damping.cwiseProduct(relative_angular).dot(relative_angular);
+    const double power = AppliedPower(fixture, wrenches);
+    Expect(std::abs(power + stored_energy_rate + dissipated_power) <=
+               1.0e-9 * (std::abs(power) + std::abs(stored_energy_rate) +
+                         dissipated_power),
+           "endpoint power equals spring energy change and translational plus "
+           "physical-angular-velocity dissipation");
 }
 
 // ---------------------------------------------------------------------------
@@ -621,6 +736,163 @@ void CheckSeriesAnalyticDerivative() {
            "velocity term is exercised");
 }
 
+void CheckPointToPointSeriesLawAndWrenches() {
+    const TwoBodyFixture fixture;
+    constexpr double kStiffness = 2000.0;
+    PointToPointSeriesSpringBilinearDamper element{
+        "point_to_point_series", fixture.reference_end, fixture.opposite_end,
+        kStiffness, 500.0, 100.0, 125.0};
+    VehicleForcePlan plan(*fixture.model,
+                         WithPointToPointSeriesElements({element}));
+    Expect(plan.series_spring_damper_force_state_count() == 1 &&
+               plan.point_to_point_series_spring_bilinear_damper_count() == 1 &&
+               plan.body_wrench_count() == 2,
+           "one point-to-point series element owns one force state and two wrenches");
+    const MotionSample motion = SampleMotion(fixture);
+    const Eigen::Vector3d direction = motion.displacement_in_world.normalized();
+    const double length_rate =
+        direction.dot(PointVelocityInWorld(fixture, fixture.opposite_end) -
+                      PointVelocityInWorld(fixture, fixture.reference_end));
+    Expect(std::abs(length_rate) > 1.0e-3,
+           "the rotating attachment fixture has a nonzero length rate");
+    const auto reference_point = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+        *fixture.context, fixture.reference_end.frame);
+    const auto opposite_point = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+        *fixture.context, fixture.opposite_end.frame);
+    const Eigen::Vector3d moment_centre(0.83, -1.27, 0.44);
+    Eigen::VectorXd state(1);
+    Eigen::VectorXd derivative(1);
+    const Eigen::VectorXd nominal(0);
+    // These independently tabulated inverse values include both knees and
+    // outer-branch speeds beyond the nominal curve table's range.
+    const std::vector<std::pair<double, double>> force_and_damper_speed{
+        {-350.0, -2.2}, {-100.0, -0.2}, {-40.0, -0.08}, {0.0, 0.0},
+        {40.0, 0.08}, {100.0, 0.2}, {350.0, 2.2}};
+    for (const auto& [force, damper_speed] : force_and_damper_speed) {
+        state[0] = force;
+        const auto wrenches = Evaluate(fixture, plan, state, nominal, derivative);
+        const double expected_rate = kStiffness * (length_rate - damper_speed);
+        Expect(std::abs(derivative[0] - expected_rate) <=
+                   512.0 * kMachine * std::max(1.0, std::abs(expected_rate)),
+               "bilinear inversion gives the signed inner, knee and outer rates");
+        const double force_scale = std::max(1.0, std::abs(force));
+        Expect((wrenches[0].force_newtons - force * direction).norm() <=
+                       64.0 * kMachine * force_scale &&
+                   wrenches[1].force_newtons == -wrenches[0].force_newtons,
+               "positive force pulls the actual endpoints together");
+        Expect(wrenches[0].torque_about_point_newton_metres.isZero(0.0) &&
+                   wrenches[1].torque_about_point_newton_metres.isZero(0.0),
+               "a central point-to-point force adds no endpoint couple");
+        Expect(wrenches[0].body == reference_point.body &&
+                   wrenches[1].body == opposite_point.body &&
+                   wrenches[0].point_position_in_body_frame_meters ==
+                       reference_point.position_in_body_frame_meters &&
+                   wrenches[1].point_position_in_body_frame_meters ==
+                       opposite_point.position_in_body_frame_meters,
+               "both forces act at their declared attachment points");
+        const Eigen::Vector3d net_moment =
+            (motion.reference_point_in_world - moment_centre)
+                .cross(wrenches[0].force_newtons) +
+            (motion.opposite_point_in_world - moment_centre)
+                .cross(wrenches[1].force_newtons);
+        Expect(net_moment.norm() <= 512.0 * kMachine * force_scale,
+               "the endpoint pair balances moment about an arbitrary point");
+        const double stored_rate = force * derivative[0] / kStiffness;
+        const double dissipation = force * damper_speed;
+        const double power = AppliedPower(fixture, wrenches);
+        const double power_scale = std::max(
+            {1.0, std::abs(stored_rate), std::abs(dissipation), std::abs(power)});
+        Expect(std::abs(power + force * length_rate) <=
+                       512.0 * kMachine * power_scale &&
+                   std::abs(power + stored_rate + dissipation) <=
+                       512.0 * kMachine * power_scale &&
+                   dissipation >= 0.0,
+               "endpoint power equals minus spring storage rate and dissipation");
+    }
+
+    element.damping_above_knee_newton_seconds_per_meter =
+        element.damping_below_knee_newton_seconds_per_meter;
+    VehicleForcePlan linear_plan(*fixture.model,
+                                 WithPointToPointSeriesElements({element}));
+    for (const double force : {-350.0, 40.0, 350.0}) {
+        state[0] = force;
+        (void)Evaluate(fixture, linear_plan, state, nominal, derivative);
+        const double expected_rate = kStiffness * (length_rate - force / 500.0);
+        Expect(std::abs(derivative[0] - expected_rate) <=
+                   512.0 * kMachine * std::max(1.0, std::abs(expected_rate)),
+               "equal damping slopes reduce to the linear constitutive law");
+    }
+}
+
+void CheckPointToPointSeriesRefusals() {
+    using Damper = PointToPointSeriesSpringBilinearDamper;
+    const TwoBodyFixture fixture;
+    const PointToPointSeriesSpringBilinearDamper valid{
+        "point_to_point_series", fixture.reference_end, fixture.opposite_end,
+        2000.0, 500.0, 100.0, 125.0};
+    const auto rejects = [&](const Damper& element) {
+        try {
+            VehicleForcePlan plan(*fixture.model,
+                                  WithPointToPointSeriesElements({element}));
+        } catch (const std::invalid_argument& error) {
+            return std::string_view(error.what()).find(element.name) !=
+                   std::string_view::npos;
+        }
+        return false;
+    };
+    for (const auto member : {
+             &Damper::series_stiffness_newtons_per_meter,
+             &Damper::damping_below_knee_newton_seconds_per_meter,
+             &Damper::knee_force_newtons,
+             &Damper::damping_above_knee_newton_seconds_per_meter}) {
+        for (const double value : {0.0, -1.0,
+                                   std::numeric_limits<double>::infinity(),
+                                   std::numeric_limits<double>::quiet_NaN()}) {
+            auto element = valid;
+            element.*member = value;
+            Expect(rejects(element),
+                   "each bilinear constant must be finite and strictly positive");
+        }
+    }
+    auto invalid = valid;
+    invalid.damping_below_knee_newton_seconds_per_meter = 1.0e-308;
+    Expect(rejects(invalid), "overflowing inner relaxation rate is rejected");
+    invalid = valid;
+    invalid.damping_above_knee_newton_seconds_per_meter = 1.0e-308;
+    Expect(rejects(invalid), "overflowing outer relaxation rate is rejected");
+    invalid = valid;
+    invalid.series_stiffness_newtons_per_meter = 1.0;
+    invalid.damping_below_knee_newton_seconds_per_meter = 1.0e-300;
+    invalid.knee_force_newtons = 1.0e9;
+    Expect(rejects(invalid), "overflowing knee velocity is rejected");
+    invalid = valid;
+    invalid.opposite_end = fixture.same_body_end;
+    Expect(rejects(invalid), "point-to-point ends must lie on distinct bodies");
+
+    auto coincident = valid;
+    coincident.reference_end.frame = fixture.model->body_frame(
+        fixture.model->GetRigidBodyByName("first"));
+    coincident.opposite_end.frame = fixture.model->body_frame(
+        fixture.model->GetRigidBodyByName("second"));
+    VehicleForcePlan plan(*fixture.model,
+                         WithPointToPointSeriesElements({coincident}));
+    const auto context = fixture.model->CreateDefaultContext();
+    Eigen::VectorXd state = Eigen::VectorXd::Zero(1);
+    Eigen::VectorXd derivative(1);
+    const Eigen::VectorXd nominal(0);
+    std::vector<AppliedBodyWrench> wrenches(2);
+    bool rejected_coincidence = false;
+    try {
+        plan.CalcAppliedForces(*context, state, nominal, wrenches, derivative);
+    } catch (const std::runtime_error& error) {
+        rejected_coincidence =
+            std::string_view(error.what()).find(coincident.name) !=
+            std::string_view::npos;
+    }
+    Expect(rejected_coincidence,
+           "coincident endpoints reject evaluation without a fabricated direction");
+}
+
 void CheckPlanRefusals() {
     const TwoBodyFixture fixture;
     const auto refuses = [](auto&& build, const std::string& description) {
@@ -779,12 +1051,11 @@ void CheckPlanRefusals() {
         [&] {
             VehicleForcePlan plan(
                 *fixture.model,
-                WithBushingElements({HalfAngleMidpointRollPitchYawBushing{
+                WithBushingElements({ReferenceFrameLinearBushing{
                     "active_bushing", fixture.reference_end,
-                    fixture.opposite_end, Eigen::Vector3d::Zero(),
-                    Eigen::Vector3d(100.0, -1.0, 100.0),
-                    Eigen::Vector3d::Constant(1.0e8),
-                    Eigen::Vector3d::Constant(100.0)}}));
+                    fixture.opposite_end, Eigen::Vector3d::Constant(1.0e8),
+                    Eigen::Vector3d::Constant(100.0),
+                    Eigen::Vector3d(100.0, -1.0, 100.0)}}));
         },
         "active_bushing",
         "a negative bushing coefficient is refused with the element name");
@@ -795,11 +1066,14 @@ void CheckPlanRefusals() {
 int main() {
     try {
         CheckFullWrenchAndPower();
+        CheckReferenceFrameBushing();
         CheckTranslationalEnergyIdentity();
         CheckSeriesEnergyIdentity();
         CheckClippedDamperLawAndDissipation();
         CheckRollCoupleAndItsFiniteAttitudeResidual();
         CheckSeriesAnalyticDerivative();
+        CheckPointToPointSeriesLawAndWrenches();
+        CheckPointToPointSeriesRefusals();
         CheckPlanRefusals();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "vehicle force elements failed: %s\n",

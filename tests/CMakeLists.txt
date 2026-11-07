@@ -1349,15 +1349,6 @@ target_link_libraries(verify_vehicle_force_elements
 add_test(NAME verify_vehicle_force_elements
          COMMAND verify_vehicle_force_elements)
 
-add_executable(verify_half_angle_midpoint_roll_pitch_yaw_bushing
-    forces/verify_half_angle_midpoint_roll_pitch_yaw_bushing.cc)
-orvd_configure_first_party_target(
-    verify_half_angle_midpoint_roll_pitch_yaw_bushing)
-target_link_libraries(verify_half_angle_midpoint_roll_pitch_yaw_bushing
-    PRIVATE orvd_forces)
-add_test(NAME verify_half_angle_midpoint_roll_pitch_yaw_bushing
-         COMMAND verify_half_angle_midpoint_roll_pitch_yaw_bushing)
-
 add_executable(verify_independent_wheel_active_torque_plan
     forces/independent_wheel_active_torque_plan_header_self_containment.cc
     forces/verify_independent_wheel_active_torque_plan.cc)

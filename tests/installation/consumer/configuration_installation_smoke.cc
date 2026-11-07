@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // The installed IRW mechanical record, H3 state, R300 line and
+        // The installed IRW mechanical record, startup state, R300 line and
         // S1002/UIC60 personality cross the relocated package boundary as one
         // contact-enabled scenario.
         const auto irw_vehicle =
@@ -198,14 +198,16 @@ int main(int argc, char* argv[]) {
             irw_system.model().num_generalized_positions() != 81 ||
             irw_system.model().num_generalized_velocities() != 74 ||
             irw_system.force_plan().translational_spring_damper_count() !=
-                36 ||
+                32 ||
             irw_system.force_plan().roll_spring_damper_couple_count() != 2 ||
             irw_system.force_plan()
-                    .half_angle_midpoint_roll_pitch_yaw_bushing_count() != 8 ||
+                    .reference_frame_linear_bushing_count() != 8 ||
             irw_system.force_plan()
                     .series_spring_viscous_damper_count() != 2 ||
-            irw_system.force_plan().body_wrench_count() != 96 ||
-            irw_system.system().continuous_state_size() != 157 ||
+            irw_system.force_plan()
+                    .point_to_point_series_spring_bilinear_damper_count() != 12 ||
+            irw_system.force_plan().body_wrench_count() != 112 ||
+            irw_system.system().continuous_state_size() != 169 ||
             irw_system.contact_force_plan() == nullptr ||
             irw_system.contact_force_plan()->carrier_count() != 4 ||
             irw_system.contact_force_plan()->interface_count() != 8 ||
@@ -220,7 +222,7 @@ int main(int argc, char* argv[]) {
             irw_system.system().held_active_torque_count() != 8 ||
             irw_resolved.context().generalized_positions().size() != 81 ||
             irw_resolved.context().generalized_velocities().size() != 74 ||
-            irw_resolved.context().series_spring_damper_forces().size() != 2 ||
+            irw_resolved.context().series_spring_damper_forces().size() != 14 ||
             irw_resolved.context()
                     .held_independent_wheel_active_torques_newton_metres()
                     .size() != 8 ||
@@ -230,7 +232,7 @@ int main(int argc, char* argv[]) {
             irw_resolved.wheel_pair_placements().size() != 4) {
             std::fprintf(stderr,
                          "installed IRW assets did not assemble their complete "
-                         "contact-enabled H3 system\n");
+                         "contact-enabled system\n");
             return 1;
         }
         orvd::configuration::IrwLongitudinalCruiseEventSession
@@ -256,7 +258,7 @@ int main(int argc, char* argv[]) {
             10.0, -20.0, 30.0, -40.0, 50.0, -60.0, 70.0, -80.0};
         irw_system.system().SetHeldIndependentWheelActiveTorques(
             irw_resolved.context(), installed_active_torques);
-        Eigen::VectorXd irw_derivatives(157);
+        Eigen::VectorXd irw_derivatives(169);
         irw_system.compiled_plan().CalcStateTimeDerivatives(
             irw_resolved.context(), irw_derivatives);
         auto irw_contact_workspace =
@@ -296,7 +298,7 @@ int main(int argc, char* argv[]) {
         if (!irw_derivatives.allFinite()) {
             std::fprintf(stderr,
                          "installed IRW contact scenario did not produce a "
-                         "finite complete 157-state RHS\n");
+                         "finite complete 169-state RHS\n");
             return 1;
         }
 

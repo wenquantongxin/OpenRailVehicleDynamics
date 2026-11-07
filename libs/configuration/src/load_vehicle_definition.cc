@@ -261,6 +261,37 @@ VehicleSeriesSpringViscousDamperDefinition ParseSeriesSpringViscousDamper(
     return element;
 }
 
+VehiclePointToPointSeriesSpringBilinearDamperDefinition
+ParsePointToPointSeriesSpringBilinearDamper(const Json& value,
+                                          const std::string& path) {
+    RequireExactKeys(
+        value, path,
+        {"name", "reference_frame_name", "opposite_frame_name",
+         "series_stiffness_newtons_per_meter",
+         "damping_below_knee_newton_seconds_per_meter", "knee_force_newtons",
+         "damping_above_knee_newton_seconds_per_meter"});
+    VehiclePointToPointSeriesSpringBilinearDamperDefinition element;
+    element.name = RequireString(value.at("name"), path + ".name");
+    const ForceElementEnds ends = ParseEnds(value, path);
+    element.reference_frame_name = ends.reference_frame_name;
+    element.opposite_frame_name = ends.opposite_frame_name;
+    const auto positive_constant = [&value, &path](const char* key) {
+        const double number = RequireFiniteNumber(value.at(key), path + "." + key);
+        if (!(number > 0.0)) {
+            ThrowExpected(path + "." + key, "a strictly positive number");
+        }
+        return number;
+    };
+    element.series_stiffness_newtons_per_meter =
+        positive_constant("series_stiffness_newtons_per_meter");
+    element.damping_below_knee_newton_seconds_per_meter =
+        positive_constant("damping_below_knee_newton_seconds_per_meter");
+    element.knee_force_newtons = positive_constant("knee_force_newtons");
+    element.damping_above_knee_newton_seconds_per_meter =
+        positive_constant("damping_above_knee_newton_seconds_per_meter");
+    return element;
+}
+
 VehicleSaturatedPiecewiseLinearDamperDefinition
 ParseSaturatedPiecewiseLinearDamper(const Json& value,
                                     const std::string& path) {
@@ -293,34 +324,34 @@ ParseSaturatedPiecewiseLinearDamper(const Json& value,
     return element;
 }
 
-VehicleHalfAngleMidpointRollPitchYawBushingDefinition
-ParseHalfAngleMidpointRollPitchYawBushing(const Json& value,
-                                          const std::string& path) {
+VehicleReferenceFrameLinearBushingDefinition ParseReferenceFrameLinearBushing(
+    const Json& value, const std::string& path) {
     RequireExactKeys(
         value, path,
-        {"name", "frame_a_name", "frame_c_name",
-         "rotational_stiffness_newton_meters_per_radian",
-         "rotational_damping_newton_meter_seconds_per_radian",
+        {"name", "reference_frame_name", "opposite_frame_name",
          "translational_stiffness_newtons_per_meter",
-         "translational_damping_newton_seconds_per_meter"});
-    VehicleHalfAngleMidpointRollPitchYawBushingDefinition element;
+         "translational_damping_newton_seconds_per_meter",
+         "rotational_damping_newton_meter_seconds_per_radian"});
+    VehicleReferenceFrameLinearBushingDefinition element;
     element.name = RequireString(value.at("name"), path + ".name");
-    element.frame_a_name =
-        RequireString(value.at("frame_a_name"), path + ".frame_a_name");
-    element.frame_c_name =
-        RequireString(value.at("frame_c_name"), path + ".frame_c_name");
-    element.rotational_stiffness_newton_meters_per_radian = RequireVector(
-        value.at("rotational_stiffness_newton_meters_per_radian"),
-        path + ".rotational_stiffness_newton_meters_per_radian");
-    element.rotational_damping_newton_meter_seconds_per_radian = RequireVector(
-        value.at("rotational_damping_newton_meter_seconds_per_radian"),
-        path + ".rotational_damping_newton_meter_seconds_per_radian");
-    element.translational_stiffness_newtons_per_meter = RequireVector(
-        value.at("translational_stiffness_newtons_per_meter"),
-        path + ".translational_stiffness_newtons_per_meter");
-    element.translational_damping_newton_seconds_per_meter = RequireVector(
-        value.at("translational_damping_newton_seconds_per_meter"),
-        path + ".translational_damping_newton_seconds_per_meter");
+    const ForceElementEnds ends = ParseEnds(value, path);
+    element.reference_frame_name = ends.reference_frame_name;
+    element.opposite_frame_name = ends.opposite_frame_name;
+    const auto coefficient = [&](const char* key) {
+        const std::string coefficient_path = path + "." + key;
+        Eigen::Vector3d result = RequireVector(value.at(key), coefficient_path);
+        if ((result.array() < 0.0).any()) {
+            ThrowExpected(coefficient_path,
+                          "three finite non-negative coefficients");
+        }
+        return result;
+    };
+    element.translational_stiffness_newtons_per_meter =
+        coefficient("translational_stiffness_newtons_per_meter");
+    element.translational_damping_newton_seconds_per_meter =
+        coefficient("translational_damping_newton_seconds_per_meter");
+    element.rotational_damping_newton_meter_seconds_per_radian =
+        coefficient("rotational_damping_newton_meter_seconds_per_radian");
     return element;
 }
 
@@ -421,8 +452,9 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                       "translational_spring_dampers",
                       "roll_spring_damper_couples",
                       "series_spring_viscous_dampers",
+                      "point_to_point_series_spring_bilinear_dampers",
                       "saturated_piecewise_linear_dampers",
-                      "half_angle_midpoint_roll_pitch_yaw_bushings"});
+                      "reference_frame_linear_bushings"});
 
     VehicleDefinition vehicle;
     vehicle.vehicle_name =
@@ -460,14 +492,18 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         ParseArray<VehicleSeriesSpringViscousDamperDefinition>(
             root, "series_spring_viscous_dampers",
             ParseSeriesSpringViscousDamper);
+    vehicle.point_to_point_series_spring_bilinear_dampers =
+        ParseArray<VehiclePointToPointSeriesSpringBilinearDamperDefinition>(
+            root, "point_to_point_series_spring_bilinear_dampers",
+            ParsePointToPointSeriesSpringBilinearDamper);
     vehicle.saturated_piecewise_linear_dampers =
         ParseArray<VehicleSaturatedPiecewiseLinearDamperDefinition>(
             root, "saturated_piecewise_linear_dampers",
             ParseSaturatedPiecewiseLinearDamper);
-    vehicle.half_angle_midpoint_roll_pitch_yaw_bushings =
-        ParseArray<VehicleHalfAngleMidpointRollPitchYawBushingDefinition>(
-            root, "half_angle_midpoint_roll_pitch_yaw_bushings",
-            ParseHalfAngleMidpointRollPitchYawBushing);
+    vehicle.reference_frame_linear_bushings =
+        ParseArray<VehicleReferenceFrameLinearBushingDefinition>(
+            root, "reference_frame_linear_bushings",
+            ParseReferenceFrameLinearBushing);
 
     // Bodies and frames share one namespace, so one set answers both "is this a
     // body?" and "is this a frame a joint may attach to?".
@@ -569,6 +605,17 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                            element.opposite_frame_name);
     }
     for (std::size_t index = 0;
+         index < vehicle.point_to_point_series_spring_bilinear_dampers.size();
+         ++index) {
+        const auto& element =
+            vehicle.point_to_point_series_spring_bilinear_dampers[index];
+        require_force_name("point_to_point_series_spring_bilinear_dampers",
+                           index, element.name);
+        require_force_ends("point_to_point_series_spring_bilinear_dampers",
+                           index, element.reference_frame_name,
+                           element.opposite_frame_name);
+    }
+    for (std::size_t index = 0;
          index < vehicle.saturated_piecewise_linear_dampers.size(); ++index) {
         const auto& element = vehicle.saturated_piecewise_linear_dampers[index];
         require_force_name("saturated_piecewise_linear_dampers", index,
@@ -578,18 +625,15 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                            element.opposite_frame_name);
     }
     for (std::size_t index = 0;
-         index < vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size();
+         index < vehicle.reference_frame_linear_bushings.size();
          ++index) {
         const auto& element =
-            vehicle.half_angle_midpoint_roll_pitch_yaw_bushings[index];
-        require_force_name("half_angle_midpoint_roll_pitch_yaw_bushings",
+            vehicle.reference_frame_linear_bushings[index];
+        require_force_name("reference_frame_linear_bushings",
                            index, element.name);
-        const std::string path = ElementPath(
-            "$.half_angle_midpoint_roll_pitch_yaw_bushings", index);
-        RequireDeclared(frame_names, element.frame_a_name,
-                        path + ".frame_a_name");
-        RequireDeclared(frame_names, element.frame_c_name,
-                        path + ".frame_c_name");
+        require_force_ends("reference_frame_linear_bushings", index,
+                           element.reference_frame_name,
+                           element.opposite_frame_name);
     }
     return vehicle;
 }

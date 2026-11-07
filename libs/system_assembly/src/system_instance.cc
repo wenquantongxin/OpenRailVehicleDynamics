@@ -173,16 +173,46 @@ SystemInstance::GetSeriesSpringViscousDamperIndexByName(
         identity_, force_plan_->FindSeriesSpringViscousDamperOrdinal(name));
 }
 
+PointToPointSeriesSpringBilinearDamperIndex
+SystemInstance::GetPointToPointSeriesSpringBilinearDamperIndexByName(
+    std::string_view name) const {
+    if (force_plan_ == nullptr) {
+        Reject("this system has no vehicle force plan, so it has no "
+               "point-to-point series spring-bilinear damper named slots");
+    }
+    return PointToPointSeriesSpringBilinearDamperIndex(
+        identity_,
+        force_plan_->FindPointToPointSeriesSpringBilinearDamperOrdinal(name));
+}
+
 SystemContinuousStateRange
 SystemInstance::series_spring_damper_force_state_range(
     SeriesSpringViscousDamperIndex element) const {
-    if (element.system_identity_ != identity_ || element.ordinal_ < 0 ||
-        element.ordinal_ >= series_spring_damper_force_state_count_) {
+    if (element.system_identity_ != identity_ || force_plan_ == nullptr ||
+        element.ordinal_ < 0 ||
+        element.ordinal_ >= force_plan_->series_spring_viscous_damper_count()) {
         Reject("the series spring-viscous damper index belongs to a different "
                "system or names no element of this system");
     }
     return SystemContinuousStateRange(
         generalized_position_count_ + generalized_velocity_count_ +
+            element.ordinal_,
+        1);
+}
+
+SystemContinuousStateRange
+SystemInstance::series_spring_damper_force_state_range(
+    PointToPointSeriesSpringBilinearDamperIndex element) const {
+    if (element.system_identity_ != identity_ || force_plan_ == nullptr ||
+        element.ordinal_ < 0 ||
+        element.ordinal_ >=
+            force_plan_->point_to_point_series_spring_bilinear_damper_count()) {
+        Reject("the point-to-point series spring-bilinear damper index belongs "
+               "to a different system or names no element of this system");
+    }
+    return SystemContinuousStateRange(
+        generalized_position_count_ + generalized_velocity_count_ +
+            force_plan_->series_spring_viscous_damper_count() +
             element.ordinal_,
         1);
 }

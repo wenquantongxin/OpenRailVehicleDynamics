@@ -90,12 +90,11 @@ void Run(const std::filesystem::path& vehicle_path,
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
 
-    // The controller consumes the frozen WRL/SIMPACK physical axle-bridge
-    // body basis. Exercise the fixed half-turn conversion at a realistic
-    // nonzero yaw before restoring the exact H3 state used below.
-    Eigen::VectorXd h3_state(assembled.system().continuous_state_size());
-    assembled.system().CopyContinuousState(accepted, h3_state);
-    Eigen::VectorXd yaw_state = h3_state;
+    // The controller consumes the physical axle-bridge body basis. Exercise
+    // its half-turn conversion at nonzero yaw, then restore the startup state.
+    Eigen::VectorXd startup_state(assembled.system().continuous_state_size());
+    assembled.system().CopyContinuousState(accepted, startup_state);
+    Eigen::VectorXd yaw_state = startup_state;
     const auto front_axle =
         assembled.model().GetRigidBodyByName("axlebridge_ff");
     const auto front_positions =
@@ -138,9 +137,9 @@ void Run(const std::filesystem::path& vehicle_path,
                 yaw_observation.mechanical_input.axle_yaw_angles_radians
                         .front() ==
                     expected_source_yaw,
-            "the nonzero axle-bridge yaw was not restored to the frozen "
+            "the nonzero axle-bridge yaw was not restored to the "
             "source body basis");
-    assembled.system().SetContinuousState(accepted, h3_state);
+    assembled.system().SetContinuousState(accepted, startup_state);
 
     IrwFullStateControlEventSession session(
         assembled,
@@ -164,12 +163,12 @@ void Run(const std::filesystem::path& vehicle_path,
                     .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second ==
                 adapted_observation
                     .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second,
-        "the frozen session did not delegate to the public mechanical "
+        "the session did not delegate to the public mechanical "
         "observation binding");
     Require(session.sample_period_seconds() == 0.01 &&
                 session.next_periodic_event_ordinal() == 0 &&
                 session.next_periodic_event_time_seconds() == 0.0,
-            "the frozen period or initial integer event ordinal is wrong");
+            "the period or initial integer event ordinal is wrong");
     Require(Throws([&] { session.RequireReadyToAdvance(); }),
             "advance was admitted before the initialization and U0 event");
 
@@ -204,7 +203,7 @@ void Run(const std::filesystem::path& vehicle_path,
                         .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second ==
                     initialization.mechanical_input
                         .wheel_angular_speeds_in_frozen_scalar_convention_radians_per_second,
-            "U0 did not reuse the same accepted H3 mechanical observation");
+            "U0 did not reuse the same accepted mechanical observation");
     for (std::size_t wheel = 0;
          wheel < u0.conditioning_result.actual_wheel_torques_newton_metres
                      .size();
@@ -260,8 +259,8 @@ void Run(const std::filesystem::path& vehicle_path,
 
     Eigen::VectorXd rhs(assembled.system().continuous_state_size());
     assembled.compiled_plan().CalcStateTimeDerivatives(accepted, rhs);
-    Require(rhs.size() == 157 && rhs.allFinite(),
-            "the controlled IRW terminal 157-state RHS is not finite");
+    Require(rhs.size() == 169 && rhs.allFinite(),
+            "the controlled IRW terminal 169-state RHS is not finite");
 
     auto component = assembled.system().GetMultibodyComponentView(
         accepted, assembled.system().multibody_component());

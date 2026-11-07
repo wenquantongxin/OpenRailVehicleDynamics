@@ -1,9 +1,10 @@
-// The frozen IRW H3 moving state, assembled by names into q81/v74/z2.
+// The IRW moving state, assembled by names into q81/v74/z14.
 
 #include <algorithm>
 #include <array>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -37,7 +38,7 @@ using orvd::configuration::VehicleDefinition;
 using orvd::track_geometry::TrackGeometry;
 
 constexpr double kLayoutReferenceStationMeters = 0.0;
-constexpr double kPrimaryNominalForceNewtons = 21578.11967531337;
+constexpr double kPrimaryNominalForceNewtons = 21552.913954058386;
 constexpr double kAirSpringNominalForceNewtons = -61312.5;
 int failure_count = 0;
 
@@ -78,21 +79,21 @@ struct WheelState {
 
 constexpr std::array<WheelState, 8> kWheelStates{{
     {"rev_wheel_ff_l", "axlebridge_ff", "wheel_ff_l",
-     0.31533397347187259, 38.782287098808986},
+     0.3153339734718726, 38.78228505759058},
     {"rev_wheel_ff_r", "axlebridge_ff", "wheel_ff_r",
-     -0.06317638965070542, 38.782287098809249},
+     -0.06317638965070542, 38.78228505759053},
     {"rev_wheel_fr_l", "axlebridge_fr", "wheel_fr_l",
-     -0.025102324383414906, 38.78228709880905},
+     -0.025102324383414906, 38.782285057590514},
     {"rev_wheel_fr_r", "axlebridge_fr", "wheel_fr_r",
-     -0.33709418242954087, 38.782287098809327},
+     -0.33709418242954087, 38.7822850575905},
     {"rev_wheel_rf_l", "axlebridge_rf", "wheel_rf_l",
-     -0.002613479380619458, 38.782287098809427},
+     -0.002613479380619458, 38.782285057590464},
     {"rev_wheel_rf_r", "axlebridge_rf", "wheel_rf_r",
-     0.0055770558701520806, 38.782287098809775},
+     0.005577055870152081, 38.782285057590514},
     {"rev_wheel_rr_l", "axlebridge_rr", "wheel_rr_l",
-     0.00053419343930150476, 38.782287098809213},
+     0.0005341934393015048, 38.78228505759046},
     {"rev_wheel_rr_r", "axlebridge_rr", "wheel_rr_r",
-     0.00021224274270999753, 38.782287098809505},
+     0.00021224274270999753, 38.7822850575905},
 }};
 
 struct SupportState {
@@ -105,14 +106,14 @@ struct SupportState {
 };
 
 constexpr std::array<SupportState, 4> kSupportStates{{
-    {"axlebridge_ff", 10.000008398803899, 49287.489352631594,
-     49287.48935999266},
-    {"axlebridge_fr", 7.5000084046506323, 49287.489354519064,
-     49287.48936219448},
-    {"axlebridge_rf", -7.4999916011961005, 49287.48936481213,
-     49287.48937441125},
-    {"axlebridge_rr", -9.9999915953493677, 49287.48935887162,
-     49287.48936707778},
+    {"axlebridge_ff", 9.999999996527368, 49237.07792005307,
+     49237.077918773306},
+    {"axlebridge_fr", 7.500000003472632, 49237.07791839886,
+     49237.077917922805},
+    {"axlebridge_rf", -7.50000000347263, 49237.07791714347,
+     49237.07791839171},
+    {"axlebridge_rr", -9.999999996527372, 49237.07791699335,
+     49237.07791808929},
 }};
 
 double MechanicalStationOffset(const VehicleDefinition& vehicle,
@@ -186,37 +187,35 @@ void CheckRecordIdentity(const ResolvedStartupState& state) {
     Require(state.vehicle_binding.vehicle_name == "IRW" &&
                 state.vehicle_binding.mechanical_definition_identifier ==
                     "irw_reference_mechanical_definition",
-            "the H3 record is bound to the frozen IRW mechanics");
+            "the record is bound to the IRW mechanics");
     Require(!state.common_wheel_spin_generation.has_value(),
             "IRW must not carry a rigid-wheelset common-spin authority");
     Require(state.initial_longitudinal_speed_meters_per_second ==
                 16.666666666666668,
-            "the H3 station speed is the frozen 60 km/h value");
+            "the station speed is the 60 km/h value");
     Require(state.free_body_startup_states.size() == 7 &&
                 state.revolute_joint_startup_states.size() == 8 &&
                 state.ball_rpy_joint_startup_states.size() == 8 &&
                 state.series_spring_viscous_damper_force_states.size() == 2 &&
-                state.translational_spring_damper_nominal_forces.size() == 36,
-            "the record has the H3 seven/eight/eight/two/thirty-six families");
+                state.point_to_point_series_spring_bilinear_damper_force_states
+                    .size() == 12 &&
+                state.translational_spring_damper_nominal_forces.size() == 32,
+            "the record has the seven/eight/eight/fourteen/thirty-two families");
 
     // These two non-degenerate source values distinguish the C-basis
     // transformation from copying SIMPACK XYZ angles into ORVD RPY slots.
     const auto& front_a = BallState(state, "ball_longibar_front_A");
     Require(front_a.roll_pitch_yaw_angles_radians ==
-                Eigen::Vector3d(8.3827533763236595e-05,
-                                6.0560601352627634e-06,
-                                1.7097133997328204) &&
+                Eigen::Vector3d(0.00010796672996660206, -1.0170248598839748e-07, 1.8411889140409292) &&
                 front_a
                     .angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second ==
                     Eigen::Vector3d::Zero(),
-            "front-A Ball-RPY carries the transformed H3 coordinate and zero "
+            "front-A Ball-RPY carries the transformed coordinate and zero "
             "physical angular velocity");
     const auto& rear_d = BallState(state, "ball_longibar_rear_D");
     Require(rear_d.roll_pitch_yaw_angles_radians ==
-                Eigen::Vector3d(8.3827533763791706e-05,
-                                6.0559934127151918e-06,
-                                -1.4318792538569758),
-            "rear-D Ball-RPY keeps its distinct transformed H3 coordinate");
+                Eigen::Vector3d(0.0001079667299692666, -8.043427635051614e-08, -1.3004037395465684),
+            "rear-D Ball-RPY keeps its distinct transformed coordinate");
 
     for (const auto& body : state.free_body_startup_states) {
         Require(body.common_wheel_spin_coefficient_in_body_frame ==
@@ -224,7 +223,7 @@ void CheckRecordIdentity(const ResolvedStartupState& state) {
                     body
                             .explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second ==
                         Eigen::Vector3d::Zero(),
-                "every H3 free body states its own zero initial angular "
+                "every free body states its own zero initial angular "
                 "velocity without generated wheel spin");
     }
 }
@@ -238,8 +237,8 @@ void CheckWrittenState(const VehicleDefinition& vehicle,
     const Eigen::VectorXd& q = resolved.context().generalized_positions();
     const Eigen::VectorXd& v = resolved.context().generalized_velocities();
     Require(q.size() == 81 && v.size() == 74 &&
-                system.system().continuous_state_size() == 157,
-            "the assembled H3 context is q81/v74/z2");
+                system.system().continuous_state_size() == 169,
+            "the assembled context is q81/v74/z14");
 
     for (const FreeBodyStartupState& body : startup.free_body_startup_states) {
         const double station =
@@ -267,7 +266,7 @@ void CheckWrittenState(const VehicleDefinition& vehicle,
                             .cwiseAbs()
                             .maxCoeff() < 1.0e-13,
                 "free body '" + body.body_name +
-                    "' was placed from its named Track-T H3 record");
+                    "' was placed from its named Track-T record");
         Require(v.segment<3>(v_range.start()) == Eigen::Vector3d::Zero() &&
                     v.segment<3>(v_range.start() + 3) ==
                         track_pose.rotation_inertial_from_track() *
@@ -287,7 +286,7 @@ void CheckWrittenState(const VehicleDefinition& vehicle,
         Require(q[q_range.start()] == expected.position_radians &&
                     v[v_range.start()] == expected.rate_radians_per_second,
                 "wheel joint '" + std::string(expected.name) +
-                    "' keeps its independent H3 phase and axle-relative "
+                    "' keeps its independent phase and axle-relative "
                     "speed");
     }
 
@@ -353,6 +352,16 @@ void CheckWrittenState(const VehicleDefinition& vehicle,
                     "' was written by name");
     }
 
+    for (const auto& expected :
+         startup.point_to_point_series_spring_bilinear_damper_force_states) {
+        const auto index = system.system().GetPointToPointSeriesSpringBilinearDamperIndexByName(
+            expected.element_name);
+        const auto range = system.system().series_spring_damper_force_state_range(index);
+        Require(range.size() == 1 && whole_state[range.start()] ==
+                    expected.reference_end_axial_force_newtons,
+                "point-to-point force state was written by its element name");
+    }
+
     auto expected_parameters = system.system().CreateDefaultRuntimeContext(0.0);
     int primary_count = 0;
     int air_count = 0;
@@ -363,7 +372,7 @@ void CheckWrittenState(const VehicleDefinition& vehicle,
         Require(element.force_on_reference_end_in_reference_frame_newtons ==
                     expected,
                 "nominal force '" + element.element_name +
-                    "' has the frozen H3 value and sign");
+                    "' has the value and sign");
         primary_count += expected.z() == kPrimaryNominalForceNewtons ? 1 : 0;
         air_count += expected.z() == kAirSpringNominalForceNewtons ? 1 : 0;
         zero_count += expected.isZero() ? 1 : 0;
@@ -373,12 +382,12 @@ void CheckWrittenState(const VehicleDefinition& vehicle,
                 element.element_name),
             expected);
     }
-    Require(primary_count == 16 && air_count == 4 && zero_count == 16,
-            "the 36 nominal slots divide into 16 primary, four air and 16 "
+    Require(primary_count == 16 && air_count == 4 && zero_count == 12,
+            "the 32 nominal slots divide into 16 primary, four air and 12 "
             "zero entries");
     Require(expected_parameters->nominal_forces() ==
                 resolved.context().nominal_forces(),
-            "all 36 nominal forces were installed by element name");
+            "all 32 nominal forces were installed by element name");
 }
 
 void CheckSupportTargets(const ResolvedInitialContext& resolved) {
@@ -409,8 +418,98 @@ void ReverseEveryNamedFamily(ResolvedStartupState* state) {
                  state->ball_rpy_joint_startup_states.end());
     std::reverse(state->series_spring_viscous_damper_force_states.begin(),
                  state->series_spring_viscous_damper_force_states.end());
+    std::reverse(state->point_to_point_series_spring_bilinear_damper_force_states.begin(),
+                 state->point_to_point_series_spring_bilinear_damper_force_states.end());
     std::reverse(state->translational_spring_damper_nominal_forces.begin(),
                  state->translational_spring_damper_nominal_forces.end());
+}
+
+void CheckMixedSeriesFamilies(const VehicleDefinition& original_vehicle,
+                             const ResolvedStartupState& original_startup,
+                             const TrackGeometry& line) {
+    VehicleDefinition vehicle = original_vehicle;
+    ResolvedStartupState startup = original_startup;
+    const auto& front = vehicle.series_spring_viscous_dampers.front();
+    const auto& rear = vehicle.series_spring_viscous_dampers.back();
+    vehicle.point_to_point_series_spring_bilinear_dampers = {
+        {"fixture_point_to_point_front", front.reference_frame_name,
+         front.opposite_frame_name, 10790000.0, 776988.0, 10000.0, 50000.0},
+        {"fixture_point_to_point_rear", rear.reference_frame_name,
+         rear.opposite_frame_name, 30000000.0, 1500000.0, 10000.0, 50000.0}};
+    startup.series_spring_viscous_damper_force_states.front()
+        .reference_end_axial_force_newtons = 73.0;
+    startup.series_spring_viscous_damper_force_states.back()
+        .reference_end_axial_force_newtons = -41.0;
+    startup.point_to_point_series_spring_bilinear_damper_force_states = {
+        {"fixture_point_to_point_front", 12500.0},
+        {"fixture_point_to_point_rear", -2500.0}};
+    const auto system = AssembleVehicleSystem(
+        vehicle, startup.gravitational_acceleration_meters_per_second_squared);
+    const auto baseline = AssembleResolvedInitialContext(
+        *system, startup, line, kLayoutReferenceStationMeters);
+    const Eigen::VectorXd values = CopyContinuousState(*system, baseline);
+    const auto whole_range =
+        system->system().series_spring_damper_force_state_range();
+    Require(whole_range.size() == 4 &&
+                values.segment(whole_range.start(), whole_range.size()) ==
+                    Eigen::Vector4d(73.0, -41.0, 12500.0, -2500.0),
+            "mixed series families did not receive their nonzero force states");
+    for (const auto& state :
+         startup.point_to_point_series_spring_bilinear_damper_force_states) {
+        const auto index =
+            system->system()
+                .GetPointToPointSeriesSpringBilinearDamperIndexByName(
+                    state.element_name);
+        const auto range =
+            system->system().series_spring_damper_force_state_range(index);
+        Require(range.size() == 1 &&
+                    values[range.start()] == state.reference_end_axial_force_newtons,
+                "point-to-point force was not written through its named range");
+    }
+    ResolvedStartupState reordered = startup;
+    std::reverse(
+        reordered.point_to_point_series_spring_bilinear_damper_force_states.begin(),
+        reordered.point_to_point_series_spring_bilinear_damper_force_states.end());
+    const auto reordered_point_to_point = AssembleResolvedInitialContext(
+        *system, reordered, line, kLayoutReferenceStationMeters);
+    Require(CopyContinuousState(*system, reordered_point_to_point) == values,
+            "reordering point-to-point states changed the assembled state");
+    std::reverse(reordered.series_spring_viscous_damper_force_states.begin(),
+                 reordered.series_spring_viscous_damper_force_states.end());
+    const auto reordered_both = AssembleResolvedInitialContext(
+        *system, reordered, line, kLayoutReferenceStationMeters);
+    Require(CopyContinuousState(*system, reordered_both) == values,
+            "reordering the two series families changed the assembled state");
+
+    ResolvedStartupState missing = startup;
+    missing.point_to_point_series_spring_bilinear_damper_force_states.pop_back();
+    RequireRefusal(
+        [&] {
+            (void)AssembleResolvedInitialContext(
+                *system, missing, line, kLayoutReferenceStationMeters);
+        },
+        "states no point-to-point series force state",
+        "a missing point-to-point state was accepted");
+    ResolvedStartupState wrong_family = startup;
+    wrong_family.point_to_point_series_spring_bilinear_damper_force_states.front()
+        .element_name = front.name;
+    RequireRefusal(
+        [&] {
+            (void)AssembleResolvedInitialContext(
+                *system, wrong_family, line, kLayoutReferenceStationMeters);
+        },
+        "point-to-point series force state",
+        "a linear-series name was accepted as a point-to-point state");
+    ResolvedStartupState nonfinite = startup;
+    nonfinite.point_to_point_series_spring_bilinear_damper_force_states.front()
+        .reference_end_axial_force_newtons =
+        std::numeric_limits<double>::infinity();
+    RequireRefusal(
+        [&] {
+            (void)AssembleResolvedInitialContext(
+                *system, nonfinite, line, kLayoutReferenceStationMeters);
+        },
+        "finite", "a nonfinite point-to-point force state was accepted");
 }
 
 }  // namespace
@@ -439,12 +538,13 @@ int main(int argc, char** argv) {
             *system, startup, line, kLayoutReferenceStationMeters);
         CheckWrittenState(vehicle, startup, line, *system, baseline);
         CheckSupportTargets(baseline);
+        CheckMixedSeriesFamilies(vehicle, startup, line);
 
         Eigen::VectorXd derivatives(system->system().continuous_state_size());
         system->compiled_plan().CalcStateTimeDerivatives(baseline.context(),
                                                          derivatives);
         Require(derivatives.allFinite(),
-                "the real passive IRW H3 state produces a finite RHS before "
+                "the real passive IRW state produces a finite RHS before "
                 "wheel-rail contact is connected");
 
         // Every family is deliberately reversed together. The model's q/v/z
@@ -460,9 +560,9 @@ int main(int argc, char** argv) {
                         reordered_context.context().nominal_forces() &&
                     SupportMap(baseline) == SupportMap(reordered_context),
                 "reordering all six named families changed the assembled "
-                "H3 state, parameters or support targets");
+                "state, parameters or support targets");
 
-        // The frozen H3 Ball velocities happen to be zero. Exercise the same
+        // The Ball velocities happen to be zero. Exercise the same
         // product writer once with a physical nonzero parent-frame omega so
         // the v side of the new three-component family is non-degenerate.
         ResolvedStartupState moving_ball = startup;
@@ -506,6 +606,6 @@ int main(int argc, char** argv) {
     if (failure_count != 0) {
         return 1;
     }
-    std::puts("IRW H3 resolved start-up assembly verified");
+    std::puts("IRW resolved start-up assembly verified");
     return 0;
 }

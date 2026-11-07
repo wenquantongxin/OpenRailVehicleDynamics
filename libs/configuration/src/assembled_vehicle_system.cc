@@ -60,6 +60,13 @@ VehicleBinding CaptureBinding(const VehicleDefinition& vehicle) {
          vehicle.series_spring_viscous_dampers) {
         binding.series_spring_viscous_damper_names.push_back(element.name);
     }
+    binding.point_to_point_series_spring_bilinear_damper_names.reserve(
+        vehicle.point_to_point_series_spring_bilinear_dampers.size());
+    for (const VehiclePointToPointSeriesSpringBilinearDamperDefinition& element :
+         vehicle.point_to_point_series_spring_bilinear_dampers) {
+        binding.point_to_point_series_spring_bilinear_damper_names.push_back(
+            element.name);
+    }
     return binding;
 }
 

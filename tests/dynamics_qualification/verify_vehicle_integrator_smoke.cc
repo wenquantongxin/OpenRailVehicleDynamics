@@ -45,7 +45,7 @@ struct Result { Eigen::VectorXd terminal; Json work; };
 
 template <class Summary>
 Result Capture(const Summary& summary, const std::string& method,
-               std::int64_t duration, bool controlled) {
+               std::int64_t duration, std::int64_t step, bool controlled) {
     Require(summary.integrator_recipe_identifier == method,
             "runner selected a different method");
     Require(summary.terminal_continuous_state.size() > 0 &&
@@ -54,7 +54,7 @@ Result Capture(const Summary& summary, const std::string& method,
     const auto work = summary.integration_work.ToJson();
     const auto& statistics = summary.integration_work.total_statistics();
     const std::uint64_t epochs = controlled ? 2 : 1;
-    const auto steps = static_cast<std::uint64_t>(duration / kStepNanoseconds);
+    const auto steps = static_cast<std::uint64_t>(duration / step);
     Require(work.at("epoch_count") == epochs &&
                 (method == "newmark" ? statistics.successful_internal_step_count >= steps
                                      : statistics.successful_internal_step_count == steps),
@@ -83,7 +83,9 @@ Result Run(const fs::path& source, const fs::path& artifacts,
     const auto config_path = artifacts / (name + ".json");
     auto configuration = ReadJson(source / "tools/dynamics_qualification/integration_configurations" /
                                   (method + "_explicit_trial.json"));
-    configuration["step_size_nanoseconds"] = kStepNanoseconds;
+    // The light rods' rotational damping requires a smaller explicit step.
+    const std::int64_t step = scenario.irw && method == "zhai" ? 500 : kStepNanoseconds;
+    configuration["step_size_nanoseconds"] = step;
     configuration["maximum_internal_steps_per_advance"] = budget;
     WriteJson(config_path, configuration);
     const auto vehicle = source / "vehicle_library" / (scenario.irw ? "irw" : "gz18");
@@ -107,7 +109,7 @@ Result Run(const fs::path& source, const fs::path& artifacts,
         Require(summary.observation_count == 41 && summary.positive_hold_interval_count == 2 &&
                     summary.backend_synchronization_count == 1,
                 "controlled smoke must traverse two hold intervals and one synchronization");
-        result = Capture(summary, method, duration, true);
+        result = Capture(summary, method, duration, step, true);
     } else if (scenario.irw) {
         dq::IrwPassiveScenarioRunConfiguration run;
         run.scenario_identifier = dq::kIrwR300Aar5V60PassiveScenarioIdentifier;
@@ -122,7 +124,7 @@ Result Run(const fs::path& source, const fs::path& artifacts,
         run.integration_config_path = config_path;
         const auto summary = dq::RunIrwPassiveScenario(run);
         Require(summary.sample_count == expected_samples, "IRW sample clock changed");
-        result = Capture(summary, method, duration, false);
+        result = Capture(summary, method, duration, step, false);
     } else {
         dq::Gz18QualificationRunConfiguration run;
         run.vehicle_definition_path = vehicle / "vehicle_definition.json";
@@ -136,7 +138,7 @@ Result Run(const fs::path& source, const fs::path& artifacts,
         run.integration_config_path = config_path;
         const auto summary = dq::RunGz18Qualification(run);
         Require(summary.sample_count == expected_samples, "GZ18 sample clock changed");
-        result = Capture(summary, method, duration, false);
+        result = Capture(summary, method, duration, step, false);
     }
     for (const char* file : {"COMPLETE", "metadata.json", "performance.json", "continuous_states.tsv",
                              "observations.tsv", "contact_patches.tsv"}) {
@@ -146,7 +148,7 @@ Result Run(const fs::path& source, const fs::path& artifacts,
     const auto metadata = ReadJson(output / "metadata.json");
     const auto& contract = metadata.at("numerical_execution_contract");
     Require(contract.at("integrator_recipe_identifier") == method &&
-                contract.at("step_size_nanoseconds") == kStepNanoseconds,
+                contract.at("step_size_nanoseconds") == step,
             "publication does not describe the requested method and step");
     std::ifstream states(output / "continuous_states.tsv");
     std::string line;

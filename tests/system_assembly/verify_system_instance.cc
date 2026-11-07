@@ -9,6 +9,7 @@
 
 #include "orvd/multibody_model/multibody_model.h"
 #include "orvd/forces/vehicle_force_plan.h"
+#include "orvd/system_assembly/compiled_system_plan.h"
 #include "orvd/system_assembly/system_assembly_description.h"
 #include "orvd/system_assembly/system_instance.h"
 
@@ -448,13 +449,107 @@ void CheckNamedForceSlotsAndContextLocalDataCopy() {
            "a foreign-source refusal leaves the destination unchanged");
 }
 
+void CheckMixedSeriesStateRangesAndRhs() {
+    const Fixture fixture;
+    auto elements = MakeSeriesFixtureForceElements(fixture);
+    elements.point_to_point_series_spring_bilinear_dampers = {
+        orvd::forces::PointToPointSeriesSpringBilinearDamper{
+            "test_point_to_point",
+            {fixture.model.GetFrameByName("rotor")},
+            {fixture.model.GetFrameByName("slider")},
+            1000.0, 100.0, 10.0, 20.0}};
+    const orvd::forces::VehicleForcePlan force_plan(fixture.model,
+                                                  std::move(elements));
+    const SystemAssemblyDescription description(fixture.model, force_plan);
+    const SystemInstance system(description);
+    const auto linear_index =
+        system.GetSeriesSpringViscousDamperIndexByName("test_series");
+    const auto point_to_point_index =
+        system.GetPointToPointSeriesSpringBilinearDamperIndexByName(
+            "test_point_to_point");
+    const auto linear_range =
+        system.series_spring_damper_force_state_range(linear_index);
+    const auto point_to_point_range =
+        system.series_spring_damper_force_state_range(point_to_point_index);
+    Expect(system.continuous_state_size() == 6 &&
+               system.series_spring_damper_force_state_range().size() == 2 &&
+               linear_range.start() == 4 && linear_range.size() == 1 &&
+               point_to_point_range.start() == 5 &&
+               point_to_point_range.size() == 1,
+           "mixed series families occupy distinct named force slots");
+    Expect(point_to_point_index ==
+               system.GetPointToPointSeriesSpringBilinearDamperIndexByName(
+                   "test_point_to_point"),
+           "point-to-point named lookup preserves system identity");
+    ExpectInvalidArgument(
+        [&] {
+            (void)system.GetPointToPointSeriesSpringBilinearDamperIndexByName(
+                "test_series");
+        },
+        "a linear-series name cannot resolve as a point-to-point index");
+    ExpectInvalidArgument(
+        [&] {
+            (void)system.GetSeriesSpringViscousDamperIndexByName(
+                "test_point_to_point");
+        },
+        "a point-to-point name cannot resolve as a linear-series index");
+    const SystemInstance other(description);
+    ExpectInvalidArgument(
+        [&] {
+            (void)other.series_spring_damper_force_state_range(
+                point_to_point_index);
+        },
+        "a point-to-point index cannot cross system instances");
+    const SystemInstance no_forces{SystemAssemblyDescription(fixture.model)};
+    ExpectInvalidArgument(
+        [&] {
+            (void)no_forces.GetPointToPointSeriesSpringBilinearDamperIndexByName(
+                "test_point_to_point");
+        },
+        "a system without a force plan cannot resolve point-to-point names");
+
+    auto context = system.CreateDefaultRuntimeContext(0.0);
+    Eigen::VectorXd state(6);
+    state << 0.4, 1.2, -0.7, 0.3, 90.0, 20.0;
+    system.SetTimeAndContinuousState(*context, 2.0, state);
+    Eigen::VectorXd observed(6);
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == state && context->time_seconds() == 2.0,
+           "the complete mixed-series state round-trips without reordering");
+    auto invalid = state;
+    invalid[point_to_point_range.start()] =
+        std::numeric_limits<double>::quiet_NaN();
+    ExpectInvalidArgument(
+        [&] { system.SetTimeAndContinuousState(*context, 3.0, invalid); },
+        "a non-finite point-to-point force refuses the whole transaction");
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == state && context->time_seconds() == 2.0,
+           "a rejected point-to-point force leaves all state blocks intact");
+
+    const orvd::system_assembly::CompiledSystemPlan plan(system);
+    Eigen::VectorXd derivative(6);
+    plan.CalcStateTimeDerivatives(*context, derivative);
+    // The slider moves at 0.3 m/s along the rotating rotor's x axis. The
+    // fixed lateral element has zero extension rate; the point-to-point
+    // damper's 20 N lies above its 10 N knee and gives 0.6 m/s damper speed.
+    ExpectNear(derivative[linear_range.start()], -4000.0,
+               "linear-series RHS reaches its original force slot");
+    ExpectNear(derivative[point_to_point_range.start()], -300.0,
+               "point-to-point RHS reaches its offset force slot");
+    Expect(derivative.allFinite(), "mixed-series whole-system RHS is finite");
+    system.CopyContinuousState(*context, observed);
+    Expect(observed == state,
+           "mixed-series derivative evaluation does not change accepted state");
+}
+
 }  // namespace
 
 int main() {
     CheckFrozenLayoutAndSingleOwnership();
     CheckContextLocalDampingAndIsolation();
     CheckOneTransactionOverEveryBlock();
-        CheckNamedForceSlotsAndContextLocalDataCopy();
+    CheckNamedForceSlotsAndContextLocalDataCopy();
+    CheckMixedSeriesStateRangesAndRhs();
     if (failure_count != 0) {
         std::printf("%d system instance checks failed\n", failure_count);
         return 1;

@@ -154,6 +154,23 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
             element.series_damping_newton_seconds_per_meter});
     }
 
+    std::vector<forces::PointToPointSeriesSpringBilinearDamper> point_to_point;
+    point_to_point.reserve(
+        vehicle.point_to_point_series_spring_bilinear_dampers.size());
+    for (const auto& element :
+         vehicle.point_to_point_series_spring_bilinear_dampers) {
+        const std::string what =
+            "point-to-point series spring-bilinear damper '" + element.name + "'";
+        point_to_point.push_back(forces::PointToPointSeriesSpringBilinearDamper{
+            element.name,
+            resolve(element.reference_frame_name, what + " reference end"),
+            resolve(element.opposite_frame_name, what + " opposite end"),
+            element.series_stiffness_newtons_per_meter,
+            element.damping_below_knee_newton_seconds_per_meter,
+            element.knee_force_newtons,
+            element.damping_above_knee_newton_seconds_per_meter});
+    }
+
     std::vector<forces::SaturatedPiecewiseLinearDamper> clipped;
     clipped.reserve(vehicle.saturated_piecewise_linear_dampers.size());
     for (const auto& element : vehicle.saturated_piecewise_linear_dampers) {
@@ -172,31 +189,28 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
             ParseAxis(element.axis, what), std::move(curve)});
     }
 
-    std::vector<forces::HalfAngleMidpointRollPitchYawBushing> bushings;
-    bushings.reserve(
-        vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size());
-    for (const auto& element :
-         vehicle.half_angle_midpoint_roll_pitch_yaw_bushings) {
-        const std::string what =
-            "half-angle midpoint roll-pitch-yaw bushing '" + element.name +
-            "'";
-        bushings.push_back(forces::HalfAngleMidpointRollPitchYawBushing{
+    std::vector<forces::ReferenceFrameLinearBushing> bushings;
+    bushings.reserve(vehicle.reference_frame_linear_bushings.size());
+    for (const auto& element : vehicle.reference_frame_linear_bushings) {
+        const std::string what = "reference-frame linear bushing '" +
+                                 element.name + "'";
+        bushings.push_back(forces::ReferenceFrameLinearBushing{
             element.name,
-            resolve(element.frame_a_name, what + " frame A"),
-            resolve(element.frame_c_name, what + " frame C"),
-            element.rotational_stiffness_newton_meters_per_radian,
-            element.rotational_damping_newton_meter_seconds_per_radian,
+            resolve(element.reference_frame_name, what + " reference end"),
+            resolve(element.opposite_frame_name, what + " opposite end"),
             element.translational_stiffness_newtons_per_meter,
-            element.translational_damping_newton_seconds_per_meter});
+            element.translational_damping_newton_seconds_per_meter,
+            element.rotational_damping_newton_meter_seconds_per_radian});
     }
 
     forces::VehicleForceElementCollection elements;
     elements.translational_spring_dampers = std::move(translational);
     elements.roll_spring_damper_couples = std::move(roll);
     elements.series_spring_viscous_dampers = std::move(series);
+    elements.point_to_point_series_spring_bilinear_dampers =
+        std::move(point_to_point);
     elements.saturated_piecewise_linear_dampers = std::move(clipped);
-    elements.half_angle_midpoint_roll_pitch_yaw_bushings =
-        std::move(bushings);
+    elements.reference_frame_linear_bushings = std::move(bushings);
     return std::make_unique<forces::VehicleForcePlan>(model,
                                                       std::move(elements));
 }

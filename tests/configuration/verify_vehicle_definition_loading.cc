@@ -166,6 +166,17 @@ constexpr std::string_view kRecord = R"json({
       "series_damping_newton_seconds_per_meter": 60000.0
     }
   ],
+  "point_to_point_series_spring_bilinear_dampers": [
+    {
+      "name": "point_to_point_damper",
+      "reference_frame_name": "longibar_child_frame",
+      "opposite_frame_name": "carbody",
+      "series_stiffness_newtons_per_meter": 10790000.0,
+      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "knee_force_newtons": 10000.0,
+      "damping_above_knee_newton_seconds_per_meter": 50000.0
+    }
+  ],
   "saturated_piecewise_linear_dampers": [
     {
       "name": "front_left_yaw_damper",
@@ -179,13 +190,11 @@ constexpr std::string_view kRecord = R"json({
       ]
     }
   ],
-  "half_angle_midpoint_roll_pitch_yaw_bushings": [
+  "reference_frame_linear_bushings": [
     {
       "name": "longibar_bushing",
-      "frame_a_name": "longibar_child_frame",
-      "frame_c_name": "carbody",
-      "rotational_stiffness_newton_meters_per_radian":
-        {"x": 1.0, "y": 2.0, "z": 3.0},
+      "reference_frame_name": "longibar_child_frame",
+      "opposite_frame_name": "carbody",
       "rotational_damping_newton_meter_seconds_per_radian":
         {"x": 4.0, "y": 5.0, "z": 6.0},
       "translational_stiffness_newtons_per_meter":
@@ -255,9 +264,10 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
                 vehicle.translational_spring_dampers.size() == 1 &&
                 vehicle.roll_spring_damper_couples.size() == 1 &&
                 vehicle.series_spring_viscous_dampers.size() == 1 &&
+                vehicle.point_to_point_series_spring_bilinear_dampers.size() ==
+                    1 &&
                 vehicle.saturated_piecewise_linear_dampers.size() == 1 &&
-                vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size() ==
-                    1,
+                vehicle.reference_frame_linear_bushings.size() == 1,
             "record does not carry the entities it declares");
 
     // Each constitutive family maps its own fields, in its own order. The three
@@ -283,6 +293,18 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
                 series.series_damping_newton_seconds_per_meter == 60000.0,
             "series constants were not mapped, or stiffness and damping were "
             "exchanged");
+    const auto& point_to_point =
+        vehicle.point_to_point_series_spring_bilinear_dampers.front();
+    Require(point_to_point.name == "point_to_point_damper" &&
+                point_to_point.reference_frame_name == "longibar_child_frame" &&
+                point_to_point.opposite_frame_name == "carbody" &&
+                point_to_point.series_stiffness_newtons_per_meter == 10790000.0 &&
+                point_to_point.damping_below_knee_newton_seconds_per_meter ==
+                    776988.0 &&
+                point_to_point.knee_force_newtons == 10000.0 &&
+                point_to_point.damping_above_knee_newton_seconds_per_meter ==
+                    50000.0,
+            "point-to-point endpoints or constants were not mapped");
     const auto& clipped = vehicle.saturated_piecewise_linear_dampers.front();
     Require(clipped.axis == "longitudinal" && clipped.curve.size() == 3 &&
                 clipped.curve[1].relative_velocity_meters_per_second == 0.02 &&
@@ -343,15 +365,16 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
                 vehicle.weld_joints.front().child_frame_name ==
                     "front_carbody_interface_body",
             "weld endpoints were not mapped, or were exchanged");
-    const auto& bushing =
-        vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.front();
-    Require(bushing.frame_a_name == "longibar_child_frame" &&
-                bushing.frame_c_name == "carbody" &&
-                bushing.rotational_stiffness_newton_meters_per_radian ==
-                    Eigen::Vector3d(1.0, 2.0, 3.0) &&
+    const auto& bushing = vehicle.reference_frame_linear_bushings.front();
+    Require(bushing.reference_frame_name == "longibar_child_frame" &&
+                bushing.opposite_frame_name == "carbody" &&
+                bushing.translational_stiffness_newtons_per_meter ==
+                    Eigen::Vector3d(7.0, 8.0, 9.0) &&
+                bushing.rotational_damping_newton_meter_seconds_per_radian ==
+                    Eigen::Vector3d(4.0, 5.0, 6.0) &&
                 bushing.translational_damping_newton_seconds_per_meter ==
                     Eigen::Vector3d(10.0, 11.0, 12.0),
-            "half-angle bushing endpoints or constants were not mapped");
+            "reference-frame bushing endpoints or constants were not mapped");
 }
 
 void CheckRejections(const std::filesystem::path& path) {
@@ -392,6 +415,30 @@ void CheckRejections(const std::filesystem::path& path) {
          {"$.roll_spring_damper_couples[0].name",
           "front_left_air_spring", "first declared at",
           "$.translational_spring_dampers[0].name"}},
+        {ReplaceOnce(valid, "\"name\": \"point_to_point_damper\"",
+                     "\"name\": \"front_lateral_damper\""),
+         {"$.point_to_point_series_spring_bilinear_dampers[0].name",
+          "first declared at", "$.series_spring_viscous_dampers[0].name"}},
+        {ReplaceOnce(valid,
+                     "\"name\": \"point_to_point_damper\",\n"
+                     "      \"reference_frame_name\": \"longibar_child_frame\"",
+                     "\"name\": \"point_to_point_damper\",\n"
+                     "      \"reference_frame_name\": \"no_such_point_to_point_frame\""),
+         {"$.point_to_point_series_spring_bilinear_dampers[0].reference_frame_name",
+          "no_such_point_to_point_frame"}},
+        {ReplaceOnce(valid, "\"knee_force_newtons\": 10000.0",
+                     "\"knee_force_newtons\": 0.0"),
+         {"$.point_to_point_series_spring_bilinear_dampers[0].knee_force_newtons",
+          "strictly positive"}},
+        {ReplaceOnce(valid,
+                     "\"damping_above_knee_newton_seconds_per_meter\": 50000.0",
+                     "\"damping_above_knee_newton_seconds_per_meter\": -1.0"),
+         {"$.point_to_point_series_spring_bilinear_dampers[0].damping_above_knee_newton_seconds_per_meter",
+          "strictly positive"}},
+        {ReplaceOnce(valid,
+                     "\"point_to_point_series_spring_bilinear_dampers\": [",
+                     "\"point_to_point_dampers\": ["),
+         {"$.point_to_point_dampers", "unknown key"}},
         // A massless body is a legitimate frame carrier to the multibody layer,
         // but a record states inertia about the centre of mass, and dividing it
         // by zero would surface as a complaint about the unit inertia rather
@@ -442,9 +489,18 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"force_newtons\": 12000.0, \"slope\": 1.0}\n      ]"),
          {"$.saturated_piecewise_linear_dampers[0].curve[2].slope",
           "unknown key"}},
-        {ReplaceOnce(valid, "\"frame_c_name\": \"carbody\"",
-                     "\"frame_c_name\": \"no_such_bushing_frame\""),
-         {"$.half_angle_midpoint_roll_pitch_yaw_bushings[0].frame_c_name",
+        {ReplaceOnce(valid, "{\"x\": 7.0, \"y\": 8.0, \"z\": 9.0}",
+                     "{\"x\": -7.0, \"y\": 8.0, \"z\": 9.0}"),
+         {"$.reference_frame_linear_bushings[0].translational_stiffness_newtons_per_meter",
+          "non-negative"}},
+        {ReplaceOnce(valid,
+                     "\"name\": \"longibar_bushing\",\n"
+                     "      \"reference_frame_name\": \"longibar_child_frame\",\n"
+                     "      \"opposite_frame_name\": \"carbody\"",
+                     "\"name\": \"longibar_bushing\",\n"
+                     "      \"reference_frame_name\": \"longibar_child_frame\",\n"
+                     "      \"opposite_frame_name\": \"no_such_bushing_frame\""),
+         {"$.reference_frame_linear_bushings[0].opposite_frame_name",
           "no_such_bushing_frame"}},
         {ReplaceOnce(valid,
                      "{\"x\": 1.0, \"y\": 0.0, \"z\": 0.0},\n"

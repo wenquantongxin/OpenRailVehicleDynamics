@@ -125,15 +125,22 @@ Json BuildQualificationStateLayout(const configuration::AssembledVehicleSystem& 
     };
     for (const auto& name : binding.revolute_joint_names) angle_joint(name, 1, "revolute");
     for (const auto& name : binding.ball_rpy_joint_names) angle_joint(name, 3, "ball_rpy");
-    for (const auto& name : binding.series_spring_viscous_damper_names) {
-        const auto range = system.series_spring_damper_force_state_range(
-            system.GetSeriesSpringViscousDamperIndexByName(name));
+    const auto force_block = [&](const std::string& name,
+                                 system_assembly::SystemContinuousStateRange range) {
         if (range.size() != 1) Invalid("series-force range must have one entry");
         const int start = range.start() - zr.start();
         Mark(z_covered, start, 1);
         blocks.push_back({{"owner", name}, {"family", "force"}, {"joint_kind", "series_force"},
                           {"internal_state_start", start}, {"physical_state_start", range.start()},
                           {"size", 1}, {"unit", "N"}});
+    };
+    for (const auto& name : binding.series_spring_viscous_damper_names) {
+        force_block(name, system.series_spring_damper_force_state_range(
+                              system.GetSeriesSpringViscousDamperIndexByName(name)));
+    }
+    for (const auto& name : binding.point_to_point_series_spring_bilinear_damper_names) {
+        force_block(name, system.series_spring_damper_force_state_range(
+                              system.GetPointToPointSeriesSpringBilinearDamperIndexByName(name)));
     }
     RequireComplete(q_covered);
     RequireComplete(v_covered);

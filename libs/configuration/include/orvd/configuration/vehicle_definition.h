@@ -113,15 +113,12 @@ struct VehicleWeldJointDefinition {
 };
 
 // The force elements, named by real constitutive law. Each states which of its
-// two ends is the reference end: the relative motion the law reads and the force
-// it produces are expressed there, and that end carries the support moment.
-// Swapping the two ends leaves every force and moment balance intact while
-// moving that support moment to the other body, so which end is which is stated
-// rather than inferred.
+// two ends is the reference end. Each law defines its force direction and
+// support-moment convention.
 //
 // A nominal force — the preload a suspension element carries at rest — is not
 // here. It belongs to a resolved start-up state, not to what the vehicle is, and
-// a later Goal supplies it per context.
+// is supplied per context.
 
 struct VehicleTranslationalSpringDamperDefinition {
     std::string name;
@@ -149,6 +146,16 @@ struct VehicleSeriesSpringViscousDamperDefinition {
     double series_damping_newton_seconds_per_meter{0.0};
 };
 
+struct VehiclePointToPointSeriesSpringBilinearDamperDefinition {
+    std::string name;
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
+    double series_stiffness_newtons_per_meter{0.0};
+    double damping_below_knee_newton_seconds_per_meter{0.0};
+    double knee_force_newtons{0.0};
+    double damping_above_knee_newton_seconds_per_meter{0.0};
+};
+
 struct VehicleSaturatedPiecewiseLinearDamperPointDefinition {
     double relative_velocity_meters_per_second{0.0};
     double force_newtons{0.0};
@@ -165,21 +172,17 @@ struct VehicleSaturatedPiecewiseLinearDamperDefinition {
     std::vector<VehicleSaturatedPiecewiseLinearDamperPointDefinition> curve;
 };
 
-// The frozen IRW six-component bushing. A and C are deliberately not called
-// reference and opposite ends: both receive a wrench at their common
-// instantaneous midpoint, and neither carries the support-moment convention of
-// the translational families.
-struct VehicleHalfAngleMidpointRollPitchYawBushingDefinition {
+// Components are expressed in the reference frame. The reference end carries
+// the support moment of the translational force.
+struct VehicleReferenceFrameLinearBushingDefinition {
     std::string name;
-    std::string frame_a_name;
-    std::string frame_c_name;
-    Eigen::Vector3d rotational_stiffness_newton_meters_per_radian{
-        Eigen::Vector3d::Zero()};
-    Eigen::Vector3d rotational_damping_newton_meter_seconds_per_radian{
-        Eigen::Vector3d::Zero()};
+    std::string reference_frame_name;
+    std::string opposite_frame_name;
     Eigen::Vector3d translational_stiffness_newtons_per_meter{
         Eigen::Vector3d::Zero()};
     Eigen::Vector3d translational_damping_newton_seconds_per_meter{
+        Eigen::Vector3d::Zero()};
+    Eigen::Vector3d rotational_damping_newton_meter_seconds_per_radian{
         Eigen::Vector3d::Zero()};
 };
 
@@ -232,10 +235,12 @@ struct VehicleDefinition {
         roll_spring_damper_couples;
     std::vector<VehicleSeriesSpringViscousDamperDefinition>
         series_spring_viscous_dampers;
+    std::vector<VehiclePointToPointSeriesSpringBilinearDamperDefinition>
+        point_to_point_series_spring_bilinear_dampers;
     std::vector<VehicleSaturatedPiecewiseLinearDamperDefinition>
         saturated_piecewise_linear_dampers;
-    std::vector<VehicleHalfAngleMidpointRollPitchYawBushingDefinition>
-        half_angle_midpoint_roll_pitch_yaw_bushings;
+    std::vector<VehicleReferenceFrameLinearBushingDefinition>
+        reference_frame_linear_bushings;
 };
 
 }  // namespace orvd::configuration

@@ -88,7 +88,6 @@ std::set<std::string> ExpectedTranslationalNames() {
         for (const char tag : {'A', 'B'}) {
             names.insert(bogie + "_ss_airspring_" + tag);
             names.insert(bogie + "_ss_tractionrod_" + tag);
-            names.insert(bogie + "_ss_antihunting_" + tag);
         }
     }
     return names;
@@ -104,13 +103,26 @@ std::set<std::string> ExpectedBushingNames() {
     return names;
 }
 
+std::set<std::string> ExpectedPointToPointNames() {
+    std::set<std::string> names;
+    for (const std::string bogie : {"front", "rear"}) {
+        for (const char tag : {'A', 'B'}) {
+            names.insert(bogie + "_ss_antihunting_" + tag);
+        }
+        for (const char tag : {'A', 'B', 'C', 'D'}) {
+            names.insert(bogie + "_ps_latdamper_" + tag);
+        }
+    }
+    return names;
+}
+
 void CheckRecordIdentity(const VehicleDefinition& vehicle) {
     Expect(vehicle.vehicle_name == "IRW", "IRW vehicle identity");
     Expect(vehicle.mechanical_definition_identifier ==
                "irw_reference_mechanical_definition",
            "IRW mechanical definition identity");
     Expect(NamesOf(vehicle.rigid_bodies) == ExpectedBodyNames(),
-           "the record contains the frozen 25-body IRW name set");
+           "the record contains the 25-body IRW name set");
 
     const std::set<std::string> expected_free{
         "carbody",       "frame_front",   "frame_rear", "axlebridge_ff",
@@ -122,7 +134,7 @@ void CheckRecordIdentity(const VehicleDefinition& vehicle) {
         }
     }
     Expect(actual_free == expected_free,
-           "the record declares the frozen seven free bodies");
+           "the record declares the seven free bodies");
     Expect(std::set<std::string>(
                vehicle.mechanical_track_station_layout
                    .wheel_pair_station_reference_body_names.begin(),
@@ -139,25 +151,28 @@ void CheckRecordIdentity(const VehicleDefinition& vehicle) {
            "the record contains all and only eight longibar Ball-RPY joints");
     Expect(NamesOf(vehicle.weld_joints) ==
                std::set<std::string>{"weld_dum_front", "weld_dum_rear"},
-           "the record contains the two frozen DUM welds");
-    Expect(vehicle.fixed_frames.size() == 122,
-           "the record contains 106 suspension and weld frames plus 16 "
+           "the record contains the two DUM welds");
+    Expect(vehicle.fixed_frames.size() == 130,
+           "the record contains 114 suspension and weld frames plus 16 "
            "Ball-RPY joint frames");
 
     Expect(NamesOf(vehicle.translational_spring_dampers) ==
                ExpectedTranslationalNames(),
-           "the 36 compiled translational elements have the frozen name set");
+           "the 32 compiled translational elements have the name set");
     Expect(NamesOf(vehicle.roll_spring_damper_couples) ==
                std::set<std::string>{"front_ss_antiroll",
                                      "rear_ss_antiroll"},
-           "the two compiled roll couples have the frozen name set");
-    Expect(NamesOf(vehicle.half_angle_midpoint_roll_pitch_yaw_bushings) ==
+           "the two compiled roll couples have the name set");
+    Expect(NamesOf(vehicle.reference_frame_linear_bushings) ==
                ExpectedBushingNames(),
-           "the eight compiled longibar bushings have the frozen name set");
+           "the eight compiled longibar bushings have the name set");
+    Expect(NamesOf(vehicle.point_to_point_series_spring_bilinear_dampers) ==
+               ExpectedPointToPointNames(),
+           "the twelve point-to-point series elements have the name set");
     Expect(NamesOf(vehicle.series_spring_viscous_dampers) ==
                std::set<std::string>{"sslatdmp_0_mk_front_BF_SLD",
                                      "sslatdmp_1_mk_rear_BF_SLD"},
-           "the two Maxwell channels have the frozen names");
+           "the two Maxwell channels have the names");
 }
 
 void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
@@ -168,7 +183,7 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
         total_mass += body.mass_kilograms;
         body_by_name.emplace(body.name, &body);
     }
-    Expect(std::abs(total_mass - 40193.67123394637) <= 5.0e-11,
+    Expect(std::abs(total_mass - 40152.56099299506) <= 5.0e-11,
            "the complete source mass ledger is preserved");
     const auto& carbody = *body_by_name.at("carbody");
     Expect(carbody.mass_kilograms == 25000.0 &&
@@ -180,12 +195,12 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
            "the carbody mass, positive COM height and central inertia are "
            "source exact");
     const auto& longibar = *body_by_name.at("longibar_front_A");
-    Expect(longibar.mass_kilograms == 23.958904243295922 &&
+    Expect(longibar.mass_kilograms == 18.820124124383078 &&
                longibar
                        .inertia_moments_about_center_of_mass_kilogram_square_meters ==
-                   Eigen::Vector3d(1.3841101530761446,
-                                   0.014019477425825506,
-                                   1.3841101530761446),
+                   Eigen::Vector3d(0.6729769337412805,
+                                   0.011012536664854763,
+                                   0.6729769337412805),
            "the polygonal longibar mass and central inertia are source exact");
 
     std::map<std::string, const orvd::configuration::
@@ -200,11 +215,11 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
                primary.opposite_frame_name ==
                    "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseA" &&
                primary.stiffness_newtons_per_meter ==
-                   Eigen::Vector3d(50000.0, 50000.0, 830000.0) &&
+                   Eigen::Vector3d(750810.0, 750810.0, 646797.0) &&
                primary.damping_newton_seconds_per_meter ==
-                   Eigen::Vector3d(0.0, 0.0, 7000.0),
+                   Eigen::Vector3d(0.0, 0.0, 5000.0),
            "the first primary spring binds its real Frame-A and axlebridge "
-           "markers with the frozen constants");
+           "markers with the constants");
     const auto& crossed = *translational.at("rear_ps_spring_C2");
     Expect(crossed.reference_frame_name ==
                    "mk_frame_rear__M_Frame_PS_Spring_baseC2" &&
@@ -217,38 +232,36 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
                air.opposite_frame_name ==
                    "mk_dum_front__M_DUM_AirSpring_A" &&
                air.stiffness_newtons_per_meter ==
-                   Eigen::Vector3d(15000.0, 15000.0, 50000.0),
+                   Eigen::Vector3d(100107.0, 100107.0, 150061.0),
            "the air spring keeps Frame A as its reference end");
 
     std::map<std::string, const orvd::configuration::
-                              VehicleHalfAngleMidpointRollPitchYawBushingDefinition*>
+                              VehicleReferenceFrameLinearBushingDefinition*>
         bushing_by_name;
     for (const auto& element :
-         vehicle.half_angle_midpoint_roll_pitch_yaw_bushings) {
+         vehicle.reference_frame_linear_bushings) {
         bushing_by_name.emplace(element.name, &element);
     }
     for (const std::string bogie : {"front", "rear"}) {
         for (const char tag : {'A', 'B', 'C', 'D'}) {
             const auto& bushing =
                 *bushing_by_name.at(bogie + "_ps_barfixed_" + tag);
-            Expect(bushing.frame_a_name ==
+            Expect(bushing.reference_frame_name ==
                        "mk_longibar_" + bogie + "_" + tag +
                            "__M_LongiBar_" + tag + "_FrameSide" &&
-                       bushing.frame_c_name ==
+                       bushing.opposite_frame_name ==
                            "mk_frame_" + bogie + "__M_Frame_LongiBar_" +
                                tag,
-                   "each half-angle bushing binds its named longibar and "
+                   "each reference-frame bushing binds its named longibar and "
                    "frame endpoints");
-            Expect(bushing.rotational_stiffness_newton_meters_per_radian ==
-                           Eigen::Vector3d::Zero() &&
-                       bushing.rotational_damping_newton_meter_seconds_per_radian ==
-                           Eigen::Vector3d::Constant(100.0) &&
+            Expect(bushing.rotational_damping_newton_meter_seconds_per_radian ==
+                           Eigen::Vector3d::Constant(10000.0) &&
                        bushing.translational_stiffness_newtons_per_meter ==
                            Eigen::Vector3d::Constant(1.0e8) &&
                        bushing.translational_damping_newton_seconds_per_meter ==
-                           Eigen::Vector3d::Constant(100.0),
-                   "each half-angle bushing keeps the frozen isotropic "
-                   "constants and zero rotational stiffness");
+                           Eigen::Vector3d::Constant(1000000.0),
+                   "each reference-frame bushing keeps the isotropic "
+                   "constants");
         }
     }
 }
@@ -257,16 +270,16 @@ void CheckAssembledTopology(
     const VehicleDefinition& vehicle,
     const orvd::configuration::AssembledVehicleSystem& system) {
     const MultibodyModel& model = system.model();
-    Expect(model.num_rigid_bodies() == 25 && model.num_frames() == 148 &&
+    Expect(model.num_rigid_bodies() == 25 && model.num_frames() == 156 &&
                model.num_joints() == 18,
-           "the finalized graph contains 25 bodies, 122 fixed frames and 18 "
+           "the finalized graph contains 25 bodies, 130 fixed frames and 18 "
            "named joints without hidden vehicle elements");
     Expect(model.num_generalized_positions() == 81 &&
                model.num_generalized_velocities() == 74,
            "seven free bodies, eight wheel joints and eight Ball-RPY joints "
            "produce nq=81 and nv=74");
-    Expect(system.system().continuous_state_size() == 157,
-           "the assembled passive IRW state is q81 plus v74 plus z2");
+    Expect(system.system().continuous_state_size() == 169,
+           "the assembled passive IRW state is q81 plus v74 plus z14");
 
     const std::set<std::string> free_names{
         "carbody",       "frame_front",   "frame_rear", "axlebridge_ff",
@@ -274,7 +287,7 @@ void CheckAssembledTopology(
     for (const std::string& name : ExpectedBodyNames()) {
         const auto body = model.GetRigidBodyByName(name);
         Expect(model.IsFreeBody(body) == free_names.contains(name),
-               "body '" + name + "' has the frozen free/constrained role");
+               "body '" + name + "' has the free/constrained role");
     }
     for (const std::string& name : ExpectedWheelJointNames()) {
         const auto joint = model.GetJointByName(name);
@@ -311,7 +324,7 @@ void CheckAssembledTopology(
         Expect(context->generalized_positions().segment(range.start(), 3) ==
                    joint.default_roll_pitch_yaw_angles_radians,
                "Ball-RPY joint '" + joint.name +
-                   "' preserves the frozen Euler-angle branch exactly");
+                   "' preserves the Euler-angle branch exactly");
     }
     for (const auto& weld : vehicle.weld_joints) {
         const auto parent =
@@ -328,18 +341,19 @@ void CheckAssembledTopology(
     }
 
     const auto& plan = system.force_plan();
-    Expect(plan.translational_spring_damper_count() == 36 &&
+    Expect(plan.translational_spring_damper_count() == 32 &&
                plan.roll_spring_damper_couple_count() == 2 &&
-               plan.half_angle_midpoint_roll_pitch_yaw_bushing_count() == 8 &&
+               plan.reference_frame_linear_bushing_count() == 8 &&
                plan.series_spring_viscous_damper_count() == 2 &&
+               plan.point_to_point_series_spring_bilinear_damper_count() == 12 &&
                plan.saturated_piecewise_linear_damper_count() == 0,
-           "the 46 ordinary suspensions compile as 36 translational, two "
-           "roll and eight full bushings, beside two Maxwell channels");
-    Expect(plan.body_wrench_count() == 96 &&
-               plan.nominal_force_component_count() == 108 &&
-               plan.series_spring_damper_force_state_count() == 2,
-           "the compiled plan owns 96 body wrenches, 108 nominal-force "
-           "components and two continuous force states");
+           "the suspension plan contains 32 translational, two roll, eight "
+           "reference-frame bushings and fourteen series elements");
+    Expect(plan.body_wrench_count() == 112 &&
+               plan.nominal_force_component_count() == 96 &&
+               plan.series_spring_damper_force_state_count() == 14,
+           "the compiled plan owns 112 body wrenches, 96 nominal-force "
+           "components and fourteen continuous force states");
 }
 
 Eigen::Vector3d WorldPoint(
@@ -353,16 +367,12 @@ Eigen::Vector3d WorldPoint(
 
 void CheckRealBushingExecution(const VehicleDefinition& vehicle,
                                const MultibodyModel& model) {
-    // G65 qualified the constitutive law on an independent non-degenerate
-    // fixture. This gate supplies the missing real-vehicle half: all eight
-    // frozen IRW names and endpoint bindings must execute together against the
-    // assembled topology. Keeping only this family makes each output pair's
-    // identity unambiguous without exposing cross-family wrench ordinals as a
-    // product API.
+    // Evaluate the eight actual bushing bindings in isolation.
     VehicleDefinition bushing_only = vehicle;
     bushing_only.translational_spring_dampers.clear();
     bushing_only.roll_spring_damper_couples.clear();
     bushing_only.series_spring_viscous_dampers.clear();
+    bushing_only.point_to_point_series_spring_bilinear_dampers.clear();
     bushing_only.saturated_piecewise_linear_dampers.clear();
     const auto plan =
         orvd::configuration::BuildVehicleForcePlan(bushing_only, model);
@@ -397,23 +407,23 @@ void CheckRealBushingExecution(const VehicleDefinition& vehicle,
     for (const auto& frame : vehicle.fixed_frames) {
         frame_body.emplace(frame.name, frame.body_name);
     }
-    Expect(plan->half_angle_midpoint_roll_pitch_yaw_bushing_count() == 8 &&
+    Expect(plan->reference_frame_linear_bushing_count() == 8 &&
                wrenches.size() == 16,
            "the real eight-bushing batch emits exactly eight named pairs");
     for (std::size_t index = 0;
-         index < vehicle.half_angle_midpoint_roll_pitch_yaw_bushings.size();
+         index < vehicle.reference_frame_linear_bushings.size();
          ++index) {
         const auto& definition =
-            vehicle.half_angle_midpoint_roll_pitch_yaw_bushings[index];
+            vehicle.reference_frame_linear_bushings[index];
         const auto& on_a = wrenches[2 * index];
         const auto& on_c = wrenches[2 * index + 1];
         const std::string name = definition.name;
         Expect(model.GetRigidBodyName(on_a.body) ==
-                       frame_body.at(definition.frame_a_name) &&
+                       frame_body.at(definition.reference_frame_name) &&
                    model.GetRigidBodyName(on_c.body) ==
-                       frame_body.at(definition.frame_c_name),
+                       frame_body.at(definition.opposite_frame_name),
                "real bushing '" + name +
-                   "' lands on its frozen longibar and frame bodies");
+                   "' lands on its longibar and frame bodies");
         Expect(on_a.expressed_in_frame == model.world_frame() &&
                    on_c.expressed_in_frame == model.world_frame(),
                "real bushing '" + name +
@@ -426,18 +436,21 @@ void CheckRealBushingExecution(const VehicleDefinition& vehicle,
                    on_c.torque_about_point_newton_metres.norm() > 1.0e-6,
                "real bushing '" + name +
                    "' produces finite non-degenerate six-component output");
+        const auto reference_frame = model.GetFrameByName(definition.reference_frame_name);
+        const auto opposite_frame = model.GetFrameByName(definition.opposite_frame_name);
+        const auto reference_pose = model.CalcPoseInWorld(*context, reference_frame);
+        const auto opposite_pose = model.CalcPoseInWorld(*context, opposite_frame);
+        const Eigen::Vector3d p_a = WorldPoint(model, *context, on_a);
+        const Eigen::Vector3d p_c = WorldPoint(model, *context, on_c);
+        Expect((p_a - reference_pose.translation()).norm() <= 1.0e-13 &&
+                   (p_c - opposite_pose.translation()).norm() <= 1.0e-13,
+               "real bushing '" + name + "' applies forces at its two markers");
+        const Eigen::Vector3d support = (p_c - p_a).cross(on_a.force_newtons);
         Expect(on_a.force_newtons == -on_c.force_newtons &&
-                   on_a.torque_about_point_newton_metres ==
-                       -on_c.torque_about_point_newton_metres,
-               "real bushing '" + name +
-                   "' emits an exact equal-and-opposite wrench pair");
-        const double point_error =
-            (WorldPoint(model, *context, on_a) -
-             WorldPoint(model, *context, on_c))
-                .norm();
-        Expect(point_error <= 1.0e-13,
-               "real bushing '" + name +
-                   "' applies both wrenches at one common midpoint");
+                   (on_a.torque_about_point_newton_metres +
+                    on_c.torque_about_point_newton_metres - support).norm() <= 1.0e-13,
+               "real bushing '" + name + "' assigns the support moment to its reference end");
+
     }
 }
 

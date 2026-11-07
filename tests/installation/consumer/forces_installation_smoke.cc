@@ -12,7 +12,7 @@
 namespace {
 
 using orvd::forces::ForceElementEnd;
-using orvd::forces::HalfAngleMidpointRollPitchYawBushing;
+using orvd::forces::ReferenceFrameLinearBushing;
 using orvd::forces::VehicleForceElementCollection;
 using orvd::forces::VehicleForcePlan;
 using orvd::multibody_model::AppliedBodyWrench;
@@ -67,12 +67,10 @@ int main() {
         model.SetGravityVector(Eigen::Vector3d::Zero());
         model.Finalize();
 
-        HalfAngleMidpointRollPitchYawBushing bushing;
-        bushing.name = "installed_half_angle_midpoint_bushing";
-        bushing.frame_a_end = ForceElementEnd{frame_a};
-        bushing.frame_c_end = ForceElementEnd{frame_c};
-        bushing.rotational_stiffness_newton_meters_per_radian =
-            Eigen::Vector3d(310.0, 270.0, 190.0);
+        ReferenceFrameLinearBushing bushing;
+        bushing.name = "installed_reference_frame_bushing";
+        bushing.reference_end = ForceElementEnd{frame_a};
+        bushing.opposite_end = ForceElementEnd{frame_c};
         bushing.rotational_damping_newton_meter_seconds_per_radian =
             Eigen::Vector3d(17.0, 19.0, 23.0);
         bushing.translational_stiffness_newtons_per_meter =
@@ -81,7 +79,7 @@ int main() {
             Eigen::Vector3d(170.0, 190.0, 230.0);
 
         VehicleForceElementCollection elements;
-        elements.half_angle_midpoint_roll_pitch_yaw_bushings.push_back(
+        elements.reference_frame_linear_bushings.push_back(
             bushing);
         const VehicleForcePlan plan(model, std::move(elements));
         auto context = model.CreateDefaultContext();
@@ -95,8 +93,14 @@ int main() {
 
         const auto frame_a_pose = model.CalcPoseInWorld(*context, frame_a);
         const auto frame_c_pose = model.CalcPoseInWorld(*context, frame_c);
-        const Eigen::Vector3d expected_midpoint =
-            0.5 * (frame_a_pose.translation() + frame_c_pose.translation());
+        const Eigen::Vector3d displacement =
+            frame_c_pose.translation() - frame_a_pose.translation();
+        const Eigen::Vector3d expected_force =
+            frame_a_pose.rotation() *
+            bushing.translational_stiffness_newtons_per_meter.cwiseProduct(
+                frame_a_pose.rotation().transpose() * displacement);
+        const Eigen::Vector3d expected_support =
+            displacement.cross(expected_force);
         const Eigen::Vector3d point_a =
             WrenchPointInWorld(model, *context, wrenches[0]);
         const Eigen::Vector3d point_c =
@@ -114,25 +118,33 @@ int main() {
             Near(wrenches[0].force_newtons + wrenches[1].force_newtons,
                  Eigen::Vector3d::Zero(), kTolerance) &&
             Near(wrenches[0].torque_about_point_newton_metres +
-                     wrenches[1].torque_about_point_newton_metres,
+                     wrenches[1].torque_about_point_newton_metres -
+                     displacement.cross(wrenches[0].force_newtons),
                  Eigen::Vector3d::Zero(), kTolerance);
-        const bool common_midpoint =
-            Near(point_a, expected_midpoint, kTolerance) &&
-            Near(point_c, expected_midpoint, kTolerance);
+        const bool actual_endpoints =
+            Near(point_a, frame_a_pose.translation(), kTolerance) &&
+            Near(point_c, frame_c_pose.translation(), kTolerance);
+        const bool constitutive_values =
+            Near(wrenches[0].force_newtons, expected_force, kTolerance) &&
+            Near(wrenches[0].torque_about_point_newton_metres,
+                 expected_support, kTolerance) &&
+            Near(wrenches[1].torque_about_point_newton_metres,
+                 Eigen::Vector3d::Zero(), kTolerance);
         const bool real_evaluation =
             wrenches[0].force_newtons.norm() > 1.0 &&
             wrenches[0].torque_about_point_newton_metres.norm() > 1.0e-3;
 
-        if (plan.half_angle_midpoint_roll_pitch_yaw_bushing_count() != 1 ||
+        if (plan.reference_frame_linear_bushing_count() != 1 ||
             plan.body_wrench_count() != 2 || wrenches[0].body != body_a ||
             wrenches[1].body != body_c ||
             wrenches[0].expressed_in_frame != model.world_frame() ||
             wrenches[1].expressed_in_frame != model.world_frame() || !finite ||
-            !paired || !common_midpoint || !real_evaluation) {
+            !paired || !actual_endpoints || !constitutive_values ||
+            !real_evaluation) {
             std::fprintf(
                 stderr,
                 "installed ORVD forces smoke did not produce one finite "
-                "equal-and-opposite wrench pair at the common midpoint\n");
+                "balanced wrench pair at the attachment points\n");
             return 1;
         }
     } catch (const std::exception& error) {

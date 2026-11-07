@@ -818,6 +818,7 @@
       "damping_newton_meter_seconds_per_radian": 0.0
     }
   ],
+  "point_to_point_series_spring_bilinear_dampers": [],
   "series_spring_viscous_dampers": [
     {
       "name": "front_lateral_damper",
@@ -882,5 +883,5 @@
       ]
     }
   ],
-  "half_angle_midpoint_roll_pitch_yaw_bushings": []
+  "reference_frame_linear_bushings": []
 }

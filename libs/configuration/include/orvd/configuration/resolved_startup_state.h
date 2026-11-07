@@ -171,6 +171,12 @@ struct SeriesSpringViscousDamperForceState {
     double reference_end_axial_force_newtons{0.0};
 };
 
+// Axial force along the two attachment points; positive force is tensile.
+struct PointToPointSeriesSpringBilinearDamperForceState {
+    std::string element_name;
+    double reference_end_axial_force_newtons{0.0};
+};
+
 // One translational element's resolved preload: the force on its reference end,
 // stated in that end's frame, exactly as the force plan will apply it.
 struct TranslationalSpringDamperNominalForce {
@@ -245,6 +251,8 @@ struct ResolvedStartupState {
     std::vector<BallRpyJointStartupState> ball_rpy_joint_startup_states;
     std::vector<SeriesSpringViscousDamperForceState>
         series_spring_viscous_damper_force_states;
+    std::vector<PointToPointSeriesSpringBilinearDamperForceState>
+        point_to_point_series_spring_bilinear_damper_force_states;
     std::vector<TranslationalSpringDamperNominalForce>
         translational_spring_damper_nominal_forces;
 };

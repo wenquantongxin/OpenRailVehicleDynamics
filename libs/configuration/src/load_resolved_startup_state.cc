@@ -260,11 +260,12 @@ BallRpyJointStartupState ParseBallRpyJointStartupState(
     return joint;
 }
 
-SeriesSpringViscousDamperForceState ParseSeriesForceState(
+template <class ForceState>
+ForceState ParseSeriesForceState(
     const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
                      {"element_name", "reference_end_axial_force_newtons"});
-    SeriesSpringViscousDamperForceState element;
+    ForceState element;
     element.element_name =
         RequireString(value.at("element_name"), path + ".element_name");
     if (element.element_name.empty()) {
@@ -330,6 +331,7 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
          "revolute_joint_startup_states",
          "ball_rpy_joint_startup_states",
          "series_spring_viscous_damper_force_states",
+         "point_to_point_series_spring_bilinear_damper_force_states",
          "translational_spring_damper_nominal_forces"});
 
     ResolvedStartupState state;
@@ -375,7 +377,12 @@ ResolvedStartupState LoadResolvedStartupStateFromJsonFile(
     state.series_spring_viscous_damper_force_states =
         ParseArray<SeriesSpringViscousDamperForceState>(
             root, "series_spring_viscous_damper_force_states",
-            ParseSeriesForceState);
+            ParseSeriesForceState<SeriesSpringViscousDamperForceState>);
+    state.point_to_point_series_spring_bilinear_damper_force_states =
+        ParseArray<PointToPointSeriesSpringBilinearDamperForceState>(
+            root, "point_to_point_series_spring_bilinear_damper_force_states",
+            ParseSeriesForceState<
+                PointToPointSeriesSpringBilinearDamperForceState>);
     state.translational_spring_damper_nominal_forces =
         ParseArray<TranslationalSpringDamperNominalForce>(
             root, "translational_spring_damper_nominal_forces",

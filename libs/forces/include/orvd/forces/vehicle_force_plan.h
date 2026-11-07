@@ -48,9 +48,10 @@ class VehicleForcePlan {
     // family — or if stiffness divided by damping is not finite. A clipped
     // damper curve must start at the origin, ascend strictly in velocity and
     // state finite non-negative force.
-    // A half-angle bushing needs four finite non-negative three-axis stiffness
-    // and damping vectors. Its space-XYZ rate map refuses the same pitch
-    // singular neighbourhood as the frozen WRL implementation.
+    // A point-to-point series element requires four finite positive constants,
+    // finite stiffness-to-damping ratios and a finite knee velocity.
+    // A reference-frame bushing requires three finite non-negative three-axis
+    // stiffness and damping vectors.
     // Throws std::invalid_argument if an endpoint is the world frame.
     // Throws std::logic_error if the model is not finalized.
     VehicleForcePlan(
@@ -81,20 +82,25 @@ class VehicleForcePlan {
     [[nodiscard]] int series_spring_viscous_damper_count() const {
         return static_cast<int>(elements_.series_spring_viscous_dampers.size());
     }
+    [[nodiscard]] int point_to_point_series_spring_bilinear_damper_count() const {
+        return static_cast<int>(
+            elements_.point_to_point_series_spring_bilinear_dampers.size());
+    }
     [[nodiscard]] int saturated_piecewise_linear_damper_count() const {
         return static_cast<int>(
             elements_.saturated_piecewise_linear_dampers.size());
     }
-    [[nodiscard]] int half_angle_midpoint_roll_pitch_yaw_bushing_count() const {
+    [[nodiscard]] int reference_frame_linear_bushing_count() const {
         return static_cast<int>(
-            elements_.half_angle_midpoint_roll_pitch_yaw_bushings.size());
+            elements_.reference_frame_linear_bushings.size());
     }
 
     /// One force component of continuous state per series element, and none for
     /// any other family. The number of state components is therefore a property
     /// of which constitutive families the vehicle has, not of its data.
     [[nodiscard]] int series_spring_damper_force_state_count() const {
-        return series_spring_viscous_damper_count();
+        return series_spring_viscous_damper_count() +
+               point_to_point_series_spring_bilinear_damper_count();
     }
 
     /// A nominal force slot per translational element, three components each.
@@ -107,13 +113,15 @@ class VehicleForcePlan {
         return 2 * (translational_spring_damper_count() +
                     roll_spring_damper_couple_count() +
                     series_spring_viscous_damper_count() +
+                    point_to_point_series_spring_bilinear_damper_count() +
                     saturated_piecewise_linear_damper_count() +
-                    half_angle_midpoint_roll_pitch_yaw_bushing_count());
+                    reference_frame_linear_bushing_count());
     }
 
     /// Evaluates every element once against `context`.
     ///
     /// `series_forces` holds the current force state of each series element;
+    /// fixed-axis linear elements precede point-to-point bilinear elements.
     /// `nominal_forces` holds three components per translational element, in the
     /// element's reference frame, acting on its reference end. Both are read,
     /// never written.
@@ -123,8 +131,8 @@ class VehicleForcePlan {
     ///
     /// Throws std::invalid_argument if the context is foreign or any span is
     /// the wrong length; nothing is written in that case.
-    /// Throws std::runtime_error if a half-angle bushing reaches the frozen
-    /// WRL space-XYZ pitch singular neighbourhood.
+    /// Throws std::runtime_error if a point-to-point series element has zero or
+    /// non-finite attachment separation.
     void CalcAppliedForces(
         const multibody_model::MultibodyEvaluationContext& context,
         const Eigen::Ref<const Eigen::VectorXd>& series_forces,
@@ -150,6 +158,8 @@ class VehicleForcePlan {
     [[nodiscard]] int FindTranslationalSpringDamperOrdinal(
         std::string_view name) const;
     [[nodiscard]] int FindSeriesSpringViscousDamperOrdinal(
+        std::string_view name) const;
+    [[nodiscard]] int FindPointToPointSeriesSpringBilinearDamperOrdinal(
         std::string_view name) const;
 
     const multibody_model::MultibodyModel* model_;

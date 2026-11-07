@@ -240,6 +240,15 @@ ResolvedInitialContext AssembleResolvedInitialContext(
                      "series force state");
 
     stated.clear();
+    for (const PointToPointSeriesSpringBilinearDamperForceState& element :
+         startup_state.point_to_point_series_spring_bilinear_damper_force_states) {
+        stated.push_back(element.element_name);
+    }
+    RequireSameNames(
+        stated, binding.point_to_point_series_spring_bilinear_damper_names,
+        "point-to-point series force state");
+
+    stated.clear();
     for (const TranslationalSpringDamperNominalForce& element :
          startup_state.translational_spring_damper_nominal_forces) {
         stated.push_back(element.element_name);
@@ -383,7 +392,7 @@ ResolvedInitialContext AssembleResolvedInitialContext(
     }
 
     struct PlacedSeriesForce {
-        const SeriesSpringViscousDamperForceState* state;
+        double force_newtons;
         system_assembly::SystemContinuousStateRange range;
     };
     std::vector<PlacedSeriesForce> placed_series;
@@ -392,18 +401,31 @@ ResolvedInitialContext AssembleResolvedInitialContext(
     const int force_state_count =
         instance.continuous_state_size() - position_and_velocity_count;
     placed_series.reserve(
-        startup_state.series_spring_viscous_damper_force_states.size());
-    for (const SeriesSpringViscousDamperForceState& element :
-         startup_state.series_spring_viscous_damper_force_states) {
-        const system_assembly::SeriesSpringViscousDamperIndex index =
-            instance.GetSeriesSpringViscousDamperIndexByName(
-                element.element_name);
+        startup_state.series_spring_viscous_damper_force_states.size() +
+        startup_state.point_to_point_series_spring_bilinear_damper_force_states
+            .size());
+    const auto place_series_force = [&](const auto& element, const auto index) {
         const system_assembly::SystemContinuousStateRange range =
             instance.series_spring_damper_force_state_range(index);
         force_state_claims.push_back(
             ClaimedRange{range.start() - position_and_velocity_count,
                          range.size(), element.element_name});
-        placed_series.push_back(PlacedSeriesForce{&element, range});
+        placed_series.push_back(PlacedSeriesForce{
+            element.reference_end_axial_force_newtons, range});
+    };
+    for (const SeriesSpringViscousDamperForceState& element :
+         startup_state.series_spring_viscous_damper_force_states) {
+        const system_assembly::SeriesSpringViscousDamperIndex index =
+            instance.GetSeriesSpringViscousDamperIndexByName(
+                element.element_name);
+        place_series_force(element, index);
+    }
+    for (const PointToPointSeriesSpringBilinearDamperForceState& element :
+         startup_state.point_to_point_series_spring_bilinear_damper_force_states) {
+        const auto index =
+            instance.GetPointToPointSeriesSpringBilinearDamperIndexByName(
+                element.element_name);
+        place_series_force(element, index);
     }
 
     std::vector<
@@ -516,8 +538,7 @@ ResolvedInitialContext AssembleResolvedInitialContext(
                 ->angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second;
     }
     for (const PlacedSeriesForce& placed : placed_series) {
-        continuous_state[placed.range.start()] =
-            placed.state->reference_end_axial_force_newtons;
+        continuous_state[placed.range.start()] = placed.force_newtons;
     }
 
     // 9-11. A context the caller has never seen, one state transaction, and

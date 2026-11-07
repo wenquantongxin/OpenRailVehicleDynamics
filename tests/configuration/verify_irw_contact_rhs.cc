@@ -1,6 +1,6 @@
-// G69/G73: the frozen H3 IRW state drives eight independently rotating wheel
+// The resolved IRW state drives eight independently rotating wheel
 // contacts and eight held wheel--frame torque couples through one complete
-// q81/v74/z2 vehicle RHS.
+// q81/v74/z14 vehicle RHS.
 
 #include <algorithm>
 #include <array>
@@ -41,9 +41,9 @@ constexpr std::size_t kCarrierCount = 4;
 constexpr std::size_t kInterfaceCount = 8;
 constexpr int kPositionCount = 81;
 constexpr int kVelocityCount = 74;
-constexpr int kSeriesStateCount = 2;
-constexpr int kContinuousStateCount = 157;
-constexpr int kVehicleWrenchCount = 96;
+constexpr int kSeriesStateCount = 14;
+constexpr int kContinuousStateCount = 169;
+constexpr int kVehicleWrenchCount = 112;
 constexpr int kContactWrenchCount = 8;
 constexpr int kActiveTorqueWrenchCount = 16;
 
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
                         kVelocityCount &&
                     assembled.system().continuous_state_size() ==
                         kContinuousStateCount,
-                "the contact-enabled IRW is not q81/v74/z2");
+                "the contact-enabled IRW is not q81/v74/z14");
         Require(assembled.force_plan().body_wrench_count() ==
                         kVehicleWrenchCount &&
                     assembled.system().vehicle_body_wrench_count() ==
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
                         kActiveTorqueWrenchCount &&
                     assembled.system().held_active_torque_count() ==
                         static_cast<int>(kInterfaceCount),
-                "the 96 vehicle, eight contact and 16 active-torque wrench "
+                "the 112 vehicle, eight contact and 16 active-torque wrench "
                 "slices are wrong");
         Require(contact_plan->carrier_count() ==
                         static_cast<int>(kCarrierCount) &&
@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
                         .isZero(0.0) &&
                     context.wheel_rail_projection_station_hints_meters()
                             .size() == kCarrierCount,
-                "the resolved H3 context has the wrong state or history size");
+                "the resolved context has the wrong state or history size");
 
         std::unordered_map<std::string, double> resolved_stations;
         for (const auto& placement :
@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
                                       placement.track_station_meters);
         }
         Require(resolved_stations.size() == kCarrierCount,
-                "the H3 state did not resolve four axle-bridge stations");
+                "the startup state did not resolve four axle-bridge stations");
         for (std::size_t ordinal = 0; ordinal < kCarrierCount; ++ordinal) {
             const std::string carrier(kCarrierNames[ordinal]);
             Require(contact_plan->carrier_name(static_cast<int>(ordinal)) ==
@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
                         context
                                 .wheel_rail_projection_station_hints_meters()[
                             ordinal] == resolved_stations.at(carrier),
-                    "a frozen axle-bridge carrier or initial hint is wrong");
+                    "an axle-bridge carrier or initial hint is wrong");
         }
         for (std::size_t ordinal = 0; ordinal < kInterfaceCount; ++ordinal) {
             Require(contact_plan->interface_name(static_cast<int>(ordinal)) ==
@@ -253,7 +253,7 @@ int main(int argc, char** argv) {
                         active_torque_plan->reaction_frame_body_name(
                             static_cast<int>(ordinal)) ==
                             kReactionFrameNames[ordinal],
-                    "a frozen IRW contact or active-torque channel mapping is "
+                    "an IRW contact or active-torque channel mapping is "
                     "wrong");
         }
 
@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
         assembled.compiled_plan().CalcStateTimeDerivatives(context,
                                                             compiled_rhs);
         Require(compiled_rhs.allFinite(),
-                "the real H3 contact-enabled 157-state RHS is not finite");
+                "the IRW contact-enabled 169-state RHS is not finite");
 
         const auto component = assembled.system().GetMultibodyComponentView(
             context, assembled.system().multibody_component());
@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
             multibody_derivatives;
         independently_rebuilt.tail(kSeriesStateCount) = series_derivatives;
         Require(Near(compiled_rhs, independently_rebuilt),
-                "the compiled 157-state RHS differs from its typed 96+8+16 "
+                "the compiled 169-state RHS differs from its typed 112+8+16 "
                 "wrench rebuild");
 
         Eigen::VectorXd passive_contact_derivatives(kPositionCount +
@@ -367,7 +367,7 @@ int main(int argc, char** argv) {
                         std::isfinite(
                             observation.patches[0]
                                 .lateral_force_on_wheel_in_contact_frame_newtons),
-                    "a real H3 wheel interface lost finite positive contact");
+                    "a IRW wheel interface lost finite positive contact");
         }
 
         // Reduce the eight real wheel-body wrenches independently. This checks
@@ -686,7 +686,7 @@ int main(int argc, char** argv) {
                         "contact result");
             }
             Require(candidate_rhs == parallel_rhs_reference,
-                    "changing the OpenMP worker request changed the 157-state "
+                    "changing the OpenMP worker request changed the 169-state "
                     "RHS");
         }
 

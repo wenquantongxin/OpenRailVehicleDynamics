@@ -1113,7 +1113,7 @@ IrwGuidanceExperimentRunSummary RunIrwGuidanceExperiment(
             kSourceSpeedMetersPerSecond ||
         startup.common_wheel_spin_generation.has_value() ||
         startup.revolute_joint_startup_states.size() != kWheelCount) {
-        Reject("resolved startup state is not the frozen 60 km/h identity");
+        Reject("resolved startup state is not the prescribed 60 km/h startup");
     }
     const double startup_speed_scale =
         definition.initial_longitudinal_speed_meters_per_second /
@@ -1145,8 +1145,8 @@ IrwGuidanceExperimentRunSummary RunIrwGuidanceExperiment(
     auto& accepted = scenario->initial_context().context();
     if (assembled.model().num_generalized_positions() != 81 ||
         assembled.model().num_generalized_velocities() != 74 ||
-        assembled.force_plan().series_spring_damper_force_state_count() != 2 ||
-        assembled.force_plan().body_wrench_count() != 96 ||
+        assembled.force_plan().series_spring_damper_force_state_count() != 14 ||
+        assembled.force_plan().body_wrench_count() != 112 ||
         assembled.contact_force_plan() == nullptr ||
         assembled.contact_force_plan()->interface_count() !=
             static_cast<int>(kWheelCount) ||
@@ -1154,7 +1154,7 @@ IrwGuidanceExperimentRunSummary RunIrwGuidanceExperiment(
         assembled.active_torque_plan()->channel_count() !=
             static_cast<int>(kWheelCount) ||
         accepted.time_seconds() != 0.0) {
-        Reject("assembled IRW startup or 96+8+16 wrench topology differs "
+        Reject("assembled IRW startup or 112+8+16 wrench topology differs "
                "from the experiment identity");
     }
 

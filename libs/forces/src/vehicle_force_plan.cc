@@ -2,8 +2,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <limits>
-#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
@@ -53,7 +51,6 @@ struct RelativeMotion {
     // is a statement about where the two application points are.
     Eigen::Vector3d displacement_in_world_meters;
     Eigen::Matrix3d rotation_of_reference_in_world;
-    Eigen::Vector3d reference_origin_in_world_meters;
 };
 
 RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
@@ -73,7 +70,6 @@ RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
     motion.opposite_point =
         model.CalcFrameOriginAsBodyFixedPoint(context, opposite.frame);
     motion.rotation_of_reference_in_world = reference_pose.rotation();
-    motion.reference_origin_in_world_meters = reference_pose.translation();
     motion.displacement_in_world_meters =
         opposite_pose.translation() - reference_pose.translation();
     motion.displacement_in_reference_frame_meters =
@@ -86,100 +82,6 @@ RelativeMotion CalcRelativeMotion(const MultibodyModel& model,
     motion.angular_velocity_in_reference_frame_radians_per_second =
         relative_velocity.angular_velocity_radians_per_second();
     return motion;
-}
-
-// Returns the canonical quaternion used by the frozen WRL path. Eigen already
-// constructs a unit quaternion from the model's rotation matrix; selecting the
-// non-negative scalar representative removes the q/-q ambiguity before taking
-// a half angle.
-Eigen::Quaterniond CanonicalQuaternion(const Eigen::Matrix3d& rotation) {
-    Eigen::Quaterniond quaternion(rotation);
-    quaternion.normalize();
-    if (quaternion.w() < 0.0) {
-        quaternion.coeffs() *= -1.0;
-    }
-    return quaternion;
-}
-
-Eigen::Matrix3d CalcHalfAngleRotation(const Eigen::Matrix3d& rotation_a_c) {
-    const Eigen::Quaterniond quaternion_a_c =
-        CanonicalQuaternion(rotation_a_c);
-    const double scalar =
-        std::sqrt(0.5 * (quaternion_a_c.w() + 1.0));
-    const double vector_scale = 1.0 / (2.0 * scalar);
-    const Eigen::Quaterniond quaternion_a_b(
-        scalar, quaternion_a_c.x() * vector_scale,
-        quaternion_a_c.y() * vector_scale,
-        quaternion_a_c.z() * vector_scale);
-    return quaternion_a_b.toRotationMatrix();
-}
-
-struct SpaceXyzRollPitchYawKinematics {
-    Eigen::Vector3d angles_radians;
-    Eigen::Matrix3d rates_from_parent_angular_velocity;
-};
-
-// The same canonical space-XYZ extraction and parent-expressed angular-rate
-// map used by the frozen WRL bushing. Keeping this small implementation here
-// avoids exposing or linking a second Drake mathematical API through the
-// first-party force module.
-SpaceXyzRollPitchYawKinematics CalcSpaceXyzRollPitchYawKinematics(
-    const Eigen::Matrix3d& rotation_a_c) {
-    const Eigen::Quaterniond quaternion = CanonicalQuaternion(rotation_a_c);
-    const double r22 = rotation_a_c(2, 2);
-    const double r21 = rotation_a_c(2, 1);
-    const double r10 = rotation_a_c(1, 0);
-    const double r00 = rotation_a_c(0, 0);
-    const double positive_cosine =
-        std::sqrt((r22 * r22 + r21 * r21 + r10 * r10 + r00 * r00) /
-                  2.0);
-    const double pitch = std::atan2(-rotation_a_c(2, 0), positive_cosine);
-
-    const double y_a = quaternion.x() + quaternion.z();
-    const double x_a = quaternion.w() - quaternion.y();
-    const double y_b = quaternion.z() - quaternion.x();
-    const double x_b = quaternion.w() + quaternion.y();
-    const double epsilon = std::numeric_limits<double>::epsilon();
-    const double z_a = std::abs(y_a) <= epsilon && std::abs(x_a) <= epsilon
-                           ? 0.0
-                           : std::atan2(y_a, x_a);
-    const double z_b = std::abs(y_b) <= epsilon && std::abs(x_b) <= epsilon
-                           ? 0.0
-                           : std::atan2(y_b, x_b);
-    double roll = z_a - z_b;
-    double yaw = z_a + z_b;
-    if (roll > std::numbers::pi) {
-        roll -= 2.0 * std::numbers::pi;
-    } else if (roll < -std::numbers::pi) {
-        roll += 2.0 * std::numbers::pi;
-    }
-    if (yaw > std::numbers::pi) {
-        yaw -= 2.0 * std::numbers::pi;
-    } else if (yaw < -std::numbers::pi) {
-        yaw += 2.0 * std::numbers::pi;
-    }
-
-    const double cosine_pitch = std::cos(pitch);
-    constexpr double kGimbalLockToleranceCosPitch = 0.008;
-    if (std::abs(cosine_pitch) < kGimbalLockToleranceCosPitch) {
-        throw std::runtime_error(
-            "half-angle midpoint roll-pitch-yaw bushing: pitch is within "
-            "the frozen 0.008 cosine threshold of the space-XYZ "
-            "roll-pitch-yaw singularity");
-    }
-    const double sine_pitch = std::sin(pitch);
-    const double sine_yaw = std::sin(yaw);
-    const double cosine_yaw = std::cos(yaw);
-    const double inverse_cosine_pitch = 1.0 / cosine_pitch;
-
-    SpaceXyzRollPitchYawKinematics result;
-    result.angles_radians = Eigen::Vector3d(roll, pitch, yaw);
-    result.rates_from_parent_angular_velocity <<
-        cosine_yaw * inverse_cosine_pitch,
-        sine_yaw * inverse_cosine_pitch, 0.0, -sine_yaw, cosine_yaw, 0.0,
-        cosine_yaw * inverse_cosine_pitch * sine_pitch,
-        sine_yaw * inverse_cosine_pitch * sine_pitch, 1.0;
-    return result;
 }
 
 // The one place the full wrench of a two-point element is written.
@@ -210,38 +112,6 @@ void EmitTranslationalWrenchPair(
     destination[1] = AppliedBodyWrench{
         opposite.body, opposite.position_in_body_frame_meters, world,
         Eigen::Vector3d::Zero(), -force_on_reference_in_world};
-}
-
-// The WRL half-angle bushing applies both resultants at one instantaneous
-// world-space midpoint. That midpoint is converted separately into a point on
-// each body; it is not either frame origin and carries no translational-family
-// support moment.
-void EmitMidpointBushingWrenchPair(
-    const MultibodyModel& model, const MultibodyEvaluationContext& context,
-    const RelativeMotion& motion,
-    const Eigen::Vector3d& force_on_c_in_world,
-    const Eigen::Vector3d& torque_on_c_in_world,
-    std::span<AppliedBodyWrench> destination) {
-    const Eigen::Vector3d midpoint_in_world =
-        motion.reference_origin_in_world_meters +
-        0.5 * motion.displacement_in_world_meters;
-    const auto pose_world_body_a =
-        model.CalcPoseInWorld(context, motion.reference_point.body);
-    const auto pose_world_body_c =
-        model.CalcPoseInWorld(context, motion.opposite_point.body);
-    const Eigen::Vector3d midpoint_in_body_a =
-        pose_world_body_a.rotation().transpose() *
-        (midpoint_in_world - pose_world_body_a.translation());
-    const Eigen::Vector3d midpoint_in_body_c =
-        pose_world_body_c.rotation().transpose() *
-        (midpoint_in_world - pose_world_body_c.translation());
-    const FrameHandle world = model.world_frame();
-    destination[0] = AppliedBodyWrench{
-        motion.reference_point.body, midpoint_in_body_a, world,
-        -torque_on_c_in_world, -force_on_c_in_world};
-    destination[1] = AppliedBodyWrench{
-        motion.opposite_point.body, midpoint_in_body_c, world,
-        torque_on_c_in_world, force_on_c_in_world};
 }
 
 void RequireDistinctLiveEnds(const MultibodyModel& model,
@@ -354,6 +224,20 @@ double EvaluateValidatedSaturatedDamperCurve(
     return sign * curve.back().force_newtons;
 }
 
+double InverseBilinearDamping(
+    const PointToPointSeriesSpringBilinearDamper& element, double force) {
+    const double magnitude = std::abs(force);
+    if (magnitude <= element.knee_force_newtons) {
+        return force / element.damping_below_knee_newton_seconds_per_meter;
+    }
+    return std::copysign(
+        element.knee_force_newtons /
+                element.damping_below_knee_newton_seconds_per_meter +
+            (magnitude - element.knee_force_newtons) /
+                element.damping_above_knee_newton_seconds_per_meter,
+        force);
+}
+
 }  // namespace
 
 VehicleForcePlan::VehicleForcePlan(
@@ -423,6 +307,36 @@ VehicleForcePlan::VehicleForcePlan(
         }
     }
     for (std::size_t index = 0;
+         index < elements_.point_to_point_series_spring_bilinear_dampers.size();
+         ++index) {
+        const auto& element =
+            elements_.point_to_point_series_spring_bilinear_dampers[index];
+        const std::string what = ElementDescription(
+            "point-to-point series spring-bilinear damper", index, element.name);
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
+                                element.opposite_end, what);
+        const double stiffness = element.series_stiffness_newtons_per_meter;
+        const double inner_damping =
+            element.damping_below_knee_newton_seconds_per_meter;
+        const double knee_force = element.knee_force_newtons;
+        const double outer_damping =
+            element.damping_above_knee_newton_seconds_per_meter;
+        for (const double value :
+             {stiffness, inner_damping, knee_force, outer_damping}) {
+            if (!(value > 0.0) || !std::isfinite(value)) {
+                Reject(what + " needs four finite positive constants");
+            }
+        }
+        if (!std::isfinite(stiffness / inner_damping) ||
+            !std::isfinite(stiffness / outer_damping) ||
+            !std::isfinite(knee_force / inner_damping)) {
+            Reject(what +
+                   " has a stiffness-to-damping ratio or knee velocity outside "
+                   "the finite binary64 range");
+        }
+    }
+    for (std::size_t index = 0;
          index < elements_.saturated_piecewise_linear_dampers.size();
          ++index) {
         const auto& element =
@@ -436,20 +350,17 @@ VehicleForcePlan::VehicleForcePlan(
         ValidateSaturatedDamperCurve(element, what);
     }
     for (std::size_t index = 0;
-         index < elements_.half_angle_midpoint_roll_pitch_yaw_bushings.size();
+         index < elements_.reference_frame_linear_bushings.size();
          ++index) {
         const auto& element =
-            elements_.half_angle_midpoint_roll_pitch_yaw_bushings[index];
+            elements_.reference_frame_linear_bushings[index];
         const std::string what = ElementDescription(
-            "half-angle midpoint roll-pitch-yaw bushing", index,
+            "reference-frame linear bushing", index,
             element.name);
         RequireUniqueName(element.name, what, &names);
         RequireDistinctLiveEnds(model, *validation_context,
-                                element.frame_a_end, element.frame_c_end,
+                                element.reference_end, element.opposite_end,
                                 what);
-        RequirePassive(
-            element.rotational_stiffness_newton_meters_per_radian,
-            what + " rotational stiffness");
         RequirePassive(
             element.rotational_damping_newton_meter_seconds_per_radian,
             what + " rotational damping");
@@ -482,6 +393,20 @@ int VehicleForcePlan::FindSeriesSpringViscousDamperOrdinal(
     }
     Reject("no series spring-viscous damper is named '" + std::string(name) +
            "'");
+}
+
+int VehicleForcePlan::FindPointToPointSeriesSpringBilinearDamperOrdinal(
+    std::string_view name) const {
+    for (std::size_t index = 0;
+         index < elements_.point_to_point_series_spring_bilinear_dampers.size();
+         ++index) {
+        if (elements_.point_to_point_series_spring_bilinear_dampers[index].name ==
+            name) {
+            return static_cast<int>(index);
+        }
+    }
+    Reject("no point-to-point series spring-bilinear damper is named '" +
+           std::string(name) + "'");
 }
 
 double VehicleForcePlan::SaturatedPiecewiseLinearDamperForce(
@@ -592,6 +517,44 @@ void VehicleForcePlan::CalcAppliedForces(
         slot += 2;
     }
 
+    for (std::size_t index = 0;
+         index < elements_.point_to_point_series_spring_bilinear_dampers.size();
+         ++index) {
+        const auto& element =
+            elements_.point_to_point_series_spring_bilinear_dampers[index];
+        const RelativeMotion motion = CalcRelativeMotion(
+            *model_, context, element.reference_end, element.opposite_end);
+        const double length = motion.displacement_in_world_meters.stableNorm();
+        if (!(length > 0.0) || !std::isfinite(length)) {
+            throw std::runtime_error(
+                "point-to-point series spring-bilinear damper '" +
+                element.name + "' has zero or non-finite attachment separation");
+        }
+        const Eigen::Vector3d direction_in_world =
+            motion.displacement_in_world_meters / length;
+        const double length_rate =
+            (motion.displacement_in_reference_frame_meters / length)
+                .dot(motion.velocity_in_reference_frame_meters_per_second);
+        const Eigen::Index state_index =
+            static_cast<Eigen::Index>(series_spring_viscous_damper_count()) +
+            static_cast<Eigen::Index>(index);
+        const double force = series_forces[state_index];
+        series_force_derivatives[state_index] =
+            element.series_stiffness_newtons_per_meter *
+            (length_rate - InverseBilinearDamping(element, force));
+        const Eigen::Vector3d force_in_world = force * direction_in_world;
+        const FrameHandle world = model_->world_frame();
+        body_wrenches[slot] = AppliedBodyWrench{
+            motion.reference_point.body,
+            motion.reference_point.position_in_body_frame_meters, world,
+            Eigen::Vector3d::Zero(), force_in_world};
+        body_wrenches[slot + 1] = AppliedBodyWrench{
+            motion.opposite_point.body,
+            motion.opposite_point.position_in_body_frame_meters, world,
+            Eigen::Vector3d::Zero(), -force_in_world};
+        slot += 2;
+    }
+
     for (const auto& element :
          elements_.saturated_piecewise_linear_dampers) {
         const RelativeMotion motion = CalcRelativeMotion(
@@ -607,49 +570,25 @@ void VehicleForcePlan::CalcAppliedForces(
         slot += 2;
     }
 
-    for (const auto& element :
-         elements_.half_angle_midpoint_roll_pitch_yaw_bushings) {
+    for (const auto& element : elements_.reference_frame_linear_bushings) {
         const RelativeMotion motion = CalcRelativeMotion(
-            *model_, context, element.frame_a_end, element.frame_c_end);
-        const Eigen::Matrix3d rotation_a_b =
-            CalcHalfAngleRotation(motion.rotation_of_opposite_in_reference);
-        const Eigen::Matrix3d rotation_b_a = rotation_a_b.transpose();
-        const Eigen::Vector3d displacement_in_b =
-            rotation_b_a * motion.displacement_in_reference_frame_meters;
-        const Eigen::Vector3d displacement_rate_in_b =
-            rotation_b_a *
-            (motion.velocity_in_reference_frame_meters_per_second -
-             0.5 *
-                 motion.angular_velocity_in_reference_frame_radians_per_second
-                     .cross(motion.displacement_in_reference_frame_meters));
-        const Eigen::Vector3d force_on_c_in_b =
-            -(element.translational_stiffness_newtons_per_meter.cwiseProduct(
-                  displacement_in_b) +
-              element.translational_damping_newton_seconds_per_meter
-                  .cwiseProduct(displacement_rate_in_b));
-        const Eigen::Vector3d force_on_c_in_world =
-            motion.rotation_of_reference_in_world * rotation_a_b *
-            force_on_c_in_b;
-
-        const SpaceXyzRollPitchYawKinematics rpy =
-            CalcSpaceXyzRollPitchYawKinematics(
-                motion.rotation_of_opposite_in_reference);
-        const Eigen::Vector3d rpy_rates =
-            rpy.rates_from_parent_angular_velocity *
-            motion.angular_velocity_in_reference_frame_radians_per_second;
-        const Eigen::Vector3d generalized_torque_on_c =
-            -(element.rotational_stiffness_newton_meters_per_radian
-                  .cwiseProduct(rpy.angles_radians) +
-              element.rotational_damping_newton_meter_seconds_per_radian
-                  .cwiseProduct(rpy_rates));
-        const Eigen::Vector3d torque_on_c_in_a =
-            rpy.rates_from_parent_angular_velocity.transpose() *
-            generalized_torque_on_c;
-        const Eigen::Vector3d torque_on_c_in_world =
-            motion.rotation_of_reference_in_world * torque_on_c_in_a;
-        EmitMidpointBushingWrenchPair(
-            *model_, context, motion, force_on_c_in_world,
-            torque_on_c_in_world, body_wrenches.subspan(slot, 2));
+            *model_, context, element.reference_end, element.opposite_end);
+        const Eigen::Vector3d force_in_reference =
+            element.translational_stiffness_newtons_per_meter.cwiseProduct(
+                motion.displacement_in_reference_frame_meters) +
+            element.translational_damping_newton_seconds_per_meter.cwiseProduct(
+                motion.velocity_in_reference_frame_meters_per_second);
+        const Eigen::Vector3d moment_in_world =
+            motion.rotation_of_reference_in_world *
+            element.rotational_damping_newton_meter_seconds_per_radian
+                .cwiseProduct(
+                    motion.angular_velocity_in_reference_frame_radians_per_second);
+        EmitTranslationalWrenchPair(
+            *model_, motion.reference_point, motion.opposite_point,
+            motion.rotation_of_reference_in_world * force_in_reference,
+            motion.displacement_in_world_meters, body_wrenches.subspan(slot, 2));
+        body_wrenches[slot].torque_about_point_newton_metres += moment_in_world;
+        body_wrenches[slot + 1].torque_about_point_newton_metres -= moment_in_world;
         slot += 2;
     }
 }

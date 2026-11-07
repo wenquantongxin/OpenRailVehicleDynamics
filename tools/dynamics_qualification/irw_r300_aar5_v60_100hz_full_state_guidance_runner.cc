@@ -751,14 +751,14 @@ RunIrwR300Aar5V60At100HzFullStateGuidance(
     auto& accepted = scenario->initial_context().context();
     if (assembled.model().num_generalized_positions() != 81 ||
         assembled.model().num_generalized_velocities() != 74 ||
-        assembled.force_plan().series_spring_damper_force_state_count() != 2 ||
-        assembled.force_plan().body_wrench_count() != 96 ||
+        assembled.force_plan().series_spring_damper_force_state_count() != 14 ||
+        assembled.force_plan().body_wrench_count() != 112 ||
         assembled.contact_force_plan() == nullptr ||
         assembled.contact_force_plan()->body_wrench_count() != 8 ||
         assembled.active_torque_plan() == nullptr ||
         assembled.active_torque_plan()->body_wrench_count() != 16 ||
         accepted.time_seconds() != 0.0) {
-        Reject("the assembled IRW startup state or 96+8+16 wrench topology "
+        Reject("the assembled IRW startup state or 112+8+16 wrench topology "
                "does not match the closed guidance recipe");
     }
 

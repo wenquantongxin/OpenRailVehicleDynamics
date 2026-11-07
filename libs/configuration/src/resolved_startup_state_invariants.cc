@@ -254,17 +254,22 @@ void RequireResolvedStartupStateInvariants(const ResolvedStartupState& state,
     }
     RequireDistinctNames(names, field("ball_rpy_joint_startup_states"));
 
-    names.clear();
-    for (const SeriesSpringViscousDamperForceState& element :
-         state.series_spring_viscous_damper_force_states) {
-        RequireFinite(element.reference_end_axial_force_newtons,
-                      field("series_spring_viscous_damper_force_states['" +
-                            element.element_name +
-                            "'].reference_end_axial_force_newtons"));
-        names.push_back(element.element_name);
-    }
-    RequireDistinctNames(names,
-                         field("series_spring_viscous_damper_force_states"));
+    const auto require_force_states = [&names, &field](const auto& states,
+                                                       const std::string& key) {
+        names.clear();
+        for (const auto& element : states) {
+            RequireFinite(element.reference_end_axial_force_newtons,
+                          field(key + "['" + element.element_name +
+                                "'].reference_end_axial_force_newtons"));
+            names.push_back(element.element_name);
+        }
+        RequireDistinctNames(names, field(key));
+    };
+    require_force_states(state.series_spring_viscous_damper_force_states,
+                         "series_spring_viscous_damper_force_states");
+    require_force_states(
+        state.point_to_point_series_spring_bilinear_damper_force_states,
+        "point_to_point_series_spring_bilinear_damper_force_states");
 
     names.clear();
     for (const TranslationalSpringDamperNominalForce& element :

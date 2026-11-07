@@ -46,6 +46,7 @@ struct VehicleBinding {
     std::vector<std::string> ball_rpy_joint_names;
     std::vector<std::string> translational_spring_damper_names;
     std::vector<std::string> series_spring_viscous_damper_names;
+    std::vector<std::string> point_to_point_series_spring_bilinear_damper_names;
     std::vector<std::string> wheel_pair_station_reference_body_names;
 };
 
