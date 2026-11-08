@@ -55,7 +55,7 @@ F=c\,\dot\delta_c,
 \dot\delta_k+\dot\delta_c=u.
 $$
 
-第三式的右端是两端沿作用轴的相对速度 $u=\mathbf e_j^{\mathsf T}\mathbf u_A$：元件的总伸长率就是对端相对参考端沿 $\mathbf e_j$ 的速度分量。共用篇第 6 节已说明运动学层不提供自然长度，总伸长本身因此没有零点；本族的本构只用到它的变化率，零点从不出现。
+第三式的右端是两端沿作用轴的相对速度 $u=\mathbf e_j^{\mathsf T}\mathbf u_A$：元件的总伸长率就是对端相对参考端沿 $\mathbf e_j$ 的速度分量。总伸长的零位属于本构定义；本族的运动输入为伸长率，初始储能由内力初值给出。
 
 对第一式求导，用第二式消去 $\dot\delta_c=F/c$，再用第三式，
 
@@ -81,7 +81,7 @@ $$
 
 ### 2.2 变形度量与速度输入
 
-本族不读任何位移：$\mathbf d_A$、$R_{AC}$ 与 $\boldsymbol\omega_{rel,A}$ 都不进入本构。唯一的运动学输入是 $u=\mathbf e_j^{\mathsf T}\mathbf u_A$，其中 $\mathbf u_A$ 是共用篇第 2.3 节含运输项的相对速度，即 $\dot{\mathbf d}_A$。因此 $u=\dot d_{A,j}$ 是相对位置 $\mathbf d_A$ 第 $j$ 个分量的时间导数，而不是惯性系速度差 $\dot{\mathbf d}_I$ 沿作用轴的投影；二者按共用篇第 6 节只在垂直于两原点连线的分量上不同，作用轴不沿连线时不可互换。$\mathbf d_A$ 只在写出支承矩时出现，见第 2.4 节。
+本族不读任何位移：$\mathbf d_A$、$R_{AC}$ 与 $\boldsymbol\omega_{rel,A}$ 都不进入本构。唯一的运动学输入是 $u=\mathbf e_j^{\mathsf T}\mathbf u_A$，其中 $\mathbf u_A$ 是共用篇第 2.3 节含运输项的相对速度，即 $\dot{\mathbf d}_A$。因此 $u=\dot d_{A,j}$ 是相对位置 $\mathbf d_A$ 第 $j$ 个分量的时间导数，而不是惯性系速度差 $\dot{\mathbf d}_I$ 沿作用轴的投影；二者按共用篇第 2.3 节只在垂直于两原点连线的分量上不同，作用轴不沿连线时一般不可互换。$\mathbf d_A$ 只在写出支承矩时出现，见第 2.4 节。
 
 ### 2.3 解析响应
 
@@ -160,7 +160,7 @@ $$
 \mathcal P=-F\,\mathbf e_j^{\mathsf T}\mathbf u_A=-F\,u.
 $$
 
-另一方面，元件按本构吸收的功率是它传递的力与总伸长率的乘积 $F\,u$。两者恰好互为相反数，本族因此满足组织原则：本构律读取的速度 $u$ 正是与扳手施加位置共轭的量。若去掉支承矩，端点功率按共用篇第 4.2 节变为 $-\mathbf f_I\cdot\dot{\mathbf d}_I=-F\,\mathbf e_j^{\mathsf T}R_{IA}^{\mathsf T}\dot{\mathbf d}_I$，与 $-F\,u$ 相差支承矩的功率 $F\,\boldsymbol\omega_A\cdot\left(\mathbf d_I\times R_{IA}\mathbf e_j\right)$，本构所记的功与元件对两刚体所做的功便不再相同。支承矩因此是使两种功率相等的必要项，而不是只为配平净力矩而添加的修正。
+另一方面，元件按本构吸收的功率是它传递的力与总伸长率的乘积 $F\,u$。两者恰好互为相反数，本族因此满足组织原则：本构律读取的速度 $u$ 正是与扳手施加位置共轭的量。若去掉支承矩，端点功率按共用篇第 4.2 节变为 $-\mathbf f_I\cdot\dot{\mathbf d}_I=-F\,\mathbf e_j^{\mathsf T}R_{IA}^{\mathsf T}\dot{\mathbf d}_I$，与 $-F\,u$ 相差支承矩的功率 $F\,\boldsymbol\omega_A\cdot\left(\mathbf d_I\times R_{IA}\mathbf e_j\right)$，本构所记的功与元件对两刚体所做的功便不再相同。支承矩因此同时保证合矩平衡与功率一致。
 
 把吸收功率按串联条件拆开，
 
@@ -208,14 +208,14 @@ $\mathbf f_I=F\,R_{IA}\mathbf e_j$ 与 $\mathbf d_I$ 交给共用篇第 5.2 节�
 
 ### 3.4 与系统状态和积分器的衔接
 
-基座第 5.1 节的连续状态 $[q;v;z]$ 中，$z$ 块由全部串联元件的力状态依次排列而成，每个元件恰占一个分量，没有串联元件的系统 $z$ 块为空。完整状态导数按
+在 $[q;v;z]$ 中，每个定轴串联元件和每个[点对点串联元件](POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.md)各占 $z$ 的一个力分量，单位为 N。完整状态导数为
 
 $$
 \frac{d}{dt}\begin{bmatrix}q\\v\\z\end{bmatrix}
 =\begin{bmatrix}N(q)\,v\\ \dot v(q,v,z)\\ \dot z(q,v,z)\end{bmatrix}
 $$
 
-装配：力元求值一次性给出全部载荷与 $\dot z$；多体层把载荷按共用篇第 3.5 节换点到刚体原点并解前向动力学得到 $\dot v$；系统装配层把 $[N(q)v;\dot v]$ 与 $\dot z$ 拼接。$\dot v$ 对 $z$ 的依赖来自 $\mathbf f_A=F\,\mathbf e_j$，$\dot z$ 对 $v$ 的依赖来自 $u$，$\dot z$ 对 $z$ 自身的依赖是对角的，每个元件的对角元为 $-1/\tau_{\mathrm r}$。积分器把 $F$ 当作与 $q$、$v$ 同等的状态分量推进，初值问题因此需要 $F(t_0)$：它不能由 $(q,v)$ 代数确定，是初始状态的一部分。$z$ 块在各积分方法中的位置见[时间积分方法](../numerical_methods/TIME_INTEGRATION_METHODS.md)第 1.1 节。
+装配：力元求值一次性给出全部载荷与 $\dot z$；多体层把载荷按共用篇第 3.5 节换点到刚体原点并解前向动力学得到 $\dot v$；系统装配层把 $[N(q)v;\dot v]$ 与 $\dot z$ 拼接。$\dot v$ 对 $z$ 的依赖来自 $\mathbf f_A=F\,\mathbf e_j$，$\dot z$ 对 $v$ 的依赖来自 $u$，本族的内力导数对力状态的依赖是对角的，每个元件的对角元为 $-1/\tau_{\mathrm r}$。积分器把 $F$ 当作与 $q$、$v$ 同等的状态分量推进，初值问题因此需要 $F(t_0)$：它不能由 $(q,v)$ 代数确定，是初始状态的一部分。$z$ 块在各积分方法中的位置见[时间积分方法](../numerical_methods/TIME_INTEGRATION_METHODS.md)第 1.1 节。
 
 ## 4. 数学性质与适用条件
 

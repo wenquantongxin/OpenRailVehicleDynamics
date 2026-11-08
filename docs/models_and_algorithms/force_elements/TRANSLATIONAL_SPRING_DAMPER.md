@@ -37,7 +37,7 @@
 
 ### 1.3 与共用篇及基座的关系
 
-本篇沿用共用篇第 1.3 节的全部约定与符号避让，并沿用它对[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)（下称基座）的引用方式：$R_{AB}$ 把 B 中分量变到 A 中，粗体 $\mathbf d$ 是相对位置向量，$\mathbf u$ 是相对速度，功率写 $\mathcal P$，未标作用端的 $\mathbf f$ 指参考端所受载荷，末下标为表达系。本篇新增的符号已在上表标出，其中三处需要说明：名义力 $\mathbf f_0$ 的下标 0 不是表达系，它始终在 A 中表达；上标 $\mathrm{el}$、$\mathrm d$ 只区分弹性与阻尼部分，不改变末下标的含义；零力位移 $\mathbf d_{0,A}$ 采用与共用篇 $\mathbf u_{m,A}$ 相同的"限定词在前、表达系在后"双下标写法。本族的刚度与阻尼按基座第 5.3 节写成小写向量 $\mathbf k$、$\mathbf c$，需要矩阵形式时写 $\operatorname{diag}(\mathbf k)$、$\operatorname{diag}(\mathbf c)$，不用大写 $K$、$C$，那两个字母留给系统级矩阵。
+本篇沿用共用篇第 1 节与[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)（下称基座）的记号：$R_{AB}$ 把 B 中分量变到 A 中，粗体 $\mathbf d$ 是相对位置向量，$\mathbf u$ 是相对速度，功率写 $\mathcal P$，未标作用端的 $\mathbf f$ 指参考端所受载荷，末下标为表达系。本篇新增的符号已在上表标出，其中三处需要说明：名义力 $\mathbf f_0$ 的下标 0 不是表达系，它始终在 A 中表达；上标 $\mathrm{el}$、$\mathrm d$ 只区分弹性与阻尼部分，不改变末下标的含义；零力位移 $\mathbf d_{0,A}$ 采用与共用篇 $\boldsymbol\omega_{rel,A}$ 相同的"限定词在前、表达系在后"双下标写法。本族的刚度与阻尼按基座第 5.3 节写成小写向量 $\mathbf k$、$\mathbf c$，需要矩阵形式时写 $\operatorname{diag}(\mathbf k)$、$\operatorname{diag}(\mathbf c)$。
 
 ## 2. 模型与推导
 
@@ -105,7 +105,7 @@ $$
 \mathcal W_{C_o}^{I}[\mathcal C]=\left(\mathbf 0,\ -\mathbf f_I\right).
 $$
 
-支承矩关于 $A_o$ 取矩、施加在刚体 $\mathcal A$ 上；旋转保持叉积，$\mathbf d_I\times\mathbf f_I=R_{IA}\left(\mathbf d_A\times\mathbf f_A\right)$，所以它在 A 中就是 $\mathbf d_A\times\mathbf f_A$。这一对扳手的合力与关于任意点的合力矩为零（共用篇第 3.2 节）。支承矩为零当且仅当 $\mathbf f_A$ 平行于 $\mathbf d_A$；三轴刚度不相等、名义力不为零或 $\mathbf u_A$ 有横向分量的一般情形下，$\mathbf f_A$ 不沿两原点连线，支承矩不为零。它不是配平补丁：其必要性由第 2.5 节的功率恒等式给出，其来源由第 2.6 节的梯度结构给出。
+支承矩关于 $A_o$ 取矩、施加在刚体 $\mathcal A$ 上；旋转保持叉积，$\mathbf d_I\times\mathbf f_I=R_{IA}\left(\mathbf d_A\times\mathbf f_A\right)$，所以它在 A 中就是 $\mathbf d_A\times\mathbf f_A$。这一对扳手的合力与关于任意点的合力矩为零（共用篇第 3.2 节）。支承矩为零当且仅当 $\mathbf f_A$ 平行于 $\mathbf d_A$；三轴刚度不相等、名义力不为零或 $\mathbf u_A$ 有横向分量的一般情形下，$\mathbf f_A$ 不沿两原点连线，支承矩不为零。支承矩的必要性由第 2.5 节的功率恒等式给出，其来源由第 2.6 节的梯度结构给出。
 
 ### 2.5 功率原则的验证
 
@@ -213,7 +213,7 @@ $$
 
 ### 3.2 本构求值
 
-$\mathbf f_A$ 由两个逐分量乘积与一次加法得到：$\mathbf k\circ\mathbf d_A$ 加 $\mathbf c\circ\mathbf u_A$，再加本实例的 $\mathbf f_0$。$\mathbf f_0$ 不在力元类型中，而是与状态一同作为求值输入给出：每个实例占三个分量，在 A 中表达、作用于参考端，求值时只读，不被积分。求值没有任何分支，也不改写任何历史量。本族不向连续状态的 $z$ 块贡献分量，$z$ 块只由[串联弹簧—黏性阻尼力元](SERIES_SPRING_VISCOUS_DAMPER.md)构成，见[时间积分方法](../numerical_methods/TIME_INTEGRATION_METHODS.md)第 1.1 节。
+$\mathbf f_A$ 由 $\mathbf k\circ\mathbf d_A$、$\mathbf c\circ\mathbf u_A$ 与本实例的 $\mathbf f_0$ 相加得到。$\mathbf f_0$ 作为实例参数，与状态一同传入求值：每个实例占三个分量，在 A 中表达、作用于参考端，求值时只读，不被积分。求值没有任何分支，也不改写任何历史量。本族不向连续状态的 $z$ 块贡献分量，$z$ 块汇集[定轴串联元件](SERIES_SPRING_VISCOUS_DAMPER.md)与[点对点串联元件](POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.md)的内力状态，见[时间积分方法](../numerical_methods/TIME_INTEGRATION_METHODS.md)第 1.1 节。
 
 ### 3.3 扳手写出
 

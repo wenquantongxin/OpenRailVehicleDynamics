@@ -55,7 +55,7 @@ F=c\,\dot\delta_c,
 \dot\delta_k+\dot\delta_c=u.
 $$
 
-The right-hand side of the third equation is the relative velocity of the two ends along the acting axis, $u=\mathbf e_j^{\mathsf T}\mathbf u_A$: the total elongation rate of the element is the component along $\mathbf e_j$ of the velocity of the opposite end relative to the reference end. Section 6 of the shared chapter states that the kinematic layer provides no natural length, so the total elongation itself has no datum; the law of this family uses only its rate, and the datum never appears.
+The right-hand side of the third equation is the relative velocity of the two ends along the acting axis, $u=\mathbf e_j^{\mathsf T}\mathbf u_A$: the total elongation rate of the element is the component along $\mathbf e_j$ of the velocity of the opposite end relative to the reference end. The total-extension datum belongs to the constitutive definition. The motion input of this family is the extension rate; the initial force specifies the initial storage.
 
 Differentiating the first equation, eliminating $\dot\delta_c=F/c$ with the second and using the third,
 
@@ -81,7 +81,7 @@ The force becomes a state because the series structure adds one degree of freedo
 
 ### 2.2 Deformation measure and velocity input
 
-The family reads no displacement: neither $\mathbf d_A$ nor $R_{AC}$ nor $\boldsymbol\omega_{rel,A}$ enters the law. Its only kinematic input is $u=\mathbf e_j^{\mathsf T}\mathbf u_A$, where $\mathbf u_A$ is the relative velocity with its transport term of Section 2.3 of the shared chapter, that is, $\dot{\mathbf d}_A$. Hence $u=\dot d_{A,j}$ is the time derivative of the $j$-th component of the relative position $\mathbf d_A$, not the projection onto the acting axis of the inertial velocity difference $\dot{\mathbf d}_I$; by Section 6 of the shared chapter the two differ only in the components perpendicular to the line joining the two origins, and they cannot be interchanged when the acting axis is not along that line. $\mathbf d_A$ appears only when the support moment is written out, in Section 2.4.
+The family reads no displacement: neither $\mathbf d_A$ nor $R_{AC}$ nor $\boldsymbol\omega_{rel,A}$ enters the law. Its only kinematic input is $u=\mathbf e_j^{\mathsf T}\mathbf u_A$, where $\mathbf u_A$ is the relative velocity with its transport term of Section 2.3 of the shared chapter, that is, $\dot{\mathbf d}_A$. Hence $u=\dot d_{A,j}$ is the time derivative of the $j$-th component of the relative position $\mathbf d_A$, not the projection onto the acting axis of the inertial velocity difference $\dot{\mathbf d}_I$; by Section 2.3 of the shared chapter the two differ only in the components perpendicular to the line joining the two origins, and generally differ when projected onto an axis not along that line. $\mathbf d_A$ appears only when the support moment is written out, in Section 2.4.
 
 ### 2.3 Analytic responses
 
@@ -160,7 +160,7 @@ $$
 \mathcal P=-F\,\mathbf e_j^{\mathsf T}\mathbf u_A=-F\,u.
 $$
 
-On the other hand, the power the element absorbs according to its law is the product of the force it transmits and its total elongation rate, $F\,u$. The two are exact negatives of each other, so the family satisfies the organizing principle: the velocity $u$ read by the law is precisely the quantity conjugate to the application points of the wrenches. Without the support moment the endpoint power would, by Section 4.2 of the shared chapter, become $-\mathbf f_I\cdot\dot{\mathbf d}_I=-F\,\mathbf e_j^{\mathsf T}R_{IA}^{\mathsf T}\dot{\mathbf d}_I$, which differs from $-F\,u$ by the power of the support moment, $F\,\boldsymbol\omega_A\cdot\left(\mathbf d_I\times R_{IA}\mathbf e_j\right)$, and the work recorded by the law would no longer equal the work the element does on the two bodies. The support moment is therefore the term that makes the two powers equal, not a correction added merely to balance the net moment.
+On the other hand, the power the element absorbs according to its law is the product of the force it transmits and its total elongation rate, $F\,u$. The two are exact negatives of each other, so the family satisfies the organizing principle: the velocity $u$ read by the law is precisely the quantity conjugate to the application points of the wrenches. Without the support moment the endpoint power would, by Section 4.2 of the shared chapter, become $-\mathbf f_I\cdot\dot{\mathbf d}_I=-F\,\mathbf e_j^{\mathsf T}R_{IA}^{\mathsf T}\dot{\mathbf d}_I$, which differs from $-F\,u$ by the power of the support moment, $F\,\boldsymbol\omega_A\cdot\left(\mathbf d_I\times R_{IA}\mathbf e_j\right)$, and the work recorded by the law would no longer equal the work the element does on the two bodies. The support moment therefore ensures both moment balance and power consistency.
 
 Splitting the absorbed power by the series conditions,
 
@@ -208,14 +208,14 @@ $\mathbf f_I=F\,R_{IA}\mathbf e_j$ and $\mathbf d_I$ are handed to the first pat
 
 ### 3.4 Coupling to the system state and the integrator
 
-In the continuous state $[q;v;z]$ of Section 5.1 of the conventions, the $z$ block is the sequence of force states of all series elements, each element occupying exactly one component; a system without series elements has an empty $z$ block. The full state derivative is assembled as
+In $[q;v;z]$, each fixed-axis series element and each [point-to-point series element](POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.en.md) occupies one force component of $z$, in N. The full state derivative is
 
 $$
 \frac{d}{dt}\begin{bmatrix}q\\v\\z\end{bmatrix}
 =\begin{bmatrix}N(q)\,v\\ \dot v(q,v,z)\\ \dot z(q,v,z)\end{bmatrix}
 $$
 
-in three steps: the force-element evaluation produces all loads and $\dot z$ at once; the multibody layer moves the loads to the body origins as in Section 3.5 of the shared chapter and solves forward dynamics for $\dot v$; and the system-assembly layer concatenates $[N(q)v;\dot v]$ with $\dot z$. The dependence of $\dot v$ on $z$ comes from $\mathbf f_A=F\,\mathbf e_j$; that of $\dot z$ on $v$ comes from $u$; that of $\dot z$ on $z$ itself is diagonal, with diagonal entry $-1/\tau_{\mathrm r}$ for each element. The integrator advances $F$ as a state component on the same footing as $q$ and $v$, so the initial-value problem needs $F(t_0)$: it cannot be determined algebraically from $(q,v)$ and is part of the initial state. The place of the $z$ block in the individual integration methods is described in Section 1.1 of [time-integration methods](../numerical_methods/TIME_INTEGRATION_METHODS.en.md).
+in three steps: the force-element evaluation produces all loads and $\dot z$ at once; the multibody layer moves the loads to the body origins as in Section 3.5 of the shared chapter and solves forward dynamics for $\dot v$; and the system-assembly layer concatenates $[N(q)v;\dot v]$ with $\dot z$. The dependence of $\dot v$ on $z$ comes from $\mathbf f_A=F\,\mathbf e_j$; that of $\dot z$ on $v$ comes from $u$; the dependence of this family's force derivatives on its force states is diagonal, with diagonal entry $-1/\tau_{\mathrm r}$ for each element. The integrator advances $F$ as a state component on the same footing as $q$ and $v$, so the initial-value problem needs $F(t_0)$: it cannot be determined algebraically from $(q,v)$ and is part of the initial state. The place of the $z$ block in the individual integration methods is described in Section 1.1 of [time-integration methods](../numerical_methods/TIME_INTEGRATION_METHODS.en.md).
 
 ## 4. Mathematical properties and conditions of applicability
 

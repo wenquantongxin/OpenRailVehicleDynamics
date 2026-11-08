@@ -34,15 +34,17 @@ N(q)v\\a(t,q,v,z)\\g(t,q,v,z)
 \end{bmatrix}.
 $$
 
-Here $q$ is generalized position, $v$ is generalized velocity and $z$ contains the first-order internal variables of force elements such as series spring-viscous-damper (Maxwell-type) elements. When a free body's orientation is represented by a quaternion, $q$ and $v$ have different dimensions and the configuration kinematics are $\dot q=N(q)v$; the complete state therefore cannot be reduced to $\dot q=v$.
+Here $q$ is generalized position, $v$ is generalized velocity and $z$ contains the internal force states of series spring–damper elements. When a free body's orientation is represented by a quaternion, $q$ and $v$ have different dimensions and the configuration kinematics are $\dot q=N(q)v$; the complete state therefore cannot be reduced to $\dot q=v$.
 
-Different parts of this right-hand side live in different modules. The multibody map $[q;v]\mapsto[N(q)v;\dot v]$ is expressed by `MultibodyModel::CalcStateTimeDerivatives` in [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h). The complete $[q;v;z]$ derivative is assembled by `CompiledSystemPlan::CalcStateTimeDerivatives` in [`compiled_system_plan.cc`](../../../libs/system_assembly/src/compiled_system_plan.cc); `SystemRhsBridge::CalcTimeDerivatives` in [`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) installs the integrator's $(t,y)$ in the trial context and delegates to that assembly. The series spring-viscous-damper element and its force-state equation are defined by `SeriesSpringViscousDamper` in [`vehicle_force_elements.h`](../../../libs/forces/include/orvd/forces/vehicle_force_elements.h), and the derivative of that force state is formed by `VehicleForcePlan::CalcAppliedForces` in [`vehicle_force_plan.cc`](../../../libs/forces/src/vehicle_force_plan.cc):
+Different parts of this right-hand side live in different modules. The multibody map $[q;v]\mapsto[N(q)v;\dot v]$ is expressed by `MultibodyModel::CalcStateTimeDerivatives` in [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h). The complete $[q;v;z]$ derivative is assembled by `CompiledSystemPlan::CalcStateTimeDerivatives` in [`compiled_system_plan.cc`](../../../libs/system_assembly/src/compiled_system_plan.cc); `SystemRhsBridge::CalcTimeDerivatives` in [`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) installs the integrator's $(t,y)$ in the trial context and delegates to that assembly. For the linear Maxwell element, the type is defined by `SeriesSpringViscousDamper` in [`vehicle_force_elements.h`](../../../libs/forces/include/orvd/forces/vehicle_force_elements.h), and the derivative of that force state is formed by `VehicleForcePlan::CalcAppliedForces` in [`vehicle_force_plan.cc`](../../../libs/forces/src/vehicle_force_plan.cc):
 
 $$
 \dot F=k\,v_{\mathrm{rel}}-\frac{k}{c}F.
 $$
 
 A spring in series with a viscous damper makes the force itself a state, because the two share one force while their deflections differ. Here $k$ and $c$ are the scalar series stiffness and series damping of that element, and $v_{\mathrm{rel}}$ is the relative velocity of its two ends along the acting axis. The time constant is $c/k$. Lower-case $k$ and $c$ denote element-level scalars throughout this chapter, while capital $M$, $C$ and $K$ denote system-level matrices only.
+
+The nonlinear force-state equation is derived in [Point-to-point series spring–bilinear damper](../force_elements/POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.en.md) and enters the same internal-state block.
 
 ### 1.2 Second-order mechanical equation
 

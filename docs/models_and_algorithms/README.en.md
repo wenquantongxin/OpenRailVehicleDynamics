@@ -25,7 +25,7 @@ A theory document may state a model's mathematical assumptions and conditions of
 | `track_geometry/` | horizontal and vertical alignment, superelevation, track frames, station projection and vertical profiles |
 | `track_irregularity_spectra/` | the four irregularity components, AAR and ERRI spectra, finite bands, random realization and placement on the two rails |
 | `wheel_rail_contact/` | profiles and interpolation, pose reduction, contact geometry, normal force, creepage, Kalker coefficients, FASTSIM, wrench assembly and contact-force-plan kinematics |
-| `force_elements/` | connection kinematics and wrenches, translational spring-damper, roll couple, series Maxwell element, saturated piecewise-linear damper and half-angle midpoint RPY bushing |
+| `force_elements/` | connection kinematics and wrenches, translational springs and dampers, roll couples, fixed-axis and point-to-point series elements, saturated damping and reference-frame bushings |
 | `vehicle_dynamics/` | multibody equations of motion, articulated-body forward dynamics, assembly of the complete right-hand side, and startup state construction |
 | `numerical_methods/` | time integration, implicit nonlinear iteration, error control and stability |
 
@@ -75,7 +75,8 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 - [Roll spring-damper couple](force_elements/ROLL_SPRING_DAMPER_COUPLE.en.md): matrix-entry roll measure, relative-angular-velocity component, pure couple pair, stored energy under pure roll and properties under coupled rotation.
 - [Series spring-viscous-damper element](force_elements/SERIES_SPRING_VISCOUS_DAMPER.en.md): Maxwell force equation, relaxation time, analytical responses and the coupling of the force state to the system continuous state.
 - [Odd-symmetric saturated piecewise-linear damper](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.en.md): piecewise-linear force curve on the non-negative half-axis, constant continuation beyond the last node, odd extension, consequences of the three domain requirements and the dissipation potential.
-- [Half-angle midpoint RPY bushing](force_elements/HALF_ANGLE_MIDPOINT_RPY_BUSHING.en.md): half-angle intermediate frame, midpoint relative material velocity, space-XYZ angle extraction and rate map, physical moment by power conjugacy and the midpoint wrench pair.
+- [Reference-frame linear bushing](force_elements/REFERENCE_FRAME_LINEAR_BUSHING.en.md): reference-frame displacement and velocity, physical angular-velocity damping, attachment loads, support moment and power balance.
+- [Point-to-point series spring–bilinear damper](force_elements/POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.en.md): attachment-line kinematics, bilinear damping and its inverse, force-state equation, piecewise relaxation, storage and dissipation.
 
 ### Vehicle dynamics
 

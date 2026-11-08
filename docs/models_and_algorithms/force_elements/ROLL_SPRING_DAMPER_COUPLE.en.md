@@ -131,7 +131,7 @@ $$
 
 Neither quantity is the roll angle $\phi$ of this decomposition or its derivative $\dot\phi$: for $\theta=\psi=0$ they reduce to $(\sin\phi,\dot\phi)$, the first still being a sine rather than the angle itself and replaceable by $\phi$ only to first order in small angles; a different composition order gives different expressions. The model uses no such set of angles; they occur only in this comparison.
 
-This also explains why the moment passes through no attitude map. If $m$ were read as a generalized force conjugate to some angular coordinate, the physical moment would have to be obtained through the transpose of that coordinate's rate map and would in general have components along the second and third axes of A; the rotational part of the [half-angle midpoint RPY bushing](HALF_ANGLE_MIDPOINT_RPY_BUSHING.en.md) works that way. This family applies no such map: $m\,\mathbf e_1$ is itself a couple about $\mathbf a_1$ in physical space, and $\sigma$ and $\omega_{rel,A,1}$ are its two inputs rather than the value and derivative of an angle.
+The couple $m\,\mathbf e_1$ is a physical moment about $\mathbf a_1$, paired with $\omega_{rel,A,1}$ in the power expression. For a generalized moment conjugate to angular coordinates, the physical moment follows from the transpose of the angular-rate map; the derivation is in Section 3.2 of [Multibody equations of motion](../vehicle_dynamics/MULTIBODY_EQUATIONS_OF_MOTION.en.md).
 
 ### 2.5 Rotation into the inertial frame and the pure couple pair
 
@@ -221,7 +221,7 @@ $$
 
 whose two bracketed terms vanish identically when $\theta=\psi=0$; for small $\theta$ and $\psi$ the first is of order $(\theta^2+\psi^2)\,\dot\phi$ and the second of order $\psi\,\dot\theta$. When the relative rotation is dominated by roll about $\mathbf a_1$, the deviation of the elastic part from $\mathcal V$ disappears together with the other two angles.
 
-**No angular-coordinate singularity.** $\sigma$ is one entry of $R_{AC}$ and $\omega_{rel,A,1}$ one component of an angular velocity; both are defined and smooth at every relative attitude. The family has none of the singularities or branches that extracting angular coordinates introduces, an instance of the property stated in Section 6 of the shared chapter that a family whose rate input is a component of $\boldsymbol\omega_{rel,A}$ has no such singularity.
+**No angular-coordinate singularity.** $\sigma$ is one entry of $R_{AC}$ and $\omega_{rel,A,1}$ one component of an angular velocity; both are defined and smooth at every relative attitude. The law uses these two quantities directly, with no singularities or branches from angular-coordinate extraction; its angular-velocity input satisfies the conditions of Section 6 of the shared chapter.
 
 **Insensitivity to relative translation.** $\mathbf d_A$ and $\mathbf u_A$ do not enter the law; moving either origin on its body while keeping the attitudes fixed leaves the element and its loads unchanged.
 

@@ -241,7 +241,7 @@ x=\begin{bmatrix}q\\v\\z\end{bmatrix},\qquad
 \dot x=\begin{bmatrix}N(q)v\\\dot v\\\dot z\end{bmatrix}
 $$
 
-$q$ and $v$ are the multibody generalized positions and velocities; $z$ contains internal states of force elements. The current source of $z$ is the internal force of a series spring-viscous damper. Time, numerical projection seeds and held controller quantities are not part of this continuous state.
+$q$ and $v$ are multibody generalized positions and velocities; $z$ collects the internal force states of fixed-axis series spring–viscous dampers and point-to-point series spring–bilinear dampers, in N. Time, projection seeds and held controller quantities are stored separately.
 
 ### 5.2 Wrench reduction point and expressed-in frame
 

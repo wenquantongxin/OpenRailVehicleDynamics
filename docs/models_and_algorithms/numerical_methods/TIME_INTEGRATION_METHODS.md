@@ -34,15 +34,17 @@ N(q)v\\a(t,q,v,z)\\g(t,q,v,z)
 \end{bmatrix}.
 $$
 
-其中 $q$ 是广义位置，$v$ 是广义速度，$z$ 是串联弹簧黏性阻尼（Maxwell 型）等力元的一阶内变量。自由体以四元数表示姿态时，$q$ 与 $v$ 不等维，位形运动学为 $\dot q=N(q)v$，不能把完整状态简化成 $\dot q=v$。
+其中 $q$ 是广义位置，$v$ 是广义速度，$z$ 是串联弹簧—阻尼力元的内力状态。自由体以四元数表示姿态时，$q$ 与 $v$ 不等维，位形运动学为 $\dot q=N(q)v$，不能把完整状态简化成 $\dot q=v$。
 
-这个右端的各部分落在不同模块。多体部分 $[q;v]\mapsto[N(q)v;\dot v]$ 由 [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) 中的 `MultibodyModel::CalcStateTimeDerivatives` 表达。含 $z$ 块的完整 $[q;v;z]$ 导数由 [`compiled_system_plan.cc`](../../../libs/system_assembly/src/compiled_system_plan.cc) 中的 `CompiledSystemPlan::CalcStateTimeDerivatives` 装配；[`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) 中的 `SystemRhsBridge::CalcTimeDerivatives` 把积分器给出的 $(t,y)$ 写入试算上下文，再转交该装配。串联弹簧黏性阻尼的力元定义与力状态方程见 [`vehicle_force_elements.h`](../../../libs/forces/include/orvd/forces/vehicle_force_elements.h) 的 `SeriesSpringViscousDamper`，该力状态的导数在 [`vehicle_force_plan.cc`](../../../libs/forces/src/vehicle_force_plan.cc) 的 `VehicleForcePlan::CalcAppliedForces` 中形成：
+这个右端的各部分落在不同模块。多体部分 $[q;v]\mapsto[N(q)v;\dot v]$ 由 [`multibody_model.h`](../../../libs/multibody_model/include/orvd/multibody_model/multibody_model.h) 中的 `MultibodyModel::CalcStateTimeDerivatives` 表达。含 $z$ 块的完整 $[q;v;z]$ 导数由 [`compiled_system_plan.cc`](../../../libs/system_assembly/src/compiled_system_plan.cc) 中的 `CompiledSystemPlan::CalcStateTimeDerivatives` 装配；[`system_rhs_bridge.cc`](../../../libs/integrators/src/system_rhs_bridge.cc) 中的 `SystemRhsBridge::CalcTimeDerivatives` 把积分器给出的 $(t,y)$ 写入试算上下文，再转交该装配。以线性 Maxwell 元件为例，其力元定义与力状态方程见 [`vehicle_force_elements.h`](../../../libs/forces/include/orvd/forces/vehicle_force_elements.h) 的 `SeriesSpringViscousDamper`，该力状态的导数在 [`vehicle_force_plan.cc`](../../../libs/forces/src/vehicle_force_plan.cc) 的 `VehicleForcePlan::CalcAppliedForces` 中形成：
 
 $$
 \dot F=k\,v_{\mathrm{rel}}-\frac{k}{c}F.
 $$
 
 弹簧与阻尼串联时二者共享同一个力而变形不同，因此力本身成为状态。式中 $k$、$c$ 是该力元的标量串联刚度与串联阻尼，$v_{\mathrm{rel}}$ 是两端沿作用轴的相对速度，时间常数为 $c/k$。本篇小写 $k$、$c$ 专指力元级标量，大写 $M$、$C$、$K$ 只表示系统级矩阵。
+
+非线性内力方程见[点对点串联弹簧—双斜率阻尼力元](../force_elements/POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.md)，其力状态进入同一内变量块。
 
 ### 1.2 二阶机械方程
 

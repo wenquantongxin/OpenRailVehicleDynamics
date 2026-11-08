@@ -2,13 +2,13 @@
 
 # 起动状态装配
 
-本篇说明一辆车的起动状态如何由一组有物理意义的初始量装配成系统连续状态的初值 $y_0=[q_0;v_0;z_0]$，以及哪些随记录一起给定的量进入运动方程却不属于状态。已发布的线路几何、不平顺谱、轮轨接触与力元各篇是组件；[整车多体动力学方程](MULTIBODY_EQUATIONS_OF_MOTION.md)（下称多体篇）把组件产生的体扳手与多体层自身的重力、关节阻尼合成完整右端 $[N(q)v;\dot v;\dot z]$，本篇构造该右端从 $t_0$ 起推进的初值，[轮轨接触力计划的运动学装配](../wheel_rail_contact/CONTACT_FORCE_PLAN_KINEMATICS.md)（下称接触力计划篇）说明多体状态如何变成每个轮轨接口的接触输入，[时间积分方法](../numerical_methods/TIME_INTEGRATION_METHODS.md)（下称时间积分篇）说明求解器如何推进并对完整右端作差分。本篇不是求解器：它不求静平衡、不求预载、不求接触，只把已经解析好的量按固定的几何与运动学规则写成状态。全篇围绕三个问题组织：给定了哪些有物理意义的初始量（第 2 节）；它们如何构成 $q_0$、$v_0$、$z_0$（第 3 至 5 节）；哪些量影响方程但不属于状态（第 6 节）。起动记录的类型见 [`resolved_startup_state.h`](../../../libs/configuration/include/orvd/configuration/resolved_startup_state.h)；装配由 [`assemble_resolved_initial_context.cc`](../../../libs/configuration/src/assemble_resolved_initial_context.cc) 的 `AssembleResolvedInitialContext` 完成。
+本篇由给定的物理初始量构造连续状态 $y_0=[q_0;v_0;z_0]$，并说明配套参数。[整车多体动力学方程](MULTIBODY_EQUATIONS_OF_MOTION.md)（下称多体篇）定义完整右端；[轮轨接触力计划的运动学装配](../wheel_rail_contact/CONTACT_FORCE_PLAN_KINEMATICS.md)（接触力计划篇）将刚体运动映射为接触输入；[时间积分方法](../numerical_methods/TIME_INTEGRATION_METHODS.md)（时间积分篇）推进该初值。初态装配由坐标变换与给定初始量的赋值构成。
 
 ## 1. 范围与记号
 
 ### 1.1 对象
 
-装配的输入有四样：一辆已装配的车，即多体篇第 2.1 节的刚体树（自由体、回转副、Ball-RPY 球铰、焊接副）连同它的力元与可选的轮轨接触力计划；一条线路；车辆布局参考刚体所在的站位 $s_{\mathrm{ref}}$；一份起动记录，即别处已经解析好的一组初始量。输出是起动时刻 $t_0=0$ 的连续状态 $y_0=[q_0;v_0;z_0]$，以及与之配套、写进运行上下文而不属于状态的参数。连续状态的三块沿用[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)（下称基座）第 5.1 节：$q$ 由每个自由体的七个广义位置与每个带坐标关节的广义位置组成，$v$ 由每个自由体的六个广义速度与关节速率组成，$z$ 由每个串联弹簧—黏性阻尼元件的内力组成。每个自由体与每个带坐标的关节各自拥有 $q$ 与 $v$ 中的恰好一段，每个串联元件拥有 $z$ 中的恰好一个分量；这些段互不重叠并且合起来铺满三个向量，装配按名称逐段填写，不依赖任何声明顺序。
+输入为已装配车辆及其力元、线路、车辆布局参考站位 $s_{\mathrm{ref}}$ 与起动记录。输出为 $t_0=0$ 时的 $y_0=[q_0;v_0;z_0]$ 及配套参数。按[坐标与记号约定](../CONVENTIONS_AND_NOTATION.md)（下称基座）第 5.1 节，自由体各贡献七个位置和六个速度分量，关节贡献各自的坐标和速率；定轴与点对点两类串联元件各贡献一个内力分量。具名初始量恰好覆盖各自的状态区间。
 
 起动记录只分两类：带公共自转生成的记录，除逐体逐关节的量外还给出一个公共的有效滚动半径，用它与整车起动速度派生一部分角速度与关节速率；显式给出的记录，每个自由体的角速度与每个回转副的速率都直接陈述，没有公共自转量。与之对应，轮轨载体也只分两类：刚性轮对，以及带独立旋转车轮的车轴体。前者通常配带公共自转生成的记录，后者配显式记录，但记录类型是记录自己的属性，不由载体类型推断。
 
@@ -31,7 +31,7 @@
 | $r_{\mathrm{eff}}$、$\Omega_0$ | 公共有效滚动半径；公共自转量 $\Omega_0=V_0/r_{\mathrm{eff}}$ | 本篇新增 |
 | $\theta_j$、$\dot\theta_j$、$\lambda_j$ | 回转副 $j$ 的角、速率与速率对 $\Omega_0$ 的无量纲倍数 | 本篇新增 |
 | $(\mathrm{roll},\mathrm{pitch},\mathrm{yaw})$、$\boldsymbol\omega_{FM\_F}$ | 球铰的三个角与子系相对父系的角速度，在父系中表达 | 基座 §4.3 |
-| $F_i$ | 第 $i$ 个串联元件的内力，即参考端所受的轴向力 | 串联篇 §1.1 |
+| $F_i$ | 第 $i$ 个串联元件的内力，即参考端所受的轴向力 | 本篇 §5.3 |
 | $\mathbf f_0$ | 平动元件的名义力，在其参考端坐标系中表达 | 平动篇 §2.3 |
 | $z_r$ | 钢轨型面原点在 $T$ 中的竖向基准，沿 $+z_T$ | 位姿归约篇 §2 |
 | $g$、$\mathbf g_I$ | 重力加速度大小与重力向量 $g\,\mathbf e_z^I$ | 基座 §2.1；多体篇 §2.4 |
@@ -51,13 +51,13 @@
 
 **每个 Ball-RPY 球铰。** 三个角 $(\mathrm{roll},\mathrm{pitch},\mathrm{yaw})$，按基座第 4.3 节合成 $R_{FM}=R_z(\mathrm{yaw})R_y(\mathrm{pitch})R_x(\mathrm{roll})$；以及子系 M 相对父系 F 的角速度 $\boldsymbol\omega_{FM\_F}$，在 F 中表达。焊接副没有坐标，记录中也没有它的条目。
 
-**每个串联弹簧—黏性阻尼元件 $i$。** 内力 $F_i$：沿该元件的作用轴、作用于其参考端的轴向力，正向与[串联弹簧—黏性阻尼力元](../force_elements/SERIES_SPRING_VISCOUS_DAMPER.md)第 1.1 节相同。
+**每个串联元件 $i$。** 内力 $F_i$，单位 N。[定轴元件](../force_elements/SERIES_SPRING_VISCOUS_DAMPER.md)沿参考架指定轴取正；[点对点元件](../force_elements/POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.md)以由参考端指向对端的拉力为正。
 
 **每个三向平动弹簧—阻尼元件。** 名义力 $\mathbf f_0$：作用于参考端、在参考端坐标系中表达的常向量，含义见[三向平动弹簧—阻尼力元](../force_elements/TRANSLATIONAL_SPRING_DAMPER.md)第 2.3 节。
 
 **整车量。** 起动速度 $V_0>0$，是每个自由体原点的惯性速度在其局部轨型系中的纵向分量；运行方向，当前只有一种定义，即朝站位递增方向起动；带公共自转生成的记录另给出有效滚动半径 $r_{\mathrm{eff}}>0$；钢轨型面竖向基准偏移，一个沿 $+z_T$ 的有符号长度；以及记录被解析时所用的重力加速度大小 $g$。
 
-下表按去向汇总这些量，第三个问题的答案就在最后一列。
+下表汇总初始量的坐标系与装配去向。
 
 | 初始量 | 陈述所在的坐标系 | 去向 |
 |---|---|---|
@@ -188,7 +188,7 @@ $$
 z_0=\begin{bmatrix}F_1\\ \vdots\\ F_{n_z}\end{bmatrix},
 $$
 
-$F_i$ 沿元件作用轴、作用于参考端，正向按串联篇第 1.1 节。它必须作为初值给出，因为串联篇第 2.1 节已说明这个力不能由 $(q,v)$ 代数确定。$F_i=0$ 表示元件松弛起动；$F_i\neq0$ 是起动瞬间的一个内力，但不是静预载：串联元件没有静刚度，若两端此后相对静止，该力按松弛时间 $c/k$ 衰减到零（串联篇第 2.3 节）。
+各内力的正号按第 2 节定义。$F_i(t_0)$ 是独立初始量，$F_i=0$ 表示元件松弛起动。本构速度为零时，定轴线性元件满足 $\dot F_i=-(k_i/c_i)F_i$；点对点双斜率元件在固定长度下满足 $\dot F_i=-k_iD_i^{-1}(F_i)$，外段按仿射方程松弛，进入内段后指数衰减。两者均趋于零，推导见相应力元章节。
 
 ### 5.4 初值的合成
 
@@ -229,7 +229,7 @@ $$
 - **运动学一致性。** $\mathsf q_{IB}$ 是两个单位四元数之积，因而是单位四元数，$R_{IB}$ 是真旋转；四元数的整体符号不携带物理内容，$\pm\mathsf q_{IB}$ 给出同一个 $R_{IB}$。$v_0$ 中每个自由体段是在 I 中表达的角速度与原点速度，与多体篇第 2.1 节自由体广义速度的定义相同，$\dot q_0=N(q_0)v_0$ 因此直接有定义，起动时不需要任何投影或归一化。
 - **只在 $t_0$ 贴合线路。** 位置与姿态按各体自身站位的完整轨型系构造，速度则是记录给出的惯性值，没有任何项把它们与线路的曲率或转动率绑定。$t_0$ 之后各体只服从运动方程以及力元与接触力计划写出的载荷，线路不再作为约束出现。
 - **起动速度与站位速率。** $V_0$ 对全部自由体相同，而由第 4.4 节的关系，曲线、坡道上各体的 $\dot s_B$ 一般互不相同，也不等于 $V_0$；$\dot s_B$ 由接触力计划在每次求值中重新导出。
-- **无平衡、无预载求解。** $t_0$ 的载荷就是各本构律在 $(q_0,v_0,z_0)$、名义力与 $z_r$ 之下给出的值，$\dot v(t_0)=\mathbf 0$ 既不被施加也不被检验；记录若与平衡不一致，运动从一段暂态开始。非零的串联内力若无相对运动维持，按各元件的松弛时间衰减。
+- **初始载荷。** 各本构律在 $(q_0,v_0,z_0)$、名义力和钢轨型面偏移 $z_r$ 下给出起动载荷。由此得到的 $\dot v(t_0)$ 决定初始机械暂态，内力按各自状态方程演化。
 - **同一记录在不同放置下不是同一个初值问题。** 记录以局部轨型系陈述各体的位姿。在平直、无超高的线路上，任意 $s_{\mathrm{ref}}$ 都给出相同的体间相对位姿；在一般线路上，体间相对位姿可能随放置改变，力元在 $t_0$ 看到的变形随之改变，而 $z_0$、名义力与 $z_r$ 都不随放置调整。
 - **定义域。** $V_0>0$；带公共自转生成时 $r_{\mathrm{eff}}>0$，否则 $\mathbf c_B=\mathbf 0$ 且回转副只有显式速率；$\lVert\mathsf q_{TB}\rVert=1$；每个 $s_B$ 有限，可以落在定义区间之外的切线延长上；超高的定义域 $\lvert u\rvert<b$ 由线路自身保证（基座第 2.2 节）。球铰的三个角本身没有限制，但 $\cos(\mathrm{pitch})=0$ 使 $N(q)$ 奇异，积分不能从那里起步（多体篇第 3.2 节）。
 - **不在 $y_0$ 中的量。** 时刻 $t_0$、投影种子与名义力都在上下文中而不在连续状态中，与基座第 5.1 节一致；$\Omega_0$、$r_{\mathrm{eff}}$ 与 $\dot s_B$ 是生成或派生的量，装配完成后不再保留。
@@ -238,7 +238,7 @@ $$
 
 | 理论对象 | 主要实现 |
 |---|---|
-| 起动记录的物理量：自由体、回转副、球铰、串联内力、名义力、公共自转生成、整车量 | `ResolvedStartupState`、`FreeBodyStartupState`、`RevoluteJointStartupState`、`BallRpyJointStartupState`、`SeriesSpringViscousDamperForceState`、`TranslationalSpringDamperNominalForce`、`CommonWheelSpinGeneration`，见 [`resolved_startup_state.h`](../../../libs/configuration/include/orvd/configuration/resolved_startup_state.h) |
+| 起动记录的物理量：自由体、回转副、球铰、串联内力、名义力、公共自转生成、整车量 | `ResolvedStartupState`、`FreeBodyStartupState`、`RevoluteJointStartupState`、`BallRpyJointStartupState`、`SeriesSpringViscousDamperForceState`、`PointToPointSeriesSpringBilinearDamperForceState`、`TranslationalSpringDamperNominalForce`、`CommonWheelSpinGeneration`，见 [`resolved_startup_state.h`](../../../libs/configuration/include/orvd/configuration/resolved_startup_state.h) |
 | 运行方向的定义 | `StartupRunningDirection`，见 [`resolved_startup_state.h`](../../../libs/configuration/include/orvd/configuration/resolved_startup_state.h) |
 | 机械站位偏置 $\Delta s_{\mathrm{mech},B}$ | `VehicleFreeBodyStationOffsetDefinition`，见 [`vehicle_definition.h`](../../../libs/configuration/include/orvd/configuration/vehicle_definition.h) |
 | 站位之和、$\mathsf q_{IB}$ 与 $\mathbf p_{IoBo\_I}$、$\boldsymbol\omega_{IB\_I}$ 与 $\mathbf v_{IBo\_I}$、关节坐标与 $z_0$ 的形成 | `AssembleResolvedInitialContext`，见 [`assemble_resolved_initial_context.cc`](../../../libs/configuration/src/assemble_resolved_initial_context.cc) |

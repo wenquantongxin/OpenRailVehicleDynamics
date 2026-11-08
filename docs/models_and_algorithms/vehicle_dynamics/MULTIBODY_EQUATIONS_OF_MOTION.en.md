@@ -46,7 +46,7 @@ The object is the rigid-body tree of one vehicle: finitely many rigid bodies, fr
 
 ### 1.3 Relation to the shared conventions
 
-The chapter follows the rotation-matrix rules of Section 4.1 and the wrench notation of Section 5.2 of [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md). The multibody layer calls its inertial reference the world frame W; the vehicle assembly takes W to be the track inertial frame I of Section 2.1 of the conventions (the gravity vector is set along the $+z$ of I and the startup state is stated in I), so the W of this chapter is the same frame as the I of the other chapters. The following symbols are local to this chapter and are declared here: the motion subspace of the articulated-body recursion is written $S$ (source `H_PB_W`), not $H$, because $H(\boldsymbol\eta)$ and $E(\boldsymbol\eta)$ are already the angular-rate maps of Section 2.7 of the [half-angle midpoint RPY bushing](../force_elements/HALF_ANGLE_MIDPOINT_RPY_BUSHING.en.md), which Section 3.2 cites verbatim; the $J$ of this chapter is a kinematic Jacobian, unrelated to the $J=\partial f/\partial y$ of [time-integration methods](../numerical_methods/TIME_INTEGRATION_METHODS.en.md); a bare $C$ is a child node of the tree, whereas $C(q,v)$ with its arguments is the system matrix of Section 5.3 of the conventions; a bare $P$ is a parent node, whereas $P_B$ with a body subscript is an articulated-body inertia; $V_B$ is a spatial velocity, not the stored energy $\mathcal V$ of the force-element chapters; $g$ is the magnitude of gravitational acceleration, unrelated to the grade $g(s)$ of Section 2.1 of the conventions, and $g_B$ with a body subscript is a recursion gain; $\lambda$ denotes quaternion components, unrelated to the eigenvalues of the stability analysis in the time-integration chapter; $N$ denotes only the position-derivative map; lowercase $\tau$ is a generalized force and bold $\boldsymbol\tau$ a spatial moment, as in Section 5.3 of the conventions.
+The chapter follows the rotation-matrix rules of Section 4.1 and the wrench notation of Section 5.2 of [Conventions and notation](../CONVENTIONS_AND_NOTATION.en.md). The multibody layer calls its inertial reference the world frame W; the vehicle assembly takes W to be the track inertial frame I of Section 2.1 of the conventions (the gravity vector is set along the $+z$ of I and the startup state is stated in I), so the W of this chapter is the same frame as the I of the other chapters. The following symbols are local to this chapter and are declared here: the motion subspace of the articulated-body recursion is written $S$ (source `H_PB_W`), not $H$, because $H(\boldsymbol\eta)$ and $E(\boldsymbol\eta)$ denote the angular-rate maps derived in Section 3.2; the $J$ of this chapter is a kinematic Jacobian, unrelated to the $J=\partial f/\partial y$ of [time-integration methods](../numerical_methods/TIME_INTEGRATION_METHODS.en.md); a bare $C$ is a child node of the tree, whereas $C(q,v)$ with its arguments is the system matrix of Section 5.3 of the conventions; a bare $P$ is a parent node, whereas $P_B$ with a body subscript is an articulated-body inertia; $V_B$ is a spatial velocity, not the stored energy $\mathcal V$ of the force-element chapters; $g$ is the magnitude of gravitational acceleration, unrelated to the grade $g(s)$ of Section 2.1 of the conventions, and $g_B$ with a body subscript is a recursion gain; $\lambda$ denotes quaternion components, unrelated to the eigenvalues of the stability analysis in the time-integration chapter; $N$ denotes only the position-derivative map; lowercase $\tau$ is a generalized force and bold $\boldsymbol\tau$ a spatial moment, as in Section 5.3 of the conventions.
 
 ## 2. Rigid-body tree and generalized coordinates
 
@@ -66,7 +66,7 @@ The axis of a single-axis joint is given as a direction in the parent frame and 
 
 ### 2.2 Tree topology
 
-Every relation connects two distinct bodies, and connecting two bodies that already reach each other would close a loop, so the model is a tree rooted at the world: there is at most one path between any two bodies, and no body reaches the world by two paths. A free-body declaration is a relation between a body and the world, implemented at finalization by a six-degree-of-freedom joint from the world frame to the body frame; it is not a default for "no relation". Joints may still hang outboard of a free body: declaring it free only states how it relates to the world. At finalization every body must reach the world. Afterwards every generalized coordinate belongs to exactly one joint or one free-body declaration, $q$ and $v$ are the concatenations of these blocks in the model's own order, and $n_q-n_v$ equals the number of free bodies. The rigid-body tree assigns each body a unique inboard relation and parent node, growing outward from the world; every recursion in this chapter runs along that tree.
+Every relation connects two distinct bodies, and connecting two bodies that already reach each other would close a loop, so the model is a tree rooted at the world: there is at most one path between any two bodies, and no body reaches the world by two paths. A free-body declaration is a relation between a body and the world, implemented at finalization by a six-degree-of-freedom joint from the world frame to the body frame. Joints may still hang outboard of a free body: declaring it free only states how it relates to the world. At finalization every body must reach the world. Afterwards every generalized coordinate belongs to exactly one joint or one free-body declaration, $q$ and $v$ are the concatenations of these blocks in the model's own order, and $n_q-n_v$ equals the number of free bodies. The rigid-body tree assigns each body a unique inboard relation and parent node, growing outward from the world; every recursion in this chapter runs along that tree.
 
 ### 2.3 Inertia parameters
 
@@ -122,7 +122,15 @@ where $(\mathbf 1_4-\hat\lambda\hat\lambda^{\mathsf T})/\lVert\lambda\rVert$ is 
 
 ### 3.2 Angular-rate map of the Ball-RPY joint and its singularity
 
-The position block of a Ball-RPY joint is $\boldsymbol\eta=(\eta_1,\eta_2,\eta_3)$, that is roll, pitch and yaw, and the velocity block is $\boldsymbol\omega_{FM\_F}$. Its composition $R_{FM}=R_z(\eta_3)R_y(\eta_2)R_x(\eta_1)$ has the same form as the $R_{AC}$ of Section 2.6 of the bushing chapter, so the angular-rate maps are the two matrices of Section 2.7 of that chapter:
+The position block is $\boldsymbol\eta=(\eta_1,\eta_2,\eta_3)$, representing roll, pitch and yaw, and the velocity block is physical angular velocity $\boldsymbol\omega_{FM\_F}$. The composition $R_{FM}=R_z(\eta_3)R_y(\eta_2)R_x(\eta_1)$ gives the instantaneous rotation axes in F as $R_zR_y\mathbf e_1$, $R_z\mathbf e_2$ and $\mathbf e_3$. Summing their contributions yields
+
+$$
+\boldsymbol\omega_{FM\_F}
+=(R_zR_y\mathbf e_1)\dot\eta_1
++(R_z\mathbf e_2)\dot\eta_2+\mathbf e_3\dot\eta_3.
+$$
+
+Collecting these axes as columns gives $E$; its inverse gives $H$:
 
 $$
 \boldsymbol\omega_{FM\_F}=E(\boldsymbol\eta)\,\dot{\boldsymbol\eta},
@@ -135,6 +143,17 @@ H=E^{-1}=\begin{bmatrix}\frac{\mathrm c_3}{\mathrm c_2}&\frac{\mathrm s_3}{\math
 $$
 
 with $\mathrm c_i=\cos\eta_i$ and $\mathrm s_i=\sin\eta_i$. Thus $N_{\mathrm r}(\boldsymbol\eta)=H(\boldsymbol\eta)$ and $N_{\mathrm r}^{+}(\boldsymbol\eta)=E(\boldsymbol\eta)$; the two are inverses of each other and neither contains the roll angle. The implementation of the rate map does not form $H$ but solves the three scalar equations of $v=E\dot{\boldsymbol\eta}$ in turn: $\dot\eta_1=(\mathrm c_3\omega_1+\mathrm s_3\omega_2)/\mathrm c_2$, $\dot\eta_2=-\mathrm s_3\omega_1+\mathrm c_3\omega_2$, $\dot\eta_3=\mathrm s_2\dot\eta_1+\omega_3$, which is equivalent to multiplying by $H$. Since $\det E=\cos\eta_2$, $\cos\eta_2=0$ is the singularity of these angular coordinates: there $E$ loses rank, $H$ is unbounded and the map $v\to\dot q$ is undefined, whereas $\dot q\to v$ and pose evaluation are defined at every angle. The local invertibility condition is $\cos\eta_2\ne0$; the principal branch $\lvert\eta_2\rvert<\tfrac\pi2$ selected by the angle extraction is only one connected component of it, not the whole invertible domain; the singularity belongs to the angular coordinates themselves and has nothing to do with the motion of the bodies.
+
+Let the child and parent bodies carry equal and opposite couples, with child-side moment $\mathbf m_F$ expressed in F and generalized moment $\boldsymbol Q_\eta$ conjugate to the angular coordinates. Power gives
+
+$$
+\boldsymbol Q_\eta=E^{\mathsf T}\mathbf m_F,\qquad
+\mathbf m_F=H^{\mathsf T}\boldsymbol Q_\eta,\qquad
+\boldsymbol Q_\eta^{\mathsf T}\dot{\boldsymbol\eta}
+=\mathbf m_F^{\mathsf T}\boldsymbol\omega_{FM\_F}.
+$$
+
+The inverse moment map has the same domain $\cos\eta_2\ne0$ as $H$.
 
 ### 3.3 Single-axis joints and welds
 
@@ -372,9 +391,9 @@ In exact arithmetic the articulated-body algorithm and assembling $M(q)$ followe
 
 ### 7.1 The three load sources
 
-The continuous state of the system is the $[q;v;z]$ of Section 5.1 of the conventions, where $z$ holds only the internal force states of series spring-viscous dampers. The loads delivered to the multibody layer in one right-hand-side evaluation come from three plans, each writing a number of body-wrench entries of Section 4.3:
+The continuous state of the system is the $[q;v;z]$ of Section 5.1 of the conventions, where $z$ collects the internal force states of fixed-axis and point-to-point series elements. The loads delivered to the multibody layer in one right-hand-side evaluation come from three plans, each writing a number of body-wrench entries of Section 4.3:
 
-- The vehicle force plan: the five force-element families each write two load entries as in Section 5.2 of the shared force-element chapter, and $\dot z$ at the same time (Section 3.4 of the [series spring-viscous-damper element](../force_elements/SERIES_SPRING_VISCOUS_DAMPER.en.md)).
+- The vehicle force plan: each element writes one load entry per body as in Section 5.2 of the shared force-element chapter; both series families also produce their internal-force derivatives, assembled as in Section 5.3 of that chapter.
 - The wheel-rail contact force plan: exactly one wrench per wheel-rail interface, acting on the wheel body, applied at the wheel body origin and expressed in the world frame, a zero wrench when there is no contact; the path from the multibody state to the contact inputs and on to this wrench is Section 7 of the contact-force-plan chapter.
 - The drive-moment couples of independently rotating wheels: each channel supplies a held scalar $\tau$ (not part of the continuous state) and writes one pair of pure couples, $(+\tau\,\mathbf a;\mathbf 0)$ on the wheel body and $(-\tau\,\mathbf a;\mathbf 0)$ on the named reaction body, both applied at their own body origins and expressed in the world frame, where $\mathbf a=R_{WA}\mathbf e_2$ is the world direction of the body-frame $+y$ axis of the axle body A that supplies the axis. This plan applies no wrench to the axle body itself; the joint constraint forces between the axle body and the wheel are accounted for by the recursion of Section 6.
 

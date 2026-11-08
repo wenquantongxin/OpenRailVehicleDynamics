@@ -19,7 +19,7 @@
 | [models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md](models_and_algorithms/track_geometry/TRACK_VERTICAL_PROFILE_MODELLING.md) | **轨道竖向剖面建模**：恒坡段、竖曲线以及平面线形、纵坡和超高的三维耦合。 |
 | [models_and_algorithms/track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md](models_and_algorithms/track_irregularity_spectra/TRACK_IRREGULARITY_SPECTRA.md) | **轨道不平顺谱**：不平顺分量与单位、AAR 与 ERRI B176 谱、有限频带与方差、随机相位实现、空间包络与左右轨放置。 |
 | [models_and_algorithms/wheel_rail_contact/](models_and_algorithms/wheel_rail_contact/) | **轮轨接触链九篇**：型面与插值、位姿归约、接触几何、法向力、蠕滑与接触坐标系、Kalker 系数、FASTSIM、单轮模型组装与成对扳手、接触力计划的运动学装配。 |
-| [models_and_algorithms/force_elements/](models_and_algorithms/force_elements/) | **力元六篇**：连接运动学与空间扳手、三向平动弹簧—阻尼、侧滚弹簧—阻尼力偶、串联弹簧—黏性阻尼、奇对称饱和分段线性阻尼、半角中点 RPY 衬套。 |
+| [models_and_algorithms/force_elements/](models_and_algorithms/force_elements/) | **力元**：连接运动学与空间扳手、三向平动弹簧—阻尼、侧滚力偶、定轴串联黏性阻尼、点对点串联双斜率阻尼、饱和折线阻尼与参考架线性衬套。 |
 | [models_and_algorithms/vehicle_dynamics/](models_and_algorithms/vehicle_dynamics/) | **整车动力学两篇**：整车多体动力学方程（刚体树、速率映射、铰接体前向动力学与完整右端装配）、起动状态装配。 |
 | [models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md](models_and_algorithms/numerical_methods/TIME_INTEGRATION_METHODS.md) | **时间积分方法**：一阶状态与坐标二阶两种方程形态；BDF 与 Radau5 的离散公式和差分 Jacobian；Newmark 与 Zhai 的经典参考理论及 ORVD 坐标形式；误差、稳定性与源码映射。 |
 
