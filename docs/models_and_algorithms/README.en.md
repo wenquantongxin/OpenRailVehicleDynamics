@@ -9,8 +9,9 @@ This directory explains the rail-vehicle theory, mathematical models and computa
 | Directory | Responsibility |
 |---|---|
 | `models_and_algorithms/` | physical models, coordinates and signs, mathematical derivations, discrete algorithms, theoretical approximations and their implementation in code |
-| `design/` | software architecture, module relationships, interface contracts and runtime ownership |
-| `engineering/` | APIs, configuration, input formats, failure behaviour, tests and engineering discipline |
+| `engineering/` | development methods, model comparisons and engineering rules |
+| module `README.md` files | module responsibilities, interfaces, configuration, ownership and failure behaviour |
+| `adr/` | architecture decisions, module boundaries and interface choices |
 | `performance/` | caches, workspaces, parallel scheduling, hardware use, timing and optimization qualification |
 | `planning/` | implementation order, migration records and project decisions |
 

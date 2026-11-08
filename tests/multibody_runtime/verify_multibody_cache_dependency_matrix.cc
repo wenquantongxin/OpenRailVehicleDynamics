@@ -1,24 +1,11 @@
-// The dependency policy of the runtime contract, made executable.
+// Checks eight cache dependency subsets against five state version sources.
+// The independently specified expectations below cover the eleven caches in
+// external/drake_mbtree/include/orvd/rigid_multibody_tree/
+// rigid_multibody_tree_cache_workspace.h. Deriving them from the slot templates
+// would make a missing or extra dependency invisible to this check.
 //
-// The runtime contract (docs/design/MULTIBODY_RUNTIME_CONTRACT.md, §2) works out
-// which state sources each retained cache actually reads. Eleven caches are kept,
-// and their root dependency sets collapse to eight distinct subsets. This file
-// checks that a slot declaring each of those subsets goes stale for exactly the
-// sources in it and stays fresh for every source outside it — forty cells, five
-// sources against eight subsets.
-//
-// The expectations below are transcribed from the contract by hand. They are
-// deliberately NOT derived from the slot's own template parameters: a slot
-// computes freshness from `Sources...`, so an expectation computed the same way
-// would agree with any declaration, right or wrong, and the thing under test here
-// IS the declaration. Written out, a slot aliased with a missing or extra source
-// fails.
-//
-// What this cannot show: that a real calculator only reads what its slot
-// declares. Nothing in the type system sees inside a calculation. A calculator
-// that read velocities while its slot declared only positions and frame poses
-// would satisfy every cell here and still serve stale results. That is G27's
-// subject, with the real caches and a cold-versus-hot context comparison.
+// Actual cache calculations are checked against cold-context results in
+// verify_rigid_tree_cache_binding.cc.
 #include <array>
 #include <cstdio>
 #include <string>
@@ -57,15 +44,14 @@ struct SyntheticPass {
     std::vector<double> entries;
 };
 
-/// What the contract says invalidates one cache.
+/// Independently specified invalidation sources for one cache subset.
 ///
 /// Five named fields rather than an array indexed by the enum: an index would
 /// make a reordering of the enum silently shift every row's meaning, and the
-/// rows are the one thing here that has to be read and checked against a
-/// document by a person.
+/// rows can be reviewed directly against the quantities read by each cache.
 struct ContractRow {
     const char* semantic_name;
-    /// Which numbered entries of the contract's §2 table this row stands for.
+    /// Corresponding numbered entries in the rigid-tree cache workspace.
     const char* contract_entries;
     bool generalized_positions;
     bool generalized_velocities;
@@ -74,8 +60,7 @@ struct ContractRow {
     bool joint_actuator_parameters;
 };
 
-// Transcribed from the runtime contract, §2. Eleven retained caches, eight
-// distinct dependency subsets.
+// Eleven retained caches share these eight dependency subsets.
 constexpr ContractRow kReflectedInertia{
     "reflected inertia", "#1", false, false, false, false, true};
 constexpr ContractRow kFramePoseInLinkAndBodyFrames{
@@ -298,17 +283,9 @@ void CheckRow(const ContractRow& row) {
 }
 
 void CheckPositionsAndVelocitiesInvalidateSeparately() {
-    // Called out because it is the one place the upstream reference implementation
-    // and this one are known to differ. Drake takes q and v together — its own
-    // source says so — and the measurement in G08 confirmed that writing either
-    // expires both position and velocity kinematics. The contract records that as
-    // the reference's conservative present, not as a permanent requirement.
-    //
-    // Two rows already pin it: position kinematics (#4/#9) must survive a
-    // velocity write, and velocity kinematics (#8/#12) must not. An
-    // implementation that shared one version between q and v would fail the
-    // first while still passing the second, so the pair is what makes the
-    // distinction falsifiable rather than merely stated.
+    // Position kinematics (#4/#9) must survive a velocity write, while
+    // velocity kinematics (#8/#12) must expire. Checking both distinguishes
+    // separate position and velocity versions from a shared version.
     const MultibodyStateLayout layout(SampleDescription());
     MultibodyStateInstance state(layout);
     PositionKinematicsSlot position_slot(state, std::in_place, 4);
@@ -352,7 +329,7 @@ int main() {
         return 1;
     }
     std::printf(
-        "all eight dependency subsets of the runtime contract expire for exactly"
+        "all eight dependency subsets of the cache workspace expire for exactly"
         " the sources they declare and for no others, across forty cells\n");
     return 0;
 }

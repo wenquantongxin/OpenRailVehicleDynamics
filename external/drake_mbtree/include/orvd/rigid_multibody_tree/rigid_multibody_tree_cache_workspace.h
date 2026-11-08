@@ -3,11 +3,9 @@
 /// @file
 /// The rigid tree's cache directory, as eleven named members.
 ///
-/// This is where the runtime contract's retained caches become storage. Each one
-/// is a `VersionedCacheSlot` whose template parameters name the state sources
-/// that make it stale — the same sets the contract works out and the dependency
-/// matrix checks. Reading a member's declaration tells you what invalidates it
-/// without going anywhere else.
+/// Each `VersionedCacheSlot` declares the state sources that invalidate it.
+/// The dependency matrix test supplies independently specified expectations;
+/// cold-versus-hot context checks exercise the actual cache calculations.
 ///
 /// Eleven members, not a registry. The directory is frozen because it is a
 /// type: nothing can append a slot to a struct, which is a stronger statement
@@ -22,13 +20,8 @@
 /// Everything is sized once, from the finalized model. Nothing here allocates
 /// on an evaluation.
 ///
-/// Two entries of the contract are deliberately absent. The block system
-/// Jacobian (#5) is computed directly in the first version, so pre-allocating
-/// storage for it would be a cache nobody fills. The ABA force cache and the
-/// accelerations (#14, #15) depend on the forces applied on the call that asks
-/// for them, so they are that call's workspace rather than something to keep;
-/// a slot for them would record a freshness that says nothing about the forces
-/// the value actually came from.
+/// The block system Jacobian is computed directly. ABA forces and accelerations
+/// depend on the current call's applied forces and use per-call workspace.
 
 #include <vector>
 
@@ -58,7 +51,7 @@ inline constexpr auto kActuators = multibody_runtime::
     MultibodyStateVersionSource::kJointActuatorParameters;
 }  // namespace slot_sources
 
-/// The eleven retained caches of the runtime contract, pre-allocated.
+/// Eleven named caches, pre-allocated for one evaluation context.
 class RigidMultibodyTreeCacheWorkspace {
    private:
     friend class RigidMultibodyTreeEvaluationContext;
@@ -128,8 +121,8 @@ class RigidMultibodyTreeCacheWorkspace {
     RigidMultibodyTreeCacheWorkspace& operator=(
         RigidMultibodyTreeCacheWorkspace&&) = delete;
 
-    // The dependency sets below are transcribed from the runtime contract's §2
-    // table. The contract entry number is on each member.
+    // Each dependency set includes the state sources read transitively by its
+    // calculation. Member numbers also identify the dependency matrix test rows.
 
     /// #3 — frame pose in link and body frames.
     multibody_runtime::VersionedCacheSlot<

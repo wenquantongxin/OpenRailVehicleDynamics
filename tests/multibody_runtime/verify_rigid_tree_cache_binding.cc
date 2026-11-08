@@ -1,12 +1,9 @@
 // The rigid tree's caches, bound to real state and exercised on a real model.
 //
-// G24 checked the slot mechanism against a hand-written transcription of the
-// contract, with synthetic values and a synthetic calculator. This checks the
-// thing itself: the tree's own calculators, writing the tree's own cache values,
-// invalidated by writes to the tree's own state. Representative position,
-// velocity and inertia chains are compared cold versus hot. The full
-// calculator-input map remains the source audit in the runtime contract; this
-// test does not pretend to exhaustively compare every field of every cache.
+// The dependency-matrix test checks the declared dependencies with synthetic
+// values and a synthetic calculator. This checks the tree's own calculators,
+// cache values and state writes. Representative position, velocity and inertia
+// chains are compared cold versus hot against the cache-workspace declarations.
 //
 // Two contexts appear throughout, and they are driven to the same version
 // numbers on purpose. Equal versions holding different states is exactly the
@@ -1420,9 +1417,8 @@ void CheckAMassWriteExpiresInertiaButNotPosition() {
                    context->caches().spatial_inertia_in_world.is_fresh(),
                "both start fresh");
 
-    // This is the distinction the runtime contract insisted on and that the
-    // upstream cache could not draw: mass properties and frame poses live in
-    // one value type, but the position pass reads only the pose fields.
+    // Mass properties and frame poses live in one value type, but the position
+    // pass reads only the pose fields.
     model.tree().SetRigidBodySpatialInertiaInBodyFrame(
         context.get(), model.first_body(),
         SpatialInertia<double>::SolidBoxWithMass(2.0, 0.2, 0.1, 0.1));
@@ -1737,7 +1733,7 @@ int main() {
         return 1;
     }
     std::printf(
-        "the eleven real cache slots match the runtime contract, model-aware "
+        "the eleven real cache slots match the workspace declarations, model-aware "
         "writes preserve their gates, and equal-version contexts keep their "
         "own answers\n");
     return 0;

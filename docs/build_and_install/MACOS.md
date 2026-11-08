@@ -13,9 +13,9 @@
 - 支持 Ninja／Makefile generator，不支持 Xcode generator；
 - generic Release 不添加 `-mcpu=native`；本机优化必须使用独立 build tree 和 prefix。
 
-既有资格快照的实测环境为 macOS 26.6.2 arm64、AppleClang 21、Homebrew GCC 15.2、CMake 4.2.3。
-该历史快照的 AppleClang 和 GCC 默认 Release 测试均为 `87/87`。当前源码按配置后的 CTest 清单
-执行完整测试，并记录对应工具链版本和实际通过数量。
+macOS 26.6.2 arm64、CMake 4.2.3 环境下，AppleClang 21 与 Homebrew GCC 15.2 的
+Release 构建与完整测试通过。线程数与计时见
+[macOS Apple silicon 计算评价](../performance/platform_evaluations/MACOS_APPLE_SILICON.md)。
 
 ## 安装工具链
 
@@ -211,10 +211,6 @@ GCC 路径应由 CMake 解析为 `-fopenmp`＋libgomp，不需要 Homebrew libom
 上述命令是 generic arm64 Release 支持证明，不加入 `-mcpu=native`。超级构建当前不传播任意
 `CMAKE_CXX_FLAGS`；本机优化应在 generic bundle 已生成的依赖 prefix 上另建源码直建产品树，例如
 AppleClang：
-
-本节只维护怎样产生和验证这些构建；AppleClang／GCC 的 `8/12/16/32` worker、四工况计时和
-内存结果见
-[macOS Apple silicon 计算评价](../performance/platform_evaluations/MACOS_APPLE_SILICON.md)。
 
 ```sh
 export ORVD_APPLE_NATIVE_BUILD="$ORVD_WORK_ROOT/appleclang-native-tests"

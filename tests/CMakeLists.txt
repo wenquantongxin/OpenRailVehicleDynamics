@@ -163,9 +163,9 @@ target_link_libraries(verify_multibody_cache_slot
 add_test(NAME verify_multibody_cache_slot
          COMMAND verify_multibody_cache_slot)
 
-# The runtime contract's dependency policy, made executable: eight declared
+# The cache workspace's dependency declarations, made executable: eight declared
 # dependency subsets against five state sources. The expectations are transcribed
-# from the contract by hand rather than derived from the slots' own template
+# from the declarations by hand rather than derived from the slots' own template
 # parameters — an expectation computed the same way the slot computes freshness
 # would agree with any declaration, and the declaration is what is under test.
 add_executable(verify_multibody_cache_dependency_matrix

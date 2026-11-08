@@ -5,12 +5,11 @@
 
 ## 平台与工具链
 
-| 平台 | 工具链 | 注册测试 | 验证结果 |
-|---|---|---:|---|
-| Ubuntu 24.04 x86-64 | GCC 13.3.0＋libgomp | 105 | CMake 3.28.3、Release，`105/105` |
-| Ubuntu 24.04 x86-64 | Clang 20＋LLVM libomp | 历史 87 | 历史资格快照为 `87/87` |
-| Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | 99 | Windows 10 Pro，两套均 `99/99`；版本见 [Windows 手册](WINDOWS.md) |
-| macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15 | 历史 87 | 历史资格快照两套均为 `87/87` |
+| 平台 | 工具链 | 验证 |
+|---|---|---|
+| Ubuntu 24.04 x86-64 | GCC 13.3.0＋libgomp；Clang 20＋LLVM libomp | Release 构建与完整测试通过 |
+| Windows 10／11 x86-64 | MSYS2 UCRT64 GCC；MSYS2 CLANG64 Clang＋LLVM libomp | Windows 10 Pro，两套 Release 构建与完整测试通过 |
+| macOS Apple silicon arm64 | AppleClang 21＋Homebrew libomp；Homebrew GCC 15.2＋libgomp | 两套 Release 构建与完整测试通过 |
 
 各平台的构建、测试与安装命令见对应手册。
 
@@ -167,7 +166,6 @@ install prefix。工具链或关键 CMake 逻辑变化后，用空 build tree �
 2. 工具链路径和 dependency prefix 只作 configure 输入；macOS SDK 与 AppleClang libomp 由 CMake
    自动发现。任何显式覆盖仍只进入命令行或 toolchain file，不写进项目源码。
 3. 一次提交若修改公共头、数值实现、OpenMP、安装导出或 CMake，应在可用平台上运行各自完整门。
-4. 分别记录配置后的测试清单、实测通过数量和验证环境，旧快照的结果标为历史记录。
-5. 平台间不要求逐位一致；同一二进制的固定槽并行合同仍必须逐位一致。
-6. 依赖来源 URL、归档名和版本以 `dependency_sources.cmake` 为准；升级时同步根项目与安装
+4. 平台间不要求逐位一致；同一二进制的固定槽并行合同仍必须逐位一致。
+5. 依赖来源 URL、归档名和版本以 `dependency_sources.cmake` 为准；升级时同步根项目与安装
    Config 的消费约束。

@@ -23,6 +23,7 @@ advancer.AdvanceTo(target_time_seconds);
 `ZhaiConfiguration`。前三者持有物理状态的误差容差；Newmark 持有名义步长和 Newton
 量纲尺度；Zhai 只持有等步步长。公共时间统一为 `double` 秒，正步长必须有限。
 方法没有隐式默认值；应用层将场景默认配方解析为明确配置。
+Radau5 要求相对容差严格大于 `1e-15`；各状态分量的绝对容差须为有限正数。
 
 `method_identifier()` 从真实 runtime 返回 `cvode_bdf2`、`cvode_bdf5`、`radau5`、
 `newmark` 或 `zhai`。没有独立的可写方法标签、旧容差构造、私有 Access 工厂或兼容入口。

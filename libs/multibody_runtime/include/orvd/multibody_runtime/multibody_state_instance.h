@@ -216,9 +216,8 @@ class MultibodyStateInstance {
     std::vector<RevoluteSpringParameters> revolute_spring_parameters_;
     std::vector<LinearBushingRollPitchYawParameters> linear_bushing_parameters_;
 
-    // Exactly five, one per source that a long-lived cache reads. Adding a sixth
-    // is a claim that some cache depends on that category; make the claim in the
-    // runtime contract first, or the number will be compared against by nobody.
+    // One version per state source read by a long-lived cache. Additional
+    // sources require a corresponding cache-workspace dependency declaration.
     MultibodyStateVersion generalized_positions_version_;
     MultibodyStateVersion generalized_velocities_version_;
     MultibodyStateVersion fixed_frame_poses_version_;
