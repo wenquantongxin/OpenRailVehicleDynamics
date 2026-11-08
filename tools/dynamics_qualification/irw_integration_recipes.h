@@ -53,7 +53,7 @@ inline constexpr IrwIntegrationRecipe
         1.0e-6,
         1.0e-5,
         1.0e-6,
-        OdeIntegrationMethod::kCvodeBdf2,
+        OdeIntegrationMethod::kCvodeBdf5,
     };
 
 // These higher-speed passive identities deliberately own separate recipes.

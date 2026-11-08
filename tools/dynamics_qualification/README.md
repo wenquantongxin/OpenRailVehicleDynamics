@@ -13,14 +13,14 @@ orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_I
 orvd_irw_r300_aar5_v60_100hz_full_state_guidance VEHICLE STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER OUTPUT_DIRECTORY DURATION_NS [--integration-config PATH]
 ```
 
-Without `--integration-config`, a scenario uses its existing ODE defaults:
+Without `--integration-config`, a scenario uses these ODE defaults:
 
 | Scenario | Method | Relative tolerance | q / v / force absolute tolerances |
 |---|---|---|---|
 | GZ18 passive | CVODE BDF2 | 1e-6 | 1e-7 / 1e-6 / 0.1 N |
 | IRW R300, no irregularity, 60 km/h | CVODE BDF2 | 1e-6 | 1e-6 / 1e-5 / 1e-6 N |
 | IRW R300 + AAR5, passive, 60 km/h | CVODE BDF5 | 1e-8 | 1e-8 / 1e-7 / 1e-6 N |
-| IRW R300 + AAR5, 100 Hz guidance | CVODE BDF2 | 1e-6 | 1e-6 / 1e-5 / 1e-6 N |
+| IRW R300 + AAR5, 100 Hz guidance | CVODE BDF5 | 1e-6 | 1e-6 / 1e-5 / 1e-6 N |
 | Other registered IRW passive scenarios | CVODE BDF5 | 1e-9 | 1e-9 / 1e-8 / 1e-7 N |
 
 IRW passive scenario names are `irw_r300_no_irregularity_v60_passive`,
@@ -31,30 +31,30 @@ IRW passive scenario names are `irw_r300_no_irregularity_v60_passive`,
 Their vehicle, startup, line and irregularity bindings remain scenario-specific.
 
 From the repository root, run R300 at 60 km/h with four-channel AAR5 for
-50 s using four OpenMP threads. Each command uses its own unused output directory.
+50 s using eight OpenMP threads. Each command uses its own unused output directory.
 
 Zero-torque passive (default CVODE BDF5, 0.5 ms output):
 
 ```sh
-OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE \
+OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=8 OMP_DYNAMIC=FALSE \
   ./build/tools/dynamics_qualification/orvd_irw_passive_scenario \
   irw_r300_aar5_v60_passive vehicle_library/irw/vehicle_definition.json \
   vehicle_library/irw/startup_states/moving_startup_60kmh.json \
   track_library/geometries/r300_centerline_superelevation_1100m.json \
-  . aar5_irregularity tmp/irw_r300_passive_50s 50000000000 500000
+  . aar5_irregularity results/irw_r300_passive 50000000000 500000
 ```
 
-100 Hz full-state guidance (default CVODE BDF2, 10 ms torque holds and 0.5 ms output):
+100 Hz full-state guidance (default CVODE BDF5, 10 ms torque holds and 0.5 ms output):
 
 ```sh
-OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE \
+OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=8 OMP_DYNAMIC=FALSE \
   ./build/tools/dynamics_qualification/orvd_irw_r300_aar5_v60_100hz_full_state_guidance \
   vehicle_library/irw/vehicle_definition.json \
   vehicle_library/irw/startup_states/moving_startup_60kmh.json \
   track_library/geometries/r300_centerline_superelevation_1100m.json . \
   controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json \
   vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json \
-  tmp/irw_r300_controlled_50s 50000000000
+  results/irw_r300_controlled 50000000000
 ```
 
 ## Explicit integration configuration

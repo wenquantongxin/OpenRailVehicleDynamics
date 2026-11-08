@@ -712,8 +712,8 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
 
     const auto summary = RunIrwR300Aar5V60At100HzFullStateGuidance(configuration);
     Require(summary.observation_count == 41 &&
-                summary.integrator_recipe_identifier == "cvode_bdf2" &&
-                summary.maximum_bdf_order == 2 &&
+                summary.integrator_recipe_identifier == "cvode_bdf5" &&
+                summary.maximum_bdf_order == 5 &&
                 summary.control_audit_count == 4 &&
                 summary.positive_hold_interval_count == 2 &&
                 summary.backend_synchronization_count == 1 &&
@@ -869,9 +869,9 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
                     std::string::npos &&
                 NumericalExecutionContractContains(
                     metadata,
-                    "\"integrator_recipe_identifier\": \"cvode_bdf2\"") &&
+                    "\"integrator_recipe_identifier\": \"cvode_bdf5\"") &&
                 NumericalExecutionContractContains(
-                    metadata, "\"maximum_bdf_order\": 2") &&
+                    metadata, "\"maximum_bdf_order\": 5") &&
                 metadata.find("\"numerical_tolerances\"") ==
                     std::string::npos &&
                 metadata.find("\"relative_tolerance\": "
@@ -923,7 +923,7 @@ void CheckControlledIrwRun(char** argv, const std::filesystem::path& root) {
         Require(contact_contract.at("contact_batch_worker_cap") == 8 &&
                     contact_contract.at("contact_batch_requested_worker_count") == contact_request,
                 "the controlled contact worker request did not follow the eight-interface cap");
-        Require(candidate.maximum_bdf_order == 2 &&
+        Require(candidate.maximum_bdf_order == 5 &&
                     candidate.integration_work.total_statistics()
                         .requested_dense_finite_difference_jacobian_worker_count ==
                     requested_threads &&

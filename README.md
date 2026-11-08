@@ -96,7 +96,7 @@ IRW has 25 rigid bodies and a 169-dimensional continuous state, including 14 ser
 
 ![IRW R300 AAR5 passive 50 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_50s_wheel_force_response.png)
 
-**100 Hz full-state control**: the vehicle uses full-state wheel-speed guidance and torque shaping. BDF2, Radau5 and SIMPACK FIXBDF each run the closed loop; their lateral and yaw responses remain closely aligned through the curve and into the final tangent.
+**100 Hz full-state control**: the vehicle uses full-state wheel-speed guidance and torque shaping. BDF5, Radau5 and SIMPACK FIXBDF each run the closed loop; their lateral and yaw responses remain closely aligned through the curve and into the final tangent.
 
 ![IRW 100 Hz controlled 50 s four-wheel-pair lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_axlebridge_response.png)
 
@@ -107,7 +107,7 @@ IRW has 25 rigid bodies and a 169-dimensional continuous state, including 14 ser
 | Case | Lateral (mm) | Yaw (mrad) | `N` (kN) | `Tx` (kN) | `Ty` (kN) |
 |---|---:|---:|---:|---:|---:|
 | Zero-torque passive | `0.036–0.048 / 0.271` | `0.014–0.015 / 0.141` | `0.553 / 46.771` | `0.062 / 3.394` | `0.183 / 9.214` |
-| 100 Hz full-state controlled | `0.010–0.016 / 0.113` | `0.004–0.007 / 0.075` | `0.463 / 49.132` | `0.053 / 3.871` | `0.115 / 12.525` |
+| 100 Hz full-state controlled | `0.010–0.016 / 0.113` | `0.004–0.007 / 0.075` | `0.455 / 48.652` | `0.052 / 3.855` | `0.113 / 12.399` |
 
 </details>
 
@@ -123,16 +123,18 @@ The default test suite runs on Ubuntu 24.04 x86-64 (GCC 13; Clang 20 + LLVM libo
 
 ## Computational performance
 
-The dynamics advancement wall clock covers the integration backend, the vehicle right-hand side and the accepted-state transactions of the run's configuration; the controlled case additionally counts hold-value synchronisation and control computation; the full process also includes observation replay, result organisation and writing. The real-time factor is the simulated duration divided by the corresponding wall clock. The table lists the means of two full-window runs of a Release build of the current source with 8 OpenMP threads, a 0.5 ms sampling period and each scenario's default CVODE recipe: BDF2 for GZ18 and the 100 Hz controlled IRW, BDF5 for the zero-torque passive IRW.
+Linux GCC Release; 60 km/h; 8 physical cores and 8 OpenMP threads; 0.5 ms output. Values are means of two full-window runs. GZ18 uses BDF2; IRW uses BDF5.
 
-| Case | Simulated | Advance / control | Advance real-time factor | Full process | Full-process real-time factor |
-|---|---:|---:|---:|---:|---:|
-| GZ18 tangent track + AAR6 | `20 s` | `4.007 s` | `4.992×` | `8.148 s` | `2.455×` |
-| GZ18 R300 + AAR5 | `16 s` | `3.303 s` | `4.844×` | `6.847 s` | `2.337×` |
-| IRW zero-torque passive | `30 s` | `26.338 s` | `1.139×` | `33.677 s` | `0.891×` |
-| IRW 100 Hz full-state controlled | `30 s` | `21.514 s` | `1.394×` | `29.977 s` | `1.001×` |
+Advance/control time covers numerical advancement, plus held-input synchronization and control computation for the controlled run. Full-process time also includes model loading, observation and result writing. The real-time factor is simulated duration divided by the corresponding wall time.
 
-The core advancement of all four cases is faster than real time. In the validation batch, the SIMPACK full-process times of the same cases were `60.13 / 48.14 / 38.28 / 155.23 s`; the two batches were not run side by side, so no speed-up ratio is computed. The single-thread computational cost, wall clock and deviation from the Radau5 reference trajectory of the five integration methods on the four cases are in the [integration method evaluation](docs/performance/integrator_evaluations/LINUX_X86_64_SINGLE_THREAD.md) (Chinese); the full Linux timings, breakdown and execution conditions are in the [Linux x86-64 evaluation](docs/performance/platform_evaluations/LINUX_X86_64.md) (Chinese), and the current results and timing definitions in the [performance documentation](docs/performance/README.md) (Chinese).
+| Case | Simulated | Threads | Advance/control | Advance/control real-time factor | Full process | Full-process real-time factor |
+|---|---:|---:|---:|---:|---:|---:|
+| GZ18 tangent track + AAR6 | `20 s` | `8` | `3.926 s` | `5.095×` | `8.062 s` | `2.481×` |
+| GZ18 R300 + AAR5 | `16 s` | `8` | `3.336 s` | `4.797×` | `6.812 s` | `2.349×` |
+| IRW R300 + AAR5, passive | `50 s` | `8` | `46.101 s` | `1.085×` | `58.458 s` | `0.855×` |
+| IRW R300 + AAR5, 100 Hz controlled | `50 s` | `8` | `39.158 s` | `1.277×` | `51.008 s` | `0.980×` |
+
+Hardware, tolerances and timing ranges are documented in the [Linux evaluation](docs/performance/platform_evaluations/LINUX_X86_64.md); other platforms and timing definitions are in the [performance guide](docs/performance/README.md) (Chinese).
 
 ## Quick start
 
