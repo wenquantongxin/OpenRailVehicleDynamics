@@ -6,3 +6,4 @@ external/drake_mbtree/LICENSE.TXT whitespace=-trailing-space
 vehicle_library/**/reference_models/simpack/**/*.spck -text whitespace=-trailing-space
 vehicle_library/**/reference_models/simpack/**/*.subvar -text whitespace=-trailing-space
 vehicle_library/**/reference_models/simpack/**/*.STL binary
+*.png filter=lfs diff=lfs merge=lfs -text

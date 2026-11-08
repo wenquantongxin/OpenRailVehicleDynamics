@@ -18,7 +18,7 @@
 
 | Area | Capability |
 |---|---|
-| Multibody vehicle | Rigid-body tree assembly, position and velocity kinematics, mass matrix, inverse and forward dynamics and external-force projection; translational spring–damper, series spring–viscous damper, saturating piecewise damper, roll element, six-component bushing, gravity and eight wheel–rail force and moment channels |
+| Multibody vehicle | Rigid-body tree assembly, position and velocity kinematics, mass matrix, inverse and forward dynamics and external-force projection; translational spring–damper, series spring–viscous damper, point-to-point series spring–bilinear damper, saturating piecewise damper, roll element, reference-frame linear bushing, gravity and eight wheel–rail force and moment channels |
 | Track and irregularity | Horizontal curvature, superelevation, constant grade, parabolic and circular vertical curves, quintic joints and their 3-D coupling, local station projection and boundary tangent extension; frozen spatial point sequences and reproducible AAR5/AAR6 spatial spectra, AAR5/AAR6 lateral, vertical, gauge and roll irregularities, and ERRI low lateral and vertical irregularities |
 | Wheel–rail contact | Equal-arc-length profile preprocessing, wheel and rail profile interpolation, multi-patch contact geometry, EEC normal force, Kalker coefficients, FASTSIM tangential forces and per-patch creepages |
 | Control and actuation | Full-state wheel-speed guidance, longitudinal cruise control and torque shaping; periodic control events committed atomically on the accepted state |
@@ -42,14 +42,14 @@ The whole chain runs on double-precision states. The track layer provides 3-D at
 
 ## Vehicle-level validation
 
-SIMPACK serves as the vehicle-level reference. Wheel–rail forces are summed per wheel over the contact patches, and RMS and maximum differences are evaluated at common time instants; the common statistics step is `0.5 ms` for GZ18 and `10 ms` for IRW. The wheel–rail force figures show the native `N/Tx/Ty` series of all wheels; solid blue is ORVD, dashed orange is SIMPACK.
+SIMPACK serves as the vehicle-level reference. Wheel–rail forces are summed per wheel over the contact patches, and RMS and maximum differences are evaluated at common time instants; the common statistics step is `0.5 ms` for GZ18 and `10 ms` for IRW. The figures retain the native sample times; solid blue is ORVD BDF, dashed orange is SIMPACK. The IRW figures also include dotted olive Radau5 curves as an internal reference.
 
 | Vehicle | Mechanical topology | Case | Reference solver |
 |---|---|---|---|
 | GZ18 | 17 bodies, four rigid wheelsets | Tangent track + AAR6, 60 km/h, 20 s | SIMPACK Time Integration with Measurements |
 | GZ18 | 17 bodies, four rigid wheelsets | R300 + AAR5, 60 km/h, 50 s | SIMPACK Time Integration with Measurements |
 | IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, zero-torque passive, 60 km/h, 50 s | SIMPACK Time Integration with Measurements |
-| IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, 100 Hz full-state controlled, 60 km/h, 50 s | SIMPACK Realtime |
+| IRW | Four axle bridges, eight independently rotating wheels | R300 + AAR5, 100 Hz full-state controlled, 60 km/h, 50 s | SIMPACK Realtime FIXBDF, 62.5 µs step |
 
 ### GZ18: rigid-wheelset vehicle
 
@@ -85,9 +85,9 @@ R300 + AAR5:
 
 ### IRW: independently rotating wheel vehicle
 
-The 157-dimensional continuous state of IRW contains four axle bridges and eight independently rotating wheels. No drive torque is applied to any wheel throughout the run. The figure shows the axle-bridge lateral and yaw response on the R300 curve under AAR5 excitation.
+IRW has 25 rigid bodies and a 169-dimensional continuous state, including 14 series internal-force states. The zero-torque passive run covers R300 at 60 km/h with four-channel AAR5 excitation for 50 s. BDF5, Radau5 and SIMPACK closely reproduce the amplitudes and phases of the four wheel pairs' lateral and yaw responses, including curve entry and the recovery after curve exit.
 
-![IRW R300 AAR5 passive 50 s axle-bridge lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_50s_axlebridge_response.png)
+![IRW R300 AAR5 passive 50 s four-wheel-pair lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_50s_axlebridge_response.png)
 
 <details>
 <summary><strong>Expand full comparison</strong></summary>
@@ -96,18 +96,18 @@ The 157-dimensional continuous state of IRW contains four axle bridges and eight
 
 ![IRW R300 AAR5 passive 50 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_50s_wheel_force_response.png)
 
-**100 Hz full-state control**: the vehicle uses full-state wheel-speed guidance and torque shaping.
+**100 Hz full-state control**: the vehicle uses full-state wheel-speed guidance and torque shaping. BDF2, Radau5 and SIMPACK FIXBDF each run the closed loop; their lateral and yaw responses remain closely aligned through the curve and into the final tangent.
 
-![IRW 100 Hz controlled 50 s axle-bridge lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_axlebridge_response.png)
+![IRW 100 Hz controlled 50 s four-wheel-pair lateral displacement and yaw comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_axlebridge_response.png)
 
 ![IRW 100 Hz controlled 50 s all-wheel three-component wheel–rail force comparison](docs/figures/irw/irw_r300_aar5_full_state_controlled_50s_wheel_force_response.png)
 
-**Accuracy overview**: each cell lists RMS / maximum difference; kinematic RMS values give the range over the four axle bridges.
+**Accuracy overview**: each cell lists RMS / maximum difference between the default BDF method and SIMPACK on the common 10 ms clock. Kinematic RMS values give the range over the four wheel pairs; force RMS values combine all eight wheels. Maxima cover all corresponding channels and samples.
 
 | Case | Lateral (mm) | Yaw (mrad) | `N` (kN) | `Tx` (kN) | `Ty` (kN) |
 |---|---:|---:|---:|---:|---:|
-| Zero-torque passive | `0.079–0.241 / 4.169` | `0.077–0.193 / 1.931` | `9.170 / 288.691` | `0.778 / 37.055` | `2.142 / 66.533` |
-| 100 Hz full-state controlled | `2.956–3.592 / 22.962` | `1.323–2.724 / 23.125` | `12.488 / 405.409` | `1.604 / 37.934` | `4.880 / 93.233` |
+| Zero-torque passive | `0.036–0.048 / 0.271` | `0.014–0.015 / 0.141` | `0.553 / 46.771` | `0.062 / 3.394` | `0.183 / 9.214` |
+| 100 Hz full-state controlled | `0.010–0.016 / 0.113` | `0.004–0.007 / 0.075` | `0.463 / 49.132` | `0.053 / 3.871` | `0.115 / 12.525` |
 
 </details>
 

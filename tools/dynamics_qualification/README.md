@@ -30,16 +30,31 @@ IRW passive scenario names are `irw_r300_no_irregularity_v60_passive`,
 `irw_straight_aar6_v160_passive`, and `irw_straight_erri_low_v200_passive`.
 Their vehicle, startup, line and irregularity bindings remain scenario-specific.
 
-For example, from the repository root, with an unused output directory:
+From the repository root, run R300 at 60 km/h with four-channel AAR5 for
+50 s using four OpenMP threads. Each command uses its own unused output directory.
+
+Zero-torque passive (default CVODE BDF5, 0.5 ms output):
 
 ```sh
-OMP_NUM_THREADS=8 OMP_DYNAMIC=FALSE \
+OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE \
   ./build/tools/dynamics_qualification/orvd_irw_passive_scenario \
   irw_r300_aar5_v60_passive vehicle_library/irw/vehicle_definition.json \
   vehicle_library/irw/startup_states/moving_startup_60kmh.json \
   track_library/geometries/r300_centerline_superelevation_1100m.json \
-  . aar5_irregularity /path/to/output 10000000 500000 \
-  --integration-config /path/to/integration.json
+  . aar5_irregularity tmp/irw_r300_passive_50s 50000000000 500000
+```
+
+100 Hz full-state guidance (default CVODE BDF2, 10 ms torque holds and 0.5 ms output):
+
+```sh
+OMP_NUM_THREADS=4 OMP_DYNAMIC=FALSE \
+  ./build/tools/dynamics_qualification/orvd_irw_r300_aar5_v60_100hz_full_state_guidance \
+  vehicle_library/irw/vehicle_definition.json \
+  vehicle_library/irw/startup_states/moving_startup_60kmh.json \
+  track_library/geometries/r300_centerline_superelevation_1100m.json . \
+  controller_library/irw/irw_r300_v60_full_state_wheel_speed_guidance_controller.json \
+  vehicle_library/irw/drive_torque_conditioners/irw_reference_wheel_drive_torque_conditioner.json \
+  tmp/irw_r300_controlled_50s 50000000000
 ```
 
 ## Explicit integration configuration
@@ -54,6 +69,20 @@ ODE configurations provide `relative_tolerance`,
 `generalized_velocity_absolute_tolerance`, and
 `series_force_absolute_tolerance_newtons`. These physical-state tolerances are
 expanded into the public method configuration after assembly.
+
+For the Radau5 reference, save the following configuration and append
+`--integration-config PATH` to either command, choosing a separate output directory:
+
+```json
+{
+  "schema_version": 1,
+  "method": "radau5",
+  "relative_tolerance": 1e-12,
+  "generalized_position_absolute_tolerance": 1e-12,
+  "generalized_velocity_absolute_tolerance": 1e-11,
+  "series_force_absolute_tolerance_newtons": 1e-10
+}
+```
 
 Newmark and Zhai provide a positive integer `step_size_nanoseconds`, converted
 to seconds once at the tool boundary. Newmark additionally provides `newton`
