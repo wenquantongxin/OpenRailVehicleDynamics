@@ -183,7 +183,7 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
         total_mass += body.mass_kilograms;
         body_by_name.emplace(body.name, &body);
     }
-    Expect(std::abs(total_mass - 40152.56099299506) <= 5.0e-11,
+    Expect(std::abs(total_mass - 40151.767881804364) <= 5.0e-11,
            "the complete source mass ledger is preserved");
     const auto& carbody = *body_by_name.at("carbody");
     Expect(carbody.mass_kilograms == 25000.0 &&
@@ -195,12 +195,12 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
            "the carbody mass, positive COM height and central inertia are "
            "source exact");
     const auto& longibar = *body_by_name.at("longibar_front_A");
-    Expect(longibar.mass_kilograms == 18.820124124383078 &&
+    Expect(longibar.mass_kilograms == 18.720985225545224 &&
                longibar
                        .inertia_moments_about_center_of_mass_kilogram_square_meters ==
-                   Eigen::Vector3d(0.6729769337412805,
-                                   0.011012536664854763,
-                                   0.6729769337412805),
+                   Eigen::Vector3d(0.6624552755613924,
+                                   0.01095452584881818,
+                                   0.6624552755613924),
            "the polygonal longibar mass and central inertia are source exact");
 
     std::map<std::string, const orvd::configuration::
@@ -215,7 +215,7 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
                primary.opposite_frame_name ==
                    "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseA" &&
                primary.stiffness_newtons_per_meter ==
-                   Eigen::Vector3d(750810.0, 750810.0, 646797.0) &&
+                   Eigen::Vector3d(752924.0, 752924.0, 507289.0) &&
                primary.damping_newton_seconds_per_meter ==
                    Eigen::Vector3d(0.0, 0.0, 5000.0),
            "the first primary spring binds its real Frame-A and axlebridge "
@@ -232,7 +232,7 @@ void CheckSourceScalarsAndBindings(const VehicleDefinition& vehicle) {
                air.opposite_frame_name ==
                    "mk_dum_front__M_DUM_AirSpring_A" &&
                air.stiffness_newtons_per_meter ==
-                   Eigen::Vector3d(100107.0, 100107.0, 150061.0),
+                   Eigen::Vector3d(101065.0, 101065.0, 150390.0),
            "the air spring keeps Frame A as its reference end");
 
     std::map<std::string, const orvd::configuration::

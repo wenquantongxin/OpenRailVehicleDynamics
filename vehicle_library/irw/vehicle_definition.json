@@ -344,161 +344,161 @@
     {
       "name": "longibar_front_A",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_front_B",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_front_C",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_front_D",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_rear_A",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_rear_B",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_rear_C",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
       "name": "longibar_rear_D",
       "moves_freely_in_world": false,
-      "mass_kilograms": 18.820124124383078,
+      "mass_kilograms": 18.720985225545224,
       "center_of_mass_in_body_frame_meters": {
         "x": 0.0,
         "y": 0.0,
         "z": 0.0
       },
       "inertia_moments_about_center_of_mass_kilogram_square_meters": {
-        "x": 0.6729769337412805,
-        "y": 0.011012536664854763,
-        "z": 0.6729769337412805
+        "x": 0.6624552755613924,
+        "y": 0.01095452584881818,
+        "z": 0.6624552755613924
       },
       "inertia_products_about_center_of_mass_kilogram_square_meters": {
-        "x": -2.4934532384798466e-18,
-        "y": -2.5973471234165235e-20,
-        "z": -4.0741416771330933e-17
+        "x": -8.311510794932822e-19,
+        "y": -1.298673561708254e-19,
+        "z": -4.010070315875357e-17
       }
     },
     {
@@ -811,8 +811,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_A",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": 0.621331,
-        "y": 0.113909,
+        "x": 0.614563,
+        "y": 0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -823,8 +823,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_B",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": 0.621331,
-        "y": -0.113909,
+        "x": 0.614563,
+        "y": -0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -835,8 +835,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_C",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": -0.621331,
-        "y": 0.113909,
+        "x": -0.614563,
+        "y": 0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -847,8 +847,8 @@
       "name": "mk_frame_front__M_Frame_LongiBar_D",
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
-        "x": -0.621331,
-        "y": -0.113909,
+        "x": -0.614563,
+        "y": -0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -956,20 +956,20 @@
       "body_name": "longibar_front_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": -0.26710977876009584,
-            "y": 0.9636661071609464,
+            "x": 0.20290376463749588,
+            "y": 0.9791986837695053,
             "z": 0.0
           },
           {
-            "x": -0.9636661071609464,
-            "y": -0.26710977876009584,
+            "x": -0.9791986837695053,
+            "y": 0.20290376463749588,
             "z": 0.0
           },
           {
@@ -985,20 +985,20 @@
       "body_name": "longibar_front_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": 0.2671097787600962,
-            "y": 0.9636661071609464,
+            "x": -0.2029037646374957,
+            "y": 0.9791986837695055,
             "z": 0.0
           },
           {
-            "x": -0.9636661071609464,
-            "y": 0.2671097787600962,
+            "x": -0.9791986837695055,
+            "y": -0.2029037646374957,
             "z": 0.0
           },
           {
@@ -1014,20 +1014,20 @@
       "body_name": "longibar_front_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": -0.26710977876009584,
-            "y": -0.9636661071609464,
+            "x": 0.20290376463749588,
+            "y": -0.9791986837695053,
             "z": 0.0
           },
           {
-            "x": 0.9636661071609464,
-            "y": -0.26710977876009584,
+            "x": 0.9791986837695053,
+            "y": 0.20290376463749588,
             "z": 0.0
           },
           {
@@ -1043,20 +1043,20 @@
       "body_name": "longibar_front_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": 0.2671097787600962,
-            "y": -0.9636661071609464,
+            "x": -0.2029037646374957,
+            "y": -0.9791986837695055,
             "z": 0.0
           },
           {
-            "x": 0.9636661071609464,
-            "y": 0.2671097787600962,
+            "x": 0.9791986837695055,
+            "y": -0.2029037646374957,
             "z": 0.0
           },
           {
@@ -1311,8 +1311,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_A",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": 0.621331,
-        "y": 0.113909,
+        "x": 0.614563,
+        "y": 0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1323,8 +1323,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_B",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": 0.621331,
-        "y": -0.113909,
+        "x": 0.614563,
+        "y": -0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1335,8 +1335,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_C",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": -0.621331,
-        "y": 0.113909,
+        "x": -0.614563,
+        "y": 0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1347,8 +1347,8 @@
       "name": "mk_frame_rear__M_Frame_LongiBar_D",
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
-        "x": -0.621331,
-        "y": -0.113909,
+        "x": -0.614563,
+        "y": -0.3174255,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -1456,20 +1456,20 @@
       "body_name": "longibar_rear_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": -0.26710977876009584,
-            "y": 0.9636661071609464,
+            "x": 0.20290376463749588,
+            "y": 0.9791986837695053,
             "z": 0.0
           },
           {
-            "x": -0.9636661071609464,
-            "y": -0.26710977876009584,
+            "x": -0.9791986837695053,
+            "y": 0.20290376463749588,
             "z": 0.0
           },
           {
@@ -1485,20 +1485,20 @@
       "body_name": "longibar_rear_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": 0.2671097787600962,
-            "y": 0.9636661071609464,
+            "x": -0.2029037646374957,
+            "y": 0.9791986837695055,
             "z": 0.0
           },
           {
-            "x": -0.9636661071609464,
-            "y": 0.2671097787600962,
+            "x": -0.9791986837695055,
+            "y": -0.2029037646374957,
             "z": 0.0
           },
           {
@@ -1514,20 +1514,20 @@
       "body_name": "longibar_rear_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": -0.26710977876009584,
-            "y": -0.9636661071609464,
+            "x": 0.20290376463749588,
+            "y": -0.9791986837695053,
             "z": 0.0
           },
           {
-            "x": 0.9636661071609464,
-            "y": -0.26710977876009584,
+            "x": 0.9791986837695053,
+            "y": 0.20290376463749588,
             "z": 0.0
           },
           {
@@ -1543,20 +1543,20 @@
       "body_name": "longibar_rear_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.3261861112103028,
+        "y": 0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
         "form": "matrix_rows",
         "rows": [
           {
-            "x": 0.2671097787600962,
-            "y": -0.9636661071609464,
+            "x": -0.2029037646374957,
+            "y": -0.9791986837695055,
             "z": 0.0
           },
           {
-            "x": 0.9636661071609464,
-            "y": 0.2671097787600962,
+            "x": 0.9791986837695055,
+            "y": -0.2029037646374957,
             "z": 0.0
           },
           {
@@ -2500,7 +2500,7 @@
       "body_name": "axlebridge_ff",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.288164,
+        "y": 0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2512,7 +2512,7 @@
       "body_name": "longibar_front_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2524,7 +2524,7 @@
       "body_name": "axlebridge_ff",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.288164,
+        "y": -0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2536,7 +2536,7 @@
       "body_name": "longibar_front_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2548,7 +2548,7 @@
       "body_name": "axlebridge_fr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.288164,
+        "y": 0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2560,7 +2560,7 @@
       "body_name": "longibar_front_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2572,7 +2572,7 @@
       "body_name": "axlebridge_fr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.288164,
+        "y": -0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2584,7 +2584,7 @@
       "body_name": "longibar_front_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2596,7 +2596,7 @@
       "body_name": "axlebridge_rf",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.288164,
+        "y": 0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2608,7 +2608,7 @@
       "body_name": "longibar_rear_A",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2620,7 +2620,7 @@
       "body_name": "axlebridge_rf",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.288164,
+        "y": -0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2632,7 +2632,7 @@
       "body_name": "longibar_rear_B",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2644,7 +2644,7 @@
       "body_name": "axlebridge_rr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": 0.288164,
+        "y": 0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2656,7 +2656,7 @@
       "body_name": "longibar_rear_C",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2668,7 +2668,7 @@
       "body_name": "axlebridge_rr",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.288164,
+        "y": -0.185754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2680,7 +2680,7 @@
       "body_name": "longibar_rear_D",
       "position_in_body_frame_meters": {
         "x": 0.0,
-        "y": -0.3261861112103028,
+        "y": -0.3244678585319546,
         "z": 0.0
       },
       "rotation_in_body_frame": {
@@ -2692,7 +2692,7 @@
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
         "x": 1.25,
-        "y": 0.5881639999999999,
+        "y": 0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2704,7 +2704,7 @@
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
         "x": 1.25,
-        "y": -0.5881639999999999,
+        "y": -0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2716,7 +2716,7 @@
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
         "x": -1.25,
-        "y": 0.5881639999999999,
+        "y": 0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2728,7 +2728,7 @@
       "body_name": "frame_front",
       "position_in_body_frame_meters": {
         "x": -1.25,
-        "y": -0.5881639999999999,
+        "y": -0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2740,7 +2740,7 @@
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
         "x": 1.25,
-        "y": 0.5881639999999999,
+        "y": 0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2752,7 +2752,7 @@
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
         "x": 1.25,
-        "y": -0.5881639999999999,
+        "y": -0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2764,7 +2764,7 @@
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
         "x": -1.25,
-        "y": 0.5881639999999999,
+        "y": 0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2776,7 +2776,7 @@
       "body_name": "frame_rear",
       "position_in_body_frame_meters": {
         "x": -1.25,
-        "y": -0.5881639999999999,
+        "y": -0.485754,
         "z": -0.07
       },
       "rotation_in_body_frame": {
@@ -2882,7 +2882,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": 1.8411889124573215
+        "z": 1.3664738623154886
       }
     },
     {
@@ -2892,7 +2892,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": 1.3004037411324723
+        "z": 1.775118791274305
       }
     },
     {
@@ -2902,7 +2902,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.841188912457321
+        "z": -1.3664738623154886
       }
     },
     {
@@ -2912,7 +2912,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.3004037411324718
+        "z": -1.7751187912743038
       }
     },
     {
@@ -2922,7 +2922,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": 1.8411889124573215
+        "z": 1.3664738623154886
       }
     },
     {
@@ -2932,7 +2932,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": 1.3004037411324723
+        "z": 1.775118791274305
       }
     },
     {
@@ -2942,7 +2942,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.841188912457321
+        "z": -1.3664738623154886
       }
     },
     {
@@ -2952,7 +2952,7 @@
       "default_roll_pitch_yaw_angles_radians": {
         "x": 0.0,
         "y": 0.0,
-        "z": -1.3004037411324718
+        "z": -1.7751187912743038
       }
     }
   ],
@@ -2974,9 +2974,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseA1",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -2989,9 +2989,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseB1",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3004,9 +3004,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseC1",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3019,9 +3019,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseD1",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3034,9 +3034,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseA2",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3049,9 +3049,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseB2",
       "opposite_frame_name": "mk_axlebridge_ff__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3064,9 +3064,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseC2",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3079,9 +3079,9 @@
       "reference_frame_name": "mk_frame_front__M_Frame_PS_Spring_baseD2",
       "opposite_frame_name": "mk_axlebridge_fr__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3101,7 +3101,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3116,7 +3116,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3131,7 +3131,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3146,7 +3146,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3154,14 +3154,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_AirSpring_A",
       "opposite_frame_name": "mk_dum_front__M_DUM_AirSpring_A",
       "stiffness_newtons_per_meter": {
-        "x": 100107.0,
-        "y": 100107.0,
-        "z": 150061.0
+        "x": 101065.0,
+        "y": 101065.0,
+        "z": 150390.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 19313.9
+        "z": 18388.9
       }
     },
     {
@@ -3169,14 +3169,14 @@
       "reference_frame_name": "mk_frame_front__M_Frame_AirSpring_B",
       "opposite_frame_name": "mk_dum_front__M_DUM_AirSpring_B",
       "stiffness_newtons_per_meter": {
-        "x": 100107.0,
-        "y": 100107.0,
-        "z": 150061.0
+        "x": 101065.0,
+        "y": 101065.0,
+        "z": 150390.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 19313.9
+        "z": 18388.9
       }
     },
     {
@@ -3214,9 +3214,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseA1",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3229,9 +3229,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseB1",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3244,9 +3244,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseC1",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3259,9 +3259,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseD1",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3274,9 +3274,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseA2",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseC",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3289,9 +3289,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseB2",
       "opposite_frame_name": "mk_axlebridge_rf__M_AxleBridge_PS_Spring_baseD",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3304,9 +3304,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseC2",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseA",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3319,9 +3319,9 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_PS_Spring_baseD2",
       "opposite_frame_name": "mk_axlebridge_rr__M_AxleBridge_PS_Spring_baseB",
       "stiffness_newtons_per_meter": {
-        "x": 750810.0,
-        "y": 750810.0,
-        "z": 646797.0
+        "x": 752924.0,
+        "y": 752924.0,
+        "z": 507289.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
@@ -3341,7 +3341,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3356,7 +3356,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3371,7 +3371,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3386,7 +3386,7 @@
       "damping_newton_seconds_per_meter": {
         "x": 100.0,
         "y": 100.0,
-        "z": 49676.6
+        "z": 49734.3
       }
     },
     {
@@ -3394,14 +3394,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_AirSpring_A",
       "opposite_frame_name": "mk_dum_rear__M_DUM_AirSpring_A",
       "stiffness_newtons_per_meter": {
-        "x": 100107.0,
-        "y": 100107.0,
-        "z": 150061.0
+        "x": 101065.0,
+        "y": 101065.0,
+        "z": 150390.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 19313.9
+        "z": 18388.9
       }
     },
     {
@@ -3409,14 +3409,14 @@
       "reference_frame_name": "mk_frame_rear__M_Frame_AirSpring_B",
       "opposite_frame_name": "mk_dum_rear__M_DUM_AirSpring_B",
       "stiffness_newtons_per_meter": {
-        "x": 100107.0,
-        "y": 100107.0,
-        "z": 150061.0
+        "x": 101065.0,
+        "y": 101065.0,
+        "z": 150390.0
       },
       "damping_newton_seconds_per_meter": {
         "x": 0.0,
         "y": 0.0,
-        "z": 19313.9
+        "z": 18388.9
       }
     },
     {
@@ -3455,14 +3455,14 @@
       "name": "front_ss_antiroll",
       "reference_frame_name": "mk_dum_front__M_DUM_AntiRoll",
       "opposite_frame_name": "mk_frame_front__M_Frame_AntiRoll",
-      "stiffness_newton_meters_per_radian": 1039880.0,
+      "stiffness_newton_meters_per_radian": 4899520.0,
       "damping_newton_meter_seconds_per_radian": 0.0
     },
     {
       "name": "rear_ss_antiroll",
       "reference_frame_name": "mk_dum_rear__M_DUM_AntiRoll",
       "opposite_frame_name": "mk_frame_rear__M_Frame_AntiRoll",
-      "stiffness_newton_meters_per_radian": 1039880.0,
+      "stiffness_newton_meters_per_radian": 4899520.0,
       "damping_newton_meter_seconds_per_radian": 0.0
     }
   ],
@@ -3471,8 +3471,8 @@
       "name": "front_ss_antihunting_A",
       "reference_frame_name": "mk_dum_front__M_DUM_AntiHuntingDmp_A",
       "opposite_frame_name": "mk_frame_front__M_Frame_AntiHuntingDmp_A",
-      "series_stiffness_newtons_per_meter": 10790000.0,
-      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "series_stiffness_newtons_per_meter": 8458310.0,
+      "damping_below_knee_newton_seconds_per_meter": 2681990.0,
       "knee_force_newtons": 10000.0,
       "damping_above_knee_newton_seconds_per_meter": 50000.0
     },
@@ -3480,8 +3480,8 @@
       "name": "front_ss_antihunting_B",
       "reference_frame_name": "mk_dum_front__M_DUM_AntiHuntingDmp_B",
       "opposite_frame_name": "mk_frame_front__M_Frame_AntiHuntingDmp_B",
-      "series_stiffness_newtons_per_meter": 10790000.0,
-      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "series_stiffness_newtons_per_meter": 8458310.0,
+      "damping_below_knee_newton_seconds_per_meter": 2681990.0,
       "knee_force_newtons": 10000.0,
       "damping_above_knee_newton_seconds_per_meter": 50000.0
     },
@@ -3489,8 +3489,8 @@
       "name": "rear_ss_antihunting_A",
       "reference_frame_name": "mk_dum_rear__M_DUM_AntiHuntingDmp_A",
       "opposite_frame_name": "mk_frame_rear__M_Frame_AntiHuntingDmp_A",
-      "series_stiffness_newtons_per_meter": 10790000.0,
-      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "series_stiffness_newtons_per_meter": 8458310.0,
+      "damping_below_knee_newton_seconds_per_meter": 2681990.0,
       "knee_force_newtons": 10000.0,
       "damping_above_knee_newton_seconds_per_meter": 50000.0
     },
@@ -3498,8 +3498,8 @@
       "name": "rear_ss_antihunting_B",
       "reference_frame_name": "mk_dum_rear__M_DUM_AntiHuntingDmp_B",
       "opposite_frame_name": "mk_frame_rear__M_Frame_AntiHuntingDmp_B",
-      "series_stiffness_newtons_per_meter": 10790000.0,
-      "damping_below_knee_newton_seconds_per_meter": 776988.0,
+      "series_stiffness_newtons_per_meter": 8458310.0,
+      "damping_below_knee_newton_seconds_per_meter": 2681990.0,
       "knee_force_newtons": 10000.0,
       "damping_above_knee_newton_seconds_per_meter": 50000.0
     },
@@ -3582,16 +3582,16 @@
       "reference_frame_name": "mk_dum_front__M_DUM_SSLatDmp",
       "opposite_frame_name": "mk_frame_front__M_Frame_SSLatDmp",
       "axis": "lateral",
-      "series_stiffness_newtons_per_meter": 9099530.0,
-      "series_damping_newton_seconds_per_meter": 23289.3
+      "series_stiffness_newtons_per_meter": 9817740.0,
+      "series_damping_newton_seconds_per_meter": 95764.9
     },
     {
       "name": "sslatdmp_1_mk_rear_BF_SLD",
       "reference_frame_name": "mk_dum_rear__M_DUM_SSLatDmp",
       "opposite_frame_name": "mk_frame_rear__M_Frame_SSLatDmp",
       "axis": "lateral",
-      "series_stiffness_newtons_per_meter": 9099530.0,
-      "series_damping_newton_seconds_per_meter": 23289.3
+      "series_stiffness_newtons_per_meter": 9817740.0,
+      "series_damping_newton_seconds_per_meter": 95764.9
     }
   ],
   "saturated_piecewise_linear_dampers": [],

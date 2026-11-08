@@ -38,7 +38,7 @@ using orvd::configuration::VehicleDefinition;
 using orvd::track_geometry::TrackGeometry;
 
 constexpr double kLayoutReferenceStationMeters = 0.0;
-constexpr double kPrimaryNominalForceNewtons = 21552.913954058386;
+constexpr double kPrimaryNominalForceNewtons = 21552.427682531303;
 constexpr double kAirSpringNominalForceNewtons = -61312.5;
 int failure_count = 0;
 
@@ -79,21 +79,21 @@ struct WheelState {
 
 constexpr std::array<WheelState, 8> kWheelStates{{
     {"rev_wheel_ff_l", "axlebridge_ff", "wheel_ff_l",
-     0.3153339734718726, 38.78228505759058},
+     0.3153339734718726, 38.78228502205281},
     {"rev_wheel_ff_r", "axlebridge_ff", "wheel_ff_r",
-     -0.06317638965070542, 38.78228505759053},
+     -0.06317638965070542, 38.782285022052854},
     {"rev_wheel_fr_l", "axlebridge_fr", "wheel_fr_l",
-     -0.025102324383414906, 38.782285057590514},
+     -0.025102324383414906, 38.78228502205282},
     {"rev_wheel_fr_r", "axlebridge_fr", "wheel_fr_r",
-     -0.33709418242954087, 38.7822850575905},
+     -0.33709418242954087, 38.782285022052854},
     {"rev_wheel_rf_l", "axlebridge_rf", "wheel_rf_l",
-     -0.002613479380619458, 38.782285057590464},
+     -0.002613479380619458, 38.78228502205286},
     {"rev_wheel_rf_r", "axlebridge_rf", "wheel_rf_r",
-     0.005577055870152081, 38.782285057590514},
+     0.005577055870152081, 38.78228502205285},
     {"rev_wheel_rr_l", "axlebridge_rr", "wheel_rr_l",
-     0.0005341934393015048, 38.78228505759046},
+     0.0005341934393015048, 38.78228502205285},
     {"rev_wheel_rr_r", "axlebridge_rr", "wheel_rr_r",
-     0.00021224274270999753, 38.7822850575905},
+     0.00021224274270999753, 38.78228502205286},
 }};
 
 struct SupportState {
@@ -106,14 +106,14 @@ struct SupportState {
 };
 
 constexpr std::array<SupportState, 4> kSupportStates{{
-    {"axlebridge_ff", 9.999999996527368, 49237.07792005307,
-     49237.077918773306},
-    {"axlebridge_fr", 7.500000003472632, 49237.07791839886,
-     49237.077917922805},
-    {"axlebridge_rf", -7.50000000347263, 49237.07791714347,
-     49237.07791839171},
-    {"axlebridge_rr", -9.999999996527372, 49237.07791699335,
-     49237.07791808929},
+    {"axlebridge_ff", 9.999999994586057, 49236.10536445693,
+     49236.105365583695},
+    {"axlebridge_fr", 7.500000005413945, 49236.10536469807,
+     49236.10536533664},
+    {"axlebridge_rf", -7.500000005413945, 49236.1053655224,
+     49236.10536531167},
+    {"axlebridge_rr", -9.999999994586055, 49236.105365417316,
+     49236.10536598847},
 }};
 
 double MechanicalStationOffset(const VehicleDefinition& vehicle,
@@ -206,7 +206,7 @@ void CheckRecordIdentity(const ResolvedStartupState& state) {
     // transformation from copying SIMPACK XYZ angles into ORVD RPY slots.
     const auto& front_a = BallState(state, "ball_longibar_front_A");
     Require(front_a.roll_pitch_yaw_angles_radians ==
-                Eigen::Vector3d(0.00010796672996660206, -1.0170248598839748e-07, 1.8411889140409292) &&
+                Eigen::Vector3d(0.00013804334599254453, 5.291564897369483e-08, 1.3664738603720663) &&
                 front_a
                     .angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second ==
                     Eigen::Vector3d::Zero(),
@@ -214,7 +214,7 @@ void CheckRecordIdentity(const ResolvedStartupState& state) {
             "physical angular velocity");
     const auto& rear_d = BallState(state, "ball_longibar_rear_D");
     Require(rear_d.roll_pitch_yaw_angles_radians ==
-                Eigen::Vector3d(0.0001079667299692666, -8.043427635051614e-08, -1.3004037395465684),
+                Eigen::Vector3d(0.00013804334599365475, 7.552417935485778e-08, -1.775118793214606),
             "rear-D Ball-RPY keeps its distinct transformed coordinate");
 
     for (const auto& body : state.free_body_startup_states) {

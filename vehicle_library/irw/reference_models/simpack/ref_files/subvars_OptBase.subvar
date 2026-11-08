@@ -4,31 +4,31 @@ subvar.str (                        $_TargetVelocity              ) = '148.047' 
 
 subvar.str (                        $_sprCpz                      ) = '5000'                  ! Definition
 
-subvar.str (                        $_Kpx                         ) = '750810'               ! Definition
+subvar.str (                        $_Kpx                         ) = '752924'               ! Definition
 
-subvar.str (                        $_Kpy                         ) = '750810'               ! Definition
+subvar.str (                        $_Kpy                         ) = '752924'               ! Definition
 
-subvar.str (                        $_Kpz                         ) = '646797'                ! Definition
+subvar.str (                        $_Kpz                         ) = '507289'                ! Definition
 
-subvar.str (                        $_Cpz                         ) = '49676.6'                 ! Definition
+subvar.str (                        $_Cpz                         ) = '49734.3'                 ! Definition
 
-subvar.str (                        $_Ksx                         ) = '100107'                 ! Definition
+subvar.str (                        $_Ksx                         ) = '101065'                 ! Definition
 
-subvar.str (                        $_Ksy                         ) = '100107'                 ! Definition
+subvar.str (                        $_Ksy                         ) = '101065'                 ! Definition
 
-subvar.str (                        $_Ksz                         ) = '150061'                 ! Definition
+subvar.str (                        $_Ksz                         ) = '150390'                 ! Definition
 
-subvar.str (                        $_Csz                         ) = '19313.9'                  ! Definition
+subvar.str (                        $_Csz                         ) = '18388.9'                  ! Definition
 
-subvar.str (                        $_Kld                         ) = '9.09953e+06'               ! Definition
+subvar.str (                        $_Kld                         ) = '9.81774e+06'               ! Definition
 
-subvar.str (                        $_Cld                         ) = '23289.3'                 ! Definition
+subvar.str (                        $_Cld                         ) = '95764.9'                 ! Definition
 
-subvar.str (                        $_Kaar                        ) = '1.03988e+06'               ! Definition
+subvar.str (                        $_Kaar                        ) = '4.89952e+06'               ! Definition
 
 subvar.str (                        $_Kstr                        ) = '1e+07'                 ! Definition
 
-subvar.str (                        $_Chx                         ) = '776988'                ! Definition
+subvar.str (                        $_Chx                         ) = '2.68199e+06'                ! Definition
 
 subvar.str (                        $_Mc                          ) = '25000'                 ! Definition
 
@@ -58,13 +58,13 @@ subvar.str (                        $_Iwy                         ) = '100'     
 
 subvar.str (                        $_Iwz                         ) = '560'                   ! Definition
 
-subvar.str (                        $_Lx1                         ) = '0.227818'                  ! Definition
+subvar.str (                        $_Lx1                         ) = '0.634851'                  ! Definition
 
-subvar.str (                        $_Lx2                         ) = '0.576328'                  ! Definition
+subvar.str (                        $_Lx2                         ) = '0.371508'                  ! Definition
 
-subvar.str (                        $_Lx3                         ) = '-0.193831'                   ! Definition
+subvar.str (                        $_Lx3                         ) = '-0.187063'                   ! Definition
 
-subvar.str (                        $_Khx                         ) = '1.079e+07'               ! Definition
+subvar.str (                        $_Khx                         ) = '8.45831e+06'               ! Definition
 
 subvar.str (                        $_Fhx                         ) = '10000'                   ! Definition
 

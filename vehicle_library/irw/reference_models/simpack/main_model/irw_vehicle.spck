@@ -402,11 +402,11 @@ joint.from (                        $J_Carbody                    ) = $M_Isys   
 joint.to (                          $J_Carbody                    ) = $M_Carbody_BRF          ! To Marker
 joint.type (                        $J_Carbody                    ) = 7                       ! Type
 joint.st.pos (            1 ,       $J_Carbody                    ) = 0.00000000000000000E+00 ! Position
-joint.st.pos (            2 ,       $J_Carbody                    ) = 2.72084245357425678E-16 ! Position
-joint.st.pos (            3 ,       $J_Carbody                    ) = 1.36795098988844215E-04 ! Position
-joint.st.pos (            4 ,       $J_Carbody                    ) = 3.53735399188853769E-17 ! Position
-joint.st.pos (            5 ,       $J_Carbody                    ) = 1.82120134701172126E-17 ! Position
-joint.st.pos (            6 ,       $J_Carbody                    ) = 8.99079546634603190E-18 ! Position
+joint.st.pos (            2 ,       $J_Carbody                    ) = -1.09703418688944595E-16 ! Position
+joint.st.pos (            3 ,       $J_Carbody                    ) = 1.17577545975369857E-04 ! Position
+joint.st.pos (            4 ,       $J_Carbody                    ) = 1.87486998606788134E-16 ! Position
+joint.st.pos (            5 ,       $J_Carbody                    ) = -9.53328024852406355E-17 ! Position
+joint.st.pos (            6 ,       $J_Carbody                    ) = 1.04246973722984881E-17 ! Position
 joint.st.vel (            1 ,       $J_Carbody                    ) = 1.66666666666666679E+01 ! Velocity
 joint.st.vel (            2 ,       $J_Carbody                    ) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $J_Carbody                    ) = 0.00000000000000000E+00 ! Velocity
@@ -4598,11 +4598,11 @@ marker.pos ( 2 , $S_IRWBogie_Front.$M_Frame_LatDamper_C ) = { -($_Lx2/2+0.3) } !
 marker.pos ( 2 , $S_IRWBogie_Front.$M_Frame_LatDamper_D ) = { ($_Lx2/2+0.3) } ! Position
 
 joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_Frame    ) = 8.75000000000000000E+00 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_Frame    ) = 3.72736084060169294E-16 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_Frame    ) = -4.29895891608416958E-01 ! Position
-joint.st.pos (            4 ,       $S_IRWBogie_Front.$J_Frame    ) = 9.33268432114788337E-17 ! Position
-joint.st.pos (            5 ,       $S_IRWBogie_Front.$J_Frame    ) = 7.88648170118015554E-17 ! Position
-joint.st.pos (            6 ,       $S_IRWBogie_Front.$J_Frame    ) = 1.85475755856685177E-16 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_Frame    ) = -1.00763936711950877E-15 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_Frame    ) = -4.29915037654503618E-01 ! Position
+joint.st.pos (            4 ,       $S_IRWBogie_Front.$J_Frame    ) = 2.65352709419892761E-16 ! Position
+joint.st.pos (            5 ,       $S_IRWBogie_Front.$J_Frame    ) = 8.39065907994334551E-18 ! Position
+joint.st.pos (            6 ,       $S_IRWBogie_Front.$J_Frame    ) = -3.03426098394275002E-18 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$J_Frame    ) = 1.66666666666666679E+01 ! Velocity
 
 
@@ -4635,9 +4635,9 @@ marker.ang (              3 ,       $S_IRWBogie_Front.$M_LongiBar_A_FrameSide) =
 
 marker.pos (              2 ,       $S_IRWBogie_Front.$M_LongiBar_A_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_A) = -2.87409623848018883E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_A) = -1.04071044038531096E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_A) = 4.44199639163761617E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_A) = 2.79577000844863950E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_A) = -1.35182599411565136E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_A) = 4.91671144870086962E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$J_LongiBar_A) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Front.$J_LongiBar_A) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Front.$J_LongiBar_A) = 0.00000000000000000E+00 ! Velocity
@@ -4651,9 +4651,9 @@ marker.ang (              3 ,       $S_IRWBogie_Front.$M_LongiBar_B_FrameSide) =
 
 marker.pos (              2 ,       $S_IRWBogie_Front.$M_LongiBar_B_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_B) = 2.88062694252986420E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_B) = -1.04052942178257138E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_B) = 4.98278156913856041E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_B) = -2.79575913309801436E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_B) = -1.35182621946714718E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_B) = 4.50806651206851683E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$J_LongiBar_B) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Front.$J_LongiBar_B) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Front.$J_LongiBar_B) = 0.00000000000000000E+00 ! Velocity
@@ -4667,9 +4667,9 @@ marker.ang (              3 ,       $S_IRWBogie_Front.$M_LongiBar_C_FrameSide) =
 
 marker.pos (              2 ,       $S_IRWBogie_Front.$M_LongiBar_C_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_C) = -2.87811257705938003E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 1.04059911515363095E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 1.84118891554615249E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 2.79676782508885058E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 1.35180531800407574E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 1.36647385847736236E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Front.$J_LongiBar_C) = 0.00000000000000000E+00 ! Velocity
@@ -4683,9 +4683,9 @@ marker.ang (              3 ,       $S_IRWBogie_Front.$M_LongiBar_D_FrameSide) =
 
 marker.pos (              2 ,       $S_IRWBogie_Front.$M_LongiBar_D_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 2.87607302075492922E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 1.04065564774683225E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 1.30040373804576781E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Front.$J_LongiBar_D) = -2.79678895658361592E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 1.35180488012470051E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 1.77511879511245785E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Front.$J_LongiBar_D) = 0.00000000000000000E+00 ! Velocity
@@ -4725,7 +4725,7 @@ constr.par (              9 ,       $S_IRWBogie_Front.$L_LockLR_B ) = 0.00000000
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_A1) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4733,7 +4733,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_A1) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_B1) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4741,7 +4741,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_B1) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_C1) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4749,7 +4749,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_C1) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_D1) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4757,7 +4757,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_D1) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_A2) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4765,7 +4765,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_A2) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_B2) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4773,7 +4773,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_B2) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_C2) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4781,7 +4781,7 @@ force.par (              28 ,       $S_IRWBogie_Front.$F_PS_Spring_C2) = $_sprCp
 
 force.preld.calc (        4 ,       $S_IRWBogie_Front.$F_PS_Spring_D2) = 0                    ! Select Preload cal.
 force.txt (                         $S_IRWBogie_Front.$F_PS_Spring_D2) = '注意项目4的符号（负号）' ! Comment
-force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_D2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Front.$F_PS_Spring_D2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Front.$F_PS_Spring_D2) = $_Kpx                ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Front.$F_PS_Spring_D2) = $_Kpy                ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Front.$F_PS_Spring_D2) = $_Kpz                ! [N/m] Transl. par. stiffness cp_z
@@ -4968,7 +4968,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Front.$S_IRW_Front.$B_IRW_L) = 5
 body.I.tens (             3 ,   3 , $S_IRWBogie_Front.$S_IRW_Front.$B_IRW_L) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_IRW_L) = -3.15333973471872586E-01 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_IRW_L) = -3.87822850575905775E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_IRW_L) = -3.87822850220528110E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Front.$S_IRW_Front.$B_IRW_R) = 5.00000000000000000E+02 ! Mass of the Body
@@ -4977,7 +4977,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Front.$S_IRW_Front.$B_IRW_R) = 5
 body.I.tens (             3 ,   3 , $S_IRWBogie_Front.$S_IRW_Front.$B_IRW_R) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_IRW_R) = 6.31763896507054196E-02 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_IRW_R) = -3.87822850575905278E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_IRW_R) = -3.87822850220528537E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Front.$S_IRW_Front.$B_AxleBridge) = 2.50000000000000000E+02 ! Mass of the Body
@@ -4989,12 +4989,12 @@ marker.pos (              2 ,       $S_IRWBogie_Front.$S_IRW_Front.$M_AxleBridge
 
 marker.pos (              2 ,       $S_IRWBogie_Front.$S_IRW_Front.$M_AxleBridge_LongiBar_B) = { $_Lx2/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 9.99999999652736804E+00 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 5.92839783526802382E-16 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = -4.29824530193046450E-01 ! Position
-joint.st.pos (            4 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 2.41992909585810438E-16 ! Position
-joint.st.pos (            5 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = -1.72742539867300933E-16 ! Position
-joint.st.pos (            6 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = -6.03312350598972879E-09 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 9.99999999458605693E+00 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 1.06749268797780262E-15 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = -4.29824530634332846E-01 ! Position
+joint.st.pos (            4 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 1.54317743960596203E-16 ! Position
+joint.st.pos (            5 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 7.45252507308014422E-15 ! Position
+joint.st.pos (            6 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = -1.18003865079200349E-08 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 1.66666666666666679E+01 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
@@ -5003,11 +5003,11 @@ joint.st.vel (            5 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge
 joint.st.vel (            6 ,       $S_IRWBogie_Front.$S_IRW_Front.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 
 
-force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 2.46836160017048858E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 4.92370779200530669E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 2.46832398718279344E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 4.92361053644569329E+04 ! [N] Nominal preload
 
-force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 2.46836261791837024E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 4.92370779187733060E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 2.46832351941801431E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 4.92361053655836949E+04 ! [N] Nominal preload
 
 rail.gaugepos (                     $S_IRWBogie_Front.$S_IRW_Front.$RWR_Rail) = 1.60000000000000003E-02 ! Gauge measurement position
 
@@ -5037,7 +5037,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Front.$S_IRW_Rear.$B_IRW_L) = 5.
 body.I.tens (             3 ,   3 , $S_IRWBogie_Front.$S_IRW_Rear.$B_IRW_L) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_IRW_L) = 2.51023243834149062E-02 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_IRW_L) = -3.87822850575905136E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_IRW_L) = -3.87822850220528181E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Front.$S_IRW_Rear.$B_IRW_R) = 5.00000000000000000E+02 ! Mass of the Body
@@ -5046,7 +5046,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Front.$S_IRW_Rear.$B_IRW_R) = 5.
 body.I.tens (             3 ,   3 , $S_IRWBogie_Front.$S_IRW_Rear.$B_IRW_R) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_IRW_R) = 3.37094182429540867E-01 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_IRW_R) = -3.87822850575904994E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_IRW_R) = -3.87822850220528537E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Front.$S_IRW_Rear.$B_AxleBridge) = 2.50000000000000000E+02 ! Mass of the Body
@@ -5058,12 +5058,12 @@ marker.pos (              2 ,       $S_IRWBogie_Front.$S_IRW_Rear.$M_AxleBridge_
 
 marker.pos (              2 ,       $S_IRWBogie_Front.$S_IRW_Rear.$M_AxleBridge_LongiBar_B) = { $_Lx2/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 7.50000000347263196E+00 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = -8.03234525722621105E-17 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = -4.29824530193046284E-01 ! Position
-joint.st.pos (            4 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 1.53682486830156127E-16 ! Position
-joint.st.pos (            5 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = -1.60919173318870348E-15 ! Position
-joint.st.pos (            6 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 6.03312594386234114E-09 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 7.50000000541394485E+00 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = -1.09186931900444221E-15 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = -4.29824530634332735E-01 ! Position
+joint.st.pos (            4 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = -1.50027748747285880E-16 ! Position
+joint.st.pos (            5 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 6.26291772796146413E-16 ! Position
+joint.st.pos (            6 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 1.18003813734444043E-08 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 1.66666666666666679E+01 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
@@ -5072,11 +5072,11 @@ joint.st.vel (            5 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge)
 joint.st.vel (            6 ,       $S_IRWBogie_Front.$S_IRW_Rear.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 
 
-force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 2.46836266909837153E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 4.92370779183988634E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 2.46832419291901064E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 4.92361053646980727E+04 ! [N] Nominal preload
 
-force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 2.46836296967263432E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 4.92370779179228048E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 2.46832400938204965E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Front.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 4.92361053653366398E+04 ! [N] Nominal preload
 
 rail.gaugepos (                     $S_IRWBogie_Front.$S_IRW_Rear.$RWR_Rail) = 1.60000000000000003E-02 ! Gauge measurement position
 
@@ -5142,11 +5142,11 @@ marker.pos ( 2 , $S_IRWBogie_Rear.$M_Frame_LatDamper_C ) = { -($_Lx2/2+0.3) } ! 
 marker.pos ( 2 , $S_IRWBogie_Rear.$M_Frame_LatDamper_D ) = { ($_Lx2/2+0.3) } ! Position
 
 joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_Frame     ) = -8.75000000000000000E+00 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_Frame     ) = 1.18352961655750705E-16 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_Frame     ) = -4.29895891608416791E-01 ! Position
-joint.st.pos (            4 ,       $S_IRWBogie_Rear.$J_Frame     ) = -1.88932789791093521E-17 ! Position
-joint.st.pos (            5 ,       $S_IRWBogie_Rear.$J_Frame     ) = 1.33784666405720329E-16 ! Position
-joint.st.pos (            6 ,       $S_IRWBogie_Rear.$J_Frame     ) = -3.89040046202171331E-18 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_Frame     ) = 5.97396500529724282E-16 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_Frame     ) = -4.29915037654503451E-01 ! Position
+joint.st.pos (            4 ,       $S_IRWBogie_Rear.$J_Frame     ) = 1.01817873769246440E-16 ! Position
+joint.st.pos (            5 ,       $S_IRWBogie_Rear.$J_Frame     ) = -1.13129516618542838E-16 ! Position
+joint.st.pos (            6 ,       $S_IRWBogie_Rear.$J_Frame     ) = 3.33367853465072474E-17 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$J_Frame     ) = 1.66666666666666679E+01 ! Velocity
 
 
@@ -5178,9 +5178,9 @@ marker.ang (              3 ,       $S_IRWBogie_Rear.$M_LongiBar_A_FrameSide) = 
 
 marker.pos (              2 ,       $S_IRWBogie_Rear.$M_LongiBar_A_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = -2.87349778685616709E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = -1.04072702830878460E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = 4.44199639163823790E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = 2.79578500498031846E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = -1.35182568341380788E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = 4.91671144870089538E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_A) = 0.00000000000000000E+00 ! Velocity
@@ -5194,9 +5194,9 @@ marker.ang (              3 ,       $S_IRWBogie_Rear.$M_LongiBar_B_FrameSide) = 
 
 marker.pos (              2 ,       $S_IRWBogie_Rear.$M_LongiBar_B_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = 2.88400756966170806E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = -1.04043571726608527E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = 4.98278156914207848E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = -2.79580951426411705E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = -1.35182517554597399E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = 4.50806651206845288E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_B) = 0.00000000000000000E+00 ! Velocity
@@ -5210,9 +5210,9 @@ marker.ang (              3 ,       $S_IRWBogie_Rear.$M_LongiBar_C_FrameSide) = 
 
 marker.pos (              2 ,       $S_IRWBogie_Rear.$M_LongiBar_C_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = -2.88110041635375965E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 1.04051629802394532E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 1.84118891554925890E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 2.79352861333658916E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 1.35187243899065568E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 1.36647385848173863E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_C) = 0.00000000000000000E+00 ! Velocity
@@ -5226,9 +5226,9 @@ marker.ang (              3 ,       $S_IRWBogie_Rear.$M_LongiBar_D_FrameSide) = 
 
 marker.pos (              2 ,       $S_IRWBogie_Rear.$M_LongiBar_D_WheelSide) = { $_L_bar/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 2.87614578387886448E-05 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 1.04065363094190267E-04 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 1.30040373804569054E+00 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = -2.79355618412058525E-05 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 1.35187186768373680E-04 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 1.77511879510808468E+00 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Rear.$J_LongiBar_D) = 0.00000000000000000E+00 ! Velocity
@@ -5267,56 +5267,56 @@ constr.par (              8 ,       $S_IRWBogie_Rear.$L_LockLR_B  ) = 0.00000000
 constr.par (              9 ,       $S_IRWBogie_Rear.$L_LockLR_B  ) = 0.00000000000000000E+00 ! [rad] Rotation about ga
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_A1) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_B1) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_C1) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_D1) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_A2) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_B2) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
 force.par (              28 ,       $S_IRWBogie_Rear.$F_PS_Spring_C2) = $_sprCpz              ! [Ns/m] Transl. par. damping dp_z
 
 force.preld.calc (        4 ,       $S_IRWBogie_Rear.$F_PS_Spring_D2) = 0                     ! Select Preload cal.
-force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_D2) = -2.15529139540583856E+04 ! [N] Nominal force F_nom_z
+force.par (               4 ,       $S_IRWBogie_Rear.$F_PS_Spring_D2) = -2.15524276825313027E+04 ! [N] Nominal force F_nom_z
 force.par (              20 ,       $S_IRWBogie_Rear.$F_PS_Spring_D2) = $_Kpx                 ! [N/m] Transl. par. stiffness cp_x
 force.par (              21 ,       $S_IRWBogie_Rear.$F_PS_Spring_D2) = $_Kpy                 ! [N/m] Transl. par. stiffness cp_y
 force.par (              22 ,       $S_IRWBogie_Rear.$F_PS_Spring_D2) = $_Kpz                 ! [N/m] Transl. par. stiffness cp_z
@@ -5507,7 +5507,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Rear.$S_IRW_Front.$B_IRW_L) = 5.
 body.I.tens (             3 ,   3 , $S_IRWBogie_Rear.$S_IRW_Front.$B_IRW_L) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_IRW_L) = 2.61347938061945798E-03 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_IRW_L) = -3.87822850575904639E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_IRW_L) = -3.87822850220528608E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Rear.$S_IRW_Front.$B_IRW_R) = 5.00000000000000000E+02 ! Mass of the Body
@@ -5516,7 +5516,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Rear.$S_IRW_Front.$B_IRW_R) = 5.
 body.I.tens (             3 ,   3 , $S_IRWBogie_Rear.$S_IRW_Front.$B_IRW_R) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_IRW_R) = -5.57705587015208063E-03 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_IRW_R) = -3.87822850575905136E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_IRW_R) = -3.87822850220528466E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Rear.$S_IRW_Front.$B_AxleBridge) = 2.50000000000000000E+02 ! Mass of the Body
@@ -5528,12 +5528,12 @@ marker.pos (              2 ,       $S_IRWBogie_Rear.$S_IRW_Front.$M_AxleBridge_
 
 marker.pos (              2 ,       $S_IRWBogie_Rear.$S_IRW_Front.$M_AxleBridge_LongiBar_B) = { $_Lx2/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -7.50000000347263018E+00 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 2.86745479534766570E-16 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -4.29824530193046395E-01 ! Position
-joint.st.pos (            4 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -5.29397930535548559E-17 ! Position
-joint.st.pos (            5 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 5.86588051271030330E-16 ! Position
-joint.st.pos (            6 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -6.03312457261399644E-09 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -7.50000000541394485E+00 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 3.33014390318250313E-16 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -4.29824530634332569E-01 ! Position
+joint.st.pos (            4 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -7.82186098038124827E-17 ! Position
+joint.st.pos (            5 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -9.89554300706705865E-16 ! Position
+joint.st.pos (            6 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = -1.18003819315296326E-08 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 1.66666666666666679E+01 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
@@ -5542,11 +5542,11 @@ joint.st.vel (            5 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge)
 joint.st.vel (            6 ,       $S_IRWBogie_Rear.$S_IRW_Front.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 
 
-force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 2.46836316060217421E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 4.92370779171434697E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 2.46832363983621875E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Left) = 4.92361053655224023E+04 ! [N] Nominal preload
 
-force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 2.46836265507705217E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 4.92370779183917111E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 2.46832377354382626E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Front.$F_RWContact_RWP_IRW_Right) = 4.92361053653116687E+04 ! [N] Nominal preload
 
 rail.gaugepos (                     $S_IRWBogie_Rear.$S_IRW_Front.$RWR_Rail) = 1.60000000000000003E-02 ! Gauge measurement position
 
@@ -5576,7 +5576,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Rear.$S_IRW_Rear.$B_IRW_L) = 5.0
 body.I.tens (             3 ,   3 , $S_IRWBogie_Rear.$S_IRW_Rear.$B_IRW_L) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_IRW_L) = -5.34193439301504759E-04 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_IRW_L) = -3.87822850575904567E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_IRW_L) = -3.87822850220528466E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Rear.$S_IRW_Rear.$B_IRW_R) = 5.00000000000000000E+02 ! Mass of the Body
@@ -5585,7 +5585,7 @@ body.I.tens (             2 ,   2 , $S_IRWBogie_Rear.$S_IRW_Rear.$B_IRW_R) = 5.0
 body.I.tens (             3 ,   3 , $S_IRWBogie_Rear.$S_IRW_Rear.$B_IRW_R) = 2.80000000000000000E+02 ! Moments of inertia
 
 joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_IRW_R) = -2.12242742709997526E-04 ! Position
-joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_IRW_R) = -3.87822850575904994E+01 ! Velocity
+joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_IRW_R) = -3.87822850220528608E+01 ! Velocity
 
 
 body.m (                            $S_IRWBogie_Rear.$S_IRW_Rear.$B_AxleBridge) = 2.50000000000000000E+02 ! Mass of the Body
@@ -5597,12 +5597,12 @@ marker.pos (              2 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$M_AxleBridge_L
 
 marker.pos (              2 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$M_AxleBridge_LongiBar_B) = { $_Lx2/2 } ! Position
 
-joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -9.99999999652737159E+00 ! Position
-joint.st.pos (            2 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -3.00672842477156751E-16 ! Position
-joint.st.pos (            3 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -4.29824530193046339E-01 ! Position
-joint.st.pos (            4 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -2.31971015691587943E-17 ! Position
-joint.st.pos (            5 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -7.00588750854872824E-17 ! Position
-joint.st.pos (            6 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 6.03312086798310567E-09 ! Position
+joint.st.pos (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -9.99999999458605515E+00 ! Position
+joint.st.pos (            2 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -3.34443269546789520E-16 ! Position
+joint.st.pos (            3 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -4.29824530634332569E-01 ! Position
+joint.st.pos (            4 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = -3.99060354776489949E-17 ! Position
+joint.st.pos (            5 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 4.53414688118408682E-15 ! Position
+joint.st.pos (            6 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 1.18003856155800944E-08 ! Position
 joint.st.vel (            1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 1.66666666666666679E+01 ! Velocity
 joint.st.vel (            2 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 joint.st.vel (            3 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
@@ -5611,11 +5611,11 @@ joint.st.vel (            5 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) 
 joint.st.vel (            6 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$J_AxleBridge) = 0.00000000000000000E+00 ! Velocity
 
 
-force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 2.46836328958573339E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 4.92370779169933521E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 2.46832378755420575E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Left) = 4.92361053654173156E+04 ! [N] Nominal preload
 
-force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 2.46836281508492681E-09 ! Descriptive states
-force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 4.92370779180892932E+04 ! [N] Nominal preload
+force.st.desc (           1 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 2.46832360378115045E-09 ! Descriptive states
+force.par (              10 ,       $S_IRWBogie_Rear.$S_IRW_Rear.$F_RWContact_RWP_IRW_Right) = 4.92361053659884710E+04 ! [N] Nominal preload
 
 rail.gaugepos (                     $S_IRWBogie_Rear.$S_IRW_Rear.$RWR_Rail) = 1.60000000000000003E-02 ! Gauge measurement position
 

@@ -409,8 +409,8 @@ void CheckRealIrwRun(char** argv, const std::filesystem::path& root) {
     constexpr std::array<std::string_view, 4> kCarrierNames{
         "axlebridge_ff", "axlebridge_fr", "axlebridge_rf", "axlebridge_rr"};
     constexpr std::array<double, 4> kInitialStations{
-        9.999999996527368, 7.500000003472632,
-        -7.5000000034726302, -9.9999999965273716};
+        9.999999994586057, 7.500000005413945,
+        -7.500000005413945, -9.999999994586055};
     for (std::size_t carrier = 0; carrier < kCarrierNames.size(); ++carrier) {
         const std::size_t station = FindColumn(
             header, std::string(kCarrierNames[carrier]) +

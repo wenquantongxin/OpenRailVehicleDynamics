@@ -13,41 +13,41 @@
   "running_direction": "increasing_track_station",
   "initial_longitudinal_speed_meters_per_second": 16.666666666666668,
   "common_wheel_spin_generation": null,
-  "rail_profile_reference_vertical_offset_meters": 2.3002505302429202e-08,
+  "rail_profile_reference_vertical_offset_meters": 2.3002624511718752e-08,
   "wheel_pair_target_support_forces": [
     {
       "station_reference_body_name": "axlebridge_ff",
-      "left_support_force_newtons": 49237.07792005307,
-      "right_support_force_newtons": 49237.077918773306
+      "left_support_force_newtons": 49236.10536445693,
+      "right_support_force_newtons": 49236.105365583695
     },
     {
       "station_reference_body_name": "axlebridge_fr",
-      "left_support_force_newtons": 49237.07791839886,
-      "right_support_force_newtons": 49237.077917922805
+      "left_support_force_newtons": 49236.10536469807,
+      "right_support_force_newtons": 49236.10536533664
     },
     {
       "station_reference_body_name": "axlebridge_rf",
-      "left_support_force_newtons": 49237.07791714347,
-      "right_support_force_newtons": 49237.07791839171
+      "left_support_force_newtons": 49236.1053655224,
+      "right_support_force_newtons": 49236.10536531167
     },
     {
       "station_reference_body_name": "axlebridge_rr",
-      "left_support_force_newtons": 49237.07791699335,
-      "right_support_force_newtons": 49237.07791808929
+      "left_support_force_newtons": 49236.105365417316,
+      "right_support_force_newtons": 49236.10536598847
     }
   ],
   "free_body_startup_states": [
     {
       "body_name": "carbody",
       "rotation_local_track_from_body": {
-        "w": -1.768676995944269e-17,
+        "w": -9.374349930339407e-17,
         "x": 1.0,
-        "y": 9.106006735058606e-18,
-        "z": -4.495397733173016e-18
+        "y": -4.766640124262032e-17,
+        "z": -5.212348686149249e-18
       },
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
-      "lateral_offset_in_local_track_frame_meters": 2.720842453574257e-16,
-      "vertical_offset_in_local_track_frame_meters": 0.00013679509898884422,
+      "lateral_offset_in_local_track_frame_meters": -1.097034186889446e-16,
+      "vertical_offset_in_local_track_frame_meters": 0.00011757754597536986,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -64,14 +64,14 @@
     {
       "body_name": "frame_front",
       "rotation_local_track_from_body": {
-        "w": -4.6663421605739417e-17,
+        "w": -1.3267635470994638e-16,
         "x": 1.0,
-        "y": 3.943240850590078e-17,
-        "z": -9.273787792834259e-17
+        "y": 4.195329539971673e-18,
+        "z": 1.5171304919713756e-18
       },
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
-      "lateral_offset_in_local_track_frame_meters": 3.727360840601693e-16,
-      "vertical_offset_in_local_track_frame_meters": -0.42989589160841696,
+      "lateral_offset_in_local_track_frame_meters": -1.0076393671195088e-15,
+      "vertical_offset_in_local_track_frame_meters": -0.4299150376545036,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -88,14 +88,14 @@
     {
       "body_name": "frame_rear",
       "rotation_local_track_from_body": {
-        "w": 9.446639489554676e-18,
+        "w": -5.090893688462322e-17,
         "x": 1.0,
-        "y": 6.689233320286016e-17,
-        "z": 1.945200231010856e-18
+        "y": -5.656475830927142e-17,
+        "z": -1.6668392673253627e-17
       },
       "resolved_track_station_offset_from_mechanical_layout_meters": 0.0,
-      "lateral_offset_in_local_track_frame_meters": 1.183529616557507e-16,
-      "vertical_offset_in_local_track_frame_meters": -0.4298958916084168,
+      "lateral_offset_in_local_track_frame_meters": 5.973965005297243e-16,
+      "vertical_offset_in_local_track_frame_meters": -0.42991503765450345,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -112,14 +112,14 @@
     {
       "body_name": "axlebridge_ff",
       "rotation_local_track_from_body": {
-        "w": -1.2099645453236095e-16,
+        "w": -7.715889396596718e-17,
         "x": 1.0,
-        "y": -8.637127029864374e-17,
-        "z": 3.0165617529948644e-09
+        "y": 3.72626253608482e-15,
+        "z": 5.9001932539600175e-09
       },
-      "resolved_track_station_offset_from_mechanical_layout_meters": -3.472631959766659e-09,
-      "lateral_offset_in_local_track_frame_meters": 5.928397835268024e-16,
-      "vertical_offset_in_local_track_frame_meters": -0.42982453019304645,
+      "resolved_track_station_offset_from_mechanical_layout_meters": -5.413943071630456e-09,
+      "lateral_offset_in_local_track_frame_meters": 1.0674926879778026e-15,
+      "vertical_offset_in_local_track_frame_meters": -0.42982453063433285,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -136,14 +136,14 @@
     {
       "body_name": "axlebridge_fr",
       "rotation_local_track_from_body": {
-        "w": -7.684124584219216e-17,
+        "w": 7.501387622126338e-17,
         "x": 1.0,
-        "y": -8.045958663625553e-16,
-        "z": -3.0165629719311706e-09
+        "y": 3.1314588595547703e-16,
+        "z": -5.900190686722202e-09
       },
-      "resolved_track_station_offset_from_mechanical_layout_meters": 3.472631959766659e-09,
-      "lateral_offset_in_local_track_frame_meters": -8.032345257226211e-17,
-      "vertical_offset_in_local_track_frame_meters": -0.4298245301930463,
+      "resolved_track_station_offset_from_mechanical_layout_meters": 5.413944847987295e-09,
+      "lateral_offset_in_local_track_frame_meters": -1.0918693190044422e-15,
+      "vertical_offset_in_local_track_frame_meters": -0.42982453063433274,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -160,14 +160,14 @@
     {
       "body_name": "axlebridge_rf",
       "rotation_local_track_from_body": {
-        "w": 2.6469895642037734e-17,
+        "w": 3.910930782118591e-17,
         "x": 1.0,
-        "y": 2.9329402571536327e-16,
-        "z": 3.0165622863069982e-09
+        "y": -4.947771501226006e-16,
+        "z": 5.900190965764816e-09
       },
-      "resolved_track_station_offset_from_mechanical_layout_meters": -3.4726301834098194e-09,
-      "lateral_offset_in_local_track_frame_meters": 2.8674547953476657e-16,
-      "vertical_offset_in_local_track_frame_meters": -0.4298245301930464,
+      "resolved_track_station_offset_from_mechanical_layout_meters": -5.413944847987295e-09,
+      "lateral_offset_in_local_track_frame_meters": 3.330143903182503e-16,
+      "vertical_offset_in_local_track_frame_meters": -0.42982453063433257,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -184,14 +184,14 @@
     {
       "body_name": "axlebridge_rr",
       "rotation_local_track_from_body": {
-        "w": 1.1598550678910981e-17,
+        "w": 1.9953031114994905e-17,
         "x": 1.0,
-        "y": -3.502943757773137e-17,
-        "z": -3.016560433991553e-09
+        "y": 2.267073440474317e-15,
+        "z": -5.900192807790047e-09
       },
-      "resolved_track_station_offset_from_mechanical_layout_meters": 3.47262840705298e-09,
-      "lateral_offset_in_local_track_frame_meters": -3.0067284247715675e-16,
-      "vertical_offset_in_local_track_frame_meters": -0.42982453019304634,
+      "resolved_track_station_offset_from_mechanical_layout_meters": 5.413944847987295e-09,
+      "lateral_offset_in_local_track_frame_meters": -3.344432695467895e-16,
+      "vertical_offset_in_local_track_frame_meters": -0.42982453063433257,
       "explicit_body_angular_velocity_in_inertial_expressed_in_body_frame_radians_per_second": {
         "x": 0.0,
         "y": 0.0,
@@ -212,7 +212,7 @@
       "position_radians": 0.3153339734718726,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.78228505759058
+        "angular_rate_radians_per_second": 38.78228502205281
       }
     },
     {
@@ -220,7 +220,7 @@
       "position_radians": -0.06317638965070542,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.78228505759053
+        "angular_rate_radians_per_second": 38.782285022052854
       }
     },
     {
@@ -228,7 +228,7 @@
       "position_radians": -0.025102324383414906,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.782285057590514
+        "angular_rate_radians_per_second": 38.78228502205282
       }
     },
     {
@@ -236,7 +236,7 @@
       "position_radians": -0.33709418242954087,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.7822850575905
+        "angular_rate_radians_per_second": 38.782285022052854
       }
     },
     {
@@ -244,7 +244,7 @@
       "position_radians": -0.002613479380619458,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.782285057590464
+        "angular_rate_radians_per_second": 38.78228502205286
       }
     },
     {
@@ -252,7 +252,7 @@
       "position_radians": 0.005577055870152081,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.782285057590514
+        "angular_rate_radians_per_second": 38.78228502205285
       }
     },
     {
@@ -260,7 +260,7 @@
       "position_radians": 0.0005341934393015048,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.78228505759046
+        "angular_rate_radians_per_second": 38.78228502205285
       }
     },
     {
@@ -268,7 +268,7 @@
       "position_radians": 0.00021224274270999753,
       "rate": {
         "kind": "explicit_angular_rate",
-        "angular_rate_radians_per_second": 38.7822850575905
+        "angular_rate_radians_per_second": 38.78228502205286
       }
     }
   ],
@@ -276,9 +276,9 @@
     {
       "joint_name": "ball_longibar_front_A",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996660206,
-        "y": -1.0170248598839748e-07,
-        "z": 1.8411889140409292
+        "x": 0.00013804334599254453,
+        "y": 5.291564897369483e-08,
+        "z": 1.3664738603720663
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -289,9 +289,9 @@
     {
       "joint_name": "ball_longibar_front_B",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996660206,
-        "y": 3.3933121645901565e-08,
-        "z": 1.3004037395415462
+        "x": 0.00013804334599265555,
+        "y": -5.3026712798498465e-08,
+        "z": 1.775118793217719
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -302,9 +302,9 @@
     {
       "joint_name": "ball_longibar_front_C",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996438161,
-        "y": 6.002478714073334e-08,
-        "z": -1.8411889140454312
+        "x": 0.00013804334599809565,
+        "y": -4.272551556994131e-08,
+        "z": -1.3664738603706543
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -315,9 +315,9 @@
     {
       "joint_name": "ball_longibar_front_D",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996471468,
-        "y": -8.118934058387595e-08,
-        "z": -1.3004037395466512
+        "x": 0.00013804334599809565,
+        "y": 4.25097117506823e-08,
+        "z": -1.7751187932191677
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -328,9 +328,9 @@
     {
       "joint_name": "ball_longibar_rear_A",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996593593,
-        "y": -1.0791264126730482e-07,
-        "z": 1.8411889140402595
+        "x": 0.0001380433459974295,
+        "y": 5.276249925856291e-08,
+        "z": 1.3664738603720397
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -341,9 +341,9 @@
     {
       "joint_name": "ball_longibar_rear_B",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996571388,
-        "y": -1.147774986165473e-09,
-        "z": 1.3004037395377583
+        "x": 0.0001380433459973185,
+        "y": -5.2512199699705775e-08,
+        "z": 1.7751187932177865
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -354,9 +354,9 @@
     {
       "joint_name": "ball_longibar_rear_C",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.00010796672996971068,
-        "y": 2.9019866287782747e-08,
-        "z": -1.841188914048776
+        "x": 0.00013804334599365475,
+        "y": -7.58057443484006e-08,
+        "z": -1.3664738603752182
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -367,9 +367,9 @@
     {
       "joint_name": "ball_longibar_rear_D",
       "roll_pitch_yaw_angles_radians": {
-        "x": 0.0001079667299692666,
-        "y": -8.043427635051614e-08,
-        "z": -1.3004037395465684
+        "x": 0.00013804334599365475,
+        "y": 7.552417935485778e-08,
+        "z": -1.775118793214606
       },
       "angular_velocity_of_child_in_parent_expressed_in_parent_frame_radians_per_second": {
         "x": 0.0,
@@ -444,7 +444,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -452,7 +452,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -460,7 +460,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -468,7 +468,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -476,7 +476,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -484,7 +484,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -492,7 +492,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -500,7 +500,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -572,7 +572,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -580,7 +580,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -588,7 +588,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -596,7 +596,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -604,7 +604,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -612,7 +612,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -620,7 +620,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
@@ -628,7 +628,7 @@
       "force_on_reference_end_in_reference_frame_newtons": {
         "x": 0.0,
         "y": 0.0,
-        "z": 21552.913954058386
+        "z": 21552.427682531303
       }
     },
     {
