@@ -1,0 +1,52 @@
+{
+  "vehicles": [
+    {
+      "instance_name": "car_1",
+      "vehicle_name": "GZ18",
+      "mechanical_definition_identifier": "gz18_reference_mechanics",
+      "station_offset_meters": 0
+    },
+    {
+      "instance_name": "car_2",
+      "vehicle_name": "GZ18",
+      "mechanical_definition_identifier": "gz18_reference_mechanics",
+      "station_offset_meters": -23.6
+    },
+    {
+      "instance_name": "car_3",
+      "vehicle_name": "GZ18",
+      "mechanical_definition_identifier": "gz18_reference_mechanics",
+      "station_offset_meters": -47.2
+    }
+  ],
+  "couplers": [
+    {
+      "name": "coupler_12",
+      "reference_end": {
+        "instance_name": "car_1",
+        "frame_name": "rear_coupler_mount"
+      },
+      "opposite_end": {
+        "instance_name": "car_2",
+        "frame_name": "front_coupler_mount"
+      },
+      "nominal_length_meters": 0.8,
+      "stiffness_newtons_per_meter": 8000000.0,
+      "damping_newton_seconds_per_meter": 130000.0
+    },
+    {
+      "name": "coupler_23",
+      "reference_end": {
+        "instance_name": "car_2",
+        "frame_name": "rear_coupler_mount"
+      },
+      "opposite_end": {
+        "instance_name": "car_3",
+        "frame_name": "front_coupler_mount"
+      },
+      "nominal_length_meters": 0.8,
+      "stiffness_newtons_per_meter": 8000000.0,
+      "damping_newton_seconds_per_meter": 130000.0
+    }
+  ]
+}

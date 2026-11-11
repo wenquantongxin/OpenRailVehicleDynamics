@@ -101,6 +101,19 @@ struct PointToPointSeriesSpringBilinearDamper {
     double damping_above_knee_newton_seconds_per_meter{0.0};
 };
 
+// A linear spring and viscous damper in parallel along the instantaneous line
+// between two attachment points. Positive force pulls the points together:
+// F = stiffness * (length - nominal_length) + damping * length_rate.
+// Both forces act at their attachment points without an additional couple.
+struct PointToPointLinearSpringDamper {
+    std::string name;
+    ForceElementEnd reference_end;
+    ForceElementEnd opposite_end;
+    double nominal_length_meters{0.0};
+    double stiffness_newtons_per_meter{0.0};
+    double damping_newton_seconds_per_meter{0.0};
+};
+
 // A damper whose force law is a piecewise linear odd function of the relative
 // velocity along one axis, saturating outside the stated range.
 //
@@ -156,6 +169,7 @@ struct VehicleForceElementCollection {
     std::vector<SeriesSpringViscousDamper> series_spring_viscous_dampers;
     std::vector<PointToPointSeriesSpringBilinearDamper>
         point_to_point_series_spring_bilinear_dampers;
+    std::vector<PointToPointLinearSpringDamper> point_to_point_linear_spring_dampers;
     std::vector<SaturatedPiecewiseLinearDamper>
         saturated_piecewise_linear_dampers;
     std::vector<ReferenceFrameLinearBushing> reference_frame_linear_bushings;

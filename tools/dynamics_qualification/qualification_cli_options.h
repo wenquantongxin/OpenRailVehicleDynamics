@@ -14,13 +14,15 @@ struct QualificationCliOptions final {
     // Includes argv[0], preserving the existing positional CLI layouts.
     std::vector<char*> positional_arguments;
     std::optional<std::filesystem::path> integration_config_path;
+    std::optional<std::filesystem::path> consist_path;
     bool publish_scene_record{};
 };
 
 // This parses only the shared named options. Each executable retains its own
 // positional paths, duration validation and usage message.
-inline QualificationCliOptions ParseQualificationCliOptions(
-    int argc, char** argv, bool allow_scene_record = false) {
+inline QualificationCliOptions ParseQualificationCliOptions(int argc, char** argv,
+                                                            bool allow_scene_record = false,
+                                                            bool allow_consist = false) {
     QualificationCliOptions result;
     result.positional_arguments.reserve(static_cast<std::size_t>(argc));
     result.positional_arguments.push_back(argv[0]);
@@ -28,6 +30,15 @@ inline QualificationCliOptions ParseQualificationCliOptions(
         const std::string_view argument(argv[index]);
         if (allow_scene_record && argument == "--scene-record") {
             result.publish_scene_record = true;
+        } else if (allow_consist && argument == "--consist") {
+            if (result.consist_path.has_value()) {
+                throw std::invalid_argument("--consist may be specified only once");
+            }
+            if (index + 1 == argc || std::string_view(argv[index + 1]).empty() ||
+                std::string_view(argv[index + 1]).starts_with("--")) {
+                throw std::invalid_argument("--consist requires one non-empty path");
+            }
+            result.consist_path = argv[++index];
         } else if (argument == "--integration-config") {
             if (result.integration_config_path.has_value()) {
                 throw std::invalid_argument("--integration-config may be specified only once");
@@ -42,6 +53,9 @@ inline QualificationCliOptions ParseQualificationCliOptions(
         } else {
             result.positional_arguments.push_back(argv[index]);
         }
+    }
+    if (result.consist_path && result.publish_scene_record) {
+        throw std::invalid_argument("--consist cannot be combined with --scene-record");
     }
     return result;
 }

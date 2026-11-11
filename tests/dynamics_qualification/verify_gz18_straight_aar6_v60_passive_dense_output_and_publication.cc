@@ -188,6 +188,123 @@ void CheckAtomicDirectory(const std::filesystem::path& root) {
             "a repeated publication did not preserve the prior success");
 }
 
+void CheckConsistRun(const Gz18QualificationRunConfiguration& single,
+                     const std::filesystem::path& root) {
+    auto config = single;
+    config.consist_path = config.orvd_data_root / "vehicle_library/gz18/consists/three_car.json";
+    config.output_directory = root / "three-car";
+    auto scene = config;
+    scene.publish_scene_record = true;
+    Require(Throws([&] { (void)RunGz18Qualification(scene); }) &&
+                !std::filesystem::exists(config.output_directory),
+            "a consist scene-record request reached publication");
+    const auto result = RunGz18Qualification(config);
+    Require(result.sample_count == 2 && result.terminal_continuous_state.size() == 327 &&
+                std::filesystem::exists(config.output_directory / "COMPLETE") &&
+                !std::filesystem::exists(root / "three-car.partial"),
+            "the consist did not publish a complete 327-state trajectory");
+    const auto metadata =
+        nlohmann::json::parse(ReadWholeFile(config.output_directory / "metadata.json"));
+    const auto& layout = metadata.at("assembled_state_and_force_layout");
+    Require(layout.at("generalized_position_count") == 171 &&
+                layout.at("generalized_velocity_count") == 150 &&
+                layout.at("series_force_state_count") == 6 &&
+                layout.at("vehicle_body_wrench_count") == 172 &&
+                layout.at("contact_body_wrench_count") == 24 &&
+                metadata.at("longest_zero_contact_run_samples").size() == 24,
+            "the consist output has the wrong state or contact dimensions");
+    Require(metadata.at("input_paths").at("consist") ==
+                std::filesystem::canonical(*config.consist_path).string(),
+            "the consist input path was not recorded");
+    std::ifstream input(config.output_directory / "observations.tsv");
+    std::string line;
+    std::getline(input, line);
+    const auto header = SplitTabs(line);
+    const std::array<std::string_view, 4> axles{"front_leading_wheelset", "front_trailing_wheelset",
+                                                "rear_leading_wheelset", "rear_trailing_wheelset"};
+    const std::array<double, 4> offsets{9.1, 6.6, -6.6, -9.1};
+    std::size_t sample = 0;
+    while (std::getline(input, line)) {
+        const auto row = SplitTabs(line);
+        Require(row.size() == header.size(), "a consist observation row has the wrong width");
+        for (int car = 0; car < 3; ++car) {
+            const std::string prefix = "car_" + std::to_string(car + 1) + ".";
+            for (const std::string_view body :
+                 {"carbody", "front_bogie_frame", "rear_bogie_frame"}) {
+                (void)FindColumn(header, prefix + std::string(body) + ".yaw_radians");
+            }
+            if (sample == 0) {
+                const auto column = FindColumn(header, prefix + "carbody.track_station_meters");
+                Require(std::abs(ParseDouble(row[column]) + 23.6 * car) <= 1e-12,
+                        "a consist representative-body projection lost its station offset");
+            }
+            for (std::size_t axle = 0; axle < axles.size(); ++axle) {
+                const std::string name = prefix + std::string(axles[axle]);
+                if (sample == 0) {
+                    const auto column = FindColumn(header, name + ".track_station_meters");
+                    Require(
+                        std::abs(ParseDouble(row[column]) - (offsets[axle] - 23.6 * car)) <= 1e-12,
+                        "a consist carrier has the wrong initial projection station");
+                }
+                for (const std::string_view side : {"left", "right"}) {
+                    const auto column =
+                        FindColumn(header, name + "." + std::string(side) +
+                                               ".vertical_support_force_on_wheel_newtons");
+                    Require(ParseDouble(row[column]) > 0.0,
+                            "a consist interface lost its positive support");
+                }
+            }
+        }
+        ++sample;
+    }
+    Require(sample == 2, "the consist observation sample count is wrong");
+    std::ifstream forces(config.output_directory / "point_to_point_linear_spring_dampers.tsv");
+    std::getline(forces, line);
+    const auto force_header = SplitTabs(line);
+    const auto length = FindColumn(force_header, "length_meters");
+    const auto force = FindColumn(force_header, "force_newtons");
+    const auto time = FindColumn(force_header, "time_nanoseconds");
+    const auto name = FindColumn(force_header, "element_name");
+    std::vector<std::string> element_names;
+    std::size_t force_rows = 0;
+    while (std::getline(forces, line)) {
+        const auto row = SplitTabs(line);
+        Require(row.size() == force_header.size(), "a linear-force row has the wrong width");
+        Require(row[time] == "0" || row[time] == "30000000",
+                "the linear-force table is detached from the sample clock");
+        if (row[time] == "0") {
+            Require(std::abs(ParseDouble(row[length]) - 0.8) < 1e-12 &&
+                        std::abs(ParseDouble(row[force])) < 1e-4,
+                    "the published initial coupler geometry or force is wrong");
+            element_names.push_back(row[name]);
+        }
+        ++force_rows;
+    }
+    Require(force_rows == 4 && element_names.size() == 2 && element_names[0] != element_names[1],
+            "the linear-force table lost a sample or element name");
+    Require(!std::filesystem::exists(single.output_directory /
+                                     "point_to_point_linear_spring_dampers.tsv"),
+            "a single-car run published an empty linear-force table");
+    std::ifstream states(config.output_directory / "continuous_states.tsv");
+    std::getline(states, line);
+    const auto state_header = SplitTabs(line);
+    Require(state_header.size() == 330 && state_header.back() == "z.5",
+            "the consist continuous-state table lost its full state layout");
+    std::size_t state_rows = 0;
+    while (std::getline(states, line)) {
+        const auto row = SplitTabs(line);
+        if (state_rows == 1) {
+            for (Eigen::Index i = 0; i < result.terminal_continuous_state.size(); ++i) {
+                Require(ParseDouble(row[static_cast<std::size_t>(i) + 3]) ==
+                            result.terminal_continuous_state[i],
+                        "the consist published state differs from its accepted endpoint");
+            }
+        }
+        ++state_rows;
+    }
+    Require(state_rows == 2, "the consist continuous-state table has the wrong sample count");
+}
+
 void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
     const int original_openmp_dynamic = omp_get_dynamic();
     const int original_openmp_max_threads = omp_get_max_threads();
@@ -584,6 +701,8 @@ void CheckRealGz18Run(char** argv, const std::filesystem::path& root) {
                 "physical artifact");
     }
 
+    omp_set_num_threads(1);
+    CheckConsistRun(configuration, root);
     omp_set_num_threads(original_openmp_max_threads);
     omp_set_dynamic(original_openmp_dynamic);
 }

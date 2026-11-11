@@ -12,6 +12,7 @@ add_library(orvd_configuration STATIC
     src/irw_full_state_control_observation_binding.cc
     src/irw_longitudinal_cruise_event_session.cc
     src/irw_wheel_rail_contact.cc
+    src/load_consist_definition.cc
     src/load_irw_full_state_wheel_speed_guidance_controller.cc
     src/load_irw_longitudinal_cruise_controller.cc
     src/load_profile_points.cc

@@ -1,6 +1,8 @@
 // The GZ18 resolved moving start-up, placed on both its qualified demonstration
 // line and an explicitly unqualified research line.
 
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,11 +15,10 @@
 #include <variant>
 #include <vector>
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-
 #include "orvd/configuration/assemble_resolved_initial_context.h"
+#include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
+#include "orvd/configuration/consist_definition.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_vehicle_definition.h"
@@ -316,6 +317,151 @@ int CountBodiesWithChangedOriginVelocity(
     return changed;
 }
 
+void CheckThreeCarAssembly(const VehicleDefinition& vehicle, const ResolvedStartupState& startup,
+                           const TrackGeometry& line, const std::filesystem::path& root) {
+    using namespace orvd::configuration;
+    const auto consist =
+        LoadConsistDefinition(root / "vehicle_library/gz18/consists/three_car.json");
+    auto single = AssembleGz18ContactScenario(vehicle, startup, line, root, 0.0);
+    auto train = AssembleConsistContactScenario(
+        vehicle, startup, consist, PrepareGz18VehicleContact(vehicle, startup, root), line, 0.0);
+    const auto& single_system = single->vehicle_system();
+    const auto& consist_system = train->vehicle_system();
+    Require(consist_system.instance_bindings().size() == 3 &&
+                consist_system.model().num_rigid_bodies() == 51 &&
+                consist_system.model().num_generalized_positions() == 171 &&
+                consist_system.model().num_generalized_velocities() == 150 &&
+                consist_system.system().continuous_state_size() == 327 &&
+                consist_system.force_plan().series_spring_damper_force_state_count() == 6 &&
+                consist_system.contact_force_plan()->carrier_count() == 12 &&
+                consist_system.contact_force_plan()->interface_count() == 24,
+            "three-car assembly has incorrect state or contact dimensions");
+    std::vector<orvd::forces::PointToPointLinearSpringDamperObservation> couplers(2);
+    auto view = consist_system.system().GetMultibodyComponentView(
+        train->initial_context().context(), consist_system.system().multibody_component());
+    consist_system.force_plan().CalcPointToPointLinearSpringDamperObservations(view.context(),
+                                                                               couplers);
+    for (const auto& coupler : couplers) {
+        Require(
+            std::abs(coupler.length_meters - 0.8) < 1e-13 && std::abs(coupler.force_newtons) < 1e-6,
+            "initial coupler length or load differs from neutral placement");
+    }
+    Eigen::VectorXd single_derivatives(single_system.system().continuous_state_size());
+    Eigen::VectorXd consist_derivatives(consist_system.system().continuous_state_size());
+    single_system.compiled_plan().CalcStateTimeDerivatives(single->initial_context().context(),
+                                                           single_derivatives);
+    consist_system.compiled_plan().CalcStateTimeDerivatives(train->initial_context().context(),
+                                                            consist_derivatives);
+    const auto compare_derivative_block = [&](int single_start, int consist_start, int size) {
+        const double difference = (single_derivatives.segment(single_start, size) -
+                                   consist_derivatives.segment(consist_start, size))
+                                      .cwiseAbs()
+                                      .maxCoeff();
+        if (difference > 2e-8) {
+            std::fprintf(stderr, "three-car RHS difference at %d/%d: %.17g\n", single_start,
+                         consist_start, difference);
+            Require(false, "three-car initial derivative differs from corresponding single car");
+        }
+    };
+    for (const auto& entry : consist_system.instance_bindings()) {
+        for (const auto& body : vehicle.mechanical_track_station_layout.free_body_station_offsets) {
+            const auto single_body = single_system.model().GetRigidBodyByName(body.body_name);
+            const auto consist_body = consist_system.model().GetRigidBodyByName(
+                QualifyVehicleName(entry.instance_name, body.body_name));
+            const auto single_position_range =
+                single_system.model().GetFreeBodyPositionRange(single_body);
+            const auto consist_position_range =
+                consist_system.model().GetFreeBodyPositionRange(consist_body);
+            const auto single_velocity_range =
+                single_system.model().GetFreeBodyVelocityRange(single_body);
+            const auto consist_velocity_range =
+                consist_system.model().GetFreeBodyVelocityRange(consist_body);
+            compare_derivative_block(single_position_range.start(), consist_position_range.start(),
+                                     single_position_range.size());
+            compare_derivative_block(
+                single_system.model().num_generalized_positions() + single_velocity_range.start(),
+                consist_system.model().num_generalized_positions() + consist_velocity_range.start(),
+                single_velocity_range.size());
+        }
+        const auto compare_joint = [&](const std::string& name) {
+            const auto single_joint = single_system.model().GetJointByName(name);
+            const auto consist_joint = consist_system.model().GetJointByName(
+                QualifyVehicleName(entry.instance_name, name));
+            const auto single_position_range =
+                single_system.model().GetJointPositionRange(single_joint);
+            const auto consist_position_range =
+                consist_system.model().GetJointPositionRange(consist_joint);
+            const auto single_velocity_range =
+                single_system.model().GetJointVelocityRange(single_joint);
+            const auto consist_velocity_range =
+                consist_system.model().GetJointVelocityRange(consist_joint);
+            compare_derivative_block(single_position_range.start(), consist_position_range.start(),
+                                     single_position_range.size());
+            compare_derivative_block(
+                single_system.model().num_generalized_positions() + single_velocity_range.start(),
+                consist_system.model().num_generalized_positions() + consist_velocity_range.start(),
+                single_velocity_range.size());
+        };
+        for (const auto& joint : vehicle.revolute_joints)
+            compare_joint(joint.name);
+        for (const auto& joint : vehicle.ball_rpy_joints)
+            compare_joint(joint.name);
+        for (const auto& force : startup.series_spring_viscous_damper_force_states) {
+            const auto single_force_range =
+                single_system.system().series_spring_damper_force_state_range(
+                    single_system.system().GetSeriesSpringViscousDamperIndexByName(
+                        force.element_name));
+            const auto consist_force_range =
+                consist_system.system().series_spring_damper_force_state_range(
+                    consist_system.system().GetSeriesSpringViscousDamperIndexByName(
+                        QualifyVehicleName(entry.instance_name, force.element_name)));
+            compare_derivative_block(single_force_range.start(), consist_force_range.start(),
+                                     single_force_range.size());
+        }
+    }
+    auto edited = startup;
+    for (std::size_t force_index = 0;
+         force_index < edited.series_spring_viscous_damper_force_states.size(); ++force_index) {
+        edited.series_spring_viscous_damper_force_states[force_index]
+            .reference_end_axial_force_newtons = force_index == 0 ? 17.0 : -31.0;
+    }
+    auto ordered = AssembleResolvedInitialContext(consist_system, edited, 0.0);
+    std::reverse(edited.free_body_startup_states.begin(), edited.free_body_startup_states.end());
+    std::reverse(edited.revolute_joint_startup_states.begin(),
+                 edited.revolute_joint_startup_states.end());
+    std::reverse(edited.ball_rpy_joint_startup_states.begin(),
+                 edited.ball_rpy_joint_startup_states.end());
+    std::reverse(edited.series_spring_viscous_damper_force_states.begin(),
+                 edited.series_spring_viscous_damper_force_states.end());
+    auto reversed = AssembleResolvedInitialContext(consist_system, edited, 0.0);
+    Eigen::VectorXd ordered_state(consist_system.system().continuous_state_size());
+    Eigen::VectorXd reordered_state(ordered_state.size());
+    consist_system.system().CopyContinuousState(ordered.context(), ordered_state);
+    consist_system.system().CopyContinuousState(reversed.context(), reordered_state);
+    Require((ordered_state.array() == reordered_state.array()).all(),
+            "three-car startup depends on named-record order");
+
+    auto missing_carrier_startup = startup;
+    const auto& missing_carrier_name =
+        vehicle.mechanical_track_station_layout.wheel_pair_station_reference_body_names.front();
+    const auto removed_count =
+        std::erase_if(missing_carrier_startup.free_body_startup_states,
+                      [&](const auto& body) { return body.body_name == missing_carrier_name; });
+    Require(removed_count == 1, "missing-carrier fixture did not remove one start-up record");
+    const std::string missing_carrier_diagnostic =
+        vehicle.vehicle_name + " contact scenario: station carrier '" +
+        QualifyVehicleName(consist.vehicles.front().instance_name, missing_carrier_name) +
+        "' is missing from the resolved free-body start-up family";
+    RequireRefusal(
+        [&] {
+            (void)AssembleConsistContactScenario(
+                vehicle, missing_carrier_startup, consist,
+                PrepareGz18VehicleContact(vehicle, missing_carrier_startup, root), line, 0.0);
+        },
+        missing_carrier_diagnostic,
+        "a consist start-up omitting a contact carrier's free-body record");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -346,6 +492,9 @@ int main(int argc, char** argv) {
         const ResolvedInitialContext baseline = AssembleResolvedInitialContext(
             *system, startup, line, kLayoutReferenceStation);
         CheckStateMatchesRecord(vehicle, startup, line, *system, baseline);
+        CheckThreeCarAssembly(
+            vehicle, startup, line,
+            std::filesystem::path(argv[1]).parent_path().parent_path().parent_path());
 
         Eigen::VectorXd derivatives(system->system().continuous_state_size());
         system->compiled_plan().CalcStateTimeDerivatives(baseline.context(),
@@ -612,7 +761,9 @@ int main(int argc, char** argv) {
             double foremost_wheelset_station =
                 research_line.start_track_station_meters();
             for (const std::string& wheelset_name :
-                 system->binding().wheel_pair_station_reference_body_names) {
+                 system->instance_bindings()
+                     .front()
+                     .binding.wheel_pair_station_reference_body_names) {
                 foremost_wheelset_station = std::max(
                     foremost_wheelset_station,
                     kLayoutReferenceStation +

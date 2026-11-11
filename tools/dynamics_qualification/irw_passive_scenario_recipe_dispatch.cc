@@ -262,15 +262,10 @@ QualificationRunSummary RunIrwPassiveScenario(
     const internal::VehicleQualificationRecipe& recipe = ResolveRecipe(input);
     return internal::RunVehicleQualification(
         internal::QualificationRunConfiguration{
-            input.vehicle_definition_path,
-            input.resolved_startup_state_path,
-            input.track_geometry_path,
-            input.orvd_data_root,
-            input.track_irregularity_identifier,
-            input.output_directory,
-            input.duration_nanoseconds,
-            input.sample_period_nanoseconds,
-            input.publish_scene_record, input.integration_config_path},
+            input.vehicle_definition_path, input.resolved_startup_state_path,
+            input.track_geometry_path, input.orvd_data_root, input.track_irregularity_identifier,
+            input.output_directory, input.duration_nanoseconds, input.sample_period_nanoseconds,
+            input.publish_scene_record, input.integration_config_path, std::nullopt},
         recipe);
 }
 

@@ -11,11 +11,12 @@
 #include <utility>
 #include <vector>
 
+#include "irw_closed_topology.h"
 #include "orvd/configuration/gz18_wheel_rail_contact.h"
 #include "orvd/configuration/irw_wheel_rail_contact.h"
-#include "irw_closed_topology.h"
 #include "resolved_startup_state_invariants.h"
 #include "vehicle_definition_invariants.h"
+#include "vehicle_instance_assembly.h"
 
 namespace orvd::configuration {
 namespace {
@@ -25,76 +26,14 @@ using forces::WheelRailContactInterfaceDefinition;
 using forces::IndependentWheelActiveTorqueCoupleDefinition;
 using wheel_rail_contact::WheelSide;
 
-struct FrozenContactTopology {
-    std::vector<WheelRailContactCarrierDefinition> carriers;
-    std::vector<WheelRailContactInterfaceDefinition> interfaces;
-    std::vector<IndependentWheelActiveTorqueCoupleDefinition>
-        active_torque_couples;
-};
-
 [[noreturn]] void Reject(std::string_view scenario,
                          const std::string& detail) {
     throw std::invalid_argument(std::string(scenario) +
                                 " contact scenario: " + detail);
 }
 
-struct StationOffsets {
-    std::unordered_map<std::string, double> mechanical;
-    std::unordered_map<std::string, double> resolved;
-};
-
-StationOffsets CaptureStationOffsets(
-    const VehicleDefinition& vehicle,
-    const ResolvedStartupState& startup_state) {
-    StationOffsets offsets;
-    const auto& layout = vehicle.mechanical_track_station_layout;
-    offsets.mechanical.reserve(layout.free_body_station_offsets.size());
-    for (const VehicleFreeBodyStationOffsetDefinition& entry :
-         layout.free_body_station_offsets) {
-        offsets.mechanical.emplace(entry.body_name,
-                                   entry.station_offset_meters);
-    }
-    offsets.resolved.reserve(startup_state.free_body_startup_states.size());
-    for (const FreeBodyStartupState& entry :
-         startup_state.free_body_startup_states) {
-        offsets.resolved.emplace(
-            entry.body_name,
-            entry.resolved_track_station_offset_from_mechanical_layout_meters);
-    }
-    return offsets;
-}
-
-WheelRailContactCarrierDefinition MakeCarrier(
-    std::string_view scenario, std::string_view body_name,
-    const StationOffsets& offsets,
-    double vehicle_layout_reference_track_station_meters,
-    const Eigen::Matrix3d&
-        rotation_body_from_nonspinning_wheel_profile =
-            Eigen::Matrix3d::Identity()) {
-    const auto mechanical = offsets.mechanical.find(std::string(body_name));
-    const auto resolved = offsets.resolved.find(std::string(body_name));
-    if (mechanical == offsets.mechanical.end() ||
-        resolved == offsets.resolved.end()) {
-        Reject(scenario, "station carrier '" + std::string(body_name) +
-                             "' is missing from the mechanical layout or "
-                             "resolved free-body start-up family");
-    }
-    return WheelRailContactCarrierDefinition{
-        std::string(body_name), std::string(body_name),
-        vehicle_layout_reference_track_station_meters + mechanical->second +
-            resolved->second,
-        rotation_body_from_nonspinning_wheel_profile};
-}
-
-FrozenContactTopology BuildGz18ContactTopology(
-    const VehicleDefinition& vehicle,
-    const ResolvedStartupState& startup_state,
-    double vehicle_layout_reference_track_station_meters) {
+VehicleContactTopology BuildGz18ContactTopology(const VehicleDefinition& vehicle) {
     constexpr std::string_view kScenario = "GZ18";
-    if (!std::isfinite(vehicle_layout_reference_track_station_meters)) {
-        Reject(kScenario,
-               "the vehicle layout reference track station is not finite");
-    }
     const auto& wheelsets = vehicle.mechanical_track_station_layout
                                 .wheel_pair_station_reference_body_names;
     if (wheelsets.size() != 4) {
@@ -103,15 +42,11 @@ FrozenContactTopology BuildGz18ContactTopology(
                "reference bodies");
     }
 
-    const StationOffsets offsets = CaptureStationOffsets(vehicle,
-                                                          startup_state);
-    FrozenContactTopology topology;
+    VehicleContactTopology topology;
     topology.carriers.reserve(wheelsets.size());
     topology.interfaces.reserve(2 * wheelsets.size());
     for (const std::string& wheelset : wheelsets) {
-        topology.carriers.push_back(MakeCarrier(
-            kScenario, wheelset, offsets,
-            vehicle_layout_reference_track_station_meters));
+        topology.carriers.push_back({wheelset, wheelset, 0.0, Eigen::Matrix3d::Identity()});
         topology.interfaces.push_back(WheelRailContactInterfaceDefinition{
             .interface_name = wheelset + ".right",
             .carrier_name = wheelset,
@@ -195,20 +130,10 @@ void RequireIrwMechanicalTopology(const VehicleDefinition& vehicle) {
     }
 }
 
-FrozenContactTopology BuildIrwContactTopology(
-    const VehicleDefinition& vehicle,
-    const ResolvedStartupState& startup_state,
-    double vehicle_layout_reference_track_station_meters) {
-    constexpr std::string_view kScenario = "IRW";
-    if (!std::isfinite(vehicle_layout_reference_track_station_meters)) {
-        Reject(kScenario,
-               "the vehicle layout reference track station is not finite");
-    }
+VehicleContactTopology BuildIrwContactTopology(const VehicleDefinition& vehicle) {
     RequireIrwMechanicalTopology(vehicle);
-    const StationOffsets offsets = CaptureStationOffsets(vehicle,
-                                                          startup_state);
 
-    FrozenContactTopology topology;
+    VehicleContactTopology topology;
     topology.carriers.reserve(internal::kIrwClosedCarrierNames.size());
     topology.interfaces.reserve(internal::kIrwClosedInterfaces.size());
     topology.active_torque_couples.reserve(
@@ -221,10 +146,8 @@ FrozenContactTopology BuildIrwContactTopology(
         internal::kIrwBodyBasisHalfTurn;
     for (const std::string_view carrier :
          internal::kIrwClosedCarrierNames) {
-        topology.carriers.push_back(MakeCarrier(
-            kScenario, carrier, offsets,
-            vehicle_layout_reference_track_station_meters,
-            rotation_body_from_profile));
+        topology.carriers.push_back(
+            {std::string(carrier), std::string(carrier), 0.0, rotation_body_from_profile});
     }
     for (const internal::IrwClosedInterfaceTopology& interface :
          internal::kIrwClosedInterfaces) {
@@ -292,84 +215,116 @@ AssembledVehicleContactScenario::AssembledVehicleContactScenario(
 
 AssembledVehicleContactScenario::~AssembledVehicleContactScenario() = default;
 
-std::unique_ptr<AssembledVehicleContactScenario>
-AssembleGz18ContactScenario(
-    const VehicleDefinition& vehicle,
-    const ResolvedStartupState& startup_state,
-    track_geometry::TrackGeometry line,
-    const std::filesystem::path& orvd_data_root,
-    double vehicle_layout_reference_track_station_meters,
-    std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
-        track_irregularity) {
+PreparedVehicleContact PrepareGz18VehicleContact(const VehicleDefinition& vehicle,
+                                                 const ResolvedStartupState& startup_state,
+                                                 const std::filesystem::path& orvd_data_root) {
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
         vehicle, "vehicle definition");
-    internal::RequireResolvedStartupStateInvariants(startup_state,
-                                                    "resolved start-up state");
-    FrozenContactTopology topology = BuildGz18ContactTopology(
-        vehicle, startup_state,
-        vehicle_layout_reference_track_station_meters);
-
+    internal::RequireResolvedStartupStateInvariants(startup_state, "resolved start-up state");
     auto contact = AssembleGz18WheelRailContact(
         orvd_data_root, startup_state.wheel_rail_binding,
         startup_state.rail_profile_reference_vertical_offset_meters);
-    auto vehicle_system =
-        AssembledVehicleSystem::AssembleWithWheelRailContact(
-            vehicle,
-            startup_state
-                .gravitational_acceleration_meters_per_second_squared,
-            std::move(line), contact->ReleaseRuntimePersonality(),
-            std::move(track_irregularity), std::move(topology.carriers),
-            std::move(topology.interfaces),
-            std::move(topology.active_torque_couples));
-    ResolvedInitialContext initial_context = AssembleResolvedInitialContext(
-        *vehicle_system, startup_state,
-        vehicle_layout_reference_track_station_meters);
-    RequireAnchorsMatchResolvedPlacements(
-        "GZ18", *vehicle_system->contact_force_plan(), initial_context);
-
-    return std::unique_ptr<AssembledVehicleContactScenario>(
-        new AssembledVehicleContactScenario(std::move(vehicle_system),
-                                            std::move(initial_context)));
+    return {BuildGz18ContactTopology(vehicle), contact->ReleaseRuntimePersonality()};
 }
 
 std::unique_ptr<AssembledVehicleContactScenario>
-AssembleIrwContactScenario(
-    const VehicleDefinition& vehicle,
-    const ResolvedStartupState& startup_state,
-    track_geometry::TrackGeometry line,
-    const std::filesystem::path& orvd_data_root,
+internal::VehicleInstanceAssembler::AssembleContactScenario(
+    const VehicleDefinition& vehicle, const ResolvedStartupState& startup_state,
+    const ConsistDefinition& consist, PreparedVehicleContact contact,
+    track_geometry::TrackGeometry line, double layout_station,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField> irregularity) {
+    internal::RequireResolvedStartupStateInvariants(startup_state, "resolved start-up state");
+    auto bindings = CaptureVehicleInstanceBindings(vehicle, consist);
+    const auto stations = ResolveInitialBodyStations(bindings, startup_state, layout_station);
+    VehicleContactTopology expanded;
+    for (const auto& binding : bindings) {
+        const auto qualified = [&](std::string& name) {
+            name = QualifyVehicleName(binding.instance_name, name);
+        };
+        for (auto carrier : contact.topology.carriers) {
+            qualified(carrier.carrier_name);
+            qualified(carrier.body_name);
+            const auto station = stations.find(carrier.body_name);
+            if (station == stations.end()) {
+                Reject(vehicle.vehicle_name,
+                       "station carrier '" + carrier.body_name +
+                           "' is missing from the resolved free-body start-up family");
+            }
+            carrier.initial_projection_station_meters = station->second;
+            expanded.carriers.push_back(std::move(carrier));
+        }
+        for (auto interface : contact.topology.interfaces) {
+            qualified(interface.interface_name);
+            qualified(interface.carrier_name);
+            qualified(interface.wheel_body_name);
+            if (interface.independent_wheel_revolute_joint) {
+                qualified(interface.independent_wheel_revolute_joint->joint_name);
+            }
+            expanded.interfaces.push_back(std::move(interface));
+        }
+        for (auto torque : contact.topology.active_torque_couples) {
+            qualified(torque.channel_name);
+            qualified(torque.axis_provider_body_name);
+            qualified(torque.wheel_body_name);
+            qualified(torque.reaction_frame_body_name);
+            expanded.active_torque_couples.push_back(std::move(torque));
+        }
+    }
+    auto vehicle_system = AssembledVehicleSystem::AssembleWithWheelRailContact(
+        vehicle, std::move(bindings), consist.couplers,
+        startup_state.gravitational_acceleration_meters_per_second_squared, std::move(line),
+        std::move(contact.personality), std::move(irregularity), std::move(expanded.carriers),
+        std::move(expanded.interfaces), std::move(expanded.active_torque_couples));
+    auto initial_context =
+        AssembleInitialContext(*vehicle_system, startup_state,
+                               vehicle_system->contact_force_plan()->track_geometry(), stations);
+    RequireAnchorsMatchResolvedPlacements(vehicle.vehicle_name,
+                                          *vehicle_system->contact_force_plan(), initial_context);
+    return std::unique_ptr<AssembledVehicleContactScenario>(
+        new AssembledVehicleContactScenario(std::move(vehicle_system), std::move(initial_context)));
+}
+
+std::unique_ptr<AssembledVehicleContactScenario> AssembleConsistContactScenario(
+    const VehicleDefinition& vehicle, const ResolvedStartupState& startup_state,
+    const ConsistDefinition& consist, PreparedVehicleContact contact,
+    track_geometry::TrackGeometry line, double layout_reference_track_station_meters,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField> track_irregularity) {
+    return internal::VehicleInstanceAssembler::AssembleContactScenario(
+        vehicle, startup_state, consist, std::move(contact), std::move(line),
+        layout_reference_track_station_meters, std::move(track_irregularity));
+}
+
+std::unique_ptr<AssembledVehicleContactScenario> AssembleGz18ContactScenario(
+    const VehicleDefinition& vehicle, const ResolvedStartupState& startup_state,
+    track_geometry::TrackGeometry line, const std::filesystem::path& orvd_data_root,
     double vehicle_layout_reference_track_station_meters,
-    std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
-        track_irregularity) {
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField> track_irregularity) {
+    ConsistDefinition single{
+        {{"", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0}}, {}};
+    return internal::VehicleInstanceAssembler::AssembleContactScenario(
+        vehicle, startup_state, single,
+        PrepareGz18VehicleContact(vehicle, startup_state, orvd_data_root), std::move(line),
+        vehicle_layout_reference_track_station_meters, std::move(track_irregularity));
+}
+
+std::unique_ptr<AssembledVehicleContactScenario> AssembleIrwContactScenario(
+    const VehicleDefinition& vehicle, const ResolvedStartupState& startup_state,
+    track_geometry::TrackGeometry line, const std::filesystem::path& orvd_data_root,
+    double vehicle_layout_reference_track_station_meters,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField> track_irregularity) {
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
         vehicle, "vehicle definition");
-    internal::RequireResolvedStartupStateInvariants(startup_state,
-                                                    "resolved start-up state");
-    FrozenContactTopology topology = BuildIrwContactTopology(
-        vehicle, startup_state,
-        vehicle_layout_reference_track_station_meters);
-
+    internal::RequireResolvedStartupStateInvariants(startup_state, "resolved start-up state");
     auto contact = AssembleIrwWheelRailContact(
         orvd_data_root, startup_state.wheel_rail_binding,
         startup_state.rail_profile_reference_vertical_offset_meters);
-    auto vehicle_system =
-        AssembledVehicleSystem::AssembleWithWheelRailContact(
-            vehicle,
-            startup_state
-                .gravitational_acceleration_meters_per_second_squared,
-            std::move(line), contact->ReleaseRuntimePersonality(),
-            std::move(track_irregularity), std::move(topology.carriers),
-            std::move(topology.interfaces),
-            std::move(topology.active_torque_couples));
-    ResolvedInitialContext initial_context = AssembleResolvedInitialContext(
-        *vehicle_system, startup_state,
-        vehicle_layout_reference_track_station_meters);
-    RequireAnchorsMatchResolvedPlacements(
-        "IRW", *vehicle_system->contact_force_plan(), initial_context);
-
-    return std::unique_ptr<AssembledVehicleContactScenario>(
-        new AssembledVehicleContactScenario(std::move(vehicle_system),
-                                            std::move(initial_context)));
+    PreparedVehicleContact prepared{BuildIrwContactTopology(vehicle),
+                                    contact->ReleaseRuntimePersonality()};
+    ConsistDefinition single{
+        {{"", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0}}, {}};
+    return internal::VehicleInstanceAssembler::AssembleContactScenario(
+        vehicle, startup_state, single, std::move(prepared), std::move(line),
+        vehicle_layout_reference_track_station_meters, std::move(track_irregularity));
 }
 
 }  // namespace orvd::configuration

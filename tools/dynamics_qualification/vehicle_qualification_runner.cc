@@ -1,5 +1,4 @@
-#include "vehicle_qualification_runner_internal.h"
-
+#include <Eigen/Core>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -23,16 +22,9 @@
 #include <utility>
 #include <vector>
 
-#include <Eigen/Core>
-
 #include "atomic_qualification_directory.h"
-#include "qualification_integration_configuration.h"
-#include "qualification_continuous_state_writer.h"
-#include "qualification_integration_run.h"
-#include "qualification_sample_clock.h"
-#include "strict_floating_point_qualification.h"
-
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
+#include "orvd/configuration/consist_definition.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
 #include "orvd/configuration/load_track_geometry.h"
 #include "orvd/configuration/load_track_irregularity_field.h"
@@ -49,6 +41,12 @@
 #include "orvd/scene_observation/wheel_spin_sampling.h"
 #include "orvd/scene_record/scene_record_writer.h"
 #include "orvd/track_geometry/track_geometry.h"
+#include "qualification_continuous_state_writer.h"
+#include "qualification_integration_configuration.h"
+#include "qualification_integration_run.h"
+#include "qualification_sample_clock.h"
+#include "strict_floating_point_qualification.h"
+#include "vehicle_qualification_runner_internal.h"
 
 namespace orvd::dynamics_qualification::internal {
 namespace {
@@ -61,8 +59,6 @@ using multibody_model::AppliedBodyWrench;
 using track_geometry::TrackStationRegion;
 
 constexpr double kVehicleReferenceTrackStationMeters = 0.0;
-constexpr std::size_t kCarrierCount = 4;
-constexpr std::size_t kInterfaceCount = 8;
 
 struct CarrierObservation final {
     double track_station_meters{};
@@ -107,11 +103,9 @@ struct QualificationObservation final {
     std::uint64_t sample_index{};
     std::uint64_t time_nanoseconds{};
     double time_seconds{};
-    std::array<CarrierObservation, kCarrierCount> carriers{};
-    std::array<QualificationInterfaceObservation, kInterfaceCount>
-        interfaces{};
-    std::array<RepresentativeBodyObservation, kRepresentativeBodyCount>
-        representative_bodies{};
+    std::vector<CarrierObservation> carriers;
+    std::vector<QualificationInterfaceObservation> interfaces;
+    std::vector<RepresentativeBodyObservation> representative_bodies;
 };
 
 QualificationInterfaceObservation SummarizeInterfaceObservation(
@@ -192,6 +186,9 @@ struct ProjectionHistory final {
         CanonicalExistingInput(input.track_geometry_path, "track geometry");
     resolved.orvd_data_root =
         CanonicalExistingInput(input.orvd_data_root, "ORVD data root");
+    if (input.consist_path) {
+        resolved.consist_path = CanonicalExistingInput(*input.consist_path, "consist definition");
+    }
     return resolved;
 }
 
@@ -259,31 +256,13 @@ void CloseChecked(std::ofstream* stream, const std::filesystem::path& path) {
     }
 }
 
-[[nodiscard]] double InitialBodyTrackStation(
-    const configuration::VehicleDefinition& vehicle,
-    const configuration::ResolvedStartupState& startup,
-    std::string_view body_name) {
-    const auto mechanical = std::find_if(
-        vehicle.mechanical_track_station_layout.free_body_station_offsets
-            .begin(),
-        vehicle.mechanical_track_station_layout.free_body_station_offsets.end(),
-        [body_name](const auto& entry) { return entry.body_name == body_name; });
-    const auto resolved = std::find_if(
-        startup.free_body_startup_states.begin(),
-        startup.free_body_startup_states.end(),
-        [body_name](const auto& entry) { return entry.body_name == body_name; });
-    if (mechanical ==
-            vehicle.mechanical_track_station_layout.free_body_station_offsets
-                .end() ||
-        resolved == startup.free_body_startup_states.end()) {
-        Reject("representative body '" + std::string(body_name) +
-               "' is absent from the mechanical or resolved station layout");
+[[nodiscard]] double InitialBodyTrackStation(const configuration::ResolvedInitialContext& initial,
+                                             std::string_view body_name) {
+    for (const auto& placement : initial.body_placements()) {
+        if (placement.body_name == body_name)
+            return placement.track_station_meters;
     }
-    const double station =
-        mechanical->station_offset_meters +
-        resolved->resolved_track_station_offset_from_mechanical_layout_meters;
-    RequireFinite(station, "representative-body initial station");
-    return station;
+    Reject("representative body has no initial station: " + std::string(body_name));
 }
 
 [[nodiscard]] double ProjectBodyOriginForObservation(
@@ -410,10 +389,9 @@ struct SceneRecordExport final {
     return text.str();
 }
 
-[[nodiscard]] std::vector<scene_observation::ScalarDefinition>
-MakeSceneScalarDefinitions(
+[[nodiscard]] std::vector<scene_observation::ScalarDefinition> MakeSceneScalarDefinitions(
     const configuration::AssembledVehicleSystem& assembled,
-    const VehicleQualificationRecipe& recipe) {
+    std::span<const std::string> representative_body_names) {
     using scene_observation::ScalarDefinition;
     constexpr const char* kDenseSample =
         "dense integrator sample replayed in a private observation context";
@@ -458,7 +436,7 @@ MakeSceneScalarDefinitions(
             "total normal force on the wheel", "sum over loaded patches",
             kDenseSample});
     }
-    for (const std::string_view body : recipe.representative_body_names) {
+    for (const std::string_view body : representative_body_names) {
         add_track_coordinates(std::string(body), false);
     }
     return definitions;
@@ -570,10 +548,9 @@ void RecordBoundaryUse(
     }
 }
 
-void WriteObservationHeader(
-    std::ofstream* output,
-    const configuration::AssembledVehicleSystem& assembled,
-    const VehicleQualificationRecipe& recipe) {
+void WriteObservationHeader(std::ofstream* output,
+                            const configuration::AssembledVehicleSystem& assembled,
+                            std::span<const std::string> representative_body_names) {
     *output << "sample_index\ttime_nanoseconds\ttime_seconds";
     const auto* contact_plan = assembled.contact_force_plan();
     for (int carrier = 0; carrier < contact_plan->carrier_count(); ++carrier) {
@@ -603,7 +580,7 @@ void WriteObservationHeader(
                 << ".longitudinal_force_on_wheel_newtons"
                 << '\t' << name << ".lateral_force_on_wheel_newtons";
     }
-    for (const std::string_view name : recipe.representative_body_names) {
+    for (const std::string_view name : representative_body_names) {
         *output << '\t' << name << ".track_station_meters"
                 << '\t' << name << ".lateral_meters"
                 << '\t' << name << ".yaw_radians";
@@ -739,16 +716,15 @@ nlohmann::json PhysicalObservationContract(
             {"carriers", std::move(carriers)}, {"interfaces", std::move(interfaces)}};
 }
 
-void WriteMetadata(
-    const std::filesystem::path& path,
-    const QualificationRunConfiguration& configuration,
-    const VehicleQualificationRecipe& recipe,
-    const nlohmann::json& numerical_metadata,
-    const configuration::ResolvedStartupState& startup,
-    const configuration::AssembledVehicleSystem& assembled,
-    const QualificationSampleClock& clock, const BoundaryUse& before,
-    const BoundaryUse& after,
-    const std::array<std::size_t, kInterfaceCount>& longest_zero_contact_runs) {
+void WriteMetadata(const std::filesystem::path& path,
+                   const QualificationRunConfiguration& configuration,
+                   const VehicleQualificationRecipe& recipe,
+                   const nlohmann::json& numerical_metadata,
+                   const configuration::ResolvedStartupState& startup,
+                   const configuration::AssembledVehicleSystem& assembled,
+                   const QualificationSampleClock& clock, const BoundaryUse& before,
+                   const BoundaryUse& after,
+                   std::span<const std::size_t> longest_zero_contact_runs) {
     std::ofstream output(path, std::ios::out | std::ios::trunc);
     if (!output) {
         Reject("could not open '" + path.string() + "'");
@@ -791,17 +767,16 @@ void WriteMetadata(
            << kVehicleReferenceTrackStationMeters << ",\n"
            << "  \"input_paths\": {\n"
            << "    \"vehicle_definition\": "
-           << JsonString(configuration.vehicle_definition_path.string())
-           << ",\n"
+           << JsonString(configuration.vehicle_definition_path.string()) << ",\n"
            << "    \"resolved_startup_state\": "
-           << JsonString(
-                  configuration.resolved_startup_state_path.string())
+           << JsonString(configuration.resolved_startup_state_path.string()) << ",\n"
+           << "    \"track_geometry\": " << JsonString(configuration.track_geometry_path.string())
            << ",\n"
-           << "    \"track_geometry\": "
-           << JsonString(configuration.track_geometry_path.string())
-           << ",\n"
-           << "    \"orvd_data_root\": "
-           << JsonString(configuration.orvd_data_root.string()) << "\n"
+           << "    \"orvd_data_root\": " << JsonString(configuration.orvd_data_root.string());
+    if (configuration.consist_path) {
+        output << ",\n    \"consist\": " << JsonString(configuration.consist_path->string());
+    }
+    output << "\n"
            << "  },\n"
            << "  \"assembled_state_and_force_layout\": {\n"
            << "    \"generalized_position_count\": "
@@ -809,11 +784,9 @@ void WriteMetadata(
            << "    \"generalized_velocity_count\": "
            << assembled.model().num_generalized_velocities() << ",\n"
            << "    \"series_force_state_count\": "
-           << assembled.force_plan()
-                  .series_spring_damper_force_state_count()
+           << assembled.force_plan().series_spring_damper_force_state_count() << ",\n"
+           << "    \"vehicle_body_wrench_count\": " << assembled.force_plan().body_wrench_count()
            << ",\n"
-           << "    \"vehicle_body_wrench_count\": "
-           << assembled.force_plan().body_wrench_count() << ",\n"
            << "    \"contact_body_wrench_count\": "
            << assembled.contact_force_plan()->body_wrench_count() << "\n"
            << "  },\n"
@@ -923,6 +896,12 @@ void ReportBoundaryWarning(std::string_view side, const BoundaryUse& use) {
 QualificationRunSummary RunVehicleQualification(
     const QualificationRunConfiguration& run_configuration,
     const VehicleQualificationRecipe& recipe) {
+    if (run_configuration.consist_path && run_configuration.publish_scene_record) {
+        throw std::invalid_argument("--consist cannot be combined with --scene-record");
+    }
+    if (run_configuration.consist_path && recipe.prepare_contact == nullptr) {
+        throw std::invalid_argument("this qualification recipe does not accept a consist");
+    }
     if (recipe.track_irregularity_requirement ==
             TrackIrregularityRequirement::kRequired &&
         (!run_configuration.track_irregularity_identifier.has_value() ||
@@ -977,25 +956,50 @@ QualificationRunSummary RunVehicleQualification(
                     *resolved_run_configuration
                          .track_irregularity_identifier));
     }
-    std::unique_ptr<AssembledVehicleContactScenario> scenario =
-        recipe.assemble_scenario(
-            vehicle, startup, std::move(line),
-            resolved_run_configuration.orvd_data_root,
-            kVehicleReferenceTrackStationMeters,
-            std::move(irregularity));
+    std::unique_ptr<AssembledVehicleContactScenario> scenario;
+    if (resolved_run_configuration.consist_path) {
+        const auto consist =
+            configuration::LoadConsistDefinition(*resolved_run_configuration.consist_path);
+        auto contact =
+            recipe.prepare_contact(vehicle, startup, resolved_run_configuration.orvd_data_root);
+        scenario = configuration::AssembleConsistContactScenario(
+            vehicle, startup, consist, std::move(contact), std::move(line),
+            kVehicleReferenceTrackStationMeters, std::move(irregularity));
+    } else {
+        scenario = recipe.assemble_scenario(
+            vehicle, startup, std::move(line), resolved_run_configuration.orvd_data_root,
+            kVehicleReferenceTrackStationMeters, std::move(irregularity));
+    }
     auto& assembled = scenario->vehicle_system();
     auto& accepted = scenario->initial_context().context();
+    const int vehicle_count = static_cast<int>(assembled.instance_bindings().size());
+    const auto linear_count = static_cast<std::size_t>(
+        assembled.force_plan().point_to_point_linear_spring_damper_count());
     if (assembled.model().num_generalized_positions() !=
-            recipe.expected_generalized_position_count ||
+            vehicle_count * recipe.expected_generalized_position_count ||
         assembled.model().num_generalized_velocities() !=
-            recipe.expected_generalized_velocity_count ||
+            vehicle_count * recipe.expected_generalized_velocity_count ||
         assembled.force_plan().series_spring_damper_force_state_count() !=
-            recipe.expected_series_force_state_count ||
+            vehicle_count * recipe.expected_series_force_state_count ||
         assembled.force_plan().body_wrench_count() !=
-            recipe.expected_vehicle_wrench_count) {
+            vehicle_count * recipe.expected_vehicle_wrench_count +
+                2 * static_cast<int>(linear_count)) {
         Reject(std::string(recipe.vehicle_label) +
                " assembled state or vehicle-wrench topology differs from "
                "its typed qualification recipe");
+    }
+    const auto carrier_count =
+        static_cast<std::size_t>(assembled.contact_force_plan()->carrier_count());
+    const auto interface_count =
+        static_cast<std::size_t>(assembled.contact_force_plan()->interface_count());
+    std::vector<std::string> representative_body_names;
+    representative_body_names.reserve(assembled.instance_bindings().size() *
+                                      recipe.representative_body_names.size());
+    for (const auto& instance : assembled.instance_bindings()) {
+        for (const auto local_name : recipe.representative_body_names) {
+            representative_body_names.push_back(
+                configuration::QualifyVehicleName(instance.instance_name, local_name));
+        }
     }
     if (accepted.time_seconds() != 0.0 || sample_times.front() != 0.0) {
         Reject("the qualification clock and resolved context must start at "
@@ -1021,6 +1025,10 @@ QualificationRunSummary RunVehicleQualification(
         {"resolved_startup_state", resolved_run_configuration.resolved_startup_state_path.string()},
         {"track_geometry", resolved_run_configuration.track_geometry_path.string()},
         {"orvd_data_root", resolved_run_configuration.orvd_data_root.string()}};
+    if (resolved_run_configuration.consist_path) {
+        failure_metadata["input_paths"]["consist"] =
+            resolved_run_configuration.consist_path->string();
+    }
     failure_metadata["qualification_vehicle_recipe"] = recipe.vehicle_label;
     failure_metadata["sample_period_nanoseconds"] = run_configuration.sample_period_nanoseconds;
     failure_metadata["track_irregularity_identifier"] =
@@ -1059,31 +1067,19 @@ QualificationRunSummary RunVehicleQualification(
     std::vector<AppliedBodyWrench> contact_wrenches(
         static_cast<std::size_t>(
             assembled.contact_force_plan()->body_wrench_count()));
-    std::array<WheelRailContactInterfaceObservation, kInterfaceCount>
-        interface_observations{};
-    if (assembled.contact_force_plan()->carrier_count() !=
-            static_cast<int>(kCarrierCount) ||
-        assembled.contact_force_plan()->interface_count() !=
-            static_cast<int>(kInterfaceCount)) {
-        Reject(std::string("the assembled ") +
-               std::string(recipe.vehicle_label) +
-               " contact topology is not four carriers and eight interfaces");
+    std::vector<WheelRailContactInterfaceObservation> interface_observations(interface_count);
+    std::vector<multibody_model::RigidBodyHandle> carrier_bodies;
+    carrier_bodies.reserve(carrier_count);
+    for (std::size_t carrier = 0; carrier < carrier_count; ++carrier) {
+        carrier_bodies.push_back(
+            assembled.model().GetRigidBodyByName(assembled.contact_force_plan()
+                                                     ->carrier_definition(static_cast<int>(carrier))
+                                                     .body_name));
     }
-
-    const std::array<multibody_model::RigidBodyHandle, kCarrierCount>
-        carrier_bodies{
-            assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_definition(0).body_name),
-            assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_definition(1).body_name),
-            assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_definition(2).body_name),
-            assembled.model().GetRigidBodyByName(
-                assembled.contact_force_plan()->carrier_definition(3).body_name)};
     const auto scene_topology = scene_observation::DescribeSceneTopology(
         assembled.model(), assembled.contact_force_plan());
     std::vector<CarrierHeadingBinding> carrier_headings;
-    for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
+    for (std::size_t carrier = 0; carrier < carrier_count; ++carrier) {
         const auto& name = assembled.contact_force_plan()->carrier_definition(
             static_cast<int>(carrier)).body_name;
         const scene_observation::SceneWheelPlacement* selected = nullptr;
@@ -1096,7 +1092,7 @@ QualificationRunSummary RunVehicleQualification(
         carrier_headings.push_back({assembled.model().GetRigidBodyByName(selected->wheel_body_name),
                                    selected->spin_axis_in_wheel_body_frame});
     }
-    std::array<ProjectionHistory, kCarrierCount> carrier_projection_histories{};
+    std::vector<ProjectionHistory> carrier_projection_histories(carrier_count);
     for (std::size_t index = 0; index < carrier_projection_histories.size();
          ++index) {
         carrier_projection_histories[index].station_seed_meters =
@@ -1104,22 +1100,14 @@ QualificationRunSummary RunVehicleQualification(
                 static_cast<int>(index));
     }
 
-    const std::array<multibody_model::RigidBodyHandle,
-                     kRepresentativeBodyCount>
-        representative_bodies{
-            assembled.model().GetRigidBodyByName(
-                recipe.representative_body_names[0]),
-            assembled.model().GetRigidBodyByName(
-                recipe.representative_body_names[1]),
-            assembled.model().GetRigidBodyByName(
-                recipe.representative_body_names[2])};
-    std::array<ProjectionHistory, kRepresentativeBodyCount>
-        representative_body_projection_histories{};
-    for (std::size_t index = 0;
-         index < representative_body_projection_histories.size(); ++index) {
-        representative_body_projection_histories[index].station_seed_meters =
-            InitialBodyTrackStation(vehicle, startup,
-                                    recipe.representative_body_names[index]);
+    std::vector<multibody_model::RigidBodyHandle> representative_bodies;
+    std::vector<ProjectionHistory> representative_body_projection_histories;
+    representative_bodies.reserve(representative_body_names.size());
+    representative_body_projection_histories.reserve(representative_body_names.size());
+    for (const auto& name : representative_body_names) {
+        representative_bodies.push_back(assembled.model().GetRigidBodyByName(name));
+        representative_body_projection_histories.push_back(
+            {InitialBodyTrackStation(scenario->initial_context(), name)});
     }
 
     std::optional<SceneRecordExport> scene_export;
@@ -1131,23 +1119,32 @@ QualificationRunSummary RunVehicleQualification(
             assembled, output_directory.working_path() / "scene_record",
             scene_observation::SceneDescription{
                 .topology = scene_topology,
-                .scalar_definitions = MakeSceneScalarDefinitions(assembled, recipe),
+                .scalar_definitions =
+                    MakeSceneScalarDefinitions(assembled, representative_body_names),
                 .nominal_sample_period_seconds =
-                    static_cast<double>(sample_clock.sample_period_nanoseconds()) *
-                    1e-9},
-            scene_record::SceneAssets{
-                .visual_definition_json =
-                    ReadVisualDefinitionText(visual_definition_path)});
+                    static_cast<double>(sample_clock.sample_period_nanoseconds()) * 1e-9},
+            scene_record::SceneAssets{.visual_definition_json =
+                                          ReadVisualDefinitionText(visual_definition_path)});
     }
 
-    std::vector<QualificationObservation> observations;
-    observations.reserve(sample_clock.sample_count());
+    std::vector<QualificationObservation> observations(sample_clock.sample_count());
+    for (auto& observation : observations) {
+        observation.carriers.resize(carrier_count);
+        observation.interfaces.resize(interface_count);
+        observation.representative_bodies.resize(representative_bodies.size());
+    }
+    std::vector<forces::PointToPointLinearSpringDamperObservation> linear_observations(
+        sample_clock.sample_count() * linear_count);
     std::vector<QualificationPatchObservation> patch_observations;
-    patch_observations.reserve(sample_clock.sample_count() * kInterfaceCount);
+    patch_observations.reserve(sample_clock.sample_count() * interface_count);
     BoundaryUse before_definition_interval;
     BoundaryUse after_definition_interval;
-    std::array<std::size_t, kInterfaceCount> current_zero_contact_runs{};
-    std::array<std::size_t, kInterfaceCount> longest_zero_contact_runs{};
+    std::vector<std::size_t> current_zero_contact_runs(interface_count);
+    std::vector<std::size_t> longest_zero_contact_runs(interface_count);
+    auto pending_carrier_projection_histories = carrier_projection_histories;
+    auto pending_representative_body_projection_histories =
+        representative_body_projection_histories;
+    std::vector<double> station_hints(carrier_count);
     const Clock::time_point observation_begin = Clock::now();
     for (std::size_t sample = 0; sample < sample_clock.sample_count(); ++sample) {
         assembled.system().SetTimeAndContinuousState(
@@ -1157,11 +1154,8 @@ QualificationRunSummary RunVehicleQualification(
             assembled.system().GetMultibodyComponentView(
             *observation_context, assembled.system().multibody_component());
 
-        std::array<ProjectionHistory, kCarrierCount>
-            pending_carrier_projection_histories =
-                carrier_projection_histories;
-        std::array<double, kCarrierCount> station_hints{};
-        for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
+        pending_carrier_projection_histories = carrier_projection_histories;
+        for (std::size_t carrier = 0; carrier < carrier_count; ++carrier) {
             const Eigen::Vector3d body_origin_in_inertial_meters =
                 assembled.model()
                     .CalcPoseInWorld(projection_component.context(),
@@ -1185,18 +1179,22 @@ QualificationRunSummary RunVehicleQualification(
             station_hints,
             contact_wrenches, interface_observations);
 
-        QualificationObservation observation;
+        auto& observation = observations[sample];
+        if (linear_count != 0) {
+            assembled.force_plan().CalcPointToPointLinearSpringDamperObservations(
+                component.context(),
+                std::span(linear_observations).subspan(sample * linear_count, linear_count));
+        }
         observation.sample_index = static_cast<std::uint64_t>(sample);
         observation.time_nanoseconds = sample_clock.TargetTimeNanoseconds(
             static_cast<std::uint64_t>(sample));
         observation.time_seconds = sample_times[sample];
-        for (std::size_t carrier = 0; carrier < kCarrierCount; ++carrier) {
+        for (std::size_t carrier = 0; carrier < carrier_count; ++carrier) {
             observation.carriers[carrier] = ObserveCarrier(
                 assembled, component.context(), carrier_bodies[carrier],
                 station_hints[carrier], carrier_headings[carrier]);
         }
-        for (std::size_t interface = 0; interface < kInterfaceCount;
-             ++interface) {
+        for (std::size_t interface = 0; interface < interface_count; ++interface) {
             observation.interfaces[interface] =
                 SummarizeInterfaceObservation(
                     interface_observations[interface]);
@@ -1210,10 +1208,8 @@ QualificationRunSummary RunVehicleQualification(
                     interface_observations[interface].patches[patch]});
             }
         }
-        std::array<ProjectionHistory, kRepresentativeBodyCount>
-            pending_representative_body_projection_histories =
-                representative_body_projection_histories;
-        for (std::size_t body = 0; body < kRepresentativeBodyCount; ++body) {
+        pending_representative_body_projection_histories = representative_body_projection_histories;
+        for (std::size_t body = 0; body < representative_bodies.size(); ++body) {
             observation.representative_bodies[body] =
                 ObserveRepresentativeBody(
                     assembled, component.context(),
@@ -1222,8 +1218,7 @@ QualificationRunSummary RunVehicleQualification(
         }
         representative_body_projection_histories =
             pending_representative_body_projection_histories;
-        for (std::size_t interface = 0; interface < kInterfaceCount;
-             ++interface) {
+        for (std::size_t interface = 0; interface < interface_count; ++interface) {
             const auto& value = observation.interfaces[interface];
             RequireFinite(
                 value.rail_profile_reference_marker_track_station_meters,
@@ -1257,7 +1252,6 @@ QualificationRunSummary RunVehicleQualification(
         RecordBoundaryUse(assembled, observation,
                           &before_definition_interval,
                           &after_definition_interval);
-        observations.push_back(observation);
         if (scene_export.has_value()) {
             const Clock::time_point scene_begin = Clock::now();
             scene_observation::SceneFrame frame;
@@ -1362,7 +1356,7 @@ QualificationRunSummary RunVehicleQualification(
         Reject("could not open '" + observation_path.string() + "'");
     }
     observation_output << std::setprecision(17);
-    WriteObservationHeader(&observation_output, assembled, recipe);
+    WriteObservationHeader(&observation_output, assembled, representative_body_names);
     for (const QualificationObservation& observation : observations) {
         WriteObservation(&observation_output, observation);
     }
@@ -1383,6 +1377,31 @@ QualificationRunSummary RunVehicleQualification(
                               assembled);
     }
     CloseChecked(&patch_observation_output, patch_observation_path);
+
+    if (linear_count != 0) {
+        const auto path =
+            output_directory.working_path() / "point_to_point_linear_spring_dampers.tsv";
+        std::ofstream output(path, std::ios::out | std::ios::trunc);
+        if (!output)
+            Reject("could not open '" + path.string() + "'");
+        output << std::setprecision(17)
+               << "sample_index\ttime_nanoseconds\ttime_seconds\telement_name"
+                  "\tlength_meters\tlength_rate_meters_per_second"
+                  "\tspring_force_newtons\tdamping_force_newtons\tforce_newtons\n";
+        for (std::size_t sample = 0; sample < sample_clock.sample_count(); ++sample) {
+            for (std::size_t element = 0; element < linear_count; ++element) {
+                const auto& value = linear_observations[sample * linear_count + element];
+                output << sample << '\t' << sample_clock.TargetTimeNanoseconds(sample) << '\t'
+                       << sample_times[sample] << '\t'
+                       << assembled.force_plan().point_to_point_linear_spring_damper_name(
+                              static_cast<int>(element))
+                       << '\t' << value.length_meters << '\t' << value.length_rate_meters_per_second
+                       << '\t' << value.spring_force_newtons << '\t' << value.damping_force_newtons
+                       << '\t' << value.force_newtons << '\n';
+            }
+        }
+        CloseChecked(&output, path);
+    }
 
     WriteMetadata(output_directory.working_path() / "metadata.json",
                   resolved_run_configuration, recipe, numerics.metadata,

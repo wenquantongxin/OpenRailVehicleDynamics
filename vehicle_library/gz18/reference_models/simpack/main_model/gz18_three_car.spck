@@ -1,0 +1,324 @@
+!file.version=3.6! Removing this line will make the file unreadable
+
+!**********************************************************************
+! Simpack Version Information
+!**********************************************************************
+version.number = 20210100
+version.desc   = ''
+version.build  = 107
+
+!**********************************************************************
+!  Global parameters
+!**********************************************************************
+searchpath (              1                                       ) = '.'
+searchpath (              2                                       ) = '../database'
+gravity (                 1                                       ) = 0.00000000000000000E+00 ! Gravity
+gravity (                 2                                       ) = 0.00000000000000000E+00 ! Gravity
+gravity (                 3                                       ) = 9.81000000000000050E+00 ! Gravity
+vehicle.startvel                                                    = { 60/3.6 }              ! Vehicle initial velocity
+vehicle.applystartvel                                               = 1                       ! Apply vehicle initial velocity at solver start
+glob.compat.flxnodeori                                              = 0                       ! Flexbody Node Orientation Method
+glob.compat.afcf                                                    = 0                       ! References Frame for Joint and Force Element Forces and Torques
+glob.compat.track.excit                                             = 0                       ! Track Excitation rotation sequence
+rw.cont.meth                                                        = 2                       ! MISCPAR_RW_CONTACT_METHOD
+rw.linear                                                           = 0                       ! MISCPAR_RW_PROFILE_LINEARIZATION_METHOD
+time                                                                = 0.00000000000000000E+00 ! Time
+slv.active                                                          = $SLV_SolverSettings     ! Active SolverSettings element
+track.active                                                        = $S_Car_1.$Trk_AAR6_120kmph ! Active Track element
+prop3d.bbox                                                         = 0                       ! 0 = exclude all refsys objects, 1 = include all refsys objects
+
+
+!**********************************************************************
+! Substructures
+!**********************************************************************
+substr.file (                       $S_Car_1                      ) = 'gz18_straight_aar6.spck' ! Filename
+substr.id (                         $S_Car_1                      ) = '1'                     ! Substructure Id
+
+substr.file (                       $S_Car_2                      ) = 'gz18_straight_aar6.spck' ! Filename
+substr.id (                         $S_Car_2                      ) = '2'                     ! Substructure Id
+
+substr.file (                       $S_Car_3                      ) = 'gz18_straight_aar6.spck' ! Filename
+substr.id (                         $S_Car_3                      ) = '3'                     ! Substructure Id
+
+!**********************************************************************
+! Views
+!**********************************************************************
+view.type (                         $V_WorkingView                ) = 0                       ! Projection type
+view.pos (                1 ,       $V_WorkingView                ) = -1.78790588378906250E+02 ! Position
+view.pos (                2 ,       $V_WorkingView                ) = -1.35414962768554688E+02 ! Position
+view.pos (                3 ,       $V_WorkingView                ) = -1.70393402099609375E+02 ! Position
+view.orient (             1 ,       $V_WorkingView                ) = -1.93944498896598816E-01 ! Orientation
+view.orient (             2 ,       $V_WorkingView                ) = -8.82542729377746582E-01 ! Orientation
+view.orient (             3 ,       $V_WorkingView                ) = 3.44356149435043335E-01 ! Orientation
+view.orient (             4 ,       $V_WorkingView                ) = 2.54799425601959229E-01 ! Orientation
+view.angle (                        $V_WorkingView                ) = 2.61799395084381104E-01 ! Lens angle
+view.fclip.auto (                   $V_WorkingView                ) = 1                       ! Front clipping plane auto
+view.bclip.auto (                   $V_WorkingView                ) = 1                       ! Back clipping plane auto
+view.fclip.value (                  $V_WorkingView                ) = 2.30219030380249023E+00 ! Front clipping plane value
+view.bclip.value (                  $V_WorkingView                ) = 2.30219018554687500E+03 ! Back clipping plane value
+view.rotcenter.type (               $V_WorkingView                ) = 0                       ! Rotation center type
+view.rotcenter.adjust (             $V_WorkingView                ) = 1                       ! Adjust rotation center
+view.motion.active (                $V_WorkingView                ) = 0                       ! Camera is moved
+view.stereo.active (                $V_WorkingView                ) = 0                       ! Stereo enabled
+view.stereo.balance (               $V_WorkingView                ) = 1.00000000000000000E+00 ! Stereo balance
+view.stereo.offset (                $V_WorkingView                ) = 1.00000000000000000E+00 ! Stereo offset
+
+!**********************************************************************
+! Solver Settings
+!**********************************************************************
+slv.kin.task (                      $SLV_SolverSettings           ) = 3                       ! KIN_INTPAR_TASK
+slv.kin.tout.n (                    $SLV_SolverSettings           ) = 201                     ! KIN_INTPAR_NUM_STEPS
+slv.kin.tol (                       $SLV_SolverSettings           ) = 9.99999999999999955E-07 ! Kinematics tolerance
+slv.integ.fix.driftstab (           $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_INTPAR_FIXINT_CONSTAB
+slv.integ.fix.jac.update (          $SLV_SolverSettings           ) = 3                       ! TIME_INTEG_PAR_FIXINT_JACOBIAN_EVAL
+slv.integ.fix.part.type (           $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_INTPAR_FIXINT_JAC_PART_TYPE
+slv.integ.fix.order (               $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_FIXINT_METHOD_ORDER
+slv.integ.fix.posup (               $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_FIXINT_POS_COORD_UPDATE
+slv.integ.sodasrt.formalism (       $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_FORMALISM
+slv.integ.type (                    $SLV_SolverSettings           ) = 1                       ! Integrator type
+slv.integ.jac.struc (               $SLV_SolverSettings           ) = 3                       ! SOLVER_TIME_INTEG_PAR_JACOBIAN_STRUC
+slv.integ.jac.incr.type (           $SLV_SolverSettings           ) = 2                       ! Jacobian increment type
+slv.integ.linalg.slv (              $SLV_SolverSettings           ) = 1                       ! 1 = dense ; 2 = sparse (UMFPACK) ; 3 = sparse (PARDISO)
+slv.integ.lsode.meth (              $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_PAR_LSODE_INTEG_METHOD
+slv.integ.lsode.jac.struc (         $SLV_SolverSettings           ) = 3                       ! SOLVER_TIME_INTEG_PAR_LSODE_JACOBIAN_STRUC
+slv.integ.lsode.maxord (            $SLV_SolverSettings           ) = 5                       ! TIME_INTEG_INTPAR_LSODE_MAX_ORDER
+slv.integ.maxrhs (                  $SLV_SolverSettings           ) = -1                      ! TIME_INTEG_INTPAR_MAX_RHS
+slv.integ.maxstp (                  $SLV_SolverSettings           ) = -1                      ! TIME_INTEG_INTPAR_MAX_TIME_STEPS
+slv.integ.hmax (                    $SLV_SolverSettings           ) = 1.00000000000000002E-03 ! TIME_INTEG_TIMEPAR_MAX_STEPSIZE
+slv.integ.newton.maxit (            $SLV_SolverSettings           ) = 7                       ! TIME_INTEG_INTPAR_NEWTON_ITERS
+slv.integ.tout.n (                  $SLV_SolverSettings           ) = 101                     ! TIME_INTEG_INTPAR_OUTPUT_NUM_POINTS
+slv.integ.sodasrt2.iestsc (         $SLV_SolverSettings           ) = 2                       ! TIME_INTEG_PAR_SODASRT20_ERROR_EST_SCALE_METHOD
+slv.integ.sodasrt.maxord (          $SLV_SolverSettings           ) = 5                       ! TIME_INTEG_INTPAR_SODASRT_MAX_ORDER
+slv.integ.sodasrt1.errnorm (        $SLV_SolverSettings           ) = 3                       ! TIME_INTEG_PAR_SODASRT_NORM_TYPE
+slv.integ.tout.mode (               $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_INTPAR_TOUT_MODE
+slv.integ.meetop (                  $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_BOOLPAR_EVAL_MOTION_EQ_AT_COMM_POINTS
+slv.integ.driftstab (               $SLV_SolverSettings           ) = 2                       ! TIME_INTEG_BOOLPAR_ACCEPT_DRIFT
+slv.integ.root (                    $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_DETECT_IMPLICIT_DISCONTINUITIES
+slv.integ.jac.part (                $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_PARTITIONED_EVAL_JACOBIAN
+slv.integ.addrhscall (              $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_BOOLPAR_EXTRA_EVAL_AFTER_SUCCESSFUL_STEP
+slv.integ.linalg.red2nd (           $SLV_SolverSettings           ) = 1                       ! Linear equations second order reduction
+slv.integ.fix.oneleg (              $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_FIXINT_IMPLICIT_ONE_LEG_OLC
+slv.integ.fix.conforce (            $SLV_SolverSettings           ) = 0                       ! TIME_INTEG_BOOLPAR_FIXINT_CONFORCE
+slv.integ.fix.clss (                $SLV_SolverSettings           ) = 1                       ! TIME_INTEG_BOOLPAR_FIXINT_METHOD_CLASS
+slv.integ.sodasrt1.scal.lam (       $SLV_SolverSettings           ) = 9.99999999999999955E-08 ! TIME_INTEG_SCALARPAR_SCALE_CONSTRAINT_FORCES
+slv.integ.sodasrt1.scal.acc (       $SLV_SolverSettings           ) = 1.00000000000000000E+00 ! TIME_INTEG_SCALARPAR_SCALE_ACCELERATIONS
+slv.integ.newton.eps (              $SLV_SolverSettings           ) = 3.33000000000000018E-01 ! TIME_INTEG_SCALARPAR_NEWTON_ERROR_BOUND
+slv.integ.fix.utcpar (              $SLV_SolverSettings           ) = 1.00000000000000000E+00 ! TIME_INTEG_SCALARPAR_FIXINT_EULER_UTC
+slv.integ.fix.olcpar (              $SLV_SolverSettings           ) = 5.00000000000000000E-01 ! TIME_INTEG_SCALARPAR_FIXINT_ONE_LEG_OLC
+slv.integ.sodasrt2.estfac (         $SLV_SolverSettings           ) = 9.99999999999999955E-07 ! TIME_INTEG_SCALARPAR_SODASRT20_ERROR_EST_SCALE_FACTOR
+slv.integ.tout.freq (               $SLV_SolverSettings           ) = { 2000 Hz }             ! TIME_INTEG_PAR_OUTPUT_FREQ
+slv.integ.tend.time (               $SLV_SolverSettings           ) = { 20 s }                ! TIME_INTEG_TIMEPAR_END_TIME
+slv.integ.atol.gen (                $SLV_SolverSettings           ) = 1.00000000000000008E-05 ! TIME_INTEG_PARSTATE_DEFAULT
+slv.integ.atol.vel (                $SLV_SolverSettings           ) = 1.00000000000000005E-04 ! TIME_INTEG_PARSTATE_VEL
+slv.integ.rtol.gen (                $SLV_SolverSettings           ) = 1.00000000000000004E-10 ! TIME_INTEG_PARSTATE_DEFAULT
+slv.integ.rtol.vel (                $SLV_SolverSettings           ) = 1.00000000000000005E-04 ! TIME_INTEG_PARSTATE_VEL
+slv.meas.geo (                      $SLV_SolverSettings           ) = 1                       ! Animation data to result file
+slv.meas.prec.dbl (                 $SLV_SolverSettings           ) = 1                       ! Result file in double precision
+slv.meas.sensor.pos (               $SLV_SolverSettings           ) = 1                       ! Sensor position to result file
+slv.meas.sensor.vel (               $SLV_SolverSettings           ) = 1                       ! Sensor velocity to result file
+slv.meas.sensor.acc (               $SLV_SolverSettings           ) = 1                       ! Sensor acceleration to result file
+slv.meas.force.af (                 $SLV_SolverSettings           ) = 1                       ! applied forces to result file
+slv.meas.force.ov (                 $SLV_SolverSettings           ) = 1                       ! Force output values to result file
+slv.meas.force.st.dyn (             $SLV_SolverSettings           ) = 1                       ! Force dynamic states to result file
+slv.meas.force.st.alg (             $SLV_SolverSettings           ) = 1                       ! Force algebraic states to result file
+slv.meas.joint.st.pos (             $SLV_SolverSettings           ) = 1                       ! Joint position to result file
+slv.meas.joint.st.vel (             $SLV_SolverSettings           ) = 1                       ! Joint velocity to result file
+slv.meas.joint.st.acc (             $SLV_SolverSettings           ) = 1                       ! Joint acceleration to result file
+slv.meas.joint.cf (                 $SLV_SolverSettings           ) = 1                       ! Joint constraining forces to result file
+slv.meas.body.pos (                 $SLV_SolverSettings           ) = 1                       ! Body position to result file
+slv.meas.body.flx.st.pos (          $SLV_SolverSettings           ) = 1                       ! Body elastic state position to result file
+slv.meas.body.flx.st.vel (          $SLV_SolverSettings           ) = 1                       ! Body elastic state velocity to result file
+slv.meas.body.flx.st.acc (          $SLV_SolverSettings           ) = 1                       ! Body elastic state acceleration to result file
+slv.meas.marker.st.alg (            $SLV_SolverSettings           ) = 1                       ! Marker algebraic state to result file
+slv.meas.constr.cf (                $SLV_SolverSettings           ) = 1                       ! Constraint constrained state to result file
+slv.meas.yout (                     $SLV_SolverSettings           ) = 1                       ! y-Outputs to result file
+slv.meas.result (                   $SLV_SolverSettings           ) = 1                       ! Result elements to result file
+slv.meas.subvar (                   $SLV_SolverSettings           ) = 1                       ! MEAS_BOOLPAR_SUBVAR
+slv.assmbl.task (                   $SLV_SolverSettings           ) = 3                       ! ASSMBL_PAR_SOLVER_MODE
+slv.output.path.type (              $SLV_SolverSettings           ) = 1                       ! OUTPUT_PATH_PAR_TYPE
+slv.output.file.desc (              $SLV_SolverSettings           ) = ''                      ! Description written to the output file if supported
+slv.threads (                       $SLV_SolverSettings           ) = 8                       ! Solver Threads
+slv.compat.solver (                 $SLV_SolverSettings           ) = 0                       ! 0 = no (new solver); 1 = yes (classic solver)
+slv.txt (                           $SLV_SolverSettings           ) = ''                      ! Comment
+
+!**********************************************************************
+! SubVars
+!**********************************************************************
+subvar.str (                        $_LeadStation                 ) = '0.0'                   ! Definition
+
+subvar.str (                        $_CarSpacing                  ) = '23.6'                  ! Definition
+
+!**********************************************************************
+! Reference systems
+!**********************************************************************
+refsys.type (                       $R_Isys                       ) = 1                       ! Type
+
+marker.type (                       $M_Isys                       ) = 1                       ! Type
+marker.parent (                     $M_Isys                       ) = $R_Isys                 ! Reference system
+
+
+!**********************************************************************
+! Force Elements
+!**********************************************************************
+force.type (                        $F_Coupler_12                 ) = 4                       ! Type
+force.from (                        $F_Coupler_12                 ) = $S_Car_1.$M_vehicle_Hook_R ! From Marker
+force.to (                          $F_Coupler_12                 ) = $S_Car_2.$M_vehicle_Hook_F ! To Marker
+force.par (               1 ,       $F_Coupler_12                 ) = { 0.80 m }              ! [m] Nominal length
+force.par (               2 ,       $F_Coupler_12                 ) = { 8000000 N/m }         ! [N/m] Stiffness
+force.par (               3 ,       $F_Coupler_12                 ) = { 130000 Ns/m }         ! [Ns/m] Damping
+force.par (               4 ,       $F_Coupler_12                 ) = null                    ! [-] Input Function F_c(l)
+force.par (               5 ,       $F_Coupler_12                 ) = null                    ! [-] Input Function F_d(ld)
+force.par (               6 ,       $F_Coupler_12                 ) = { 0 N }                 ! [N] Preload force
+
+force.type (                        $F_Coupler_23                 ) = 4                       ! Type
+force.from (                        $F_Coupler_23                 ) = $S_Car_2.$M_vehicle_Hook_R ! From Marker
+force.to (                          $F_Coupler_23                 ) = $S_Car_3.$M_vehicle_Hook_F ! To Marker
+force.par (               1 ,       $F_Coupler_23                 ) = { 0.80 m }              ! [m] Nominal length
+force.par (               2 ,       $F_Coupler_23                 ) = { 8000000 N/m }         ! [N/m] Stiffness
+force.par (               3 ,       $F_Coupler_23                 ) = { 130000 Ns/m }         ! [Ns/m] Damping
+force.par (               4 ,       $F_Coupler_23                 ) = null                    ! [-] Input Function F_c(l)
+force.par (               5 ,       $F_Coupler_23                 ) = null                    ! [-] Input Function F_d(ld)
+force.par (               6 ,       $F_Coupler_23                 ) = { 0 N }                 ! [N] Preload force
+
+!**********************************************************************
+! Tracks
+!**********************************************************************
+track.type (                        $Trk_Straight                 ) = 2                       ! Type
+track.kind (                        $Trk_Straight                 ) = 1                       ! Kind
+track.excit.lat (                   $Trk_Straight                 ) = null                    ! Track::EXC_TRACK_LATERAL
+track.excit.vert (                  $Trk_Straight                 ) = null                    ! Track::EXC_TRACK_VERTICAL
+track.excit.roll (                  $Trk_Straight                 ) = null                    ! Track::EXC_TRACK_ROLL
+track.excit.left.lat (              $Trk_Straight                 ) = null                    ! Track::EXC_RAIL_LATERAL_LEFT
+track.excit.left.vert (             $Trk_Straight                 ) = null                    ! Track::EXC_RAIL_VERTICAL_LEFT
+track.excit.left.roll (             $Trk_Straight                 ) = null                    ! Track::EXC_RAIL_ROLL_LEFT
+track.excit.right.lat (             $Trk_Straight                 ) = null                    ! Track::EXC_RAIL_LATERAL_RIGHT
+track.excit.right.vert (            $Trk_Straight                 ) = null                    ! Track::EXC_RAIL_VERTICAL_RIGHT
+track.excit.right.roll (            $Trk_Straight                 ) = null                    ! Track::EXC_RAIL_ROLL_RIGHT
+track.excit.gauge (                 $Trk_Straight                 ) = null                    ! Track::EXC_TRACK_GAUGE
+track.meas.superelev.kind (         $Trk_Straight                 ) = 1                       ! Superelevation kind (measured track)
+track.meas.superelev.reflen (       $Trk_Straight                 ) = 0.00000000000000000E+00 ! Superelevation reference length (measured track)
+track.meas.len (                    $Trk_Straight                 ) = 0.00000000000000000E+00 ! Total measured length
+track.meas.discr.fromfile (         $Trk_Straight                 ) = 0                       ! Discretisation from file
+track.meas.discr.num (              $Trk_Straight                 ) = 0                       ! Number of discretisation points
+track.cart.file (                   $Trk_Straight                 ) = ''                      ! Cartographic filename
+track.meas.file (                   $Trk_Straight                 ) = ''                      ! Measured filename
+track.crg.dir (                     $Trk_Straight                 ) = ''                      ! CRG file directory
+track.excit.type (                  $Trk_Straight                 ) = 0                       ! Excitations type
+track.excit.start (                 $Trk_Straight                 ) = 0.00000000000000000E+00 ! Excitations start
+track.excit.end (                   $Trk_Straight                 ) = 0.00000000000000000E+00 ! Excitations end
+track.excit.fade.len (              $Trk_Straight                 ) = 0.00000000000000000E+00 ! Excitations fade in/out
+track.meas.sec.start (              $Trk_Straight                 ) = 0.00000000000000000E+00 ! Section start
+track.meas.sec.end (                $Trk_Straight                 ) = 0.00000000000000000E+00 ! Section end
+track.meas.datared.fromfile (       $Trk_Straight                 ) = 0                       ! Data reduction from file
+track.meas.datared.incr (           $Trk_Straight                 ) = 0                       ! Data increment
+track.meas.curvature.datared (      $Trk_Straight                 ) = 1                       ! Data reduction vertical curvature handling
+track.meas.startend.fromexcit (     $Trk_Straight                 ) = 0                       ! Start/End from excitation
+track.meas.start (                  $Trk_Straight                 ) = 0.00000000000000000E+00 ! Start
+track.meas.fade.len (               $Trk_Straight                 ) = 0.00000000000000000E+00 ! Fade length
+track.cart.horizontal.curvature.kind ( $Trk_Straight              ) = 0                       ! 0=radius; 1=arc length; 2=chord length
+track.cart.horizontal.curvature.reflen ( $Trk_Straight            ) = 1.00000000000000000E+00 ! Reference length
+track.cart.superelev.fromfile (     $Trk_Straight                 ) = 0                       ! Superelevation from file (cartographic track)
+track.cart.superelev.kind (         $Trk_Straight                 ) = 1                       ! Superelevation kind (cartographic track)
+track.cart.superelev.reflen (       $Trk_Straight                 ) = 1.50000000000000000E+00 ! Superelevation reference length (cartographic track)
+track.cart.discr.gen (              $Trk_Straight                 ) = 1.00000000000000000E+00 ! Discr. gen
+track.cart.discr.fine (             $Trk_Straight                 ) = 5.00000000000000000E-01 ! Discr. fine
+track.txt (                         $Trk_Straight                 ) = ''                      ! Comment
+track.cart.h.type (       1 ,       $Trk_Straight                 ) = 1                       ! Type
+track.cart.h.par (        1 ,   1 , $Trk_Straight                 ) = 2.00000000000000000E+03 ! [m] L
+track.cart.h.par (       10 ,   1 , $Trk_Straight                 ) = 1.50000000000000000E+00 ! [m] Lsmo/2
+track.cart.v.type (       1 ,       $Trk_Straight                 ) = 201                     ! Type
+track.cart.v.par (        1 ,   1 , $Trk_Straight                 ) = 2.00000000000000000E+03 ! [m] L
+track.cart.v.par (        2 ,   1 , $Trk_Straight                 ) = 0.00000000000000000E+00 ! [-] P
+track.cart.v.par (       10 ,   1 , $Trk_Straight                 ) = 1.50000000000000000E+00 ! [m] Lsmo/2
+track.cart.s.type (       1 ,       $Trk_Straight                 ) = 101                     ! Type
+track.cart.s.par (        1 ,   1 , $Trk_Straight                 ) = 2.00000000000000000E+03 ! [m] L
+track.cart.s.par (        2 ,   1 , $Trk_Straight                 ) = 0.00000000000000000E+00 ! [m] U
+track.cart.s.par (       10 ,   1 , $Trk_Straight                 ) = 1.50000000000000000E+00 ! [m] Lsmo/2
+
+
+! Overwritten substructure values
+joint.from (                        $S_Car_1.$J_vehicle           ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$J_vehicle           ) = { $_LeadStation }       ! Position
+
+
+joint.from (                        $S_Car_1.$S_BF_F.$J_BF        ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$S_BF_F.$J_BF        ) = { $_LeadStation+$S_Car_1.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_1.$S_BF_F.$S_WS_F.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$S_BF_F.$S_WS_F.$J_wheelset) = { $_LeadStation+$S_Car_1.$S_BF_F.$_lt/2/1000+$S_Car_1.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_1.$S_BF_F.$S_WS_R.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$S_BF_F.$S_WS_R.$J_wheelset) = { $_LeadStation-$S_Car_1.$S_BF_F.$_lt/2/1000+$S_Car_1.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_1.$S_BF_R.$J_BF        ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$S_BF_R.$J_BF        ) = { $_LeadStation-$S_Car_1.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_1.$S_BF_R.$S_WS_F.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$S_BF_R.$S_WS_F.$J_wheelset) = { $_LeadStation+$S_Car_1.$S_BF_R.$_lt/2/1000-$S_Car_1.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_1.$S_BF_R.$S_WS_R.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_1.$S_BF_R.$S_WS_R.$J_wheelset) = { $_LeadStation-$S_Car_1.$S_BF_R.$_lt/2/1000-$S_Car_1.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_2.$J_vehicle           ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$J_vehicle           ) = { $_LeadStation-$_CarSpacing } ! Position
+
+
+joint.from (                        $S_Car_2.$S_BF_F.$J_BF        ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$S_BF_F.$J_BF        ) = { $_LeadStation-$_CarSpacing+$S_Car_2.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_2.$S_BF_F.$S_WS_F.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$S_BF_F.$S_WS_F.$J_wheelset) = { $_LeadStation-$_CarSpacing+$S_Car_2.$S_BF_F.$_lt/2/1000+$S_Car_2.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_2.$S_BF_F.$S_WS_R.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$S_BF_F.$S_WS_R.$J_wheelset) = { $_LeadStation-$_CarSpacing-$S_Car_2.$S_BF_F.$_lt/2/1000+$S_Car_2.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_2.$S_BF_R.$J_BF        ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$S_BF_R.$J_BF        ) = { $_LeadStation-$_CarSpacing-$S_Car_2.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_2.$S_BF_R.$S_WS_F.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$S_BF_R.$S_WS_F.$J_wheelset) = { $_LeadStation-$_CarSpacing+$S_Car_2.$S_BF_R.$_lt/2/1000-$S_Car_2.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_2.$S_BF_R.$S_WS_R.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_2.$S_BF_R.$S_WS_R.$J_wheelset) = { $_LeadStation-$_CarSpacing-$S_Car_2.$S_BF_R.$_lt/2/1000-$S_Car_2.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_3.$J_vehicle           ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$J_vehicle           ) = { $_LeadStation-2*$_CarSpacing } ! Position
+
+
+joint.from (                        $S_Car_3.$S_BF_F.$J_BF        ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$S_BF_F.$J_BF        ) = { $_LeadStation-2*$_CarSpacing+$S_Car_3.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_3.$S_BF_F.$S_WS_F.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$S_BF_F.$S_WS_F.$J_wheelset) = { $_LeadStation-2*$_CarSpacing+$S_Car_3.$S_BF_F.$_lt/2/1000+$S_Car_3.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_3.$S_BF_F.$S_WS_R.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$S_BF_F.$S_WS_R.$J_wheelset) = { $_LeadStation-2*$_CarSpacing-$S_Car_3.$S_BF_F.$_lt/2/1000+$S_Car_3.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_3.$S_BF_R.$J_BF        ) = $M_Isys                 ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$S_BF_R.$J_BF        ) = { $_LeadStation-2*$_CarSpacing-$S_Car_3.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_3.$S_BF_R.$S_WS_F.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$S_BF_R.$S_WS_F.$J_wheelset) = { $_LeadStation-2*$_CarSpacing+$S_Car_3.$S_BF_R.$_lt/2/1000-$S_Car_3.$_bc/2/1000 } ! Position
+
+
+joint.from (                        $S_Car_3.$S_BF_R.$S_WS_R.$J_wheelset) = $M_Isys           ! From Marker
+joint.st.pos (            1 ,       $S_Car_3.$S_BF_R.$S_WS_R.$J_wheelset) = { $_LeadStation-2*$_CarSpacing-$S_Car_3.$S_BF_R.$_lt/2/1000-$S_Car_3.$_bc/2/1000 } ! Position
+
+
+                                     

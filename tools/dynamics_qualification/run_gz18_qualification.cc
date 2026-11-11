@@ -29,8 +29,8 @@ bool ParsePositiveInteger(std::string_view text, std::int64_t* output) {
 int main(int argc, char** argv) {
     orvd::dynamics_qualification::internal::QualificationCliOptions options;
     try {
-        options = orvd::dynamics_qualification::internal::ParseQualificationCliOptions(
-            argc, argv, true);
+        options = orvd::dynamics_qualification::internal::ParseQualificationCliOptions(argc, argv,
+                                                                                       true, true);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
         return 2;
@@ -38,16 +38,17 @@ int main(int argc, char** argv) {
     argc = static_cast<int>(options.positional_arguments.size());
     argv = options.positional_arguments.data();
     if (argc != 9) {
-        std::fprintf(
-            stderr,
-            "usage: orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE "
-            "DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS "
-            "SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record]\n");
+        std::fprintf(stderr,
+                     "usage: orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE "
+                     "DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS "
+                     "SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record] "
+                     "[--consist PATH]\n");
         return 2;
     }
     orvd::dynamics_qualification::Gz18QualificationRunConfiguration config;
     config.integration_config_path = options.integration_config_path;
     config.publish_scene_record = options.publish_scene_record;
+    config.consist_path = options.consist_path;
     config.vehicle_definition_path = argv[1];
     config.resolved_startup_state_path = argv[2];
     config.track_geometry_path = argv[3];

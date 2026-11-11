@@ -21,6 +21,7 @@ namespace orvd::configuration {
 
 class AssembledVehicleContactScenario;
 struct VehicleDefinition;
+struct PreparedVehicleContact;
 namespace internal {
 struct BoundWheelRailContact;
 }
@@ -74,6 +75,9 @@ class Gz18WheelRailContact {
         wheel_rail_contact::WheelSide side) const;
    private:
     friend class AssembledVehicleContactScenario;
+    friend PreparedVehicleContact PrepareGz18VehicleContact(const VehicleDefinition&,
+                                                            const ResolvedStartupState&,
+                                                            const std::filesystem::path&);
     friend std::unique_ptr<Gz18WheelRailContact> AssembleGz18WheelRailContact(
         const std::filesystem::path&, const StartupWheelRailBinding&, double);
     friend std::unique_ptr<AssembledVehicleContactScenario>

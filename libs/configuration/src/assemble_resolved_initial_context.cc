@@ -1,5 +1,6 @@
 #include "orvd/configuration/assemble_resolved_initial_context.h"
 
+#include <Eigen/Geometry>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -9,10 +10,9 @@
 #include <utility>
 #include <vector>
 
-#include <Eigen/Geometry>
-
 #include "orvd/forces/wheel_rail_contact_force_plan.h"
 #include "resolved_startup_state_invariants.h"
+#include "vehicle_instance_assembly.h"
 
 namespace orvd::configuration {
 namespace {
@@ -117,18 +117,73 @@ void RequireFiniteStation(double station, const std::string& body_name) {
     }
 }
 
+ResolvedStartupState QualifyStartupState(const ResolvedStartupState& source,
+                                         std::string_view instance_name) {
+    auto state = source;
+    const auto qualify = [&](std::string& name) { name = QualifyVehicleName(instance_name, name); };
+    for (auto& body : state.free_body_startup_states) {
+        qualify(body.body_name);
+    }
+    for (auto& joint : state.revolute_joint_startup_states) {
+        qualify(joint.joint_name);
+    }
+    for (auto& joint : state.ball_rpy_joint_startup_states) {
+        qualify(joint.joint_name);
+    }
+    for (auto& force : state.series_spring_viscous_damper_force_states) {
+        qualify(force.element_name);
+    }
+    for (auto& force : state.point_to_point_series_spring_bilinear_damper_force_states) {
+        qualify(force.element_name);
+    }
+    for (auto& force : state.translational_spring_damper_nominal_forces) {
+        qualify(force.element_name);
+    }
+    for (auto& target : state.wheel_pair_target_support_forces) {
+        qualify(target.station_reference_body_name);
+    }
+    return state;
+}
 }  // namespace
+
+internal::InitialBodyStations internal::ResolveInitialBodyStations(
+    const std::vector<VehicleInstanceBinding>& bindings, const ResolvedStartupState& startup_state,
+    double layout_station) {
+    if (!std::isfinite(layout_station)) {
+        Reject("layout reference station must be finite");
+    }
+    InitialBodyStations stations;
+    for (const auto& entry : bindings) {
+        const double reference_station = layout_station + entry.station_offset_meters;
+        std::unordered_map<std::string, double> mechanical;
+        for (const auto& body : entry.binding.free_body_station_offsets) {
+            mechanical.emplace(body.body_name, body.station_offset_meters);
+        }
+        for (const auto& body : startup_state.free_body_startup_states) {
+            const std::string name = QualifyVehicleName(entry.instance_name, body.body_name);
+            const auto found = mechanical.find(name);
+            if (found == mechanical.end()) {
+                Reject("unknown free-body start-up state '" + name + "'");
+            }
+            const double station = reference_station + found->second +
+                                   body.resolved_track_station_offset_from_mechanical_layout_meters;
+            RequireFiniteStation(station, name);
+            stations.emplace(name, station);
+        }
+    }
+    return stations;
+}
 
 ResolvedInitialContext::ResolvedInitialContext(
     std::unique_ptr<SystemRuntimeContext> context,
     std::vector<ResolvedWheelPairPlacement> wheel_pair_placements,
+    std::vector<ResolvedBodyPlacement> body_placements,
     double rail_profile_reference_vertical_offset_meters,
-    StartupWheelRailBinding wheel_rail_binding,
-    std::string load_condition_identifier)
+    StartupWheelRailBinding wheel_rail_binding, std::string load_condition_identifier)
     : context_(std::move(context)),
       wheel_pair_placements_(std::move(wheel_pair_placements)),
-      rail_profile_reference_vertical_offset_meters_(
-          rail_profile_reference_vertical_offset_meters),
+      body_placements_(std::move(body_placements)),
+      rail_profile_reference_vertical_offset_meters_(rail_profile_reference_vertical_offset_meters),
       wheel_rail_binding_(std::move(wheel_rail_binding)),
       load_condition_identifier_(std::move(load_condition_identifier)) {}
 
@@ -138,141 +193,125 @@ ResolvedInitialContext& ResolvedInitialContext::operator=(
     ResolvedInitialContext&&) noexcept = default;
 ResolvedInitialContext::~ResolvedInitialContext() = default;
 
-ResolvedInitialContext AssembleResolvedInitialContext(
-    const AssembledVehicleSystem& system,
-    const ResolvedStartupState& startup_state,
-    const track_geometry::TrackGeometry& line,
-    double vehicle_layout_reference_track_station_meters) {
-    // 1. The record's own invariants. A malformed value gets its own
-    // diagnostic here rather than a misleading identity mismatch below.
-    internal::RequireResolvedStartupStateInvariants(startup_state,
+ResolvedInitialContext internal::VehicleInstanceAssembler::AssembleInitialContext(
+    const AssembledVehicleSystem& system, const ResolvedStartupState& source_startup_state,
+    const track_geometry::TrackGeometry& line, const InitialBodyStations& station_of_body) {
+    internal::RequireResolvedStartupStateInvariants(source_startup_state,
                                                     "resolved start-up state");
-    if (!std::isfinite(vehicle_layout_reference_track_station_meters)) {
-        Reject("the vehicle layout reference track station is " +
-               Describe(vehicle_layout_reference_track_station_meters) +
-               ", which is not finite");
-    }
-    const forces::WheelRailContactForcePlan* contact_plan =
-        system.contact_force_plan();
+    const auto* contact_plan = system.contact_force_plan();
     if (contact_plan != nullptr && &line != &contact_plan->track_geometry()) {
-        Reject("a contact-enabled system already owns the line used by its "
-               "wheel-rail force plan; an external line cannot be used to "
-               "place its start-up state");
-    }
-
-    // 2. Identity, including the gravity this state was resolved under.
-    const VehicleBinding& binding = system.binding();
-    if (startup_state.vehicle_binding.vehicle_name != binding.vehicle_name) {
-        Reject("the record was resolved for vehicle '" +
-               startup_state.vehicle_binding.vehicle_name +
-               "', but this system was assembled from '" + binding.vehicle_name +
-               "'");
-    }
-    if (startup_state.vehicle_binding.mechanical_definition_identifier !=
-        binding.mechanical_definition_identifier) {
-        Reject("the record was resolved for mechanical definition '" +
-               startup_state.vehicle_binding.mechanical_definition_identifier +
-               "', but this system was assembled from '" +
-               binding.mechanical_definition_identifier +
-               "'; identifier equality is what binds a resolved state to a "
-               "mechanical definition, and keeping the identifier current is "
-               "the caller's responsibility");
+        Reject("a contact-enabled system already owns the line used by its wheel-rail force plan");
     }
     const MultibodyModel& model = system.model();
-    const Eigen::Vector3d expected_gravity(
-        0.0, 0.0,
-        startup_state.gravitational_acceleration_meters_per_second_squared);
-    if (model.gravity_vector() != expected_gravity) {
-        Reject(
-            "the record was resolved under gravity " +
-            Describe(
-                startup_state
-                    .gravitational_acceleration_meters_per_second_squared) +
-            " m/s^2 along +z, but this system was assembled with (" +
-            Describe(model.gravity_vector().x()) + ", " +
-            Describe(model.gravity_vector().y()) + ", " +
-            Describe(model.gravity_vector().z()) +
-            ") m/s^2; every preload, every target wheel load and the rail "
-            "offset that produces them follow from that value, so this is "
-            "compared exactly rather than within a tolerance");
-    }
+    ResolvedStartupState expanded = source_startup_state;
+    expanded.free_body_startup_states.clear();
+    expanded.revolute_joint_startup_states.clear();
+    expanded.ball_rpy_joint_startup_states.clear();
+    expanded.series_spring_viscous_damper_force_states.clear();
+    expanded.point_to_point_series_spring_bilinear_damper_force_states.clear();
+    expanded.translational_spring_damper_nominal_forces.clear();
+    expanded.wheel_pair_target_support_forces.clear();
+    const auto append = [](auto& target, const auto& source) {
+        target.insert(target.end(), source.begin(), source.end());
+    };
+    for (const auto& instance_binding : system.instance_bindings()) {
+        const auto startup_state =
+            QualifyStartupState(source_startup_state, instance_binding.instance_name);
+        // 2. Identity, including the gravity this state was resolved under.
+        const VehicleBinding& binding = instance_binding.binding;
+        if (startup_state.vehicle_binding.vehicle_name != binding.vehicle_name) {
+            Reject("the record was resolved for vehicle '" +
+                   startup_state.vehicle_binding.vehicle_name +
+                   "', but this system was assembled from '" + binding.vehicle_name + "'");
+        }
+        if (startup_state.vehicle_binding.mechanical_definition_identifier !=
+            binding.mechanical_definition_identifier) {
+            Reject("the record was resolved for mechanical definition '" +
+                   startup_state.vehicle_binding.mechanical_definition_identifier +
+                   "', but this system was assembled from '" +
+                   binding.mechanical_definition_identifier +
+                   "'; identifier equality is what binds a resolved state to a "
+                   "mechanical definition, and keeping the identifier current is "
+                   "the caller's responsibility");
+        }
+        const Eigen::Vector3d expected_gravity(
+            0.0, 0.0, startup_state.gravitational_acceleration_meters_per_second_squared);
+        if (model.gravity_vector() != expected_gravity) {
+            Reject("the record was resolved under gravity " +
+                   Describe(startup_state.gravitational_acceleration_meters_per_second_squared) +
+                   " m/s^2 along +z, but this system was assembled with (" +
+                   Describe(model.gravity_vector().x()) + ", " +
+                   Describe(model.gravity_vector().y()) + ", " +
+                   Describe(model.gravity_vector().z()) +
+                   ") m/s^2; every preload, every target wheel load and the rail "
+                   "offset that produces them follow from that value, so this is "
+                   "compared exactly rather than within a tolerance");
+        }
 
-    // 3. Every name family, all and only.
-    std::vector<std::string> stated;
-    stated.reserve(startup_state.wheel_pair_target_support_forces.size());
-    for (const WheelPairTargetSupportForces& forces :
-         startup_state.wheel_pair_target_support_forces) {
-        stated.push_back(forces.station_reference_body_name);
-    }
-    RequireSameNames(stated, binding.wheel_pair_station_reference_body_names,
-                     "wheel-pair target support force");
+        // 3. Every name family, all and only.
+        std::vector<std::string> stated;
+        stated.reserve(startup_state.wheel_pair_target_support_forces.size());
+        for (const WheelPairTargetSupportForces& forces :
+             startup_state.wheel_pair_target_support_forces) {
+            stated.push_back(forces.station_reference_body_name);
+        }
+        RequireSameNames(stated, binding.wheel_pair_station_reference_body_names,
+                         "wheel-pair target support force");
 
-    std::vector<std::string> free_body_names;
-    for (const VehicleFreeBodyStationOffset& offset :
-         binding.free_body_station_offsets) {
-        free_body_names.push_back(offset.body_name);
-    }
-    RequireSameNames(NamesOfFreeBodies(startup_state), free_body_names,
-                     "free-body start-up state");
+        std::vector<std::string> free_body_names;
+        for (const VehicleFreeBodyStationOffset& offset : binding.free_body_station_offsets) {
+            free_body_names.push_back(offset.body_name);
+        }
+        RequireSameNames(NamesOfFreeBodies(startup_state), free_body_names,
+                         "free-body start-up state");
 
-    stated.clear();
-    for (const RevoluteJointStartupState& joint :
-         startup_state.revolute_joint_startup_states) {
-        stated.push_back(joint.joint_name);
-    }
-    RequireSameNames(stated, binding.revolute_joint_names,
-                     "revolute-joint start-up state");
+        stated.clear();
+        for (const RevoluteJointStartupState& joint : startup_state.revolute_joint_startup_states) {
+            stated.push_back(joint.joint_name);
+        }
+        RequireSameNames(stated, binding.revolute_joint_names, "revolute-joint start-up state");
 
-    stated.clear();
-    for (const BallRpyJointStartupState& joint :
-         startup_state.ball_rpy_joint_startup_states) {
-        stated.push_back(joint.joint_name);
-    }
-    RequireSameNames(stated, binding.ball_rpy_joint_names,
-                     "Ball-RPY-joint start-up state");
+        stated.clear();
+        for (const BallRpyJointStartupState& joint : startup_state.ball_rpy_joint_startup_states) {
+            stated.push_back(joint.joint_name);
+        }
+        RequireSameNames(stated, binding.ball_rpy_joint_names, "Ball-RPY-joint start-up state");
 
-    stated.clear();
-    for (const SeriesSpringViscousDamperForceState& element :
-         startup_state.series_spring_viscous_damper_force_states) {
-        stated.push_back(element.element_name);
-    }
-    RequireSameNames(stated, binding.series_spring_viscous_damper_names,
-                     "series force state");
+        stated.clear();
+        for (const SeriesSpringViscousDamperForceState& element :
+             startup_state.series_spring_viscous_damper_force_states) {
+            stated.push_back(element.element_name);
+        }
+        RequireSameNames(stated, binding.series_spring_viscous_damper_names, "series force state");
 
-    stated.clear();
-    for (const PointToPointSeriesSpringBilinearDamperForceState& element :
-         startup_state.point_to_point_series_spring_bilinear_damper_force_states) {
-        stated.push_back(element.element_name);
-    }
-    RequireSameNames(
-        stated, binding.point_to_point_series_spring_bilinear_damper_names,
-        "point-to-point series force state");
+        stated.clear();
+        for (const PointToPointSeriesSpringBilinearDamperForceState& element :
+             startup_state.point_to_point_series_spring_bilinear_damper_force_states) {
+            stated.push_back(element.element_name);
+        }
+        RequireSameNames(stated, binding.point_to_point_series_spring_bilinear_damper_names,
+                         "point-to-point series force state");
 
-    stated.clear();
-    for (const TranslationalSpringDamperNominalForce& element :
-         startup_state.translational_spring_damper_nominal_forces) {
-        stated.push_back(element.element_name);
-    }
-    RequireSameNames(stated, binding.translational_spring_damper_names,
-                     "nominal force");
+        stated.clear();
+        for (const TranslationalSpringDamperNominalForce& element :
+             startup_state.translational_spring_damper_nominal_forces) {
+            stated.push_back(element.element_name);
+        }
+        RequireSameNames(stated, binding.translational_spring_damper_names, "nominal force");
 
-    // 4. Where each free body actually ends up.
-    std::unordered_map<std::string, double> mechanical_offset_of_body;
-    for (const VehicleFreeBodyStationOffset& offset :
-         binding.free_body_station_offsets) {
-        mechanical_offset_of_body.emplace(offset.body_name,
-                                          offset.station_offset_meters);
+        append(expanded.free_body_startup_states, startup_state.free_body_startup_states);
+        append(expanded.revolute_joint_startup_states, startup_state.revolute_joint_startup_states);
+        append(expanded.ball_rpy_joint_startup_states, startup_state.ball_rpy_joint_startup_states);
+        append(expanded.series_spring_viscous_damper_force_states,
+               startup_state.series_spring_viscous_damper_force_states);
+        append(expanded.point_to_point_series_spring_bilinear_damper_force_states,
+               startup_state.point_to_point_series_spring_bilinear_damper_force_states);
+        append(expanded.translational_spring_damper_nominal_forces,
+               startup_state.translational_spring_damper_nominal_forces);
+        append(expanded.wheel_pair_target_support_forces,
+               startup_state.wheel_pair_target_support_forces);
     }
-    std::unordered_map<std::string, double> station_of_body;
-    for (const FreeBodyStartupState& body :
-         startup_state.free_body_startup_states) {
-        const double station =
-            vehicle_layout_reference_track_station_meters +
-            mechanical_offset_of_body.at(body.body_name) +
-            body.resolved_track_station_offset_from_mechanical_layout_meters;
-        RequireFiniteStation(station, body.body_name);
-        station_of_body.emplace(body.body_name, station);
-    }
+    const ResolvedStartupState& startup_state = expanded;
 
     // 5. Resolve the optional rigid-wheelset authority before touching a
     // context. IRW has no generated common spin: its axle-body angular
@@ -566,11 +605,26 @@ ResolvedInitialContext AssembleResolvedInitialContext(
             forces.right_support_force_newtons});
     }
 
+    std::vector<ResolvedBodyPlacement> body_placements;
+    body_placements.reserve(startup_state.free_body_startup_states.size());
+    for (const auto& body : startup_state.free_body_startup_states) {
+        body_placements.push_back({body.body_name, station_of_body.at(body.body_name)});
+    }
     return ResolvedInitialContext(
-        std::move(context), std::move(placements),
+        std::move(context), std::move(placements), std::move(body_placements),
         startup_state.rail_profile_reference_vertical_offset_meters,
-        startup_state.wheel_rail_binding,
-        startup_state.load_condition_identifier);
+        startup_state.wheel_rail_binding, startup_state.load_condition_identifier);
+}
+
+ResolvedInitialContext AssembleResolvedInitialContext(
+    const AssembledVehicleSystem& system, const ResolvedStartupState& startup_state,
+    const track_geometry::TrackGeometry& line,
+    double vehicle_layout_reference_track_station_meters) {
+    internal::RequireResolvedStartupStateInvariants(startup_state, "resolved start-up state");
+    const auto stations = internal::ResolveInitialBodyStations(
+        system.instance_bindings(), startup_state, vehicle_layout_reference_track_station_meters);
+    return internal::VehicleInstanceAssembler::AssembleInitialContext(system, startup_state, line,
+                                                                      stations);
 }
 
 ResolvedInitialContext AssembleResolvedInitialContext(

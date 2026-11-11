@@ -5,12 +5,28 @@
 
 #include "orvd/configuration/assemble_resolved_initial_context.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
+#include "orvd/configuration/consist_definition.h"
 #include "orvd/configuration/resolved_startup_state.h"
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/track_geometry/track_geometry.h"
 #include "orvd/wheel_rail_contact/track_irregularity_field.h"
 
 namespace orvd::configuration {
+
+struct VehicleContactTopology {
+    std::vector<forces::WheelRailContactCarrierDefinition> carriers;
+    std::vector<forces::WheelRailContactInterfaceDefinition> interfaces;
+    std::vector<forces::IndependentWheelActiveTorqueCoupleDefinition> active_torque_couples;
+};
+
+struct PreparedVehicleContact {
+    VehicleContactTopology topology;
+    std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality> personality;
+};
+
+[[nodiscard]] PreparedVehicleContact PrepareGz18VehicleContact(
+    const VehicleDefinition& vehicle, const ResolvedStartupState& startup_state,
+    const std::filesystem::path& orvd_data_root);
 
 // One transactionally assembled vehicle contact scenario.
 //
@@ -41,25 +57,15 @@ class AssembledVehicleContactScenario {
     }
 
    private:
-    friend std::unique_ptr<AssembledVehicleContactScenario>
-    AssembleGz18ContactScenario(
-        const VehicleDefinition&, const ResolvedStartupState&,
-        track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
-    friend std::unique_ptr<AssembledVehicleContactScenario>
-    AssembleIrwContactScenario(
-        const VehicleDefinition&, const ResolvedStartupState&,
-        track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
+     friend class internal::VehicleInstanceAssembler;
 
-    AssembledVehicleContactScenario(
-        std::unique_ptr<AssembledVehicleSystem> vehicle_system,
-        ResolvedInitialContext initial_context);
+     AssembledVehicleContactScenario(std::unique_ptr<AssembledVehicleSystem> vehicle_system,
+                                     ResolvedInitialContext initial_context);
 
-    // Destruction is reverse declaration order: the context goes away before
-    // the system and the model-bound workspaces it borrows from.
-    std::unique_ptr<AssembledVehicleSystem> vehicle_system_;
-    ResolvedInitialContext initial_context_;
+     // Destruction is reverse declaration order: the context goes away before
+     // the system and the model-bound workspaces it borrows from.
+     std::unique_ptr<AssembledVehicleSystem> vehicle_system_;
+     ResolvedInitialContext initial_context_;
 };
 
 // Builds the GZ18 vehicle, its installed contact personality, one owned line,
@@ -92,6 +98,12 @@ AssembleIrwContactScenario(
     double vehicle_layout_reference_track_station_meters,
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
         track_irregularity = nullptr);
+
+[[nodiscard]] std::unique_ptr<AssembledVehicleContactScenario> AssembleConsistContactScenario(
+    const VehicleDefinition& vehicle, const ResolvedStartupState& startup_state,
+    const ConsistDefinition& consist, PreparedVehicleContact contact,
+    track_geometry::TrackGeometry line, double layout_reference_track_station_meters,
+    std::unique_ptr<wheel_rail_contact::TrackIrregularityField> track_irregularity = nullptr);
 
 // The layout reference station is a scene property, not a start-up JSON field.
 // A non-null irregularity field is moved into the immutable force plan, while

@@ -193,6 +193,18 @@
   ],
   "fixed_frames": [
     {
+      "name": "front_coupler_mount",
+      "body_name": "carbody",
+      "position_in_body_frame_meters": {"x": 11.4, "y": 0.0, "z": -1.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
+      "name": "rear_coupler_mount",
+      "body_name": "carbody",
+      "position_in_body_frame_meters": {"x": -11.4, "y": 0.0, "z": -1.0},
+      "rotation_in_body_frame": {"form": "aligned_with_body"}
+    },
+    {
       "name": "front_carbody_interface_mount",
       "body_name": "carbody",
       "position_in_body_frame_meters": {"x": 7.85, "y": 0.0, "z": -1.0},

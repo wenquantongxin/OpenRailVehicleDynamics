@@ -18,6 +18,7 @@ inline constexpr std::size_t kRepresentativeBodyCount = 3;
 
 using ScenarioAssembler =
     decltype(&configuration::AssembleGz18ContactScenario);
+using ContactPreparer = decltype(&configuration::PrepareGz18VehicleContact);
 
 enum class TrackIrregularityRequirement {
     kForbidden,
@@ -38,6 +39,7 @@ struct QualificationRunConfiguration final {
     // integrator stop and leaves every existing artefact unchanged.
     bool publish_scene_record{false};
     std::optional<std::filesystem::path> integration_config_path;
+    std::optional<std::filesystem::path> consist_path;
 };
 
 // A closed, private recipe used only by the two migration executables. It is
@@ -45,40 +47,30 @@ struct QualificationRunConfiguration final {
 struct VehicleQualificationRecipe final {
     constexpr VehicleQualificationRecipe(
         std::string_view vehicle_label_value,
-        std::array<std::string_view, kRepresentativeBodyCount>
-            representative_body_names_value,
-        double relative_tolerance_value,
-        double generalized_position_absolute_tolerance_value,
+        std::array<std::string_view, kRepresentativeBodyCount> representative_body_names_value,
+        double relative_tolerance_value, double generalized_position_absolute_tolerance_value,
         double generalized_velocity_absolute_tolerance_value,
         double series_force_absolute_tolerance_newtons_value,
         OdeIntegrationMethod default_integration_recipe_value,
         int expected_generalized_position_count_value,
-        int expected_generalized_velocity_count_value,
-        int expected_series_force_state_count_value,
+        int expected_generalized_velocity_count_value, int expected_series_force_state_count_value,
         int expected_vehicle_wrench_count_value,
         TrackIrregularityRequirement track_irregularity_requirement_value,
-        ScenarioAssembler assemble_scenario_value)
+        ScenarioAssembler assemble_scenario_value, ContactPreparer prepare_contact_value = nullptr)
         : vehicle_label(vehicle_label_value),
           representative_body_names(representative_body_names_value),
           relative_tolerance(relative_tolerance_value),
-          generalized_position_absolute_tolerance(
-              generalized_position_absolute_tolerance_value),
-          generalized_velocity_absolute_tolerance(
-              generalized_velocity_absolute_tolerance_value),
-          series_force_absolute_tolerance_newtons(
-              series_force_absolute_tolerance_newtons_value),
+          generalized_position_absolute_tolerance(generalized_position_absolute_tolerance_value),
+          generalized_velocity_absolute_tolerance(generalized_velocity_absolute_tolerance_value),
+          series_force_absolute_tolerance_newtons(series_force_absolute_tolerance_newtons_value),
           default_integration_recipe(default_integration_recipe_value),
-          expected_generalized_position_count(
-              expected_generalized_position_count_value),
-          expected_generalized_velocity_count(
-              expected_generalized_velocity_count_value),
-          expected_series_force_state_count(
-              expected_series_force_state_count_value),
-          expected_vehicle_wrench_count(
-              expected_vehicle_wrench_count_value),
-          track_irregularity_requirement(
-              track_irregularity_requirement_value),
-          assemble_scenario(assemble_scenario_value) {}
+          expected_generalized_position_count(expected_generalized_position_count_value),
+          expected_generalized_velocity_count(expected_generalized_velocity_count_value),
+          expected_series_force_state_count(expected_series_force_state_count_value),
+          expected_vehicle_wrench_count(expected_vehicle_wrench_count_value),
+          track_irregularity_requirement(track_irregularity_requirement_value),
+          assemble_scenario(assemble_scenario_value),
+          prepare_contact(prepare_contact_value) {}
     VehicleQualificationRecipe() = delete;
 
     std::string_view vehicle_label;
@@ -95,6 +87,7 @@ struct VehicleQualificationRecipe final {
     int expected_vehicle_wrench_count{};
     TrackIrregularityRequirement track_irregularity_requirement{};
     ScenarioAssembler assemble_scenario{};
+    ContactPreparer prepare_contact{};
 };
 
 [[nodiscard]] QualificationRunSummary RunVehicleQualification(

@@ -1,6 +1,7 @@
 #include "orvd/configuration/assemble_vehicle_multibody_model.h"
 
 #include <cmath>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -10,6 +11,7 @@
 #include "orvd/multibody_runtime/multibody_physical_parameters.h"
 #include "orvd/track_geometry/track_inertial_frame.h"
 #include "vehicle_definition_inertia.h"
+#include "vehicle_instance_assembly.h"
 
 namespace orvd::configuration {
 namespace {
@@ -113,8 +115,13 @@ struct EndResolver {
 
 }  // namespace
 
-std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
-    const VehicleDefinition& vehicle, const MultibodyModel& model) {
+void internal::AppendVehicleForceElements(const VehicleDefinition& vehicle,
+                                          std::string_view instance_name,
+                                          const MultibodyModel& model,
+                                          forces::VehicleForceElementCollection& elements) {
+    const auto qualified = [&](const std::string& name) {
+        return QualifyVehicleName(instance_name, name);
+    };
     const EndResolver resolve{&model};
 
     std::vector<forces::TranslationalSpringDamper> translational;
@@ -122,11 +129,10 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     for (const auto& element : vehicle.translational_spring_dampers) {
         const std::string what = "translational spring-damper '" + element.name + "'";
         translational.push_back(forces::TranslationalSpringDamper{
-            element.name,
-            resolve(element.reference_frame_name, what + " reference end"),
-            resolve(element.opposite_frame_name, what + " opposite end"),
-            element.stiffness_newtons_per_meter,
-            element.damping_newton_seconds_per_meter});
+            qualified(element.name),
+            resolve(qualified(element.reference_frame_name), what + " reference end"),
+            resolve(qualified(element.opposite_frame_name), what + " opposite end"),
+            element.stiffness_newtons_per_meter, element.damping_newton_seconds_per_meter});
     }
 
     std::vector<forces::RollSpringDamperCouple> roll;
@@ -134,9 +140,9 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     for (const auto& element : vehicle.roll_spring_damper_couples) {
         const std::string what = "roll spring-damper couple '" + element.name + "'";
         roll.push_back(forces::RollSpringDamperCouple{
-            element.name,
-            resolve(element.reference_frame_name, what + " reference end"),
-            resolve(element.opposite_frame_name, what + " opposite end"),
+            qualified(element.name),
+            resolve(qualified(element.reference_frame_name), what + " reference end"),
+            resolve(qualified(element.opposite_frame_name), what + " opposite end"),
             element.stiffness_newton_meters_per_radian,
             element.damping_newton_meter_seconds_per_radian});
     }
@@ -146,11 +152,10 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
     for (const auto& element : vehicle.series_spring_viscous_dampers) {
         const std::string what = "series spring-viscous damper '" + element.name + "'";
         series.push_back(forces::SeriesSpringViscousDamper{
-            element.name,
-            resolve(element.reference_frame_name, what + " reference end"),
-            resolve(element.opposite_frame_name, what + " opposite end"),
-            ParseAxis(element.axis, what),
-            element.series_stiffness_newtons_per_meter,
+            qualified(element.name),
+            resolve(qualified(element.reference_frame_name), what + " reference end"),
+            resolve(qualified(element.opposite_frame_name), what + " opposite end"),
+            ParseAxis(element.axis, what), element.series_stiffness_newtons_per_meter,
             element.series_damping_newton_seconds_per_meter});
     }
 
@@ -162,12 +167,11 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
         const std::string what =
             "point-to-point series spring-bilinear damper '" + element.name + "'";
         point_to_point.push_back(forces::PointToPointSeriesSpringBilinearDamper{
-            element.name,
-            resolve(element.reference_frame_name, what + " reference end"),
-            resolve(element.opposite_frame_name, what + " opposite end"),
+            qualified(element.name),
+            resolve(qualified(element.reference_frame_name), what + " reference end"),
+            resolve(qualified(element.opposite_frame_name), what + " opposite end"),
             element.series_stiffness_newtons_per_meter,
-            element.damping_below_knee_newton_seconds_per_meter,
-            element.knee_force_newtons,
+            element.damping_below_knee_newton_seconds_per_meter, element.knee_force_newtons,
             element.damping_above_knee_newton_seconds_per_meter});
     }
 
@@ -183,9 +187,9 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
                 point.relative_velocity_meters_per_second, point.force_newtons});
         }
         clipped.push_back(forces::SaturatedPiecewiseLinearDamper{
-            element.name,
-            resolve(element.reference_frame_name, what + " reference end"),
-            resolve(element.opposite_frame_name, what + " opposite end"),
+            qualified(element.name),
+            resolve(qualified(element.reference_frame_name), what + " reference end"),
+            resolve(qualified(element.opposite_frame_name), what + " opposite end"),
             ParseAxis(element.axis, what), std::move(curve)});
     }
 
@@ -195,36 +199,42 @@ std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(
         const std::string what = "reference-frame linear bushing '" +
                                  element.name + "'";
         bushings.push_back(forces::ReferenceFrameLinearBushing{
-            element.name,
-            resolve(element.reference_frame_name, what + " reference end"),
-            resolve(element.opposite_frame_name, what + " opposite end"),
+            qualified(element.name),
+            resolve(qualified(element.reference_frame_name), what + " reference end"),
+            resolve(qualified(element.opposite_frame_name), what + " opposite end"),
             element.translational_stiffness_newtons_per_meter,
             element.translational_damping_newton_seconds_per_meter,
             element.rotational_damping_newton_meter_seconds_per_radian});
     }
 
-    forces::VehicleForceElementCollection elements;
-    elements.translational_spring_dampers = std::move(translational);
-    elements.roll_spring_damper_couples = std::move(roll);
-    elements.series_spring_viscous_dampers = std::move(series);
-    elements.point_to_point_series_spring_bilinear_dampers =
-        std::move(point_to_point);
-    elements.saturated_piecewise_linear_dampers = std::move(clipped);
-    elements.reference_frame_linear_bushings = std::move(bushings);
-    return std::make_unique<forces::VehicleForcePlan>(model,
-                                                      std::move(elements));
+    const auto append = [](auto& into, auto& from) {
+        into.insert(into.end(), std::make_move_iterator(from.begin()),
+                    std::make_move_iterator(from.end()));
+    };
+    append(elements.translational_spring_dampers, translational);
+    append(elements.roll_spring_damper_couples, roll);
+    append(elements.series_spring_viscous_dampers, series);
+    append(elements.point_to_point_series_spring_bilinear_dampers, point_to_point);
+    append(elements.saturated_piecewise_linear_dampers, clipped);
+    append(elements.reference_frame_linear_bushings, bushings);
 }
 
-std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
-    const VehicleDefinition& vehicle,
-    double gravitational_acceleration_magnitude_meters_per_second_squared) {
+std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(const VehicleDefinition& vehicle,
+                                                                const MultibodyModel& model) {
+    forces::VehicleForceElementCollection elements;
+    internal::AppendVehicleForceElements(vehicle, "", model, elements);
+    return std::make_unique<forces::VehicleForcePlan>(model, std::move(elements));
+}
+
+void internal::AppendVehicleMultibodyModel(const VehicleDefinition& vehicle,
+                                           std::string_view instance_name, MultibodyModel& model) {
+    const auto qualified = [&](const std::string& name) {
+        return QualifyVehicleName(instance_name, name);
+    };
     if (vehicle.vehicle_name.empty()) {
         throw std::invalid_argument(
             "a vehicle description must have a non-empty vehicle name");
     }
-    auto model = std::make_unique<MultibodyModel>();
-    model->SetGravityVector(track_geometry::GravitationalAccelerationInInertial(
-        gravitational_acceleration_magnitude_meters_per_second_squared));
 
     // One name resolves to one frame whether it belongs to a body or to a frame
     // fixed on one: the multibody layer keeps bodies and frames in a single
@@ -236,9 +246,9 @@ std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
     std::unordered_map<std::string, FrameHandle> frames;
     for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
         const RigidBodyHandle handle =
-            model->AddRigidBody(body.name, UnitInertiaAboutBodyOrigin(body));
+            model.AddRigidBody(qualified(body.name), UnitInertiaAboutBodyOrigin(body));
         bodies.emplace(body.name, handle);
-        frames.emplace(body.name, model->body_frame(handle));
+        frames.emplace(body.name, model.body_frame(handle));
     }
 
     for (const VehicleFixedFrameDefinition& frame : vehicle.fixed_frames) {
@@ -253,38 +263,34 @@ std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
                 "', which the vehicle description does not declare");
         }
         frames.emplace(frame.name,
-                       model->AddFixedFrame(frame.name, carrier->second, pose));
+                       model.AddFixedFrame(qualified(frame.name), carrier->second, pose));
     }
 
     for (const VehicleWeldJointDefinition& joint : vehicle.weld_joints) {
-        model->AddWeldJoint(
-            joint.name,
-            ResolveFrame(frames, joint.parent_frame_name,
-                         "weld joint '" + joint.name + "' parent"),
-            ResolveFrame(frames, joint.child_frame_name,
-                         "weld joint '" + joint.name + "' child"));
+        model.AddWeldJoint(
+            qualified(joint.name),
+            ResolveFrame(frames, joint.parent_frame_name, "weld joint '" + joint.name + "' parent"),
+            ResolveFrame(frames, joint.child_frame_name, "weld joint '" + joint.name + "' child"));
     }
 
     for (const VehicleRevoluteJointDefinition& joint : vehicle.revolute_joints) {
-        model->AddRevoluteJoint(
-            joint.name,
-            ResolveFrame(frames, joint.parent_frame_name,
-                         "revolute joint '" + joint.name + "' parent"),
-            ResolveFrame(frames, joint.child_frame_name,
-                         "revolute joint '" + joint.name + "' child"),
-            joint.axis_in_parent_frame,
-            joint.damping_newton_metre_seconds_per_radian);
+        model.AddRevoluteJoint(qualified(joint.name),
+                               ResolveFrame(frames, joint.parent_frame_name,
+                                            "revolute joint '" + joint.name + "' parent"),
+                               ResolveFrame(frames, joint.child_frame_name,
+                                            "revolute joint '" + joint.name + "' child"),
+                               joint.axis_in_parent_frame,
+                               joint.damping_newton_metre_seconds_per_radian);
     }
 
     for (const VehicleBallRpyJointDefinition& joint :
          vehicle.ball_rpy_joints) {
-        model->AddBallRpyJoint(
-            joint.name,
-            ResolveFrame(frames, joint.parent_frame_name,
-                         "Ball-RPY joint '" + joint.name + "' parent"),
-            ResolveFrame(frames, joint.child_frame_name,
-                         "Ball-RPY joint '" + joint.name + "' child"),
-            joint.default_roll_pitch_yaw_angles_radians);
+        model.AddBallRpyJoint(qualified(joint.name),
+                              ResolveFrame(frames, joint.parent_frame_name,
+                                           "Ball-RPY joint '" + joint.name + "' parent"),
+                              ResolveFrame(frames, joint.child_frame_name,
+                                           "Ball-RPY joint '" + joint.name + "' child"),
+                              joint.default_roll_pitch_yaw_angles_radians);
     }
 
     // Last, so that a description whose joints are wrong fails on the joint
@@ -292,10 +298,18 @@ std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
     // statement to notice the tree already closed.
     for (const VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
         if (body.moves_freely_in_world) {
-            model->DeclareFreeBody(bodies.at(body.name));
+            model.DeclareFreeBody(bodies.at(body.name));
         }
     }
+}
 
+std::unique_ptr<MultibodyModel> AssembleVehicleMultibodyModel(
+    const VehicleDefinition& vehicle,
+    double gravitational_acceleration_magnitude_meters_per_second_squared) {
+    auto model = std::make_unique<MultibodyModel>();
+    model->SetGravityVector(track_geometry::GravitationalAccelerationInInertial(
+        gravitational_acceleration_magnitude_meters_per_second_squared));
+    internal::AppendVehicleMultibodyModel(vehicle, "", *model);
     model->Finalize();
     return model;
 }

@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "orvd/configuration/consist_definition.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 
 namespace {
@@ -526,6 +527,45 @@ void CheckRejections(const std::filesystem::path& path) {
 
 }
 
+void CheckConsistLoading(const std::filesystem::path& path) {
+    const std::string record = R"json({
+      "vehicles": [
+        {"instance_name":"car.a", "vehicle_name":"fixture",
+         "mechanical_definition_identifier":"mechanics", "station_offset_meters":0.0},
+        {"instance_name":"car.b", "vehicle_name":"fixture",
+         "mechanical_definition_identifier":"mechanics", "station_offset_meters":-23.6}],
+      "couplers": [{"name":"coupler", "reference_end":{"instance_name":"car.a","frame_name":"rear"},
+        "opposite_end":{"instance_name":"car.b","frame_name":"front"},
+        "nominal_length_meters":0.8,"stiffness_newtons_per_meter":8000000,
+        "damping_newton_seconds_per_meter":130000}]
+    })json";
+    Write(path, record);
+    const auto definition = orvd::configuration::LoadConsistDefinition(path);
+    Require(definition.vehicles.size() == 2 && definition.couplers.size() == 1 &&
+                definition.vehicles[1].station_offset_meters == -23.6 &&
+                definition.couplers[0].reference_end.instance_name == "car.a" &&
+                definition.couplers[0].nominal_length_meters == 0.8,
+            "consist values and endpoint identity");
+    const std::vector<std::string> invalid{
+        ReplaceOnce(record, "\"instance_name\":\"car.b\", \"vehicle_name\"",
+                    "\"instance_name\":\"car.a\", \"vehicle_name\""),
+        ReplaceOnce(record, "\"frame_name\":\"front\"",
+                    "\"frame_name\":\"front\",\"direction\":-1"),
+        ReplaceOnce(record, "\"opposite_end\":{\"instance_name\":\"car.b\"",
+                    "\"opposite_end\":{\"instance_name\":\"absent\""),
+        ReplaceOnce(record, "\"nominal_length_meters\":0.8", "\"nominal_length_meters\":0")};
+    for (const auto& value : invalid) {
+        Write(path, value);
+        bool refused = false;
+        try {
+            (void)orvd::configuration::LoadConsistDefinition(path);
+        } catch (const std::invalid_argument&) {
+            refused = true;
+        }
+        Require(refused, "invalid consist was accepted");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -541,6 +581,7 @@ int main(int argc, char* argv[]) {
 
         CheckRecordIsMappedAndOwned(configuration);
         CheckRejections(configuration);
+        CheckConsistLoading(scratch / "consist.json");
         std::filesystem::remove_all(scratch);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "vehicle definition loading failed: %s\n",

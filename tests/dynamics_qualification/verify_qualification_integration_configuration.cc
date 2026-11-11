@@ -198,7 +198,7 @@ void Vehicle(const std::filesystem::path& vehicle_path, const dq::IntegrationReq
     Eigen::VectorXd initial(system.continuous_state_size());
     system.CopyContinuousState(*context, initial);
     const auto& model = assembled->model();
-    const auto& binding = assembled->binding();
+    const auto& binding = assembled->instance_bindings().front().binding;
     // Each free body has a distinct legal non-unit norm and alternating sign.
     double norm = 1.25;
     for (const auto& body : binding.free_body_station_offsets) {

@@ -34,48 +34,52 @@ class SystemInstance;
 
 namespace orvd::forces {
 
+struct PointToPointLinearSpringDamperObservation {
+    double length_meters{0.0};
+    double length_rate_meters_per_second{0.0};
+    double spring_force_newtons{0.0};
+    double damping_force_newtons{0.0};
+    double force_newtons{0.0};
+};
+
 class VehicleForcePlan {
    public:
-    // Builds the plan against `model`, which must be finalized and must outlive
-    // the plan and every system compiled from it. Every frame handle must
-    // belong to that model.
-    //
-    // Throws std::invalid_argument if an element name is empty or repeated, if
-    // any handle is foreign or invalid, if an element's two ends are one frame
-    // or one body, if an algebraic stiffness or damping is negative or not
-    // finite, if a series element's stiffness or damping is not positive — a
-    // series element with either at zero has no time constant and is not this
-    // family — or if stiffness divided by damping is not finite. A clipped
-    // damper curve must start at the origin, ascend strictly in velocity and
-    // state finite non-negative force.
-    // A point-to-point series element requires four finite positive constants,
-    // finite stiffness-to-damping ratios and a finite knee velocity.
-    // A reference-frame bushing requires three finite non-negative three-axis
-    // stiffness and damping vectors.
-    // Throws std::invalid_argument if an endpoint is the world frame.
-    // Throws std::logic_error if the model is not finalized.
-    VehicleForcePlan(
-        const multibody_model::MultibodyModel& model,
-        VehicleForceElementCollection elements);
-    VehicleForcePlan(
-        multibody_model::MultibodyModel&&,
-        VehicleForceElementCollection) = delete;
-    VehicleForcePlan(
-        const multibody_model::MultibodyModel&&,
-        VehicleForceElementCollection) = delete;
+     // Builds the plan against `model`, which must be finalized and must outlive
+     // the plan and every system compiled from it. Every frame handle must
+     // belong to that model.
+     //
+     // Throws std::invalid_argument if an element name is empty or repeated, if
+     // any handle is foreign or invalid, if an element's two ends are one frame
+     // or one body, if an algebraic stiffness or damping is negative or not
+     // finite, if a series element's stiffness or damping is not positive — a
+     // series element with either at zero has no time constant and is not this
+     // family — or if stiffness divided by damping is not finite. A clipped
+     // damper curve must start at the origin, ascend strictly in velocity and
+     // state finite non-negative force.
+     // A point-to-point series element requires four finite positive constants,
+     // finite stiffness-to-damping ratios and a finite knee velocity.
+     // A reference-frame bushing requires three finite non-negative three-axis
+     // stiffness and damping vectors.
+     // A point-to-point linear spring-damper requires finite positive nominal
+     // length and finite non-negative stiffness and damping.
+     // Throws std::invalid_argument if an endpoint is the world frame.
+     // Throws std::logic_error if the model is not finalized.
+     VehicleForcePlan(const multibody_model::MultibodyModel& model,
+                      VehicleForceElementCollection elements);
+     VehicleForcePlan(multibody_model::MultibodyModel&&, VehicleForceElementCollection) = delete;
+     VehicleForcePlan(const multibody_model::MultibodyModel&&,
+                      VehicleForceElementCollection) = delete;
 
-    VehicleForcePlan(const VehicleForcePlan&) = delete;
-    VehicleForcePlan& operator=(const VehicleForcePlan&) = delete;
-    VehicleForcePlan(VehicleForcePlan&&) = delete;
-    VehicleForcePlan& operator=(VehicleForcePlan&&) = delete;
+     VehicleForcePlan(const VehicleForcePlan&) = delete;
+     VehicleForcePlan& operator=(const VehicleForcePlan&) = delete;
+     VehicleForcePlan(VehicleForcePlan&&) = delete;
+     VehicleForcePlan& operator=(VehicleForcePlan&&) = delete;
 
-    [[nodiscard]] const multibody_model::MultibodyModel& model() const {
-        return *model_;
-    }
+     [[nodiscard]] const multibody_model::MultibodyModel& model() const { return *model_; }
 
-    [[nodiscard]] int translational_spring_damper_count() const {
-        return static_cast<int>(elements_.translational_spring_dampers.size());
-    }
+     [[nodiscard]] int translational_spring_damper_count() const {
+         return static_cast<int>(elements_.translational_spring_dampers.size());
+     }
     [[nodiscard]] int roll_spring_damper_couple_count() const {
         return static_cast<int>(elements_.roll_spring_damper_couples.size());
     }
@@ -89,6 +93,9 @@ class VehicleForcePlan {
     [[nodiscard]] int saturated_piecewise_linear_damper_count() const {
         return static_cast<int>(
             elements_.saturated_piecewise_linear_dampers.size());
+    }
+    [[nodiscard]] int point_to_point_linear_spring_damper_count() const {
+        return static_cast<int>(elements_.point_to_point_linear_spring_dampers.size());
     }
     [[nodiscard]] int reference_frame_linear_bushing_count() const {
         return static_cast<int>(
@@ -110,12 +117,12 @@ class VehicleForcePlan {
 
     /// Two body wrenches per element, always both written.
     [[nodiscard]] int body_wrench_count() const {
-        return 2 * (translational_spring_damper_count() +
-                    roll_spring_damper_couple_count() +
-                    series_spring_viscous_damper_count() +
-                    point_to_point_series_spring_bilinear_damper_count() +
-                    saturated_piecewise_linear_damper_count() +
-                    reference_frame_linear_bushing_count());
+        return 2 *
+               (translational_spring_damper_count() + roll_spring_damper_couple_count() +
+                series_spring_viscous_damper_count() +
+                point_to_point_series_spring_bilinear_damper_count() +
+                point_to_point_linear_spring_damper_count() +
+                saturated_piecewise_linear_damper_count() + reference_frame_linear_bushing_count());
     }
 
     /// Evaluates every element once against `context`.
@@ -131,7 +138,7 @@ class VehicleForcePlan {
     ///
     /// Throws std::invalid_argument if the context is foreign or any span is
     /// the wrong length; nothing is written in that case.
-    /// Throws std::runtime_error if a point-to-point series element has zero or
+    /// Throws std::runtime_error if a point-to-point element has zero or
     /// non-finite attachment separation.
     void CalcAppliedForces(
         const multibody_model::MultibodyEvaluationContext& context,
@@ -139,6 +146,12 @@ class VehicleForcePlan {
         const Eigen::Ref<const Eigen::VectorXd>& nominal_forces,
         std::span<multibody_model::AppliedBodyWrench> body_wrenches,
         Eigen::Ref<Eigen::VectorXd> series_force_derivatives) const;
+
+    /// Names and observations follow this family's input order.
+    [[nodiscard]] std::string_view point_to_point_linear_spring_damper_name(int ordinal) const;
+    void CalcPointToPointLinearSpringDamperObservations(
+        const multibody_model::MultibodyEvaluationContext& context,
+        std::span<PointToPointLinearSpringDamperObservation> observations) const;
 
     /// The force a saturated piecewise linear damper produces at one finite
     /// relative velocity. Exposed because it is the whole constitutive content

@@ -19,8 +19,10 @@ namespace {
 
 using orvd::forces::ForceElementAxis;
 using orvd::forces::ForceElementEnd;
-using orvd::forces::ReferenceFrameLinearBushing;
+using orvd::forces::PointToPointLinearSpringDamper;
+using orvd::forces::PointToPointLinearSpringDamperObservation;
 using orvd::forces::PointToPointSeriesSpringBilinearDamper;
+using orvd::forces::ReferenceFrameLinearBushing;
 using orvd::forces::RollSpringDamperCouple;
 using orvd::forces::SaturatedPiecewiseLinearDamper;
 using orvd::forces::SaturatedPiecewiseLinearDamperPoint;
@@ -103,7 +105,7 @@ struct TwoBodyFixture {
     // both bodies angular and translational velocity so that the relative
     // motion has content along every axis and the two ends' angular velocities
     // differ.
-    void SetState() const {
+    void SetState(double velocity_sign = 1.0) const {
         Eigen::VectorXd positions(model->num_generalized_positions());
         Eigen::VectorXd velocities(model->num_generalized_velocities());
         const Eigen::Quaterniond first_orientation(
@@ -121,6 +123,7 @@ struct TwoBodyFixture {
         velocities.segment<3>(3) << 0.11, 0.29, -0.37;
         velocities.segment<3>(6) << -0.19, 0.33, 0.27;
         velocities.segment<3>(9) << 0.41, -0.23, 0.13;
+        velocities *= velocity_sign;
         model->SetGeneralizedState(context.get(), positions, velocities);
     }
 };
@@ -237,6 +240,13 @@ VehicleForceElementCollection WithPointToPointSeriesElements(
     VehicleForceElementCollection collection;
     collection.point_to_point_series_spring_bilinear_dampers =
         std::move(elements);
+    return collection;
+}
+
+VehicleForceElementCollection WithPointToPointLinearElements(
+    std::vector<PointToPointLinearSpringDamper> elements) {
+    VehicleForceElementCollection collection;
+    collection.point_to_point_linear_spring_dampers = std::move(elements);
     return collection;
 }
 
@@ -824,6 +834,137 @@ void CheckPointToPointSeriesLawAndWrenches() {
     }
 }
 
+void CheckPointToPointLinearLawAndWrenches() {
+    const TwoBodyFixture fixture;
+    constexpr double stiffness = 8000.0;
+    constexpr double damping = 130.0;
+    const Eigen::VectorXd empty(0);
+    Eigen::VectorXd no_derivative(0);
+    for (const double velocity_sign : {-1.0, 1.0}) {
+        fixture.SetState(velocity_sign);
+        const MotionSample motion = SampleMotion(fixture);
+        const double length = motion.displacement_in_world.stableNorm();
+        const Eigen::Vector3d direction = motion.displacement_in_world / length;
+        const double rate = direction.dot(PointVelocityInWorld(fixture, fixture.opposite_end) -
+                                          PointVelocityInWorld(fixture, fixture.reference_end));
+        for (const double extension : {-0.15, 0.0, 0.15}) {
+            const PointToPointLinearSpringDamper element{"coupler",
+                                                         fixture.reference_end,
+                                                         fixture.opposite_end,
+                                                         length - extension,
+                                                         stiffness,
+                                                         damping};
+            const VehicleForcePlan plan(*fixture.model, WithPointToPointLinearElements({element}));
+            Expect(plan.point_to_point_linear_spring_damper_count() == 1 &&
+                       plan.point_to_point_linear_spring_damper_name(0) == "coupler" &&
+                       plan.series_spring_damper_force_state_count() == 0 &&
+                       plan.nominal_force_component_count() == 0 && plan.body_wrench_count() == 2,
+                   "point-to-point parallel law owns two wrenches and no state");
+            const auto wrenches = Evaluate(fixture, plan, empty, empty, no_derivative);
+            std::vector<PointToPointLinearSpringDamperObservation> observations(1);
+            plan.CalcPointToPointLinearSpringDamperObservations(*fixture.context, observations);
+            const double spring = stiffness * (length - element.nominal_length_meters);
+            const double viscous = damping * rate;
+            const double force = spring + viscous;
+            const double scale =
+                std::max({1.0, std::abs(force), std::abs(spring), std::abs(viscous)});
+            const auto& observed = observations[0];
+            Expect(
+                std::abs(observed.length_meters - length) <= 16.0 * kMachine &&
+                    std::abs(observed.length_rate_meters_per_second - rate) <= 64.0 * kMachine &&
+                    std::abs(observed.spring_force_newtons - spring) <= 64.0 * kMachine * scale &&
+                    std::abs(observed.damping_force_newtons - viscous) <= 64.0 * kMachine * scale &&
+                    std::abs(observed.force_newtons - force) <= 128.0 * kMachine * scale,
+                "observed parallel force uses actual endpoint distance and absolute velocities");
+            Expect((wrenches[0].force_newtons - force * direction).norm() <=
+                           128.0 * kMachine * scale &&
+                       wrenches[1].force_newtons == -wrenches[0].force_newtons &&
+                       wrenches[0].torque_about_point_newton_metres.isZero(0.0) &&
+                       wrenches[1].torque_about_point_newton_metres.isZero(0.0),
+                   "parallel law applies tensile or compressive central forces without couples");
+            const auto reference = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+                *fixture.context, fixture.reference_end.frame);
+            const auto opposite = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+                *fixture.context, fixture.opposite_end.frame);
+            Expect(wrenches[0].body == reference.body && wrenches[1].body == opposite.body &&
+                       wrenches[0].point_position_in_body_frame_meters ==
+                           reference.position_in_body_frame_meters &&
+                       wrenches[1].point_position_in_body_frame_meters ==
+                           opposite.position_in_body_frame_meters,
+                   "parallel forces retain both offset attachment points");
+            const Eigen::Vector3d centre(0.83, -1.27, 0.44);
+            const Eigen::Vector3d net_moment =
+                (motion.reference_point_in_world - centre).cross(wrenches[0].force_newtons) +
+                (motion.opposite_point_in_world - centre).cross(wrenches[1].force_newtons);
+            Expect(net_moment.norm() <= 512.0 * kMachine * scale,
+                   "parallel point forces balance moment about an arbitrary point");
+            const double power = AppliedPower(fixture, wrenches);
+            const double stored_rate = spring * rate;
+            const double dissipation = damping * rate * rate;
+            Expect(std::abs(power + stored_rate + dissipation) <= 512.0 * kMachine * scale,
+                   "parallel endpoint power balances spring energy and nonnegative dissipation");
+        }
+    }
+}
+
+void CheckPointToPointLinearRefusals() {
+    const TwoBodyFixture fixture;
+    const PointToPointLinearSpringDamper valid{
+        "coupler", fixture.reference_end, fixture.opposite_end, 0.8, 8.0e6, 1.3e5};
+    const auto rejects = [&](const PointToPointLinearSpringDamper& element) {
+        try {
+            VehicleForcePlan plan(*fixture.model, WithPointToPointLinearElements({element}));
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    for (const auto member : {&PointToPointLinearSpringDamper::nominal_length_meters,
+                              &PointToPointLinearSpringDamper::stiffness_newtons_per_meter,
+                              &PointToPointLinearSpringDamper::damping_newton_seconds_per_meter}) {
+        for (const double value : {-1.0, std::numeric_limits<double>::infinity(),
+                                   std::numeric_limits<double>::quiet_NaN()}) {
+            auto invalid = valid;
+            invalid.*member = value;
+            Expect(rejects(invalid), "parallel law rejects negative and nonfinite parameters");
+        }
+    }
+    auto element = valid;
+    element.nominal_length_meters = 0.0;
+    Expect(rejects(element), "parallel law requires positive nominal length");
+    element = valid;
+    element.stiffness_newtons_per_meter = 0.0;
+    element.damping_newton_seconds_per_meter = 0.0;
+    Expect(!rejects(element), "parallel law allows zero stiffness and damping");
+    element = valid;
+    element.opposite_end = fixture.same_body_end;
+    Expect(rejects(element), "parallel law requires two carrier bodies");
+    element = valid;
+    element.reference_end.frame =
+        fixture.model->body_frame(fixture.model->GetRigidBodyByName("first"));
+    element.opposite_end.frame =
+        fixture.model->body_frame(fixture.model->GetRigidBodyByName("second"));
+    const VehicleForcePlan plan(*fixture.model, WithPointToPointLinearElements({element}));
+    const auto coincident = fixture.model->CreateDefaultContext();
+    std::vector<PointToPointLinearSpringDamperObservation> observations(1);
+    bool rejected = false;
+    try {
+        plan.CalcPointToPointLinearSpringDamperObservations(*coincident, observations);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    Expect(rejected, "parallel observation rejects coincident attachment points");
+    rejected = false;
+    Eigen::VectorXd empty(0);
+    std::vector<AppliedBodyWrench> wrenches(2);
+    try {
+        plan.CalcAppliedForces(*coincident, empty, empty, wrenches, empty);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    Expect(rejected, "parallel force evaluation rejects coincident attachment points");
+}
+
 void CheckPointToPointSeriesRefusals() {
     using Damper = PointToPointSeriesSpringBilinearDamper;
     const TwoBodyFixture fixture;
@@ -1074,6 +1215,8 @@ int main() {
         CheckSeriesAnalyticDerivative();
         CheckPointToPointSeriesLawAndWrenches();
         CheckPointToPointSeriesRefusals();
+        CheckPointToPointLinearLawAndWrenches();
+        CheckPointToPointLinearRefusals();
         CheckPlanRefusals();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "vehicle force elements failed: %s\n",

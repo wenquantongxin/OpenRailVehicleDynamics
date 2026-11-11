@@ -9,8 +9,9 @@ import subprocess
 import sys
 
 
-def check_options(executable: Path, base: list[str], *, scene_record: bool = False) -> None:
-    for tail, message in (
+def check_options(executable: Path, base: list[str], *,
+                  scene_record: bool = False, consist: bool = False) -> None:
+    invalid_commands = [
         (["--integration-config"], "requires one non-empty path"),
         (["--integration-config", ""], "requires one non-empty path"),
         (["--integration-config", "--scene-record"], "requires one non-empty path"),
@@ -19,7 +20,19 @@ def check_options(executable: Path, base: list[str], *, scene_record: bool = Fal
         (["--unknown-option"], "unknown option"),
         (["radau5_fine"], "usage:"),
         (["radau5_fine", "--integration-config", "one.json"], "usage:"),
-    ):
+    ]
+    if consist:
+        invalid_commands += [
+            (["--consist"], "requires one non-empty path"),
+            (["--consist", ""], "requires one non-empty path"),
+            (["--consist", "--scene-record"], "requires one non-empty path"),
+            (["--consist", "one.json", "--consist", "two.json"], "may be specified only once"),
+            (["--consist", "one.json", "--scene-record"], "cannot be combined"),
+            (["--scene-record", "--consist", "one.json"], "cannot be combined"),
+        ]
+    else:
+        invalid_commands.append((["--consist", "one.json"], "unknown option"))
+    for tail, message in invalid_commands:
         completed = subprocess.run([str(executable), *base, *tail], check=False,
                                    capture_output=True, text=True)
         if completed.returncode != 2 or message not in completed.stderr:
@@ -37,6 +50,15 @@ def check_options(executable: Path, base: list[str], *, scene_record: bool = Fal
             valid_commands.append(["--scene-record", *command])
     if scene_record:
         valid_commands.append([*base, "--scene-record"])
+    if consist:
+        for insertion in (0, len(base) // 2, len(base)):
+            valid_commands.append([
+                *base[:insertion], "--consist", "unread consist.json", *base[insertion:]
+            ])
+        valid_commands.append([
+            *base, "--consist", "unread consist.json",
+            "--integration-config", "unread config.json"
+        ])
     for command in valid_commands:
         completed = subprocess.run([str(executable), *command], check=False,
                                    capture_output=True, text=True)
@@ -61,7 +83,7 @@ def main() -> int:
     arguments = parser.parse_args()
     check_options(arguments.gz18,
                   ["vehicle", "startup", "line", "data", "irregularity", "output", "1", "1"],
-                  scene_record=True)
+                  scene_record=True, consist=True)
     check_options(arguments.irw_passive,
                   ["scenario", "vehicle", "startup", "line", "data", "none", "output", "1", "1"],
                   scene_record=True)

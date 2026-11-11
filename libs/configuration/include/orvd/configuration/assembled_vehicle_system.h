@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "orvd/configuration/consist_definition.h"
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/forces/independent_wheel_active_torque_plan.h"
 #include "orvd/forces/vehicle_force_plan.h"
@@ -18,6 +19,9 @@ namespace orvd::configuration {
 
 class AssembledVehicleContactScenario;
 struct ResolvedStartupState;
+namespace internal {
+class VehicleInstanceAssembler;
+}
 
 // What one assembled vehicle system remembers about the description it was
 // built from.
@@ -50,7 +54,13 @@ struct VehicleBinding {
     std::vector<std::string> wheel_pair_station_reference_body_names;
 };
 
-// One vehicle, assembled once, with everything downstream needs to reach it.
+struct VehicleInstanceBinding {
+    std::string instance_name;
+    double station_offset_meters{};
+    VehicleBinding binding;
+};
+
+// Assembled vehicle instances and the shared plans that evaluate them.
 //
 // The model, its typed force plans, the system instance and the compiled plan
 // borrow one another and none of them may be moved, so holding them separately
@@ -91,57 +101,44 @@ class AssembledVehicleSystem {
         const {
         return *compiled_plan_;
     }
-    [[nodiscard]] const VehicleBinding& binding() const { return binding_; }
+    [[nodiscard]] const std::vector<VehicleInstanceBinding>& instance_bindings() const {
+        return instance_bindings_;
+    }
 
    private:
-    friend std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
-        const VehicleDefinition&, double);
-    friend class AssembledVehicleContactScenario;
-    friend std::unique_ptr<AssembledVehicleContactScenario>
-    AssembleGz18ContactScenario(
-        const VehicleDefinition&, const ResolvedStartupState&,
-        track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
-    friend std::unique_ptr<AssembledVehicleContactScenario>
-    AssembleIrwContactScenario(
-        const VehicleDefinition&, const ResolvedStartupState&,
-        track_geometry::TrackGeometry, const std::filesystem::path&, double,
-        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>);
+     friend class internal::VehicleInstanceAssembler;
+     friend std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(const VehicleDefinition&,
+                                                                          double);
 
-    AssembledVehicleSystem(
-        std::unique_ptr<multibody_model::MultibodyModel> model,
-        std::unique_ptr<forces::VehicleForcePlan> force_plan,
-        std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan,
-        std::unique_ptr<forces::IndependentWheelActiveTorquePlan>
-            active_torque_plan,
-        std::unique_ptr<system_assembly::SystemInstance> system,
-        std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
-        VehicleBinding binding);
+     AssembledVehicleSystem(
+         std::unique_ptr<multibody_model::MultibodyModel> model,
+         std::unique_ptr<forces::VehicleForcePlan> force_plan,
+         std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan,
+         std::unique_ptr<forces::IndependentWheelActiveTorquePlan> active_torque_plan,
+         std::unique_ptr<system_assembly::SystemInstance> system,
+         std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
+         std::vector<VehicleInstanceBinding> instance_bindings);
 
-    static std::unique_ptr<AssembledVehicleSystem> AssembleWithWheelRailContact(
-        const VehicleDefinition& vehicle,
-        double gravitational_acceleration_magnitude_meters_per_second_squared,
-        track_geometry::TrackGeometry line,
-        std::unique_ptr<
-            wheel_rail_contact::WheelRailContactRuntimePersonality>
-            personality,
-        std::unique_ptr<wheel_rail_contact::TrackIrregularityField>
-            track_irregularity,
-        std::vector<forces::WheelRailContactCarrierDefinition> carriers,
-        std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
-        std::vector<forces::IndependentWheelActiveTorqueCoupleDefinition>
-            active_torque_couples);
+     static std::unique_ptr<AssembledVehicleSystem> AssembleWithWheelRailContact(
+         const VehicleDefinition& vehicle, std::vector<VehicleInstanceBinding> instance_bindings,
+         const std::vector<ConsistCouplerDefinition>& couplers,
+         double gravitational_acceleration_magnitude_meters_per_second_squared,
+         track_geometry::TrackGeometry line,
+         std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality> personality,
+         std::unique_ptr<wheel_rail_contact::TrackIrregularityField> track_irregularity,
+         std::vector<forces::WheelRailContactCarrierDefinition> carriers,
+         std::vector<forces::WheelRailContactInterfaceDefinition> interfaces,
+         std::vector<forces::IndependentWheelActiveTorqueCoupleDefinition> active_torque_couples);
 
-    // Declaration order is construction order; destruction runs in reverse, so
-    // each object outlives the ones that borrow it.
-    std::unique_ptr<multibody_model::MultibodyModel> model_;
-    std::unique_ptr<forces::VehicleForcePlan> force_plan_;
-    std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan_;
-    std::unique_ptr<forces::IndependentWheelActiveTorquePlan>
-        active_torque_plan_;
-    std::unique_ptr<system_assembly::SystemInstance> system_;
-    std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan_;
-    VehicleBinding binding_;
+     // Declaration order is construction order; destruction runs in reverse, so
+     // each object outlives the ones that borrow it.
+     std::unique_ptr<multibody_model::MultibodyModel> model_;
+     std::unique_ptr<forces::VehicleForcePlan> force_plan_;
+     std::unique_ptr<forces::WheelRailContactForcePlan> contact_force_plan_;
+     std::unique_ptr<forces::IndependentWheelActiveTorquePlan> active_torque_plan_;
+     std::unique_ptr<system_assembly::SystemInstance> system_;
+     std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan_;
+     std::vector<VehicleInstanceBinding> instance_bindings_;
 };
 
 // Assembles the model, the force plan, the system instance and the compiled

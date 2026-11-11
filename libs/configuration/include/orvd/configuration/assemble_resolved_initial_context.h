@@ -11,6 +11,11 @@
 
 namespace orvd::configuration {
 
+struct ResolvedBodyPlacement {
+    std::string body_name;
+    double track_station_meters{};
+};
+
 // Where one left/right wheel pair ended up, and what its two wheels are
 // resolved to carry.
 //
@@ -59,6 +64,10 @@ class ResolvedInitialContext {
         return wheel_pair_placements_;
     }
 
+    [[nodiscard]] const std::vector<ResolvedBodyPlacement>& body_placements() const {
+        return body_placements_;
+    }
+
     // Signed, along +z_T, exactly as the record stated it.
     [[nodiscard]] double rail_profile_reference_vertical_offset_meters() const {
         return rail_profile_reference_vertical_offset_meters_;
@@ -72,24 +81,27 @@ class ResolvedInitialContext {
     }
 
    private:
-    friend ResolvedInitialContext AssembleResolvedInitialContext(
-        const AssembledVehicleSystem&, const ResolvedStartupState&,
-        const track_geometry::TrackGeometry&, double);
-    friend ResolvedInitialContext AssembleResolvedInitialContext(
-        const AssembledVehicleSystem&, const ResolvedStartupState&, double);
+     friend class internal::VehicleInstanceAssembler;
+     friend ResolvedInitialContext AssembleResolvedInitialContext(
+         const AssembledVehicleSystem&, const ResolvedStartupState&,
+         const track_geometry::TrackGeometry&, double);
+     friend ResolvedInitialContext AssembleResolvedInitialContext(const AssembledVehicleSystem&,
+                                                                  const ResolvedStartupState&,
+                                                                  double);
 
-    ResolvedInitialContext(
-        std::unique_ptr<system_assembly::SystemRuntimeContext> context,
-        std::vector<ResolvedWheelPairPlacement> wheel_pair_placements,
-        double rail_profile_reference_vertical_offset_meters,
-        StartupWheelRailBinding wheel_rail_binding,
-        std::string load_condition_identifier);
+     ResolvedInitialContext(std::unique_ptr<system_assembly::SystemRuntimeContext> context,
+                            std::vector<ResolvedWheelPairPlacement> wheel_pair_placements,
+                            std::vector<ResolvedBodyPlacement> body_placements,
+                            double rail_profile_reference_vertical_offset_meters,
+                            StartupWheelRailBinding wheel_rail_binding,
+                            std::string load_condition_identifier);
 
-    std::unique_ptr<system_assembly::SystemRuntimeContext> context_;
-    std::vector<ResolvedWheelPairPlacement> wheel_pair_placements_;
-    double rail_profile_reference_vertical_offset_meters_{0.0};
-    StartupWheelRailBinding wheel_rail_binding_;
-    std::string load_condition_identifier_;
+     std::unique_ptr<system_assembly::SystemRuntimeContext> context_;
+     std::vector<ResolvedWheelPairPlacement> wheel_pair_placements_;
+     std::vector<ResolvedBodyPlacement> body_placements_;
+     double rail_profile_reference_vertical_offset_meters_{0.0};
+     StartupWheelRailBinding wheel_rail_binding_;
+     std::string load_condition_identifier_;
 };
 
 // Places a resolved start-up state on a line and writes it into a fresh runtime

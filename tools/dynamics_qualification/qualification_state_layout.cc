@@ -44,7 +44,6 @@ Json BuildQualificationStateLayout(const configuration::AssembledVehicleSystem& 
                       const Eigen::Ref<const Eigen::VectorXd>& initial) {
     const auto& system = assembled.system();
     const auto& model = assembled.model();
-    const auto& binding = assembled.binding();
     if (initial.size() != system.continuous_state_size() || !initial.allFinite()) {
         Invalid("initial physical state has invalid size or values");
     }
@@ -81,28 +80,34 @@ Json BuildQualificationStateLayout(const configuration::AssembledVehicleSystem& 
                           {"scale_multiplier", multiplier}});
     };
     Json norms = Json::array();
-    for (const auto& body : binding.free_body_station_offsets) {
-        const auto handle = model.GetRigidBodyByName(body.body_name);
-        if (!model.IsFreeBody(handle)) Invalid("binding body is not free: " + body.body_name);
-        const auto range = model.GetFreeBodyPositionRange(handle);
-        const auto velocity = model.GetFreeBodyVelocityRange(handle);
-        if (range.size() != 7) Invalid("free-body position range must have seven entries");
-        if (velocity.size() != 6) Invalid("free-body velocity range must have six entries");
-        const double rho = initial.segment(range.start(), 4).norm();
-        Positive(rho, "initial quaternion norm");
-        coordinate_block(body.body_name, "quaternion", "free_quaternion", range.start(), 4,
-                         velocity.start(), 3, rho, "stored_quaternion");
-        blocks.back()["quaternion_order"] = "wxyz";
-        blocks.back()["rotation_convention"] = "R_WB";
-        blocks.back()["physical_velocity_kind"] = "angular_velocity";
-        blocks.back()["physical_velocity_expression_frame"] = "world";
-        coordinate_block(body.body_name, "translation", "free_translation", range.start() + 4, 3,
-                         velocity.start() + 3, 3, 1.0, "m");
-        blocks.back()["position_expression_frame"] = "world";
-        blocks.back()["physical_velocity_kind"] = "linear_velocity";
-        blocks.back()["physical_velocity_expression_frame"] = "world";
-        norms.push_back({{"body_name", body.body_name}, {"coordinate_start", range.start()},
-                         {"initial_norm", rho}});
+    for (const auto& vehicle : assembled.instance_bindings()) {
+        for (const auto& body : vehicle.binding.free_body_station_offsets) {
+            const auto handle = model.GetRigidBodyByName(body.body_name);
+            if (!model.IsFreeBody(handle))
+                Invalid("binding body is not free: " + body.body_name);
+            const auto range = model.GetFreeBodyPositionRange(handle);
+            const auto velocity = model.GetFreeBodyVelocityRange(handle);
+            if (range.size() != 7)
+                Invalid("free-body position range must have seven entries");
+            if (velocity.size() != 6)
+                Invalid("free-body velocity range must have six entries");
+            const double rho = initial.segment(range.start(), 4).norm();
+            Positive(rho, "initial quaternion norm");
+            coordinate_block(body.body_name, "quaternion", "free_quaternion", range.start(), 4,
+                             velocity.start(), 3, rho, "stored_quaternion");
+            blocks.back()["quaternion_order"] = "wxyz";
+            blocks.back()["rotation_convention"] = "R_WB";
+            blocks.back()["physical_velocity_kind"] = "angular_velocity";
+            blocks.back()["physical_velocity_expression_frame"] = "world";
+            coordinate_block(body.body_name, "translation", "free_translation", range.start() + 4,
+                             3, velocity.start() + 3, 3, 1.0, "m");
+            blocks.back()["position_expression_frame"] = "world";
+            blocks.back()["physical_velocity_kind"] = "linear_velocity";
+            blocks.back()["physical_velocity_expression_frame"] = "world";
+            norms.push_back({{"body_name", body.body_name},
+                             {"coordinate_start", range.start()},
+                             {"initial_norm", rho}});
+        }
     }
     const auto angle_joint = [&](const std::string& name, int size, const char* joint_kind) {
         const auto joint = model.GetJointByName(name);
@@ -123,8 +128,12 @@ Json BuildQualificationStateLayout(const configuration::AssembledVehicleSystem& 
             blocks.back()["physical_velocity_expression_frame"] = "joint_axis_in_parent_frame";
         }
     };
-    for (const auto& name : binding.revolute_joint_names) angle_joint(name, 1, "revolute");
-    for (const auto& name : binding.ball_rpy_joint_names) angle_joint(name, 3, "ball_rpy");
+    for (const auto& vehicle : assembled.instance_bindings()) {
+        for (const auto& name : vehicle.binding.revolute_joint_names)
+            angle_joint(name, 1, "revolute");
+        for (const auto& name : vehicle.binding.ball_rpy_joint_names)
+            angle_joint(name, 3, "ball_rpy");
+    }
     const auto force_block = [&](const std::string& name,
                                  system_assembly::SystemContinuousStateRange range) {
         if (range.size() != 1) Invalid("series-force range must have one entry");
@@ -134,13 +143,17 @@ Json BuildQualificationStateLayout(const configuration::AssembledVehicleSystem& 
                           {"internal_state_start", start}, {"physical_state_start", range.start()},
                           {"size", 1}, {"unit", "N"}});
     };
-    for (const auto& name : binding.series_spring_viscous_damper_names) {
-        force_block(name, system.series_spring_damper_force_state_range(
-                              system.GetSeriesSpringViscousDamperIndexByName(name)));
-    }
-    for (const auto& name : binding.point_to_point_series_spring_bilinear_damper_names) {
-        force_block(name, system.series_spring_damper_force_state_range(
-                              system.GetPointToPointSeriesSpringBilinearDamperIndexByName(name)));
+    for (const auto& vehicle : assembled.instance_bindings()) {
+        for (const auto& name : vehicle.binding.series_spring_viscous_damper_names) {
+            force_block(name, system.series_spring_damper_force_state_range(
+                                  system.GetSeriesSpringViscousDamperIndexByName(name)));
+        }
+        for (const auto& name :
+             vehicle.binding.point_to_point_series_spring_bilinear_damper_names) {
+            force_block(name,
+                        system.series_spring_damper_force_state_range(
+                            system.GetPointToPointSeriesSpringBilinearDamperIndexByName(name)));
+        }
     }
     RequireComplete(q_covered);
     RequireComplete(v_covered);
