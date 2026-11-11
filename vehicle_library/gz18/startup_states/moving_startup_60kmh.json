@@ -13,9 +13,9 @@
   "running_direction": "increasing_track_station",
   "initial_longitudinal_speed_meters_per_second": 16.666666666666668,
   "common_wheel_spin_generation": {
-    "effective_rolling_radius_meters": 0.42024171238881536
+    "effective_rolling_radius_meters": 0.42024207320134843
   },
-  "rail_profile_reference_vertical_offset_meters": -0.0003055705255365684,
+  "rail_profile_reference_vertical_offset_meters": -0.00030557052691430029,
   "wheel_pair_target_support_forces": [
     {
       "station_reference_body_name": "front_leading_wheelset",

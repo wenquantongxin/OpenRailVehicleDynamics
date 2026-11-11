@@ -39,6 +39,7 @@ using orvd::multibody_model::AppliedBodyWrench;
 constexpr std::size_t kSampleCount = 101;
 constexpr std::size_t kCarrierCount = 4;
 constexpr std::size_t kInterfaceCount = 8;
+constexpr double kInitialWheelForceToleranceNewtons = 1.0e-3;
 
 int failures = 0;
 
@@ -240,11 +241,19 @@ void CheckPhysicalObservationBatch(
             const auto& left =
                 observations.front().interfaces[2 * carrier + 1];
             Require(std::abs(right.vertical_support_force_on_wheel_newtons -
-                             placement.right_support_force_newtons) <= 1.0 &&
+                             placement.right_support_force_newtons) <=
+                            kInitialWheelForceToleranceNewtons &&
                         std::abs(left.vertical_support_force_on_wheel_newtons -
-                                 placement.left_support_force_newtons) <= 1.0,
+                                 placement.left_support_force_newtons) <=
+                            kInitialWheelForceToleranceNewtons,
                     "the resolved target support does not match the real t=0 "
                     "contact result");
+            Require(std::abs(right.total_force_on_wheel_in_carrier_track_frame_newtons.x()) <=
+                            kInitialWheelForceToleranceNewtons &&
+                        std::abs(left.total_force_on_wheel_in_carrier_track_frame_newtons.x()) <=
+                            kInitialWheelForceToleranceNewtons,
+                    "the straight-track rolling start has a longitudinal "
+                    "wheel-rail force");
         }
     }
 }
