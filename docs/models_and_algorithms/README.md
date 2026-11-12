@@ -26,7 +26,7 @@
 | `track_geometry/` | 线路平纵断面、超高、轨道坐标系、站位投影和竖向剖面 |
 | `track_irregularity_spectra/` | 轨道不平顺的四个分量、AAR 与 ERRI 谱、有限频带、随机实现与左右轨施加 |
 | `wheel_rail_contact/` | 型面与插值、位姿归约、接触几何、法向力、蠕滑、Kalker 系数、FASTSIM、扳手组装与接触力计划运动学 |
-| `force_elements/` | 连接运动学与扳手、平动弹簧—阻尼、侧滚力偶、定轴与点对点串联元件、饱和阻尼及参考架衬套 |
+| `force_elements/` | 连接运动学与扳手、平动弹簧—阻尼、侧滚力偶、定轴与点对点串联元件、点对点迟滞弹簧、饱和阻尼及参考架衬套 |
 | `vehicle_dynamics/` | 整车多体动力学方程、铰接体前向动力学、完整右端装配与起动状态构造 |
 | `numerical_methods/` | 时间积分、隐式非线性迭代、误差控制与稳定性 |
 
@@ -78,6 +78,7 @@
 - [奇对称饱和分段线性阻尼力元](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.md)：非负半轴折线力曲线、末节点外恒值延拓、奇延拓、定义域三条要求的后果与耗散势。
 - [参考架线性衬套](force_elements/REFERENCE_FRAME_LINEAR_BUSHING.md)：参考架位移与速度、物理角速度阻尼、安装点载荷、支承矩及功率平衡。
 - [点对点串联弹簧—双斜率阻尼力元](force_elements/POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.md)：连线运动学、双斜率阻尼及反解、内力方程、分段松弛、储能与耗散。
+- [点对点迟滞弹簧](force_elements/POINT_TO_POINT_HYSTERETIC_SPRING.md)：上下包络、速度过渡、端点载荷、储能与耗散、循环耗能与速率依赖。
 
 ### 整车动力学
 

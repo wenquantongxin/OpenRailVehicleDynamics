@@ -26,7 +26,7 @@ A theory document may state a model's mathematical assumptions and conditions of
 | `track_geometry/` | horizontal and vertical alignment, superelevation, track frames, station projection and vertical profiles |
 | `track_irregularity_spectra/` | the four irregularity components, AAR and ERRI spectra, finite bands, random realization and placement on the two rails |
 | `wheel_rail_contact/` | profiles and interpolation, pose reduction, contact geometry, normal force, creepage, Kalker coefficients, FASTSIM, wrench assembly and contact-force-plan kinematics |
-| `force_elements/` | connection kinematics and wrenches, translational springs and dampers, roll couples, fixed-axis and point-to-point series elements, saturated damping and reference-frame bushings |
+| `force_elements/` | connection kinematics and wrenches, translational springs and dampers, roll couples, fixed-axis and point-to-point series elements, point-to-point hysteretic springs, saturated damping and reference-frame bushings |
 | `vehicle_dynamics/` | multibody equations of motion, articulated-body forward dynamics, assembly of the complete right-hand side, and startup state construction |
 | `numerical_methods/` | time integration, implicit nonlinear iteration, error control and stability |
 
@@ -78,6 +78,7 @@ All documents share [Conventions and notation](CONVENTIONS_AND_NOTATION.en.md).
 - [Odd-symmetric saturated piecewise-linear damper](force_elements/SATURATED_PIECEWISE_LINEAR_DAMPER.en.md): piecewise-linear force curve on the non-negative half-axis, constant continuation beyond the last node, odd extension, consequences of the three domain requirements and the dissipation potential.
 - [Reference-frame linear bushing](force_elements/REFERENCE_FRAME_LINEAR_BUSHING.en.md): reference-frame displacement and velocity, physical angular-velocity damping, attachment loads, support moment and power balance.
 - [Point-to-point series spring–bilinear damper](force_elements/POINT_TO_POINT_SERIES_SPRING_BILINEAR_DAMPER.en.md): attachment-line kinematics, bilinear damping and its inverse, force-state equation, piecewise relaxation, storage and dissipation.
+- [Point-to-point hysteretic spring](force_elements/POINT_TO_POINT_HYSTERETIC_SPRING.en.md): upper and lower envelopes, speed transition, attachment loads, storage and dissipation, cycle dissipation and rate dependence.
 
 ### Vehicle dynamics
 

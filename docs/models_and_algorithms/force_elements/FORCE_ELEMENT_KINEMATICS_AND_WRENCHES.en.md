@@ -252,7 +252,7 @@ The two poses give $\mathbf d_I,\mathbf d_A,R_{AC}$; the relative spatial veloci
 
 - **Endpoint force pair and support moment**: the translational, fixed-axis series and saturated-damper families use Section 3.2.
 - **Pure couple**: the roll element uses Section 3.3.
-- **Axial force pair**: the point-to-point series element uses Section 3.4.
+- **Axial force pair**: point-to-point axial elements acting along the attachment line use Section 3.4.
 
 The reference-frame bushing combines the first two forms. Each element supplies one combined wrench to each body.
 

@@ -15,6 +15,7 @@
 |---|---|
 | [模型与算法](models_and_algorithms/README.md) | 线路、不平顺、轮轨接触、力元、多体动力学与积分方法；含中英文索引 |
 | [坐标与记号](models_and_algorithms/CONVENTIONS_AND_NOTATION.md) | 坐标系、正号、状态布局与单位 |
+| [车辆与编组资产](../vehicle_library/README.md) | 车辆定义、起动状态、编组配置与参考模型 |
 | [车辆配置](../libs/configuration/README.md) | 显式加载、机械装配与具名启动量 |
 | [IRW 参考模型](../vehicle_library/irw/reference_models/simpack/README.md)与[GZ18 参考模型](../vehicle_library/gz18/reference_models/simpack/README.md) | SIMPACK 文件、工况与初始化 |
 | [力元](../libs/forces/README.md) | 本构、载荷作用点与内力状态 |

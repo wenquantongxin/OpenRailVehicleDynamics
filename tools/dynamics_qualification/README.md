@@ -8,7 +8,7 @@ not installed and do not define another simulation or solver API.
 The three executables keep their positional arguments:
 
 ```text
-orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record]
+orvd_gz18_dynamics_qualification VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_ID OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record | --consist PATH]
 orvd_irw_passive_scenario SCENARIO VEHICLE STARTUP LINE DATA_ROOT IRREGULARITY_ID_OR_NONE OUTPUT_DIRECTORY DURATION_NS SAMPLE_PERIOD_NS [--integration-config PATH] [--scene-record]
 orvd_irw_r300_aar5_v60_100hz_full_state_guidance VEHICLE STARTUP LINE DATA_ROOT CONTROLLER CONDITIONER OUTPUT_DIRECTORY DURATION_NS [--integration-config PATH]
 ```
@@ -57,6 +57,25 @@ OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=8 OMP_DYNAMIC=FALSE \
   results/irw_r300_controlled 50000000000
 ```
 
+## Run a consist
+
+The GZ18 runner accepts `--consist PATH` to assemble the vehicle instances and
+force elements in a [consist definition](../../vehicle_library/README.md#编组).
+The vehicle, startup, track and irregularity inputs retain their positional arguments.
+`--consist` and `--scene-record` are mutually exclusive.
+
+Three cars on tangent track with AAR6, using default BDF2:
+
+```sh
+OMP_NUM_THREADS=8 OMP_THREAD_LIMIT=8 OMP_DYNAMIC=FALSE \
+  ./build/tools/dynamics_qualification/orvd_gz18_dynamics_qualification \
+  vehicle_library/gz18/vehicle_definition.json \
+  vehicle_library/gz18/startup_states/moving_startup_60kmh.json \
+  track_library/geometries/straight_level_2000m.json . aar6_irregularity \
+  results/gz18_three_car_straight 20000000000 500000 \
+  --consist vehicle_library/gz18/consists/three_car.json
+```
+
 ## Explicit integration configuration
 
 All runners accept the same JSON schema (`schema_version: 1`). `method` is one
@@ -71,7 +90,7 @@ ODE configurations provide `relative_tolerance`,
 expanded into the public method configuration after assembly.
 
 For the Radau5 reference, save the following configuration and append
-`--integration-config PATH` to either command, choosing a separate output directory:
+`--integration-config PATH` to any command above, choosing a separate output directory:
 
 ```json
 {
@@ -103,6 +122,13 @@ Each successful run publishes `metadata.json`, `performance.json`,
 `COMPLETE`. Controlled runs also publish `control_events.tsv`. The GZ18 and IRW passive
 `--scene-record` option publishes `scene_record/` from the same observation
 samples; it does not change integration stops or the scene format.
+
+Hysteretic point-to-point elements publish `point_to_point_hysteretic_springs.tsv`:
+length, length rate, elastic force, hysteretic force and total tensile-positive
+axial force, identified by element name on the common sample clock.
+Linear point-to-point elements publish `point_to_point_linear_spring_dampers.tsv`
+with length, length rate, elastic force, viscous force and total axial force.
+Consist observation columns use instance-qualified names, such as `car_1.carbody`.
 
 Physical state `[q;v;z]` uses 17 significant digits and an integer nanosecond
 sample clock. Initial and terminal samples are included, and adjacent control
