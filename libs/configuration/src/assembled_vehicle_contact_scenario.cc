@@ -271,7 +271,8 @@ internal::VehicleInstanceAssembler::AssembleContactScenario(
         }
     }
     auto vehicle_system = AssembledVehicleSystem::AssembleWithWheelRailContact(
-        vehicle, std::move(bindings), consist.couplers,
+        vehicle, std::move(bindings), consist.point_to_point_linear_spring_dampers,
+        consist.point_to_point_hysteretic_springs,
         startup_state.gravitational_acceleration_meters_per_second_squared, std::move(line),
         std::move(contact.personality), std::move(irregularity), std::move(expanded.carriers),
         std::move(expanded.interfaces), std::move(expanded.active_torque_couples));
@@ -300,7 +301,7 @@ std::unique_ptr<AssembledVehicleContactScenario> AssembleGz18ContactScenario(
     double vehicle_layout_reference_track_station_meters,
     std::unique_ptr<wheel_rail_contact::TrackIrregularityField> track_irregularity) {
     ConsistDefinition single{
-        {{"", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0}}, {}};
+        {{"", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0}}, {}, {}};
     return internal::VehicleInstanceAssembler::AssembleContactScenario(
         vehicle, startup_state, single,
         PrepareGz18VehicleContact(vehicle, startup_state, orvd_data_root), std::move(line),
@@ -321,7 +322,7 @@ std::unique_ptr<AssembledVehicleContactScenario> AssembleIrwContactScenario(
     PreparedVehicleContact prepared{BuildIrwContactTopology(vehicle),
                                     contact->ReleaseRuntimePersonality()};
     ConsistDefinition single{
-        {{"", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0}}, {}};
+        {{"", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0}}, {}, {}};
     return internal::VehicleInstanceAssembler::AssembleContactScenario(
         vehicle, startup_state, single, std::move(prepared), std::move(line),
         vehicle_layout_reference_track_station_meters, std::move(track_irregularity));

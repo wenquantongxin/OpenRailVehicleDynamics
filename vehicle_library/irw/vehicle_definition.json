@@ -3756,5 +3756,7 @@
         "z": 10000.0
       }
     }
-  ]
+  ],
+  "point_to_point_linear_spring_dampers": [],
+  "point_to_point_hysteretic_springs": []
 }

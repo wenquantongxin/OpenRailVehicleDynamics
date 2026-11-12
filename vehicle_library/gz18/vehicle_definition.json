@@ -895,5 +895,7 @@
       ]
     }
   ],
-  "reference_frame_linear_bushings": []
+  "reference_frame_linear_bushings": [],
+  "point_to_point_linear_spring_dampers": [],
+  "point_to_point_hysteretic_springs": []
 }

@@ -6,6 +6,8 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include "orvd/configuration/point_to_point_spring_definitions.h"
+
 // The mechanical description of one rail vehicle: the rigid bodies, the frames
 // fixed to them, and the relations that hold them together.
 //
@@ -241,6 +243,8 @@ struct VehicleDefinition {
         saturated_piecewise_linear_dampers;
     std::vector<VehicleReferenceFrameLinearBushingDefinition>
         reference_frame_linear_bushings;
+    std::vector<PointToPointLinearSpringDamperDefinition> point_to_point_linear_spring_dampers;
+    std::vector<PointToPointHystereticSpringDefinition> point_to_point_hysteretic_springs;
 };
 
 }  // namespace orvd::configuration

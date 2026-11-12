@@ -114,6 +114,19 @@ struct PointToPointLinearSpringDamper {
     double damping_newton_seconds_per_meter{0.0};
 };
 
+// A point-to-point spring with velocity-regularized hysteresis. With extension
+// x and length rate v, F = k*x + eta*k*abs(x)*clamp(v/epsilon, -1, 1).
+// Positive force pulls the attachment points together. No internal state.
+struct PointToPointHystereticSpring {
+    std::string name;
+    ForceElementEnd reference_end;
+    ForceElementEnd opposite_end;
+    double nominal_length_meters{0.0};
+    double stiffness_newtons_per_meter{0.0};
+    double hysteresis_ratio{0.0};
+    double hysteresis_transition_speed_meters_per_second{0.0};
+};
+
 // A damper whose force law is a piecewise linear odd function of the relative
 // velocity along one axis, saturating outside the stated range.
 //
@@ -170,6 +183,7 @@ struct VehicleForceElementCollection {
     std::vector<PointToPointSeriesSpringBilinearDamper>
         point_to_point_series_spring_bilinear_dampers;
     std::vector<PointToPointLinearSpringDamper> point_to_point_linear_spring_dampers;
+    std::vector<PointToPointHystereticSpring> point_to_point_hysteretic_springs;
     std::vector<SaturatedPiecewiseLinearDamper>
         saturated_piecewise_linear_dampers;
     std::vector<ReferenceFrameLinearBushing> reference_frame_linear_bushings;

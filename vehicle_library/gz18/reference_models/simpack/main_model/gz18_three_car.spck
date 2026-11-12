@@ -160,25 +160,39 @@ marker.parent (                     $M_Isys                       ) = $R_Isys   
 !**********************************************************************
 ! Force Elements
 !**********************************************************************
-force.type (                        $F_Coupler_12                 ) = 4                       ! Type
+force.type($F_Coupler_12) = 105
 force.from (                        $F_Coupler_12                 ) = $S_Car_1.$M_vehicle_Hook_R ! From Marker
 force.to (                          $F_Coupler_12                 ) = $S_Car_2.$M_vehicle_Hook_F ! To Marker
-force.par (               1 ,       $F_Coupler_12                 ) = { 0.80 m }              ! [m] Nominal length
-force.par (               2 ,       $F_Coupler_12                 ) = { 8000000 N/m }         ! [N/m] Stiffness
-force.par (               3 ,       $F_Coupler_12                 ) = { 130000 Ns/m }         ! [Ns/m] Damping
-force.par (               4 ,       $F_Coupler_12                 ) = null                    ! [-] Input Function F_c(l)
-force.par (               5 ,       $F_Coupler_12                 ) = null                    ! [-] Input Function F_d(ld)
-force.par (               6 ,       $F_Coupler_12                 ) = { 0 N }                 ! [N] Preload force
+force.par(2,$F_Coupler_12) = 1
+force.par(3,$F_Coupler_12) = 0
+force.par(4,$F_Coupler_12) = 0
+force.par(5,$F_Coupler_12) = 0.80
+force.par(6,$F_Coupler_12) = 1
+force.par(7,$F_Coupler_12) = 0
+force.par(8,$F_Coupler_12) = 0
+force.par(9,$F_Coupler_12) = 0
+force.par(10,$F_Coupler_12) = 0.001
+force.par(11,$F_Coupler_12) = $I_Coupler_LowerEnvelope
+force.par(12,$F_Coupler_12) = $I_Coupler_UpperEnvelope
+force.par(13,$F_Coupler_12) = null
+force.par(14,$F_Coupler_12) = 1
 
-force.type (                        $F_Coupler_23                 ) = 4                       ! Type
+force.type($F_Coupler_23) = 105
 force.from (                        $F_Coupler_23                 ) = $S_Car_2.$M_vehicle_Hook_R ! From Marker
 force.to (                          $F_Coupler_23                 ) = $S_Car_3.$M_vehicle_Hook_F ! To Marker
-force.par (               1 ,       $F_Coupler_23                 ) = { 0.80 m }              ! [m] Nominal length
-force.par (               2 ,       $F_Coupler_23                 ) = { 8000000 N/m }         ! [N/m] Stiffness
-force.par (               3 ,       $F_Coupler_23                 ) = { 130000 Ns/m }         ! [Ns/m] Damping
-force.par (               4 ,       $F_Coupler_23                 ) = null                    ! [-] Input Function F_c(l)
-force.par (               5 ,       $F_Coupler_23                 ) = null                    ! [-] Input Function F_d(ld)
-force.par (               6 ,       $F_Coupler_23                 ) = { 0 N }                 ! [N] Preload force
+force.par(2,$F_Coupler_23) = 1
+force.par(3,$F_Coupler_23) = 0
+force.par(4,$F_Coupler_23) = 0
+force.par(5,$F_Coupler_23) = 0.80
+force.par(6,$F_Coupler_23) = 1
+force.par(7,$F_Coupler_23) = 0
+force.par(8,$F_Coupler_23) = 0
+force.par(9,$F_Coupler_23) = 0
+force.par(10,$F_Coupler_23) = 0.001
+force.par(11,$F_Coupler_23) = $I_Coupler_LowerEnvelope
+force.par(12,$F_Coupler_23) = $I_Coupler_UpperEnvelope
+force.par(13,$F_Coupler_23) = null
+force.par(14,$F_Coupler_23) = 1
 
 !**********************************************************************
 ! Tracks
@@ -322,3 +336,29 @@ joint.st.pos (            1 ,       $S_Car_3.$S_BF_R.$S_WS_R.$J_wheelset) = { $_
 
 
                                      
+
+! Shared coupler envelopes; extension in m, force in N.
+ifctn.type($I_Coupler_LowerEnvelope) = 1
+ifctn.datatype($I_Coupler_LowerEnvelope) = 1
+ifctn.x(1,$I_Coupler_LowerEnvelope) = -0.02
+ifctn.y(1,$I_Coupler_LowerEnvelope) = -200000
+ifctn.x(2,$I_Coupler_LowerEnvelope) = 0
+ifctn.y(2,$I_Coupler_LowerEnvelope) = 0
+ifctn.x(3,$I_Coupler_LowerEnvelope) = 0.02
+ifctn.y(3,$I_Coupler_LowerEnvelope) = 120000
+ifctn.intpol.type($I_Coupler_LowerEnvelope) = 2
+ifctn.extr.type($I_Coupler_LowerEnvelope) = 0
+ifctn.range.handling($I_Coupler_LowerEnvelope) = 2
+
+ifctn.type($I_Coupler_UpperEnvelope) = 1
+ifctn.datatype($I_Coupler_UpperEnvelope) = 1
+ifctn.x(1,$I_Coupler_UpperEnvelope) = -0.02
+ifctn.y(1,$I_Coupler_UpperEnvelope) = -120000
+ifctn.x(2,$I_Coupler_UpperEnvelope) = 0
+ifctn.y(2,$I_Coupler_UpperEnvelope) = 0
+ifctn.x(3,$I_Coupler_UpperEnvelope) = 0.02
+ifctn.y(3,$I_Coupler_UpperEnvelope) = 200000
+ifctn.intpol.type($I_Coupler_UpperEnvelope) = 2
+ifctn.extr.type($I_Coupler_UpperEnvelope) = 0
+ifctn.range.handling($I_Coupler_UpperEnvelope) = 2
+

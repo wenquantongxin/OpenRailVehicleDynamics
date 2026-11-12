@@ -19,6 +19,8 @@ namespace {
 
 using orvd::forces::ForceElementAxis;
 using orvd::forces::ForceElementEnd;
+using orvd::forces::PointToPointHystereticSpring;
+using orvd::forces::PointToPointHystereticSpringObservation;
 using orvd::forces::PointToPointLinearSpringDamper;
 using orvd::forces::PointToPointLinearSpringDamperObservation;
 using orvd::forces::PointToPointSeriesSpringBilinearDamper;
@@ -907,6 +909,120 @@ void CheckPointToPointLinearLawAndWrenches() {
     }
 }
 
+void CheckPointToPointHystereticLawAndWrenches() {
+    const TwoBodyFixture fixture;
+    constexpr double stiffness = 8000.0;
+    constexpr double transition_speed = 0.001;
+    const MotionSample motion = SampleMotion(fixture);
+    const double length = motion.displacement_in_world.stableNorm();
+    const Eigen::Vector3d direction = motion.displacement_in_world / length;
+    const double base_rate = direction.dot(PointVelocityInWorld(fixture, fixture.opposite_end) -
+                                           PointVelocityInWorld(fixture, fixture.reference_end));
+    const Eigen::VectorXd empty(0);
+    Eigen::VectorXd no_derivative(0);
+    for (const double ratio : {0.0, 0.25, 1.0}) {
+        for (const double extension : {-0.15, 0.0, 0.15}) {
+            for (const double fraction : {-2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0}) {
+                const double rate = fraction * transition_speed;
+                fixture.SetState(rate / base_rate);
+                VehicleForceElementCollection elements;
+                elements.point_to_point_hysteretic_springs.push_back(
+                    {"hysteretic", fixture.reference_end, fixture.opposite_end, length - extension,
+                     stiffness, ratio, transition_speed});
+                const VehicleForcePlan plan(*fixture.model, std::move(elements));
+                Expect(plan.point_to_point_hysteretic_spring_count() == 1 &&
+                           plan.point_to_point_hysteretic_spring_name(0) == "hysteretic" &&
+                           plan.series_spring_damper_force_state_count() == 0 &&
+                           plan.nominal_force_component_count() == 0 &&
+                           plan.body_wrench_count() == 2,
+                       "hysteretic spring has two wrenches and no state or nominal force");
+                const auto wrenches = Evaluate(fixture, plan, empty, empty, no_derivative);
+                std::vector<PointToPointHystereticSpringObservation> observations(1);
+                plan.CalcPointToPointHystereticSpringObservations(*fixture.context, observations);
+                const double upper = stiffness * (extension + ratio * std::abs(extension));
+                const double lower = stiffness * (extension - ratio * std::abs(extension));
+                const double upper_weight = fraction <= -1.0  ? 0.0
+                                            : fraction >= 1.0 ? 1.0
+                                                              : (fraction + 1.0) / 2.0;
+                const double expected = upper_weight * upper + (1.0 - upper_weight) * lower;
+                const double spring = stiffness * extension;
+                const double scale = std::max({1.0, std::abs(upper), std::abs(lower)});
+                const auto& observed = observations[0];
+                Expect(std::abs(observed.length_meters - length) <= 16.0 * kMachine &&
+                           std::abs(observed.length_rate_meters_per_second - rate) <=
+                               64.0 * kMachine &&
+                           std::abs(observed.spring_force_newtons - spring) <=
+                               128.0 * kMachine * scale &&
+                           std::abs(observed.hysteresis_force_newtons - (expected - spring)) <=
+                               256.0 * kMachine * scale &&
+                           std::abs(observed.force_newtons - expected) <= 256.0 * kMachine * scale,
+                       "hysteretic force interpolates the two envelopes on either side of zero");
+                Expect((wrenches[0].force_newtons - expected * direction).norm() <=
+                               256.0 * kMachine * scale &&
+                           wrenches[1].force_newtons == -wrenches[0].force_newtons &&
+                           wrenches[0].torque_about_point_newton_metres.isZero(0.0) &&
+                           wrenches[1].torque_about_point_newton_metres.isZero(0.0),
+                       "hysteretic spring emits central tensile and compressive forces");
+                const auto reference = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+                    *fixture.context, fixture.reference_end.frame);
+                const auto opposite = fixture.model->CalcFrameOriginAsBodyFixedPoint(
+                    *fixture.context, fixture.opposite_end.frame);
+                Expect(wrenches[0].body == reference.body && wrenches[1].body == opposite.body &&
+                           wrenches[0].point_position_in_body_frame_meters ==
+                               reference.position_in_body_frame_meters &&
+                           wrenches[1].point_position_in_body_frame_meters ==
+                               opposite.position_in_body_frame_meters,
+                       "hysteretic forces act at the offset attachment points");
+                const Eigen::Vector3d origin(0.83, -1.27, 0.44);
+                const auto moment =
+                    (motion.reference_point_in_world - origin).cross(wrenches[0].force_newtons) +
+                    (motion.opposite_point_in_world - origin).cross(wrenches[1].force_newtons);
+                const double dissipated_power = (expected - spring) * rate;
+                Expect(moment.norm() <= 512.0 * kMachine * scale && dissipated_power >= 0.0 &&
+                           std::abs(AppliedPower(fixture, wrenches) + spring * rate +
+                                    dissipated_power) <= 512.0 * kMachine * scale,
+                       "hysteretic endpoint power balances storage and non-negative dissipation");
+            }
+        }
+    }
+    const PointToPointHystereticSpring valid{
+        "hysteretic", fixture.reference_end, fixture.opposite_end, 0.8, 8000.0, 0.25, 0.001};
+    const auto rejected = [&](const PointToPointHystereticSpring& element) {
+        VehicleForceElementCollection elements;
+        elements.point_to_point_hysteretic_springs.push_back(element);
+        try {
+            const VehicleForcePlan plan(*fixture.model, std::move(elements));
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+    for (const auto member :
+         {&PointToPointHystereticSpring::nominal_length_meters,
+          &PointToPointHystereticSpring::stiffness_newtons_per_meter,
+          &PointToPointHystereticSpring::hysteresis_ratio,
+          &PointToPointHystereticSpring::hysteresis_transition_speed_meters_per_second}) {
+        for (const double value : {-1.0, std::numeric_limits<double>::infinity(),
+                                   std::numeric_limits<double>::quiet_NaN()}) {
+            auto invalid = valid;
+            invalid.*member = value;
+            Expect(rejected(invalid), "hysteretic spring rejects negative or nonfinite parameters");
+        }
+    }
+    auto invalid = valid;
+    invalid.hysteresis_ratio = 1.01;
+    Expect(rejected(invalid), "hysteretic ratio must not exceed one");
+    invalid = valid;
+    invalid.hysteresis_transition_speed_meters_per_second = 0.0;
+    Expect(rejected(invalid), "hysteretic transition speed is positive");
+    invalid = valid;
+    invalid.nominal_length_meters = 0.0;
+    Expect(rejected(invalid), "hysteretic nominal length is positive");
+    invalid = valid;
+    invalid.opposite_end = fixture.same_body_end;
+    Expect(rejected(invalid), "hysteretic spring requires distinct carrier bodies");
+}
+
 void CheckPointToPointLinearRefusals() {
     const TwoBodyFixture fixture;
     const PointToPointLinearSpringDamper valid{
@@ -1217,6 +1333,7 @@ int main() {
         CheckPointToPointSeriesRefusals();
         CheckPointToPointLinearLawAndWrenches();
         CheckPointToPointLinearRefusals();
+        CheckPointToPointHystereticLawAndWrenches();
         CheckPlanRefusals();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "vehicle force elements failed: %s\n",

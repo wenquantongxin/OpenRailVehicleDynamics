@@ -1,5 +1,6 @@
 #include "orvd/forces/vehicle_force_plan.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
@@ -238,19 +239,40 @@ double InverseBilinearDamping(
         force);
 }
 
-PointToPointLinearSpringDamperObservation EvaluateLinearPointToPoint(
-    const PointToPointLinearSpringDamper& element, const RelativeMotion& motion) {
+struct PointToPointMotion {
+    double length_meters;
+    double length_rate_meters_per_second;
+};
+
+PointToPointMotion CalcPointToPointMotion(const RelativeMotion& motion, std::string_view name) {
     const double length = motion.displacement_in_world_meters.stableNorm();
     if (!(length > 0.0) || !std::isfinite(length)) {
-        throw std::runtime_error("point-to-point linear spring-damper '" + element.name +
+        throw std::runtime_error("point-to-point element '" + std::string(name) +
                                  "' has zero or non-finite attachment separation");
     }
     const double rate = (motion.displacement_in_reference_frame_meters / length)
                             .dot(motion.velocity_in_reference_frame_meters_per_second);
+    return {length, rate};
+}
+
+PointToPointLinearSpringDamperObservation EvaluateLinearPointToPoint(
+    const PointToPointLinearSpringDamper& element, const RelativeMotion& motion) {
+    const auto [length, rate] = CalcPointToPointMotion(motion, element.name);
     const double spring =
         element.stiffness_newtons_per_meter * (length - element.nominal_length_meters);
     const double damping = element.damping_newton_seconds_per_meter * rate;
     return {length, rate, spring, damping, spring + damping};
+}
+
+PointToPointHystereticSpringObservation EvaluateHystereticPointToPoint(
+    const PointToPointHystereticSpring& element, const RelativeMotion& motion) {
+    const auto [length, rate] = CalcPointToPointMotion(motion, element.name);
+    const double spring =
+        element.stiffness_newtons_per_meter * (length - element.nominal_length_meters);
+    const double hysteresis =
+        element.hysteresis_ratio * std::abs(spring) *
+        std::clamp(rate / element.hysteresis_transition_speed_meters_per_second, -1.0, 1.0);
+    return {length, rate, spring, hysteresis, spring + hysteresis};
 }
 
 }  // namespace
@@ -370,6 +392,26 @@ VehicleForcePlan::VehicleForcePlan(
                    "non-negative stiffness and damping");
         }
     }
+    for (std::size_t index = 0; index < elements_.point_to_point_hysteretic_springs.size();
+         ++index) {
+        const auto& element = elements_.point_to_point_hysteretic_springs[index];
+        const std::string what =
+            ElementDescription("point-to-point hysteretic spring", index, element.name);
+        RequireUniqueName(element.name, what, &names);
+        RequireDistinctLiveEnds(model, *validation_context, element.reference_end,
+                                element.opposite_end, what);
+        if (!(element.nominal_length_meters > 0.0) ||
+            !std::isfinite(element.nominal_length_meters) ||
+            !std::isfinite(element.stiffness_newtons_per_meter) ||
+            element.stiffness_newtons_per_meter < 0.0 || !std::isfinite(element.hysteresis_ratio) ||
+            element.hysteresis_ratio < 0.0 || element.hysteresis_ratio > 1.0 ||
+            !(element.hysteresis_transition_speed_meters_per_second > 0.0) ||
+            !std::isfinite(element.hysteresis_transition_speed_meters_per_second)) {
+            Reject(what +
+                   " needs finite positive nominal length and transition speed, "
+                   "non-negative stiffness and hysteresis ratio in [0, 1]");
+        }
+    }
     for (std::size_t index = 0;
          index < elements_.saturated_piecewise_linear_dampers.size();
          ++index) {
@@ -474,6 +516,27 @@ void VehicleForcePlan::CalcPointToPointLinearSpringDamperObservations(
         const RelativeMotion motion =
             CalcRelativeMotion(*model_, context, element.reference_end, element.opposite_end);
         observations[index] = EvaluateLinearPointToPoint(element, motion);
+    }
+}
+
+std::string_view VehicleForcePlan::point_to_point_hysteretic_spring_name(int ordinal) const {
+    if (ordinal < 0 || ordinal >= point_to_point_hysteretic_spring_count()) {
+        throw std::out_of_range("point-to-point hysteretic spring ordinal");
+    }
+    return elements_.point_to_point_hysteretic_springs[static_cast<std::size_t>(ordinal)].name;
+}
+
+void VehicleForcePlan::CalcPointToPointHystereticSpringObservations(
+    const MultibodyEvaluationContext& context,
+    std::span<PointToPointHystereticSpringObservation> observations) const {
+    if (observations.size() != elements_.point_to_point_hysteretic_springs.size()) {
+        Reject("the point-to-point hysteretic observation output has the wrong length");
+    }
+    for (std::size_t index = 0; index < observations.size(); ++index) {
+        const auto& element = elements_.point_to_point_hysteretic_springs[index];
+        const RelativeMotion motion =
+            CalcRelativeMotion(*model_, context, element.reference_end, element.opposite_end);
+        observations[index] = EvaluateHystereticPointToPoint(element, motion);
     }
 }
 
@@ -614,6 +677,23 @@ void VehicleForcePlan::CalcAppliedForces(
         const RelativeMotion motion =
             CalcRelativeMotion(*model_, context, element.reference_end, element.opposite_end);
         const auto observation = EvaluateLinearPointToPoint(element, motion);
+        const Eigen::Vector3d force_in_world =
+            observation.force_newtons *
+            (motion.displacement_in_world_meters / observation.length_meters);
+        const FrameHandle world = model_->world_frame();
+        body_wrenches[slot] = AppliedBodyWrench{
+            motion.reference_point.body, motion.reference_point.position_in_body_frame_meters,
+            world, Eigen::Vector3d::Zero(), force_in_world};
+        body_wrenches[slot + 1] = AppliedBodyWrench{
+            motion.opposite_point.body, motion.opposite_point.position_in_body_frame_meters, world,
+            Eigen::Vector3d::Zero(), -force_in_world};
+        slot += 2;
+    }
+
+    for (const auto& element : elements_.point_to_point_hysteretic_springs) {
+        const RelativeMotion motion =
+            CalcRelativeMotion(*model_, context, element.reference_end, element.opposite_end);
+        const auto observation = EvaluateHystereticPointToPoint(element, motion);
         const Eigen::Vector3d force_in_world =
             observation.force_newtons *
             (motion.displacement_in_world_meters / observation.length_meters);

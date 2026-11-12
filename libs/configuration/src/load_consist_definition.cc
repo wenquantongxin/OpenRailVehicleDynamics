@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "orvd/configuration/consist_definition.h"
+#include "point_to_point_spring_definitions_json.h"
 #include "strict_json.h"
 
 namespace orvd::configuration {
@@ -17,18 +18,14 @@ using strict_json::RequireFiniteNumber;
 using strict_json::RequireIdentifier;
 using strict_json::RequireString;
 
-ConsistCouplerEndDefinition ReadEnd(const Json& value, const std::string& path) {
-    RequireExactKeys(value, path, {"instance_name", "frame_name"});
-    return {RequireIdentifier(value.at("instance_name"), path + ".instance_name", "instance name"),
-            RequireString(value.at("frame_name"), path + ".frame_name")};
-}
 }  // namespace
 
 ConsistDefinition LoadConsistDefinition(const std::filesystem::path& path) {
     const auto root = ParseStrictJson(ReadWholeFile(path, "consist definition"));
-    RequireExactKeys(root, "consist", {"vehicles", "couplers"});
+    RequireExactKeys(
+        root, "consist",
+        {"vehicles", "point_to_point_linear_spring_dampers", "point_to_point_hysteretic_springs"});
     RequireArray(root.at("vehicles"), "consist.vehicles");
-    RequireArray(root.at("couplers"), "consist.couplers");
     ConsistDefinition result;
     std::unordered_set<std::string> instance_names;
     for (std::size_t i = 0; i < root.at("vehicles").size(); ++i) {
@@ -53,33 +50,25 @@ ConsistDefinition LoadConsistDefinition(const std::filesystem::path& path) {
         throw std::invalid_argument("consist.vehicles must not be empty");
     }
     std::unordered_set<std::string> force_names;
-    for (std::size_t i = 0; i < root.at("couplers").size(); ++i) {
-        const auto& item = root.at("couplers")[i];
-        const auto where = ElementPath("consist.couplers", i);
-        RequireExactKeys(item, where,
-                         {"name", "reference_end", "opposite_end", "nominal_length_meters",
-                          "stiffness_newtons_per_meter", "damping_newton_seconds_per_meter"});
-        ConsistCouplerDefinition force{
-            RequireString(item.at("name"), where + ".name"),
-            ReadEnd(item.at("reference_end"), where + ".reference_end"),
-            ReadEnd(item.at("opposite_end"), where + ".opposite_end"),
-            RequireFiniteNumber(item.at("nominal_length_meters"), where + ".nominal_length_meters"),
-            RequireFiniteNumber(item.at("stiffness_newtons_per_meter"),
-                                where + ".stiffness_newtons_per_meter"),
-            RequireFiniteNumber(item.at("damping_newton_seconds_per_meter"),
-                                where + ".damping_newton_seconds_per_meter")};
-        if (force.name.empty() || !force_names.insert(force.name).second ||
-            !instance_names.contains(force.reference_end.instance_name) ||
-            !instance_names.contains(force.opposite_end.instance_name) ||
-            force.reference_end.instance_name == force.opposite_end.instance_name ||
-            force.reference_end.frame_name.empty() || force.opposite_end.frame_name.empty() ||
-            !(force.nominal_length_meters > 0.0) || force.stiffness_newtons_per_meter < 0.0 ||
-            force.damping_newton_seconds_per_meter < 0.0) {
-            throw std::invalid_argument(where +
-                                        " has invalid endpoints or constitutive parameters");
+    const auto read_elements = [&](const char* key, auto parse, auto& destination) {
+        const auto& array = root.at(key);
+        const std::string path = std::string("consist.") + key;
+        RequireArray(array, path);
+        for (std::size_t index = 0; index < array.size(); ++index) {
+            const auto where = ElementPath(path, index);
+            auto element = parse(array[index], where);
+            if (!force_names.insert(element.name).second) {
+                throw std::invalid_argument(where + " repeats force-element name '" + element.name +
+                                            "'");
+            }
+            destination.push_back(std::move(element));
         }
-        result.couplers.push_back(std::move(force));
-    }
+    };
+    read_elements("point_to_point_linear_spring_dampers",
+                  internal::ParsePointToPointLinearSpringDamper,
+                  result.point_to_point_linear_spring_dampers);
+    read_elements("point_to_point_hysteretic_springs", internal::ParsePointToPointHystereticSpring,
+                  result.point_to_point_hysteretic_springs);
     return result;
 }
 }  // namespace orvd::configuration

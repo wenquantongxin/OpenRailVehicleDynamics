@@ -317,9 +317,81 @@ int CountBodiesWithChangedOriginVelocity(
     return changed;
 }
 
+void CheckPointToPointPlacement(const VehicleDefinition& vehicle,
+                                const ResolvedStartupState& startup, const TrackGeometry& line,
+                                const std::filesystem::path& root) {
+    using namespace orvd::configuration;
+    auto with_springs = vehicle;
+    with_springs.point_to_point_linear_spring_dampers.push_back(
+        {"linear_link", "rear_coupler_mount", "rear_bogie_frame", 3.0, 8000.0, 130.0});
+    with_springs.point_to_point_hysteretic_springs.push_back(
+        {"hysteretic_link", "front_coupler_mount", "front_bogie_frame", 3.1, 9000.0, 0.25, 0.001});
+    ConsistDefinition placement;
+    placement.vehicles.push_back(
+        {"car_1", vehicle.vehicle_name, vehicle.mechanical_definition_identifier, 0.0});
+    auto local = AssembleConsistContactScenario(
+        with_springs, startup, placement, PrepareGz18VehicleContact(with_springs, startup, root),
+        line, 0.0);
+    placement.point_to_point_linear_spring_dampers =
+        with_springs.point_to_point_linear_spring_dampers;
+    placement.point_to_point_hysteretic_springs = with_springs.point_to_point_hysteretic_springs;
+    const auto qualify = [](auto& definitions) {
+        for (auto& element : definitions) {
+            element.reference_frame_name =
+                QualifyVehicleName("car_1", element.reference_frame_name);
+            element.opposite_frame_name = QualifyVehicleName("car_1", element.opposite_frame_name);
+        }
+    };
+    qualify(placement.point_to_point_linear_spring_dampers);
+    qualify(placement.point_to_point_hysteretic_springs);
+    auto qualified = AssembleConsistContactScenario(
+        vehicle, startup, placement, PrepareGz18VehicleContact(vehicle, startup, root), line, 0.0);
+    const auto& local_system = local->vehicle_system();
+    const auto& qualified_system = qualified->vehicle_system();
+    Require(local_system.force_plan().point_to_point_linear_spring_damper_name(0) ==
+                    "car_1.linear_link" &&
+                local_system.force_plan().point_to_point_hysteretic_spring_name(0) ==
+                    "car_1.hysteretic_link",
+            "vehicle-local point-to-point names lost the instance prefix");
+    auto local_view = local_system.system().GetMultibodyComponentView(
+        local->initial_context().context(), local_system.system().multibody_component());
+    auto qualified_view = qualified_system.system().GetMultibodyComponentView(
+        qualified->initial_context().context(), qualified_system.system().multibody_component());
+    std::vector<orvd::forces::PointToPointLinearSpringDamperObservation> local_linear(1),
+        qualified_linear(1);
+    std::vector<orvd::forces::PointToPointHystereticSpringObservation> local_hysteretic(1),
+        qualified_hysteretic(1);
+    local_system.force_plan().CalcPointToPointLinearSpringDamperObservations(local_view.context(),
+                                                                             local_linear);
+    qualified_system.force_plan().CalcPointToPointLinearSpringDamperObservations(
+        qualified_view.context(), qualified_linear);
+    local_system.force_plan().CalcPointToPointHystereticSpringObservations(local_view.context(),
+                                                                           local_hysteretic);
+    qualified_system.force_plan().CalcPointToPointHystereticSpringObservations(
+        qualified_view.context(), qualified_hysteretic);
+    Require(
+        std::abs(local_linear[0].length_meters - qualified_linear[0].length_meters) < 1e-12 &&
+            std::abs(local_linear[0].force_newtons - qualified_linear[0].force_newtons) < 1e-8 &&
+            std::abs(local_hysteretic[0].length_meters - qualified_hysteretic[0].length_meters) <
+                1e-12 &&
+            std::abs(local_hysteretic[0].force_newtons - qualified_hysteretic[0].force_newtons) <
+                1e-8,
+        "local and qualified frame placement changed the point-to-point forces");
+    placement.point_to_point_hysteretic_springs[0].opposite_frame_name = "car_1.missing_mount";
+    RequireRefusal(
+        [&] {
+            (void)AssembleConsistContactScenario(vehicle, startup, placement,
+                                                 PrepareGz18VehicleContact(vehicle, startup, root),
+                                                 line, 0.0);
+        },
+        "hysteretic_link' opposite end names frame 'car_1.missing_mount'",
+        "a missing qualified force endpoint");
+}
+
 void CheckThreeCarAssembly(const VehicleDefinition& vehicle, const ResolvedStartupState& startup,
                            const TrackGeometry& line, const std::filesystem::path& root) {
     using namespace orvd::configuration;
+    CheckPointToPointPlacement(vehicle, startup, line, root);
     const auto consist =
         LoadConsistDefinition(root / "vehicle_library/gz18/consists/three_car.json");
     auto single = AssembleGz18ContactScenario(vehicle, startup, line, root, 0.0);
@@ -336,11 +408,11 @@ void CheckThreeCarAssembly(const VehicleDefinition& vehicle, const ResolvedStart
                 consist_system.contact_force_plan()->carrier_count() == 12 &&
                 consist_system.contact_force_plan()->interface_count() == 24,
             "three-car assembly has incorrect state or contact dimensions");
-    std::vector<orvd::forces::PointToPointLinearSpringDamperObservation> couplers(2);
+    std::vector<orvd::forces::PointToPointHystereticSpringObservation> couplers(2);
     auto view = consist_system.system().GetMultibodyComponentView(
         train->initial_context().context(), consist_system.system().multibody_component());
-    consist_system.force_plan().CalcPointToPointLinearSpringDamperObservations(view.context(),
-                                                                               couplers);
+    consist_system.force_plan().CalcPointToPointHystereticSpringObservations(view.context(),
+                                                                             couplers);
     for (const auto& coupler : couplers) {
         Require(
             std::abs(coupler.length_meters - 0.8) < 1e-13 && std::abs(coupler.force_newtons) < 1e-6,

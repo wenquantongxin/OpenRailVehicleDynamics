@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <unordered_map>
 
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
@@ -11,6 +12,14 @@ void AppendVehicleMultibodyModel(const VehicleDefinition& vehicle, std::string_v
 void AppendVehicleForceElements(const VehicleDefinition& vehicle, std::string_view instance_name,
                                 const multibody_model::MultibodyModel& model,
                                 forces::VehicleForceElementCollection& elements);
+void AppendPointToPointLinearSpringDampers(
+    std::span<const PointToPointLinearSpringDamperDefinition> definitions,
+    std::string_view name_prefix, const multibody_model::MultibodyModel& model,
+    forces::VehicleForceElementCollection& elements);
+void AppendPointToPointHystereticSprings(
+    std::span<const PointToPointHystereticSpringDefinition> definitions,
+    std::string_view name_prefix, const multibody_model::MultibodyModel& model,
+    forces::VehicleForceElementCollection& elements);
 std::vector<VehicleInstanceBinding> CaptureVehicleInstanceBindings(
     const VehicleDefinition& vehicle, const ConsistDefinition& consist);
 using InitialBodyStations = std::unordered_map<std::string, double>;

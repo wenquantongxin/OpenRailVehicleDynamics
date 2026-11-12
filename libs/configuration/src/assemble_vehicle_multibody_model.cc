@@ -115,6 +115,44 @@ struct EndResolver {
 
 }  // namespace
 
+void internal::AppendPointToPointLinearSpringDampers(
+    std::span<const PointToPointLinearSpringDamperDefinition> definitions,
+    std::string_view name_prefix, const MultibodyModel& model,
+    forces::VehicleForceElementCollection& elements) {
+    const EndResolver resolve{&model};
+    for (const auto& element : definitions) {
+        const auto name = QualifyVehicleName(name_prefix, element.name);
+        const std::string what = "point-to-point linear spring-damper '" + name + "'";
+        elements.point_to_point_linear_spring_dampers.push_back(
+            {name,
+             resolve(QualifyVehicleName(name_prefix, element.reference_frame_name),
+                     what + " reference end"),
+             resolve(QualifyVehicleName(name_prefix, element.opposite_frame_name),
+                     what + " opposite end"),
+             element.nominal_length_meters, element.stiffness_newtons_per_meter,
+             element.damping_newton_seconds_per_meter});
+    }
+}
+
+void internal::AppendPointToPointHystereticSprings(
+    std::span<const PointToPointHystereticSpringDefinition> definitions,
+    std::string_view name_prefix, const MultibodyModel& model,
+    forces::VehicleForceElementCollection& elements) {
+    const EndResolver resolve{&model};
+    for (const auto& element : definitions) {
+        const auto name = QualifyVehicleName(name_prefix, element.name);
+        const std::string what = "point-to-point hysteretic spring '" + name + "'";
+        elements.point_to_point_hysteretic_springs.push_back(
+            {name,
+             resolve(QualifyVehicleName(name_prefix, element.reference_frame_name),
+                     what + " reference end"),
+             resolve(QualifyVehicleName(name_prefix, element.opposite_frame_name),
+                     what + " opposite end"),
+             element.nominal_length_meters, element.stiffness_newtons_per_meter,
+             element.hysteresis_ratio, element.hysteresis_transition_speed_meters_per_second});
+    }
+}
+
 void internal::AppendVehicleForceElements(const VehicleDefinition& vehicle,
                                           std::string_view instance_name,
                                           const MultibodyModel& model,
@@ -217,6 +255,10 @@ void internal::AppendVehicleForceElements(const VehicleDefinition& vehicle,
     append(elements.point_to_point_series_spring_bilinear_dampers, point_to_point);
     append(elements.saturated_piecewise_linear_dampers, clipped);
     append(elements.reference_frame_linear_bushings, bushings);
+    internal::AppendPointToPointLinearSpringDampers(vehicle.point_to_point_linear_spring_dampers,
+                                                    instance_name, model, elements);
+    internal::AppendPointToPointHystereticSprings(vehicle.point_to_point_hysteretic_springs,
+                                                  instance_name, model, elements);
 }
 
 std::unique_ptr<forces::VehicleForcePlan> BuildVehicleForcePlan(const VehicleDefinition& vehicle,

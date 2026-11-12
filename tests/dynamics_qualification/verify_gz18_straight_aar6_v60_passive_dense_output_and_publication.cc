@@ -191,7 +191,21 @@ void CheckAtomicDirectory(const std::filesystem::path& root) {
 void CheckConsistRun(const Gz18QualificationRunConfiguration& single,
                      const std::filesystem::path& root) {
     auto config = single;
-    config.consist_path = config.orvd_data_root / "vehicle_library/gz18/consists/three_car.json";
+    auto consist = nlohmann::json::parse(
+        ReadWholeFile(config.orvd_data_root / "vehicle_library/gz18/consists/three_car.json"));
+    auto linear = consist.at("point_to_point_hysteretic_springs").at(0);
+    consist.at("point_to_point_hysteretic_springs").erase(0);
+    linear.erase("hysteresis_ratio");
+    linear.erase("hysteresis_transition_speed_meters_per_second");
+    linear["damping_newton_seconds_per_meter"] = 130000.0;
+    consist.at("point_to_point_linear_spring_dampers").push_back(linear);
+    config.consist_path = root / "mixed_point_to_point_consist.json";
+    {
+        std::ofstream output(*config.consist_path);
+        output << consist.dump(2) << '\n';
+        output.close();
+        Require(static_cast<bool>(output), "mixed constitutive fixture was not written");
+    }
     config.output_directory = root / "three-car";
     auto scene = config;
     scene.publish_scene_record = true;
@@ -258,33 +272,41 @@ void CheckConsistRun(const Gz18QualificationRunConfiguration& single,
         ++sample;
     }
     Require(sample == 2, "the consist observation sample count is wrong");
-    std::ifstream forces(config.output_directory / "point_to_point_linear_spring_dampers.tsv");
-    std::getline(forces, line);
-    const auto force_header = SplitTabs(line);
-    const auto length = FindColumn(force_header, "length_meters");
-    const auto force = FindColumn(force_header, "force_newtons");
-    const auto time = FindColumn(force_header, "time_nanoseconds");
-    const auto name = FindColumn(force_header, "element_name");
     std::vector<std::string> element_names;
-    std::size_t force_rows = 0;
-    while (std::getline(forces, line)) {
-        const auto row = SplitTabs(line);
-        Require(row.size() == force_header.size(), "a linear-force row has the wrong width");
-        Require(row[time] == "0" || row[time] == "30000000",
-                "the linear-force table is detached from the sample clock");
-        if (row[time] == "0") {
-            Require(std::abs(ParseDouble(row[length]) - 0.8) < 1e-12 &&
-                        std::abs(ParseDouble(row[force])) < 1e-4,
-                    "the published initial coupler geometry or force is wrong");
-            element_names.push_back(row[name]);
+    for (const std::string family :
+         {"point_to_point_linear_spring_dampers", "point_to_point_hysteretic_springs"}) {
+        std::ifstream forces(config.output_directory / (family + ".tsv"));
+        std::getline(forces, line);
+        const auto force_header = SplitTabs(line);
+        const auto length = FindColumn(force_header, "length_meters");
+        const auto force = FindColumn(force_header, "force_newtons");
+        const auto time = FindColumn(force_header, "time_nanoseconds");
+        const auto name = FindColumn(force_header, "element_name");
+        (void)FindColumn(force_header, family == "point_to_point_linear_spring_dampers"
+                                           ? "damping_force_newtons"
+                                           : "hysteresis_force_newtons");
+        std::size_t force_rows = 0;
+        while (std::getline(forces, line)) {
+            const auto row = SplitTabs(line);
+            Require(row.size() == force_header.size(),
+                    "a point-to-point force row has the wrong width");
+            Require(row[time] == "0" || row[time] == "30000000",
+                    "the force table is detached from the sample clock");
+            if (row[time] == "0") {
+                Require(std::abs(ParseDouble(row[length]) - 0.8) < 1e-12 &&
+                            std::abs(ParseDouble(row[force])) < 1e-4,
+                        "the published initial attachment geometry or force is wrong");
+                element_names.push_back(row[name]);
+            }
+            ++force_rows;
         }
-        ++force_rows;
+        Require(force_rows == 2, "a force family lost a sample");
+        Require(!std::filesystem::exists(single.output_directory / (family + ".tsv")),
+                "a single-car run published an empty force table");
     }
-    Require(force_rows == 4 && element_names.size() == 2 && element_names[0] != element_names[1],
-            "the linear-force table lost a sample or element name");
-    Require(!std::filesystem::exists(single.output_directory /
-                                     "point_to_point_linear_spring_dampers.tsv"),
-            "a single-car run published an empty linear-force table");
+    Require(element_names.size() == 2 && element_names[0] == "coupler_12" &&
+                element_names[1] == "coupler_23",
+            "mixed point-to-point output lost its element names");
     std::ifstream states(config.output_directory / "continuous_states.tsv");
     std::getline(states, line);
     const auto state_header = SplitTabs(line);

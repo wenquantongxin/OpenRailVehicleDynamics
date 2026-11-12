@@ -21,6 +21,7 @@ add_library(orvd_configuration STATIC
     src/load_track_geometry.cc
     src/load_vehicle_definition.cc
     src/load_wheel_drive_torque_command_conditioner.cc
+    src/point_to_point_spring_definitions_json.cc
     src/resolve_track_irregularity_field.cc
     src/resolved_startup_state_invariants.cc
     src/strict_json.cc

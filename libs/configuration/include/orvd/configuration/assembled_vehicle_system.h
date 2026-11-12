@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -121,7 +122,8 @@ class AssembledVehicleSystem {
 
      static std::unique_ptr<AssembledVehicleSystem> AssembleWithWheelRailContact(
          const VehicleDefinition& vehicle, std::vector<VehicleInstanceBinding> instance_bindings,
-         const std::vector<ConsistCouplerDefinition>& couplers,
+         std::span<const PointToPointLinearSpringDamperDefinition> linear_springs,
+         std::span<const PointToPointHystereticSpringDefinition> hysteretic_springs,
          double gravitational_acceleration_magnitude_meters_per_second_squared,
          track_geometry::TrackGeometry line,
          std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality> personality,

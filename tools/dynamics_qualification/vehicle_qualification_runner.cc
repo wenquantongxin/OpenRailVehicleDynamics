@@ -975,6 +975,8 @@ QualificationRunSummary RunVehicleQualification(
     const int vehicle_count = static_cast<int>(assembled.instance_bindings().size());
     const auto linear_count = static_cast<std::size_t>(
         assembled.force_plan().point_to_point_linear_spring_damper_count());
+    const auto hysteretic_count =
+        static_cast<std::size_t>(assembled.force_plan().point_to_point_hysteretic_spring_count());
     if (assembled.model().num_generalized_positions() !=
             vehicle_count * recipe.expected_generalized_position_count ||
         assembled.model().num_generalized_velocities() !=
@@ -983,7 +985,7 @@ QualificationRunSummary RunVehicleQualification(
             vehicle_count * recipe.expected_series_force_state_count ||
         assembled.force_plan().body_wrench_count() !=
             vehicle_count * recipe.expected_vehicle_wrench_count +
-                2 * static_cast<int>(linear_count)) {
+                2 * static_cast<int>(linear_count + hysteretic_count)) {
         Reject(std::string(recipe.vehicle_label) +
                " assembled state or vehicle-wrench topology differs from "
                "its typed qualification recipe");
@@ -1135,6 +1137,8 @@ QualificationRunSummary RunVehicleQualification(
     }
     std::vector<forces::PointToPointLinearSpringDamperObservation> linear_observations(
         sample_clock.sample_count() * linear_count);
+    std::vector<forces::PointToPointHystereticSpringObservation> hysteretic_observations(
+        sample_clock.sample_count() * hysteretic_count);
     std::vector<QualificationPatchObservation> patch_observations;
     patch_observations.reserve(sample_clock.sample_count() * interface_count);
     BoundaryUse before_definition_interval;
@@ -1184,6 +1188,11 @@ QualificationRunSummary RunVehicleQualification(
             assembled.force_plan().CalcPointToPointLinearSpringDamperObservations(
                 component.context(),
                 std::span(linear_observations).subspan(sample * linear_count, linear_count));
+        }
+        if (hysteretic_count != 0) {
+            assembled.force_plan().CalcPointToPointHystereticSpringObservations(
+                component.context(), std::span(hysteretic_observations)
+                                         .subspan(sample * hysteretic_count, hysteretic_count));
         }
         observation.sample_index = static_cast<std::uint64_t>(sample);
         observation.time_nanoseconds = sample_clock.TargetTimeNanoseconds(
@@ -1398,6 +1407,30 @@ QualificationRunSummary RunVehicleQualification(
                        << '\t' << value.length_meters << '\t' << value.length_rate_meters_per_second
                        << '\t' << value.spring_force_newtons << '\t' << value.damping_force_newtons
                        << '\t' << value.force_newtons << '\n';
+            }
+        }
+        CloseChecked(&output, path);
+    }
+
+    if (hysteretic_count != 0) {
+        const auto path = output_directory.working_path() / "point_to_point_hysteretic_springs.tsv";
+        std::ofstream output(path, std::ios::out | std::ios::trunc);
+        if (!output)
+            Reject("could not open '" + path.string() + "'");
+        output << std::setprecision(17)
+               << "sample_index\ttime_nanoseconds\ttime_seconds\telement_name"
+                  "\tlength_meters\tlength_rate_meters_per_second"
+                  "\tspring_force_newtons\thysteresis_force_newtons\tforce_newtons\n";
+        for (std::size_t sample = 0; sample < sample_clock.sample_count(); ++sample) {
+            for (std::size_t element = 0; element < hysteretic_count; ++element) {
+                const auto& value = hysteretic_observations[sample * hysteretic_count + element];
+                output << sample << '\t' << sample_clock.TargetTimeNanoseconds(sample) << '\t'
+                       << sample_times[sample] << '\t'
+                       << assembled.force_plan().point_to_point_hysteretic_spring_name(
+                              static_cast<int>(element))
+                       << '\t' << value.length_meters << '\t' << value.length_rate_meters_per_second
+                       << '\t' << value.spring_force_newtons << '\t'
+                       << value.hysteresis_force_newtons << '\t' << value.force_newtons << '\n';
             }
         }
         CloseChecked(&output, path);

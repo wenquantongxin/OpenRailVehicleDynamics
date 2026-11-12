@@ -203,7 +203,16 @@ constexpr std::string_view kRecord = R"json({
       "translational_damping_newton_seconds_per_meter":
         {"x": 10.0, "y": 11.0, "z": 12.0}
     }
-  ]
+  ],
+  "point_to_point_linear_spring_dampers": [{
+    "name":"linear_link", "reference_frame_name":"longibar_child_frame",
+    "opposite_frame_name":"carbody", "nominal_length_meters":0.8,
+    "stiffness_newtons_per_meter":8000000, "damping_newton_seconds_per_meter":130000}],
+  "point_to_point_hysteretic_springs": [{
+    "name":"hysteretic_link", "reference_frame_name":"longibar_child_frame",
+    "opposite_frame_name":"carbody", "nominal_length_meters":0.9,
+    "stiffness_newtons_per_meter":9000000, "hysteresis_ratio":0.25,
+    "hysteresis_transition_speed_meters_per_second":0.001}]
 })json";
 
 void Require(bool condition, std::string_view description) {
@@ -270,6 +279,18 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
                 vehicle.saturated_piecewise_linear_dampers.size() == 1 &&
                 vehicle.reference_frame_linear_bushings.size() == 1,
             "record does not carry the entities it declares");
+
+    const auto& linear = vehicle.point_to_point_linear_spring_dampers.at(0);
+    const auto& hysteretic = vehicle.point_to_point_hysteretic_springs.at(0);
+    Require(linear.name == "linear_link" && linear.reference_frame_name == "longibar_child_frame" &&
+                linear.opposite_frame_name == "carbody" && linear.nominal_length_meters == 0.8 &&
+                linear.stiffness_newtons_per_meter == 8000000.0 &&
+                linear.damping_newton_seconds_per_meter == 130000.0 &&
+                hysteretic.name == "hysteretic_link" && hysteretic.nominal_length_meters == 0.9 &&
+                hysteretic.stiffness_newtons_per_meter == 9000000.0 &&
+                hysteretic.hysteresis_ratio == 0.25 &&
+                hysteretic.hysteresis_transition_speed_meters_per_second == 0.001,
+            "shared point-to-point definitions lost parameters or local endpoints");
 
     // Each constitutive family maps its own fields, in its own order. The three
     // stiffness components differ so a transposed read fails.
@@ -440,6 +461,11 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"point_to_point_series_spring_bilinear_dampers\": [",
                      "\"point_to_point_dampers\": ["),
          {"$.point_to_point_dampers", "unknown key"}},
+        {ReplaceOnce(
+             valid,
+             "\"name\":\"hysteretic_link\", \"reference_frame_name\":\"longibar_child_frame\"",
+             "\"name\":\"hysteretic_link\", \"reference_frame_name\":\"missing_mount\""),
+         {"$.point_to_point_hysteretic_springs[0].reference_frame_name", "missing_mount"}},
         // A massless body is a legitimate frame carrier to the multibody layer,
         // but a record states inertia about the centre of mass, and dividing it
         // by zero would surface as a complaint about the unit inertia rather
@@ -534,25 +560,36 @@ void CheckConsistLoading(const std::filesystem::path& path) {
          "mechanical_definition_identifier":"mechanics", "station_offset_meters":0.0},
         {"instance_name":"car.b", "vehicle_name":"fixture",
          "mechanical_definition_identifier":"mechanics", "station_offset_meters":-23.6}],
-      "couplers": [{"name":"coupler", "reference_end":{"instance_name":"car.a","frame_name":"rear"},
-        "opposite_end":{"instance_name":"car.b","frame_name":"front"},
+      "point_to_point_linear_spring_dampers": [{"name":"linear_link",
+        "reference_frame_name":"car.a.rear", "opposite_frame_name":"car.b.front",
         "nominal_length_meters":0.8,"stiffness_newtons_per_meter":8000000,
-        "damping_newton_seconds_per_meter":130000}]
+        "damping_newton_seconds_per_meter":130000}],
+      "point_to_point_hysteretic_springs": [{"name":"hysteretic_link",
+        "reference_frame_name":"car.a.carbody", "opposite_frame_name":"car.a.frame",
+        "nominal_length_meters":0.9,"stiffness_newtons_per_meter":9000000,
+        "hysteresis_ratio":0.25,"hysteresis_transition_speed_meters_per_second":0.001}]
     })json";
     Write(path, record);
     const auto definition = orvd::configuration::LoadConsistDefinition(path);
-    Require(definition.vehicles.size() == 2 && definition.couplers.size() == 1 &&
-                definition.vehicles[1].station_offset_meters == -23.6 &&
-                definition.couplers[0].reference_end.instance_name == "car.a" &&
-                definition.couplers[0].nominal_length_meters == 0.8,
-            "consist values and endpoint identity");
+    Require(
+        definition.vehicles.size() == 2 &&
+            definition.point_to_point_linear_spring_dampers.size() == 1 &&
+            definition.point_to_point_hysteretic_springs.size() == 1 &&
+            definition.vehicles[1].station_offset_meters == -23.6 &&
+            definition.point_to_point_linear_spring_dampers[0].reference_frame_name ==
+                "car.a.rear" &&
+            definition.point_to_point_hysteretic_springs[0].opposite_frame_name == "car.a.frame" &&
+            definition.point_to_point_hysteretic_springs[0].hysteresis_ratio == 0.25,
+        "consist values and qualified endpoint names");
     const std::vector<std::string> invalid{
         ReplaceOnce(record, "\"instance_name\":\"car.b\", \"vehicle_name\"",
                     "\"instance_name\":\"car.a\", \"vehicle_name\""),
-        ReplaceOnce(record, "\"frame_name\":\"front\"",
-                    "\"frame_name\":\"front\",\"direction\":-1"),
-        ReplaceOnce(record, "\"opposite_end\":{\"instance_name\":\"car.b\"",
-                    "\"opposite_end\":{\"instance_name\":\"absent\""),
+        ReplaceOnce(record, "\"opposite_frame_name\":\"car.b.front\"",
+                    "\"opposite_frame_name\":\"car.b.front\",\"direction\":-1"),
+        ReplaceOnce(record, "\"name\":\"hysteretic_link\"", "\"name\":\"linear_link\""),
+        ReplaceOnce(record, "\"hysteresis_ratio\":0.25", "\"hysteresis_ratio\":1.1"),
+        ReplaceOnce(record, "\"hysteresis_transition_speed_meters_per_second\":0.001",
+                    "\"hysteresis_transition_speed_meters_per_second\":0"),
         ReplaceOnce(record, "\"nominal_length_meters\":0.8", "\"nominal_length_meters\":0")};
     for (const auto& value : invalid) {
         Write(path, value);

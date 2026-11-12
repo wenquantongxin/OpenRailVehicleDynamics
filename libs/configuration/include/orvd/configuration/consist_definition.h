@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 
+#include "orvd/configuration/point_to_point_spring_definitions.h"
+
 namespace orvd::configuration {
 
 struct ConsistVehicleInstanceDefinition {
@@ -14,23 +16,10 @@ struct ConsistVehicleInstanceDefinition {
     double station_offset_meters{};
 };
 
-struct ConsistCouplerEndDefinition {
-    std::string instance_name;
-    std::string frame_name;
-};
-
-struct ConsistCouplerDefinition {
-    std::string name;
-    ConsistCouplerEndDefinition reference_end;
-    ConsistCouplerEndDefinition opposite_end;
-    double nominal_length_meters{};
-    double stiffness_newtons_per_meter{};
-    double damping_newton_seconds_per_meter{};
-};
-
 struct ConsistDefinition {
     std::vector<ConsistVehicleInstanceDefinition> vehicles;
-    std::vector<ConsistCouplerDefinition> couplers;
+    std::vector<PointToPointLinearSpringDamperDefinition> point_to_point_linear_spring_dampers;
+    std::vector<PointToPointHystereticSpringDefinition> point_to_point_hysteretic_springs;
 };
 
 [[nodiscard]] ConsistDefinition LoadConsistDefinition(const std::filesystem::path& path);

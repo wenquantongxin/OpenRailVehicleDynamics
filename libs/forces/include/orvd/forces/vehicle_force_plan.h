@@ -42,6 +42,14 @@ struct PointToPointLinearSpringDamperObservation {
     double force_newtons{0.0};
 };
 
+struct PointToPointHystereticSpringObservation {
+    double length_meters{0.0};
+    double length_rate_meters_per_second{0.0};
+    double spring_force_newtons{0.0};
+    double hysteresis_force_newtons{0.0};
+    double force_newtons{0.0};
+};
+
 class VehicleForcePlan {
    public:
      // Builds the plan against `model`, which must be finalized and must outlive
@@ -62,6 +70,8 @@ class VehicleForcePlan {
      // stiffness and damping vectors.
      // A point-to-point linear spring-damper requires finite positive nominal
      // length and finite non-negative stiffness and damping.
+     // A hysteretic spring requires finite positive nominal length and
+     // transition speed, finite non-negative stiffness, and ratio in [0, 1].
      // Throws std::invalid_argument if an endpoint is the world frame.
      // Throws std::logic_error if the model is not finalized.
      VehicleForcePlan(const multibody_model::MultibodyModel& model,
@@ -97,6 +107,9 @@ class VehicleForcePlan {
     [[nodiscard]] int point_to_point_linear_spring_damper_count() const {
         return static_cast<int>(elements_.point_to_point_linear_spring_dampers.size());
     }
+    [[nodiscard]] int point_to_point_hysteretic_spring_count() const {
+        return static_cast<int>(elements_.point_to_point_hysteretic_springs.size());
+    }
     [[nodiscard]] int reference_frame_linear_bushing_count() const {
         return static_cast<int>(
             elements_.reference_frame_linear_bushings.size());
@@ -122,6 +135,7 @@ class VehicleForcePlan {
                 series_spring_viscous_damper_count() +
                 point_to_point_series_spring_bilinear_damper_count() +
                 point_to_point_linear_spring_damper_count() +
+                point_to_point_hysteretic_spring_count() +
                 saturated_piecewise_linear_damper_count() + reference_frame_linear_bushing_count());
     }
 
@@ -152,6 +166,11 @@ class VehicleForcePlan {
     void CalcPointToPointLinearSpringDamperObservations(
         const multibody_model::MultibodyEvaluationContext& context,
         std::span<PointToPointLinearSpringDamperObservation> observations) const;
+
+    [[nodiscard]] std::string_view point_to_point_hysteretic_spring_name(int ordinal) const;
+    void CalcPointToPointHystereticSpringObservations(
+        const multibody_model::MultibodyEvaluationContext& context,
+        std::span<PointToPointHystereticSpringObservation> observations) const;
 
     /// The force a saturated piecewise linear damper produces at one finite
     /// relative velocity. Exposed because it is the whole constitutive content

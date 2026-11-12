@@ -156,7 +156,8 @@ std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
 
 std::unique_ptr<AssembledVehicleSystem> AssembledVehicleSystem::AssembleWithWheelRailContact(
     const VehicleDefinition& vehicle, std::vector<VehicleInstanceBinding> instance_bindings,
-    const std::vector<ConsistCouplerDefinition>& couplers,
+    std::span<const PointToPointLinearSpringDamperDefinition> linear_springs,
+    std::span<const PointToPointHystereticSpringDefinition> hysteretic_springs,
     double gravitational_acceleration_magnitude_meters_per_second_squared,
     track_geometry::TrackGeometry line,
     std::unique_ptr<wheel_rail_contact::WheelRailContactRuntimePersonality> personality,
@@ -177,17 +178,8 @@ std::unique_ptr<AssembledVehicleSystem> AssembledVehicleSystem::AssembleWithWhee
     for (const auto& entry : instance_bindings) {
         internal::AppendVehicleForceElements(vehicle, entry.instance_name, *model, elements);
     }
-    for (const auto& coupler : couplers) {
-        elements.point_to_point_linear_spring_dampers.push_back(
-            {coupler.name,
-             {model->GetFrameByName(QualifyVehicleName(coupler.reference_end.instance_name,
-                                                       coupler.reference_end.frame_name))},
-             {model->GetFrameByName(QualifyVehicleName(coupler.opposite_end.instance_name,
-                                                       coupler.opposite_end.frame_name))},
-             coupler.nominal_length_meters,
-             coupler.stiffness_newtons_per_meter,
-             coupler.damping_newton_seconds_per_meter});
-    }
+    internal::AppendPointToPointLinearSpringDampers(linear_springs, "", *model, elements);
+    internal::AppendPointToPointHystereticSprings(hysteretic_springs, "", *model, elements);
     auto force_plan = std::make_unique<forces::VehicleForcePlan>(*model, std::move(elements));
     auto contact_force_plan =
         std::make_unique<forces::WheelRailContactForcePlan>(

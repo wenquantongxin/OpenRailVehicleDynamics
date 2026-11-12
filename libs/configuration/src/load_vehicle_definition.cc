@@ -9,9 +9,10 @@
 #include <utility>
 #include <vector>
 
+#include "point_to_point_spring_definitions_json.h"
 #include "strict_json.h"
-#include "vehicle_definition_invariants.h"
 #include "vehicle_definition_inertia.h"
+#include "vehicle_definition_invariants.h"
 
 namespace orvd::configuration {
 namespace {
@@ -443,18 +444,14 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
     const std::string document =
         ReadWholeFile(configuration_path, "vehicle definition");
     const Json root = ParseStrictJson(document);
-    RequireExactKeys(root, "$",
-                     {"vehicle_name",
-                      "mechanical_definition_identifier",
-                      "mechanical_track_station_layout", "rigid_bodies",
-                      "fixed_frames", "revolute_joints", "ball_rpy_joints",
-                      "weld_joints",
-                      "translational_spring_dampers",
-                      "roll_spring_damper_couples",
-                      "series_spring_viscous_dampers",
-                      "point_to_point_series_spring_bilinear_dampers",
-                      "saturated_piecewise_linear_dampers",
-                      "reference_frame_linear_bushings"});
+    RequireExactKeys(
+        root, "$",
+        {"vehicle_name", "mechanical_definition_identifier", "mechanical_track_station_layout",
+         "rigid_bodies", "fixed_frames", "revolute_joints", "ball_rpy_joints", "weld_joints",
+         "translational_spring_dampers", "roll_spring_damper_couples",
+         "series_spring_viscous_dampers", "point_to_point_series_spring_bilinear_dampers",
+         "saturated_piecewise_linear_dampers", "reference_frame_linear_bushings",
+         "point_to_point_linear_spring_dampers", "point_to_point_hysteretic_springs"});
 
     VehicleDefinition vehicle;
     vehicle.vehicle_name =
@@ -504,6 +501,13 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
         ParseArray<VehicleReferenceFrameLinearBushingDefinition>(
             root, "reference_frame_linear_bushings",
             ParseReferenceFrameLinearBushing);
+
+    vehicle.point_to_point_linear_spring_dampers =
+        ParseArray<PointToPointLinearSpringDamperDefinition>(
+            root, "point_to_point_linear_spring_dampers",
+            internal::ParsePointToPointLinearSpringDamper);
+    vehicle.point_to_point_hysteretic_springs = ParseArray<PointToPointHystereticSpringDefinition>(
+        root, "point_to_point_hysteretic_springs", internal::ParsePointToPointHystereticSpring);
 
     // Bodies and frames share one namespace, so one set answers both "is this a
     // body?" and "is this a frame a joint may attach to?".
@@ -635,6 +639,18 @@ VehicleDefinition LoadVehicleDefinitionFromJsonFile(
                            element.reference_frame_name,
                            element.opposite_frame_name);
     }
+    const auto require_point_to_point = [&](const char* key, const auto& elements) {
+        for (std::size_t index = 0; index < elements.size(); ++index) {
+            const auto& element = elements[index];
+            require_force_name(key, index, element.name);
+            require_force_ends(key, index, element.reference_frame_name,
+                               element.opposite_frame_name);
+        }
+    };
+    require_point_to_point("point_to_point_linear_spring_dampers",
+                           vehicle.point_to_point_linear_spring_dampers);
+    require_point_to_point("point_to_point_hysteretic_springs",
+                           vehicle.point_to_point_hysteretic_springs);
     return vehicle;
 }
 
