@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -11,6 +12,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "../vehicle_project/configuration_record_comparison.h"
 #include "orvd/configuration/assembled_vehicle_contact_scenario.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/configuration/load_resolved_startup_state.h"
@@ -18,6 +20,10 @@
 #include "orvd/configuration/load_vehicle_contact_record.h"
 #include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/configuration/vehicle_contact_topology.h"
+#include "strict_json.h"
+#include "vehicle_contact_record_json_reading_and_writing.h"
+#include "vehicle_contact_record_validation.h"
+#include "vehicle_definition_json_reading_and_writing.h"
 
 namespace {
 
@@ -332,7 +338,100 @@ void VerifyRecordLoading(const std::filesystem::path& record_path,
     Require(side != std::string::npos, "the reference has no right-side interface");
     changed.replace(side, 7, "\"up\"");
     reject_document(changed, "side");
+
+    const auto original = strict_json::ParseStrictJson(document);
+    for (const std::string_view field : {"wheel", "rail", "computation"}) {
+        for (const std::string invalid_identifier : {"", "invalid identifier"}) {
+            auto invalid = original;
+            if (field == "computation") {
+                invalid[field]["contact_strategy_identifier"] = invalid_identifier;
+                reject_document(invalid.dump(),
+                                "vehicle contact record.computation.contact_strategy_identifier");
+            } else {
+                invalid[field]["profile"]["profile_identifier"] = invalid_identifier;
+                reject_document(invalid.dump(), "vehicle contact record." + std::string(field) +
+                                                    ".profile.profile_identifier");
+            }
+        }
+    }
     std::filesystem::remove(fixture);
+}
+
+void VerifyConfigurationRoundtrip(const std::filesystem::path& root) {
+    using namespace orvd::configuration::internal;
+    const std::string mechanical_path = "$.vehicle_definition";
+    const std::string contact_path = "$.contact_record";
+    const auto require_contact_roundtrip = [&](const VehicleContactRecord& original) {
+        const auto encoded = EncodeVehicleContactRecordToJson(original, contact_path);
+        const auto decoded = DecodeVehicleContactRecordFromJson(
+            strict_json::ParseStrictJson(encoded.dump()), contact_path);
+        Require(orvd::configuration_record_comparison::Same(original, decoded),
+                "contact JSON roundtrip changed a field or interface order");
+    };
+    for (const std::string reference : {"gz18", "irw"}) {
+        const auto directory = root / "vehicle_library" / reference;
+        const auto vehicle =
+            LoadVehicleDefinitionFromJsonFile(directory / "vehicle_definition.json");
+        const auto encoded = EncodeVehicleDefinitionToJson(vehicle, mechanical_path);
+        const auto decoded = DecodeVehicleDefinitionFromJson(
+            strict_json::ParseStrictJson(encoded.dump()), mechanical_path);
+        Require(orvd::configuration_record_comparison::Same(vehicle, decoded),
+                "reference mechanical record did not survive JSON roundtrip");
+        require_contact_roundtrip(
+            LoadVehicleContactRecordFromJsonFile(directory / "contact_record.json"));
+    }
+    require_contact_roundtrip(VehicleContactRecord{});
+
+    const auto original =
+        LoadVehicleContactRecordFromJsonFile(root / "vehicle_library/gz18/contact_record.json");
+    auto unfinished = original;
+    unfinished.wheel.profile.profile_identifier.clear();
+    unfinished.wheel.profile.profile_path = "../profiles/待选型面.json";
+    unfinished.rail.profile.profile_identifier = "unfinished identifier";
+    unfinished.computation.contact_strategy_identifier.clear();
+    unfinished.wheel.nominal_rolling_radius_meters = 0.0;
+    unfinished.rail.track_gauge_meters = -1.0;
+    unfinished.declaration.carriers.front().rotation_body_from_nonspinning_wheel_profile(0, 1) =
+        0.25;
+    unfinished.declaration.interfaces.front().independent_wheel_revolute_joint_name = "";
+    unfinished.declaration.interfaces.back().independent_wheel_revolute_joint_name = std::nullopt;
+    unfinished.rail.profile_origin_mode =
+        orvd::wheel_rail_contact::RailProfileOriginMode::kTrackStation;
+    unfinished.computation.creep_coefficients_outside_table =
+        orvd::wheel_rail_contact::OutsideTableRule::kRefuse;
+    require_contact_roundtrip(unfinished);
+    RequireRefusal([&] { RequireVehicleContactRecordInvariants(unfinished, contact_path); },
+                   "$.contact_record.wheel.profile.profile_identifier", "");
+
+    const auto encoded_original = EncodeVehicleContactRecordToJson(original, contact_path);
+    auto missing_key = encoded_original;
+    missing_key["declaration"]["interfaces"][0].erase("wheel_body_name");
+    RequireRefusal([&] { (void)DecodeVehicleContactRecordFromJson(missing_key, contact_path); },
+                   "$.contact_record.declaration.interfaces[0].wheel_body_name", "");
+    auto wrong_type = encoded_original;
+    wrong_type["wheel"]["nominal_rolling_radius_meters"] = "unfinished";
+    RequireRefusal([&] { (void)DecodeVehicleContactRecordFromJson(wrong_type, contact_path); },
+                   "$.contact_record.wheel.nominal_rolling_radius_meters", "");
+    auto wrong_enum = encoded_original;
+    wrong_enum["declaration"]["interfaces"][0]["side"] = "up";
+    RequireRefusal([&] { (void)DecodeVehicleContactRecordFromJson(wrong_enum, contact_path); },
+                   "$.contact_record.declaration.interfaces[0].side", "");
+    RequireRefusal(
+        [&] {
+            (void)strict_json::ParseStrictJson(
+                R"({"contact_record":{"wheel":{"profile":{"profile_identifier":"a",)"
+                R"("profile_identifier":"b"}}}})");
+        },
+        "$.contact_record.wheel.profile.profile_identifier", "");
+
+    auto nonfinite = original;
+    nonfinite.wheel.nominal_rolling_radius_meters = std::numeric_limits<double>::quiet_NaN();
+    RequireRefusal([&] { (void)EncodeVehicleContactRecordToJson(nonfinite, contact_path); },
+                   "$.contact_record.wheel.nominal_rolling_radius_meters", "");
+    auto unrepresentable = original;
+    unrepresentable.declaration.interfaces.front().side = static_cast<WheelSide>(-1);
+    RequireRefusal([&] { (void)EncodeVehicleContactRecordToJson(unrepresentable, contact_path); },
+                   "$.contact_record.declaration.interfaces[0].side", "");
 }
 
 void VerifyAliasedRuntimeCarriers(const std::filesystem::path& root) {
@@ -392,6 +491,7 @@ int main(int argc, char** argv) {
         VerifyJointAndForceLoops();
         VerifyReferenceAssemblyWithoutStartup(argv[3]);
         VerifyRecordLoading(argv[2], argv[4]);
+        VerifyConfigurationRoundtrip(argv[3]);
         VerifyAliasedRuntimeCarriers(argv[3]);
         std::puts(
             "contact assembly without startup, declarations, force loops and carrier aliases "

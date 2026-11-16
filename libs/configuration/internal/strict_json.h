@@ -1,13 +1,12 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <cstddef>
 #include <filesystem>
 #include <initializer_list>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
-
-#include <Eigen/Core>
-#include <nlohmann/json.hpp>
 
 // Strict reading of human-authored product configuration, shared by every
 // record this module loads.
@@ -42,8 +41,8 @@ using Json = nlohmann::json;
 //
 // Throws std::runtime_error when the file cannot be opened or cannot be read to
 // its end; both diagnostics name the path.
-[[nodiscard]] std::string ReadWholeFile(
-    const std::filesystem::path& configuration_path, std::string_view what);
+[[nodiscard]] std::string ReadWholeFile(const std::filesystem::path& configuration_path,
+                                        std::string_view what);
 
 // Parses one document under the strict rules and returns the resulting DOM.
 //
@@ -59,8 +58,7 @@ using Json = nlohmann::json;
 [[nodiscard]] Json ParseStrictJson(const std::string& document);
 
 // Throws std::invalid_argument reading "<path> must be <expected>".
-[[noreturn]] void ThrowExpected(const std::string& path,
-                                std::string_view expected);
+[[noreturn]] void ThrowExpected(const std::string& path, std::string_view expected);
 
 void RequireObject(const Json& value, const std::string& path);
 void RequireArray(const Json& value, const std::string& path);
@@ -79,14 +77,15 @@ void RequireExactKeys(const Json& object, const std::string& path,
 // keeps the ordinary binary64 rounding semantics — that is what writing 0.1
 // means — except that a non-zero token underflowing all the way to zero is
 // refused by the pre-pass, because zero is not what the author wrote.
-[[nodiscard]] double RequireFiniteNumber(const Json& value,
-                                         const std::string& path);
+[[nodiscard]] double RequireFiniteNumber(const Json& value, const std::string& path);
 
-[[nodiscard]] std::string RequireString(const Json& value,
-                                        const std::string& path);
+// Checks a typed record's encoded numbers before JSON text serialization, which
+// would otherwise replace non-finite floating-point values with null.
+void RequireFiniteJsonNumbers(const Json& value, const std::string& path);
+
+[[nodiscard]] std::string RequireString(const Json& value, const std::string& path);
 [[nodiscard]] bool RequireBool(const Json& value, const std::string& path);
-[[nodiscard]] std::size_t RequireIndex(const Json& value,
-                                       const std::string& path);
+[[nodiscard]] std::size_t RequireIndex(const Json& value, const std::string& path);
 
 // A name a record uses to bind itself to something else: non-empty and drawn
 // from letters, digits, '.', '_' and '-'. The character set is the point. It
@@ -95,18 +94,15 @@ void RequireExactKeys(const Json& object, const std::string& path,
 // identifier is a name rather than a path, so no later goal has to defend
 // against a path separator reaching a file lookup. `what` names the kind of
 // identifier for the diagnostic.
-[[nodiscard]] std::string RequireIdentifier(const Json& value,
-                                            const std::string& path,
+[[nodiscard]] std::string RequireIdentifier(const Json& value, const std::string& path,
                                             std::string_view what);
 
 // The `{x, y, z}` object every three-component quantity in this module is
 // written as. Spelling the components out is what lets a diagnostic name the
 // offending one.
-[[nodiscard]] Eigen::Vector3d RequireFiniteVector3(const Json& value,
-                                                   const std::string& path);
+[[nodiscard]] Eigen::Vector3d RequireFiniteVector3(const Json& value, const std::string& path);
 
 // "<array_path>[<index>]", the path prefix for one element of an array.
-[[nodiscard]] std::string ElementPath(const std::string& array_path,
-                                      std::size_t index);
+[[nodiscard]] std::string ElementPath(const std::string& array_path, std::size_t index);
 
 }  // namespace orvd::configuration::strict_json

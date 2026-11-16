@@ -7,6 +7,7 @@ add_library(orvd_configuration STATIC
     src/assemble_vehicle_multibody_model.cc
     src/assembled_vehicle_contact_scenario.cc
     src/assembled_vehicle_system.cc
+    src/configuration_identifier_validation.cc
     src/gz18_wheel_rail_contact.cc
     src/irw_full_state_control_event_session.cc
     src/irw_full_state_control_observation_binding.cc
@@ -23,13 +24,18 @@ add_library(orvd_configuration STATIC
     src/load_vehicle_definition.cc
     src/load_wheel_drive_torque_command_conditioner.cc
     src/point_to_point_spring_definitions_json.cc
+    src/point_to_point_spring_definition_validation.cc
     src/resolve_track_irregularity_field.cc
     src/resolved_startup_state_invariants.cc
     src/strict_json.cc
     src/vehicle_contact_record.cc
+    src/vehicle_contact_record_json_reading_and_writing.cc
+    src/vehicle_contact_record_validation.cc
     src/vehicle_contact_topology.cc
     src/vehicle_definition_invariants.cc
     src/vehicle_definition_inertia.cc
+    src/vehicle_definition_json_reading_and_writing.cc
+    src/vehicle_definition_validation.cc
     src/wheel_rail_contact_personality_assembly.cc)
 
 orvd_configure_first_party_target(orvd_configuration)
@@ -37,7 +43,8 @@ orvd_configure_first_party_target(orvd_configuration)
 target_include_directories(orvd_configuration
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>)
 
 target_link_libraries(orvd_configuration
     PUBLIC orvd_actuation orvd_control orvd_forces orvd_multibody_model

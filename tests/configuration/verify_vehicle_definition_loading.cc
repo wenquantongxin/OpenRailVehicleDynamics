@@ -1,13 +1,18 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "../vehicle_project/configuration_record_comparison.h"
 #include "orvd/configuration/consist_definition.h"
 #include "orvd/configuration/load_vehicle_definition.h"
+#include "strict_json.h"
+#include "vehicle_definition_json_reading_and_writing.h"
+#include "vehicle_definition_validation.h"
 
 namespace {
 
@@ -223,17 +228,14 @@ void Require(bool condition, std::string_view description) {
 
 void Write(const std::filesystem::path& path, std::string_view contents) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    output.write(contents.data(),
-                 static_cast<std::streamsize>(contents.size()));
+    output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
     output.close();
     Require(static_cast<bool>(output), "test configuration was not written");
 }
 
-std::string ReplaceOnce(std::string source, std::string_view needle,
-                        std::string_view replacement) {
+std::string ReplaceOnce(std::string source, std::string_view needle, std::string_view replacement) {
     const std::size_t position = source.find(needle);
-    if (position == std::string::npos ||
-        source.find(needle, position + 1) != std::string::npos) {
+    if (position == std::string::npos || source.find(needle, position + 1) != std::string::npos) {
         throw std::runtime_error("test mutation did not identify one substring: " +
                                  std::string(needle));
     }
@@ -248,8 +250,7 @@ void ExpectInvalid(const std::filesystem::path& path, std::string contents,
         static_cast<void>(LoadVehicleDefinitionFromJsonFile(path));
     } catch (const std::invalid_argument& error) {
         for (const std::string& fragment : diagnostic_fragments) {
-            Require(std::string_view(error.what()).find(fragment) !=
-                        std::string_view::npos,
+            Require(std::string_view(error.what()).find(fragment) != std::string_view::npos,
                     "vehicle description was rejected at the wrong diagnostic "
                     "layer: " +
                         std::string(error.what()));
@@ -262,20 +263,16 @@ void ExpectInvalid(const std::filesystem::path& path, std::string contents,
 void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
     Write(path, kRecord);
     const auto vehicle = LoadVehicleDefinitionFromJsonFile(path);
-    Require(std::filesystem::remove(path),
-            "test configuration was not deleted after loading");
+    Require(std::filesystem::remove(path), "test configuration was not deleted after loading");
 
     Require(vehicle.vehicle_name == "assembly_fixture", "vehicle name");
-    Require(vehicle.rigid_bodies.size() == 5 &&
-                vehicle.fixed_frames.size() == 4 &&
-                vehicle.revolute_joints.size() == 1 &&
-                vehicle.ball_rpy_joints.size() == 1 &&
+    Require(vehicle.rigid_bodies.size() == 5 && vehicle.fixed_frames.size() == 4 &&
+                vehicle.revolute_joints.size() == 1 && vehicle.ball_rpy_joints.size() == 1 &&
                 vehicle.weld_joints.size() == 1 &&
                 vehicle.translational_spring_dampers.size() == 1 &&
                 vehicle.roll_spring_damper_couples.size() == 1 &&
                 vehicle.series_spring_viscous_dampers.size() == 1 &&
-                vehicle.point_to_point_series_spring_bilinear_dampers.size() ==
-                    1 &&
+                vehicle.point_to_point_series_spring_bilinear_dampers.size() == 1 &&
                 vehicle.saturated_piecewise_linear_dampers.size() == 1 &&
                 vehicle.reference_frame_linear_bushings.size() == 1,
             "record does not carry the entities it declares");
@@ -295,37 +292,33 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
     // Each constitutive family maps its own fields, in its own order. The three
     // stiffness components differ so a transposed read fails.
     const auto& translational = vehicle.translational_spring_dampers.front();
-    Require(translational.reference_frame_name ==
-                    "front_bogie_leading_left_axlebox_pivot" &&
+    Require(translational.reference_frame_name == "front_bogie_leading_left_axlebox_pivot" &&
                 translational.opposite_frame_name == "carbody",
             "a force element's two ends were exchanged");
-    Require(translational.stiffness_newtons_per_meter ==
-                    Eigen::Vector3d(185000.0, 190000.0, 230000.0) &&
-                translational.damping_newton_seconds_per_meter ==
-                    Eigen::Vector3d(0.0, 0.0, 20000.0),
-            "translational constants were not mapped in order");
-    Require(vehicle.roll_spring_damper_couples.front()
-                        .stiffness_newton_meters_per_radian == 1500000.0 &&
-                vehicle.roll_spring_damper_couples.front()
-                        .damping_newton_meter_seconds_per_radian == 250.0,
-            "roll couple constants were not mapped, or were exchanged");
+    Require(
+        translational.stiffness_newtons_per_meter ==
+                Eigen::Vector3d(185000.0, 190000.0, 230000.0) &&
+            translational.damping_newton_seconds_per_meter == Eigen::Vector3d(0.0, 0.0, 20000.0),
+        "translational constants were not mapped in order");
+    Require(
+        vehicle.roll_spring_damper_couples.front().stiffness_newton_meters_per_radian ==
+                1500000.0 &&
+            vehicle.roll_spring_damper_couples.front().damping_newton_meter_seconds_per_radian ==
+                250.0,
+        "roll couple constants were not mapped, or were exchanged");
     const auto& series = vehicle.series_spring_viscous_dampers.front();
-    Require(series.axis == "lateral" &&
-                series.series_stiffness_newtons_per_meter == 1.0e9 &&
+    Require(series.axis == "lateral" && series.series_stiffness_newtons_per_meter == 1.0e9 &&
                 series.series_damping_newton_seconds_per_meter == 60000.0,
             "series constants were not mapped, or stiffness and damping were "
             "exchanged");
-    const auto& point_to_point =
-        vehicle.point_to_point_series_spring_bilinear_dampers.front();
+    const auto& point_to_point = vehicle.point_to_point_series_spring_bilinear_dampers.front();
     Require(point_to_point.name == "point_to_point_damper" &&
                 point_to_point.reference_frame_name == "longibar_child_frame" &&
                 point_to_point.opposite_frame_name == "carbody" &&
                 point_to_point.series_stiffness_newtons_per_meter == 10790000.0 &&
-                point_to_point.damping_below_knee_newton_seconds_per_meter ==
-                    776988.0 &&
+                point_to_point.damping_below_knee_newton_seconds_per_meter == 776988.0 &&
                 point_to_point.knee_force_newtons == 10000.0 &&
-                point_to_point.damping_above_knee_newton_seconds_per_meter ==
-                    50000.0,
+                point_to_point.damping_above_knee_newton_seconds_per_meter == 50000.0,
             "point-to-point endpoints or constants were not mapped");
     const auto& clipped = vehicle.saturated_piecewise_linear_dampers.front();
     Require(clipped.axis == "longitudinal" && clipped.curve.size() == 3 &&
@@ -338,39 +331,32 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
             "free-body flag was not mapped");
     Require(carbody.mass_kilograms == 30000.0, "mass was not mapped");
     // Each component distinct, so a transposed or reordered read fails.
-    Require(carbody.center_of_mass_in_body_frame_meters ==
-                Eigen::Vector3d(0.0, 0.0, -1.25),
+    Require(carbody.center_of_mass_in_body_frame_meters == Eigen::Vector3d(0.0, 0.0, -1.25),
             "centre of mass was not mapped, or its sign was flipped");
     Require(carbody.inertia_moments_about_center_of_mass_kilogram_square_meters ==
                 Eigen::Vector3d(60000.0, 1300000.0, 1330000.0),
             "inertia moments were not mapped in order");
-    Require(
-        carbody.inertia_products_about_center_of_mass_kilogram_square_meters ==
-            Eigen::Vector3d(110.0, -220.0, 330.0),
-        "inertia matrix off-diagonal entries were reordered or lost their signs");
-    Require(!vehicle.rigid_bodies[1].moves_freely_in_world,
-            "a welded body was read as free");
+    Require(carbody.inertia_products_about_center_of_mass_kilogram_square_meters ==
+                Eigen::Vector3d(110.0, -220.0, 330.0),
+            "inertia matrix off-diagonal entries were reordered or lost their signs");
+    Require(!vehicle.rigid_bodies[1].moves_freely_in_world, "a welded body was read as free");
 
     Require(vehicle.fixed_frames.front().body_name == "carbody" &&
                 vehicle.fixed_frames.front().position_in_body_frame_meters ==
                     Eigen::Vector3d(7.85, 0.0, -1.0),
             "weld mounting frame was not mapped");
-    Require(vehicle.fixed_frames.front().rotation_in_body_frame ==
-                Eigen::Matrix3d::Identity(),
+    Require(vehicle.fixed_frames.front().rotation_in_body_frame == Eigen::Matrix3d::Identity(),
             "frame rotation was not mapped");
     Require(vehicle.fixed_frames[1].position_in_body_frame_meters.y() == -1.0,
             "a lateral offset lost its sign");
     Eigen::Matrix3d expected_rotation;
     expected_rotation << 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0;
-    Require(vehicle.fixed_frames[2].rotation_in_body_frame ==
-                expected_rotation,
+    Require(vehicle.fixed_frames[2].rotation_in_body_frame == expected_rotation,
             "matrix-row frame rotation was transposed or reordered");
 
     const auto& revolute = vehicle.revolute_joints.front();
-    Require(revolute.parent_frame_name ==
-                    "front_bogie_leading_left_axlebox_pivot" &&
-                revolute.child_frame_name ==
-                    "front_bogie_leading_left_axlebox_carrier",
+    Require(revolute.parent_frame_name == "front_bogie_leading_left_axlebox_pivot" &&
+                revolute.child_frame_name == "front_bogie_leading_left_axlebox_carrier",
             "revolute endpoints were not mapped, or were exchanged");
     Require(revolute.axis_in_parent_frame == Eigen::Vector3d(0.0, 1.0, 0.0),
             "revolute axis was not mapped");
@@ -379,24 +365,21 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
     const auto& ball = vehicle.ball_rpy_joints.front();
     Require(ball.parent_frame_name == "longibar_parent_frame" &&
                 ball.child_frame_name == "longibar_child_frame" &&
-                ball.default_roll_pitch_yaw_angles_radians ==
-                    Eigen::Vector3d(0.1, -0.2, 0.3),
+                ball.default_roll_pitch_yaw_angles_radians == Eigen::Vector3d(0.1, -0.2, 0.3),
             "Ball-RPY endpoints or default angles were not mapped");
-    Require(vehicle.weld_joints.front().parent_frame_name ==
-                    "front_carbody_interface_mount" &&
-                vehicle.weld_joints.front().child_frame_name ==
-                    "front_carbody_interface_body",
+    Require(vehicle.weld_joints.front().parent_frame_name == "front_carbody_interface_mount" &&
+                vehicle.weld_joints.front().child_frame_name == "front_carbody_interface_body",
             "weld endpoints were not mapped, or were exchanged");
     const auto& bushing = vehicle.reference_frame_linear_bushings.front();
-    Require(bushing.reference_frame_name == "longibar_child_frame" &&
-                bushing.opposite_frame_name == "carbody" &&
-                bushing.translational_stiffness_newtons_per_meter ==
-                    Eigen::Vector3d(7.0, 8.0, 9.0) &&
-                bushing.rotational_damping_newton_meter_seconds_per_radian ==
-                    Eigen::Vector3d(4.0, 5.0, 6.0) &&
-                bushing.translational_damping_newton_seconds_per_meter ==
-                    Eigen::Vector3d(10.0, 11.0, 12.0),
-            "reference-frame bushing endpoints or constants were not mapped");
+    Require(
+        bushing.reference_frame_name == "longibar_child_frame" &&
+            bushing.opposite_frame_name == "carbody" &&
+            bushing.translational_stiffness_newtons_per_meter == Eigen::Vector3d(7.0, 8.0, 9.0) &&
+            bushing.rotational_damping_newton_meter_seconds_per_radian ==
+                Eigen::Vector3d(4.0, 5.0, 6.0) &&
+            bushing.translational_damping_newton_seconds_per_meter ==
+                Eigen::Vector3d(10.0, 11.0, 12.0),
+        "reference-frame bushing endpoints or constants were not mapped");
 }
 
 void CheckRejections(const std::filesystem::path& path) {
@@ -417,30 +400,22 @@ void CheckRejections(const std::filesystem::path& path) {
         {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0,",
                      "\"mass_kilograms\": 30000.0, \"colour\": \"red\","),
          {"$.rigid_bodies[0].colour", "unknown key"}},
-        {ReplaceOnce(valid,
-                     ",\n      \"damping_newton_metre_seconds_per_radian\": 0.0",
-                     ""),
-         {"$.revolute_joints[0].damping_newton_metre_seconds_per_radian",
-          "required"}},
-        {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0",
-                     "\"mass_kilograms\": \"heavy\""),
+        {ReplaceOnce(valid, ",\n      \"damping_newton_metre_seconds_per_radian\": 0.0", ""),
+         {"$.revolute_joints[0].damping_newton_metre_seconds_per_radian", "required"}},
+        {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0", "\"mass_kilograms\": \"heavy\""),
          {"$.rigid_bodies[0].mass_kilograms", "finite JSON number"}},
-        {ReplaceOnce(valid, "\"vehicle_name\": \"assembly_fixture\"",
-                     "\"vehicle_name\": \"\""),
+        {ReplaceOnce(valid, "\"vehicle_name\": \"assembly_fixture\"", "\"vehicle_name\": \"\""),
          {"$.vehicle_name", "non-empty string"}},
-        {ReplaceOnce(valid, "\"name\": \"front_left_air_spring\"",
-                     "\"name\": \"\""),
-         {"$.translational_spring_dampers[0].name",
-          "non-empty force-element name"}},
+        {ReplaceOnce(valid, "\"name\": \"front_left_air_spring\"", "\"name\": \"\""),
+         {"$.translational_spring_dampers[0].name", "non-empty force-element name"}},
         {ReplaceOnce(valid, "\"name\": \"front_anti_roll_bar\"",
                      "\"name\": \"front_left_air_spring\""),
-         {"$.roll_spring_damper_couples[0].name",
-          "front_left_air_spring", "first declared at",
+         {"$.roll_spring_damper_couples[0].name", "front_left_air_spring", "first declared at",
           "$.translational_spring_dampers[0].name"}},
         {ReplaceOnce(valid, "\"name\": \"point_to_point_damper\"",
                      "\"name\": \"front_lateral_damper\""),
-         {"$.point_to_point_series_spring_bilinear_dampers[0].name",
-          "first declared at", "$.series_spring_viscous_dampers[0].name"}},
+         {"$.point_to_point_series_spring_bilinear_dampers[0].name", "first declared at",
+          "$.series_spring_viscous_dampers[0].name"}},
         {ReplaceOnce(valid,
                      "\"name\": \"point_to_point_damper\",\n"
                      "      \"reference_frame_name\": \"longibar_child_frame\"",
@@ -448,17 +423,15 @@ void CheckRejections(const std::filesystem::path& path) {
                      "      \"reference_frame_name\": \"no_such_point_to_point_frame\""),
          {"$.point_to_point_series_spring_bilinear_dampers[0].reference_frame_name",
           "no_such_point_to_point_frame"}},
-        {ReplaceOnce(valid, "\"knee_force_newtons\": 10000.0",
-                     "\"knee_force_newtons\": 0.0"),
+        {ReplaceOnce(valid, "\"knee_force_newtons\": 10000.0", "\"knee_force_newtons\": 0.0"),
          {"$.point_to_point_series_spring_bilinear_dampers[0].knee_force_newtons",
           "strictly positive"}},
-        {ReplaceOnce(valid,
-                     "\"damping_above_knee_newton_seconds_per_meter\": 50000.0",
+        {ReplaceOnce(valid, "\"damping_above_knee_newton_seconds_per_meter\": 50000.0",
                      "\"damping_above_knee_newton_seconds_per_meter\": -1.0"),
-         {"$.point_to_point_series_spring_bilinear_dampers[0].damping_above_knee_newton_seconds_per_meter",
+         {"$.point_to_point_series_spring_bilinear_dampers[0].damping_above_knee_newton_seconds_"
+          "per_meter",
           "strictly positive"}},
-        {ReplaceOnce(valid,
-                     "\"point_to_point_series_spring_bilinear_dampers\": [",
+        {ReplaceOnce(valid, "\"point_to_point_series_spring_bilinear_dampers\": [",
                      "\"point_to_point_dampers\": ["),
          {"$.point_to_point_dampers", "unknown key"}},
         {ReplaceOnce(
@@ -470,11 +443,9 @@ void CheckRejections(const std::filesystem::path& path) {
         // but a record states inertia about the centre of mass, and dividing it
         // by zero would surface as a complaint about the unit inertia rather
         // than about the mass the author wrote.
-        {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0",
-                     "\"mass_kilograms\": 0.0"),
+        {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0", "\"mass_kilograms\": 0.0"),
          {"$.rigid_bodies[0].mass_kilograms", "positive number of kilograms"}},
-        {ReplaceOnce(valid,
-                     "{\"x\": 60000.0, \"y\": 1300000.0, \"z\": 1330000.0}",
+        {ReplaceOnce(valid, "{\"x\": 60000.0, \"y\": 1300000.0, \"z\": 1330000.0}",
                      "{\"x\": 0.0, \"y\": 0.0, \"z\": 0.0}"),
          {"$.rigid_bodies[0]", "positive-definite",
           "centre-of-mass inertia"}},  // This fixture body moves freely.
@@ -483,20 +454,16 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"parent_frame_name\": "
                      "\"front_bogie_leading_left_axlebox_pivot\",",
                      "\"parent_frame_name\": \"no_such_frame\","),
-         {"$.revolute_joints[0].parent_frame_name", "no_such_frame",
-          "never declares"}},
+         {"$.revolute_joints[0].parent_frame_name", "no_such_frame", "never declares"}},
         {ReplaceOnce(valid,
                      "\"child_frame_name\": "
                      "\"front_carbody_interface_body\"",
                      "\"child_frame_name\": \"no_such_body\""),
          {"$.weld_joints[0].child_frame_name", "no_such_body"}},
-        {ReplaceOnce(valid,
-                     "\"child_frame_name\": \"longibar_child_frame\"",
+        {ReplaceOnce(valid, "\"child_frame_name\": \"longibar_child_frame\"",
                      "\"child_frame_name\": \"no_such_ball_frame\""),
-         {"$.ball_rpy_joints[0].child_frame_name",
-          "no_such_ball_frame"}},
-        {ReplaceOnce(valid, "\"body_name\": \"carbody\",",
-                     "\"body_name\": \"no_such_body\","),
+         {"$.ball_rpy_joints[0].child_frame_name", "no_such_ball_frame"}},
+        {ReplaceOnce(valid, "\"body_name\": \"carbody\",", "\"body_name\": \"no_such_body\","),
          {"$.fixed_frames[0].body_name", "no_such_body"}},
         // The axis is a closed vocabulary, and a force element's ends must be
         // declared like any other reference.
@@ -510,12 +477,10 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"reference_frame_name\": \"no_such_frame\",\n      "
                      "\"opposite_frame_name\": \"carbody\",\n      "
                      "\"stiffness_newtons_per_meter\""),
-         {"$.translational_spring_dampers[0].reference_frame_name",
-          "no_such_frame"}},
+         {"$.translational_spring_dampers[0].reference_frame_name", "no_such_frame"}},
         {ReplaceOnce(valid, "\"force_newtons\": 12000.0}\n      ]",
                      "\"force_newtons\": 12000.0, \"slope\": 1.0}\n      ]"),
-         {"$.saturated_piecewise_linear_dampers[0].curve[2].slope",
-          "unknown key"}},
+         {"$.saturated_piecewise_linear_dampers[0].curve[2].slope", "unknown key"}},
         {ReplaceOnce(valid, "{\"x\": 7.0, \"y\": 8.0, \"z\": 9.0}",
                      "{\"x\": -7.0, \"y\": 8.0, \"z\": 9.0}"),
          {"$.reference_frame_linear_bushings[0].translational_stiffness_newtons_per_meter",
@@ -527,15 +492,13 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"name\": \"longibar_bushing\",\n"
                      "      \"reference_frame_name\": \"longibar_child_frame\",\n"
                      "      \"opposite_frame_name\": \"no_such_bushing_frame\""),
-         {"$.reference_frame_linear_bushings[0].opposite_frame_name",
-          "no_such_bushing_frame"}},
+         {"$.reference_frame_linear_bushings[0].opposite_frame_name", "no_such_bushing_frame"}},
         {ReplaceOnce(valid,
                      "{\"x\": 1.0, \"y\": 0.0, \"z\": 0.0},\n"
                      "          {\"x\": 0.0, \"y\": 0.0, \"z\": 1.0}",
                      "{\"x\": 0.0, \"y\": -1.0, \"z\": 0.0},\n"
                      "          {\"x\": 0.0, \"y\": 0.0, \"z\": 1.0}"),
-         {"$.fixed_frames[2].rotation_in_body_frame",
-          "right-handed orthonormal rotation matrix"}},
+         {"$.fixed_frames[2].rotation_in_body_frame", "right-handed orthonormal rotation matrix"}},
         // The rotation form is a closed vocabulary, not a free string.
         {ReplaceOnce(valid,
                      "\"rotation_in_body_frame\": {\"form\": "
@@ -544,13 +507,127 @@ void CheckRejections(const std::filesystem::path& path) {
                      "\"rotation_in_body_frame\": {\"form\": \"identity\"}\n"
                      "    },\n    {\n      \"name\": "
                      "\"front_bogie_leading_left_axlebox_pivot\""),
-         {"$.fixed_frames[0].rotation_in_body_frame.form",
-          "aligned_with_body"}},
+         {"$.fixed_frames[0].rotation_in_body_frame.form", "aligned_with_body"}},
     };
     for (const RejectionCase& one : cases) {
         ExpectInvalid(path, one.contents, one.fragments);
     }
+}
 
+template <typename Operation>
+void RequireRefusalAt(Operation&& operation, std::string_view expected_path) {
+    try {
+        operation();
+    } catch (const std::invalid_argument& refusal) {
+        Require(std::string_view(refusal.what()).find(expected_path) != std::string_view::npos,
+                "configuration refusal lost its full path: " + std::string(refusal.what()));
+        return;
+    }
+    throw std::runtime_error("invalid configuration was accepted at " + std::string(expected_path));
+}
+
+void CheckMechanicalRecordRoundtrip() {
+    using namespace orvd::configuration;
+    using namespace orvd::configuration::internal;
+    constexpr std::string_view path = "$.vehicle_definition";
+    const auto fixture = DecodeVehicleDefinitionFromJson(
+        strict_json::ParseStrictJson(std::string(kRecord)), std::string(path));
+    const auto require_roundtrip = [&](const VehicleDefinition& original) {
+        const auto encoded = EncodeVehicleDefinitionToJson(original, std::string(path));
+        const auto decoded = DecodeVehicleDefinitionFromJson(
+            strict_json::ParseStrictJson(encoded.dump()), std::string(path));
+        Require(orvd::configuration_record_comparison::Same(original, decoded),
+                "mechanical JSON roundtrip changed a field or element order");
+    };
+    require_roundtrip(fixture);
+    require_roundtrip(VehicleDefinition{});
+
+    auto aligned = fixture;
+    aligned.fixed_frames.front().rotation_in_body_frame.setIdentity();
+    aligned.fixed_frames.front().rotation_in_body_frame(0, 1) = -0.0;
+    const auto encoded_aligned = EncodeVehicleDefinitionToJson(aligned, std::string(path));
+    Require(encoded_aligned.at("fixed_frames")[0].at("rotation_in_body_frame") ==
+                strict_json::Json{{"form", "aligned_with_body"}},
+            "an identity rotation must use the aligned form");
+    require_roundtrip(aligned);
+
+    auto nearly_aligned = aligned;
+    nearly_aligned.fixed_frames.front().rotation_in_body_frame(0, 0) +=
+        std::numeric_limits<double>::epsilon();
+    const auto encoded_nearly_aligned =
+        EncodeVehicleDefinitionToJson(nearly_aligned, std::string(path));
+    Require(encoded_nearly_aligned.at("fixed_frames")[0].at("rotation_in_body_frame").at("form") ==
+                "matrix_rows",
+            "a nonzero rotation-entry difference must retain the matrix form");
+    require_roundtrip(nearly_aligned);
+
+    auto unfinished = fixture;
+    unfinished.vehicle_name.clear();
+    unfinished.mechanical_definition_identifier.clear();
+    unfinished.rigid_bodies.front().mass_kilograms = 0.0;
+    unfinished.rigid_bodies.front()
+        .inertia_moments_about_center_of_mass_kilogram_square_meters.setZero();
+    unfinished.rigid_bodies.front()
+        .inertia_products_about_center_of_mass_kilogram_square_meters.setZero();
+    unfinished.fixed_frames.front().body_name = "missing_body";
+    unfinished.fixed_frames.front().rotation_in_body_frame(1, 1) = 2.0;
+    unfinished.mechanical_track_station_layout.reference_body_name.clear();
+    unfinished.mechanical_track_station_layout.free_body_station_offsets.front().body_name.clear();
+    unfinished.mechanical_track_station_layout.wheel_pair_station_reference_body_names = {""};
+    unfinished.translational_spring_dampers.front().reference_frame_name.clear();
+    unfinished.translational_spring_dampers.front().stiffness_newtons_per_meter.x() = -1.0;
+    unfinished.roll_spring_damper_couples.front().stiffness_newton_meters_per_radian = -2.0;
+    unfinished.series_spring_viscous_dampers.front().axis.clear();
+    unfinished.series_spring_viscous_dampers.front().series_stiffness_newtons_per_meter = 0.0;
+    unfinished.point_to_point_series_spring_bilinear_dampers.front().knee_force_newtons = 0.0;
+    unfinished.saturated_piecewise_linear_dampers.front().axis = "unfinished_axis";
+    unfinished.saturated_piecewise_linear_dampers.front().curve.clear();
+    unfinished.reference_frame_linear_bushings.front()
+        .translational_damping_newton_seconds_per_meter.y() = -3.0;
+    unfinished.point_to_point_linear_spring_dampers.front().nominal_length_meters = 0.0;
+    unfinished.point_to_point_linear_spring_dampers.front().name.clear();
+    unfinished.point_to_point_hysteretic_springs.front().nominal_length_meters = 0.0;
+    unfinished.point_to_point_hysteretic_springs.front().hysteresis_ratio = 2.0;
+    require_roundtrip(unfinished);
+
+    RequireVehicleDefinitionDeclarationInvariants(fixture, std::string(path));
+    auto invalid_declaration = fixture;
+    invalid_declaration.mechanical_definition_identifier = "unfinished identifier";
+    RequireRefusalAt(
+        [&] {
+            RequireVehicleDefinitionDeclarationInvariants(invalid_declaration, std::string(path));
+        },
+        "$.vehicle_definition.mechanical_definition_identifier");
+    invalid_declaration = fixture;
+    invalid_declaration.translational_spring_dampers.front().opposite_frame_name = "world";
+    RequireRefusalAt(
+        [&] {
+            RequireVehicleDefinitionDeclarationInvariants(invalid_declaration, std::string(path));
+        },
+        "$.vehicle_definition.translational_spring_dampers[0].opposite_frame_name");
+
+    const auto encoded_fixture = EncodeVehicleDefinitionToJson(fixture, std::string(path));
+    auto missing_key = encoded_fixture;
+    missing_key["rigid_bodies"][0].erase("mass_kilograms");
+    RequireRefusalAt([&] { (void)DecodeVehicleDefinitionFromJson(missing_key, std::string(path)); },
+                     "$.vehicle_definition.rigid_bodies[0].mass_kilograms");
+    auto wrong_type = encoded_fixture;
+    wrong_type["point_to_point_linear_spring_dampers"][0]["nominal_length_meters"] = "unfinished";
+    RequireRefusalAt(
+        [&] { (void)DecodeVehicleDefinitionFromJson(wrong_type, std::string(path)); },
+        "$.vehicle_definition.point_to_point_linear_spring_dampers[0].nominal_length_meters");
+    const std::string duplicate = "{\"vehicle_definition\":" +
+                                  ReplaceOnce(std::string(kRecord), "\"name\": \"carbody\",",
+                                              "\"name\": \"carbody\", \"name\": \"other\",") +
+                                  "}";
+    RequireRefusalAt([&] { (void)strict_json::ParseStrictJson(duplicate); },
+                     "$.vehicle_definition.rigid_bodies[0].name");
+
+    auto nonfinite = fixture;
+    nonfinite.fixed_frames.front().position_in_body_frame_meters.z() =
+        std::numeric_limits<double>::infinity();
+    RequireRefusalAt([&] { (void)EncodeVehicleDefinitionToJson(nonfinite, std::string(path)); },
+                     "$.vehicle_definition.fixed_frames[0].position_in_body_frame_meters.z");
 }
 
 void CheckConsistLoading(const std::filesystem::path& path) {
@@ -613,16 +690,15 @@ int main(int argc, char* argv[]) {
         const std::filesystem::path scratch = argv[1];
         std::filesystem::remove_all(scratch);
         std::filesystem::create_directories(scratch);
-        const std::filesystem::path configuration =
-            scratch / "vehicle_definition.json";
+        const std::filesystem::path configuration = scratch / "vehicle_definition.json";
 
         CheckRecordIsMappedAndOwned(configuration);
         CheckRejections(configuration);
+        CheckMechanicalRecordRoundtrip();
         CheckConsistLoading(scratch / "consist.json");
         std::filesystem::remove_all(scratch);
     } catch (const std::exception& error) {
-        std::fprintf(stderr, "vehicle definition loading failed: %s\n",
-                     error.what());
+        std::fprintf(stderr, "vehicle definition loading failed: %s\n", error.what());
         return 1;
     }
     return 0;

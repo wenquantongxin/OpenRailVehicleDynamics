@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include "configuration_identifier_validation.h"
+
 namespace orvd::configuration::strict_json {
 namespace {
 
@@ -45,24 +47,20 @@ void CompleteValue(ParseFrame& frame) {
 bool HasNonzeroSignificand(std::string_view token) {
     const std::size_t exponent = token.find_first_of("eE");
     const std::string_view significand = token.substr(0, exponent);
-    return std::any_of(significand.begin(), significand.end(), [](char digit) {
-        return digit >= '1' && digit <= '9';
-    });
+    return std::any_of(significand.begin(), significand.end(),
+                       [](char digit) { return digit >= '1' && digit <= '9'; });
 }
 
 class StrictJsonValidator final : public nlohmann::json_sax<Json> {
-   public:
+  public:
     bool null() override { return CompleteScalar(); }
     bool boolean(bool) override { return CompleteScalar(); }
     bool number_integer(number_integer_t) override { return CompleteScalar(); }
-    bool number_unsigned(number_unsigned_t) override {
-        return CompleteScalar();
-    }
+    bool number_unsigned(number_unsigned_t) override { return CompleteScalar(); }
     bool number_float(number_float_t value, const string_t& token) override {
         if (value == 0.0 && HasNonzeroSignificand(token)) {
             throw std::invalid_argument(
-                CurrentValuePath() +
-                " contains a non-zero JSON number that underflows binary64");
+                CurrentValuePath() + " contains a non-zero JSON number that underflows binary64");
         }
         return CompleteScalar();
     }
@@ -74,15 +72,13 @@ class StrictJsonValidator final : public nlohmann::json_sax<Json> {
         return true;
     }
     bool key(string_t& key) override {
-        if (frames_.empty() ||
-            frames_.back().kind != ParseFrame::Kind::kObject) {
-            throw std::invalid_argument(
-                "invalid JSON parser event while reading object key");
+        if (frames_.empty() || frames_.back().kind != ParseFrame::Kind::kObject) {
+            throw std::invalid_argument("invalid JSON parser event while reading object key");
         }
         ParseFrame& frame = frames_.back();
         if (!frame.object_keys.insert(key).second) {
-            throw std::invalid_argument("duplicate JSON object key at " +
-                                        ContainerPath() + "." + key);
+            throw std::invalid_argument("duplicate JSON object key at " + ContainerPath() + "." +
+                                        key);
         }
         frame.pending_object_key = key;
         return true;
@@ -97,18 +93,16 @@ class StrictJsonValidator final : public nlohmann::json_sax<Json> {
     bool parse_error(std::size_t position, const std::string&,
                      const nlohmann::detail::exception& error) override {
         if (error.id == 406) {
-            throw std::invalid_argument(
-                CurrentValuePath() +
-                " contains a JSON number that is not representable as a "
-                "finite binary64 value: " +
-                error.what());
+            throw std::invalid_argument(CurrentValuePath() +
+                                        " contains a JSON number that is not representable as a "
+                                        "finite binary64 value: " +
+                                        error.what());
         }
-        throw std::invalid_argument("invalid JSON syntax at byte " +
-                                    std::to_string(position) + ": " +
-                                    error.what());
+        throw std::invalid_argument("invalid JSON syntax at byte " + std::to_string(position) +
+                                    ": " + error.what());
     }
 
-   private:
+  private:
     [[nodiscard]] std::string ContainerPath() const {
         std::string path{"$"};
         for (const ParseFrame& frame : frames_) {
@@ -128,16 +122,14 @@ class StrictJsonValidator final : public nlohmann::json_sax<Json> {
         ParseFrame frame;
         frame.kind = kind;
         if (!frames_.empty()) {
-            frame.component_from_parent =
-                PendingValueComponent(frames_.back());
+            frame.component_from_parent = PendingValueComponent(frames_.back());
         }
         frames_.push_back(std::move(frame));
     }
 
     bool PopFrame() {
         if (frames_.empty()) {
-            throw std::invalid_argument(
-                "invalid JSON parser event while closing a container");
+            throw std::invalid_argument("invalid JSON parser event while closing a container");
         }
         frames_.pop_back();
         if (!frames_.empty()) {
@@ -158,8 +150,7 @@ class StrictJsonValidator final : public nlohmann::json_sax<Json> {
 
 }  // namespace
 
-std::string ReadWholeFile(const std::filesystem::path& configuration_path,
-                          std::string_view what) {
+std::string ReadWholeFile(const std::filesystem::path& configuration_path, std::string_view what) {
     std::ifstream input(configuration_path, std::ios::binary);
     if (!input) {
         throw std::runtime_error("could not open " + std::string(what) + " '" +
@@ -167,11 +158,9 @@ std::string ReadWholeFile(const std::filesystem::path& configuration_path,
     }
     std::string document;
     std::array<char, 4096> buffer{};
-    while (input.read(buffer.data(),
-                      static_cast<std::streamsize>(buffer.size())) ||
+    while (input.read(buffer.data(), static_cast<std::streamsize>(buffer.size())) ||
            input.gcount() > 0) {
-        document.append(buffer.data(),
-                        static_cast<std::size_t>(input.gcount()));
+        document.append(buffer.data(), static_cast<std::size_t>(input.gcount()));
     }
     if (!input.eof()) {
         throw std::runtime_error("could not read " + std::string(what) + " '" +
@@ -180,26 +169,23 @@ std::string ReadWholeFile(const std::filesystem::path& configuration_path,
     return document;
 }
 
-[[noreturn]] void ThrowExpected(const std::string& path,
-                                std::string_view expected) {
+[[noreturn]] void ThrowExpected(const std::string& path, std::string_view expected) {
     throw std::invalid_argument(path + " must be " + std::string(expected));
 }
 
 Json ParseStrictJson(const std::string& document) {
     const std::size_t nul_position = document.find('\0');
     if (nul_position != std::string::npos) {
-        throw std::invalid_argument(
-            "invalid JSON syntax: NUL byte at byte " +
-            std::to_string(nul_position + 1) +
-            " would terminate the document before the end of the file");
+        throw std::invalid_argument("invalid JSON syntax: NUL byte at byte " +
+                                    std::to_string(nul_position + 1) +
+                                    " would terminate the document before the end of the file");
     }
 
     // The SAX pass sees duplicate keys and raw number tokens, both of which a
     // completed DOM has already normalised away. It stores only one local path
     // component per nesting level; the full path is assembled only on error.
     StrictJsonValidator validator;
-    if (!Json::sax_parse(document, &validator, Json::input_format_t::json,
-                         true)) {
+    if (!Json::sax_parse(document, &validator, Json::input_format_t::json, true)) {
         throw std::invalid_argument("invalid JSON syntax");
     }
     return Json::parse(document);
@@ -213,8 +199,7 @@ bool IsExactlyRepresentableAsBinary64(std::uint64_t magnitude) {
         return true;
     }
     const auto discarded_bits = width - 53;
-    const std::uint64_t discarded_mask =
-        (std::uint64_t{1} << discarded_bits) - 1U;
+    const std::uint64_t discarded_mask = (std::uint64_t{1} << discarded_bits) - 1U;
     return (magnitude & discarded_mask) == 0U;
 }
 
@@ -237,16 +222,13 @@ void RequireExactKeys(const Json& object, const std::string& path,
     RequireObject(object, path);
     for (const auto& [key, unused] : object.items()) {
         (void)unused;
-        if (std::find(expected_keys.begin(), expected_keys.end(), key) ==
-            expected_keys.end()) {
-            throw std::invalid_argument(path + "." + key +
-                                        " is an unknown key");
+        if (std::find(expected_keys.begin(), expected_keys.end(), key) == expected_keys.end()) {
+            throw std::invalid_argument(path + "." + key + " is an unknown key");
         }
     }
     for (const std::string_view key : expected_keys) {
         if (!object.contains(std::string(key))) {
-            throw std::invalid_argument(path + "." + std::string(key) +
-                                        " is required");
+            throw std::invalid_argument(path + "." + std::string(key) + " is required");
         }
     }
 }
@@ -264,13 +246,11 @@ double RequireFiniteNumber(const Json& value, const std::string& path) {
     }
     if (value.is_number_integer() && !value.is_number_unsigned()) {
         const std::int64_t signed_value = value.get<std::int64_t>();
-        const std::uint64_t magnitude =
-            signed_value < 0
-                ? static_cast<std::uint64_t>(-(signed_value + 1)) + 1U
-                : static_cast<std::uint64_t>(signed_value);
+        const std::uint64_t magnitude = signed_value < 0
+                                            ? static_cast<std::uint64_t>(-(signed_value + 1)) + 1U
+                                            : static_cast<std::uint64_t>(signed_value);
         if (!IsExactlyRepresentableAsBinary64(magnitude)) {
-            ThrowExpected(path,
-                          "exactly representable as a finite binary64 number");
+            ThrowExpected(path, "exactly representable as a finite binary64 number");
         }
     }
     double result{};
@@ -283,6 +263,21 @@ double RequireFiniteNumber(const Json& value, const std::string& path) {
         ThrowExpected(path, "a finite binary64 number");
     }
     return result;
+}
+
+void RequireFiniteJsonNumbers(const Json& value, const std::string& path) {
+    if (value.is_number_float() && !std::isfinite(value.get<double>())) {
+        ThrowExpected(path, "a finite binary64 number");
+    }
+    if (value.is_object()) {
+        for (const auto& [key, child] : value.items()) {
+            RequireFiniteJsonNumbers(child, path + "." + key);
+        }
+    } else if (value.is_array()) {
+        for (std::size_t index = 0; index < value.size(); ++index) {
+            RequireFiniteJsonNumbers(value[index], ElementPath(path, index));
+        }
+    }
 }
 
 std::string RequireString(const Json& value, const std::string& path) {
@@ -310,30 +305,13 @@ bool RequireBool(const Json& value, const std::string& path) {
     return value.get<bool>();
 }
 
-std::string RequireIdentifier(const Json& value, const std::string& path,
-                              std::string_view what) {
+std::string RequireIdentifier(const Json& value, const std::string& path, std::string_view what) {
     const std::string identifier = RequireString(value, path);
-    if (identifier.empty()) {
-        ThrowExpected(path, std::string("a non-empty ") + std::string(what));
-    }
-    for (const char character : identifier) {
-        const bool admitted = (character >= 'A' && character <= 'Z') ||
-                              (character >= 'a' && character <= 'z') ||
-                              (character >= '0' && character <= '9') ||
-                              character == '.' || character == '_' ||
-                              character == '-';
-        if (!admitted) {
-            throw std::invalid_argument(
-                path + " is a " + std::string(what) + " '" + identifier +
-                "' containing a character outside [A-Za-z0-9._-]; an "
-                "identifier is a name, not a path or a sentence");
-        }
-    }
+    internal::RequireConfigurationIdentifier(identifier, path, what);
     return identifier;
 }
 
-Eigen::Vector3d RequireFiniteVector3(const Json& value,
-                                     const std::string& path) {
+Eigen::Vector3d RequireFiniteVector3(const Json& value, const std::string& path) {
     RequireExactKeys(value, path, {"x", "y", "z"});
     return Eigen::Vector3d(RequireFiniteNumber(value.at("x"), path + ".x"),
                            RequireFiniteNumber(value.at("y"), path + ".y"),

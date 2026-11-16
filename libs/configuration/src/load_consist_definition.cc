@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "orvd/configuration/consist_definition.h"
+#include "point_to_point_spring_definition_validation.h"
 #include "point_to_point_spring_definitions_json.h"
 #include "strict_json.h"
 
@@ -50,13 +51,14 @@ ConsistDefinition LoadConsistDefinition(const std::filesystem::path& path) {
         throw std::invalid_argument("consist.vehicles must not be empty");
     }
     std::unordered_set<std::string> force_names;
-    const auto read_elements = [&](const char* key, auto parse, auto& destination) {
+    const auto read_elements = [&](const char* key, auto parse, auto validate, auto& destination) {
         const auto& array = root.at(key);
         const std::string path = std::string("consist.") + key;
         RequireArray(array, path);
         for (std::size_t index = 0; index < array.size(); ++index) {
             const auto where = ElementPath(path, index);
             auto element = parse(array[index], where);
+            validate(element, where);
             if (!force_names.insert(element.name).second) {
                 throw std::invalid_argument(where + " repeats force-element name '" + element.name +
                                             "'");
@@ -66,8 +68,10 @@ ConsistDefinition LoadConsistDefinition(const std::filesystem::path& path) {
     };
     read_elements("point_to_point_linear_spring_dampers",
                   internal::ParsePointToPointLinearSpringDamper,
+                  internal::RequirePointToPointLinearSpringDamperInvariants,
                   result.point_to_point_linear_spring_dampers);
     read_elements("point_to_point_hysteretic_springs", internal::ParsePointToPointHystereticSpring,
+                  internal::RequirePointToPointHystereticSpringInvariants,
                   result.point_to_point_hysteretic_springs);
     return result;
 }

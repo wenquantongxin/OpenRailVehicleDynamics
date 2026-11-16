@@ -1315,7 +1315,9 @@ add_executable(verify_vehicle_definition_loading
     configuration/verify_vehicle_definition_loading.cc)
 orvd_configure_first_party_target(verify_vehicle_definition_loading)
 target_link_libraries(verify_vehicle_definition_loading
-    PRIVATE orvd_configuration)
+    PRIVATE orvd_configuration nlohmann_json::nlohmann_json)
+target_include_directories(verify_vehicle_definition_loading
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/configuration/internal)
 add_test(NAME verify_vehicle_definition_loading
          COMMAND verify_vehicle_definition_loading
              ${CMAKE_CURRENT_BINARY_DIR}/vehicle-definition-fixtures)
@@ -1605,7 +1607,10 @@ add_executable(verify_vehicle_contact_declaration
     configuration/vehicle_contact_topology_header_self_containment.cc
     configuration/verify_vehicle_contact_declaration.cc)
 orvd_configure_first_party_target(verify_vehicle_contact_declaration)
-target_link_libraries(verify_vehicle_contact_declaration PRIVATE orvd_configuration)
+target_link_libraries(verify_vehicle_contact_declaration
+    PRIVATE orvd_configuration nlohmann_json::nlohmann_json)
+target_include_directories(verify_vehicle_contact_declaration
+    PRIVATE ${PROJECT_SOURCE_DIR}/libs/configuration/internal)
 add_test(NAME verify_vehicle_contact_declaration
     COMMAND verify_vehicle_contact_declaration
         ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
