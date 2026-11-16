@@ -113,20 +113,27 @@ AssembledVehicleSystem::AssembledVehicleSystem(
     std::unique_ptr<forces::IndependentWheelActiveTorquePlan> active_torque_plan,
     std::unique_ptr<system_assembly::SystemInstance> system,
     std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
-    std::vector<VehicleInstanceBinding> instance_bindings)
+    std::vector<VehicleInstanceBinding> instance_bindings,
+    std::optional<VehicleContactTopology> checked_contact_topology)
     : model_(std::move(model)),
       force_plan_(std::move(force_plan)),
       contact_force_plan_(std::move(contact_force_plan)),
       active_torque_plan_(std::move(active_torque_plan)),
       system_(std::move(system)),
       compiled_plan_(std::move(compiled_plan)),
-      instance_bindings_(std::move(instance_bindings)) {}
+      instance_bindings_(std::move(instance_bindings)),
+      checked_contact_topology_(std::move(checked_contact_topology)) {}
 
 AssembledVehicleSystem::~AssembledVehicleSystem() = default;
 
 std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
     const VehicleDefinition& vehicle,
-    double gravitational_acceleration_magnitude_meters_per_second_squared) {
+    double gravitational_acceleration_magnitude_meters_per_second_squared,
+    const VehicleContactDeclaration* contact_declaration) {
+    std::optional<VehicleContactTopology> checked_contact_topology;
+    if (contact_declaration != nullptr) {
+        checked_contact_topology = BuildVehicleContactTopology(vehicle, *contact_declaration);
+    }
     internal::RequireVehicleMechanicalTrackStationLayoutInvariants(
         vehicle, "vehicle definition");
     std::vector<VehicleInstanceBinding> bindings{{"", 0.0, CaptureBinding(vehicle, "")}};
@@ -151,7 +158,7 @@ std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
 
     return std::unique_ptr<AssembledVehicleSystem>(new AssembledVehicleSystem(
         std::move(model), std::move(force_plan), nullptr, nullptr, std::move(system),
-        std::move(compiled_plan), std::move(bindings)));
+        std::move(compiled_plan), std::move(bindings), std::move(checked_contact_topology)));
 }
 
 std::unique_ptr<AssembledVehicleSystem> AssembledVehicleSystem::AssembleWithWheelRailContact(

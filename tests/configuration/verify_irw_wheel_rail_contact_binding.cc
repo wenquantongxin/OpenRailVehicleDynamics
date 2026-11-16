@@ -352,6 +352,7 @@ void CheckIdentityRefusals(const fs::path& data_root,
     const fs::path rail_relative =
         "track_library/rail_profiles/uic60_rail_profile.json";
     fs::remove_all(fixture_root);
+    CopyAsset(data_root, fixture_root, "vehicle_library/irw/contact_record.json");
     CopyAsset(data_root, fixture_root, wheel_relative,
               "\"profile_identifier\": \"irw_reference_wheel_profile\"",
               "\"profile_identifier\": \"wrong_internal_identity\"");

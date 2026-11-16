@@ -701,7 +701,7 @@ add_test(NAME verify_basic_system_continuous_state_advancer
          COMMAND verify_basic_system_continuous_state_advancer)
 
 # G46's installed-package qualification.  This test moves an actual installation
-# to a second prefix and configures seven independent public-header-only
+# to a second prefix and configures independent public-header-only
 # consumers. They exercise all five integration methods, configuration, track,
 # contact, forces and a scene-record round trip. Each consumer runs and then
 # passes the same runtime dependency closure check. The sibling marker
@@ -1516,3 +1516,73 @@ add_executable(verify_scene_description
 orvd_configure_first_party_target(verify_scene_description)
 target_link_libraries(verify_scene_description PRIVATE orvd_scene_observation)
 add_test(NAME verify_scene_description COMMAND verify_scene_description)
+
+# Both bundled vehicles as projects: generation returns the loaded
+# definition, contact carriers provide the wheel-pair stations, start-up poses
+# place every free body, groups only organise, and inconsistent placements,
+# groups and start-up bindings are refused by name.
+add_executable(verify_vehicle_project
+    vehicle_project/vehicle_project_header_self_containment.cc
+    vehicle_project/free_body_placements_header_self_containment.cc
+    vehicle_project/generate_assembly_inputs_header_self_containment.cc
+    vehicle_project/vehicle_project_invariants_header_self_containment.cc
+    vehicle_project/element_kind_records_header_self_containment.cc
+    vehicle_project/verify_vehicle_project.cc)
+orvd_configure_first_party_target(verify_vehicle_project)
+target_link_libraries(verify_vehicle_project PRIVATE orvd_vehicle_project)
+add_test(NAME verify_vehicle_project
+         COMMAND verify_vehicle_project
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
+
+# The editing layer: every property of every element kind reads and, for the
+# editable set, writes the member it names; edits are undone and redone under
+# an increasing revision and refused by element and property; both bundled
+# vehicles pass the mechanical check, a refused assembly is reported and keeps
+# the older preview; and the preview puts every body, frame, joint and
+# force-element end where the assembled model places it.
+add_executable(verify_vehicle_project_editing
+    vehicle_project_editing/element_properties_header_self_containment.cc
+    vehicle_project_editing/mechanical_check_report_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_preview_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_editing_session_header_self_containment.cc
+    vehicle_project_editing/verify_vehicle_project_editing.cc)
+orvd_configure_first_party_target(verify_vehicle_project_editing)
+target_include_directories(verify_vehicle_project_editing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_editing PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_editing
+         COMMAND verify_vehicle_project_editing
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
+
+# The modelling service driven through standard input and output on GZ18: the
+# protocol's structure, one response per request and its revisions.
+add_test(NAME verify_vehicle_modeling_service
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/vehicle_project_editing/verify_vehicle_modeling_service.py
+        $<TARGET_FILE:orvd_vehicle_modeling_service>
+        ${PROJECT_SOURCE_DIR})
+
+# Contact declarations bind arbitrary free carriers and wheel-joint names;
+# reference data load strictly and carrier aliases reach initial assembly.
+add_executable(verify_vehicle_contact_declaration
+    configuration/vehicle_contact_record_header_self_containment.cc
+    configuration/load_vehicle_contact_record_header_self_containment.cc
+    configuration/vehicle_contact_topology_header_self_containment.cc
+    configuration/verify_vehicle_contact_declaration.cc)
+orvd_configure_first_party_target(verify_vehicle_contact_declaration)
+target_link_libraries(verify_vehicle_contact_declaration PRIVATE orvd_configuration)
+add_test(NAME verify_vehicle_contact_declaration
+    COMMAND verify_vehicle_contact_declaration
+        ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+        ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/vehicle-contact-record-fixtures)

@@ -388,6 +388,8 @@ run_installed_consumer(wheel_rail_contact_installation_smoke)
 run_installed_consumer(forces_installation_smoke)
 run_installed_consumer(scene_record_installation_smoke)
 run_installed_consumer(scene_stream_installation_smoke)
+run_installed_consumer(vehicle_project_installation_smoke)
+run_installed_consumer(vehicle_project_editing_installation_smoke)
 
 find_single_executable(drake_probe_executable drake_loading_probe
                        "${consumer_build}")
@@ -422,5 +424,5 @@ message(STATUS
     "Drake-marker positive control rejected because its runtime dependency "
     "closure contains shared Drake")
 message(STATUS
-    "eight relocated find_package consumers, five integration methods, scene "
+    "ten relocated find_package consumers, five integration methods, scene "
     "record round trip and runtime dependency discrimination all passed")

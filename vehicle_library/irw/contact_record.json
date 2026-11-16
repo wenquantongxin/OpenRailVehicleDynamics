@@ -1,0 +1,205 @@
+{
+  "declaration": {
+    "carriers": [
+      {
+        "carrier_name": "axlebridge_ff",
+        "body_name": "axlebridge_ff",
+        "rotation_body_from_nonspinning_wheel_profile": [
+          {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": -1.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.0
+          }
+        ]
+      },
+      {
+        "carrier_name": "axlebridge_fr",
+        "body_name": "axlebridge_fr",
+        "rotation_body_from_nonspinning_wheel_profile": [
+          {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": -1.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.0
+          }
+        ]
+      },
+      {
+        "carrier_name": "axlebridge_rf",
+        "body_name": "axlebridge_rf",
+        "rotation_body_from_nonspinning_wheel_profile": [
+          {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": -1.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.0
+          }
+        ]
+      },
+      {
+        "carrier_name": "axlebridge_rr",
+        "body_name": "axlebridge_rr",
+        "rotation_body_from_nonspinning_wheel_profile": [
+          {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": -1.0,
+            "z": 0.0
+          },
+          {
+            "x": 0.0,
+            "y": 0.0,
+            "z": -1.0
+          }
+        ]
+      }
+    ],
+    "interfaces": [
+      {
+        "interface_name": "wheel_ff_l",
+        "carrier_name": "axlebridge_ff",
+        "wheel_body_name": "wheel_ff_l",
+        "side": "left",
+        "independent_wheel_revolute_joint_name": "rev_wheel_ff_l"
+      },
+      {
+        "interface_name": "wheel_ff_r",
+        "carrier_name": "axlebridge_ff",
+        "wheel_body_name": "wheel_ff_r",
+        "side": "right",
+        "independent_wheel_revolute_joint_name": "rev_wheel_ff_r"
+      },
+      {
+        "interface_name": "wheel_fr_l",
+        "carrier_name": "axlebridge_fr",
+        "wheel_body_name": "wheel_fr_l",
+        "side": "left",
+        "independent_wheel_revolute_joint_name": "rev_wheel_fr_l"
+      },
+      {
+        "interface_name": "wheel_fr_r",
+        "carrier_name": "axlebridge_fr",
+        "wheel_body_name": "wheel_fr_r",
+        "side": "right",
+        "independent_wheel_revolute_joint_name": "rev_wheel_fr_r"
+      },
+      {
+        "interface_name": "wheel_rf_l",
+        "carrier_name": "axlebridge_rf",
+        "wheel_body_name": "wheel_rf_l",
+        "side": "left",
+        "independent_wheel_revolute_joint_name": "rev_wheel_rf_l"
+      },
+      {
+        "interface_name": "wheel_rf_r",
+        "carrier_name": "axlebridge_rf",
+        "wheel_body_name": "wheel_rf_r",
+        "side": "right",
+        "independent_wheel_revolute_joint_name": "rev_wheel_rf_r"
+      },
+      {
+        "interface_name": "wheel_rr_l",
+        "carrier_name": "axlebridge_rr",
+        "wheel_body_name": "wheel_rr_l",
+        "side": "left",
+        "independent_wheel_revolute_joint_name": "rev_wheel_rr_l"
+      },
+      {
+        "interface_name": "wheel_rr_r",
+        "carrier_name": "axlebridge_rr",
+        "wheel_body_name": "wheel_rr_r",
+        "side": "right",
+        "independent_wheel_revolute_joint_name": "rev_wheel_rr_r"
+      }
+    ]
+  },
+  "wheel": {
+    "profile": {
+      "profile_identifier": "irw_reference_wheel_profile",
+      "profile_path": "vehicle_library/irw/wheel_profiles/irw_reference_wheel_profile.json"
+    },
+    "nominal_rolling_radius_meters": 0.43,
+    "wheel_lateral_datum_magnitude_meters": 0.7465
+  },
+  "rail": {
+    "profile": {
+      "profile_identifier": "uic60_rail_profile",
+      "profile_path": "track_library/rail_profiles/uic60_rail_profile.json"
+    },
+    "track_gauge_meters": 1.435,
+    "gauge_measuring_depth_meters": 0.016,
+    "pose_rail_cant_radians": 0.02499479361892016,
+    "geometry_rail_cant_radians": 0.024994792,
+    "profile_origin_mode": "profile_coordinate"
+  },
+  "computation": {
+    "contact_strategy_identifier": "irw_reference_wheel_rail_contact",
+    "material": {
+      "youngs_modulus_pascals": 210000000000.0,
+      "poisson_ratio": 0.28
+    },
+    "geometry": {
+      "envelope_bin_width_meters": 2e-05,
+      "outline_sample_count": 1000,
+      "contact_gap_epsilon_meters": 0.0,
+      "island_merge_gap_tolerance_meters": 1e-06,
+      "island_quadrature_stations": 120
+    },
+    "normal": {
+      "penetration_equivalence_factor": 1.8181818181818181,
+      "reference_damping_newton_seconds_per_meter": 100000.0,
+      "reference_stiffness_newtons_per_meter": 500000000.0,
+      "damping_activation_penetration_meters": 1e-12
+    },
+    "creepage": {
+      "minimum_reference_speed_meters_per_second": 0.01
+    },
+    "friction": {
+      "static_coefficient": 0.3,
+      "limiting_fraction": 0.4,
+      "decay_per_meter_per_second": 0.55,
+      "minimum_reference_speed_meters_per_second": 0.01
+    },
+    "tangential": {
+      "longitudinal_cells": 21,
+      "lateral_strips": 21,
+      "refinement_width": 0.01
+    },
+    "creep_coefficients_outside_table": "asymptotic",
+    "wheel_profile_preprocessing": {
+      "equal_arc_length_rescan_step_meters": 0.0005
+    }
+  }
+}

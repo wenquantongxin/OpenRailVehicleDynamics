@@ -19,12 +19,15 @@ add_library(orvd_configuration STATIC
     src/load_resolved_startup_state.cc
     src/load_track_irregularity_field.cc
     src/load_track_geometry.cc
+    src/load_vehicle_contact_record.cc
     src/load_vehicle_definition.cc
     src/load_wheel_drive_torque_command_conditioner.cc
     src/point_to_point_spring_definitions_json.cc
     src/resolve_track_irregularity_field.cc
     src/resolved_startup_state_invariants.cc
     src/strict_json.cc
+    src/vehicle_contact_record.cc
+    src/vehicle_contact_topology.cc
     src/vehicle_definition_invariants.cc
     src/vehicle_definition_inertia.cc
     src/wheel_rail_contact_personality_assembly.cc)

@@ -28,9 +28,9 @@ inline constexpr std::array<std::string_view, 4> kIrwClosedCarrierNames{
 inline const Eigen::Matrix3d kIrwBodyBasisHalfTurn =
     Eigen::Vector3d(1.0, -1.0, -1.0).asDiagonal();
 
-// Frozen WRL order: each axle from front to rear, left before right. Contact,
-// active torque and the G76 control observation binding all consume this one
-// table; none reconstructs the order independently.
+// Reference actuation and control order: each axle from front to rear, left
+// before right. The installed contact declaration states the same interface
+// order; control observation checks that it matches these bindings.
 inline constexpr std::array<IrwClosedInterfaceTopology, 8>
     kIrwClosedInterfaces{{
         {"wheel_ff_l", "axlebridge_ff", "wheel_ff_l", "rev_wheel_ff_l",

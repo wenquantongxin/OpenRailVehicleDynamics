@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "orvd/configuration/load_profile_points.h"
+#include "orvd/configuration/vehicle_contact_record.h"
 
 namespace orvd::configuration::internal {
 namespace {
@@ -13,33 +14,21 @@ namespace {
 using wheel_rail_contact::ProfilePoints;
 using wheel_rail_contact::ProfileRole;
 using wheel_rail_contact::RailGaugeDatum;
-using wheel_rail_contact::WheelProfilePreprocessingConfiguration;
 using wheel_rail_contact::WheelRailContactModel;
 using wheel_rail_contact::WheelRailPoseConstants;
 using wheel_rail_contact::WheelSide;
-
-// The two production vehicles share one profile-grid contract. Keep its only
-// numerical parameter here, below the public configuration API and outside
-// either vehicle factory, so the grids cannot drift independently.
-constexpr WheelProfilePreprocessingConfiguration
-    kProductionWheelProfilePreprocessingConfiguration{
-        .equal_arc_length_rescan_step_meters = 0.0005,
-    };
 
 [[noreturn]] void Reject(std::string_view vehicle, const std::string& detail) {
     throw std::invalid_argument(std::string(vehicle) +
                                 " wheel-rail contact: " + detail);
 }
 
-void RequireClosedLogicalIdentifier(std::string_view actual,
-                                    std::string_view expected,
-                                    std::string_view what,
-                                    std::string_view vehicle) {
-    const bool path_like =
-        actual.empty() || actual.find('/') != actual.npos ||
-        actual.find('\\') != actual.npos || actual.find("..") != actual.npos ||
-        actual.find("${") != actual.npos ||
-        std::filesystem::path(std::string(actual)).is_absolute();
+void RequireMatchingLogicalIdentifier(std::string_view actual, std::string_view expected,
+                                      std::string_view what, std::string_view vehicle) {
+    const bool path_like = actual.empty() || actual.find('/') != actual.npos ||
+                           actual.find('\\') != actual.npos || actual.find("..") != actual.npos ||
+                           actual.find("${") != actual.npos ||
+                           std::filesystem::path(std::string(actual)).is_absolute();
     if (path_like) {
         Reject(vehicle, std::string(what) + " is '" + std::string(actual) +
                             "', but this field is a logical identity and may "
@@ -48,8 +37,7 @@ void RequireClosedLogicalIdentifier(std::string_view actual,
     }
     if (actual != expected) {
         Reject(vehicle, std::string(what) + " is '" + std::string(actual) +
-                            "', but the closed personality requires '" +
-                            std::string(expected) + "'");
+                            "', but the contact record requires '" + std::string(expected) + "'");
     }
 }
 
@@ -92,91 +80,102 @@ WheelRailPoseConstants MakePoseConstants(
 }  // namespace
 
 std::unique_ptr<BoundWheelRailContact> AssembleBoundWheelRailContact(
-    const std::filesystem::path& orvd_data_root,
-    const StartupWheelRailBinding& startup_binding,
-    double rail_profile_reference_vertical_offset_meters,
-    WheelRailContactPersonalitySpecification specification) {
-    const std::string_view vehicle = specification.diagnostic_vehicle_name;
-    if (vehicle.empty()) {
-        throw std::logic_error(
-            "wheel-rail contact personality has no diagnostic vehicle name");
-    }
+    const std::filesystem::path& orvd_data_root, const StartupWheelRailBinding& startup_binding,
+    double rail_profile_reference_vertical_offset_meters, const VehicleContactRecord& record) {
+    constexpr std::string_view vehicle = "vehicle";
+    const auto& settings = record.computation;
+    const wheel_rail_contact::WheelRailContactConfiguration contact_configuration{
+        .geometry =
+            {
+                .nominal_rolling_radius_meters = record.wheel.nominal_rolling_radius_meters,
+                .envelope_bin_width_meters = settings.geometry.envelope_bin_width_meters,
+                .outline_sample_count = settings.geometry.outline_sample_count,
+                .contact_gap_epsilon_meters = settings.geometry.contact_gap_epsilon_meters,
+                .island_merge_gap_tolerance_meters =
+                    settings.geometry.island_merge_gap_tolerance_meters,
+                .island_quadrature_stations = settings.geometry.island_quadrature_stations,
+                .rail_cant_radians = record.rail.geometry_rail_cant_radians,
+            },
+        .normal =
+            {
+                .material = settings.material,
+                .penetration_equivalence_factor = settings.normal.penetration_equivalence_factor,
+                .reference_damping_newton_seconds_per_meter =
+                    settings.normal.reference_damping_newton_seconds_per_meter,
+                .reference_stiffness_newtons_per_meter =
+                    settings.normal.reference_stiffness_newtons_per_meter,
+                .damping_activation_penetration_meters =
+                    settings.normal.damping_activation_penetration_meters,
+            },
+        .creepage = settings.creepage,
+        .friction = settings.friction,
+        .tangential =
+            {
+                .longitudinal_cells = settings.tangential.longitudinal_cells,
+                .lateral_strips = settings.tangential.lateral_strips,
+                .refinement_width = settings.tangential.refinement_width,
+                .material = settings.material,
+            },
+        .material = settings.material,
+        .creep_coefficients_outside_table = settings.creep_coefficients_outside_table,
+    };
     if (orvd_data_root.empty()) {
         Reject(vehicle, "the explicitly supplied ORVD data root is empty");
     }
-    RequireClosedLogicalIdentifier(
-        startup_binding.wheel_profile_identifier,
-        specification.wheel_profile_identifier, "wheel profile identifier",
-        vehicle);
-    RequireClosedLogicalIdentifier(
-        startup_binding.rail_profile_identifier,
-        specification.rail_profile_identifier, "rail profile identifier",
-        vehicle);
-    RequireClosedLogicalIdentifier(
-        startup_binding.wheel_rail_contact_strategy_identifier,
-        specification.contact_strategy_identifier,
-        "wheel-rail contact strategy identifier", vehicle);
+    RequireMatchingLogicalIdentifier(startup_binding.wheel_profile_identifier,
+                                     record.wheel.profile.profile_identifier,
+                                     "wheel profile identifier", vehicle);
+    RequireMatchingLogicalIdentifier(startup_binding.rail_profile_identifier,
+                                     record.rail.profile.profile_identifier,
+                                     "rail profile identifier", vehicle);
+    RequireMatchingLogicalIdentifier(startup_binding.wheel_rail_contact_strategy_identifier,
+                                     record.computation.contact_strategy_identifier,
+                                     "wheel-rail contact strategy identifier", vehicle);
     if (!std::isfinite(rail_profile_reference_vertical_offset_meters)) {
-        Reject(vehicle,
-               "the rail profile reference vertical offset is not finite");
+        Reject(vehicle, "the rail profile reference vertical offset is not finite");
     }
 
-    ProfilePoints wheel_profile = LoadProfilePointsFromJsonFile(
-        orvd_data_root / specification.wheel_profile_relative_path);
-    ProfilePoints rail_profile = LoadProfilePointsFromJsonFile(
-        orvd_data_root / specification.rail_profile_relative_path);
-    RequireLoadedIdentityAndRole(
-        wheel_profile, specification.wheel_profile_identifier,
-        ProfileRole::kWheel, "wheel profile", vehicle);
-    RequireLoadedIdentityAndRole(
-        rail_profile, specification.rail_profile_identifier,
-        ProfileRole::kRail, "rail profile", vehicle);
+    ProfilePoints wheel_profile =
+        LoadProfilePointsFromJsonFile(orvd_data_root / record.wheel.profile.profile_path);
+    ProfilePoints rail_profile =
+        LoadProfilePointsFromJsonFile(orvd_data_root / record.rail.profile.profile_path);
+    RequireLoadedIdentityAndRole(wheel_profile, record.wheel.profile.profile_identifier,
+                                 ProfileRole::kWheel, "wheel profile", vehicle);
+    RequireLoadedIdentityAndRole(rail_profile, record.rail.profile.profile_identifier,
+                                 ProfileRole::kRail, "rail profile", vehicle);
 
-    const RailGaugeDatum right_rail_gauge_datum =
-        wheel_rail_contact::ComputeRailGaugeDatum(
-            rail_profile, specification.track_gauge_meters,
-            specification.gauge_measuring_depth_meters,
-            specification.pose_rail_cant_radians, WheelSide::kRight);
-    const RailGaugeDatum left_rail_gauge_datum =
-        wheel_rail_contact::ComputeRailGaugeDatum(
-            rail_profile, specification.track_gauge_meters,
-            specification.gauge_measuring_depth_meters,
-            specification.pose_rail_cant_radians, WheelSide::kLeft);
-    const double nominal_radius =
-        specification.contact_configuration.geometry
-            .nominal_rolling_radius_meters;
+    const RailGaugeDatum right_rail_gauge_datum = wheel_rail_contact::ComputeRailGaugeDatum(
+        rail_profile, record.rail.track_gauge_meters, record.rail.gauge_measuring_depth_meters,
+        record.rail.pose_rail_cant_radians, WheelSide::kRight);
+    const RailGaugeDatum left_rail_gauge_datum = wheel_rail_contact::ComputeRailGaugeDatum(
+        rail_profile, record.rail.track_gauge_meters, record.rail.gauge_measuring_depth_meters,
+        record.rail.pose_rail_cant_radians, WheelSide::kLeft);
+    const double nominal_radius = contact_configuration.geometry.nominal_rolling_radius_meters;
     const WheelRailPoseConstants right_pose_constants = MakePoseConstants(
-        right_rail_gauge_datum, WheelSide::kRight,
-        rail_profile_reference_vertical_offset_meters,
-        specification.wheel_lateral_datum_magnitude_meters, nominal_radius);
+        right_rail_gauge_datum, WheelSide::kRight, rail_profile_reference_vertical_offset_meters,
+        record.wheel.wheel_lateral_datum_magnitude_meters, nominal_radius);
     const WheelRailPoseConstants left_pose_constants = MakePoseConstants(
-        left_rail_gauge_datum, WheelSide::kLeft,
-        rail_profile_reference_vertical_offset_meters,
-        specification.wheel_lateral_datum_magnitude_meters, nominal_radius);
+        left_rail_gauge_datum, WheelSide::kLeft, rail_profile_reference_vertical_offset_meters,
+        record.wheel.wheel_lateral_datum_magnitude_meters, nominal_radius);
 
     auto right_model = std::make_unique<WheelRailContactModel>(
-        wheel_profile, rail_profile, WheelSide::kRight,
-        kProductionWheelProfilePreprocessingConfiguration,
-        specification.contact_configuration);
+        wheel_profile, rail_profile, WheelSide::kRight, settings.wheel_profile_preprocessing,
+        contact_configuration);
     auto left_model = std::make_unique<WheelRailContactModel>(
-        wheel_profile, rail_profile, WheelSide::kLeft,
-        kProductionWheelProfilePreprocessingConfiguration,
-        specification.contact_configuration);
-    auto runtime_personality = std::make_unique<
-        wheel_rail_contact::WheelRailContactRuntimePersonality>(
-        std::move(right_model), std::move(left_model), right_pose_constants,
-        left_pose_constants, specification.rail_profile_origin_mode);
+        wheel_profile, rail_profile, WheelSide::kLeft, settings.wheel_profile_preprocessing,
+        contact_configuration);
+    auto runtime_personality =
+        std::make_unique<wheel_rail_contact::WheelRailContactRuntimePersonality>(
+            std::move(right_model), std::move(left_model), right_pose_constants,
+            left_pose_constants, record.rail.profile_origin_mode);
 
     return std::make_unique<BoundWheelRailContact>(BoundWheelRailContact{
         .binding = startup_binding,
-        .contact_configuration =
-            std::move(specification.contact_configuration),
-        .wheel_profile_preprocessing_configuration =
-            kProductionWheelProfilePreprocessingConfiguration,
-        .track_gauge_meters = specification.track_gauge_meters,
-        .gauge_measuring_depth_meters =
-            specification.gauge_measuring_depth_meters,
-        .pose_rail_cant_radians = specification.pose_rail_cant_radians,
+        .contact_configuration = contact_configuration,
+        .wheel_profile_preprocessing_configuration = settings.wheel_profile_preprocessing,
+        .track_gauge_meters = record.rail.track_gauge_meters,
+        .gauge_measuring_depth_meters = record.rail.gauge_measuring_depth_meters,
+        .pose_rail_cant_radians = record.rail.pose_rail_cant_radians,
         .right_rail_gauge_datum = right_rail_gauge_datum,
         .left_rail_gauge_datum = left_rail_gauge_datum,
         .runtime_personality = std::move(runtime_personality),

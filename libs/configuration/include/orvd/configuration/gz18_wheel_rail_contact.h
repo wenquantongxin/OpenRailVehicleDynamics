@@ -96,15 +96,14 @@ class Gz18WheelRailContact {
     std::unique_ptr<internal::BoundWheelRailContact> implementation_;
 };
 
-// Loads the two GZ18 JSON profiles from an explicitly supplied ORVD data root,
-// checks the start-up record's three logical identities against those assets,
-// derives the two rail gauge datums and builds the immutable side models.
+// Loads the installed GZ18 contact record and its two profiles from an explicit
+// data root, checks the start-up binding against that record, derives the rail
+// gauge datums and builds the immutable side models.
 //
 // `orvd_data_root` is the directory containing `vehicle_library` and
 // `track_library`. It is never searched for, read from an environment variable
 // or compiled into the library. The three binding strings are identities rather
-// than paths; path-like spellings are refused before the closed GZ18 mapping is
-// consulted.
+// than paths; profile paths and physical parameters come from the contact record.
 //
 // Throws std::runtime_error when an asset cannot be read. Throws
 // std::invalid_argument when an identity, asset role, asset-internal identifier,

@@ -83,6 +83,23 @@ add_executable(scene_stream_installation_smoke scene_stream_installation_smoke.c
 target_compile_features(scene_stream_installation_smoke PRIVATE cxx_std_23)
 target_link_libraries(scene_stream_installation_smoke PRIVATE ORVD::scene_stream)
 
+# The vehicle project must be consumable from the install alone: its headers,
+# its archive and the configuration closure it carries, with no other ORVD
+# target supplying a missing include or link dependency.
+add_executable(vehicle_project_installation_smoke
+    vehicle_project_installation_smoke.cc)
+target_compile_features(vehicle_project_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(vehicle_project_installation_smoke PRIVATE ORVD::vehicle_project)
+
+# The editing session must be consumable from the install alone as well: its
+# headers, its archive and the vehicle project and assembly closure it
+# carries, checked and drawn rather than merely linked.
+add_executable(vehicle_project_editing_installation_smoke
+    vehicle_project_editing_installation_smoke.cc)
+target_compile_features(vehicle_project_editing_installation_smoke PRIVATE cxx_std_23)
+target_link_libraries(vehicle_project_editing_installation_smoke
+    PRIVATE ORVD::vehicle_project_editing)
+
 # This pair is a positive control for the installed-artifact dependency gate.
 # The executable calls an exported function, so linkers cannot discard the
 # Drake-identified shared library as unused.

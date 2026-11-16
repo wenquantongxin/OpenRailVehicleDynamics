@@ -2,11 +2,13 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 #include "orvd/configuration/consist_definition.h"
+#include "orvd/configuration/vehicle_contact_topology.h"
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/forces/independent_wheel_active_torque_plan.h"
 #include "orvd/forces/vehicle_force_plan.h"
@@ -105,11 +107,16 @@ class AssembledVehicleSystem {
     [[nodiscard]] const std::vector<VehicleInstanceBinding>& instance_bindings() const {
         return instance_bindings_;
     }
+    // Topology checked during start-up-free assembly; absent when no contact
+    // declaration was supplied. This does not create a contact force plan.
+    [[nodiscard]] const VehicleContactTopology* checked_contact_topology() const {
+        return checked_contact_topology_ ? &*checked_contact_topology_ : nullptr;
+    }
 
    private:
      friend class internal::VehicleInstanceAssembler;
-     friend std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(const VehicleDefinition&,
-                                                                          double);
+     friend std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
+         const VehicleDefinition&, double, const VehicleContactDeclaration*);
 
      AssembledVehicleSystem(
          std::unique_ptr<multibody_model::MultibodyModel> model,
@@ -118,7 +125,8 @@ class AssembledVehicleSystem {
          std::unique_ptr<forces::IndependentWheelActiveTorquePlan> active_torque_plan,
          std::unique_ptr<system_assembly::SystemInstance> system,
          std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan,
-         std::vector<VehicleInstanceBinding> instance_bindings);
+         std::vector<VehicleInstanceBinding> instance_bindings,
+         std::optional<VehicleContactTopology> checked_contact_topology = std::nullopt);
 
      static std::unique_ptr<AssembledVehicleSystem> AssembleWithWheelRailContact(
          const VehicleDefinition& vehicle, std::vector<VehicleInstanceBinding> instance_bindings,
@@ -141,6 +149,7 @@ class AssembledVehicleSystem {
      std::unique_ptr<system_assembly::SystemInstance> system_;
      std::unique_ptr<system_assembly::CompiledSystemPlan> compiled_plan_;
      std::vector<VehicleInstanceBinding> instance_bindings_;
+     std::optional<VehicleContactTopology> checked_contact_topology_;
 };
 
 // Assembles the model, the force plan, the system instance and the compiled
@@ -154,11 +163,16 @@ class AssembledVehicleSystem {
 // assembled — not here.
 //
 // The description is read once and not retained.
+// An optional contact declaration is checked against that same description;
+// the system owns the resulting topology. No profile files, rail datum, line
+// or start-up state are needed for this geometric check.
 //
 // Throws whatever `AssembleVehicleMultibodyModel` and `BuildVehicleForcePlan`
-// throw for a description this layer cannot accept.
+// throw for a description this layer cannot accept, and the declaration
+// errors reported by `BuildVehicleContactTopology`.
 [[nodiscard]] std::unique_ptr<AssembledVehicleSystem> AssembleVehicleSystem(
     const VehicleDefinition& vehicle,
-    double gravitational_acceleration_magnitude_meters_per_second_squared);
+    double gravitational_acceleration_magnitude_meters_per_second_squared,
+    const VehicleContactDeclaration* contact_declaration = nullptr);
 
 }  // namespace orvd::configuration

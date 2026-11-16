@@ -35,9 +35,9 @@ inline constexpr std::string_view kIrwWheelRailContactStrategyIdentifier =
 
 // The installed IRW contact personality resolved against one start-up
 // binding. It owns the prepared left/right S1002-UIC60 contact models and all
-// fixed contact inputs. Axle-bridge carriers, independently rotating wheel
-// bodies and their revolute joints remain topology bindings of the closed IRW
-// vehicle-contact scenario rather than properties inferred by this object.
+// fixed contact inputs. Carrier bodies and wheel joints are declared in the
+// contact record and checked against the mechanical definition by scenario
+// assembly.
 class IrwWheelRailContact {
    public:
     ~IrwWheelRailContact();
@@ -85,10 +85,10 @@ class IrwWheelRailContact {
     std::unique_ptr<internal::BoundWheelRailContact> implementation_;
 };
 
-// Loads the IRW S1002 wheel and shared UIC60 rail JSON profiles from an
-// explicitly supplied ORVD data root, closes the three logical identities and
-// builds the immutable side models. The identifiers are not paths and the
-// function never searches the process environment for assets.
+// Loads the installed IRW contact record and its profiles from an explicit
+// data root, checks the start-up binding against that record and builds the
+// immutable side models. The identifiers are not paths and the function never
+// searches the process environment for assets.
 //
 // Throws std::runtime_error when an asset cannot be read. Throws
 // std::invalid_argument when a binding, asset or typed IRW contact input is

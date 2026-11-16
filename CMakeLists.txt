@@ -132,6 +132,9 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # Track geometry and the wheel-rail contact core also feed the typed force
 # plans; configuration consumes those lower layers and equilibrium/tests come
 # last.
+# vehicle_project edits configuration values and generates the records a
+# vehicle assembly consumes. vehicle_project_editing is the command layer over
+# one project: validated property edits with undo, checking and a preview.
 # These listed directories are the product module roots. Every non-imported
 # target defined in one of them or a descendant is subject to the Drake boundary
 # gate below. A new target inside a listed module needs no registration; a new
@@ -152,6 +155,8 @@ set(ORVD_PRODUCT_MODULE_DIRECTORIES
     libs/system_assembly
     libs/integrators
     libs/configuration
+    libs/vehicle_project
+    libs/vehicle_project_editing
     libs/scene_observation
     libs/scene_record
     libs/scene_stream
@@ -167,6 +172,7 @@ endforeach()
 add_subdirectory(tools/profile_conversion)
 add_subdirectory(tools/dynamics_qualification)
 add_subdirectory(tools/scene_export)
+add_subdirectory(tools/vehicle_modeling_service)
 
 option(ORVD_BUILD_SIMPACK_REALTIME_TOOLS
        "Build the optional SIMPACK Realtime component and tools" OFF)
@@ -227,6 +233,8 @@ set(ORVD_INSTALL_TARGETS
     orvd_track_irregularity
     orvd_wheel_rail_contact
     orvd_configuration
+    orvd_vehicle_project
+    orvd_vehicle_project_editing
     orvd_multibody_runtime
     orvd_multibody_model
     orvd_forces
@@ -244,7 +252,8 @@ install(TARGETS ${ORVD_INSTALL_TARGETS}
 
 foreach(orvd_public_module
         control actuation track_geometry track_irregularity wheel_rail_contact
-        configuration multibody_runtime multibody_model forces system_assembly
+        configuration vehicle_project vehicle_project_editing multibody_runtime
+        multibody_model forces system_assembly
         integrators scene_observation scene_record scene_stream)
     install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/libs/${orvd_public_module}/include/"

@@ -3,101 +3,10 @@
 #include <memory>
 #include <utility>
 
+#include "orvd/configuration/load_vehicle_contact_record.h"
 #include "wheel_rail_contact_personality_assembly.h"
 
 namespace orvd::configuration {
-namespace {
-
-using wheel_rail_contact::ContactGeometryConfiguration;
-using wheel_rail_contact::ContactMaterial;
-using wheel_rail_contact::CreepageConfiguration;
-using wheel_rail_contact::FrictionLaw;
-using wheel_rail_contact::NormalContactConfiguration;
-using wheel_rail_contact::OutsideTableRule;
-using wheel_rail_contact::RailProfileOriginMode;
-using wheel_rail_contact::TangentialContactConfiguration;
-using wheel_rail_contact::WheelRailContactConfiguration;
-
-constexpr double kNominalRollingRadiusMeters = 0.43;
-constexpr double kWheelLateralDatumMagnitudeMeters = 0.7465;
-constexpr double kTrackGaugeMeters = 1.435;
-constexpr double kGaugeMeasuringDepthMeters = 0.016;
-constexpr double kPoseRailCantRadians = 0.02499479361892016;
-
-constexpr std::string_view kWheelProfileRelativePath =
-    "vehicle_library/irw/wheel_profiles/irw_reference_wheel_profile.json";
-constexpr std::string_view kRailProfileRelativePath =
-    "track_library/rail_profiles/uic60_rail_profile.json";
-
-WheelRailContactConfiguration MakeIrwContactConfiguration() {
-    const ContactMaterial material{
-        .youngs_modulus_pascals = 210000000000.0,
-        .poisson_ratio = 0.28,
-    };
-    const ContactGeometryConfiguration geometry{
-        .nominal_rolling_radius_meters = kNominalRollingRadiusMeters,
-        .envelope_bin_width_meters = 2.0e-5,
-        .outline_sample_count = 1000,
-        .contact_gap_epsilon_meters = 0.0,
-        .island_merge_gap_tolerance_meters = 1.0e-6,
-        .island_quadrature_stations = 120,
-        .rail_cant_radians = 0.024994792,
-    };
-    const NormalContactConfiguration normal{
-        .material = material,
-        .penetration_equivalence_factor =
-            internal::kEecPenetrationEquivalenceFactor,
-        .reference_damping_newton_seconds_per_meter = 100000.0,
-        .reference_stiffness_newtons_per_meter = 500000000.0,
-        .damping_activation_penetration_meters = 1.0e-12,
-    };
-    const CreepageConfiguration creepage{
-        .minimum_reference_speed_meters_per_second = 0.01,
-    };
-    const FrictionLaw friction{
-        .static_coefficient = 0.3,
-        .limiting_fraction = 0.4,
-        .decay_per_meter_per_second = 0.55,
-        .minimum_reference_speed_meters_per_second = 0.01,
-    };
-    const TangentialContactConfiguration tangential{
-        .longitudinal_cells = 21,
-        .lateral_strips = 21,
-        .refinement_width = 0.01,
-        .material = material,
-    };
-    return WheelRailContactConfiguration{
-        .geometry = geometry,
-        .normal = normal,
-        .creepage = creepage,
-        .friction = friction,
-        .tangential = tangential,
-        .material = material,
-        .creep_coefficients_outside_table = OutsideTableRule::kAsymptotic,
-    };
-}
-
-internal::WheelRailContactPersonalitySpecification MakeIrwSpecification() {
-    return internal::WheelRailContactPersonalitySpecification{
-        .diagnostic_vehicle_name = "IRW",
-        .wheel_profile_identifier = kIrwWheelProfileIdentifier,
-        .rail_profile_identifier = kIrwRailProfileIdentifier,
-        .contact_strategy_identifier =
-            kIrwWheelRailContactStrategyIdentifier,
-        .wheel_profile_relative_path = kWheelProfileRelativePath,
-        .rail_profile_relative_path = kRailProfileRelativePath,
-        .contact_configuration = MakeIrwContactConfiguration(),
-        .track_gauge_meters = kTrackGaugeMeters,
-        .gauge_measuring_depth_meters = kGaugeMeasuringDepthMeters,
-        .pose_rail_cant_radians = kPoseRailCantRadians,
-        .wheel_lateral_datum_magnitude_meters =
-            kWheelLateralDatumMagnitudeMeters,
-        .rail_profile_origin_mode = RailProfileOriginMode::kProfileCoordinate,
-    };
-}
-
-}  // namespace
-
 IrwWheelRailContact::IrwWheelRailContact(
     std::unique_ptr<internal::BoundWheelRailContact> implementation)
     : implementation_(std::move(implementation)) {}
@@ -160,14 +69,13 @@ IrwWheelRailContact::ReleaseRuntimePersonality() {
 }
 
 std::unique_ptr<IrwWheelRailContact> AssembleIrwWheelRailContact(
-    const std::filesystem::path& orvd_data_root,
-    const StartupWheelRailBinding& startup_binding,
+    const std::filesystem::path& orvd_data_root, const StartupWheelRailBinding& startup_binding,
     double rail_profile_reference_vertical_offset_meters) {
-    return std::unique_ptr<IrwWheelRailContact>(new IrwWheelRailContact(
-        internal::AssembleBoundWheelRailContact(
-            orvd_data_root, startup_binding,
-            rail_profile_reference_vertical_offset_meters,
-            MakeIrwSpecification())));
+    return std::unique_ptr<IrwWheelRailContact>(
+        new IrwWheelRailContact(internal::AssembleBoundWheelRailContact(
+            orvd_data_root, startup_binding, rail_profile_reference_vertical_offset_meters,
+            LoadVehicleContactRecordFromJsonFile(
+                orvd_data_root / internal::kIrwContactRecordRelativePath))));
 }
 
 }  // namespace orvd::configuration
