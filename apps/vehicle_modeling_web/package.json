@@ -1,0 +1,28 @@
+{
+  "name": "orvd-vehicle-modeling-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types --test \"tests/*.test.ts\"",
+    "serve": "node --experimental-strip-types server/main.ts",
+    "serve:reference": "node --experimental-strip-types server/main.ts --reference-vehicles reference_vehicles.json",
+    "check-service": "node --experimental-strip-types scripts/check_service.ts"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.186.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "name": "GZ18",
+    "title": { "en": "Bogie vehicle with rigid wheelsets", "zh": "刚性轮对转向架车辆" },
+    "vehicle_definition_path": "../../vehicle_library/gz18/vehicle_definition.json",
+    "startup_state_path": "../../vehicle_library/gz18/startup_states/moving_startup_60kmh.json",
+    "contact_record_path": "../../vehicle_library/gz18/contact_record.json",
+    "visual_definition_path": "../../vehicle_library/gz18/visualization/visual_definition.json"
+  },
+  {
+    "name": "IRW",
+    "title": { "en": "Bogie vehicle with independently rotating wheels", "zh": "独立旋转车轮转向架车辆" },
+    "vehicle_definition_path": "../../vehicle_library/irw/vehicle_definition.json",
+    "startup_state_path": "../../vehicle_library/irw/startup_states/moving_startup_60kmh.json",
+    "contact_record_path": "../../vehicle_library/irw/contact_record.json",
+    "visual_definition_path": "../../vehicle_library/irw/visualization/visual_definition.json"
+  }
+]
