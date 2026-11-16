@@ -7,9 +7,9 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "test": "node --experimental-strip-types --test \"tests/*.test.ts\"",
-    "serve": "node --experimental-strip-types server/main.ts",
-    "serve:reference": "node --experimental-strip-types server/main.ts --reference-vehicles reference_vehicles.json",
-    "check-service": "node --experimental-strip-types scripts/check_service.ts"
+    "serve": "node --experimental-strip-types server/vehicle_modeling_server_command_line.ts",
+    "serve:reference": "node --experimental-strip-types server/vehicle_modeling_server_command_line.ts --reference-vehicles reference_vehicle_catalogue.json",
+    "check-service": "node --experimental-strip-types scripts/check_vehicle_modeling_service_against_interface.ts"
   },
   "dependencies": {
     "react": "19.3.1",

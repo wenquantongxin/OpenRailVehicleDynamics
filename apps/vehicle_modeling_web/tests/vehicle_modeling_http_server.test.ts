@@ -1,0 +1,172 @@
+import assert from 'node:assert/strict';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+
+import { createServer as createViteServer } from 'vite';
+
+import type { ReferenceVehicleCatalogueEntry } from '../server/read_reference_vehicle_catalogue.ts';
+import { startVehicleModelingHttpServer } from '../server/vehicle_modeling_http_server.ts';
+import { modellingServerProxy } from '../vite.config.ts';
+
+// The server against a stand-in service: a child process that answers each
+// line after a delay the request chooses, says how many requests it held when
+// one arrived and how many it has received, and ends with a chosen exit code
+// on request.
+
+const fakeServiceSource = `
+const lines = require('node:readline').createInterface({ input: process.stdin });
+let held = 0;
+let received = 0;
+lines.on('line', (line) => {
+  const request = JSON.parse(line);
+  if (request.command === 'end') process.exit(request.code);
+  const heldOnArrival = held++;
+  const receivedSoFar = ++received;
+  setTimeout(() => {
+    held--;
+    process.stdout.write(JSON.stringify({ id: request.id, ok: true, request, heldOnArrival, received: receivedSoFar }) + '\\n');
+  }, request.delay ?? 0);
+});
+`;
+
+async function fixture() {
+  const directory = await mkdtemp(join(tmpdir(), 'orvd-modelling-server-'));
+  const servicePath = join(directory, 'fake_service.cjs');
+  await writeFile(servicePath, `#!${process.execPath}\n${fakeServiceSource}`);
+  await chmod(servicePath, 0o755);
+  const staticDirectory = join(directory, 'dist');
+  await mkdir(staticDirectory);
+  await writeFile(join(staticDirectory, 'index.html'), '<title>modelling</title>');
+  await writeFile(join(directory, 'secret.txt'), 'outside dist');
+  const visualDefinitionPath = join(directory, 'visual.json');
+  await writeFile(visualDefinitionPath, '{"length_unit": "meter", "parts": []}');
+  const referenceVehicles: ReferenceVehicleCatalogueEntry[] = [
+    {
+      name: 'A',
+      title: { en: 'Vehicle A', zh: '车辆 A' },
+      openArguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json' },
+      visualDefinitionPath,
+    },
+    {
+      name: 'B',
+      title: { en: 'Vehicle B', zh: '车辆 B' },
+      openArguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json' },
+      visualDefinitionPath: null,
+    },
+  ];
+  const endings: string[] = [];
+  const server = await startVehicleModelingHttpServer({ servicePath, host: '127.0.0.1', port: 0, staticDirectory, referenceVehicles }, (ending) => endings.push(ending));
+  const origin = `http://127.0.0.1:${server.port}`;
+  return { directory, server, origin, endings };
+}
+
+function command(origin: string, body: string, signal?: AbortSignal): Promise<Response> {
+  return fetch(`${origin}/api/command`, { method: 'POST', body, signal });
+}
+
+function commandFromPage(target: string, pageOrigin: string, id: number): Promise<Response> {
+  return fetch(`${target}/api/command`, { method: 'POST', headers: { Origin: pageOrigin }, body: JSON.stringify({ id, command: 'echo' }) });
+}
+
+test('commands are relayed one at a time, each answered with its own answer line', { timeout: 10000 }, async () => {
+  const { directory, server, origin } = await fixture();
+  try {
+    // Later requests answer sooner: only strict one-at-a-time relaying keeps every answer with its request.
+    const answers = await Promise.all(
+      Array.from({ length: 12 }, async (_, id) => (await command(origin, JSON.stringify({ id, command: 'echo', delay: 24 - 2 * id }))).json()),
+    );
+    answers.forEach((answer, id) => {
+      assert.equal(answer.id, id);
+      assert.equal(answer.heldOnArrival, 0);
+    });
+    // A request laid out over several lines still reaches the service as one line.
+    const spread = await (await command(origin, '{\n  "id": 99,\n  "command": "echo",\n  "nested": {"a": [1,\n 2]}\n}')).json();
+    assert.deepEqual(spread.request, { id: 99, command: 'echo', nested: { a: [1, 2] } });
+    assert.equal((await command(origin, 'not json')).status, 400);
+  } finally {
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('reference vehicles, their visual definitions and the built files are served; nothing else is', { timeout: 10000 }, async () => {
+  const { directory, server, origin } = await fixture();
+  try {
+    const listed = await (await fetch(`${origin}/api/reference_vehicles`)).json();
+    assert.deepEqual(listed, [
+      {
+        name: 'A',
+        title: { en: 'Vehicle A', zh: '车辆 A' },
+        open_arguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json' },
+        visual_definition_available: true,
+      },
+      {
+        name: 'B',
+        title: { en: 'Vehicle B', zh: '车辆 B' },
+        open_arguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json' },
+        visual_definition_available: false,
+      },
+    ]);
+    assert.equal(await (await fetch(`${origin}/api/reference_vehicles/A/visual_definition`)).text(), '{"length_unit": "meter", "parts": []}');
+    assert.match(await (await fetch(`${origin}/?vehicle=A`)).text(), /modelling/);
+    for (const path of ['/api/reference_vehicles/B/visual_definition', '/api/reference_vehicles/C/visual_definition', '/api/other', '/%2e%2e/secret.txt', '/missing.js']) {
+      assert.equal((await fetch(`${origin}${path}`)).status, 404, path);
+    }
+  } finally {
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a service that ends is reported once, with how it ended', { timeout: 10000 }, async () => {
+  const { directory, server, origin, endings } = await fixture();
+  const unanswered = new AbortController();
+  try {
+    command(origin, JSON.stringify({ id: 1, command: 'end', code: 3 }), unanswered.signal).catch(() => {});
+    for (let wait = 0; wait < 100 && endings.length === 0; ++wait) await new Promise((done) => setTimeout(done, 20));
+    assert.deepEqual(endings, ['exited with code 3']);
+  } finally {
+    unanswered.abort();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a command from a page of another origin is refused before it reaches the service', { timeout: 10000 }, async () => {
+  const { directory, server, origin } = await fixture();
+  try {
+    assert.equal((await commandFromPage(origin, 'http://elsewhere.invalid', 1)).status, 403);
+    assert.equal((await commandFromPage(origin, `http://localhost:${server.port}`, 2)).status, 403);
+    assert.equal((await commandFromPage(origin, 'null', 3)).status, 403);
+    const own = await (await commandFromPage(origin, origin, 4)).json();
+    assert.equal(own.id, 4);
+    assert.equal(own.received, 1, 'the refused commands never reached the service');
+  } finally {
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('pages of the Vite development server reach the service through its proxy', { timeout: 10000 }, async () => {
+  const { directory, server, origin } = await fixture();
+  // The development configuration's own proxy, pointed at this server.
+  const vite = await createViteServer({
+    configFile: false,
+    logLevel: 'silent',
+    server: { host: '127.0.0.1', port: 0, watch: null, proxy: { '/api': { ...modellingServerProxy, target: origin } } },
+  });
+  try {
+    await vite.listen();
+    const viteOrigin = `http://127.0.0.1:${(vite.httpServer!.address() as AddressInfo).port}`;
+    const answer = await (await commandFromPage(viteOrigin, viteOrigin, 5)).json();
+    assert.equal(answer.id, 5);
+    assert.equal((await commandFromPage(viteOrigin, 'http://elsewhere.invalid', 6)).status, 403);
+  } finally {
+    await vite.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
