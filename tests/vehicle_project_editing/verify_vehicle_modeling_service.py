@@ -4,11 +4,17 @@ Opens GZ18 with its reference contact record, lists the element kinds, reads,
 edits, creates, renames, removes, checks, previews, undoes, redoes and refuses,
 asserting the protocol's structure and its revision behaviour rather than any
 numeric result. Missing inputs keep the open session; mismatched contact
-declarations open and are reported by checking.
+declarations open and are reported by checking. Then saves GZ18 as a project,
+edited and left failing its check, into a directory of projects, lists it,
+and opens each project again after another vehicle to find everything an
+interface reads of it as it was saved; follows the session and its unsaved
+changes throughout, the names Save As gives surviving undo and redo; and finds
+the reference vehicles' files unchanged.
 """
 import json
 import math
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -29,6 +35,10 @@ DRAWING_LIST_KINDS = {
     "wheels": {"contact_interface"},
 }
 DRAWN_ELEMENT_KINDS = set().union(*DRAWING_LIST_KINDS.values())
+# The envelope fields that describe the session after a command; all null
+# while nothing is open.
+SESSION_FIELDS = ("revision", "can_undo", "can_redo", "has_unsaved_changes")
+NOTHING_OPEN = (None, None, None, None)
 CURVE = "saturated_piecewise_linear_damper_curve"
 # The description fields each value kind adds to name, value_kind and editable.
 DESCRIPTION_FIELDS_OF_VALUE_KIND = {
@@ -53,7 +63,7 @@ class Service:
         response = json.loads(self.process.stdout.readline())
         assert response["id"] == self.last_id, response
         if response["ok"]:
-            assert set(response) == {"id", "ok", "revision", "can_undo", "can_redo", "result"}
+            assert set(response) == {"id", "ok", *SESSION_FIELDS, "result"}, response
         else:
             assert set(response) == {"id", "ok", "error"}, response
             assert set(response["error"]) == {"element", "property", "message"}, response
@@ -69,6 +79,15 @@ class Service:
         response = self.request(command, **arguments)
         assert not response["ok"], response
         return response["error"]
+
+    def finish(self):
+        self.process.stdin.close()
+        assert self.process.stdout.read() == "", "the service wrote more than its responses"
+        assert self.process.wait(timeout=60) == 0, self.process.stderr.read()
+
+
+def session_of(response):
+    return tuple(response[field] for field in SESSION_FIELDS)
 
 
 def is_vector(value):
@@ -157,14 +176,172 @@ def require_drawings_name_outline_elements(preview, outline):
         element for element in outline_elements if element[0] in DRAWN_ELEMENT_KINDS)
 
 
+def everything_read_of(service):
+    """What an interface reads of the open project: the outline, every
+    element's properties, the check, the preview without the revision it was
+    computed from, and the visual definition."""
+    outline = service.accepted("get_outline")["result"]
+    properties = [service.accepted("get_properties", element=element)["result"]["properties"]
+                  for element in outline["elements"]]
+    check = service.accepted("check")["result"]
+    preview = service.accepted("get_preview")["result"]["preview"]
+    if preview is not None:
+        preview = {key: value for key, value in preview.items() if key != "project_revision"}
+    visual_definition = service.accepted("get_visual_definition")["result"]["visual_definition"]
+    return {"outline": outline, "properties": properties, "check": check, "preview": preview,
+            "visual_definition": visual_definition}
+
+
+def verify_saving_and_reopening(executable, gz18, irw, work_directory):
+    """Save As, Save and opening a project through commands alone, and what the
+    session and its unsaved changes say at each step."""
+    projects = work_directory / "vehicle_projects"
+    projects.mkdir()
+    inputs = work_directory / "inputs"
+    inputs.mkdir()
+    service = Service(executable)
+
+    # While nothing is open, only the session and the list of projects are
+    # answered, with the session fields null.
+    nothing_open = service.accepted("get_session")
+    assert nothing_open["result"] == {"open": False} and session_of(nothing_open) == NOTHING_OPEN
+    listed = service.accepted("list_vehicle_projects", directory=str(projects))
+    assert listed["result"] == {"vehicle_projects": []} and session_of(listed) == NOTHING_OPEN
+    for command in ("save_vehicle_project", "get_visual_definition"):
+        service.refused(command)
+    service.refused("list_vehicle_projects", directory=str(projects / "missing_directory"))
+
+    opened = service.accepted("open_vehicle", **gz18)
+    assert session_of(opened) == (0, False, False, False)
+    assert service.accepted("get_session")["result"] == {"open": True,
+                                                         "vehicle_project_file": None}
+    visual_definition = service.accepted("get_visual_definition")["result"]["visual_definition"]
+    assert visual_definition == json.loads(Path(gz18["visual_definition_path"]).read_text())
+
+    # Opening needs a visual definition path, which may be null, and a file
+    # holding a JSON object; a refused open keeps the open session.
+    not_an_object = inputs / "visual_definition_array.json"
+    not_an_object.write_text("[]\n")
+    without_visual_definition = {key: value for key, value in gz18.items()
+                                 if key != "visual_definition_path"}
+    for arguments in (without_visual_definition,
+                      {**gz18, "visual_definition_path": str(not_an_object)}):
+        refusal = service.refused("open_vehicle", **arguments)
+        assert refusal["element"] is None and refusal["property"] is None
+        assert session_of(service.accepted("get_outline")) == (0, False, False, False)
+
+    # A vehicle opened from its files has no project file to save to.
+    service.refused("save_vehicle_project")
+    suspension = {"kind": "translational_spring_damper",
+                  "name": "front_leading_left_primary_suspension"}
+    stiffness = next(prop["value"] for prop in service.accepted(
+        "get_properties", element=suspension)["result"]["properties"]
+        if prop["name"] == "stiffness_newtons_per_meter")
+
+    def edit_stiffness(factor):
+        return service.accepted("set_property", element=suspension,
+                                property="stiffness_newtons_per_meter",
+                                value=[component * factor for component in stiffness])
+
+    assert session_of(edit_stiffness(1.5)) == (1, True, False, True)
+    assert session_of(service.accepted("undo")) == (2, False, True, False)
+    assert session_of(service.accepted("redo")) == (3, True, False, True)
+
+    # A name that is not a project name is refused and writes nothing.
+    refusal = service.refused("save_vehicle_project_as", directory=str(projects),
+                              name="edited gz18")
+    assert refusal["element"] is None and refusal["property"] is None
+    assert session_of(service.accepted("get_outline")) == (3, True, False, True)
+    assert list(projects.iterdir()) == []
+
+    # Save As names the vehicle after the project in one revision without an
+    # undo step, and the session is then the project file's, with nothing
+    # unsaved.
+    saved_as = service.accepted("save_vehicle_project_as", directory=str(projects),
+                                name="edited_gz18")
+    assert session_of(saved_as) == (4, True, False, False) and saved_as["result"] == {}
+    assert service.accepted("get_outline")["result"]["vehicle_name"] == "edited_gz18"
+    project_file = {"directory": str(projects), "name": "edited_gz18"}
+    assert service.accepted("get_session")["result"] == {"open": True,
+                                                         "vehicle_project_file": project_file}
+    assert service.accepted("list_vehicle_projects", directory=str(projects))["result"] == {
+        "vehicle_projects": ["edited_gz18"]}
+
+    # The names are the project's identity, not an edit: undoing the edit made
+    # before Save As keeps them, and Save writes them again.
+    assert session_of(service.accepted("undo")) == (5, False, True, True)
+    assert service.accepted("get_outline")["result"]["vehicle_name"] == "edited_gz18"
+    assert session_of(service.accepted("save_vehicle_project")) == (5, False, True, False)
+    written = json.loads((projects / "edited_gz18.vehicle_project.json").read_text())
+    assert (written["vehicle_definition"]["vehicle_name"],
+            written["vehicle_definition"]["mechanical_definition_identifier"]) == (
+        "edited_gz18", "edited_gz18")
+    assert session_of(service.accepted("redo")) == (6, True, False, True)
+    assert service.accepted("get_outline")["result"]["vehicle_name"] == "edited_gz18"
+    # Under the names the vehicle has, Save As adds no revision.
+    resaved = service.accepted("save_vehicle_project_as", directory=str(projects),
+                               name="edited_gz18")
+    assert session_of(resaved) == (6, True, False, False)
+
+    # Save, edit, undo leaves nothing unsaved; Save changes no revision.
+    assert session_of(edit_stiffness(2.0)) == (7, True, False, True)
+    assert session_of(service.accepted("undo")) == (8, True, True, False)
+    assert session_of(service.accepted("redo")) == (9, True, False, True)
+    saved = service.accepted("save_vehicle_project")
+    assert session_of(saved) == (9, True, False, False) and saved["result"] == {}
+    as_saved = everything_read_of(service)
+    assert as_saved["check"]["passed"] and as_saved["preview"] is not None
+
+    # Another vehicle, opened without a visual definition, then the project
+    # again: everything as it was saved, in a new session of the file.
+    other = service.accepted("open_vehicle", **{**irw, "visual_definition_path": None})
+    assert session_of(other) == (0, False, False, False)
+    assert service.accepted("get_session")["result"] == {"open": True,
+                                                         "vehicle_project_file": None}
+    assert service.accepted("get_visual_definition")["result"] == {"visual_definition": None}
+    service.refused("open_vehicle_project", directory=str(projects), name="absent_project")
+    assert service.accepted("get_outline")["result"]["vehicle_name"] == "IRW"
+    reopened = service.accepted("open_vehicle_project", **project_file)
+    assert session_of(reopened) == (0, False, False, False) and reopened["result"] == {}
+    assert service.accepted("get_session")["result"] == {"open": True,
+                                                         "vehicle_project_file": project_file}
+    assert everything_read_of(service) == as_saved
+
+    # The same for a project left failing its check.
+    service.accepted("open_vehicle", **gz18)
+    service.accepted("add_element", kind="rigid_body", name="body_of_zero_mass", properties={})
+    assert not service.accepted("check")["result"]["passed"]
+    service.accepted("save_vehicle_project_as", directory=str(projects), name="unfinished_gz18")
+    unfinished = everything_read_of(service)
+    assert not unfinished["check"]["passed"] and unfinished["preview"] is None
+    service.accepted("open_vehicle", **irw)
+    service.accepted("open_vehicle_project", directory=str(projects), name="unfinished_gz18")
+    assert everything_read_of(service) == unfinished
+
+    # Every file the service wrote is a project file in the directory of
+    # projects.
+    assert service.accepted("list_vehicle_projects", directory=str(projects))["result"] == {
+        "vehicle_projects": ["edited_gz18", "unfinished_gz18"]}
+    assert sorted(path.name for path in projects.iterdir()) == [
+        "edited_gz18.vehicle_project.json", "unfinished_gz18.vehicle_project.json"]
+    service.finish()
+
+
 def main():
     executable = Path(sys.argv[1]).resolve()
     vehicle_library = Path(sys.argv[2]).resolve() / "vehicle_library"
+    work_directory = Path(sys.argv[3]).resolve()
+    shutil.rmtree(work_directory, ignore_errors=True)
+    work_directory.mkdir(parents=True)
     gz18, irw = ({"vehicle_definition_path": str(vehicle_library / name / "vehicle_definition.json"),
                   "startup_state_path": str(vehicle_library / name / "startup_states" /
                                             "moving_startup_60kmh.json"),
-                  "contact_record_path": str(vehicle_library / name / "contact_record.json")}
+                  "contact_record_path": str(vehicle_library / name / "contact_record.json"),
+                  "visual_definition_path": str(vehicle_library / name / "visualization" /
+                                                "visual_definition.json")}
                  for name in ("gz18", "irw"))
+    reference_files = {path: path.read_bytes() for name in ("gz18", "irw")
+                       for path in sorted((vehicle_library / name).rglob("*")) if path.is_file()}
     service = Service(executable)
 
     refusal = service.refused("get_outline")
@@ -453,9 +630,11 @@ def main():
     assert irw_preview["project_revision"] == 0
     require_drawings_name_outline_elements(irw_preview, irw_outline)
 
-    service.process.stdin.close()
-    assert service.process.stdout.read() == "", "the service wrote more than its responses"
-    assert service.process.wait(timeout=60) == 0, service.process.stderr.read()
+    service.finish()
+
+    verify_saving_and_reopening(executable, gz18, irw, work_directory)
+    assert {path: path.read_bytes() for path in reference_files} == reference_files, (
+        "a reference vehicle's file changed")
     print("vehicle modelling service protocol passed")
 
 

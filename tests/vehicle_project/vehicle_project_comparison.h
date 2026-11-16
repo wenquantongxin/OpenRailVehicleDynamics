@@ -7,10 +7,11 @@
 #include "orvd/vehicle_project/vehicle_project.h"
 
 // Part-by-part comparison of two vehicle projects: the configuration records
-// member by member (configuration_record_comparison.h), and the placements,
-// the names bodies' shapes are stated under and the grouping tree exactly. A
-// structured binding names every member of each type it compares, so a member
-// added to one stops the tests using it compiling until it is compared too.
+// member by member (configuration_record_comparison.h), and the gravity, the
+// placements, the names bodies' shapes are stated under, the grouping tree and
+// the visual definition's text exactly. A structured binding names every
+// member of each type it compares, so a member added to one stops the tests
+// using it compiling until it is compared too.
 
 namespace orvd::vehicle_project_comparison {
 
@@ -43,16 +44,20 @@ inline bool SameGroups(const std::vector<vehicle_project::ElementGroup>& expecte
 
 inline bool SameProject(const vehicle_project::VehicleProject& expected,
                         const vehicle_project::VehicleProject& actual) {
-    const auto& [vehicle_definition, contact_record, free_body_placements,
-                 visual_definition_body_names, element_groups] = expected;
+    const auto& [vehicle_definition, contact_record, gravitational_acceleration,
+                 free_body_placements, visual_definition_body_names, element_groups,
+                 visual_definition_document] = expected;
     return configuration_record_comparison::Same(vehicle_definition, actual.vehicle_definition) &&
            contact_record.has_value() == actual.contact_record.has_value() &&
            (!contact_record.has_value() ||
             configuration_record_comparison::Same(*contact_record, *actual.contact_record)) &&
+           gravitational_acceleration ==
+               actual.gravitational_acceleration_meters_per_second_squared &&
            std::ranges::equal(free_body_placements, actual.free_body_placements, SamePlacement) &&
            std::ranges::equal(visual_definition_body_names, actual.visual_definition_body_names,
                               SameVisualDefinitionBodyName) &&
-           SameGroups(element_groups, actual.element_groups);
+           SameGroups(element_groups, actual.element_groups) &&
+           visual_definition_document == actual.visual_definition_document;
 }
 
 }  // namespace orvd::vehicle_project_comparison

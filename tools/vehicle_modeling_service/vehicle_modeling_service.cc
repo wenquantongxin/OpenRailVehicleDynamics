@@ -2,9 +2,11 @@
 // modelling tool drives over one vehicle project.
 //
 // The service is deliberately thin. It parses a request, calls
-// orvd::vehicle_project_editing, and writes the answer: all JSON lives here,
-// and every rule an edit follows lives there. It reads a vehicle and never
-// writes a project.
+// orvd::vehicle_project and orvd::vehicle_project_editing, and writes the
+// answer: the protocol's JSON lives here, and every rule an edit, a check or a
+// project file follows lives there. It opens a vehicle from its own files or a
+// project from its project file, and the only files it writes are project
+// files, each <name>.vehicle_project.json in the directory a request names.
 //
 // PROTOCOL
 //
@@ -28,11 +30,18 @@
 //
 // Response to an accepted command
 //   {"id": <id>, "ok": true, "revision": <integer>, "can_undo": <bool>,
-//    "can_redo": <bool>, "result": {...}}
-//   revision, can_undo and can_redo describe the session after the command.
-//   Opening a vehicle starts at revision 0, every accepted edit, undo and redo
-//   adds one, nothing else changes it, and it never decreases: undoing
-//   restores an earlier project, not its revision.
+//    "can_redo": <bool>, "has_unsaved_changes": <bool>, "result": {...}}
+//   revision, can_undo, can_redo and has_unsaved_changes describe the session
+//   after the command. All four are null while nothing is open, when only
+//   get_session and list_vehicle_projects are answered. Opening a vehicle or a
+//   project starts at revision 0; every accepted edit, undo and redo adds one,
+//   and so does a save_vehicle_project_as that changes the vehicle's names;
+//   nothing else changes it, and it never decreases: undoing restores an
+//   earlier project, not its revision. has_unsaved_changes says whether the
+//   project differs from the state last saved or, before any save, from the
+//   state it was opened with. It follows undo and redo: undoing back to that
+//   state leaves nothing unsaved, and an edit made after undoing past it
+//   leaves the changes unsaved until the next save.
 //
 // Response to a refused command
 //   {"id": <id>, "ok": false,
@@ -104,16 +113,43 @@
 //
 // Commands
 //
+//   get_session
+//     result: {"open": false}, or {"open": true, "vehicle_project_file":
+//             {"directory": "<path>", "name": "<name>"} or null}
+//     Never refused, changes nothing. vehicle_project_file is the project file
+//     the session was opened from or last saved as; null for a vehicle opened
+//     from its own files and not saved yet.
+//
+//   list_vehicle_projects  {"directory": "<path>"}
+//     result: {"vehicle_projects": ["<name>", ...]}
+//     The names of the projects saved in the directory, sorted: one for each
+//     file <name>.vehicle_project.json there whose <name> is a project name.
+//     Answered whether or not anything is open; changes nothing. Refused when
+//     the directory cannot be read.
+//
 //   open_vehicle  {"vehicle_definition_path": "<path>",
 //                  "startup_state_path": "<path>",
-//                  "contact_record_path": "<path>"}
+//                  "contact_record_path": "<path>",
+//                  "visual_definition_path": "<path>" or null}
 //     Loads the three records with the strict loaders. The start-up record
-//     supplies drawing placements and gravity; contact declaration problems
-//     are reported by check. Every rigid body's shapes are stated under its
-//     name in the vehicle definition. Opens a new session: revision 0, empty
-//     history, no preview. A refused open keeps the session that was open.
-//     Every other command is refused while no vehicle is open.
+//     supplies drawing placements and the gravity the project is checked
+//     under; contact declaration problems are reported by check. The visual
+//     definition file must hold a JSON object, which becomes the project's
+//     visual definition; with null the project has none. Every rigid body's
+//     shapes are stated under its name in the vehicle definition. Opens a new
+//     session: revision 0, empty history, no preview, no project file and
+//     nothing unsaved. A refused open keeps the session that was open.
 //     result: {}
+//
+//   open_vehicle_project  {"directory": "<path>", "name": "<name>"}
+//     result: {}
+//     Reads the project file of that name in that directory. Reading refuses
+//     only what is wrong with the document; whatever is wrong with the vehicle
+//     is reported by check once it is open. Opens a new session as
+//     open_vehicle does, associated with that file. A refused open keeps the
+//     session that was open.
+//
+//   Every other command is refused while nothing is open.
 //
 //   describe_element_kinds
 //     result: {"element_kinds": [{"kind": <element kind>,
@@ -194,6 +230,27 @@
 //     result: {}
 //     Refused when there is nothing to undo or to redo.
 //
+//   save_vehicle_project
+//     result: {}
+//     Writes the project, whatever state it is in, to the session's project
+//     file, replacing it whole or not at all, and leaves nothing unsaved.
+//     Refused when the session has no project file. Changes no revision.
+//
+//   save_vehicle_project_as  {"directory": "<path>", "name": "<name>"}
+//     result: {}
+//     Writes the project, its vehicle definition's vehicle_name and
+//     mechanical_definition_identifier set to <name>, as the file
+//     <name>.vehicle_project.json of the directory, replacing a project of that
+//     name whole or not at all. Only once it is written do the two names
+//     become those of the session's project and of every project its undo and
+//     redo history holds: they are the project's identity, not an edit, so
+//     can_undo and can_redo stay as they were and no undo or redo brings an
+//     earlier identity back. The revision increases by one when the names
+//     change. The session is then associated with that file and nothing is
+//     unsaved. Nothing else is renamed or rewritten. A project name is not
+//     empty and holds only A-Z, a-z, 0-9, '.', '_' and '-'. A refused save
+//     changes nothing and leaves no file half written.
+//
 //   check
 //     result: {"passed": <bool>, "refusals": ["<message>", ...],
 //              "information": ["<message>", ...],
@@ -203,6 +260,11 @@
 //     coverage_statements says, in words a user can be shown, what the check
 //     covered and what passing means. A check that passes replaces the preview
 //     with one of the current revision.
+//
+//   get_visual_definition
+//     result: {"visual_definition": <object> or null}
+//     The visual definition the project's bodies are drawn with, as the JSON
+//     object it is; null when the project has none.
 //
 //   get_preview
 //     result: {"preview": null} before any check has passed, otherwise
@@ -275,7 +337,6 @@
 
 #include <Eigen/Core>
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdio>
 #include <exception>
@@ -297,7 +358,11 @@
 #include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/configuration/resolved_startup_state.h"
 #include "orvd/vehicle_project/make_vehicle_project_from_vehicle_definition.h"
+#include "orvd/vehicle_project/read_visual_definition_document_from_file.h"
 #include "orvd/vehicle_project/vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
+#include "orvd/vehicle_project/vehicle_project_file_reading_and_writing.h"
+#include "orvd/vehicle_project/vehicle_project_files_in_directory.h"
 #include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
 #include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
@@ -312,6 +377,7 @@ using orvd::vehicle_project::ElementGroup;
 using orvd::vehicle_project::ElementKind;
 using orvd::vehicle_project::ElementReference;
 using orvd::vehicle_project::VehicleProject;
+using orvd::vehicle_project::VehicleProjectFileLocation;
 using orvd::vehicle_project_editing::CurveRowField;
 using orvd::vehicle_project_editing::ElementEditRefusal;
 using orvd::vehicle_project_editing::ElementOwnName;
@@ -328,47 +394,18 @@ using orvd::vehicle_project_editing::SaturatedPiecewiseLinearDamperCurve;
 using orvd::vehicle_project_editing::VehicleProjectEditingSession;
 using orvd::vehicle_project_editing::VehicleProjectPreview;
 
-struct ElementKindName {
-    ElementKind kind;
-    std::string_view name;
-};
-
-// Every element kind and its protocol name, in the order the protocol lists
-// them.
-constexpr auto kElementKindNames = std::to_array<ElementKindName>({
-    {ElementKind::kRigidBody, "rigid_body"},
-    {ElementKind::kFixedFrame, "fixed_frame"},
-    {ElementKind::kRevoluteJoint, "revolute_joint"},
-    {ElementKind::kBallRpyJoint, "ball_rpy_joint"},
-    {ElementKind::kWeldJoint, "weld_joint"},
-    {ElementKind::kTranslationalSpringDamper, "translational_spring_damper"},
-    {ElementKind::kRollSpringDamperCouple, "roll_spring_damper_couple"},
-    {ElementKind::kSeriesSpringViscousDamper, "series_spring_viscous_damper"},
-    {ElementKind::kPointToPointSeriesSpringBilinearDamper,
-     "point_to_point_series_spring_bilinear_damper"},
-    {ElementKind::kSaturatedPiecewiseLinearDamper, "saturated_piecewise_linear_damper"},
-    {ElementKind::kReferenceFrameLinearBushing, "reference_frame_linear_bushing"},
-    {ElementKind::kPointToPointLinearSpringDamper, "point_to_point_linear_spring_damper"},
-    {ElementKind::kPointToPointHystereticSpring, "point_to_point_hysteretic_spring"},
-    {ElementKind::kContactCarrier, "contact_carrier"},
-    {ElementKind::kContactInterface, "contact_interface"},
-});
-
+// The protocol writes an element kind as its word
+// (vehicle_project_element_kind_records.h), the word a project file uses too.
 std::string NameOfElementKind(ElementKind kind) {
-    const auto named = std::ranges::find(kElementKindNames, kind, &ElementKindName::kind);
-    if (named == kElementKindNames.end()) {
-        throw std::logic_error("element kind " + std::to_string(std::to_underlying(kind)) +
-                               " has no protocol name");
-    }
-    return std::string(named->name);
+    return std::string(orvd::vehicle_project::ElementKindWord(kind));
 }
 
-ElementKind ElementKindNamed(std::string_view name) {
-    const auto named = std::ranges::find(kElementKindNames, name, &ElementKindName::name);
-    if (named == kElementKindNames.end()) {
-        throw std::invalid_argument("'" + std::string(name) + "' is not an element kind");
+ElementKind ElementKindNamed(std::string_view word) {
+    const std::optional<ElementKind> kind = orvd::vehicle_project::FindElementKindWrittenAs(word);
+    if (!kind.has_value()) {
+        throw std::invalid_argument("'" + std::string(word) + "' is not an element kind");
     }
-    return named->kind;
+    return *kind;
 }
 
 std::string NameOfValueKind(PropertyValueKind kind) {
@@ -604,24 +641,24 @@ Json EncodeGroups(const std::vector<ElementGroup>& groups) {
 
 Json DescribeElementKinds() {
     Json kinds = Json::array();
-    for (const ElementKindName& kind : kElementKindNames) {
+    for (const ElementKind kind : orvd::vehicle_project::kElementKinds) {
         Json properties = Json::array();
         for (const ElementPropertyDescription& description :
-             orvd::vehicle_project_editing::DescribeElementProperties(kind.kind)) {
+             orvd::vehicle_project_editing::DescribeElementProperties(kind)) {
             properties.push_back(EncodeDescription(description));
         }
         kinds.push_back(
-            Json{{"kind", std::string(kind.name)}, {"properties", std::move(properties)}});
+            Json{{"kind", NameOfElementKind(kind)}, {"properties", std::move(properties)}});
     }
     return Json{{"element_kinds", std::move(kinds)}};
 }
 
 Json EncodeOutline(const VehicleProject& project) {
     Json elements = Json::array();
-    for (const ElementKindName& kind : kElementKindNames) {
+    for (const ElementKind kind : orvd::vehicle_project::kElementKinds) {
         for (const std::string& name :
-             orvd::vehicle_project_editing::CollectElementNames(project, kind.kind)) {
-            elements.push_back(Json{{"kind", std::string(kind.name)}, {"name", name}});
+             orvd::vehicle_project_editing::CollectElementNames(project, kind)) {
+            elements.push_back(EncodeElement({kind, name}));
         }
     }
     return Json{
@@ -720,7 +757,27 @@ Json Accepted(const Json& id, const VehicleProjectEditingSession& session, Json 
                 {"revision", session.revision()},
                 {"can_undo", session.can_undo()},
                 {"can_redo", session.can_redo()},
+                {"has_unsaved_changes", session.has_unsaved_changes()},
                 {"result", std::move(result)}};
+}
+
+// The answer of a command accepted while nothing is open, which has no
+// session to describe.
+Json AcceptedWithNothingOpen(const Json& id, Json result) {
+    return Json{{"id", id},
+                {"ok", true},
+                {"revision", nullptr},
+                {"can_undo", nullptr},
+                {"can_redo", nullptr},
+                {"has_unsaved_changes", nullptr},
+                {"result", std::move(result)}};
+}
+
+Json AcceptedWhetherOrNotOpen(const Json& id,
+                              const std::optional<VehicleProjectEditingSession>& session,
+                              Json result) {
+    return session.has_value() ? Accepted(id, *session, std::move(result))
+                               : AcceptedWithNothingOpen(id, std::move(result));
 }
 
 Json Refused(const Json& id, Json element, Json property, std::string_view message) {
@@ -745,10 +802,55 @@ VehicleProjectEditingSession OpenVehicle(const Json& request) {
         orvd::configuration::LoadResolvedStartupStateFromJsonFile(
             request.at("startup_state_path").get<std::string>());
     orvd::vehicle_project::PlaceFreeBodiesAtStartupPoses(project, startup_state);
+    project.gravitational_acceleration_meters_per_second_squared =
+        startup_state.gravitational_acceleration_meters_per_second_squared;
     project.contact_record = orvd::configuration::LoadVehicleContactRecordFromJsonFile(
         request.at("contact_record_path").get<std::string>());
-    return VehicleProjectEditingSession(
-        std::move(project), startup_state.gravitational_acceleration_meters_per_second_squared);
+    if (const Json& visual_definition_path = request.at("visual_definition_path");
+        !visual_definition_path.is_null()) {
+        project.visual_definition_document =
+            orvd::vehicle_project::ReadVisualDefinitionDocumentFromFile(
+                visual_definition_path.get<std::string>());
+    }
+    return VehicleProjectEditingSession(std::move(project));
+}
+
+VehicleProjectFileLocation DecodeVehicleProjectFileLocation(const Json& request) {
+    return {.directory = request.at("directory").get<std::string>(),
+            .name = request.at("name").get<std::string>()};
+}
+
+VehicleProjectEditingSession OpenVehicleProject(const Json& request) {
+    const VehicleProjectFileLocation location = DecodeVehicleProjectFileLocation(request);
+    return VehicleProjectEditingSession(orvd::vehicle_project::ReadVehicleProjectFile(location),
+                                        location);
+}
+
+Json GetSession(const Json& id, const std::optional<VehicleProjectEditingSession>& session) {
+    if (!session.has_value()) {
+        return AcceptedWithNothingOpen(id, Json{{"open", false}});
+    }
+    const std::optional<VehicleProjectFileLocation>& file = session->associated_file();
+    return Accepted(
+        id, *session,
+        Json{{"open", true},
+             {"vehicle_project_file",
+              file.has_value() ? Json{{"directory", file->directory.string()}, {"name", file->name}}
+                               : Json(nullptr)}});
+}
+
+Json ListVehicleProjects(const Json& id, const Json& request,
+                         const std::optional<VehicleProjectEditingSession>& session) {
+    return AcceptedWhetherOrNotOpen(
+        id, session,
+        Json{{"vehicle_projects", orvd::vehicle_project::ListVehicleProjectNames(
+                                      request.at("directory").get<std::string>())}});
+}
+
+Json EncodeVisualDefinition(const VehicleProject& project) {
+    return Json{{"visual_definition", project.visual_definition_document.empty()
+                                          ? Json(nullptr)
+                                          : Json::parse(project.visual_definition_document)}};
 }
 
 Json GetProperties(const Json& id, const Json& request,
@@ -848,12 +950,23 @@ Json Respond(const std::string& line, std::optional<VehicleProjectEditingSession
             id = request.at("id");
         }
         const std::string command = request.at("command").get<std::string>();
+        if (command == "get_session") {
+            return GetSession(id, session);
+        }
+        if (command == "list_vehicle_projects") {
+            return ListVehicleProjects(id, request, session);
+        }
         if (command == "open_vehicle") {
             session = OpenVehicle(request);
             return Accepted(id, *session, Json::object());
         }
+        if (command == "open_vehicle_project") {
+            session = OpenVehicleProject(request);
+            return Accepted(id, *session, Json::object());
+        }
         if (!session.has_value()) {
-            throw std::invalid_argument("no vehicle is open; send open_vehicle first");
+            throw std::invalid_argument(
+                "nothing is open; send open_vehicle or open_vehicle_project first");
         }
         VehicleProjectEditingSession& open_session = *session;
         if (command == "describe_element_kinds") {
@@ -884,6 +997,17 @@ Json Respond(const std::string& line, std::optional<VehicleProjectEditingSession
         if (command == "redo") {
             open_session.Redo();
             return Accepted(id, open_session, Json::object());
+        }
+        if (command == "save_vehicle_project") {
+            open_session.SaveVehicleProject();
+            return Accepted(id, open_session, Json::object());
+        }
+        if (command == "save_vehicle_project_as") {
+            open_session.SaveVehicleProjectAs(DecodeVehicleProjectFileLocation(request));
+            return Accepted(id, open_session, Json::object());
+        }
+        if (command == "get_visual_definition") {
+            return Accepted(id, open_session, EncodeVisualDefinition(open_session.project()));
         }
         if (command == "check") {
             return Accepted(id, open_session, EncodeCheckReport(open_session.CheckMechanics()));

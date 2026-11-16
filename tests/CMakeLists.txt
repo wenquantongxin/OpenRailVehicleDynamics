@@ -1531,6 +1531,9 @@ add_executable(verify_vehicle_project
     vehicle_project/vehicle_project_invariants_header_self_containment.cc
     vehicle_project/vehicle_project_element_kind_records_header_self_containment.cc
     vehicle_project/make_vehicle_project_from_vehicle_definition_header_self_containment.cc
+    vehicle_project/vehicle_project_files_in_directory_header_self_containment.cc
+    vehicle_project/vehicle_project_file_reading_and_writing_header_self_containment.cc
+    vehicle_project/read_visual_definition_document_from_file_header_self_containment.cc
     vehicle_project/verify_vehicle_project.cc)
 orvd_configure_first_party_target(verify_vehicle_project)
 target_link_libraries(verify_vehicle_project PRIVATE orvd_vehicle_project)
@@ -1543,11 +1546,35 @@ add_test(NAME verify_vehicle_project
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
 
+# Projects saved as files of a directory of projects: both bundled vehicles,
+# opened as the modelling service opens them, and unfinished projects read
+# back as written and write the same bytes again; faulty documents, project
+# names that are not identifiers and writes that cannot complete are refused
+# by place, leaving the directory as it was; only project files are listed;
+# and a visual definition file is taken in only as one strict JSON object.
+add_executable(verify_vehicle_project_file_reading_and_writing
+    vehicle_project/verify_vehicle_project_file_reading_and_writing.cc)
+orvd_configure_first_party_target(verify_vehicle_project_file_reading_and_writing)
+target_link_libraries(verify_vehicle_project_file_reading_and_writing
+    PRIVATE orvd_vehicle_project nlohmann_json::nlohmann_json)
+add_test(NAME verify_vehicle_project_file_reading_and_writing
+         COMMAND verify_vehicle_project_file_reading_and_writing
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/visualization/visual_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/visualization/visual_definition.json
+             ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-files)
+
 # The editing layer: every property of every element kind is described as
 # what it is and reads and writes the member it names; edits are undone and
 # redone under an increasing revision and refused by element and property;
 # both bundled vehicles pass the mechanical check, a refused assembly is
-# reported and keeps the older preview; and the preview puts every body,
+# reported and keeps the older preview, and what a vehicle file's declaration
+# rules refuse is refused before any assembly; and the preview puts every body,
 # frame, joint, force-element end and wheel where the assembled model places
 # it.
 add_executable(verify_vehicle_project_editing
@@ -1590,14 +1617,36 @@ add_test(NAME verify_vehicle_project_structural_editing
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
 
+# Saving through the editing session on GZ18: unsaved changes follow edits,
+# saves, undo and redo; Save needs a file; Save As writes the project under the
+# project's name and gives that name to the whole history without a step, so
+# no undo or redo brings an earlier identity back; a save that cannot write
+# changes nothing.
+add_executable(verify_vehicle_project_editing_session_saving
+    vehicle_project_editing/verify_vehicle_project_editing_session_saving.cc)
+orvd_configure_first_party_target(verify_vehicle_project_editing_session_saving)
+target_include_directories(verify_vehicle_project_editing_session_saving
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_editing_session_saving
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_editing_session_saving
+         COMMAND verify_vehicle_project_editing_session_saving
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-editing-session-saving)
+
 # The modelling service driven through standard input and output on GZ18: the
 # protocol's structure, property descriptions, creation, renaming and removal,
-# one response per request and its revisions.
+# saving a project into a directory and opening it again as it was, one
+# response per request and its revisions; the reference vehicle files stay
+# as they were.
 add_test(NAME verify_vehicle_modeling_service
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/vehicle_project_editing/verify_vehicle_modeling_service.py
         $<TARGET_FILE:orvd_vehicle_modeling_service>
-        ${PROJECT_SOURCE_DIR})
+        ${PROJECT_SOURCE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/vehicle-modeling-service-projects)
 
 # Contact declarations bind arbitrary free carriers and wheel-joint names;
 # reference data load strictly and carrier aliases reach initial assembly.

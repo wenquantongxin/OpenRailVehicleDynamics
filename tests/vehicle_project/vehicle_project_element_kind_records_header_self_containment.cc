@@ -1,5 +1,6 @@
 #include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -24,3 +25,12 @@ static_assert(std::is_same_v<decltype(orvd::vehicle_project::VisitElementKind(
                                      return KindRecords::kKindDescription;
                                  })),
                              std::string_view>);
+static_assert(std::is_same_v<decltype(orvd::vehicle_project::ElementKindRecords<
+                                      orvd::vehicle_project::ElementKind::kFixedFrame>::kKindWord),
+                             const std::string_view>);
+static_assert(std::is_same_v<decltype(orvd::vehicle_project::ElementKindWord(
+                                 std::declval<orvd::vehicle_project::ElementKind>())),
+                             std::string_view>);
+static_assert(std::is_same_v<decltype(orvd::vehicle_project::FindElementKindWrittenAs(
+                                 std::declval<std::string_view>())),
+                             std::optional<orvd::vehicle_project::ElementKind>>);

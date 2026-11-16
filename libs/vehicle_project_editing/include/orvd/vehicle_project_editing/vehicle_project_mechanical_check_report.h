@@ -7,13 +7,14 @@
 //
 // A check runs, in order, the project's own invariants
 // (vehicle_project::RequireVehicleProjectInvariants), generation of the
-// vehicle definition (vehicle_project::GenerateVehicleDefinition) and the
+// vehicle definition (vehicle_project::GenerateVehicleDefinition), the
+// declaration rules a vehicle file's definition obeys on that generated
+// definition, and, unless those refused or the project states no gravity, the
 // start-up-free assembly (configuration::AssembleVehicleSystem) under the
-// session's gravity, including the contact declaration when one is provided.
+// project's gravity, including the contact declaration when one is provided.
 // Whatever a step refuses becomes a refusal carrying that step's own message;
 // nothing here restates or anticipates their rules, and a faulty project never
-// makes a check throw. The check
-// passes when nothing was refused.
+// makes a check throw. The check passes when nothing was refused.
 
 namespace orvd::vehicle_project_editing {
 
@@ -29,8 +30,11 @@ struct MechanicalCheckReport {
     // What the check covered and what passing means. The same for every check.
     std::vector<std::string> coverage_statements{
         "The check validates the project's free-body placements, the names its bodies' shapes "
-        "are stated under and its element groups, and assembles the vehicle definition into a "
-        "multibody model with its force elements.",
+        "are stated under and its element groups. It applies to the vehicle definition the "
+        "rules a vehicle file's definition obeys, its names and identifier, the references "
+        "between its elements, its force elements' names and its station layout, and then "
+        "assembles it into a multibody model with its force elements under the project's "
+        "gravity.",
         "When a contact record is provided, its carriers and interfaces are checked against "
         "the mechanical definition. Contact profiles, wheel-rail forces and start-up conditions "
         "are not evaluated; no track or wheel-rail contact runtime is assembled.",

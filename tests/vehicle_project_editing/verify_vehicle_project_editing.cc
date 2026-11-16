@@ -47,7 +47,9 @@
 // that only increases; each kind of refused edit names its element and
 // property and changes nothing; both bundled vehicles pass the
 // mechanical check, and a project the assembly refuses is reported, not
-// thrown, while the older preview stays; the preview places free bodies where
+// thrown, while the older preview stays; a project a vehicle file's
+// declaration rules refuse, or stating no gravity, is refused before any
+// assembly; the preview places free bodies where
 // their station offsets and placements say, moves a body along the track when
 // its station offset is edited, puts every force-element end, frame and joint
 // where its body's pose takes it, puts every wheel the lateral datum
@@ -62,7 +64,6 @@ using namespace orvd;
 using configuration_record_comparison::Members;
 using configuration_record_comparison::Same;
 using editing_verification::Fail;
-using editing_verification::GravityOf;
 using editing_verification::PlacedProject;
 using editing_verification::ReferenceVehicle;
 using editing_verification::Require;
@@ -155,10 +156,6 @@ bool SameReading(const std::optional<PropertyValue>& expected,
 }
 
 // --- Property descriptions -------------------------------------------------
-
-// The probe is edited, never checked, so the gravity its sessions hold is
-// never used.
-constexpr double kUncheckedGravitationalAccelerationMetersPerSecondSquared = 9.81;
 
 // One element of every kind, every member of it holding a value no other
 // member of its record holds, so that a property can only read the value of
@@ -712,8 +709,7 @@ void VerifyAbsentValues(const VehicleProject& probe) {
 // reading, with a value of its kind, is refused.
 void VerifyReadingsStateWhatEditsAccept(const VehicleProject& probe,
                                         std::span<const ExpectedElementKind> kinds) {
-    VehicleProjectEditingSession session(probe,
-                                         kUncheckedGravitationalAccelerationMetersPerSecondSquared);
+    VehicleProjectEditingSession session(probe);
     for (const ExpectedElementKind& kind : kinds) {
         for (const std::string& element_name :
              vehicle_project_editing::CollectElementNames(probe, kind.kind)) {
@@ -828,8 +824,7 @@ PropertyValue ChangedValue(const VehicleProject& probe, const PropertyName& prop
 // that follow them; the structural editing verification covers those.
 void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
                                        std::span<const ExpectedElementKind> kinds) {
-    VehicleProjectEditingSession session(probe,
-                                         kUncheckedGravitationalAccelerationMetersPerSecondSquared);
+    VehicleProjectEditingSession session(probe);
     const std::map<PropertyKey, std::optional<PropertyValue>> original =
         ReadEveryProperty(probe, kinds);
     const std::set<PropertyName> read_only = ReadOnlyProperties();
@@ -872,8 +867,7 @@ void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
 void VerifyStationOffsetWritesItsLayoutEntry(const VehicleProject& probe) {
     constexpr double kEditedStationOffsetMeters = 6.5;
     const ElementReference body{ElementKind::kRigidBody, "probe_body"};
-    VehicleProjectEditingSession session(probe,
-                                         kUncheckedGravitationalAccelerationMetersPerSecondSquared);
+    VehicleProjectEditingSession session(probe);
     Require(session
                 .SetElementProperty(body, "mechanical_track_station_layout.station_offset_meters",
                                     kEditedStationOffsetMeters)
@@ -917,7 +911,7 @@ std::size_t PrimarySuspensionIndex(const configuration::VehicleDefinition& vehic
 }
 
 void VerifyPrimarySuspensionEdit(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProject(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProject(gz18));
     const configuration::VehicleDefinition original =
         vehicle_project::GenerateVehicleDefinition(session.project());
     const std::size_t suspension = PrimarySuspensionIndex(original);
@@ -983,7 +977,7 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
     std::erase_if(project.free_body_placements, [&](const FreeBodyPlacement& placement) {
         return placement.body_name == unplaced_body_name;
     });
-    VehicleProjectEditingSession session(project, GravityOf(gz18));
+    VehicleProjectEditingSession session(project);
     // One accepted edit first, so that the history holds a step a refusal
     // could disturb.
     Require(session
@@ -1063,7 +1057,7 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
 
 void VerifyReferenceVehicleChecks(const ReferenceVehicle& reference) {
     const std::string& vehicle_name = reference.definition.vehicle_name;
-    VehicleProjectEditingSession session(PlacedProject(reference), GravityOf(reference));
+    VehicleProjectEditingSession session(PlacedProject(reference));
     const MechanicalCheckReport report = session.CheckMechanics();
     Require(report.refusals.empty(), vehicle_name + " did not pass the mechanical check: " +
                                          (report.refusals.empty() ? "" : report.refusals.front()));
@@ -1082,7 +1076,7 @@ void VerifyReferenceVehicleChecks(const ReferenceVehicle& reference) {
 
     VehicleProject with_contact_record = PlacedProject(reference);
     with_contact_record.contact_record = reference.contact_record;
-    VehicleProjectEditingSession contact_session(with_contact_record, GravityOf(reference));
+    VehicleProjectEditingSession contact_session(with_contact_record);
     const MechanicalCheckReport contact_report = contact_session.CheckMechanics();
     Require(contact_report.refusals.empty() && contact_report.information.empty(),
             vehicle_name +
@@ -1091,7 +1085,7 @@ void VerifyReferenceVehicleChecks(const ReferenceVehicle& reference) {
 }
 
 void VerifyRefusedAssemblyKeepsOlderPreview(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProject(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProject(gz18));
     Require(session.CheckMechanics().refusals.empty(), "GZ18 did not pass the mechanical check");
     const std::uint64_t checked_revision = session.revision();
 
@@ -1106,7 +1100,8 @@ void VerifyRefusedAssemblyKeepsOlderPreview(const ReferenceVehicle& gz18) {
     std::string assembly_refusal;
     try {
         (void)configuration::AssembleVehicleSystem(
-            vehicle_project::GenerateVehicleDefinition(session.project()), GravityOf(gz18));
+            vehicle_project::GenerateVehicleDefinition(session.project()),
+            *session.project().gravitational_acceleration_meters_per_second_squared);
     } catch (const std::exception& error) {
         assembly_refusal = error.what();
     }
@@ -1125,7 +1120,7 @@ void VerifyRefusedAssemblyKeepsOlderPreview(const ReferenceVehicle& gz18) {
 void VerifyContactDeclarationRefusalKeepsOlderPreview(const ReferenceVehicle& irw) {
     VehicleProject project = PlacedProject(irw);
     project.contact_record = irw.contact_record;
-    VehicleProjectEditingSession session(std::move(project), GravityOf(irw));
+    VehicleProjectEditingSession session(std::move(project));
     Require(session.CheckMechanics().refusals.empty(),
             "IRW did not pass the check with its contact declaration");
     const std::uint64_t checked_revision = session.revision();
@@ -1157,6 +1152,44 @@ void VerifyContactDeclarationRefusalKeepsOlderPreview(const ReferenceVehicle& ir
     Require(session.CheckMechanics().refusals.empty() && session.preview().has_value() &&
                 session.preview()->project_revision == session.revision(),
             "restoring the wheel axis did not restore a passing contact check and current preview");
+}
+
+// What a vehicle file's declaration rules refuse, and a project without a
+// gravity, are refused by the check before any assembly: the refusal names
+// the place, the check does not throw and leaves no preview, and the
+// assembly is not attempted, so a negative stiffness it would refuse as well
+// goes unreported. A force element ending at `world` is one such project: the
+// assembly accepts it, and the preview could not draw it.
+void VerifyCheckRefusesBeforeAssembly(const ReferenceVehicle& gz18) {
+    const auto require_refused_before_assembly = [](VehicleProject project, std::string_view place,
+                                                    const std::string& what) {
+        project.vehicle_definition.translational_spring_dampers.at(1).stiffness_newtons_per_meter =
+            Eigen::Vector3d(0.0, 0.0, -1.4e6);
+        VehicleProjectEditingSession session(std::move(project));
+        const MechanicalCheckReport report = session.CheckMechanics();
+        Require(
+            report.refusals.size() == 1 && report.refusals.front().find(place) != std::string::npos,
+            what + " is not the check's one refusal, naming " + std::string(place));
+        Require(!session.preview().has_value(), what + " was checked into a preview");
+    };
+
+    VehicleProject ending_at_world = PlacedProject(gz18);
+    ending_at_world.vehicle_definition.translational_spring_dampers.at(0).opposite_frame_name =
+        "world";
+    require_refused_before_assembly(
+        ending_at_world, "$.vehicle_definition.translational_spring_dampers[0].opposite_frame_name",
+        "a force element ending at world");
+
+    VehicleProject spaced_identifier = PlacedProject(gz18);
+    spaced_identifier.vehicle_definition.mechanical_definition_identifier = "gz18 edited";
+    require_refused_before_assembly(spaced_identifier,
+                                    "$.vehicle_definition.mechanical_definition_identifier",
+                                    "a mechanical definition identifier with a space");
+
+    VehicleProject without_gravity = PlacedProject(gz18);
+    without_gravity.gravitational_acceleration_meters_per_second_squared.reset();
+    require_refused_before_assembly(without_gravity, "gravitational acceleration",
+                                    "a project stating no gravity");
 }
 
 // --- Preview -------------------------------------------------------------------
@@ -1442,7 +1475,7 @@ void VerifyPreviewPlacesWhatTheModelPlaces(const ReferenceVehicle& reference) {
     const std::string& vehicle_name = vehicle.vehicle_name;
     VehicleProject project = AsymmetricallyPlacedProject(reference);
     project.contact_record = reference.contact_record;
-    VehicleProjectEditingSession session(project, GravityOf(reference));
+    VehicleProjectEditingSession session(project);
     Require(session.CheckMechanics().refusals.empty(),
             vehicle_name + " with asymmetric placements did not pass the check");
     const VehicleProjectPreview& preview = *session.preview();
@@ -1486,7 +1519,7 @@ void VerifyWheelsPointToTheirSides(const ReferenceVehicle& reference) {
     const std::string& vehicle_name = reference.definition.vehicle_name;
     VehicleProject project = PlacedProject(reference);
     project.contact_record = reference.contact_record;
-    VehicleProjectEditingSession session(std::move(project), GravityOf(reference));
+    VehicleProjectEditingSession session(std::move(project));
     Require(session.CheckMechanics().refusals.empty(),
             vehicle_name + " did not pass the check with its contact record");
     const std::vector<WheelDrawing>& wheels = session.preview()->wheels;
@@ -1512,7 +1545,7 @@ void VerifyWheelsPointToTheirSides(const ReferenceVehicle& reference) {
 void VerifyStationOffsetEditMovesBodyAlongTrack(const ReferenceVehicle& gz18) {
     constexpr double kShiftMeters = 0.25;
     const ElementReference bogie_frame{ElementKind::kRigidBody, "front_bogie_frame"};
-    VehicleProjectEditingSession session(PlacedProject(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProject(gz18));
     Require(session.CheckMechanics().refusals.empty(), "GZ18 did not pass the mechanical check");
     const Eigen::Vector3d origin_before =
         DrawnBody(*session.preview(), bogie_frame.name).origin_in_drawing_frame_meters;
@@ -1544,7 +1577,7 @@ void VerifyStationOffsetEditMovesBodyAlongTrack(const ReferenceVehicle& gz18) {
 // angles it would be turned by more than a radian.
 void VerifyTieRodsHoldTheirDefaultAngles(const ReferenceVehicle& irw) {
     const configuration::VehicleDefinition& vehicle = irw.definition;
-    VehicleProjectEditingSession session(AsymmetricallyPlacedProject(irw), GravityOf(irw));
+    VehicleProjectEditingSession session(AsymmetricallyPlacedProject(irw));
     Require(session.CheckMechanics().refusals.empty(),
             "IRW with asymmetric placements did not pass the mechanical check");
     const VehicleProjectPreview& preview = *session.preview();
@@ -1578,7 +1611,7 @@ void VerifyUnplacedBodiesAreNotDrawn(const ReferenceVehicle& irw) {
     std::erase_if(project.free_body_placements, [](const FreeBodyPlacement& placement) {
         return placement.body_name == "axlebridge_ff";
     });
-    VehicleProjectEditingSession session(project, GravityOf(irw));
+    VehicleProjectEditingSession session(project);
     const MechanicalCheckReport report = session.CheckMechanics();
     Require(report.refusals.empty() && report.information.size() == 1,
             "IRW with one unplaced free body did not pass the check reporting that body alone");
@@ -1637,6 +1670,7 @@ int main(int argc, char** argv) {
         VerifyReferenceVehicleChecks(irw);
         VerifyRefusedAssemblyKeepsOlderPreview(gz18);
         VerifyContactDeclarationRefusalKeepsOlderPreview(irw);
+        VerifyCheckRefusesBeforeAssembly(gz18);
         VerifyPreviewPlacesWhatTheModelPlaces(gz18);
         VerifyPreviewPlacesWhatTheModelPlaces(irw);
         VerifyWheelsPointToTheirSides(gz18);

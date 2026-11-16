@@ -1,8 +1,9 @@
 # The command layer a graphical modelling tool drives over one vehicle project:
 # every element's properties described and read, elements created, edited,
-# renamed and removed at this boundary with undo and redo, a mechanical check
-# and the preview a 3D view draws. It holds no JSON and reads and writes no
-# files.
+# renamed and removed at this boundary with undo and redo, saving to a project
+# file, a mechanical check and the preview a 3D view draws. It holds no JSON.
+# The check reaches the configuration library's declaration rules through its
+# internal directory, which is not installed.
 
 add_library(orvd_vehicle_project_editing STATIC
     src/vehicle_project_editing_session.cc
@@ -20,7 +21,8 @@ orvd_configure_first_party_target(orvd_vehicle_project_editing)
 target_include_directories(orvd_vehicle_project_editing
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/libs/configuration/internal>)
 
 target_link_libraries(orvd_vehicle_project_editing
     PUBLIC orvd_vehicle_project)

@@ -10,9 +10,9 @@
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
 
 // The installed editing session used through its public headers and archive
-// alone: a one-body project has its body's placement edited, passes the
-// mechanical check, is drawn where the placement puts it, and has the edit
-// undone.
+// alone: a one-body project has its body's placement edited, which leaves an
+// unsaved change, passes the mechanical check under its own gravity, is drawn
+// where the placement puts it, and has the edit undone, which leaves none.
 
 int main() {
     using namespace orvd;
@@ -30,10 +30,12 @@ int main() {
              .mass_kilograms = 1.0,
              .inertia_moments_about_center_of_mass_kilogram_square_meters =
                  Eigen::Vector3d::Ones()});
-        vehicle_project::VehicleProject project{.vehicle_definition = std::move(vehicle),
-                                                .free_body_placements = {{.body_name = "carbody"}}};
+        vehicle_project::VehicleProject project{
+            .vehicle_definition = std::move(vehicle),
+            .gravitational_acceleration_meters_per_second_squared = 9.81,
+            .free_body_placements = {{.body_name = "carbody"}}};
 
-        vehicle_project_editing::VehicleProjectEditingSession session(std::move(project), 9.81);
+        vehicle_project_editing::VehicleProjectEditingSession session(std::move(project));
         const vehicle_project::ElementReference carbody{vehicle_project::ElementKind::kRigidBody,
                                                         "carbody"};
         const bool edited =
@@ -41,6 +43,7 @@ int main() {
                 .SetElementProperty(carbody,
                                     "placement.vertical_offset_in_local_track_frame_meters", -1.0)
                 .has_value();
+        const bool unsaved_after_edit = session.has_unsaved_changes();
         const vehicle_project_editing::MechanicalCheckReport report = session.CheckMechanics();
         const auto& preview = session.preview();
         const bool drawn_at_placement =
@@ -49,8 +52,9 @@ int main() {
         session.Undo();
         const auto readings =
             vehicle_project_editing::ReadElementProperties(session.project(), carbody);
-        if (!edited || !report.refusals.empty() || !drawn_at_placement || session.revision() != 2 ||
-            !session.can_redo() || readings.empty() ||
+        if (!edited || !unsaved_after_edit || !report.refusals.empty() || !drawn_at_placement ||
+            session.revision() != 2 || !session.can_redo() || session.has_unsaved_changes() ||
+            readings.empty() ||
             session.project().free_body_placements[0].vertical_offset_in_local_track_frame_meters !=
                 0.0) {
             std::fprintf(stderr,

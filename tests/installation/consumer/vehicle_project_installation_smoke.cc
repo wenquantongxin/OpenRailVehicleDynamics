@@ -1,19 +1,28 @@
 #include <cstdio>
 #include <exception>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
 #include "orvd/vehicle_project/vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_file_reading_and_writing.h"
+#include "orvd/vehicle_project/vehicle_project_files_in_directory.h"
 #include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project/vehicle_project_invariants.h"
 
 // The installed vehicle project used through its public headers and archive
 // alone: a project is built around a one-body definition, its body placed at a
 // start-up pose and grouped, the project checked and the definition generated
-// back.
+// back, and the project saved into a directory of projects, listed there and
+// read back.
 
-int main() {
+int main(int argc, char** argv) {
     using namespace orvd;
+    if (argc != 2) {
+        std::fprintf(stderr, "usage: vehicle_project_installation_smoke PROJECT_DIRECTORY\n");
+        return 2;
+    }
     try {
         configuration::VehicleDefinition vehicle;
         vehicle.vehicle_name = "smoke_vehicle";
@@ -40,13 +49,29 @@ int main() {
         } catch (const std::invalid_argument&) {
             contact_record_refused = true;
         }
+
+        project.gravitational_acceleration_meters_per_second_squared = 9.81;
+        project.visual_definition_document = R"({"parts": []})";
+        const vehicle_project::VehicleProjectFileLocation file{argv[1], "smoke_vehicle"};
+        vehicle_project::WriteVehicleProjectFile(project, file);
+        const vehicle_project::VehicleProject read = vehicle_project::ReadVehicleProjectFile(file);
+        const bool saved_and_read_back =
+            vehicle_project::ListVehicleProjectNames(file.directory) ==
+                std::vector<std::string>{file.name} &&
+            read.vehicle_definition.rigid_bodies.size() == 1 &&
+            read.free_body_placements.size() == 1 &&
+            read.free_body_placements[0].vertical_offset_in_local_track_frame_meters == -1.0 &&
+            read.element_groups.size() == 1 &&
+            read.gravitational_acceleration_meters_per_second_squared == 9.81 &&
+            !read.visual_definition_document.empty();
+
         if (!unplaced_after_import ||
             !vehicle_project::CollectUnplacedFreeBodyNames(project).empty() ||
             project.free_body_placements[0].vertical_offset_in_local_track_frame_meters != -1.0 ||
             generated.rigid_bodies.size() != 1 || generated.rigid_bodies[0].name != "carbody" ||
-            !contact_record_refused) {
+            !contact_record_refused || !saved_and_read_back) {
             std::fprintf(stderr,
-                         "installed vehicle project did not place, check and generate the "
+                         "installed vehicle project did not place, check, generate and save the "
                          "vehicle it imported\n");
             return 1;
         }

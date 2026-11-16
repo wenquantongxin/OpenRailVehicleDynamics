@@ -48,7 +48,6 @@ namespace {
 
 using namespace orvd;
 using configuration_record_comparison::Same;
-using editing_verification::GravityOf;
 using editing_verification::PlacedProject;
 using editing_verification::PlacedProjectWithContact;
 using editing_verification::ReferenceVehicle;
@@ -154,7 +153,7 @@ void RequireRefused(const std::expected<Value, ElementEditRefusal>& outcome,
 // its ends and values: the generated definition is the original with exactly
 // that record appended, undo restores the opened project and redo the edit.
 void VerifyAddingAForceElement(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const VehicleProject opened = session.project();
     const configuration::VehicleTranslationalSpringDamperDefinition& beside = Named(
         gz18.definition.translational_spring_dampers, "front_leading_left_primary_suspension");
@@ -278,7 +277,7 @@ std::vector<ElementReference> ExpectedRemovalOfBody(const VehicleProject& projec
 void VerifyRemovingABody(const ReferenceVehicle& reference, const std::string& body_name,
                          const std::vector<ElementReference>& required) {
     const std::string what = reference.definition.vehicle_name + " body '" + body_name + "'";
-    VehicleProjectEditingSession session(PlacedProjectWithContact(reference), GravityOf(reference));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(reference));
     const VehicleProject opened = session.project();
     const ElementReference body{ElementKind::kRigidBody, body_name};
     const std::vector<ElementReference> expected = ExpectedRemovalOfBody(opened, body_name);
@@ -360,7 +359,7 @@ void VerifyGroupsFollowElements(const ReferenceVehicle& gz18) {
     project.element_groups = {{.name = "running gear",
                                .members = {carrier_element, frame},
                                .subgroups = {{.name = "wheelset", .members = {body}}}}};
-    VehicleProjectEditingSession session(project, GravityOf(gz18));
+    VehicleProjectEditingSession session(project);
 
     const ElementReference renamed = RequireAccepted(
         session.SetElementProperty(body, "name", ElementOwnName{body.name + "_renamed"}),
@@ -430,7 +429,7 @@ void SubstituteBodyName(configuration::VehicleDefinition& vehicle, const std::st
 // renamed body; the station layout, the placement and the shape name follow,
 // the shape name still being the one the body had; the check still passes.
 void VerifyRenamingARigidBody(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const VehicleProject opened = session.project();
     const configuration::VehicleContactCarrierDeclaration& carrier =
         gz18.contact_record.declaration.carriers.front();
@@ -506,7 +505,7 @@ void VerifyRenamingARigidBody(const ReferenceVehicle& gz18) {
 // Each edit the contract refuses is refused by element and property and
 // changes neither the project, its history nor its revision.
 void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const configuration::VehicleDefinition& vehicle = gz18.definition;
     const ElementReference suspension{ElementKind::kTranslationalSpringDamper,
                                       vehicle.translational_spring_dampers.front().name};
@@ -572,7 +571,7 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
 
 // A contact element needs the contact record its kind belongs to.
 void VerifyContactElementNeedsContactRecord(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProject(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProject(gz18));
     const VehicleProject before = session.project();
     const ElementReference carrier{ElementKind::kContactCarrier, "carrier_without_record"};
     RequireRefused(session.AddElement(carrier.kind, carrier.name,
@@ -589,7 +588,7 @@ void VerifyContactElementNeedsContactRecord(const ReferenceVehicle& gz18) {
 // primary suspensions between them, a contact carrier and its two interfaces.
 // The check passes and the preview draws two more wheels.
 void VerifyBuildingAThirdAxle(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const VehicleProject& project = session.project();
     const configuration::VehicleDefinition& vehicle = gz18.definition;
     RequireCheckPasses(session, "GZ18 as opened");
@@ -686,7 +685,7 @@ void VerifyBuildingAThirdAxle(const ReferenceVehicle& gz18) {
 // An interface's optional independent-wheel joint is set, which the check
 // then judges, and cleared again, which restores the opened project.
 void VerifyOptionalReference(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const VehicleProject opened = session.project();
     const ElementReference interface{
         ElementKind::kContactInterface,
@@ -712,7 +711,7 @@ void VerifyOptionalReference(const ReferenceVehicle& gz18) {
 // A new saturated piecewise-linear damper has an empty curve, which the check
 // refuses; with the curve of an existing yaw damper set, the check passes.
 void VerifyCurve(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const configuration::VehicleSaturatedPiecewiseLinearDamperDefinition& beside =
         gz18.definition.saturated_piecewise_linear_dampers.front();
     const ElementReference damper{ElementKind::kSaturatedPiecewiseLinearDamper,
@@ -743,7 +742,7 @@ void VerifyCurve(const ReferenceVehicle& gz18) {
 // placement, at zero offsets and the identity rotation; making it no longer
 // move freely takes both away again.
 void VerifyFreedomBringsFreeBodyRecords(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const VehicleProject opened = session.project();
     const auto jointed =
         std::ranges::find(gz18.definition.rigid_bodies, false,
@@ -776,7 +775,7 @@ void VerifyRepairingAMismatchedContactRecord(const ReferenceVehicle& gz18,
                                              const ReferenceVehicle& irw) {
     VehicleProject project = PlacedProject(gz18);
     project.contact_record = irw.contact_record;
-    VehicleProjectEditingSession session(std::move(project), GravityOf(gz18));
+    VehicleProjectEditingSession session(std::move(project));
     Require(!session.CheckMechanics().refusals.empty(),
             "GZ18 with IRW's contact record passed the check");
 
@@ -813,7 +812,7 @@ void VerifyRepairingAMismatchedContactRecord(const ReferenceVehicle& gz18,
 // A body created in the session has no shapes; the bodies the vehicle opened
 // with have the shapes stated under their own names.
 void VerifyCreatedBodyHasNoShapes(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const ElementReference body{ElementKind::kRigidBody, "created_box"};
     RequireAccepted(
         session.AddElement(body.kind, body.name,
@@ -836,7 +835,7 @@ void VerifyCreatedBodyHasNoShapes(const ReferenceVehicle& gz18) {
 
 // Every axis token is one the check accepts.
 void VerifyAxisTokensPassTheCheck(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18), GravityOf(gz18));
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const ElementReference damper{ElementKind::kSeriesSpringViscousDamper,
                                   gz18.definition.series_spring_viscous_dampers.front().name};
     const auto axis = vehicle_project_editing::DescribeElementProperty(damper.kind, "axis");

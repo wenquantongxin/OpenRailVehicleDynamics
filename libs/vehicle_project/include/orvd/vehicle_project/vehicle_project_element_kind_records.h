@@ -5,6 +5,7 @@
 #include <concepts>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -20,12 +21,15 @@
 //
 // For every ElementKind, ElementKindRecords<kind> states the record type that
 // declares an element of that kind, the record member holding the element's
-// name, how a diagnostic names the kind, and the project's container of those
+// name, how a diagnostic names the kind, the word a project file and the
+// modelling service write the kind as, and the project's container of those
 // records. VisitElementKind turns a kind known only at run time into that
 // compile-time statement; it needs no project, so it serves questions about a
 // kind as well as questions about a project's elements. FindElementRecord and
-// ContainsElement look one element up by its name, and DescribeElementKind and
-// DescribeElement name a kind and an element in diagnostics.
+// ContainsElement look one element up by its name, DescribeElementKind and
+// DescribeElement name a kind and an element in diagnostics, and
+// ElementKindWord and FindElementKindWrittenAs turn a kind into its word and
+// back.
 
 namespace orvd::vehicle_project {
 
@@ -75,6 +79,7 @@ template <>
 struct ElementKindRecords<ElementKind::kRigidBody> {
     using Record = configuration::VehicleRigidBodyDefinition;
     static constexpr std::string_view kKindDescription = "rigid body";
+    static constexpr std::string_view kKindWord = "rigid_body";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.rigid_bodies;
@@ -85,6 +90,7 @@ template <>
 struct ElementKindRecords<ElementKind::kFixedFrame> {
     using Record = configuration::VehicleFixedFrameDefinition;
     static constexpr std::string_view kKindDescription = "fixed frame";
+    static constexpr std::string_view kKindWord = "fixed_frame";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.fixed_frames;
@@ -95,6 +101,7 @@ template <>
 struct ElementKindRecords<ElementKind::kRevoluteJoint> {
     using Record = configuration::VehicleRevoluteJointDefinition;
     static constexpr std::string_view kKindDescription = "revolute joint";
+    static constexpr std::string_view kKindWord = "revolute_joint";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.revolute_joints;
@@ -105,6 +112,7 @@ template <>
 struct ElementKindRecords<ElementKind::kBallRpyJoint> {
     using Record = configuration::VehicleBallRpyJointDefinition;
     static constexpr std::string_view kKindDescription = "Ball-RPY joint";
+    static constexpr std::string_view kKindWord = "ball_rpy_joint";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.ball_rpy_joints;
@@ -115,6 +123,7 @@ template <>
 struct ElementKindRecords<ElementKind::kWeldJoint> {
     using Record = configuration::VehicleWeldJointDefinition;
     static constexpr std::string_view kKindDescription = "weld joint";
+    static constexpr std::string_view kKindWord = "weld_joint";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.weld_joints;
@@ -125,6 +134,7 @@ template <>
 struct ElementKindRecords<ElementKind::kTranslationalSpringDamper> {
     using Record = configuration::VehicleTranslationalSpringDamperDefinition;
     static constexpr std::string_view kKindDescription = "translational spring-damper";
+    static constexpr std::string_view kKindWord = "translational_spring_damper";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.translational_spring_dampers;
@@ -135,6 +145,7 @@ template <>
 struct ElementKindRecords<ElementKind::kRollSpringDamperCouple> {
     using Record = configuration::VehicleRollSpringDamperCoupleDefinition;
     static constexpr std::string_view kKindDescription = "roll spring-damper couple";
+    static constexpr std::string_view kKindWord = "roll_spring_damper_couple";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.roll_spring_damper_couples;
@@ -145,6 +156,7 @@ template <>
 struct ElementKindRecords<ElementKind::kSeriesSpringViscousDamper> {
     using Record = configuration::VehicleSeriesSpringViscousDamperDefinition;
     static constexpr std::string_view kKindDescription = "series spring-viscous damper";
+    static constexpr std::string_view kKindWord = "series_spring_viscous_damper";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.series_spring_viscous_dampers;
@@ -156,6 +168,7 @@ struct ElementKindRecords<ElementKind::kPointToPointSeriesSpringBilinearDamper> 
     using Record = configuration::VehiclePointToPointSeriesSpringBilinearDamperDefinition;
     static constexpr std::string_view kKindDescription =
         "point-to-point series spring-bilinear damper";
+    static constexpr std::string_view kKindWord = "point_to_point_series_spring_bilinear_damper";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.point_to_point_series_spring_bilinear_dampers;
@@ -166,6 +179,7 @@ template <>
 struct ElementKindRecords<ElementKind::kSaturatedPiecewiseLinearDamper> {
     using Record = configuration::VehicleSaturatedPiecewiseLinearDamperDefinition;
     static constexpr std::string_view kKindDescription = "saturated piecewise-linear damper";
+    static constexpr std::string_view kKindWord = "saturated_piecewise_linear_damper";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.saturated_piecewise_linear_dampers;
@@ -176,6 +190,7 @@ template <>
 struct ElementKindRecords<ElementKind::kReferenceFrameLinearBushing> {
     using Record = configuration::VehicleReferenceFrameLinearBushingDefinition;
     static constexpr std::string_view kKindDescription = "reference-frame linear bushing";
+    static constexpr std::string_view kKindWord = "reference_frame_linear_bushing";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.reference_frame_linear_bushings;
@@ -186,6 +201,7 @@ template <>
 struct ElementKindRecords<ElementKind::kPointToPointLinearSpringDamper> {
     using Record = configuration::PointToPointLinearSpringDamperDefinition;
     static constexpr std::string_view kKindDescription = "point-to-point linear spring-damper";
+    static constexpr std::string_view kKindWord = "point_to_point_linear_spring_damper";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.point_to_point_linear_spring_dampers;
@@ -196,6 +212,7 @@ template <>
 struct ElementKindRecords<ElementKind::kPointToPointHystereticSpring> {
     using Record = configuration::PointToPointHystereticSpringDefinition;
     static constexpr std::string_view kKindDescription = "point-to-point hysteretic spring";
+    static constexpr std::string_view kKindWord = "point_to_point_hysteretic_spring";
     static constexpr std::string Record::* kElementName = &Record::name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return &project.vehicle_definition.point_to_point_hysteretic_springs;
@@ -206,6 +223,7 @@ template <>
 struct ElementKindRecords<ElementKind::kContactCarrier> {
     using Record = configuration::VehicleContactCarrierDeclaration;
     static constexpr std::string_view kKindDescription = "contact carrier";
+    static constexpr std::string_view kKindWord = "contact_carrier";
     static constexpr std::string Record::* kElementName = &Record::carrier_name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return project.contact_record ? &project.contact_record->declaration.carriers : nullptr;
@@ -216,6 +234,7 @@ template <>
 struct ElementKindRecords<ElementKind::kContactInterface> {
     using Record = configuration::VehicleContactInterfaceDeclaration;
     static constexpr std::string_view kKindDescription = "contact interface";
+    static constexpr std::string_view kKindWord = "contact_interface";
     static constexpr std::string Record::* kElementName = &Record::interface_name;
     static auto* Records(ConstOrMutableVehicleProject auto& project) {
         return project.contact_record ? &project.contact_record->declaration.interfaces : nullptr;
@@ -298,6 +317,23 @@ inline std::string_view DescribeElementKind(ElementKind kind) {
 // 'carbody'".
 inline std::string DescribeElement(const ElementReference& element) {
     return std::string(DescribeElementKind(element.kind)) + " '" + element.name + "'";
+}
+
+// The word a project file and the modelling service write a kind as: its
+// kKindWord, "rigid_body".
+inline std::string_view ElementKindWord(ElementKind kind) {
+    return VisitElementKind(
+        kind, []<typename KindRecords>(KindRecords) { return KindRecords::kKindWord; });
+}
+
+// The kind written as `word`, or none when no kind is.
+inline std::optional<ElementKind> FindElementKindWrittenAs(std::string_view word) {
+    const auto written = std::ranges::find_if(
+        kElementKinds, [word](ElementKind kind) { return ElementKindWord(kind) == word; });
+    if (written == kElementKinds.end()) {
+        return std::nullopt;
+    }
+    return *written;
 }
 
 }  // namespace orvd::vehicle_project

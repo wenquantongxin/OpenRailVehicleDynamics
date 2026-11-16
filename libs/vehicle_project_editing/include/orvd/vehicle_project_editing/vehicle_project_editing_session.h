@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -8,18 +9,20 @@
 #include <vector>
 
 #include "orvd/vehicle_project/vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_files_in_directory.h"
 #include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
 #include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
 
-// The command layer a graphical modelling tool drives: one project being
-// edited, the gravity it is checked under, its undo and redo history, a
-// revision number, and the preview of the last check that passed.
+// The command layer a graphical modelling tool drives over one vehicle
+// project: the project being edited, the project file it is associated with if
+// any, its undo and redo history, a revision number, whether it has unsaved
+// changes, and the preview of the last check that passed.
 //
 // An interface sends commands and shows what comes back; nothing here draws,
 // and nothing here knows a window. Whatever an interface can do through a
-// session, a test can do without one.
+// session, a test can do without one, saving included.
 //
 // An edit sets a property, creates an element or removes one. Each is made on
 // a copy of the project, which becomes the project only when the whole edit
@@ -33,24 +36,52 @@
 // or a non-positive mass for instance, and the station layout's own
 // consistency, such as its reference body keeping a zero station offset, are
 // judged by checking as well.
+//
+// Saving writes the project, whatever state it is in, to a project file
+// (vehicle_project_file_reading_and_writing.h). A session opened from a
+// vehicle's own files has no file until it is saved as a named project; one
+// opened from a project file is associated with that file. Saving as a named
+// project gives the project that name as its vehicle name and mechanical
+// definition identifier. Those two names are the project's identity rather
+// than an edit: every project of the undo and redo history carries the
+// current one, so no undo or redo brings an earlier identity back. The session
+// knows whether its project differs from the state last saved or, before any
+// save, from the state it was opened with, through undo and redo: undoing back
+// to that state leaves no unsaved changes, and an edit made after undoing past
+// it makes it unreachable, so the changes stay unsaved until the next save.
 
 namespace orvd::vehicle_project_editing {
 
 class VehicleProjectEditingSession {
   public:
-    // Starts at revision 0, with an empty history and no preview.
-    //
-    // The gravitational acceleration magnitude is the caller's to state, for
-    // the reason configuration::AssembleVehicleSystem gives; checking passes it
-    // to that assembly unchanged, which is also where it is judged.
-    VehicleProjectEditingSession(
-        vehicle_project::VehicleProject project,
-        double gravitational_acceleration_magnitude_meters_per_second_squared);
+    // A session over a project opened from a vehicle's own files, which has no
+    // project file yet. Starts at revision 0, with an empty history, no
+    // preview and no unsaved changes.
+    explicit VehicleProjectEditingSession(vehicle_project::VehicleProject project);
+
+    // A session over a project read from the project file at `associated_file`,
+    // with which it stays associated. Starts as the other constructor does.
+    VehicleProjectEditingSession(vehicle_project::VehicleProject project,
+                                 vehicle_project::VehicleProjectFileLocation associated_file);
 
     [[nodiscard]] const vehicle_project::VehicleProject& project() const { return project_; }
 
-    // Increases by one with every accepted edit, undo and redo, and never
-    // decreases: undoing restores an earlier project, not its revision.
+    // The project file the session was opened from or last saved as; absent
+    // for a project opened from a vehicle's own files and not saved yet.
+    [[nodiscard]] const std::optional<vehicle_project::VehicleProjectFileLocation>&
+    associated_file() const {
+        return associated_file_;
+    }
+
+    // Whether the project differs from the state last saved or, before any
+    // save, from the state the session was opened with.
+    [[nodiscard]] bool has_unsaved_changes() const {
+        return saved_state_position_ != undo_snapshots_.size();
+    }
+
+    // Increases by one with every accepted edit, undo and redo and with every
+    // Save As that changes the project's names, and never decreases: undoing
+    // restores an earlier project, not its revision.
     [[nodiscard]] std::uint64_t revision() const { return revision_; }
 
     [[nodiscard]] bool can_undo() const { return !undo_snapshots_.empty(); }
@@ -129,10 +160,34 @@ class VehicleProjectEditingSession {
     // Throws std::logic_error when there is no step to redo.
     void Redo();
 
-    // Checks the current project (vehicle_project_mechanical_check_report.h). When the check
-    // passes, the preview of the current revision replaces the previous one;
-    // when it does not, the previous preview stays, marked with the revision it
-    // was computed from.
+    // Writes the project to the file the session is associated with, and
+    // marks the current state saved. Changes nothing in the project, its
+    // history or its revision.
+    //
+    // Throws std::logic_error when the session has no file, and what writing
+    // throws when the file cannot be written (WriteVehicleProjectFile); either
+    // way nothing changes.
+    void SaveVehicleProject();
+
+    // Saves the project as the project named `file.name` in `file.directory`:
+    // the project is written with the vehicle definition's vehicle_name and
+    // mechanical_definition_identifier set to that name, replacing a project
+    // file of that name, and only once it has been written do the two names
+    // become those of the current project and of every project in the undo
+    // and redo history. No step is added, so can_undo and can_redo stay as
+    // they were; the revision increases by one when the names change. The
+    // session is then associated with the file and its state is saved.
+    // Nothing else is renamed or rewritten.
+    //
+    // Throws what writing throws (WriteVehicleProjectFile), an unacceptable
+    // name included, leaving the project, its names, the history, the
+    // revision and the association as they were.
+    void SaveVehicleProjectAs(const vehicle_project::VehicleProjectFileLocation& file);
+
+    // Checks the current project (vehicle_project_mechanical_check_report.h).
+    // When the check passes, the preview of the current revision replaces the
+    // previous one; when it does not, the previous preview stays, marked with
+    // the revision it was computed from.
     [[nodiscard]] MechanicalCheckReport CheckMechanics();
 
     // The preview of the last check that passed; absent until one has.
@@ -144,12 +199,16 @@ class VehicleProjectEditingSession {
     void AdoptEdit(vehicle_project::VehicleProject edited);
 
     vehicle_project::VehicleProject project_;
-    double gravitational_acceleration_magnitude_meters_per_second_squared_;
+    std::optional<vehicle_project::VehicleProjectFileLocation> associated_file_;
     // Whole-project snapshots, the most recent last: the project before each
     // step that can be undone, and the project after each step that can be
     // redone.
     std::vector<vehicle_project::VehicleProject> undo_snapshots_;
     std::vector<vehicle_project::VehicleProject> redo_snapshots_;
+    // Where in the history the saved state is: the number of undo snapshots
+    // while it is the current project. Absent once an edit has discarded the
+    // redo history it was in.
+    std::optional<std::size_t> saved_state_position_{0};
     std::uint64_t revision_{0};
     std::optional<VehicleProjectPreview> preview_;
 };

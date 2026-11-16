@@ -49,11 +49,14 @@ inline ReferenceVehicle LoadReferenceVehicle(const char* vehicle_path,
 }
 
 // The project the vehicle opens as, every free body placed at its reference
-// start-up pose, without the contact record.
+// start-up pose and checked under that start-up state's gravity, without the
+// contact record.
 inline vehicle_project::VehicleProject PlacedProject(const ReferenceVehicle& reference) {
     vehicle_project::VehicleProject project =
         vehicle_project::MakeVehicleProject(reference.definition);
     vehicle_project::PlaceFreeBodiesAtStartupPoses(project, reference.startup_state);
+    project.gravitational_acceleration_meters_per_second_squared =
+        reference.startup_state.gravitational_acceleration_meters_per_second_squared;
     return project;
 }
 
@@ -62,10 +65,6 @@ inline vehicle_project::VehicleProject PlacedProjectWithContact(const ReferenceV
     vehicle_project::VehicleProject project = PlacedProject(reference);
     project.contact_record = reference.contact_record;
     return project;
-}
-
-inline double GravityOf(const ReferenceVehicle& reference) {
-    return reference.startup_state.gravitational_acceleration_meters_per_second_squared;
 }
 
 }  // namespace orvd::editing_verification

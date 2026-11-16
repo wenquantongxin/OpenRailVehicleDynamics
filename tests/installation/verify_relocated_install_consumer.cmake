@@ -388,7 +388,12 @@ run_installed_consumer(wheel_rail_contact_installation_smoke)
 run_installed_consumer(forces_installation_smoke)
 run_installed_consumer(scene_record_installation_smoke)
 run_installed_consumer(scene_stream_installation_smoke)
-run_installed_consumer(vehicle_project_installation_smoke)
+# The installed project library saves a project into a directory of
+# projects and reads it back; the directory is this test's own storage.
+set(installed_consumer_vehicle_projects "${WORK_ROOT}/vehicle-projects")
+file(MAKE_DIRECTORY "${installed_consumer_vehicle_projects}")
+run_installed_consumer(vehicle_project_installation_smoke
+    "${installed_consumer_vehicle_projects}")
 run_installed_consumer(vehicle_project_editing_installation_smoke)
 
 find_single_executable(drake_probe_executable drake_loading_probe

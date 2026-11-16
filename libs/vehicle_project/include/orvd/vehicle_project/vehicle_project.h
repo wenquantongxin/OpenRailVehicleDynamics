@@ -8,21 +8,30 @@
 #include "orvd/configuration/vehicle_contact_record.h"
 #include "orvd/configuration/vehicle_definition.h"
 
-// The document a graphical modelling tool edits for one rail vehicle.
+// The document a graphical modelling tool edits for one rail vehicle, and
+// saves as one project file (vehicle_project_file_reading_and_writing.h).
 //
-// A project holds the vehicle's mechanical definition and, once provided, its
-// wheel-rail contact record. Those two are what the solver side receives,
-// through generate_assembly_inputs_from_vehicle_project.h. Beside them it holds three things that
-// exist only for the person editing: where each free body is drawn, the name
-// each rigid body's shapes are stated under, and how the elements are
-// organised into groups. None of them reaches the solver side, so redrawing or
+// A project holds:
+// - the vehicle's mechanical definition and, once provided, its wheel-rail
+//   contact record, which are what the solver side receives, through
+//   generate_assembly_inputs_from_vehicle_project.h;
+// - the magnitude of the gravitational acceleration the vehicle is checked
+//   under, once someone has stated it;
+// - where each free body is drawn, the name each rigid body's shapes are
+//   stated under, and how the elements are organised into groups;
+// - the visual definition its bodies are drawn with, a document of the
+//   drawing's own that this library keeps as text and does not interpret.
+// Placements, shape names, groups and the visual definition exist only for the
+// person editing. None of them reaches the solver side, so redrawing or
 // reorganising a vehicle cannot change a number the dynamics sees.
 //
 // Like the vehicle definition it carries, this is deliberately a mutable value
 // record: a caller may build any part of it directly and edit it in place.
 // Nothing here keeps a reference to a project, and nothing generated from one
 // refers back to it. The parts this library owns are checked when the caller
-// asks for it (vehicle_project_invariants.h), not on every assignment.
+// asks for it (vehicle_project_invariants.h), not on every assignment, and
+// neither writing nor reading a project file checks them: an unfinished
+// project is saved and reopened as it is.
 
 namespace orvd::vehicle_project {
 
@@ -117,18 +126,30 @@ struct VehicleProject {
     // about whether the vehicle runs in wheel-rail contact.
     std::optional<configuration::VehicleContactRecord> contact_record{};
 
+    // The magnitude of the gravitational acceleration the vehicle is checked
+    // under. Absent until someone states it, as a start-up state or a project
+    // file does; checking passes it to the vehicle assembly, which is where it
+    // is judged.
+    std::optional<double> gravitational_acceleration_meters_per_second_squared{};
+
     // At most one per free body. A free body without one has not been placed
     // yet.
     std::vector<FreeBodyPlacement> free_body_placements{};
 
     // At most one per rigid body. A project made from a vehicle definition
-    // (make_vehicle_project_from_vehicle_definition.h) gives every body its own name; renaming the
-    // body keeps the name its shapes are stated under, and a body without one,
-    // such as a body created later, has no shapes.
+    // (make_vehicle_project_from_vehicle_definition.h) gives every body its
+    // own name; renaming the body keeps the name its shapes are stated under,
+    // and a body without one, such as a body created later, has no shapes.
     std::vector<VisualDefinitionBodyName> visual_definition_body_names{};
 
     // The top level of the grouping tree.
     std::vector<ElementGroup> element_groups{};
+
+    // The visual definition the bodies are drawn with: the text of a JSON
+    // object a drawing reads, which this library carries and does not
+    // interpret (read_visual_definition_document_from_file.h). Empty when the
+    // project has none.
+    std::string visual_definition_document{};
 };
 
 }  // namespace orvd::vehicle_project

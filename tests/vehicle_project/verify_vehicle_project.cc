@@ -71,8 +71,10 @@ struct ReferenceVehicle {
 void VerifyImportAndGeneration(const ReferenceVehicle& reference) {
     const std::string& vehicle_name = reference.definition.vehicle_name;
     const VehicleProject project = vehicle_project::MakeVehicleProject(reference.definition);
-    Require(!project.contact_record && project.free_body_placements.empty() &&
-                project.element_groups.empty(),
+    Require(!project.contact_record &&
+                !project.gravitational_acceleration_meters_per_second_squared &&
+                project.free_body_placements.empty() && project.element_groups.empty() &&
+                project.visual_definition_document.empty(),
             vehicle_name + ": an imported project holds more than its vehicle definition");
     // A visual definition made for the vehicle states each body's shapes under
     // the body's own name.

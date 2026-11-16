@@ -9,7 +9,30 @@
 #include <vector>
 
 static_assert(std::is_constructible_v<orvd::vehicle_project_editing::VehicleProjectEditingSession,
-                                      orvd::vehicle_project::VehicleProject, double>);
+                                      orvd::vehicle_project::VehicleProject>);
+static_assert(std::is_constructible_v<orvd::vehicle_project_editing::VehicleProjectEditingSession,
+                                      orvd::vehicle_project::VehicleProject,
+                                      orvd::vehicle_project::VehicleProjectFileLocation>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<const orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
+                     .associated_file()),
+        const std::optional<orvd::vehicle_project::VehicleProjectFileLocation>&>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<const orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
+                     .has_unsaved_changes()),
+        bool>);
+static_assert(std::is_same_v<
+              decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
+                           .SaveVehicleProject()),
+              void>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
+                     .SaveVehicleProjectAs(
+                         std::declval<const orvd::vehicle_project::VehicleProjectFileLocation&>())),
+        void>);
 static_assert(
     std::is_same_v<
         decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
