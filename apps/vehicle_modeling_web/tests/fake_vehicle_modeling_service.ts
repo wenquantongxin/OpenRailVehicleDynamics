@@ -10,6 +10,17 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 // reference left out. Removing an element removes everything that refers to
 // it, and a rename updates every reference to the renamed element. Kinds and
 // names are made up on purpose: the interface must not depend on them.
+//
+// Projects are kept in memory by name, in the one folder the fake is given:
+// another folder cannot be read, a folder made unwritable refuses every save,
+// and a name is refused as the service refuses it. Saving as renames the
+// vehicle in the whole undo and redo history, with one revision and no undo
+// step: the name is the document's identity, not an edit. Unsaved changes
+// follow undo and redo: every edit makes a project state of its own, and the
+// session has unsaved changes while its state is not the one last saved or
+// opened.
+// get_session and list_vehicle_projects are answered while nothing is open,
+// with the session's fields null.
 
 export interface FakePropertyDescription {
   name: string;
@@ -48,7 +59,23 @@ interface Element {
   name: string;
 }
 
+/** What an edit changes and undo restores, with the state's own number: no two edits make the same state. */
+interface ProjectState {
+  vehicleName: string;
+  elements: FakeElement[];
+  stateNumber: number;
+}
+
+/** A project as saved: the vehicle as it was then, and the visual definition document it carries. */
+export interface FakeSavedProject {
+  vehicle: FakeVehicle;
+  visualDefinition: unknown;
+}
+
 type Refused = { refused: { element: unknown; property: unknown; message: string } };
+
+/** The service's rule for a project name, which the interface never applies: it shows the refusal. */
+const projectName = /^[A-Za-z0-9._-]+$/;
 
 function negativeNumbers(value: unknown): boolean {
   if (typeof value === 'number') return value < 0;
@@ -84,17 +111,37 @@ function defaultValue(property: FakePropertyDescription): unknown {
 
 export class FakeVehicleModelingService {
   readonly log: { command: string; commandArguments: Record<string, unknown> }[] = [];
+  /** The projects of the folder, by name. */
+  readonly savedProjects = new Map<string, FakeSavedProject>();
+  /** Whether saving into the folder succeeds; a folder that cannot be written refuses every save. */
+  projectsDirectoryWritable = true;
   private readonly vehicles: ReadonlyMap<string, FakeVehicle>;
+  private readonly visualDefinitions: ReadonlyMap<string, unknown>;
+  private readonly projectsDirectory: string;
+  /** The open vehicle's kinds and drawings; null while nothing is open. */
   private vehicle: FakeVehicle | null = null;
+  private vehicleName = '';
   private elements: FakeElement[] = [];
+  private stateNumber = 0;
+  private stateNumbersGiven = 0;
+  /** The state last saved or, before any save, opened. */
+  private savedStateNumber = 0;
+  private visualDefinition: unknown = null;
+  private projectFile: { directory: string; name: string } | null = null;
   private revision = 0;
-  private undoSteps: FakeElement[][] = [];
-  private redoSteps: FakeElement[][] = [];
+  private undoSteps: ProjectState[] = [];
+  private redoSteps: ProjectState[] = [];
   private preview: Record<string, unknown> | null = null;
 
-  /** Vehicles by the vehicle_definition_path that opens them. */
-  constructor(vehicles: Record<string, FakeVehicle>) {
+  /**
+   * Vehicles by the vehicle_definition_path that opens them, visual definition
+   * documents by the visual_definition_path that reads them, and the one
+   * folder of projects.
+   */
+  constructor(vehicles: Record<string, FakeVehicle>, options: { visualDefinitions?: Record<string, unknown>; projectsDirectory?: string } = {}) {
     this.vehicles = new Map(Object.entries(vehicles));
+    this.visualDefinitions = new Map(Object.entries(options.visualDefinitions ?? {}));
+    this.projectsDirectory = options.projectsDirectory ?? '/fake/projects';
   }
 
   readonly send: SendCommand = async (command, commandArguments = {}) => {
@@ -104,7 +151,38 @@ export class FakeVehicleModelingService {
   };
 
   private accepted(result: unknown): unknown {
-    return { ok: true, revision: this.revision, can_undo: this.undoSteps.length > 0, can_redo: this.redoSteps.length > 0, result };
+    if (this.vehicle === null) {
+      return { ok: true, revision: null, can_undo: null, can_redo: null, has_unsaved_changes: null, result };
+    }
+    return {
+      ok: true,
+      revision: this.revision,
+      can_undo: this.undoSteps.length > 0,
+      can_redo: this.redoSteps.length > 0,
+      has_unsaved_changes: this.stateNumber !== this.savedStateNumber,
+      result,
+    };
+  }
+
+  /** Makes the given project the open one: revision 0, no history, no preview, nothing unsaved. */
+  private openProject(vehicle: FakeVehicle, visualDefinition: unknown, projectFile: { directory: string; name: string } | null): void {
+    this.vehicle = structuredClone(vehicle);
+    this.vehicleName = vehicle.vehicleName;
+    this.elements = structuredClone(vehicle.elements);
+    this.visualDefinition = structuredClone(visualDefinition);
+    this.projectFile = projectFile;
+    this.stateNumber = ++this.stateNumbersGiven;
+    this.savedStateNumber = this.stateNumber;
+    this.revision = 0;
+    this.undoSteps = [];
+    this.redoSteps = [];
+    this.preview = null;
+  }
+
+  /** Writes the open project as the named one; the caller has checked the folder and the name. */
+  private saveProject(name: string, vehicleName: string): void {
+    const vehicle = { ...this.vehicle!, vehicleName, elements: this.elements };
+    this.savedProjects.set(name, structuredClone({ vehicle, visualDefinition: this.visualDefinition }));
   }
 
   private refused(message: string, element: unknown = null, property: unknown = null): Refused {
@@ -178,10 +256,15 @@ export class FakeVehicleModelingService {
     return this.outline().filter((each) => removed.has(each));
   }
 
+  private projectState(): ProjectState {
+    return structuredClone({ vehicleName: this.vehicleName, elements: this.elements, stateNumber: this.stateNumber });
+  }
+
   private edit(change: () => void): void {
-    this.undoSteps.push(structuredClone(this.elements));
+    this.undoSteps.push(this.projectState());
     this.redoSteps = [];
     change();
+    this.stateNumber = ++this.stateNumbersGiven;
     this.revision += 1;
   }
 
@@ -193,27 +276,86 @@ export class FakeVehicleModelingService {
     return outcome;
   }
 
-  private outcome(command: string, commandArguments: Record<string, unknown>): unknown {
-    if (command === 'open_vehicle') {
-      const opened = this.vehicles.get(String(commandArguments['vehicle_definition_path']));
-      if (opened === undefined) return this.refused(`cannot read '${String(commandArguments['vehicle_definition_path'])}'`);
-      this.vehicle = opened;
-      this.elements = structuredClone(opened.elements);
-      this.revision = 0;
-      this.undoSteps = [];
-      this.redoSteps = [];
-      this.preview = null;
-      return this.accepted({});
+  /** Why the folder cannot be read, or null. */
+  private unreadableDirectory(directory: unknown): string | null {
+    return directory === this.projectsDirectory ? null : `cannot read the folder '${String(directory)}'`;
+  }
+
+  /** The open-anywhere commands: the session, the folder, and the two opens. Null for every other command. */
+  private sessionOutcome(command: string, commandArguments: Record<string, unknown>): unknown {
+    switch (command) {
+      case 'get_session':
+        return this.accepted(this.vehicle === null ? { open: false } : { open: true, vehicle_project_file: this.projectFile });
+      case 'list_vehicle_projects': {
+        const unreadable = this.unreadableDirectory(commandArguments['directory']);
+        return unreadable !== null ? this.refused(unreadable) : this.accepted({ vehicle_projects: [...this.savedProjects.keys()].sort() });
+      }
+      case 'open_vehicle': {
+        const path = String(commandArguments['vehicle_definition_path']);
+        const opened = this.vehicles.get(path);
+        if (opened === undefined) return this.refused(`cannot read '${path}'`);
+        if (!('visual_definition_path' in commandArguments)) return this.refused('visual_definition_path is missing');
+        const visualPath = commandArguments['visual_definition_path'];
+        const visualDefinition = visualPath === null ? null : this.visualDefinitions.get(String(visualPath));
+        if (visualDefinition === undefined) return this.refused(`cannot read '${String(visualPath)}'`);
+        this.openProject(opened, visualDefinition, null);
+        return this.accepted({});
+      }
+      case 'open_vehicle_project': {
+        const directory = String(commandArguments['directory']);
+        const name = String(commandArguments['name']);
+        const unreadable = this.unreadableDirectory(directory);
+        const saved = this.savedProjects.get(name);
+        if (unreadable !== null) return this.refused(unreadable);
+        if (saved === undefined) return this.refused(`the folder holds no project named '${name}'`);
+        this.openProject(saved.vehicle, saved.visualDefinition, { directory, name });
+        return this.accepted({});
+      }
+      default:
+        return null;
     }
+  }
+
+  private outcome(command: string, commandArguments: Record<string, unknown>): unknown {
+    const sessionOutcome = this.sessionOutcome(command, commandArguments);
+    if (sessionOutcome !== null) return sessionOutcome;
     if (this.vehicle === null) return this.refused('no vehicle is open; send open_vehicle first');
     const target = commandArguments['element'] as Element | undefined;
     const element = this.find(target);
     switch (command) {
+      case 'save_vehicle_project': {
+        if (this.projectFile === null) return this.refused('the session has no project file; save it as a project first');
+        if (!this.projectsDirectoryWritable) return this.refused(`cannot write into the folder '${this.projectFile.directory}'`);
+        this.saveProject(this.projectFile.name, this.vehicleName);
+        this.savedStateNumber = this.stateNumber;
+        return this.accepted({});
+      }
+      case 'save_vehicle_project_as': {
+        const directory = String(commandArguments['directory']);
+        const name = String(commandArguments['name']);
+        const unreadable = this.unreadableDirectory(directory);
+        if (unreadable !== null) return this.refused(unreadable);
+        if (!projectName.test(name)) return this.refused(`'${name}' is not a project name: use only letters, digits, '.', '_' and '-'`);
+        if (!this.projectsDirectoryWritable) return this.refused(`cannot write into the folder '${directory}'`);
+        // Written first; only then does the session's project take the name. The name is the document's identity,
+        // not an edit: it changes in every state undo and redo hold, with one revision and no undo step.
+        this.saveProject(name, name);
+        if (this.vehicleName !== name) {
+          for (const state of [...this.undoSteps, ...this.redoSteps]) state.vehicleName = name;
+          this.vehicleName = name;
+          this.revision += 1;
+        }
+        this.projectFile = { directory, name };
+        this.savedStateNumber = this.stateNumber;
+        return this.accepted({});
+      }
+      case 'get_visual_definition':
+        return this.accepted({ visual_definition: this.visualDefinition });
       case 'describe_element_kinds':
         return this.accepted({ element_kinds: this.vehicle.kinds });
       case 'get_outline':
         return this.accepted({
-          vehicle_name: this.vehicle.vehicleName,
+          vehicle_name: this.vehicleName,
           elements: this.outline().map(({ kind, name }) => ({ kind, name })),
           element_groups: [],
           unplaced_free_bodies: [],
@@ -288,8 +430,8 @@ export class FakeVehicleModelingService {
         const [from, to] = command === 'undo' ? [this.undoSteps, this.redoSteps] : [this.redoSteps, this.undoSteps];
         const restored = from.pop();
         if (restored === undefined) return this.refused(`there is no step to ${command}`);
-        to.push(structuredClone(this.elements));
-        this.elements = restored;
+        to.push(this.projectState());
+        ({ vehicleName: this.vehicleName, elements: this.elements, stateNumber: this.stateNumber } = restored);
         this.revision += 1;
         return this.accepted({});
       }

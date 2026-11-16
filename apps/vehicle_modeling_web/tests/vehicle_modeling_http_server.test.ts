@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,12 +11,13 @@ import type { ReferenceVehicleCatalogueEntry } from '../server/read_reference_ve
 import { startVehicleModelingHttpServer } from '../server/vehicle_modeling_http_server.ts';
 import { modellingServerProxy } from '../vite.config.ts';
 
-// The server against a stand-in service: a child process that answers each
-// line after a delay the request chooses, says how many requests it held when
-// one arrived and how many it has received, and ends with a chosen exit code
-// on request.
+// The server against a stand-in service: a child process that notes that it
+// started, answers each line after a delay the request chooses, says how many
+// requests it held when one arrived and how many it has received, and ends
+// with a chosen exit code on request.
 
 const fakeServiceSource = `
+require('node:fs').appendFileSync(require('node:path').join(__dirname, 'started.txt'), 'started\\n');
 const lines = require('node:readline').createInterface({ input: process.stdin });
 let held = 0;
 let received = 0;
@@ -32,7 +33,21 @@ lines.on('line', (line) => {
 });
 `;
 
-async function fixture() {
+const referenceVehicles: ReferenceVehicleCatalogueEntry[] = [
+  {
+    name: 'A',
+    title: { en: 'Vehicle A', zh: '车辆 A' },
+    openArguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json', visual_definition_path: '/a_visual.json' },
+  },
+  {
+    name: 'B',
+    title: { en: 'Vehicle B', zh: '车辆 B' },
+    openArguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json', visual_definition_path: null },
+  },
+];
+
+/** A temporary folder holding the stand-in service, a dist/ with one page, a file beside it, and a folder of projects. */
+async function serverFiles() {
   const directory = await mkdtemp(join(tmpdir(), 'orvd-modelling-server-'));
   const servicePath = join(directory, 'fake_service.cjs');
   await writeFile(servicePath, `#!${process.execPath}\n${fakeServiceSource}`);
@@ -41,26 +56,17 @@ async function fixture() {
   await mkdir(staticDirectory);
   await writeFile(join(staticDirectory, 'index.html'), '<title>modelling</title>');
   await writeFile(join(directory, 'secret.txt'), 'outside dist');
-  const visualDefinitionPath = join(directory, 'visual.json');
-  await writeFile(visualDefinitionPath, '{"length_unit": "meter", "parts": []}');
-  const referenceVehicles: ReferenceVehicleCatalogueEntry[] = [
-    {
-      name: 'A',
-      title: { en: 'Vehicle A', zh: '车辆 A' },
-      openArguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json' },
-      visualDefinitionPath,
-    },
-    {
-      name: 'B',
-      title: { en: 'Vehicle B', zh: '车辆 B' },
-      openArguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json' },
-      visualDefinitionPath: null,
-    },
-  ];
+  const vehicleProjectsDirectory = join(directory, 'projects');
+  await mkdir(vehicleProjectsDirectory);
+  return { directory, options: { servicePath, host: '127.0.0.1', port: 0, staticDirectory, referenceVehicles, vehicleProjectsDirectory } };
+}
+
+async function fixture() {
+  const { directory, options } = await serverFiles();
   const endings: string[] = [];
-  const server = await startVehicleModelingHttpServer({ servicePath, host: '127.0.0.1', port: 0, staticDirectory, referenceVehicles }, (ending) => endings.push(ending));
+  const server = await startVehicleModelingHttpServer(options, (ending) => endings.push(ending));
   const origin = `http://127.0.0.1:${server.port}`;
-  return { directory, server, origin, endings };
+  return { directory, server, origin, endings, vehicleProjectsDirectory: options.vehicleProjectsDirectory };
 }
 
 function command(origin: string, body: string, signal?: AbortSignal): Promise<Response> {
@@ -92,31 +98,44 @@ test('commands are relayed one at a time, each answered with its own answer line
   }
 });
 
-test('reference vehicles, their visual definitions and the built files are served; nothing else is', { timeout: 10000 }, async () => {
-  const { directory, server, origin } = await fixture();
+test('reference vehicles with their open arguments, the folder of projects and the built files are served; nothing else is', { timeout: 10000 }, async () => {
+  const { directory, server, origin, vehicleProjectsDirectory } = await fixture();
   try {
     const listed = await (await fetch(`${origin}/api/reference_vehicles`)).json();
     assert.deepEqual(listed, [
       {
         name: 'A',
         title: { en: 'Vehicle A', zh: '车辆 A' },
-        open_arguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json' },
-        visual_definition_available: true,
+        open_arguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json', visual_definition_path: '/a_visual.json' },
       },
       {
         name: 'B',
         title: { en: 'Vehicle B', zh: '车辆 B' },
-        open_arguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json' },
-        visual_definition_available: false,
+        open_arguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json', visual_definition_path: null },
       },
     ]);
-    assert.equal(await (await fetch(`${origin}/api/reference_vehicles/A/visual_definition`)).text(), '{"length_unit": "meter", "parts": []}');
+    assert.deepEqual(await (await fetch(`${origin}/api/vehicle_projects_directory`)).json(), { directory: vehicleProjectsDirectory });
     assert.match(await (await fetch(`${origin}/?vehicle=A`)).text(), /modelling/);
-    for (const path of ['/api/reference_vehicles/B/visual_definition', '/api/reference_vehicles/C/visual_definition', '/api/other', '/%2e%2e/secret.txt', '/missing.js']) {
+    for (const path of ['/api/reference_vehicles/A/visual_definition', '/api/other', '/%2e%2e/secret.txt', '/missing.js']) {
       assert.equal((await fetch(`${origin}${path}`)).status, 404, path);
     }
   } finally {
     await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('without an existing folder of projects the server does not start, says why, and starts no service', { timeout: 10000 }, async () => {
+  const { directory, options } = await serverFiles();
+  try {
+    for (const vehicleProjectsDirectory of [join(directory, 'absent'), join(directory, 'secret.txt')]) {
+      await assert.rejects(
+        startVehicleModelingHttpServer({ ...options, vehicleProjectsDirectory }, () => {}),
+        new RegExp(`the folder of vehicle projects '${vehicleProjectsDirectory}' is not an existing directory`),
+      );
+    }
+    await assert.rejects(access(join(directory, 'started.txt')), /ENOENT/, 'the service was started');
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });

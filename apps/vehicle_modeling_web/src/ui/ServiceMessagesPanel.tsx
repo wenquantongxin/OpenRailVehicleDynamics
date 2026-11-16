@@ -1,38 +1,20 @@
-import { useState, type ReactNode } from 'react';
-
 import { elementKey, type ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditRefusal, SessionState } from '../session/vehicle_editing_session.ts';
 import type { VisualPart } from '../visual/read_vehicle_visual_definition.ts';
+import { CollapsibleMessageGroup } from './CollapsibleMessageGroup.tsx';
 import { DockedPanelTitleStrip } from './DockedPanelTitleStrip.tsx';
+import { ElementLinkButton } from './ElementLinkButton.tsx';
 import { identifierLabel } from './identifier_display_labels.ts';
+import { openChoiceInSentence } from './open_choice_and_edited_project_wording.ts';
 import { WrappableElementName } from './WrappableElementName.tsx';
 
 // What the service said: the latest check (refusals first, then information,
 // then what the check covers), the latest refused edit and command, what the
 // latest removal took, and what the preview could not draw; and the visual
 // parts left without a body to hang on. Check refusals are the kernel's
-// sentences and are shown as they are.
-
-function ElementButton({ element, onSelect }: { element: ElementReference; onSelect: (element: ElementReference) => void }) {
-  return (
-    <button type="button" className="element-link" onClick={() => onSelect(element)} title={`${identifierLabel(element.kind)} · ${element.name}`}>
-      <span className="link-kind">{identifierLabel(element.kind)}</span> <WrappableElementName name={element.name} />
-    </button>
-  );
-}
-
-function Collapsible(props: { en: string; zh: string; count: number; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="message-group secondary">
-      <button type="button" className="group-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className={`chevron ${open ? 'open' : ''}`} aria-hidden="true" />
-        {props.en} <span className="zh">{props.zh}</span> <span className="count">{props.count}</span>
-      </button>
-      {open && props.children}
-    </section>
-  );
-}
+// sentences and are shown as they are. Besides, two notices of the session's
+// own: a link the page was opened with that was not followed because a
+// session was open, and a visual definition the view cannot draw from.
 
 export function ServiceMessagesPanel(props: {
   state: SessionState;
@@ -65,6 +47,29 @@ export function ServiceMessagesPanel(props: {
               Refused <span className="zh">被拒绝</span>
             </b>
             <span>{state.commandRefusal.message}</span>
+          </div>
+        )}
+        {state.linkNotFollowed !== null && (
+          <div className="message notice" role="status">
+            <b>
+              Link not followed <span className="zh">链接未执行</span>
+            </b>
+            <span>
+              The page was opened with a link to {openChoiceInSentence(state.linkNotFollowed).en}, but the service had a session open; it has been
+              resumed as it was.
+            </span>
+            <span className="zh">页面链接要求打开{openChoiceInSentence(state.linkNotFollowed).zh}，但服务中已有打开的会话，已按原样恢复。</span>
+          </div>
+        )}
+        {state.vehicle !== null && state.vehicle.visualDefinitionProblem !== null && (
+          <div className="message notice" role="status">
+            <b>
+              Visual definition not drawn <span className="zh">外观定义无法绘制</span>
+            </b>
+            <span>{state.vehicle.visualDefinitionProblem}</span>
+            <span className="hint">
+              The bodies are drawn as their markers; editing goes on as usual. <span className="zh">刚体以标记绘制，编辑照常进行。</span>
+            </span>
           </div>
         )}
         {state.removedElements !== null && (
@@ -121,13 +126,13 @@ export function ServiceMessagesPanel(props: {
                 </ul>
               </section>
             )}
-            <Collapsible en="What the check covers" zh="检查范围" count={report.coverageStatements.length}>
+            <CollapsibleMessageGroup en="What the check covers" zh="检查范围" count={report.coverageStatements.length}>
               <ul className="coverage">
                 {report.coverageStatements.map((statement, index) => (
                   <li key={index}>{statement}</li>
                 ))}
               </ul>
-            </Collapsible>
+            </CollapsibleMessageGroup>
           </>
         )}
         {notDrawable.length > 0 && (
@@ -137,13 +142,13 @@ export function ServiceMessagesPanel(props: {
             </h3>
             <div className="element-links">
               {notDrawable.map((element) => (
-                <ElementButton key={elementKey(element)} element={element} onSelect={props.onSelect} />
+                <ElementLinkButton key={elementKey(element)} element={element} onSelect={props.onSelect} />
               ))}
             </div>
           </section>
         )}
         {props.partsWithoutBody.length > 0 && (
-          <Collapsible en="Visual parts without a drawn body" zh="外形部件无对应刚体" count={props.partsWithoutBody.length}>
+          <CollapsibleMessageGroup en="Visual parts without a drawn body" zh="外形部件无对应刚体" count={props.partsWithoutBody.length}>
             <ul className="parts-without-body">
               {props.partsWithoutBody.map((part) => (
                 <li key={part.name}>
@@ -151,7 +156,7 @@ export function ServiceMessagesPanel(props: {
                 </li>
               ))}
             </ul>
-          </Collapsible>
+          </CollapsibleMessageGroup>
         )}
         {state.vehicle === null && state.failure === null && state.commandRefusal === null && (
           <p className="panel-empty">

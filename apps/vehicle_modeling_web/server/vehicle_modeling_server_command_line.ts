@@ -5,7 +5,11 @@
 //
 //   npm run build
 //   npm run serve:reference -- --service <path to orvd_vehicle_modeling_service>
-//   open http://127.0.0.1:6651/            (?vehicle=GZ18 opens GZ18 on load,
+//                              --vehicle-projects <folder of projects>
+//   open http://127.0.0.1:6651/            (a session the service has open is
+//                                            resumed; otherwise ?vehicle=GZ18
+//                                            opens GZ18, ?project=NAME opens a
+//                                            saved project, and then
 //                                            &select=<kind>:<name> selects an element)
 //
 // For development, run the server as above and `npm run dev` beside it: Vite
@@ -13,6 +17,9 @@
 //
 // Options are strict key/value pairs:
 //   --service PATH               the service binary (required)
+//   --vehicle-projects DIRECTORY the folder the projects are saved in and opened
+//                                from, an existing directory outside the
+//                                repository (required)
 //   --reference-vehicles FILE    the catalogue of reference vehicles the interface
 //                                offers (see read_reference_vehicle_catalogue.ts);
 //                                without it there are none
@@ -31,12 +38,14 @@
 //     they arrive. A request whose Origin names another host than its Host is
 //     refused with 403, so that no page of another origin drives the service.
 //   GET /api/reference_vehicles
-//     [{"name", "title": {"en", "zh"}, "open_arguments": {...},
-//       "visual_definition_available"}, ...] in catalogue order. open_arguments
-//     are the arguments of the service's open_vehicle command for that vehicle;
-//     the interface sends them as given and reads none of them.
-//   GET /api/reference_vehicles/NAME/visual_definition
-//     The vehicle's visual definition file, read when requested.
+//     [{"name", "title": {"en", "zh"}, "open_arguments": {...}}, ...] in
+//     catalogue order. open_arguments are the arguments of the service's
+//     open_vehicle command for that vehicle, its visual definition's path among
+//     them (null where the catalogue names none); the interface sends them as
+//     given and reads none of them.
+//   GET /api/vehicle_projects_directory
+//     {"directory": "<absolute path>"}: the folder of projects, which the
+//     interface passes to the service's commands that take a folder.
 //   Anything else is a file of dist/.
 //
 // The service is started once. If it ends, the server reports why on standard
@@ -50,6 +59,7 @@ import { startVehicleModelingHttpServer } from './vehicle_modeling_http_server.t
 
 export interface VehicleModelingServerArguments {
   servicePath: string;
+  vehicleProjectsDirectory: string;
   host: string;
   port: number;
   referenceVehiclesPath: string | null;
@@ -57,6 +67,7 @@ export interface VehicleModelingServerArguments {
 
 export function parseVehicleModelingServerArguments(args: readonly string[]): VehicleModelingServerArguments {
   let servicePath: string | null = null;
+  let vehicleProjectsDirectory: string | null = null;
   let host = '127.0.0.1';
   let port = 6651;
   let referenceVehiclesPath: string | null = null;
@@ -68,6 +79,7 @@ export function parseVehicleModelingServerArguments(args: readonly string[]): Ve
     if (seen.has(key)) throw new Error(`${key} is given twice`);
     seen.add(key);
     if (key === '--service') servicePath = resolve(value);
+    else if (key === '--vehicle-projects') vehicleProjectsDirectory = resolve(value);
     else if (key === '--reference-vehicles') referenceVehiclesPath = resolve(value);
     else if (key === '--host') host = value;
     else if (key === '--port') {
@@ -76,15 +88,16 @@ export function parseVehicleModelingServerArguments(args: readonly string[]): Ve
     } else throw new Error(`unknown option ${key}`);
   }
   if (servicePath === null) throw new Error('--service PATH is required');
-  return { servicePath, host, port, referenceVehiclesPath };
+  if (vehicleProjectsDirectory === null) throw new Error('--vehicle-projects DIRECTORY is required: the folder the projects are saved in');
+  return { servicePath, vehicleProjectsDirectory, host, port, referenceVehiclesPath };
 }
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { servicePath, host, port, referenceVehiclesPath } = parseVehicleModelingServerArguments(process.argv.slice(2));
+    const { servicePath, vehicleProjectsDirectory, host, port, referenceVehiclesPath } = parseVehicleModelingServerArguments(process.argv.slice(2));
     const referenceVehicles = referenceVehiclesPath === null ? [] : await readReferenceVehicleCatalogue(referenceVehiclesPath);
     const staticDirectory = fileURLToPath(new URL('../dist', import.meta.url));
-    const server = await startVehicleModelingHttpServer({ servicePath, host, port, staticDirectory, referenceVehicles }, (ending) => {
+    const server = await startVehicleModelingHttpServer({ servicePath, host, port, staticDirectory, referenceVehicles, vehicleProjectsDirectory }, (ending) => {
       process.stderr.write(`The modelling service ${ending}; the modelling server stops.\n`);
       process.exit(1);
     });

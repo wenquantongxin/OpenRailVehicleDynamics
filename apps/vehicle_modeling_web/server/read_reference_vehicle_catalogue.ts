@@ -13,12 +13,12 @@ import { dirname, resolve } from 'node:path';
 // catalogue's own folder. Because people write it, it is read strictly:
 // exactly these keys, non-empty strings, and no name listed twice.
 
-/** A vehicle the interface can open: its title, the open_vehicle arguments as the service takes them, and its drawing. */
+/** A vehicle the interface can open: its title, and the open_vehicle arguments as the service takes them. */
 export interface ReferenceVehicleCatalogueEntry {
   name: string;
   title: { en: string; zh: string };
-  openArguments: { vehicle_definition_path: string; startup_state_path: string; contact_record_path: string };
-  visualDefinitionPath: string | null;
+  /** Absolute paths; the visual definition's is null where the catalogue names none. */
+  openArguments: { vehicle_definition_path: string; startup_state_path: string; contact_record_path: string; visual_definition_path: string | null };
 }
 
 function fieldsOf(value: unknown, required: readonly string[], optional: readonly string[], what: string): Record<string, unknown> {
@@ -63,8 +63,8 @@ export function parseReferenceVehicleCatalogue(catalogueText: string, catalogueD
         vehicle_definition_path: path('vehicle_definition_path'),
         startup_state_path: path('startup_state_path'),
         contact_record_path: path('contact_record_path'),
+        visual_definition_path: 'visual_definition_path' in fields ? path('visual_definition_path') : null,
       },
-      visualDefinitionPath: 'visual_definition_path' in fields ? path('visual_definition_path') : null,
     };
   });
 }

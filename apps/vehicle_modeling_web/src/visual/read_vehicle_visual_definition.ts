@@ -92,9 +92,14 @@ function appearance(value: unknown, what: string): Appearance {
   return value as Appearance;
 }
 
-/** Reads the parts; which bodies they name is checked against the drawn vehicle, where the body names are known. */
-export function parseVisualDefinition(textValue: string): VisualDefinition {
-  const json = JSON.parse(textValue) as Record<string, unknown>;
+/**
+ * Reads the parts of the document the project carries, a JSON object the
+ * service does not interpret: whatever the view could not draw is refused
+ * here. Which bodies the parts name is checked against the drawn vehicle,
+ * where the body names are known.
+ */
+export function readVisualDefinition(document: unknown): VisualDefinition {
+  const json = document as Record<string, unknown>;
   if (json['length_unit'] !== 'meter') throw new Error('visual definition: length_unit must be meter');
   if (!Array.isArray(json['parts'])) throw new Error('visual definition: parts is not an array');
   const parts = json['parts'].map((entry: Record<string, unknown>, index): VisualPart => {
@@ -123,14 +128,14 @@ export function parseVisualDefinition(textValue: string): VisualDefinition {
           cornerRadiusMeters:
             entry['corner_radius_meters'] === undefined ? 0 : nonNegativeNumber(entry['corner_radius_meters'], `${name}.corner_radius`),
         };
-      case 'cylinder':
-        return {
-          ...base,
-          kind: 'cylinder',
-          startInBodyFrameMeters: triple(entry['start_in_body_frame_meters'], `${name}.start`),
-          endInBodyFrameMeters: triple(entry['end_in_body_frame_meters'], `${name}.end`),
-          radiusMeters: positiveNumber(entry['radius_meters'], `${name}.radius`),
-        };
+      case 'cylinder': {
+        const start = triple(entry['start_in_body_frame_meters'], `${name}.start`);
+        const end = triple(entry['end_in_body_frame_meters'], `${name}.end`);
+        if (!(Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]) > 0)) {
+          throw new Error(`visual definition: cylinder '${name}' starts and ends at the same point`);
+        }
+        return { ...base, kind: 'cylinder', startInBodyFrameMeters: start, endInBodyFrameMeters: end, radiusMeters: positiveNumber(entry['radius_meters'], `${name}.radius`) };
+      }
       case 'sphere':
         return {
           ...base,

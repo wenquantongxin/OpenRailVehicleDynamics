@@ -13,12 +13,20 @@ export type Vector3 = [number, number, number];
 /** Three rows of a rotation matrix. */
 export type Rotation = [Vector3, Vector3, Vector3];
 
-/** The session after an accepted command, and the command's own result. */
-export interface Accepted {
-  ok: true;
+/** The open session after an accepted command, as every accepted answer states it. */
+export interface SessionAfterCommand {
   revision: number;
   canUndo: boolean;
   canRedo: boolean;
+  /** The project differs from the state it was last saved in or, before any save, the state it was opened in. */
+  hasUnsavedChanges: boolean;
+}
+
+/** An accepted command's answer: the session after it, and the command's own result. */
+export interface Accepted {
+  ok: true;
+  /** Null while no vehicle is open, when only get_session and list_vehicle_projects are accepted. */
+  session: SessionAfterCommand | null;
   result: unknown;
 }
 
@@ -30,6 +38,15 @@ export interface Refusal {
 }
 
 export type ServiceAnswer = Accepted | { ok: false; refusal: Refusal };
+
+/** A project file as the service names it: the folder of projects it lies in, and the project's name. */
+export interface VehicleProjectFile {
+  directory: string;
+  name: string;
+}
+
+/** What get_session says is open: nothing, or a vehicle with the project file the session is associated with, if any. */
+export type ServiceSessionDescription = { open: false } | { open: true; vehicleProjectFile: VehicleProjectFile | null };
 
 export interface Outline {
   vehicleName: string;
@@ -189,11 +206,19 @@ function nullable<T>(value: unknown, read: (present: unknown) => T): T | null {
 
 export function readAnswer(json: unknown): ServiceAnswer {
   if (field(json, 'ok', 'answer') === true) {
+    // While nothing is open the four session fields are null; the revision says which it is.
+    const revision = field(json, 'revision', 'answer');
     return {
       ok: true,
-      revision: number(field(json, 'revision', 'answer'), 'answer.revision'),
-      canUndo: truth(field(json, 'can_undo', 'answer'), 'answer.can_undo'),
-      canRedo: truth(field(json, 'can_redo', 'answer'), 'answer.can_redo'),
+      session:
+        revision === null
+          ? null
+          : {
+              revision: number(revision, 'answer.revision'),
+              canUndo: truth(field(json, 'can_undo', 'answer'), 'answer.can_undo'),
+              canRedo: truth(field(json, 'can_redo', 'answer'), 'answer.can_redo'),
+              hasUnsavedChanges: truth(field(json, 'has_unsaved_changes', 'answer'), 'answer.has_unsaved_changes'),
+            },
       result: field(json, 'result', 'answer'),
     };
   }
@@ -206,6 +231,29 @@ export function readAnswer(json: unknown): ServiceAnswer {
       message: text(field(error, 'message', 'error'), 'error.message'),
     },
   };
+}
+
+export function readServiceSessionDescription(result: unknown): ServiceSessionDescription {
+  if (!truth(field(result, 'open', 'get_session'), 'get_session.open')) {
+    return { open: false };
+  }
+  return {
+    open: true,
+    vehicleProjectFile: nullable(field(result, 'vehicle_project_file', 'get_session'), (file) => ({
+      directory: text(field(file, 'directory', 'vehicle_project_file'), 'vehicle_project_file.directory'),
+      name: text(field(file, 'name', 'vehicle_project_file'), 'vehicle_project_file.name'),
+    })),
+  };
+}
+
+/** The names of the projects in a folder of projects, sorted, as list_vehicle_projects gives them. */
+export function readVehicleProjectNames(result: unknown): string[] {
+  return texts(field(result, 'vehicle_projects', 'list_vehicle_projects'), 'list_vehicle_projects.vehicle_projects');
+}
+
+/** The visual definition document the project carries, unread: a JSON object, or null where it carries none. */
+export function readVisualDefinitionDocument(result: unknown): unknown {
+  return field(result, 'visual_definition', 'get_visual_definition');
 }
 
 export function readOutline(result: unknown): Outline {

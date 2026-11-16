@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-
-import type { ReferenceVehicle } from '../service/fetch_reference_vehicles.ts';
 import { checkStatus, type SessionState } from '../session/vehicle_editing_session.ts';
+import { openChoiceName } from './open_choice_and_edited_project_wording.ts';
 
-// Title, the vehicle and how to open one, undo and redo, and the check status
-// with the project revision.
+// Title; Open, Save and Save as; what is being edited: the project's name when
+// the session has a file, otherwise the vehicle's with a plain statement that
+// it is not saved to a file, and a mark while there are unsaved changes; undo
+// and redo; and the check status with the project revision.
 
 const checkStatusNames = {
   passed: { en: 'Check passed', zh: '检查通过' },
@@ -12,70 +12,18 @@ const checkStatusNames = {
   not_checked: { en: 'Not checked', zh: '未检查' },
 };
 
-function OpenMenu(props: { vehicles: ReferenceVehicle[] | null; current: ReferenceVehicle | null; onOpen: (vehicle: ReferenceVehicle) => void }) {
-  const [open, setOpen] = useState(false);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: Event): void => {
-      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener('pointerdown', close);
-    window.addEventListener('keydown', close);
-    return () => {
-      window.removeEventListener('pointerdown', close);
-      window.removeEventListener('keydown', close);
-    };
-  }, [open]);
-  return (
-    <div className="open-menu" ref={menu}>
-      <button type="button" className="chip primary open-button" aria-haspopup="menu" aria-expanded={open} disabled={props.vehicles === null} onClick={() => setOpen(!open)}>
-        <span className="en">Open</span>
-        <span className="zh">打开</span>
-        <span className={`chevron ${open ? 'open' : ''}`} aria-hidden="true" />
-      </button>
-      {open && props.vehicles !== null && (
-        <div className="menu" role="menu">
-          <div className="menu-caption">
-            Reference vehicles <span className="zh">参考车辆</span>
-          </div>
-          {props.vehicles.length === 0 ? (
-            <div className="menu-empty">
-              The server was started without reference vehicles. <span className="zh">服务器启动时未给出参考车辆。</span>
-            </div>
-          ) : (
-            props.vehicles.map((vehicle) => (
-              <button
-                type="button"
-                role="menuitem"
-                key={vehicle.name}
-                className={vehicle === props.current ? 'current' : ''}
-                aria-current={vehicle === props.current || undefined}
-                onClick={() => {
-                  setOpen(false);
-                  props.onOpen(vehicle);
-                }}
-              >
-                <span className="en">{vehicle.title.en}</span>
-                <span className="zh">{vehicle.title.zh}</span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function VehicleModelingTopBar(props: {
-  vehicles: ReferenceVehicle[] | null;
   state: SessionState;
-  onOpen: (vehicle: ReferenceVehicle) => void;
+  onShowOpenChoices: () => void;
+  onSave: () => void;
+  onSaveAs: () => void;
   onUndo: () => void;
   onRedo: () => void;
 }) {
   const { state } = props;
   const opened = state.vehicle !== null;
+  const busy = state.opening !== null || state.failure !== null;
+  const file = state.vehicleProjectFile;
   const status = checkStatus(state);
   return (
     <header className="top-bar">
@@ -100,27 +48,59 @@ export function VehicleModelingTopBar(props: {
         </div>
       </div>
       <div className="top-vehicle">
-        <OpenMenu vehicles={props.vehicles} current={state.vehicle?.reference ?? null} onOpen={props.onOpen} />
-        <span className="meta">
-          <span className="k">
-            Vehicle <span className="zh">车辆</span>
+        <div className="file-actions">
+          <button type="button" className="chip" disabled={!opened || busy || state.choosingWhatToOpen} onClick={props.onShowOpenChoices}>
+            <span className="en">Open</span>
+            <span className="zh">打开</span>
+          </button>
+          <button type="button" className="chip primary" disabled={!opened || busy} onClick={props.onSave} title="Ctrl+S">
+            <span className="en">Save</span>
+            <span className="zh">保存</span>
+          </button>
+          <button type="button" className="chip" disabled={!opened || busy} onClick={props.onSaveAs}>
+            <span className="en">Save as</span>
+            <span className="zh">另存为</span>
+          </button>
+        </div>
+        <span className="meta edited-project">
+          {file !== null ? (
+            <span className="k">
+              Project <span className="zh">工程</span>
+            </span>
+          ) : opened ? (
+            <span className="k">
+              Vehicle, not saved to a file <span className="zh">车辆，未保存为文件</span>
+            </span>
+          ) : (
+            <span className="k">
+              Vehicle <span className="zh">车辆</span>
+            </span>
+          )}
+          <span className="v">
+            <span className="edited-name">{file?.name ?? state.outline?.vehicleName ?? '—'}</span>
+            {opened && state.hasUnsavedChanges && (
+              <span className="unsaved-mark" role="status">
+                <span className="dot" />
+                <span className="en">Unsaved changes</span>
+                <span className="zh">未保存的更改</span>
+              </span>
+            )}
           </span>
-          <span className="v">{state.outline?.vehicleName ?? '—'}</span>
         </span>
         {state.opening !== null && (
           <span className="opening-chip" role="status">
-            <span className="en">Opening {state.opening.title.en}</span>
-            <span className="zh">正在打开{state.opening.title.zh}</span>
+            <span className="en">Opening {openChoiceName(state.opening)}</span>
+            <span className="zh">正在打开 {openChoiceName(state.opening)}</span>
           </span>
         )}
       </div>
       <div className="top-session">
         <div className="history">
-          <button type="button" className="chip" disabled={!state.canUndo || state.opening !== null} onClick={props.onUndo} title="Ctrl+Z">
+          <button type="button" className="chip" disabled={!state.canUndo || busy} onClick={props.onUndo} title="Ctrl+Z">
             <span className="en">Undo</span>
             <span className="zh">撤销</span>
           </button>
-          <button type="button" className="chip" disabled={!state.canRedo || state.opening !== null} onClick={props.onRedo} title="Ctrl+Shift+Z · Ctrl+Y">
+          <button type="button" className="chip" disabled={!state.canRedo || busy} onClick={props.onRedo} title="Ctrl+Shift+Z · Ctrl+Y">
             <span className="en">Redo</span>
             <span className="zh">重做</span>
           </button>

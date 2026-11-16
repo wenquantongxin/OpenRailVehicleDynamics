@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { createModelPalette } from '../src/scene/vehicle_model_view_colors_and_materials.ts';
 import { assignPartsToDrawnBodies, VehiclePreviewScene } from '../src/scene/vehicle_preview_scene.ts';
 import { readPreview, sameElement, type ElementReference } from '../src/service/vehicle_modeling_service_protocol.ts';
-import { parseVisualDefinition } from '../src/visual/read_vehicle_visual_definition.ts';
+import { readVisualDefinition } from '../src/visual/read_vehicle_visual_definition.ts';
 
 // The drawing is built from the preview alone: poses, parts in their body's
 // frame, marks at the drawn places, each drawing showing the element the
@@ -90,7 +90,7 @@ function world(x: number, y: number, z: number): THREE.Vector3 {
 }
 
 const preview = readPreview({ preview: previewJson })!;
-const visualDefinition = parseVisualDefinition(JSON.stringify(visualJson));
+const visualDefinition = readVisualDefinition(visualJson);
 
 function build(palette = createModelPalette()) {
   return new VehiclePreviewScene(preview, visualDefinition, palette);

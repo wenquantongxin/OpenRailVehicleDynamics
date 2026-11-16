@@ -4,12 +4,13 @@ import { test } from 'node:test';
 
 import { parseVehicleModelingServerArguments } from '../server/vehicle_modeling_server_command_line.ts';
 
-test('the service is required; the catalogue, host and port are optional, paths absolute', () => {
-  const defaults = parseVehicleModelingServerArguments(['--service', 'bin/service']);
+test('the service and the folder of projects are required; the catalogue, host and port are optional, paths absolute', () => {
+  const defaults = parseVehicleModelingServerArguments(['--service', 'bin/service', '--vehicle-projects', 'projects']);
   assert.ok(isAbsolute(defaults.servicePath));
+  assert.ok(isAbsolute(defaults.vehicleProjectsDirectory) && defaults.vehicleProjectsDirectory.endsWith('/projects'));
   assert.deepEqual([defaults.host, defaults.port, defaults.referenceVehiclesPath], ['127.0.0.1', 6651, null]);
-  const given = parseVehicleModelingServerArguments(['--port', '7000', '--host', '0.0.0.0', '--reference-vehicles', 'catalogue.json', '--service', 'x']);
-  assert.deepEqual([given.host, given.port], ['0.0.0.0', 7000]);
+  const given = parseVehicleModelingServerArguments(['--port', '7000', '--host', '0.0.0.0', '--reference-vehicles', 'catalogue.json', '--vehicle-projects', '/p', '--service', 'x']);
+  assert.deepEqual([given.host, given.port, given.vehicleProjectsDirectory], ['0.0.0.0', 7000, '/p']);
   assert.ok(given.referenceVehiclesPath !== null && isAbsolute(given.referenceVehiclesPath) && given.referenceVehiclesPath.endsWith('/catalogue.json'));
 });
 
@@ -18,12 +19,16 @@ test('anything but complete, unrepeated key/value pairs is refused', () => {
     [],
     ['--service'],
     ['--service', '--port'],
-    ['--service', 'x', '--service', 'y'],
-    ['--service', 'x', '--port', '0'],
-    ['--service', 'x', '--port', '80.5'],
-    ['--service', 'x', '--colour', 'red'],
-    ['--service', 'x', '--reference-vehicles', 'a.json', '--reference-vehicles', 'b.json'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--service', 'y'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--port', '0'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--port', '80.5'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--colour', 'red'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--reference-vehicles', 'a.json', '--reference-vehicles', 'b.json'],
   ]) {
     assert.throws(() => parseVehicleModelingServerArguments(args), Error, args.join(' '));
   }
+});
+
+test('without a folder of projects the server is not started, and says so', () => {
+  assert.throws(() => parseVehicleModelingServerArguments(['--service', 'x']), /--vehicle-projects DIRECTORY is required/);
 });

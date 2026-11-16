@@ -1,17 +1,53 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { readAnswer, readEditedElement, readElementKinds, readPreview, readProperties, readRemovedElements } from '../src/service/vehicle_modeling_service_protocol.ts';
+import {
+  readAnswer,
+  readEditedElement,
+  readElementKinds,
+  readPreview,
+  readProperties,
+  readRemovedElements,
+  readServiceSessionDescription,
+  readVehicleProjectNames,
+  readVisualDefinitionDocument,
+} from '../src/service/vehicle_modeling_service_protocol.ts';
 import { fakeVehicle } from './fake_vehicle_modeling_service.ts';
 
 // Answers are read leniently, but what the interface uses must be there.
 
 test('an accepted answer carries the session envelope and a refused one the service’s reason', () => {
-  const accepted = readAnswer({ id: 3, ok: true, revision: 4, can_undo: true, can_redo: false, result: {}, extra: 'ignored' });
-  assert.deepEqual(accepted, { ok: true, revision: 4, canUndo: true, canRedo: false, result: {} });
+  const accepted = readAnswer({ id: 3, ok: true, revision: 4, can_undo: true, can_redo: false, has_unsaved_changes: true, result: {}, extra: 'ignored' });
+  assert.deepEqual(accepted, { ok: true, session: { revision: 4, canUndo: true, canRedo: false, hasUnsavedChanges: true }, result: {} });
+  assert.throws(() => readAnswer({ ok: true, revision: 4, can_undo: true, can_redo: false, result: {} }), /has_unsaved_changes is missing/);
   const refused = readAnswer({ id: 3, ok: false, error: { element: { kind: 'kind_a', name: 'a' }, property: 'p', message: 'no' } });
   assert.deepEqual(refused, { ok: false, refusal: { element: { kind: 'kind_a', name: 'a' }, property: 'p', message: 'no' } });
   assert.throws(() => readAnswer({ ok: true, revision: 4, can_undo: true, result: {} }), /can_redo is missing/);
+});
+
+test('an answer while nothing is open has no session: its four session fields are null', () => {
+  const answer = readAnswer({ id: 1, ok: true, revision: null, can_undo: null, can_redo: null, has_unsaved_changes: null, result: { open: false } });
+  assert.deepEqual(answer, { ok: true, session: null, result: { open: false } });
+});
+
+test('get_session says whether a vehicle is open and with which project file, if any', () => {
+  assert.deepEqual(readServiceSessionDescription({ open: false }), { open: false });
+  assert.deepEqual(readServiceSessionDescription({ open: true, vehicle_project_file: null }), { open: true, vehicleProjectFile: null });
+  assert.deepEqual(readServiceSessionDescription({ open: true, vehicle_project_file: { directory: '/somewhere/projects', name: 'mine' } }), {
+    open: true,
+    vehicleProjectFile: { directory: '/somewhere/projects', name: 'mine' },
+  });
+  assert.throws(() => readServiceSessionDescription({ open: true }), /vehicle_project_file is missing/);
+  assert.throws(() => readServiceSessionDescription({ open: true, vehicle_project_file: { directory: '/somewhere/projects' } }), /name is missing/);
+});
+
+test('a folder lists its project names as given, and a visual definition is passed on unread, or null', () => {
+  assert.deepEqual(readVehicleProjectNames({ vehicle_projects: ['a', 'b.c', 'd-e'] }), ['a', 'b.c', 'd-e']);
+  assert.throws(() => readVehicleProjectNames({ vehicle_projects: [1] }), /not a string/);
+  const document = { anything: ['the service', { does: 'not read' }] };
+  assert.equal(readVisualDefinitionDocument({ visual_definition: document }), document);
+  assert.equal(readVisualDefinitionDocument({ visual_definition: null }), null);
+  assert.throws(() => readVisualDefinitionDocument({}), /visual_definition is missing/);
 });
 
 test('every value kind is read with its shape and what its description says, and an absent value is null', () => {

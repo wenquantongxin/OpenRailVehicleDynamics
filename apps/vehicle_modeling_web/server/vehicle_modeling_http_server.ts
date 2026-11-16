@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
@@ -13,6 +13,8 @@ export interface VehicleModelingHttpServerOptions {
   port: number;
   staticDirectory: string;
   referenceVehicles: ReferenceVehicleCatalogueEntry[];
+  /** The folder of projects, an absolute path; the interface passes it to the service's commands that take a folder. */
+  vehicleProjectsDirectory: string;
 }
 
 export interface RunningVehicleModelingHttpServer {
@@ -54,17 +56,22 @@ async function readBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/** Refuses a folder of projects that is not an existing directory, before anything starts. */
+async function requireExistingDirectory(path: string): Promise<void> {
+  const found = await stat(path).catch(() => null);
+  if (found === null || !found.isDirectory()) {
+    throw new Error(`the folder of vehicle projects '${path}' is not an existing directory`);
+  }
+}
+
 /** Starts the service and the HTTP server; onServiceEnd reports a service that ends on its own. */
 export async function startVehicleModelingHttpServer(options: VehicleModelingHttpServerOptions, onServiceEnd: (ending: string) => void): Promise<RunningVehicleModelingHttpServer> {
-  const vehicles = new Map(options.referenceVehicles.map((vehicle) => [vehicle.name, vehicle]));
-  const referenceVehicleList = JSON.stringify(
-    options.referenceVehicles.map((vehicle) => ({
-      name: vehicle.name,
-      title: vehicle.title,
-      open_arguments: vehicle.openArguments,
-      visual_definition_available: vehicle.visualDefinitionPath !== null,
-    })),
-  );
+  await requireExistingDirectory(options.vehicleProjectsDirectory);
+  // What the interface asks the server itself, answered the same for the server's whole life.
+  const serverAnswers = new Map([
+    ['/api/reference_vehicles', JSON.stringify(options.referenceVehicles.map((vehicle) => ({ name: vehicle.name, title: vehicle.title, open_arguments: vehicle.openArguments })))],
+    ['/api/vehicle_projects_directory', JSON.stringify({ directory: options.vehicleProjectsDirectory })],
+  ]);
   const service = new VehicleModelingServiceChildProcess(options.servicePath, onServiceEnd);
 
   async function relayCommand(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -98,20 +105,10 @@ export async function startVehicleModelingHttpServer(options: VehicleModelingHtt
       response.end();
       return;
     }
-    if (pathname === '/api/reference_vehicles') {
+    const serverAnswer = serverAnswers.get(pathname);
+    if (serverAnswer !== undefined) {
       response.writeHead(200, jsonHeaders);
-      response.end(request.method === 'HEAD' ? undefined : referenceVehicleList);
-      return;
-    }
-    const visual = /^\/api\/reference_vehicles\/([^/]+)\/visual_definition$/.exec(pathname);
-    if (visual !== null) {
-      const path = vehicles.get(decodeURIComponent(visual[1]!))?.visualDefinitionPath;
-      if (path === undefined || path === null) {
-        throw new Error('no visual definition for this name');
-      }
-      const text = await readFile(path, 'utf8');
-      response.writeHead(200, jsonHeaders);
-      response.end(request.method === 'HEAD' ? undefined : text);
+      response.end(request.method === 'HEAD' ? undefined : serverAnswer);
       return;
     }
     if (pathname.startsWith('/api/')) {

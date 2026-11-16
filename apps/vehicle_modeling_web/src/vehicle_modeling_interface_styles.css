@@ -32,11 +32,11 @@
   --alert-line: rgba(164, 80, 74, 0.35);
   --alert-tint: rgba(164, 80, 74, 0.08);
   --stale: #735c2d;
+  --unsaved: #7a5c25;
   --force: #4b8480;
   --joint: #7767a0;
   --body-marker: #87919b;
   --brand-tile: #3d4b5a;
-  --menu-shadow: 0 4px 12px rgba(31, 42, 53, 0.12);
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Ubuntu Sans", Ubuntu, "Helvetica Neue", Arial, "PingFang SC",
     "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, "Ubuntu Sans Mono", "Ubuntu Mono", "DejaVu Sans Mono",
@@ -433,8 +433,7 @@ input {
   color: var(--on-accent);
 }
 
-.chip.primary:hover,
-.chip.primary[aria-expanded='true'] {
+.chip.primary:hover {
   background: var(--accent-deep);
   border-color: var(--accent-deep);
 }
@@ -466,21 +465,6 @@ input {
 .chip.danger:disabled,
 .chip.danger:disabled .zh {
   color: var(--ink3);
-}
-
-.open-button {
-  align-items: center;
-}
-
-.open-button .chevron {
-  width: 5px;
-  height: 5px;
-  margin-left: 2px;
-  transform: rotate(45deg) translate(-1px, -1px);
-}
-
-.open-button .chevron.open {
-  transform: rotate(-135deg);
 }
 
 .check-chip,
@@ -555,65 +539,58 @@ input {
   color: var(--accent-deep);
 }
 
-.open-menu {
-  position: relative;
+/* Open, Save and Save as. */
+.file-actions {
+  display: flex;
+  gap: 6px;
   flex: none;
 }
 
-/* The one floating surface keeps a faint shadow. */
-.menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 10;
-  min-width: 340px;
-  padding: 4px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--field);
-  box-shadow: var(--menu-shadow);
+/* What is being edited, by name, and the mark of unsaved changes beside the name. */
+.edited-project {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-.menu-caption {
-  padding: 4px 8px 6px;
-  font-size: 12px;
-  color: var(--ink2);
+.edited-project .k {
+  white-space: nowrap;
 }
 
-.menu-caption .zh {
-  margin-left: 3px;
-  font-size: 12px;
-}
-
-.menu button {
+.edited-project .v {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 2px;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
-.menu button .zh {
-  font-size: 12px;
+.edited-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.menu button:hover {
-  background: var(--accent-tint);
+.unsaved-mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: none;
+  font: 400 11.5px var(--sans);
+  color: var(--unsaved);
+  white-space: nowrap;
 }
 
-.menu button.current .en::after {
-  content: ' · open';
-  color: var(--ink2);
+.unsaved-mark .zh {
+  font-size: 11px;
+  color: var(--unsaved);
 }
 
-.menu-empty {
-  padding: 6px 8px;
-  color: var(--ink2);
+.unsaved-mark .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--unsaved);
+  align-self: center;
 }
 
 /* ---------- component tree ---------- */
@@ -1368,6 +1345,17 @@ table.value.curve {
   color: var(--ink1);
 }
 
+/* The session's own notices: no refusal, so no alert colour. */
+.message.notice {
+  border-color: var(--line-strong);
+  background: var(--field);
+}
+
+.message.notice b,
+.message.notice b .zh {
+  color: var(--ink1);
+}
+
 .edit-refusal {
   width: 100%;
   cursor: pointer;
@@ -1688,36 +1676,91 @@ table.value.curve {
   gap: 4px;
 }
 
-/* The choice of a vehicle before one is open: a short list of flat cards. */
+/* What can be opened, in two columns: reference vehicles as flat cards, one's own projects as a list of names.
+   Over an open session the page covers the 3D view. */
 .open-stage {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
+  padding: 12px 0;
+}
+
+.open-stage.over-session {
+  background: var(--bg);
 }
 
 .open-card {
-  width: min(460px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100% - 32px));
+  max-height: 100%;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   background: var(--panel);
 }
 
-.open-card p {
-  margin: 10px 12px;
-  line-height: 1.55;
-  color: var(--ink1);
+.open-card .panel-head {
+  align-items: center;
 }
 
-.open-card p .zh {
+.open-card .open-problem {
+  margin: 10px 12px 0;
+}
+
+.open-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.open-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 14px;
+}
+
+.open-column + .open-column {
+  border-left: 1px solid var(--line);
+}
+
+.open-column-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.open-column-title .zh {
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.open-column-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.open-column-note .zh {
   display: block;
+}
+
+.projects-folder {
+  font: 400 11.5px/1.45 var(--mono);
+  color: var(--ink1);
+  overflow-wrap: anywhere;
 }
 
 .open-choices {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0 12px 12px;
 }
 
 .open-choice {
@@ -1736,16 +1779,148 @@ table.value.curve {
   font-weight: 600;
 }
 
+.open-choice .choice-tag {
+  font: 400 11.5px var(--mono);
+  color: var(--ink2);
+}
+
+.project-choices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--field);
+}
+
+.project-choices li + li {
+  border-top: 1px solid var(--line);
+}
+
+.project-choice {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: 400 12.5px var(--mono);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
 .open-choice:hover,
 .open-choice:focus-visible {
   border-color: var(--accent);
   outline: none;
 }
 
+.project-choice:hover,
+.project-choice:focus-visible {
+  background: var(--accent-tint);
+  outline: none;
+}
+
+.open-empty {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.open-empty .zh {
+  display: block;
+}
+
+/* ---------- dialogs ---------- */
+
+/* Save as and the question before discarding changes: flat, over a tinted page. */
+.modal-dialog {
+  width: min(470px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink0);
+}
+
+.modal-dialog::backdrop {
+  background: rgba(31, 42, 53, 0.24);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+}
+
+.dialog-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink1);
+}
+
+.dialog-note .zh {
+  display: block;
+  font-size: 12px;
+}
+
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialog-field-label {
+  font-size: 12px;
+  color: var(--ink2);
+}
+
+.dialog-field-label .zh {
+  margin-left: 4px;
+}
+
+.dialog-field .text-field input {
+  padding: 5px 8px;
+  font-size: 13px;
+}
+
+.dialog-folder {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink2);
+}
+
+.dialog-folder .zh {
+  margin: 0 6px 0 3px;
+}
+
+.replace-question {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 /* Narrow windows: the overline and the toolbars' labels give way. */
 @media (max-width: 1400px) {
   .overline {
     display: none;
+  }
+  .top-bar .chip {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  .top-bar .chip .zh {
+    font-size: 11px;
   }
   .top-bar {
     gap: 14px;

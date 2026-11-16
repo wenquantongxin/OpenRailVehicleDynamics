@@ -28,11 +28,11 @@ test('entries are read in order, with titles and with paths relative to the cata
       vehicle_definition_path: '/catalogues/library/a/vehicle_definition.json',
       startup_state_path: '/catalogues/library/a/startup.json',
       contact_record_path: '/catalogues/library/a/contact_record.json',
+      visual_definition_path: '/catalogues/library/a/visual_definition.json',
     },
-    visualDefinitionPath: '/catalogues/library/a/visual_definition.json',
   });
   assert.equal(b?.name, 'B');
-  assert.equal(b?.visualDefinitionPath, null);
+  assert.equal(b?.openArguments.visual_definition_path, null, 'a vehicle the catalogue names no visual definition for opens with none');
 });
 
 test('anything but exactly the keys, as non-empty strings, under unique names is refused', () => {

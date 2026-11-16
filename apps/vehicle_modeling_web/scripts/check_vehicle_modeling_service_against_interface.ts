@@ -2,14 +2,19 @@
 // interface does, with the interface's own session, readers and drawing, and
 // asserts the structure of what comes back, never its numbers. For each
 // reference vehicle: open, outline, the properties of every element, the
-// drawing with one wheel per contact interface, an edit the check passes, an
-// edit the check refuses, undo and redo. On GZ18, structural editing: a body,
-// a frame on it and a force element from that frame to one the vehicle had
-// are created; the body is renamed and the frame follows; removing the body
-// takes the frame and the force element with it; undoing everything gives
-// back the outline the vehicle opened with. Then a vehicle whose contact
-// record does not fit it: it opens, its check refuses it, there is no drawing,
-// and its outline and properties read.
+// drawing with one wheel per contact interface and the visual definition from
+// the service, an edit the check passes, an edit the check refuses, undo and
+// redo. On GZ18, structural editing: a body, a frame on it and a force element
+// from that frame to one the vehicle had are created; the body is renamed and
+// the frame follows; removing the body takes the frame and the force element
+// with it; undoing everything gives back the outline the vehicle opened with.
+// Then a vehicle whose contact record does not fit it: it opens, its check
+// refuses it, there is no drawing, and its outline and properties read. Last,
+// saving, in a temporary folder of projects removed at the end: GZ18 edited,
+// saved as a project, with no undo step, the folder listed, IRW opened, the
+// project opened again with its outline and the edited value as they were;
+// unsaved changes through an edit and its undo, Save, and a name the service
+// refuses; get_session at each stage.
 // The reference vehicles are this app's catalogue; the vehicle that does not
 // fit is made of the repository's IRW vehicle and GZ18 contact record. Kinds
 // are told apart by the preview's drawings and properties by their
@@ -19,6 +24,8 @@
 // Usage: npm run check-service -- <service binary> <repository root>
 
 import assert from 'node:assert/strict';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,12 +33,20 @@ import { readReferenceVehicleCatalogue, type ReferenceVehicleCatalogueEntry } fr
 import { startVehicleModelingHttpServer } from '../server/vehicle_modeling_http_server.ts';
 import { createModelPalette } from '../src/scene/vehicle_model_view_colors_and_materials.ts';
 import { assignPartsToDrawnBodies, VehiclePreviewScene } from '../src/scene/vehicle_preview_scene.ts';
-import { fetchReferenceVehicles, fetchVisualDefinitionText, type ReferenceVehicle } from '../src/service/fetch_reference_vehicles.ts';
-import { modelingServerCommandChannel } from '../src/service/modeling_server_command_channel.ts';
-import { elementKey, sameElement, type ElementReference, type PropertyDescription, type PropertyReading } from '../src/service/vehicle_modeling_service_protocol.ts';
-import { checkStatus, VehicleEditingSession, previewIsStale, type SessionState } from '../src/session/vehicle_editing_session.ts';
+import { fetchReferenceVehicles, type ReferenceVehicle } from '../src/service/fetch_reference_vehicles.ts';
+import { fetchVehicleProjectsDirectory } from '../src/service/fetch_vehicle_projects_directory.ts';
+import { modelingServerCommandChannel, type SendCommand } from '../src/service/modeling_server_command_channel.ts';
+import {
+  elementKey,
+  readServiceSessionDescription,
+  sameElement,
+  type ElementReference,
+  type PropertyDescription,
+  type PropertyReading,
+  type ServiceSessionDescription,
+} from '../src/service/vehicle_modeling_service_protocol.ts';
+import { checkStatus, VehicleEditingSession, previewIsStale, type OpenChoice, type SessionState } from '../src/session/vehicle_editing_session.ts';
 import type { ReferenceDescription } from '../src/ui/element_reference_picker_rules.ts';
-import { parseVisualDefinition } from '../src/visual/read_vehicle_visual_definition.ts';
 
 const [servicePath, repositoryRoot] = process.argv.slice(2);
 if (servicePath === undefined || repositoryRoot === undefined) {
@@ -48,9 +63,13 @@ const nonFittingVehicle: ReferenceVehicleCatalogueEntry = {
     vehicle_definition_path: library('irw', 'vehicle_definition.json'),
     startup_state_path: library('irw', 'startup_states', 'moving_startup_60kmh.json'),
     contact_record_path: library('gz18', 'contact_record.json'),
+    visual_definition_path: null,
   },
-  visualDefinitionPath: null,
 };
+
+function referenceVehicle(vehicle: ReferenceVehicle): OpenChoice {
+  return { source: 'reference_vehicle', vehicle };
+}
 
 function fail(message: string): never {
   throw new Error(message);
@@ -78,9 +97,7 @@ async function editableNumbers(session: VehicleEditingSession, elements: Element
 }
 
 function sessionAt(origin: string): VehicleEditingSession {
-  return new VehicleEditingSession(modelingServerCommandChannel(origin), async (reference) =>
-    reference.visualDefinitionAvailable ? parseVisualDefinition(await fetchVisualDefinitionText(origin, reference)) : null,
-  );
+  return new VehicleEditingSession(modelingServerCommandChannel(origin));
 }
 
 /**
@@ -110,10 +127,13 @@ async function readEveryElement(session: VehicleEditingSession, elements: Elemen
 
 async function checkVehicle(origin: string, vehicle: ReferenceVehicle): Promise<string> {
   const session = sessionAt(origin);
-  let state = await settled(session, session.open(vehicle));
+  let state = await settled(session, session.open(referenceVehicle(vehicle)));
   const outline = state.outline ?? fail('no outline after opening');
   assert.ok(outline.vehicleName.length > 0);
   assert.equal(state.revision, 0);
+  assert.equal(state.hasUnsavedChanges, false);
+  // The visual definition comes from the service, and the interface can draw from it.
+  assert.ok(state.vehicle?.visualDefinition, `${vehicle.name} opens without a visual definition: ${state.vehicle?.visualDefinitionProblem}`);
   assert.equal(checkStatus(state), 'passed', `${vehicle.name} does not pass its check when opened: ${state.check?.report.refusals.join('; ')}`);
   const kinds = [...new Set(outline.elements.map((element) => element.kind))];
   // The outline lists the elements kind by kind: each kind is one run.
@@ -211,7 +231,7 @@ function unusedName(elements: readonly ElementReference[], stem: string): string
  */
 async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle): Promise<string> {
   const session = sessionAt(origin);
-  let state = await settled(session, session.open(vehicle));
+  let state = await settled(session, session.open(referenceVehicle(vehicle)));
   const opened = state.outline ?? fail('no outline after opening');
   const preview = state.preview ?? fail('no preview after opening');
   const bodyKind = (preview.rigidBodies[0] ?? fail('nothing drawn as a rigid body')).element.kind;
@@ -274,7 +294,7 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
 
 async function checkNonFittingVehicle(origin: string, vehicle: ReferenceVehicle): Promise<string> {
   const session = sessionAt(origin);
-  const state = await settled(session, session.open(vehicle));
+  const state = await settled(session, session.open(referenceVehicle(vehicle)));
   assert.equal(checkStatus(state), 'failed', `${vehicle.name} passes its check`);
   const refusals = state.check!.report.refusals;
   assert.ok(refusals.length > 0);
@@ -289,30 +309,152 @@ async function checkNonFittingVehicle(origin: string, vehicle: ReferenceVehicle)
   ].join('\n');
 }
 
-// The reference vehicles exactly as serve:reference offers them, and the one that does not fit; any free port.
+/** What get_session says now. */
+async function serviceSession(send: SendCommand): Promise<ServiceSessionDescription> {
+  const answer = await send('get_session');
+  if (!answer.ok) fail(`get_session was refused: ${answer.refusal.message}`);
+  return readServiceSessionDescription(answer.result);
+}
+
+/** Opens the choice, discarding the unsaved changes the session asks about first. */
+async function openedDiscardingChanges(session: VehicleEditingSession, choice: OpenChoice): Promise<SessionState> {
+  await session.open(choice);
+  if (session.state.pendingOpen !== null) await session.discardChangesAndOpen();
+  return settled(session, Promise.resolve());
+}
+
+/** The saved project's name; the folder starts empty. */
+const savedProjectName = 'check_service_saved_gz18';
+
+/**
+ * Saving and opening a project through the interface's session, in the
+ * folder of projects the server was started with, which starts empty. The
+ * edited value is found by its description, as in checkVehicle.
+ */
+async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: ReferenceVehicle): Promise<string> {
+  const send = modelingServerCommandChannel(origin);
+  const directory = await fetchVehicleProjectsDirectory(origin);
+  const session = new VehicleEditingSession(send);
+  // The checks before left a session open: the start resumes it, as a reload of the page would.
+  let state = await settled(session, session.start(directory, null));
+  assert.ok(state.vehicle !== null && state.outline !== null, 'the start did not resume the open session');
+  assert.equal((await serviceSession(send)).open, true);
+
+  state = await openedDiscardingChanges(session, referenceVehicle(gz18));
+  assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: null });
+  assert.equal(state.hasUnsavedChanges, false);
+  const opened = state.outline ?? fail('no outline after opening');
+  const numbers = await editableNumbers(session, opened.elements.filter((element, index) => opened.elements.findIndex((other) => other.kind === element.kind) === index));
+  const edited = numbers.find((entry) => entry.property.value! > 0) ?? fail('no editable positive number');
+  const doubled = 2 * edited.property.value!;
+  assert.equal(await session.setProperty(edited.element, edited.property.name, doubled), true);
+  assert.equal(session.state.hasUnsavedChanges, true);
+  const { revision: revisionBeforeSaving, canUndo: canUndoBeforeSaving, canRedo: canRedoBeforeSaving } = session.state;
+
+  // A name the service refuses stays at the dialog with its reason, and nothing is written.
+  await session.startSaveAs();
+  await session.saveAs('not a project name', false);
+  const refusedDialog = session.state.saveAs ?? fail('a refused Save as closed its dialog');
+  const refusal = refusedDialog.refusal ?? fail('the service took a name with spaces in it');
+  assert.equal(refusedDialog.name, 'not a project name');
+  assert.deepEqual(await readdir(directory), [], 'a refused Save as wrote into the folder');
+
+  // Save as: written, the vehicle renamed in one revision, the session tied to the file.
+  state = await settled(session, session.saveAs(savedProjectName, false));
+  assert.equal(state.saveAs, null, `Save as was refused: ${state.saveAs?.refusal}`);
+  assert.deepEqual(state.vehicleProjectFile, { directory, name: savedProjectName });
+  assert.equal(state.hasUnsavedChanges, false);
+  assert.equal(state.outline?.vehicleName, savedProjectName);
+  assert.equal(state.revision, revisionBeforeSaving + 1);
+  assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: { directory, name: savedProjectName } });
+  assert.equal((await readdir(directory)).length, 1, 'the folder holds more than the one project file');
+  const savedOutline = state.outline!;
+  const savedCheck = checkStatus(state);
+
+  // The name is the document's identity, not an edit: no undo step, and undoing the edit before keeps the name.
+  assert.deepEqual([state.canUndo, state.canRedo], [canUndoBeforeSaving, canRedoBeforeSaving], 'Save as changed what can be undone or redone');
+  state = await settled(session, session.undo());
+  assert.equal(state.outline?.vehicleName, savedProjectName, 'undo after Save as brought an earlier name back');
+  assert.equal(state.hasUnsavedChanges, true);
+  state = await settled(session, session.redo());
+  assert.equal(state.hasUnsavedChanges, false, 'redo back to the saved state left changes unsaved');
+
+  // The folder lists the project.
+  state = await settled(session, session.showOpenChoices());
+  assert.deepEqual(state.vehicleProjects, [savedProjectName]);
+  session.leaveOpenChoices();
+
+  // IRW, from its files: no file, nothing to ask about after the save.
+  await session.open(referenceVehicle(irw));
+  state = await settled(session, Promise.resolve());
+  assert.equal(state.pendingOpen, null, 'the session asked about unsaved changes right after saving');
+  assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: null });
+  assert.notEqual(state.outline?.vehicleName, savedProjectName);
+
+  // The project again, as it was saved.
+  state = await settled(session, session.open({ source: 'vehicle_project', name: savedProjectName }));
+  assert.deepEqual(state.vehicleProjectFile, { directory, name: savedProjectName });
+  assert.deepEqual([state.revision, state.canUndo, state.hasUnsavedChanges], [0, false, false]);
+  assert.deepEqual(state.outline, savedOutline);
+  assert.equal(checkStatus(state), savedCheck);
+  state = await settled(session, session.select(edited.element));
+  assert.equal(state.properties.find((property) => property.name === edited.property.name)?.value, doubled);
+  assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: { directory, name: savedProjectName } });
+
+  // Unsaved changes follow undo; Save writes to the file and leaves nothing unsaved.
+  const tripled = 3 * edited.property.value!;
+  assert.equal(await session.setProperty(edited.element, edited.property.name, tripled), true);
+  assert.equal(session.state.hasUnsavedChanges, true);
+  state = await settled(session, session.undo());
+  assert.equal(state.hasUnsavedChanges, false, 'undoing the one edit since opening left changes unsaved');
+  assert.equal(await session.setProperty(edited.element, edited.property.name, tripled), true);
+  state = await settled(session, session.save());
+  assert.equal(state.hasUnsavedChanges, false);
+  assert.equal((await readdir(directory)).length, 1);
+  assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: { directory, name: savedProjectName } });
+
+  return [
+    `GZ18 saved as a project: ${edited.element.name}'s ${edited.property.name} doubled, a name with spaces refused at the dialog ('${refusal}'),`,
+    `  saved as '${savedProjectName}' at revision ${revisionBeforeSaving + 1} with the vehicle renamed and no undo step: undo kept the name, redo was saved again,`,
+    `  the folder listed [${savedProjectName}], IRW opened with no file,`,
+    `  the project opened again at revision 0 with its ${savedOutline.elements.length} elements and the doubled value, check ${savedCheck};`,
+    `  changes unsaved after an edit and none after its undo, Save left nothing unsaved; get_session named the file at each stage`,
+  ].join('\n');
+}
+
+// The reference vehicles exactly as serve:reference offers them, and the one that does not fit; any free port; a
+// temporary folder of projects, removed at the end.
 const referenceVehicles = await readReferenceVehicleCatalogue(fileURLToPath(new URL('../reference_vehicle_catalogue.json', import.meta.url)));
-const options = {
-  servicePath: resolve(servicePath),
-  host: '127.0.0.1',
-  port: 0,
-  staticDirectory: fileURLToPath(new URL('../dist', import.meta.url)),
-  referenceVehicles: [...referenceVehicles, nonFittingVehicle],
-};
-const server = await startVehicleModelingHttpServer(options, (ending) => {
-  console.error(`check-service: the service ${ending}`);
-  process.exit(1);
-});
+const vehicleProjectsDirectory = await mkdtemp(join(tmpdir(), 'orvd-check-service-projects-'));
 try {
-  const origin = `http://127.0.0.1:${server.port}`;
-  const vehicles = await fetchReferenceVehicles(origin);
-  for (const vehicle of vehicles) {
-    console.log(vehicle.name === nonFittingVehicle.name ? await checkNonFittingVehicle(origin, vehicle) : await checkVehicle(origin, vehicle));
+  const options = {
+    servicePath: resolve(servicePath),
+    host: '127.0.0.1',
+    port: 0,
+    staticDirectory: fileURLToPath(new URL('../dist', import.meta.url)),
+    referenceVehicles: [...referenceVehicles, nonFittingVehicle],
+    vehicleProjectsDirectory,
+  };
+  const server = await startVehicleModelingHttpServer(options, (ending) => {
+    console.error(`check-service: the service ${ending}`);
+    process.exit(1);
+  });
+  try {
+    const origin = `http://127.0.0.1:${server.port}`;
+    const vehicles = await fetchReferenceVehicles(origin);
+    for (const vehicle of vehicles) {
+      console.log(vehicle.name === nonFittingVehicle.name ? await checkNonFittingVehicle(origin, vehicle) : await checkVehicle(origin, vehicle));
+    }
+    const named = (name: string): ReferenceVehicle => vehicles.find((vehicle) => vehicle.name === name) ?? fail(`the catalogue has no ${name}`);
+    console.log(await checkStructuralEditing(origin, named('GZ18')));
+    console.log(await checkProjectSaving(origin, named('GZ18'), named('IRW')));
+    console.log('check-service: passed');
+  } catch (error) {
+    console.error(`check-service: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  } finally {
+    await server.close();
   }
-  console.log(await checkStructuralEditing(origin, vehicles.find((vehicle) => vehicle.name === 'GZ18') ?? fail('the catalogue has no GZ18')));
-  console.log('check-service: passed');
-} catch (error) {
-  console.error(`check-service: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
 } finally {
-  await server.close();
+  await rm(vehicleProjectsDirectory, { recursive: true, force: true });
 }

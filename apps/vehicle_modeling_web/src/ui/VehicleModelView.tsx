@@ -34,7 +34,7 @@ export function VehicleModelView(props: {
   /** The latest check's refusals, shown while there is no drawing. */
   checkRefusals: string[];
   onPick: (element: ElementReference | null) => void;
-  /** Shown over the view, such as the choice of a vehicle before one is open. */
+  /** Shown over the view, such as the choice of what to open. */
   children?: ReactNode;
 }) {
   const { vehicle, preview } = props;
@@ -168,8 +168,9 @@ export function VehicleModelView(props: {
         </>
       )}
       {viewFailure === null && vehicle !== null && preview === null && (
-        <div className="view-notice">
-          No drawing yet: no check of this vehicle has passed. <span className="zh">尚无预览：本车辆尚未通过检查。</span>
+        <div className="view-notice no-drawing">
+          No drawing until the check passes: since it was opened, the check has refused this project.
+          <span className="zh">检查通过之前没有图形：本工程自打开以来未通过检查。</span>
           {props.checkRefusals.length > 0 && (
             <ul className="notice-refusals">
               {props.checkRefusals.map((refusal, index) => (
