@@ -15,18 +15,20 @@
 #include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/configuration/vehicle_contact_record.h"
 #include "orvd/configuration/vehicle_contact_topology.h"
-#include "orvd/vehicle_project/free_body_placements.h"
-#include "orvd/vehicle_project/generate_assembly_inputs.h"
+#include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
+#include "orvd/vehicle_project/make_vehicle_project_from_vehicle_definition.h"
 #include "orvd/vehicle_project/vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project/vehicle_project_invariants.h"
 
-// For both bundled vehicles: a project holding the vehicle definition
-// generates that definition again, field by field; with the reference contact
-// record the wheel-pair stations come from the contact carriers; the reference
-// start-up poses place every free body, and a start-up state bound to another
-// vehicle is refused; nesting, moving and renaming groups changes neither
-// generated record; and inconsistent placements and groups are refused with a
-// message naming the offender.
+// For both bundled vehicles: a project made from the vehicle definition states
+// every body's shapes under its own name and generates that definition again,
+// field by field; with the reference contact record the wheel-pair stations
+// come from the contact carriers; the reference start-up poses place every
+// free body, and a start-up state bound to another vehicle is refused;
+// nesting, moving and renaming groups changes neither generated record; and
+// inconsistent placements, shape names and groups are refused with a message
+// naming the offender.
 
 namespace {
 
@@ -68,10 +70,21 @@ struct ReferenceVehicle {
 
 void VerifyImportAndGeneration(const ReferenceVehicle& reference) {
     const std::string& vehicle_name = reference.definition.vehicle_name;
-    const VehicleProject project{.vehicle_definition = reference.definition};
+    const VehicleProject project = vehicle_project::MakeVehicleProject(reference.definition);
     Require(!project.contact_record && project.free_body_placements.empty() &&
                 project.element_groups.empty(),
             vehicle_name + ": an imported project holds more than its vehicle definition");
+    // A visual definition made for the vehicle states each body's shapes under
+    // the body's own name.
+    Require(
+        std::ranges::equal(project.visual_definition_body_names, reference.definition.rigid_bodies,
+                           [](const vehicle_project::VisualDefinitionBodyName& named,
+                              const configuration::VehicleRigidBodyDefinition& body) {
+                               return named.body_name == body.name &&
+                                      named.visual_definition_body_name == body.name;
+                           }),
+        vehicle_name +
+            ": an imported project does not state every body's shapes under its own name");
     vehicle_project::RequireVehicleProjectInvariants(project);
     Require(Same(reference.definition, vehicle_project::GenerateVehicleDefinition(project)),
             vehicle_name +
@@ -203,6 +216,33 @@ void VerifyPlacementRefusals(const VehicleProject& placed) {
                    vehicle_name + ": a rotation that is not a unit quaternion");
 }
 
+void VerifyVisualDefinitionBodyNameRefusals(const VehicleProject& opened) {
+    const std::string& vehicle_name = opened.vehicle_definition.vehicle_name;
+    VehicleProject project = opened;
+    const auto check_project = [&project] {
+        vehicle_project::RequireVehicleProjectInvariants(project);
+    };
+
+    project.visual_definition_body_names.push_back(
+        {.body_name = "absent_body", .visual_definition_body_name = "absent_body"});
+    RequireRefusal(check_project, "visual_definition_body_names['absent_body']",
+                   vehicle_name + ": shapes stated for a body the vehicle does not declare");
+
+    const vehicle_project::VisualDefinitionBodyName& first =
+        opened.visual_definition_body_names.front();
+    project = opened;
+    project.visual_definition_body_names.push_back(first);
+    RequireRefusal(check_project, "repeats '" + first.body_name + "'",
+                   vehicle_name + ": a second shape name for one body");
+
+    project = opened;
+    project.visual_definition_body_names.front().visual_definition_body_name.clear();
+    RequireRefusal(
+        check_project,
+        "visual_definition_body_names['" + first.body_name + "'].visual_definition_body_name",
+        vehicle_name + ": an empty shape name");
+}
+
 // A carrier and its body share a name; as members of different kinds they are
 // different elements and may sit in different groups.
 std::vector<ElementGroup> MakeElementGroups(const VehicleProject& project) {
@@ -308,10 +348,11 @@ void VerifyReferenceVehicle(const ReferenceVehicle& reference) {
     VerifyImportAndGeneration(reference);
     VerifyContactCarriersProvideStations(reference);
 
-    VehicleProject project{.vehicle_definition = reference.definition};
+    VehicleProject project = vehicle_project::MakeVehicleProject(reference.definition);
     vehicle_project::PlaceFreeBodiesAtStartupPoses(project, reference.startup_state);
     VerifyStartupPosesPlaceEveryFreeBody(project, reference);
     VerifyPlacementRefusals(project);
+    VerifyVisualDefinitionBodyNameRefusals(project);
 
     project.contact_record = reference.contact_record;
     VerifyGroupingOnlyOrganises(project);

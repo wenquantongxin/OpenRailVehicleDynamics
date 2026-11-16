@@ -12,11 +12,11 @@
 //
 // A project holds the vehicle's mechanical definition and, once provided, its
 // wheel-rail contact record. Those two are what the solver side receives,
-// through generate_assembly_inputs.h. Beside them it holds two things that
-// exist only for the person editing: where each free body is drawn, and how
-// the elements are organised into groups. Neither reaches the solver side, so
-// redrawing or reorganising a vehicle cannot change a number the dynamics
-// sees.
+// through generate_assembly_inputs_from_vehicle_project.h. Beside them it holds three things that
+// exist only for the person editing: where each free body is drawn, the name
+// each rigid body's shapes are stated under, and how the elements are
+// organised into groups. None of them reaches the solver side, so redrawing or
+// reorganising a vehicle cannot change a number the dynamics sees.
 //
 // Like the vehicle definition it carries, this is deliberately a mutable value
 // record: a caller may build any part of it directly and edit it in place.
@@ -49,6 +49,16 @@ struct FreeBodyPlacement {
     double vertical_offset_in_local_track_frame_meters{0.0};
 };
 
+// The name one rigid body's shapes are stated under. A visual definition,
+// which only a drawing reads, states the shapes of a vehicle's bodies under
+// the bodies' names in the vehicle definition it was made for. This record
+// keeps that name for a body, so that the shapes stay with the body when it
+// is renamed.
+struct VisualDefinitionBodyName {
+    std::string body_name;
+    std::string visual_definition_body_name;
+};
+
 // Every kind of element a project contains: each element family of
 // configuration::VehicleDefinition, named there by `name`, and the carriers and
 // interfaces of the contact record's declaration, named by `carrier_name` and
@@ -78,6 +88,8 @@ enum class ElementKind {
 struct ElementReference {
     ElementKind kind{ElementKind::kRigidBody};
     std::string name;
+
+    friend bool operator==(const ElementReference&, const ElementReference&) = default;
 };
 
 // One node of the grouping tree.
@@ -108,6 +120,12 @@ struct VehicleProject {
     // At most one per free body. A free body without one has not been placed
     // yet.
     std::vector<FreeBodyPlacement> free_body_placements{};
+
+    // At most one per rigid body. A project made from a vehicle definition
+    // (make_vehicle_project_from_vehicle_definition.h) gives every body its own name; renaming the
+    // body keeps the name its shapes are stated under, and a body without one,
+    // such as a body created later, has no shapes.
+    std::vector<VisualDefinitionBodyName> visual_definition_body_names{};
 
     // The top level of the grouping tree.
     std::vector<ElementGroup> element_groups{};

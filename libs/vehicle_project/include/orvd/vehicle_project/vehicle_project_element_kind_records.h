@@ -1,6 +1,10 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <concepts>
+#include <cstddef>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -19,9 +23,41 @@
 // name, how a diagnostic names the kind, and the project's container of those
 // records. VisitElementKind turns a kind known only at run time into that
 // compile-time statement; it needs no project, so it serves questions about a
-// kind as well as questions about a project's elements.
+// kind as well as questions about a project's elements. FindElementRecord and
+// ContainsElement look one element up by its name, and DescribeElementKind and
+// DescribeElement name a kind and an element in diagnostics.
 
 namespace orvd::vehicle_project {
+
+// Every element kind, in the order ElementKind declares them, which is the
+// order an outline lists elements in, kind by kind.
+inline constexpr std::array kElementKinds{
+    ElementKind::kRigidBody,
+    ElementKind::kFixedFrame,
+    ElementKind::kRevoluteJoint,
+    ElementKind::kBallRpyJoint,
+    ElementKind::kWeldJoint,
+    ElementKind::kTranslationalSpringDamper,
+    ElementKind::kRollSpringDamperCouple,
+    ElementKind::kSeriesSpringViscousDamper,
+    ElementKind::kPointToPointSeriesSpringBilinearDamper,
+    ElementKind::kSaturatedPiecewiseLinearDamper,
+    ElementKind::kReferenceFrameLinearBushing,
+    ElementKind::kPointToPointLinearSpringDamper,
+    ElementKind::kPointToPointHystereticSpring,
+    ElementKind::kContactCarrier,
+    ElementKind::kContactInterface,
+};
+static_assert(
+    [] {
+        for (std::size_t index = 0; index < kElementKinds.size(); ++index) {
+            if (static_cast<std::size_t>(std::to_underlying(kElementKinds[index])) != index) {
+                return false;
+            }
+        }
+        return true;
+    }(),
+    "kElementKinds lists the element kinds in declaration order, each once");
 
 // A vehicle project seen as const or as mutable. Records reached through it
 // share its constness.
@@ -229,6 +265,39 @@ decltype(auto) VisitElementKind(ElementKind kind, Visitor&& visitor) {
     throw std::invalid_argument("vehicle project element kind " +
                                 std::to_string(std::to_underlying(kind)) +
                                 " is none of the element kinds");
+}
+
+// The record of the element of KindRecords' kind named `name`, sharing the
+// project's constness, or null when the project has none; a contact kind has
+// none while the project has no contact record.
+template <typename KindRecords, ConstOrMutableVehicleProject Project>
+auto* FindElementRecord(Project& project, const std::string& name) {
+    auto* const records = KindRecords::Records(project);
+    using RecordPointer = decltype(records->data());
+    if (records == nullptr) {
+        return RecordPointer{nullptr};
+    }
+    const auto found = std::ranges::find(*records, name, KindRecords::kElementName);
+    return found == records->end() ? RecordPointer{nullptr} : std::to_address(found);
+}
+
+// Whether the project contains `element`.
+inline bool ContainsElement(const VehicleProject& project, const ElementReference& element) {
+    return VisitElementKind(element.kind, [&project, &element]<typename KindRecords>(KindRecords) {
+        return FindElementRecord<KindRecords>(project, element.name) != nullptr;
+    });
+}
+
+// How a diagnostic names a kind: its kKindDescription, "rigid body".
+inline std::string_view DescribeElementKind(ElementKind kind) {
+    return VisitElementKind(
+        kind, []<typename KindRecords>(KindRecords) { return KindRecords::kKindDescription; });
+}
+
+// How a diagnostic names an element: its kind and its name, "rigid body
+// 'carbody'".
+inline std::string DescribeElement(const ElementReference& element) {
+    return std::string(DescribeElementKind(element.kind)) + " '" + element.name + "'";
 }
 
 }  // namespace orvd::vehicle_project

@@ -1,12 +1,13 @@
 # The document a graphical modelling tool edits for one rail vehicle: its
 # mechanical definition, its wheel-rail contact record once provided, free-body
-# placements for drawing and a tree of groups that only organises. It generates
-# the configuration records a vehicle assembly consumes; it reads and writes no
-# files.
+# placements and the names bodies' shapes are stated under, both for drawing,
+# and a tree of groups that only organises. It generates the configuration
+# records a vehicle assembly consumes; it reads and writes no files.
 
 add_library(orvd_vehicle_project STATIC
-    src/free_body_placements.cc
-    src/generate_assembly_inputs.cc
+    src/generate_assembly_inputs_from_vehicle_project.cc
+    src/make_vehicle_project_from_vehicle_definition.cc
+    src/vehicle_project_free_body_placements.cc
     src/vehicle_project_invariants.cc)
 
 orvd_configure_first_party_target(orvd_vehicle_project)

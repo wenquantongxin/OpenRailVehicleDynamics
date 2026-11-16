@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,10 @@ struct RigidBodyDrawing {
     std::string body_name;
     Eigen::Matrix3d rotation_drawing_from_body{Eigen::Matrix3d::Identity()};
     Eigen::Vector3d origin_in_drawing_frame_meters{Eigen::Vector3d::Zero()};
+    // The name the body's shapes are stated under, which a renamed body keeps;
+    // absent for a body that has none, such as one created after the vehicle
+    // was opened.
+    std::optional<std::string> visual_definition_body_name{};
 };
 
 struct FixedFrameDrawing {

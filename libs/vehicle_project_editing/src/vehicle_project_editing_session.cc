@@ -5,15 +5,19 @@
 #include <stdexcept>
 #include <utility>
 
-#include "element_property_assignment.h"
 #include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/configuration/vehicle_definition.h"
-#include "orvd/vehicle_project/free_body_placements.h"
-#include "orvd/vehicle_project/generate_assembly_inputs.h"
+#include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project/vehicle_project_invariants.h"
+#include "vehicle_project_element_creation.h"
+#include "vehicle_project_element_property_assignment.h"
+#include "vehicle_project_element_removal.h"
 #include "vehicle_project_preview_computation.h"
 
 namespace orvd::vehicle_project_editing {
+
+using vehicle_project::ElementReference;
 
 VehicleProjectEditingSession::VehicleProjectEditingSession(
     vehicle_project::VehicleProject project,
@@ -22,22 +26,53 @@ VehicleProjectEditingSession::VehicleProjectEditingSession(
       gravitational_acceleration_magnitude_meters_per_second_squared_(
           gravitational_acceleration_magnitude_meters_per_second_squared) {}
 
-std::expected<void, PropertyEditRefusal> VehicleProjectEditingSession::SetElementProperty(
-    const vehicle_project::ElementReference& element, std::string_view property_name,
-    const PropertyValue& value) {
-    // The edit is made on a copy, which becomes the project only when accepted.
+std::expected<ElementReference, ElementEditRefusal>
+VehicleProjectEditingSession::SetElementProperty(const ElementReference& element,
+                                                 std::string_view property_name,
+                                                 const PropertyValue& value) {
     vehicle_project::VehicleProject edited = project_;
-    const std::expected<void, std::string> assigned =
+    std::expected<ElementReference, ElementEditRefusal> assigned =
         internal::AssignElementProperty(edited, element, property_name, value);
-    if (!assigned.has_value()) {
-        return std::unexpected(
-            PropertyEditRefusal{element, std::string(property_name), assigned.error()});
+    if (assigned.has_value()) {
+        AdoptEdit(std::move(edited));
     }
+    return assigned;
+}
+
+std::expected<ElementReference, ElementEditRefusal> VehicleProjectEditingSession::AddElement(
+    vehicle_project::ElementKind kind, const std::string& name,
+    const PropertyValuesByName& properties) {
+    vehicle_project::VehicleProject edited = project_;
+    std::expected<ElementReference, ElementEditRefusal> created =
+        internal::CreateElement(edited, kind, name, properties);
+    if (created.has_value()) {
+        AdoptEdit(std::move(edited));
+    }
+    return created;
+}
+
+std::expected<std::vector<ElementReference>, ElementEditRefusal>
+VehicleProjectEditingSession::RemoveElement(const ElementReference& element) {
+    std::expected<std::vector<ElementReference>, ElementEditRefusal> removed =
+        internal::CollectElementsRemovedWith(project_, element);
+    if (removed.has_value()) {
+        vehicle_project::VehicleProject edited = project_;
+        internal::RemoveElements(edited, *removed);
+        AdoptEdit(std::move(edited));
+    }
+    return removed;
+}
+
+std::expected<std::vector<ElementReference>, ElementEditRefusal>
+VehicleProjectEditingSession::CollectRemovalConsequences(const ElementReference& element) const {
+    return internal::CollectElementsRemovedWith(project_, element);
+}
+
+void VehicleProjectEditingSession::AdoptEdit(vehicle_project::VehicleProject edited) {
     undo_snapshots_.push_back(std::move(project_));
     project_ = std::move(edited);
     redo_snapshots_.clear();
     ++revision_;
-    return {};
 }
 
 void VehicleProjectEditingSession::Undo() {
@@ -67,8 +102,9 @@ MechanicalCheckReport VehicleProjectEditingSession::CheckMechanics() {
     } catch (const std::exception& refusal) {
         report.refusals.emplace_back(refusal.what());
     }
-    // Placements and groups take no part in generation or assembly, so a
-    // refusal above does not keep the assembly from being checked.
+    // Placements, shape names and groups take no part in generation or
+    // assembly, so a refusal above does not keep the assembly from being
+    // checked.
     const configuration::VehicleDefinition vehicle =
         vehicle_project::GenerateVehicleDefinition(project_);
     std::unique_ptr<configuration::AssembledVehicleSystem> system;

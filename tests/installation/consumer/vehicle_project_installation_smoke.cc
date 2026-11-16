@@ -2,9 +2,9 @@
 #include <exception>
 #include <stdexcept>
 
-#include "orvd/vehicle_project/free_body_placements.h"
-#include "orvd/vehicle_project/generate_assembly_inputs.h"
+#include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
 #include "orvd/vehicle_project/vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project/vehicle_project_invariants.h"
 
 // The installed vehicle project used through its public headers and archive

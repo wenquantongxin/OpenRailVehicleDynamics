@@ -3,6 +3,7 @@
 #include <Eigen/Geometry>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -12,7 +13,7 @@
 #include "orvd/configuration/vehicle_contact_record.h"
 #include "orvd/multibody_model/multibody_evaluation_context.h"
 #include "orvd/multibody_model/multibody_rigid_pose.h"
-#include "orvd/vehicle_project/free_body_placements.h"
+#include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/wheel_rail_contact/profile_points.h"
 
 namespace orvd::vehicle_project_editing::internal {
@@ -124,6 +125,12 @@ VehicleProjectPreview ComputeVehicleProjectPreview(const vehicle_project::Vehicl
         return model.CalcPoseInWorld(*context, model.GetFrameByName(frame_name));
     };
 
+    std::unordered_map<std::string, std::string> visual_definition_name_of_body;
+    for (const vehicle_project::VisualDefinitionBodyName& named :
+         project.visual_definition_body_names) {
+        visual_definition_name_of_body.emplace(named.body_name, named.visual_definition_body_name);
+    }
+
     VehicleProjectPreview preview{.project_revision = project_revision};
     for (const configuration::VehicleRigidBodyDefinition& body : vehicle.rigid_bodies) {
         if (!drawable(body.name)) {
@@ -132,7 +139,12 @@ VehicleProjectPreview ComputeVehicleProjectPreview(const vehicle_project::Vehicl
         }
         const multibody_model::RigidPose pose =
             model.CalcPoseInWorld(*context, model.GetRigidBodyByName(body.name));
-        preview.rigid_bodies.push_back({body.name, pose.rotation(), pose.translation()});
+        const auto visual_definition_name = visual_definition_name_of_body.find(body.name);
+        preview.rigid_bodies.push_back(
+            {body.name, pose.rotation(), pose.translation(),
+             visual_definition_name == visual_definition_name_of_body.end()
+                 ? std::nullopt
+                 : std::optional(visual_definition_name->second)});
     }
     for (const configuration::VehicleFixedFrameDefinition& frame : vehicle.fixed_frames) {
         if (!drawable(frame.name)) {

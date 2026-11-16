@@ -1518,15 +1518,17 @@ target_link_libraries(verify_scene_description PRIVATE orvd_scene_observation)
 add_test(NAME verify_scene_description COMMAND verify_scene_description)
 
 # Both bundled vehicles as projects: generation returns the loaded
-# definition, contact carriers provide the wheel-pair stations, start-up poses
-# place every free body, groups only organise, and inconsistent placements,
-# groups and start-up bindings are refused by name.
+# definition, every body's shapes are stated under its own name, contact
+# carriers provide the wheel-pair stations, start-up poses place every free
+# body, groups only organise, and inconsistent placements, shape names, groups
+# and start-up bindings are refused by name.
 add_executable(verify_vehicle_project
     vehicle_project/vehicle_project_header_self_containment.cc
-    vehicle_project/free_body_placements_header_self_containment.cc
-    vehicle_project/generate_assembly_inputs_header_self_containment.cc
+    vehicle_project/vehicle_project_free_body_placements_header_self_containment.cc
+    vehicle_project/generate_assembly_inputs_from_vehicle_project_header_self_containment.cc
     vehicle_project/vehicle_project_invariants_header_self_containment.cc
-    vehicle_project/element_kind_records_header_self_containment.cc
+    vehicle_project/vehicle_project_element_kind_records_header_self_containment.cc
+    vehicle_project/make_vehicle_project_from_vehicle_definition_header_self_containment.cc
     vehicle_project/verify_vehicle_project.cc)
 orvd_configure_first_party_target(verify_vehicle_project)
 target_link_libraries(verify_vehicle_project PRIVATE orvd_vehicle_project)
@@ -1539,15 +1541,17 @@ add_test(NAME verify_vehicle_project
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
 
-# The editing layer: every property of every element kind reads and, for the
-# editable set, writes the member it names; edits are undone and redone under
-# an increasing revision and refused by element and property; both bundled
-# vehicles pass the mechanical check, a refused assembly is reported and keeps
-# the older preview; and the preview puts every body, frame, joint and
-# force-element end where the assembled model places it.
+# The editing layer: every property of every element kind is described as
+# what it is and reads and writes the member it names; edits are undone and
+# redone under an increasing revision and refused by element and property;
+# both bundled vehicles pass the mechanical check, a refused assembly is
+# reported and keeps the older preview; and the preview puts every body,
+# frame, joint, force-element end and wheel where the assembled model places
+# it.
 add_executable(verify_vehicle_project_editing
-    vehicle_project_editing/element_properties_header_self_containment.cc
-    vehicle_project_editing/mechanical_check_report_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_element_edit_refusal_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_element_properties_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_mechanical_check_report_header_self_containment.cc
     vehicle_project_editing/vehicle_project_preview_header_self_containment.cc
     vehicle_project_editing/vehicle_project_editing_session_header_self_containment.cc
     vehicle_project_editing/verify_vehicle_project_editing.cc)
@@ -1563,8 +1567,30 @@ add_test(NAME verify_vehicle_project_editing
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
 
+# Structural edits on both bundled vehicles: elements created, removed with
+# everything that refers to them, renamed with every reference and following
+# record, and reconnected, each one undo step; names, references, tokens and
+# the station layout's reference body refused where the contract refuses them;
+# and a third GZ18 axle built from edits alone that passes the check.
+add_executable(verify_vehicle_project_structural_editing
+    vehicle_project_editing/verify_vehicle_project_structural_editing.cc)
+orvd_configure_first_party_target(verify_vehicle_project_structural_editing)
+target_include_directories(verify_vehicle_project_structural_editing
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_structural_editing
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_structural_editing
+         COMMAND verify_vehicle_project_structural_editing
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
+
 # The modelling service driven through standard input and output on GZ18: the
-# protocol's structure, one response per request and its revisions.
+# protocol's structure, property descriptions, creation, renaming and removal,
+# one response per request and its revisions.
 add_test(NAME verify_vehicle_modeling_service
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/vehicle_project_editing/verify_vehicle_modeling_service.py

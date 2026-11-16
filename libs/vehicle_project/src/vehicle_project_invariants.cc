@@ -1,17 +1,15 @@
 #include "orvd/vehicle_project/vehicle_project_invariants.h"
 
-#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <map>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "orvd/vehicle_project/element_kind_records.h"
+#include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 
 namespace orvd::vehicle_project {
 namespace {
@@ -64,6 +62,23 @@ void RequirePlacementInvariants(const VehicleProject& project) {
     }
 }
 
+void RequireVisualDefinitionBodyNameInvariants(const VehicleProject& project) {
+    std::unordered_set<std::string> named_body_names;
+    for (const VisualDefinitionBodyName& named : project.visual_definition_body_names) {
+        const std::string what = "visual_definition_body_names['" + named.body_name + "']";
+        if (FindElementRecord<ElementKindRecords<ElementKind::kRigidBody>>(
+                project, named.body_name) == nullptr) {
+            Reject(what + " names a body this vehicle definition does not declare");
+        }
+        if (!named_body_names.insert(named.body_name).second) {
+            Reject("visual_definition_body_names repeats '" + named.body_name + "'");
+        }
+        if (named.visual_definition_body_name.empty()) {
+            Reject(what + ".visual_definition_body_name is empty");
+        }
+    }
+}
+
 // Checks one level of the grouping tree and everything below it. `path`
 // locates `groups` in the project. `containing_group_of_element` maps every
 // member met so far, by kind and name, to the path of its group.
@@ -81,19 +96,8 @@ void RequireGroupInvariants(
         }
         const std::string group_path = path + "['" + group.name + "']";
         for (const ElementReference& member : group.members) {
-            // How a diagnostic names the member's kind, and whether the
-            // project contains the member.
-            const auto [kind_description, contained] = VisitElementKind(
-                member.kind, [&project, &member]<typename KindRecords>(KindRecords) {
-                    const auto* const records = KindRecords::Records(project);
-                    return std::pair{
-                        KindRecords::kKindDescription,
-                        records != nullptr &&
-                            std::ranges::find(*records, member.name, KindRecords::kElementName) !=
-                                records->end()};
-                });
-            const std::string element = std::string(kind_description) + " '" + member.name + "'";
-            if (!contained) {
+            const std::string element = DescribeElement(member);
+            if (!ContainsElement(project, member)) {
                 Reject(group_path + ".members names " + element +
                        ", which this project does not contain");
             }
@@ -114,6 +118,7 @@ void RequireGroupInvariants(
 
 void RequireVehicleProjectInvariants(const VehicleProject& project) {
     RequirePlacementInvariants(project);
+    RequireVisualDefinitionBodyNameInvariants(project);
     std::map<std::pair<ElementKind, std::string>, std::string> containing_group_of_element;
     RequireGroupInvariants(project, project.element_groups, "element_groups",
                            containing_group_of_element);

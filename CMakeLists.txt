@@ -134,7 +134,7 @@ find_package(nlohmann_json 3.12.0 EXACT CONFIG REQUIRED
 # last.
 # vehicle_project edits configuration values and generates the records a
 # vehicle assembly consumes. vehicle_project_editing is the command layer over
-# one project: validated property edits with undo, checking and a preview.
+# one project: validated element edits with undo, checking and a preview.
 # These listed directories are the product module roots. Every non-imported
 # target defined in one of them or a descendant is subject to the Drake boundary
 # gate below. A new target inside a listed module needs no registration; a new

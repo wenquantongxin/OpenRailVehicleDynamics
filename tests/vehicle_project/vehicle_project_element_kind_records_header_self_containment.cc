@@ -1,4 +1,4 @@
-#include "orvd/vehicle_project/element_kind_records.h"
+#include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 
 #include <string_view>
 #include <type_traits>

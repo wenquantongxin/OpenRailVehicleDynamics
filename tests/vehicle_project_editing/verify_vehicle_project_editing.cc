@@ -23,25 +23,29 @@
 #include <vector>
 
 #include "orvd/configuration/assembled_vehicle_system.h"
-#include "orvd/configuration/load_resolved_startup_state.h"
-#include "orvd/configuration/load_vehicle_contact_record.h"
-#include "orvd/configuration/load_vehicle_definition.h"
 #include "orvd/configuration/vehicle_contact_record.h"
-#include "orvd/vehicle_project/free_body_placements.h"
-#include "orvd/vehicle_project/generate_assembly_inputs.h"
+#include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
 #include "orvd/vehicle_project/vehicle_project.h"
-#include "orvd/vehicle_project_editing/element_properties.h"
-#include "orvd/vehicle_project_editing/mechanical_check_report.h"
+#include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
+#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
+#include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
 #include "vehicle_project/configuration_record_comparison.h"
+#include "vehicle_project/vehicle_project_comparison.h"
+#include "vehicle_project_editing/vehicle_project_editing_verification.h"
 
 // The editing layer, verified by properties rather than recorded outputs:
 // every property of every element kind is described, read from the member of
-// its name and, exactly for the editable set stated here, written to it; an
-// edit of a GZ18 primary suspension changes that one member and is undone and
-// redone with a revision that only increases; each kind of refused edit names
-// its element and property and changes nothing; both bundled vehicles pass the
+// its name and, except a rotation, editable; a reference states the kinds it
+// may name and whether it may name none, a token its choices and a curve its
+// row fields, as stated here from the contract; every property but a name and
+// a body's freedom, which the structural editing verification covers, is
+// written to its own member and to nothing else; an edit of a GZ18 primary
+// suspension changes that one member and is undone and redone with a revision
+// that only increases; each kind of refused edit names its element and
+// property and changes nothing; both bundled vehicles pass the
 // mechanical check, and a project the assembly refuses is reported, not
 // thrown, while the older preview stays; the preview places free bodies where
 // their station offsets and placements say, moves a body along the track when
@@ -57,17 +61,27 @@ namespace {
 using namespace orvd;
 using configuration_record_comparison::Members;
 using configuration_record_comparison::Same;
+using editing_verification::Fail;
+using editing_verification::GravityOf;
+using editing_verification::PlacedProject;
+using editing_verification::ReferenceVehicle;
+using editing_verification::Require;
 using vehicle_project::ElementKind;
 using vehicle_project::ElementReference;
 using vehicle_project::FreeBodyPlacement;
 using vehicle_project::VehicleProject;
+using vehicle_project_comparison::SameProject;
+using vehicle_project_editing::ElementEditRefusal;
+using vehicle_project_editing::ElementOwnName;
 using vehicle_project_editing::ElementPropertyDescription;
 using vehicle_project_editing::ElementPropertyReading;
 using vehicle_project_editing::MechanicalCheckReport;
-using vehicle_project_editing::PropertyEditRefusal;
+using vehicle_project_editing::PropertyToken;
 using vehicle_project_editing::PropertyValue;
 using vehicle_project_editing::PropertyValueKind;
+using vehicle_project_editing::ReferencedElementName;
 using vehicle_project_editing::RigidBodyDrawing;
+using vehicle_project_editing::SaturatedPiecewiseLinearDamperCurve;
 using vehicle_project_editing::VehicleProjectEditingSession;
 using vehicle_project_editing::VehicleProjectPreview;
 using vehicle_project_editing::WheelDrawing;
@@ -78,16 +92,6 @@ using vehicle_project_editing::WheelDrawing;
 // allowed.
 constexpr double kCompositionToleranceMeters = 64.0 * std::numeric_limits<double>::epsilon() * 20.0;
 constexpr double kCompositionToleranceRadians = 64.0 * std::numeric_limits<double>::epsilon();
-
-[[noreturn]] void Fail(const std::string& detail) {
-    throw std::runtime_error(detail);
-}
-
-void Require(bool condition, const std::string& detail) {
-    if (!condition) {
-        Fail(detail);
-    }
-}
 
 std::string Describe(const ElementReference& element) {
     return "element '" + element.name + "' of kind " +
@@ -117,14 +121,16 @@ PropertyValueKind KindOfHeldValue(const PropertyValue& value) {
                 return PropertyValueKind::kNumber;
             } else if constexpr (std::is_same_v<Held, Eigen::Vector3d>) {
                 return PropertyValueKind::kVector3;
-            } else if constexpr (std::is_same_v<Held, std::string>) {
-                return PropertyValueKind::kText;
             } else if constexpr (std::is_same_v<Held, bool>) {
                 return PropertyValueKind::kBoolean;
             } else if constexpr (std::is_same_v<Held, Eigen::Matrix3d>) {
                 return PropertyValueKind::kRotation;
-            } else if constexpr (std::is_same_v<Held, wheel_rail_contact::WheelSide>) {
-                return PropertyValueKind::kWheelSide;
+            } else if constexpr (std::is_same_v<Held, ElementOwnName>) {
+                return PropertyValueKind::kElementName;
+            } else if constexpr (std::is_same_v<Held, ReferencedElementName>) {
+                return PropertyValueKind::kElementReference;
+            } else if constexpr (std::is_same_v<Held, PropertyToken>) {
+                return PropertyValueKind::kToken;
             } else {
                 return PropertyValueKind::kSaturatedPiecewiseLinearDamperCurve;
             }
@@ -148,27 +154,6 @@ bool SameReading(const std::optional<PropertyValue>& expected,
            (!expected.has_value() || SameValue(*expected, *actual));
 }
 
-// Whether two projects hold the same definition, contact record and
-// placements. Groups are not compared: no project here has any, and the
-// session never edits them.
-bool SameProject(const VehicleProject& expected, const VehicleProject& actual) {
-    const auto same_placement = [](const FreeBodyPlacement& left, const FreeBodyPlacement& right) {
-        return left.body_name == right.body_name &&
-               left.rotation_local_track_from_body.coeffs() ==
-                   right.rotation_local_track_from_body.coeffs() &&
-               left.lateral_offset_in_local_track_frame_meters ==
-                   right.lateral_offset_in_local_track_frame_meters &&
-               left.vertical_offset_in_local_track_frame_meters ==
-                   right.vertical_offset_in_local_track_frame_meters;
-    };
-    return Same(expected.vehicle_definition, actual.vehicle_definition) &&
-           expected.contact_record.has_value() == actual.contact_record.has_value() &&
-           (!expected.contact_record.has_value() ||
-            Same(*expected.contact_record, *actual.contact_record)) &&
-           std::ranges::equal(expected.free_body_placements, actual.free_body_placements,
-                              same_placement);
-}
-
 // --- Property descriptions -------------------------------------------------
 
 // The probe is edited, never checked, so the gravity its sessions hold is
@@ -176,9 +161,10 @@ bool SameProject(const VehicleProject& expected, const VehicleProject& actual) {
 constexpr double kUncheckedGravitationalAccelerationMetersPerSecondSquared = 9.81;
 
 // One element of every kind, every member of it holding a value no other
-// member of the project holds, so that a property can only read the value of
-// the member it names. Its frame names resolve to nothing: the probe is read
-// and edited, never checked.
+// member of its record holds, so that a property can only read the value of
+// the member it names. Its references name elements of the probe, which an
+// edit requires of a reference it sets; the probe is read and edited, never
+// checked.
 VehicleProject MakePropertyProbeProject() {
     configuration::VehicleDefinition vehicle;
     vehicle.vehicle_name = "property_probe";
@@ -201,72 +187,70 @@ VehicleProject MakePropertyProbeProject() {
         {.body_name = "probe_unplaced_body", .station_offset_meters = 5.3}};
     vehicle.fixed_frames = {
         {.name = "probe_frame",
-         .body_name = "frame_body",
+         .body_name = "probe_jointed_body",
          .position_in_body_frame_meters = Eigen::Vector3d(6.1, 6.2, 6.3),
          .rotation_in_body_frame =
              Eigen::AngleAxisd(0.3, Eigen::Vector3d::UnitZ()).toRotationMatrix()}};
     vehicle.revolute_joints = {{.name = "probe_revolute_joint",
-                                .parent_frame_name = "revolute_parent_frame",
-                                .child_frame_name = "revolute_child_frame",
+                                .parent_frame_name = "probe_frame",
+                                .child_frame_name = "probe_jointed_body",
                                 .axis_in_parent_frame = Eigen::Vector3d(7.1, 7.2, 7.3),
                                 .damping_newton_metre_seconds_per_radian = 7.4}};
     vehicle.ball_rpy_joints = {
         {.name = "probe_ball_rpy_joint",
-         .parent_frame_name = "ball_rpy_parent_frame",
-         .child_frame_name = "ball_rpy_child_frame",
+         .parent_frame_name = "probe_body",
+         .child_frame_name = "probe_unplaced_body",
          .default_roll_pitch_yaw_angles_radians = Eigen::Vector3d(8.1, 8.2, 8.3)}};
     vehicle.weld_joints = {{.name = "probe_weld_joint",
-                            .parent_frame_name = "weld_parent_frame",
-                            .child_frame_name = "weld_child_frame"}};
+                            .parent_frame_name = "probe_frame",
+                            .child_frame_name = "probe_unplaced_body"}};
     vehicle.translational_spring_dampers = {
         {.name = "probe_translational_spring_damper",
-         .reference_frame_name = "translational_reference_frame",
-         .opposite_frame_name = "translational_opposite_frame",
+         .reference_frame_name = "probe_frame",
+         .opposite_frame_name = "probe_body",
          .stiffness_newtons_per_meter = Eigen::Vector3d(9.1, 9.2, 9.3),
          .damping_newton_seconds_per_meter = Eigen::Vector3d(10.1, 10.2, 10.3)}};
     vehicle.roll_spring_damper_couples = {{.name = "probe_roll_spring_damper_couple",
-                                           .reference_frame_name = "roll_reference_frame",
-                                           .opposite_frame_name = "roll_opposite_frame",
+                                           .reference_frame_name = "probe_body",
+                                           .opposite_frame_name = "probe_frame",
                                            .stiffness_newton_meters_per_radian = 11.1,
                                            .damping_newton_meter_seconds_per_radian = 11.2}};
     vehicle.series_spring_viscous_dampers = {{.name = "probe_series_spring_viscous_damper",
-                                              .reference_frame_name = "series_reference_frame",
-                                              .opposite_frame_name = "series_opposite_frame",
+                                              .reference_frame_name = "probe_frame",
+                                              .opposite_frame_name = "probe_unplaced_body",
                                               .axis = "lateral",
                                               .series_stiffness_newtons_per_meter = 12.1,
                                               .series_damping_newton_seconds_per_meter = 12.2}};
     vehicle.point_to_point_series_spring_bilinear_dampers = {
         {.name = "probe_bilinear_damper",
-         .reference_frame_name = "bilinear_reference_frame",
-         .opposite_frame_name = "bilinear_opposite_frame",
+         .reference_frame_name = "probe_unplaced_body",
+         .opposite_frame_name = "probe_frame",
          .series_stiffness_newtons_per_meter = 13.1,
          .damping_below_knee_newton_seconds_per_meter = 13.2,
          .knee_force_newtons = 13.3,
          .damping_above_knee_newton_seconds_per_meter = 13.4}};
-    vehicle.saturated_piecewise_linear_dampers = {
-        {.name = "probe_saturated_damper",
-         .reference_frame_name = "saturated_reference_frame",
-         .opposite_frame_name = "saturated_opposite_frame",
-         .axis = "longitudinal",
-         .curve = {{0.0, 0.0}, {14.1, 14.2}}}};
+    vehicle.saturated_piecewise_linear_dampers = {{.name = "probe_saturated_damper",
+                                                   .reference_frame_name = "probe_jointed_body",
+                                                   .opposite_frame_name = "probe_frame",
+                                                   .axis = "longitudinal",
+                                                   .curve = {{0.0, 0.0}, {14.1, 14.2}}}};
     vehicle.reference_frame_linear_bushings = {
         {.name = "probe_bushing",
-         .reference_frame_name = "bushing_reference_frame",
-         .opposite_frame_name = "bushing_opposite_frame",
+         .reference_frame_name = "probe_frame",
+         .opposite_frame_name = "probe_jointed_body",
          .translational_stiffness_newtons_per_meter = Eigen::Vector3d(15.1, 15.2, 15.3),
          .translational_damping_newton_seconds_per_meter = Eigen::Vector3d(16.1, 16.2, 16.3),
          .rotational_damping_newton_meter_seconds_per_radian = Eigen::Vector3d(17.1, 17.2, 17.3)}};
-    vehicle.point_to_point_linear_spring_dampers = {
-        {.name = "probe_linear_spring_damper",
-         .reference_frame_name = "linear_reference_frame",
-         .opposite_frame_name = "linear_opposite_frame",
-         .nominal_length_meters = 18.1,
-         .stiffness_newtons_per_meter = 18.2,
-         .damping_newton_seconds_per_meter = 18.3}};
+    vehicle.point_to_point_linear_spring_dampers = {{.name = "probe_linear_spring_damper",
+                                                     .reference_frame_name = "probe_body",
+                                                     .opposite_frame_name = "probe_jointed_body",
+                                                     .nominal_length_meters = 18.1,
+                                                     .stiffness_newtons_per_meter = 18.2,
+                                                     .damping_newton_seconds_per_meter = 18.3}};
     vehicle.point_to_point_hysteretic_springs = {
         {.name = "probe_hysteretic_spring",
-         .reference_frame_name = "hysteretic_reference_frame",
-         .opposite_frame_name = "hysteretic_opposite_frame",
+         .reference_frame_name = "probe_jointed_body",
+         .opposite_frame_name = "probe_body",
          .nominal_length_meters = 19.1,
          .stiffness_newtons_per_meter = 19.2,
          .hysteresis_ratio = 19.3,
@@ -275,19 +259,20 @@ VehicleProject MakePropertyProbeProject() {
     configuration::VehicleContactRecord contact_record;
     contact_record.declaration.carriers = {
         {.carrier_name = "probe_carrier",
-         .body_name = "carrier_body",
+         .body_name = "probe_body",
          .rotation_body_from_nonspinning_wheel_profile =
-             Eigen::AngleAxisd(0.4, Eigen::Vector3d::UnitX()).toRotationMatrix()}};
+             Eigen::AngleAxisd(0.4, Eigen::Vector3d::UnitX()).toRotationMatrix()},
+        {.carrier_name = "probe_second_carrier", .body_name = "probe_unplaced_body"}};
     contact_record.declaration.interfaces = {
         {.interface_name = "probe_interface",
-         .carrier_name = "interface_carrier",
-         .wheel_body_name = "interface_wheel_body",
+         .carrier_name = "probe_carrier",
+         .wheel_body_name = "probe_jointed_body",
          .side = wheel_rail_contact::WheelSide::kLeft,
-         .independent_wheel_revolute_joint_name = "interface_wheel_joint"},
+         .independent_wheel_revolute_joint_name = "probe_revolute_joint"},
         // A wheel that is not separately jointed names no joint.
         {.interface_name = "probe_interface_without_joint",
-         .carrier_name = "probe_carrier",
-         .wheel_body_name = "carrier_body",
+         .carrier_name = "probe_second_carrier",
+         .wheel_body_name = "probe_body",
          .side = wheel_rail_contact::WheelSide::kRight,
          .independent_wheel_revolute_joint_name = std::nullopt},
     };
@@ -320,6 +305,12 @@ std::size_t MemberCount(const Record& record) {
     return std::tuple_size_v<decltype(Members(record))>;
 }
 
+// The token a wheel side is written as, stated here independently of the
+// library.
+std::string WheelSideToken(wheel_rail_contact::WheelSide side) {
+    return side == wheel_rail_contact::WheelSide::kLeft ? "left" : "right";
+}
+
 std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& probe) {
     const configuration::VehicleDefinition& vehicle = probe.vehicle_definition;
     const configuration::VehicleContactDeclaration& declaration = probe.contact_record->declaration;
@@ -341,11 +332,15 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
     const auto& hysteretic = vehicle.point_to_point_hysteretic_springs.front();
     const auto& carrier = declaration.carriers.front();
     const auto& interface = declaration.interfaces.front();
+    const auto own_name = [](const std::string& name) { return ElementOwnName{name}; };
+    const auto reference = [](const std::optional<std::string>& name) {
+        return ReferencedElementName{name};
+    };
     return {
         {ElementKind::kRigidBody,
          body.name,
          MemberCount(body) + 3,
-         {{"name", body.name},
+         {{"name", own_name(body.name)},
           {"moves_freely_in_world", body.moves_freely_in_world},
           {"mass_kilograms", body.mass_kilograms},
           {"center_of_mass_in_body_frame_meters", body.center_of_mass_in_body_frame_meters},
@@ -362,66 +357,66 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
         {ElementKind::kFixedFrame,
          frame.name,
          MemberCount(frame),
-         {{"name", frame.name},
-          {"body_name", frame.body_name},
+         {{"name", own_name(frame.name)},
+          {"body_name", reference(frame.body_name)},
           {"position_in_body_frame_meters", frame.position_in_body_frame_meters},
           {"rotation_in_body_frame", frame.rotation_in_body_frame}}},
         {ElementKind::kRevoluteJoint,
          revolute.name,
          MemberCount(revolute),
-         {{"name", revolute.name},
-          {"parent_frame_name", revolute.parent_frame_name},
-          {"child_frame_name", revolute.child_frame_name},
+         {{"name", own_name(revolute.name)},
+          {"parent_frame_name", reference(revolute.parent_frame_name)},
+          {"child_frame_name", reference(revolute.child_frame_name)},
           {"axis_in_parent_frame", revolute.axis_in_parent_frame},
           {"damping_newton_metre_seconds_per_radian",
            revolute.damping_newton_metre_seconds_per_radian}}},
         {ElementKind::kBallRpyJoint,
          ball_rpy.name,
          MemberCount(ball_rpy),
-         {{"name", ball_rpy.name},
-          {"parent_frame_name", ball_rpy.parent_frame_name},
-          {"child_frame_name", ball_rpy.child_frame_name},
+         {{"name", own_name(ball_rpy.name)},
+          {"parent_frame_name", reference(ball_rpy.parent_frame_name)},
+          {"child_frame_name", reference(ball_rpy.child_frame_name)},
           {"default_roll_pitch_yaw_angles_radians",
            ball_rpy.default_roll_pitch_yaw_angles_radians}}},
         {ElementKind::kWeldJoint,
          weld.name,
          MemberCount(weld),
-         {{"name", weld.name},
-          {"parent_frame_name", weld.parent_frame_name},
-          {"child_frame_name", weld.child_frame_name}}},
+         {{"name", own_name(weld.name)},
+          {"parent_frame_name", reference(weld.parent_frame_name)},
+          {"child_frame_name", reference(weld.child_frame_name)}}},
         {ElementKind::kTranslationalSpringDamper,
          translational.name,
          MemberCount(translational),
-         {{"name", translational.name},
-          {"reference_frame_name", translational.reference_frame_name},
-          {"opposite_frame_name", translational.opposite_frame_name},
+         {{"name", own_name(translational.name)},
+          {"reference_frame_name", reference(translational.reference_frame_name)},
+          {"opposite_frame_name", reference(translational.opposite_frame_name)},
           {"stiffness_newtons_per_meter", translational.stiffness_newtons_per_meter},
           {"damping_newton_seconds_per_meter", translational.damping_newton_seconds_per_meter}}},
         {ElementKind::kRollSpringDamperCouple,
          roll.name,
          MemberCount(roll),
-         {{"name", roll.name},
-          {"reference_frame_name", roll.reference_frame_name},
-          {"opposite_frame_name", roll.opposite_frame_name},
+         {{"name", own_name(roll.name)},
+          {"reference_frame_name", reference(roll.reference_frame_name)},
+          {"opposite_frame_name", reference(roll.opposite_frame_name)},
           {"stiffness_newton_meters_per_radian", roll.stiffness_newton_meters_per_radian},
           {"damping_newton_meter_seconds_per_radian",
            roll.damping_newton_meter_seconds_per_radian}}},
         {ElementKind::kSeriesSpringViscousDamper,
          series.name,
          MemberCount(series),
-         {{"name", series.name},
-          {"reference_frame_name", series.reference_frame_name},
-          {"opposite_frame_name", series.opposite_frame_name},
-          {"axis", series.axis},
+         {{"name", own_name(series.name)},
+          {"reference_frame_name", reference(series.reference_frame_name)},
+          {"opposite_frame_name", reference(series.opposite_frame_name)},
+          {"axis", PropertyToken{series.axis}},
           {"series_stiffness_newtons_per_meter", series.series_stiffness_newtons_per_meter},
           {"series_damping_newton_seconds_per_meter",
            series.series_damping_newton_seconds_per_meter}}},
         {ElementKind::kPointToPointSeriesSpringBilinearDamper,
          bilinear.name,
          MemberCount(bilinear),
-         {{"name", bilinear.name},
-          {"reference_frame_name", bilinear.reference_frame_name},
-          {"opposite_frame_name", bilinear.opposite_frame_name},
+         {{"name", own_name(bilinear.name)},
+          {"reference_frame_name", reference(bilinear.reference_frame_name)},
+          {"opposite_frame_name", reference(bilinear.opposite_frame_name)},
           {"series_stiffness_newtons_per_meter", bilinear.series_stiffness_newtons_per_meter},
           {"damping_below_knee_newton_seconds_per_meter",
            bilinear.damping_below_knee_newton_seconds_per_meter},
@@ -431,17 +426,17 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
         {ElementKind::kSaturatedPiecewiseLinearDamper,
          saturated.name,
          MemberCount(saturated),
-         {{"name", saturated.name},
-          {"reference_frame_name", saturated.reference_frame_name},
-          {"opposite_frame_name", saturated.opposite_frame_name},
-          {"axis", saturated.axis},
+         {{"name", own_name(saturated.name)},
+          {"reference_frame_name", reference(saturated.reference_frame_name)},
+          {"opposite_frame_name", reference(saturated.opposite_frame_name)},
+          {"axis", PropertyToken{saturated.axis}},
           {"curve", saturated.curve}}},
         {ElementKind::kReferenceFrameLinearBushing,
          bushing.name,
          MemberCount(bushing),
-         {{"name", bushing.name},
-          {"reference_frame_name", bushing.reference_frame_name},
-          {"opposite_frame_name", bushing.opposite_frame_name},
+         {{"name", own_name(bushing.name)},
+          {"reference_frame_name", reference(bushing.reference_frame_name)},
+          {"opposite_frame_name", reference(bushing.opposite_frame_name)},
           {"translational_stiffness_newtons_per_meter",
            bushing.translational_stiffness_newtons_per_meter},
           {"translational_damping_newton_seconds_per_meter",
@@ -451,18 +446,18 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
         {ElementKind::kPointToPointLinearSpringDamper,
          linear.name,
          MemberCount(linear),
-         {{"name", linear.name},
-          {"reference_frame_name", linear.reference_frame_name},
-          {"opposite_frame_name", linear.opposite_frame_name},
+         {{"name", own_name(linear.name)},
+          {"reference_frame_name", reference(linear.reference_frame_name)},
+          {"opposite_frame_name", reference(linear.opposite_frame_name)},
           {"nominal_length_meters", linear.nominal_length_meters},
           {"stiffness_newtons_per_meter", linear.stiffness_newtons_per_meter},
           {"damping_newton_seconds_per_meter", linear.damping_newton_seconds_per_meter}}},
         {ElementKind::kPointToPointHystereticSpring,
          hysteretic.name,
          MemberCount(hysteretic),
-         {{"name", hysteretic.name},
-          {"reference_frame_name", hysteretic.reference_frame_name},
-          {"opposite_frame_name", hysteretic.opposite_frame_name},
+         {{"name", own_name(hysteretic.name)},
+          {"reference_frame_name", reference(hysteretic.reference_frame_name)},
+          {"opposite_frame_name", reference(hysteretic.opposite_frame_name)},
           {"nominal_length_meters", hysteretic.nominal_length_meters},
           {"stiffness_newtons_per_meter", hysteretic.stiffness_newtons_per_meter},
           {"hysteresis_ratio", hysteretic.hysteresis_ratio},
@@ -471,66 +466,125 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
         {ElementKind::kContactCarrier,
          carrier.carrier_name,
          MemberCount(carrier),
-         {{"carrier_name", carrier.carrier_name},
-          {"body_name", carrier.body_name},
+         {{"carrier_name", own_name(carrier.carrier_name)},
+          {"body_name", reference(carrier.body_name)},
           {"rotation_body_from_nonspinning_wheel_profile",
            carrier.rotation_body_from_nonspinning_wheel_profile}}},
         {ElementKind::kContactInterface,
          interface.interface_name,
          MemberCount(interface),
-         {{"interface_name", interface.interface_name},
-          {"carrier_name", interface.carrier_name},
-          {"wheel_body_name", interface.wheel_body_name},
-          {"side", interface.side},
+         {{"interface_name", own_name(interface.interface_name)},
+          {"carrier_name", reference(interface.carrier_name)},
+          {"wheel_body_name", reference(interface.wheel_body_name)},
+          {"side", PropertyToken{WheelSideToken(interface.side)}},
           {"independent_wheel_revolute_joint_name",
-           *interface.independent_wheel_revolute_joint_name}}},
+           reference(interface.independent_wheel_revolute_joint_name)}}},
     };
 }
 
-// The editable properties, stated here independently of the descriptions:
-// every number and 3-vector of the mechanical element records, a rigid body's
-// station offset in the mechanical track station layout, and the two offsets
-// of its placement.
-std::set<std::pair<ElementKind, std::string>> EditableProperties() {
-    return {
-        {ElementKind::kRigidBody, "mass_kilograms"},
-        {ElementKind::kRigidBody, "center_of_mass_in_body_frame_meters"},
-        {ElementKind::kRigidBody, "inertia_moments_about_center_of_mass_kilogram_square_meters"},
-        {ElementKind::kRigidBody, "inertia_products_about_center_of_mass_kilogram_square_meters"},
-        {ElementKind::kRigidBody, "mechanical_track_station_layout.station_offset_meters"},
-        {ElementKind::kRigidBody, "placement.lateral_offset_in_local_track_frame_meters"},
-        {ElementKind::kRigidBody, "placement.vertical_offset_in_local_track_frame_meters"},
-        {ElementKind::kFixedFrame, "position_in_body_frame_meters"},
-        {ElementKind::kRevoluteJoint, "axis_in_parent_frame"},
-        {ElementKind::kRevoluteJoint, "damping_newton_metre_seconds_per_radian"},
-        {ElementKind::kBallRpyJoint, "default_roll_pitch_yaw_angles_radians"},
-        {ElementKind::kTranslationalSpringDamper, "stiffness_newtons_per_meter"},
-        {ElementKind::kTranslationalSpringDamper, "damping_newton_seconds_per_meter"},
-        {ElementKind::kRollSpringDamperCouple, "stiffness_newton_meters_per_radian"},
-        {ElementKind::kRollSpringDamperCouple, "damping_newton_meter_seconds_per_radian"},
-        {ElementKind::kSeriesSpringViscousDamper, "series_stiffness_newtons_per_meter"},
-        {ElementKind::kSeriesSpringViscousDamper, "series_damping_newton_seconds_per_meter"},
-        {ElementKind::kPointToPointSeriesSpringBilinearDamper,
-         "series_stiffness_newtons_per_meter"},
-        {ElementKind::kPointToPointSeriesSpringBilinearDamper,
-         "damping_below_knee_newton_seconds_per_meter"},
-        {ElementKind::kPointToPointSeriesSpringBilinearDamper, "knee_force_newtons"},
-        {ElementKind::kPointToPointSeriesSpringBilinearDamper,
-         "damping_above_knee_newton_seconds_per_meter"},
-        {ElementKind::kReferenceFrameLinearBushing, "translational_stiffness_newtons_per_meter"},
-        {ElementKind::kReferenceFrameLinearBushing,
-         "translational_damping_newton_seconds_per_meter"},
-        {ElementKind::kReferenceFrameLinearBushing,
-         "rotational_damping_newton_meter_seconds_per_radian"},
-        {ElementKind::kPointToPointLinearSpringDamper, "nominal_length_meters"},
-        {ElementKind::kPointToPointLinearSpringDamper, "stiffness_newtons_per_meter"},
-        {ElementKind::kPointToPointLinearSpringDamper, "damping_newton_seconds_per_meter"},
-        {ElementKind::kPointToPointHystereticSpring, "nominal_length_meters"},
-        {ElementKind::kPointToPointHystereticSpring, "stiffness_newtons_per_meter"},
-        {ElementKind::kPointToPointHystereticSpring, "hysteresis_ratio"},
-        {ElementKind::kPointToPointHystereticSpring,
-         "hysteresis_transition_speed_meters_per_second"},
+using PropertyName = std::pair<ElementKind, std::string>;
+
+// The properties that cannot be edited, stated here independently of the
+// descriptions: the rotations. Every other property is editable.
+std::set<PropertyName> ReadOnlyProperties() {
+    return {{ElementKind::kFixedFrame, "rotation_in_body_frame"},
+            {ElementKind::kContactCarrier, "rotation_body_from_nonspinning_wheel_profile"}};
+}
+
+struct ExpectedReference {
+    std::vector<ElementKind> referenced_kinds;
+    bool may_name_none;
+};
+
+// Who names whom, stated here from the contract independently of the tables:
+// a fixed frame names its rigid body; a joint or force element end names a
+// fixed frame or a rigid body; a contact carrier names its rigid body; a
+// contact interface names its carrier, its wheel body and, optionally, a
+// revolute joint.
+std::map<PropertyName, ExpectedReference> ExpectedReferences() {
+    const std::vector<ElementKind> body{ElementKind::kRigidBody};
+    const std::vector<ElementKind> frame{ElementKind::kRigidBody, ElementKind::kFixedFrame};
+    std::map<PropertyName, ExpectedReference> references{
+        {{ElementKind::kFixedFrame, "body_name"}, {body, false}},
+        {{ElementKind::kContactCarrier, "body_name"}, {body, false}},
+        {{ElementKind::kContactInterface, "carrier_name"}, {{ElementKind::kContactCarrier}, false}},
+        {{ElementKind::kContactInterface, "wheel_body_name"}, {body, false}},
+        {{ElementKind::kContactInterface, "independent_wheel_revolute_joint_name"},
+         {{ElementKind::kRevoluteJoint}, true}},
     };
+    for (const ElementKind joint :
+         {ElementKind::kRevoluteJoint, ElementKind::kBallRpyJoint, ElementKind::kWeldJoint}) {
+        references.insert({{joint, "parent_frame_name"}, {frame, false}});
+        references.insert({{joint, "child_frame_name"}, {frame, false}});
+    }
+    for (const ElementKind force_element :
+         {ElementKind::kTranslationalSpringDamper, ElementKind::kRollSpringDamperCouple,
+          ElementKind::kSeriesSpringViscousDamper,
+          ElementKind::kPointToPointSeriesSpringBilinearDamper,
+          ElementKind::kSaturatedPiecewiseLinearDamper, ElementKind::kReferenceFrameLinearBushing,
+          ElementKind::kPointToPointLinearSpringDamper,
+          ElementKind::kPointToPointHystereticSpring}) {
+        references.insert({{force_element, "reference_frame_name"}, {frame, false}});
+        references.insert({{force_element, "opposite_frame_name"}, {frame, false}});
+    }
+    return references;
+}
+
+// Every token property's choices, stated here independently of the tables:
+// the axes configuration's ParseAxis accepts, and a wheel's two sides.
+std::map<PropertyName, std::vector<std::string>> ExpectedTokenChoices() {
+    const std::vector<std::string> axes{"longitudinal", "lateral", "vertical"};
+    return {{{ElementKind::kSeriesSpringViscousDamper, "axis"}, axes},
+            {{ElementKind::kSaturatedPiecewiseLinearDamper, "axis"}, axes},
+            {{ElementKind::kContactInterface, "side"},
+             {WheelSideToken(wheel_rail_contact::WheelSide::kLeft),
+              WheelSideToken(wheel_rail_contact::WheelSide::kRight)}}};
+}
+
+// What a description states beyond name, value kind and editability is what
+// this test states for the property: a reference's kinds and whether it may
+// name none, a token's choices, and a curve's row fields, which are the
+// members of a curve point under their own names.
+void RequireDescribedAsStated(const ElementPropertyDescription& description,
+                              const PropertyName& property, const std::string& what) {
+    const std::map<PropertyName, ExpectedReference> references = ExpectedReferences();
+    const auto reference = references.find(property);
+    Require((description.value_kind == PropertyValueKind::kElementReference) ==
+                (reference != references.end()),
+            what + " is described as a reference where this test states none, or the reverse");
+    Require(reference == references.end()
+                ? description.referenced_kinds.empty() && !description.may_name_none
+                : std::ranges::equal(description.referenced_kinds,
+                                     reference->second.referenced_kinds) &&
+                      description.may_name_none == reference->second.may_name_none,
+            what + " is described as naming other kinds than stated here");
+
+    const std::map<PropertyName, std::vector<std::string>> token_choices = ExpectedTokenChoices();
+    const auto choices = token_choices.find(property);
+    Require(
+        (description.value_kind == PropertyValueKind::kToken) == (choices != token_choices.end()),
+        what + " is described as a token where this test states none, or the reverse");
+    Require(choices == token_choices.end()
+                ? description.choices.empty()
+                : std::ranges::equal(description.choices, choices->second),
+            what + " is described with other choices than stated here");
+
+    if (description.value_kind != PropertyValueKind::kSaturatedPiecewiseLinearDamperCurve) {
+        Require(description.row_fields.empty(), what + " is described with row fields");
+        return;
+    }
+    const configuration::VehicleSaturatedPiecewiseLinearDamperPointDefinition point{
+        .relative_velocity_meters_per_second = 21.1, .force_newtons = 21.2};
+    const std::vector<std::pair<std::string, double>> members_by_name{
+        {"relative_velocity_meters_per_second", point.relative_velocity_meters_per_second},
+        {"force_newtons", point.force_newtons}};
+    Require(description.row_fields.size() == MemberCount(point) &&
+                std::ranges::equal(description.row_fields, members_by_name,
+                                   [&point](const auto& field, const auto& member) {
+                                       return field.name == member.first &&
+                                              point.*field.member == member.second;
+                                   }),
+            what + " does not give every curve point member as a row field of its own name");
 }
 
 using PropertyKey = std::tuple<ElementKind, std::string, std::string>;
@@ -556,7 +610,7 @@ std::map<PropertyKey, std::optional<PropertyValue>> ReadEveryProperty(
 
 void VerifyPropertiesReadTheirMembers(const VehicleProject& probe,
                                       std::span<const ExpectedElementKind> kinds) {
-    std::set<std::pair<ElementKind, std::string>> described_editable;
+    const std::set<PropertyName> read_only = ReadOnlyProperties();
     for (const ExpectedElementKind& expected : kinds) {
         const ElementReference element{expected.kind, expected.element_name};
         Require(expected.properties.size() == expected.property_count,
@@ -587,20 +641,19 @@ void VerifyPropertiesReadTheirMembers(const VehicleProject& probe,
                     what + " is read with another description");
             Require(description.value_kind == KindOfHeldValue(property.value),
                     what + " is described with the wrong value kind");
+            Require(description.editable != read_only.contains({expected.kind, property.name}),
+                    what + " is not editable exactly when this test calls it read-only");
+            RequireDescribedAsStated(description, {expected.kind, property.name}, what);
             Require(readings[index].value.has_value() &&
                         SameValue(property.value, *readings[index].value),
                     what + " does not read the member of that name");
-            if (description.editable) {
-                described_editable.emplace(expected.kind, property.name);
-            }
         }
     }
-    Require(described_editable == EditableProperties(),
-            "the properties described as editable are not exactly the editable set stated here");
 }
 
 // A property whose value is absent for an element reads as not editable for
-// it, although its kind may call the property editable.
+// it, although its kind may call the property editable. A reference that
+// names none is not absent: it holds no name and stays editable.
 void VerifyAbsentValues(const VehicleProject& probe) {
     const auto reading_of = [&probe](const ElementReference& element,
                                      std::string_view property_name) {
@@ -644,8 +697,14 @@ void VerifyAbsentValues(const VehicleProject& probe) {
                           *unplaced_station_offset.value) &&
                 unplaced_station_offset.description.editable,
             "'probe_unplaced_body' does not read its own station offset as editable");
-    require_absent({ElementKind::kContactInterface, "probe_interface_without_joint"},
-                   "independent_wheel_revolute_joint_name", "names no independent-wheel joint");
+    const ElementPropertyReading no_joint =
+        reading_of({ElementKind::kContactInterface, "probe_interface_without_joint"},
+                   "independent_wheel_revolute_joint_name");
+    Require(no_joint.value.has_value() &&
+                SameValue(ReferencedElementName{std::nullopt}, *no_joint.value) &&
+                no_joint.description.editable,
+            "an interface naming no independent-wheel joint does not read a reference naming "
+            "none that can be edited");
 }
 
 // What a reading calls editable is exactly what an edit accepts: writing an
@@ -663,12 +722,10 @@ void VerifyReadingsStateWhatEditsAccept(const VehicleProject& probe,
                  vehicle_project_editing::ReadElementProperties(probe, element)) {
                 const std::string property_name(reading.description.name);
                 const std::string what = Describe(element) + " property '" + property_name + "'";
-                // A value is absent only from a number or text property.
+                // A value is absent only from a station offset or a placement
+                // offset, which hold numbers.
                 const PropertyValue value =
-                    reading.value.has_value() ? *reading.value
-                    : reading.description.value_kind == PropertyValueKind::kNumber
-                        ? PropertyValue(0.0)
-                        : PropertyValue(std::string());
+                    reading.value.has_value() ? *reading.value : PropertyValue(0.0);
                 const auto edited = session.SetElementProperty(element, property_name, value);
                 if (reading.description.editable) {
                     Require(edited.has_value(),
@@ -716,58 +773,97 @@ void VerifyElementLookup(const VehicleProject& probe) {
             "name");
 }
 
+// A value of the same kind that differs from `value`, for a property whose
+// reference or token is stated here: another element of a kind the reference
+// may name, or none where it may name none, another choice of a token, a
+// curve with one more point, and numbers moved by a different amount each.
+PropertyValue ChangedValue(const VehicleProject& probe, const PropertyName& property,
+                           const PropertyValue& value) {
+    return std::visit(
+        [&](const auto& held) -> PropertyValue {
+            using Held = std::remove_cvref_t<decltype(held)>;
+            if constexpr (std::is_same_v<Held, double>) {
+                return held + 1000.0;
+            } else if constexpr (std::is_same_v<Held, Eigen::Vector3d>) {
+                return Eigen::Vector3d(held + Eigen::Vector3d(1000.0, 2000.0, 3000.0));
+            } else if constexpr (std::is_same_v<Held, ReferencedElementName>) {
+                const ExpectedReference reference = ExpectedReferences().at(property);
+                if (reference.may_name_none && held.name.has_value()) {
+                    return ReferencedElementName{std::nullopt};
+                }
+                for (const ElementKind kind : reference.referenced_kinds) {
+                    for (const std::string& name :
+                         vehicle_project_editing::CollectElementNames(probe, kind)) {
+                        if (name != held.name) {
+                            return ReferencedElementName{name};
+                        }
+                    }
+                }
+                Fail("the probe has no other element that '" + property.second + "' may name");
+            } else if constexpr (std::is_same_v<Held, PropertyToken>) {
+                const std::vector<std::string> choices = ExpectedTokenChoices().at(property);
+                for (const std::string& choice : choices) {
+                    if (choice != held.token) {
+                        return PropertyToken{choice};
+                    }
+                }
+                Fail("'" + property.second + "' has no other choice");
+            } else if constexpr (std::is_same_v<Held, SaturatedPiecewiseLinearDamperCurve>) {
+                SaturatedPiecewiseLinearDamperCurve curve = held;
+                curve.push_back({.relative_velocity_meters_per_second =
+                                     curve.back().relative_velocity_meters_per_second + 1.0,
+                                 .force_newtons = curve.back().force_newtons + 2.0});
+                return curve;
+            } else {
+                Fail("a name, a boolean or a rotation is not written here");
+            }
+        },
+        value);
+}
+
 // Writing each editable property changes the member of its name and nothing
 // else. Since the reads above are shown to come from the member each property
 // names, reading every property after a write shows which member the write
-// reached.
+// reached. An element's name and a body's freedom also change the records
+// that follow them; the structural editing verification covers those.
 void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
                                        std::span<const ExpectedElementKind> kinds) {
     VehicleProjectEditingSession session(probe,
                                          kUncheckedGravitationalAccelerationMetersPerSecondSquared);
     const std::map<PropertyKey, std::optional<PropertyValue>> original =
         ReadEveryProperty(probe, kinds);
-    for (const auto& [kind, property_name] : EditableProperties()) {
-        const auto expected_kind = std::ranges::find(kinds, kind, &ExpectedElementKind::kind);
-        Require(expected_kind != kinds.end(),
-                "the probe has no element of the kind of '" + property_name + "'");
-        const ElementReference element{kind, expected_kind->element_name};
-        const PropertyKey key{kind, element.name, property_name};
-        const std::string what = Describe(element) + " property '" + property_name + "'";
-        const PropertyValue changed = std::visit(
-            [](const auto& value) -> PropertyValue {
-                using Held = std::remove_cvref_t<decltype(value)>;
-                if constexpr (std::is_same_v<Held, double>) {
-                    return value + 1000.0;
-                } else if constexpr (std::is_same_v<Held, Eigen::Vector3d>) {
-                    return Eigen::Vector3d(value + Eigen::Vector3d(1000.0, 2000.0, 3000.0));
-                } else {
-                    Fail("an editable property holds neither a number nor a 3-vector");
-                }
-            },
-            *original.at(key));
-        const auto written = session.SetElementProperty(element, property_name, changed);
-        Require(written.has_value(),
-                what + " was not written: " + (written.has_value() ? "" : written.error().reason));
-        for (const auto& [read_key, read_value] : ReadEveryProperty(session.project(), kinds)) {
-            if (read_key == key) {
-                Require(read_value.has_value() && SameValue(changed, *read_value),
-                        what + " does not read back what was written");
-            } else {
-                Require(SameReading(original.at(read_key), read_value),
-                        "writing " + what + " changed property '" + std::get<2>(read_key) +
-                            "' of '" + std::get<1>(read_key) + "'");
+    const std::set<PropertyName> read_only = ReadOnlyProperties();
+    for (const ExpectedElementKind& kind : kinds) {
+        for (const ExpectedProperty& property : kind.properties) {
+            const PropertyValueKind value_kind = KindOfHeldValue(property.value);
+            if (read_only.contains({kind.kind, property.name}) ||
+                value_kind == PropertyValueKind::kElementName ||
+                value_kind == PropertyValueKind::kBoolean) {
+                continue;
             }
+            const ElementReference element{kind.kind, kind.element_name};
+            const PropertyKey key{kind.kind, element.name, property.name};
+            const std::string what = Describe(element) + " property '" + property.name + "'";
+            const PropertyValue changed =
+                ChangedValue(probe, {kind.kind, property.name}, *original.at(key));
+            const auto written = session.SetElementProperty(element, property.name, changed);
+            Require(
+                written.has_value() && *written == element,
+                what + " was not written: " + (written.has_value() ? "" : written.error().reason));
+            for (const auto& [read_key, read_value] : ReadEveryProperty(session.project(), kinds)) {
+                if (read_key == key) {
+                    Require(read_value.has_value() && SameValue(changed, *read_value),
+                            what + " does not read back what was written");
+                } else {
+                    Require(SameReading(original.at(read_key), read_value),
+                            "writing " + what + " changed property '" + std::get<2>(read_key) +
+                                "' of '" + std::get<1>(read_key) + "'");
+                }
+            }
+            session.Undo();
+            Require(SameProject(probe, session.project()),
+                    "undoing the write of " + what + " did not restore the probe");
         }
-        session.Undo();
-        const std::map<PropertyKey, std::optional<PropertyValue>> undone =
-            ReadEveryProperty(session.project(), kinds);
-        Require(undone.size() == original.size() &&
-                    std::ranges::all_of(undone,
-                                        [&original](const auto& entry) {
-                                            return SameReading(original.at(entry.first),
-                                                               entry.second);
-                                        }),
-                "undoing the write of " + what + " did not restore the probe");
     }
 }
 
@@ -807,22 +903,6 @@ void VerifyPropertyDescriptions() {
 }
 
 // --- Editing the bundled vehicles ------------------------------------------
-
-struct ReferenceVehicle {
-    configuration::VehicleDefinition definition;
-    configuration::ResolvedStartupState startup_state;
-    configuration::VehicleContactRecord contact_record;
-};
-
-VehicleProject PlacedProject(const ReferenceVehicle& reference) {
-    VehicleProject project{.vehicle_definition = reference.definition};
-    vehicle_project::PlaceFreeBodiesAtStartupPoses(project, reference.startup_state);
-    return project;
-}
-
-double GravityOf(const ReferenceVehicle& reference) {
-    return reference.startup_state.gravitational_acceleration_meters_per_second_squared;
-}
 
 const ElementReference kPrimarySuspension{ElementKind::kTranslationalSpringDamper,
                                           "front_leading_left_primary_suspension"};
@@ -929,8 +1009,10 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
          Eigen::Vector3d(0.0, 0.0, 1.0e6)},
         {"an edit of a property the kind does not have", kPrimarySuspension, "stiffness",
          Eigen::Vector3d(0.0, 0.0, 1.0e6)},
-        {"an edit of a property that is not editable", kPrimarySuspension, "reference_frame_name",
-         std::string("front_bogie_frame")},
+        {"an edit of a property that is not editable",
+         {ElementKind::kFixedFrame, gz18.definition.fixed_frames.front().name},
+         "rotation_in_body_frame",
+         Eigen::Matrix3d::Identity().eval()},
         {"an edit with a value of the wrong kind", kPrimarySuspension,
          "stiffness_newtons_per_meter", 1.0e6},
         {"an edit with a number that is not finite",
@@ -939,6 +1021,13 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
          not_a_number},
         {"an edit with a 3-vector component that is not finite", kPrimarySuspension,
          "stiffness_newtons_per_meter", Eigen::Vector3d(0.0, 0.0, infinity)},
+        {"an edit with a curve point that is not finite",
+         {ElementKind::kSaturatedPiecewiseLinearDamper,
+          gz18.definition.saturated_piecewise_linear_dampers.front().name},
+         "curve",
+         SaturatedPiecewiseLinearDamperCurve{
+             {.relative_velocity_meters_per_second = 0.0, .force_newtons = 0.0},
+             {.relative_velocity_meters_per_second = not_a_number, .force_newtons = 1.0}}},
         {"an edit of a placement offset of a free body without a placement",
          {ElementKind::kRigidBody, unplaced_body_name},
          "placement.lateral_offset_in_local_track_frame_meters",
@@ -956,10 +1045,9 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
         const auto outcome =
             session.SetElementProperty(edit.element, edit.property_name, edit.value);
         Require(!outcome.has_value(), edit.what + " was accepted");
-        const PropertyEditRefusal& refusal = outcome.error();
-        Require(refusal.element.kind == edit.element.kind &&
-                    refusal.element.name == edit.element.name &&
-                    refusal.property_name == edit.property_name && !refusal.reason.empty(),
+        const ElementEditRefusal& refusal = outcome.error();
+        Require(refusal.element == edit.element && refusal.property_name == edit.property_name &&
+                    !refusal.reason.empty(),
                 edit.what + " was refused without naming its element and property and saying why");
         Require(SameProject(edited, session.project()) && session.revision() == edited_revision &&
                     session.can_undo() && !session.can_redo(),
@@ -1527,17 +1615,6 @@ void VerifyUnplacedBodiesAreNotDrawn(const ReferenceVehicle& irw) {
     RequireWheelsOnTheirCarriers(preview, project);
 }
 
-ReferenceVehicle LoadReferenceVehicle(const char* vehicle_path, const char* startup_state_path,
-                                      const char* contact_record_path) {
-    configuration::VehicleDefinition definition =
-        configuration::LoadVehicleDefinitionFromJsonFile(vehicle_path);
-    configuration::VehicleContactRecord contact_record =
-        configuration::LoadVehicleContactRecordFromJsonFile(contact_record_path);
-    return {std::move(definition),
-            configuration::LoadResolvedStartupStateFromJsonFile(startup_state_path),
-            std::move(contact_record)};
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1548,8 +1625,10 @@ int main(int argc, char** argv) {
         return 2;
     }
     try {
-        const ReferenceVehicle gz18 = LoadReferenceVehicle(argv[1], argv[2], argv[3]);
-        const ReferenceVehicle irw = LoadReferenceVehicle(argv[4], argv[5], argv[6]);
+        const ReferenceVehicle gz18 =
+            editing_verification::LoadReferenceVehicle(argv[1], argv[2], argv[3]);
+        const ReferenceVehicle irw =
+            editing_verification::LoadReferenceVehicle(argv[4], argv[5], argv[6]);
 
         VerifyPropertyDescriptions();
         VerifyPrimarySuspensionEdit(gz18);

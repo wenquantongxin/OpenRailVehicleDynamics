@@ -1,4 +1,4 @@
-#include "orvd/vehicle_project/free_body_placements.h"
+#include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 
 #include <stdexcept>
 #include <unordered_set>

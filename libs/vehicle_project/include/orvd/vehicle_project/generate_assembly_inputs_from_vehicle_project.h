@@ -5,8 +5,8 @@
 #include "orvd/vehicle_project/vehicle_project.h"
 
 // What the solver side receives from a project: the records a vehicle assembly
-// consumes. Placements and groups take no part in either, and neither function
-// checks them.
+// consumes. Placements, shape names and groups take no part in either, and
+// neither function checks them.
 
 namespace orvd::vehicle_project {
 

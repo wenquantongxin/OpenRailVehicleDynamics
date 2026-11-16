@@ -4,9 +4,9 @@
 #include <exception>
 #include <utility>
 
-#include "orvd/vehicle_project_editing/element_properties.h"
-#include "orvd/vehicle_project_editing/mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
+#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
+#include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
 
 // The installed editing session used through its public headers and archive

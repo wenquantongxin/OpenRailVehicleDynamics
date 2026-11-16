@@ -1,4 +1,4 @@
-#include "orvd/vehicle_project/generate_assembly_inputs.h"
+#include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
 
 #include <stdexcept>
 
