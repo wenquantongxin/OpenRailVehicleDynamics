@@ -12,7 +12,10 @@ one edit, and refuses by subject and property, an IRW wheel's freedom
 included. Shows the vehicle layout zero: no settings for it, a row under
 Globals selecting nothing, the car body attached, removed and renamed like any
 body, the station section's title, and a project file holding a key the
-station layout no longer has refused. Then saves GZ18 as a project,
+station layout no longer has refused. Starts a new project from the single
+rigid body's template, reads it, builds on it, saves it as a project and opens
+that, and refuses templates that cannot be read, the open session staying.
+Then saves GZ18 as a project,
 edited and left failing its check, into a directory of projects, lists it,
 and opens each project again after another vehicle to find everything an
 interface reads of it as it was saved; follows the session and its unsaved
@@ -586,6 +589,98 @@ def verify_vehicle_layout_zero(executable, gz18, work_directory):
     service.finish()
 
 
+def verify_new_project_from_template(executable, templates, work_directory):
+    """A new project started from the single rigid body's template: a session
+    without a project file over one free cube of 1 m and 1 kg resting on the
+    ground plane, which passes its check, has no contact record, refuses Save
+    and is saved as a project that opens equal; a template that is no project
+    name, is not there or is no project file refused, the open session
+    staying; and a marker and a second body hung on a revolute joint added to
+    it, the check still passing. The template itself is never written."""
+    template_path = templates / "single_body.vehicle_project.json"
+    template_bytes = template_path.read_bytes()
+    service = Service(executable)
+    single_body = {"directory": str(templates), "name": "single_body"}
+    started = service.accepted("new_project_from_template", **single_body)
+    assert started["result"] == {} and session_of(started) == (0, False, False, False), started
+    assert service.accepted("get_session")["result"] == {"open": True,
+                                                         "vehicle_project_file": None}
+
+    outline = service.accepted("get_outline")["result"]
+    body = {"kind": "rigid_body", "name": "body"}
+    assert outline == {"vehicle_name": "single_body", "elements": [body], "element_groups": [],
+                       "unplaced_free_bodies": [], "contact_record_present": False}, outline
+    reading = service.accepted("get_properties", subject={"element": body})["result"]
+    values = {prop["name"]: prop["value"] for prop in reading["properties"]}
+    assert (reading["attachment"]["summary"], reading["attachment"]["joint"]) == (
+        {"en": "Moves freely in the world", "zh": "相对世界自由"}, None), reading["attachment"]
+    assert values == {
+        "name": "body", "mass_kilograms": 1.0,
+        "center_of_mass_in_body_frame_meters": [0.0, 0.0, 0.0],
+        "inertia_moments_about_center_of_mass_kilogram_square_meters": [1.0 / 6.0] * 3,
+        "inertia_products_about_center_of_mass_kilogram_square_meters": [0.0, 0.0, 0.0],
+        STATION_OFFSET: 0.0, PLACEMENT_OFFSETS[0]: 0.0, PLACEMENT_OFFSETS[1]: -0.5}, values
+    gravity = service.accepted("get_properties", subject={"settings": "gravity"})["result"]
+    assert gravity["properties"][0]["value"] == 9.81, gravity
+    assert service.accepted("check")["result"]["passed"]
+    wheel_rail = next(node for node in service.accepted("get_model_tree")["result"]["nodes"]
+                      if node["title"]["en"] == "Wheel-rail")
+    assert wheel_rail["children"] == [] and "contact record" in wheel_rail["note"]["en"], (
+        wheel_rail)
+    visual_definition = service.accepted("get_visual_definition")["result"]["visual_definition"]
+    assert [part["body_name"] for part in visual_definition["parts"]] == ["body"], (
+        visual_definition)
+    assert "wheel_visual" not in visual_definition, visual_definition
+
+    # Save needs a project file; Save As names the project, which then opens
+    # as it was saved, under the name given.
+    refusal = service.refused("save_vehicle_project")
+    assert (refusal["subject"], refusal["property"]) == (None, None), refusal
+    projects = work_directory / "projects_started_from_a_template"
+    projects.mkdir()
+    saved = {"directory": str(projects), "name": "my_cube"}
+    service.accepted("save_vehicle_project_as", **saved)
+    as_saved = everything_read_of(service)
+    assert as_saved["outline"]["vehicle_name"] == "my_cube", as_saved["outline"]
+    service.accepted("new_project_from_template", **single_body)
+    service.accepted("open_vehicle_project", **saved)
+    assert service.accepted("get_session")["result"] == {"open": True,
+                                                         "vehicle_project_file": saved}
+    assert everything_read_of(service) == as_saved
+
+    # A template that cannot be read is refused, and the open session stays.
+    not_a_project = work_directory / "templates_that_are_no_project_files"
+    not_a_project.mkdir()
+    (not_a_project / "single_body.vehicle_project.json").write_text('{"parts": []}\n')
+    def open_session():
+        outline = service.accepted("get_outline")
+        return (service.accepted("get_session")["result"], session_of(outline), outline["result"])
+
+    before = open_session()
+    for arguments, named in (({**single_body, "name": "single body"}, "'single body'"),
+                             ({**single_body, "directory": str(work_directory)},
+                              str(work_directory / "single_body.vehicle_project.json")),
+                             ({**single_body, "directory": str(not_a_project)}, "$.parts")):
+        refusal = service.refused("new_project_from_template", **arguments)
+        assert (refusal["subject"], refusal["property"]) == (None, None), refusal
+        assert named in refusal["message"], refusal
+        assert open_session() == before, arguments
+
+    # Built on: a marker on the body, and a second body hung on it there by a
+    # revolute joint; the check still passes.
+    service.accepted("new_project_from_template", **single_body)
+    service.accepted("add_element", kind="fixed_frame", name="body_top", properties={
+        "body_name": "body", "position_in_body_frame_meters": [0.0, 0.0, -0.5]})
+    service.accepted("add_element", kind="rigid_body", name="second_body", properties={
+        "mass_kilograms": 1.0,
+        "inertia_moments_about_center_of_mass_kilogram_square_meters": [0.1, 0.1, 0.1]},
+                     attachment={"joint": {"kind": "revolute_joint", "name": "hinge",
+                                           "properties": {"parent_frame_name": "body_top"}}})
+    assert service.accepted("check")["result"]["passed"]
+    service.finish()
+    assert template_path.read_bytes() == template_bytes, "the template was written"
+
+
 def everything_read_of(service):
     """What an interface reads of the open project: the outline, every
     element's properties, the check, the preview without the revision it was
@@ -742,6 +837,8 @@ def verify_saving_and_reopening(executable, gz18, irw, work_directory):
 def main():
     executable = Path(sys.argv[1]).resolve()
     vehicle_library = Path(sys.argv[2]).resolve() / "vehicle_library"
+    templates = (Path(sys.argv[2]).resolve() / "tools" / "vehicle_modeling_service" /
+                 "project_templates")
     work_directory = Path(sys.argv[3]).resolve()
     shutil.rmtree(work_directory, ignore_errors=True)
     work_directory.mkdir(parents=True)
@@ -1064,6 +1161,7 @@ def main():
     verify_model_tree_and_settings(executable, gz18, irw)
     verify_attachments(executable, gz18, irw)
     verify_vehicle_layout_zero(executable, gz18, work_directory)
+    verify_new_project_from_template(executable, templates, work_directory)
     verify_saving_and_reopening(executable, gz18, irw, work_directory)
     assert {path: path.read_bytes() for path in reference_files} == reference_files, (
         "a reference vehicle's file changed")

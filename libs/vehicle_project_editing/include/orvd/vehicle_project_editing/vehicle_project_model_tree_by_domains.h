@@ -17,10 +17,11 @@
 // The tree is made from the records alone, whatever a check would say of
 // them, and every element of the outline is one row of it, exactly once. Its
 // first level is the domains, in this order:
-// - Globals: the gravity and the vehicle identity, which are settings; the
-//   vehicle layout zero, which the free bodies' station offsets are measured
-//   from and which no record names, a row selecting nothing; initial
-//   conditions, views and simulation settings, not provided yet.
+// - Globals: the gravity and the model identity, which are the gravity and
+//   the vehicle identity settings; the vehicle layout zero, which the free
+//   bodies' station offsets are measured from and which no record names, a
+//   row selecting nothing; initial conditions, views and simulation settings,
+//   not provided yet.
 // - Bodies: every rigid body, with its markers, the fixed frames naming it,
 //   and its geometry, a note on the name its shapes are stated under. An
 //   unattached or conflicting body's row carries its attachment's note

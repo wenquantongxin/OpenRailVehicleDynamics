@@ -1732,14 +1732,29 @@ add_test(NAME verify_vehicle_project_settings_editing
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json
              ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-settings-editing)
 
+# The project templates the modelling service starts new projects from: each
+# a project file in the writer's own form, giving the same bytes when read and
+# written again, and each passing its check.
+add_executable(verify_vehicle_project_templates
+    vehicle_project_editing/verify_vehicle_project_templates.cc)
+orvd_configure_first_party_target(verify_vehicle_project_templates)
+target_include_directories(verify_vehicle_project_templates PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_templates PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_templates
+         COMMAND verify_vehicle_project_templates
+             ${CMAKE_SOURCE_DIR}/tools/vehicle_modeling_service/project_templates
+             ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-templates)
+
 # The modelling service driven through standard input and output on GZ18: the
 # protocol's structure, property descriptions, creation, renaming and removal,
 # the model tree of GZ18 and IRW and creating through its offers, settings
 # read, set and refused as subjects, how rigid bodies are attached, the
-# vehicle layout zero and the car body treated as any body, saving a project
-# into a directory and opening it again as it was, a project file with the
-# station layout's former key refused, one response per request and its
-# revisions; the reference vehicle files stay as they were.
+# vehicle layout zero and the car body treated as any body, a new project
+# started from the single rigid body's template and templates that cannot be
+# read refused, saving a project into a directory and opening it again as it
+# was, a project file with the station layout's former key refused, one
+# response per request and its revisions; the reference vehicle files and the
+# template stay as they were.
 add_test(NAME verify_vehicle_modeling_service
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/vehicle_project_editing/verify_vehicle_modeling_service.py

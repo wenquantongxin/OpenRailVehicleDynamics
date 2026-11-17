@@ -1,0 +1,93 @@
+{
+  "contact_record": null,
+  "element_groups": [],
+  "free_body_placements": [
+    {
+      "body_name": "body",
+      "lateral_offset_in_local_track_frame_meters": 0.0,
+      "rotation_local_track_from_body": {
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "vertical_offset_in_local_track_frame_meters": -0.5
+    }
+  ],
+  "gravitational_acceleration_meters_per_second_squared": 9.81,
+  "vehicle_definition": {
+    "ball_rpy_joints": [],
+    "fixed_frames": [],
+    "mechanical_definition_identifier": "single_body",
+    "mechanical_track_station_layout": {
+      "free_body_station_offsets": [
+        {
+          "body_name": "body",
+          "station_offset_meters": 0.0
+        }
+      ],
+      "wheel_pair_station_reference_body_names": []
+    },
+    "point_to_point_hysteretic_springs": [],
+    "point_to_point_linear_spring_dampers": [],
+    "point_to_point_series_spring_bilinear_dampers": [],
+    "reference_frame_linear_bushings": [],
+    "revolute_joints": [],
+    "rigid_bodies": [
+      {
+        "center_of_mass_in_body_frame_meters": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "inertia_moments_about_center_of_mass_kilogram_square_meters": {
+          "x": 0.16666666666666666,
+          "y": 0.16666666666666666,
+          "z": 0.16666666666666666
+        },
+        "inertia_products_about_center_of_mass_kilogram_square_meters": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "mass_kilograms": 1.0,
+        "moves_freely_in_world": true,
+        "name": "body"
+      }
+    ],
+    "roll_spring_damper_couples": [],
+    "saturated_piecewise_linear_dampers": [],
+    "series_spring_viscous_dampers": [],
+    "translational_spring_dampers": [],
+    "vehicle_name": "single_body",
+    "weld_joints": []
+  },
+  "visual_definition": {
+    "length_unit": "meter",
+    "parts": [
+      {
+        "appearance": "structure",
+        "body_name": "body",
+        "center_in_body_frame_meters": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "corner_radius_meters": 0.0,
+        "name": "body_cube",
+        "shape": "box",
+        "size_meters": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    ]
+  },
+  "visual_definition_body_names": [
+    {
+      "body_name": "body",
+      "visual_definition_body_name": "body"
+    }
+  ]
+}

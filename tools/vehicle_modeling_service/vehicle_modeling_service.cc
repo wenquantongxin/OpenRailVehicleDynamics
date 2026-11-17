@@ -4,9 +4,12 @@
 // The service is deliberately thin. It parses a request, calls
 // orvd::vehicle_project and orvd::vehicle_project_editing, and writes the
 // answer: the protocol's JSON lives here, and every rule an edit, a check or a
-// project file follows lives there. It opens a vehicle from its own files or a
-// project from its project file, and the only files it writes are project
-// files, each <name>.vehicle_project.json in the directory a request names.
+// project file follows lives there. It opens a vehicle from its own files, a
+// project from its project file, or a new project from a template, and the
+// only files it writes are project files, each <name>.vehicle_project.json in
+// the directory a request names. A template is a project file it reads and
+// never writes; those that come with it are in project_templates beside this
+// file.
 //
 // PROTOCOL
 //
@@ -34,14 +37,15 @@
 //   revision, can_undo, can_redo and has_unsaved_changes describe the session
 //   after the command. All four are null while nothing is open, when only
 //   get_session and list_vehicle_projects are answered. Opening a vehicle or a
-//   project starts at revision 0; every accepted edit, undo and redo adds one,
-//   and so does a save_vehicle_project_as that changes the vehicle's names;
-//   nothing else changes it, and it never decreases: undoing restores an
-//   earlier project, not its revision. has_unsaved_changes says whether the
-//   project differs from the state last saved or, before any save, from the
-//   state it was opened with. It follows undo and redo: undoing back to that
-//   state leaves nothing unsaved, and an edit made after undoing past it
-//   leaves the changes unsaved until the next save.
+//   project, or a new project from a template, starts at revision 0; every
+//   accepted edit, undo and redo adds one, and so does a
+//   save_vehicle_project_as that changes the vehicle's names; nothing else
+//   changes it, and it never decreases: undoing restores an earlier project,
+//   not its revision. has_unsaved_changes says whether the project differs
+//   from the state last saved or, before any save, from the state it was
+//   opened with. It follows undo and redo: undoing back to that state leaves
+//   nothing unsaved, and an edit made after undoing past it leaves the changes
+//   unsaved until the next save.
 //
 // Response to a refused command
 //   {"id": <id>, "ok": false,
@@ -153,7 +157,7 @@
 //             {"directory": "<path>", "name": "<name>"} or null}
 //     Never refused, changes nothing. vehicle_project_file is the project file
 //     the session was opened from or last saved as; null for a vehicle opened
-//     from its own files and not saved yet.
+//     from its own files or a project started from a template, not saved yet.
 //
 //   list_vehicle_projects  {"directory": "<path>"}
 //     result: {"vehicle_projects": ["<name>", ...]}
@@ -184,6 +188,16 @@
 //     open_vehicle does, associated with that file. A refused open keeps the
 //     session that was open.
 //
+//   new_project_from_template  {"directory": "<path>", "name": "<name>"}
+//     result: {}
+//     Reads the template <name>.vehicle_project.json in that directory, a
+//     project file, exactly as open_vehicle_project reads one, and opens a new
+//     session over its project as open_vehicle does: revision 0, empty
+//     history, no preview, no project file and nothing unsaved, so that
+//     save_vehicle_project is refused until save_vehicle_project_as names the
+//     project. The template is never written. A refused command keeps the
+//     session that was open.
+//
 //   Every other command is refused while nothing is open.
 //
 //   get_model_tree
@@ -199,11 +213,12 @@
 //     The project as a model tree divided into domains, made from its records
 //     whatever check would say of them: every element of the outline is one
 //     node, exactly once. The nodes are the domains, in this order:
-//       Globals         the gravity and vehicle identity settings; the
-//                       vehicle layout zero, which the free bodies' station
-//                       offsets are measured from and which no record names,
-//                       a node selecting nothing; initial conditions, views
-//                       and simulation settings, not provided
+//       Globals         the gravity and the model identity, which are the
+//                       gravity and vehicle_identity settings; the vehicle
+//                       layout zero, which the free bodies' station offsets
+//                       are measured from and which no record names, a node
+//                       selecting nothing; initial conditions, views and
+//                       simulation settings, not provided
 //       Bodies          every rigid body, with its markers (the fixed frames
 //                       naming it) and its geometry (a note on the name its
 //                       shapes are stated under); fixed frames naming a body
@@ -1113,6 +1128,13 @@ VehicleProjectEditingSession OpenVehicleProject(const Json& request) {
                                         location);
 }
 
+// A new project: the template's, read as a project file is read, in a session
+// with no project file, so that the template is never written.
+VehicleProjectEditingSession NewProjectFromTemplate(const Json& request) {
+    return VehicleProjectEditingSession(
+        orvd::vehicle_project::ReadVehicleProjectFile(DecodeVehicleProjectFileLocation(request)));
+}
+
 Json GetSession(const Json& id, const std::optional<VehicleProjectEditingSession>& session) {
     if (!session.has_value()) {
         return AcceptedWithNothingOpen(id, Json{{"open", false}});
@@ -1334,9 +1356,14 @@ Json Respond(const std::string& line, std::optional<VehicleProjectEditingSession
             session = OpenVehicleProject(request);
             return Accepted(id, *session, Json::object());
         }
+        if (command == "new_project_from_template") {
+            session = NewProjectFromTemplate(request);
+            return Accepted(id, *session, Json::object());
+        }
         if (!session.has_value()) {
             throw std::invalid_argument(
-                "nothing is open; send open_vehicle or open_vehicle_project first");
+                "nothing is open; send open_vehicle, open_vehicle_project or "
+                "new_project_from_template first");
         }
         VehicleProjectEditingSession& open_session = *session;
         if (command == "describe_element_kinds") {

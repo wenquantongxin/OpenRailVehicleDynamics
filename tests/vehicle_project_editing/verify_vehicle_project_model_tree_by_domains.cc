@@ -313,6 +313,9 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
     Require(globals.children.size() == 6 &&
                 SettingsOf(globals.children[0]) == ProjectSettings::kGravity &&
                 SettingsOf(globals.children[1]) == ProjectSettings::kVehicleIdentity &&
+                globals.children[1].title == Title{.en = "Model identity", .zh = "模型标识"} &&
+                globals.children[1].note == Title{.en = "Save as gives the model both names.",
+                                                  .zh = "另存为时设定这两个名称。"} &&
                 !globals.children[3].provided && !globals.children[4].provided &&
                 !globals.children[5].provided &&
                 globals.children[5].title == Title{.en = "Simulation settings", .zh = "仿真设置"} &&
@@ -320,8 +323,8 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
                     Title{.en = "Duration, solver, tolerances and parallel threads of a run",
                           .zh = "一次运行的时长、求解器、容差与并行线程数"},
             vehicle_name +
-                ": the globals are not gravity, vehicle identity, a third row and three rows "
-                "not provided yet, the simulation settings last");
+                ": the globals are not gravity, the model identity as the owner words it, a "
+                "third row and three rows not provided yet, the simulation settings last");
     const ModelTreeNode& layout_zero = globals.children[2];
     Require(layout_zero.provided && !layout_zero.subject.has_value() &&
                 layout_zero.creates.empty() && layout_zero.attaches.empty() &&

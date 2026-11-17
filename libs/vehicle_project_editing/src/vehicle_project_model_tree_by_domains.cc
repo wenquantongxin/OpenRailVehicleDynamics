@@ -83,8 +83,8 @@ ModelTreeNode DescribeGlobals() {
         .children = {
             SettingsRow(ProjectSettings::kGravity, {.en = "Gravity", .zh = "重力加速度"}),
             SettingsRow(ProjectSettings::kVehicleIdentity,
-                        {.en = "Vehicle identity", .zh = "车辆标识"},
-                        Title{.en = "Save as gives the vehicle both names.",
+                        {.en = "Model identity", .zh = "模型标识"},
+                        Title{.en = "Save as gives the model both names.",
                               .zh = "另存为时设定这两个名称。"}),
             DescribeVehicleLayoutZero(),
             NotProvidedRow("initial_conditions", {.en = "Initial conditions", .zh = "初始条件"},
