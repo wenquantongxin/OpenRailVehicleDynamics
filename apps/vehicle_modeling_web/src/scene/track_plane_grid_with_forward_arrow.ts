@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 
+import { framedBox } from './vehicle_model_view_camera_presets.ts';
 import { viewColors } from './vehicle_model_view_colors_and_materials.ts';
 
 // A quiet drafting grid on the plane z = 0 of the drawing frame, one line per
 // metre and a stronger one every five, a little larger than the drawn vehicle,
 // with an arrow beside the vehicle's front end pointing forward, to +x, on the
-// side the overview looks from. Built in the drawing frame under a group
-// turned like the preview's root.
+// side the overview looks from. Beside a drawing shorter than a vehicle the
+// arrow and its label shrink with the length the camera frames, so that they
+// never take more than about a third of it. Built in the drawing frame under
+// a group turned like the preview's root.
 
 function gridLines(positions: number[], color: string): THREE.LineSegments {
   const geometry = new THREE.BufferGeometry();
@@ -14,7 +17,7 @@ function gridLines(positions: number[], color: string): THREE.LineSegments {
   return new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color }));
 }
 
-function forwardLabel(): THREE.Sprite {
+function forwardLabel(scale: number): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 64;
@@ -30,8 +33,22 @@ function forwardLabel(): THREE.Sprite {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false }));
-  label.scale.set(0.8, 0.4, 1);
+  label.scale.set(0.8 * scale, 0.4 * scale, 1);
   return label;
+}
+
+/** The arrow's length beside a vehicle, or any drawing framed at least the length below; beside a shorter one it shrinks in proportion. */
+const forwardArrowLengthMeters = 2.4;
+const framedLengthForFullArrowMeters = 7.5;
+
+/**
+ * Where the forward arrow lies beside a drawing that fills the given box of three's world, and how large it is drawn:
+ * its tip along x and the line across it lies on, in the drawing frame, and its scale, 1 beside a vehicle.
+ */
+export function forwardArrowPlacement(bounds: THREE.Box3): { tip: number; side: number; scale: number; lengthMeters: number } {
+  const framed = framedBox(bounds);
+  const scale = Math.min(1, (framed.max.x - framed.min.x) / framedLengthForFullArrowMeters);
+  return { tip: bounds.max.x - 0.5 * scale, side: bounds.min.z - 1 * scale, scale, lengthMeters: forwardArrowLengthMeters * scale };
 }
 
 /** The grid for a vehicle whose drawing fills the given box of three's world. */
@@ -50,21 +67,20 @@ export function buildGroundGrid(bounds: THREE.Box3): THREE.Group {
   group.add(gridLines(minor, viewColors.gridMinor), gridLines(major, viewColors.gridMajor));
 
   // The arrow lies 2 mm above the plane so that it never fights the lines.
-  const tip = bounds.max.x - 0.5;
-  const side = bounds.min.z - 1;
+  const { tip, side, scale, lengthMeters } = forwardArrowPlacement(bounds);
   const arrowShape = new THREE.Shape()
-    .moveTo(tip - 2.4, side - 0.05)
-    .lineTo(tip - 0.6, side - 0.05)
-    .lineTo(tip - 0.6, side - 0.2)
+    .moveTo(tip - lengthMeters, side - 0.05 * scale)
+    .lineTo(tip - 0.6 * scale, side - 0.05 * scale)
+    .lineTo(tip - 0.6 * scale, side - 0.2 * scale)
     .lineTo(tip, side)
-    .lineTo(tip - 0.6, side + 0.2)
-    .lineTo(tip - 0.6, side + 0.05)
-    .lineTo(tip - 2.4, side + 0.05)
+    .lineTo(tip - 0.6 * scale, side + 0.2 * scale)
+    .lineTo(tip - 0.6 * scale, side + 0.05 * scale)
+    .lineTo(tip - lengthMeters, side + 0.05 * scale)
     .closePath();
   const arrow = new THREE.Mesh(new THREE.ShapeGeometry(arrowShape), new THREE.MeshBasicMaterial({ color: viewColors.direction, side: THREE.DoubleSide }));
   arrow.position.z = -0.002;
-  const label = forwardLabel();
-  label.position.set(tip + 0.5, side, -0.25);
+  const label = forwardLabel(scale);
+  label.position.set(tip + 0.5 * scale, side, -0.25 * scale);
   group.add(arrow, label);
   return group;
 }

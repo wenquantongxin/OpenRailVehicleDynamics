@@ -7,9 +7,10 @@ import { test } from 'node:test';
 
 import { createServer as createViteServer } from 'vite';
 
-import type { ReferenceVehicleCatalogueEntry } from '../server/read_reference_vehicle_catalogue.ts';
+import type { ProjectStartingPointCatalogueEntry } from '../server/read_project_starting_point_catalogue.ts';
 import type { TerminalConversation } from '../server/terminal_conversation.ts';
 import { startVehicleModelingHttpServer } from '../server/vehicle_modeling_http_server.ts';
+import { fetchProjectStartingPoints } from '../src/service/fetch_project_starting_points.ts';
 import { modellingServerProxy } from '../vite.config.ts';
 
 // The server against a stand-in service: a child process that notes that it
@@ -34,16 +35,23 @@ lines.on('line', (line) => {
 });
 `;
 
-const referenceVehicles: ReferenceVehicleCatalogueEntry[] = [
+const startingPoints: ProjectStartingPointCatalogueEntry[] = [
+  {
+    name: 'T',
+    title: { en: 'Template T', zh: '模板 T' },
+    description: { en: 'A made-up template.', zh: '虚构模板。' },
+    category: { en: 'Made-up', zh: '虚构' },
+    open: { command: 'new_project_from_template', arguments: { directory: '/templates', name: 't' } },
+  },
   {
     name: 'A',
     title: { en: 'Vehicle A', zh: '车辆 A' },
-    openArguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json', visual_definition_path: '/a_visual.json' },
-  },
-  {
-    name: 'B',
-    title: { en: 'Vehicle B', zh: '车辆 B' },
-    openArguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json', visual_definition_path: null },
+    description: { en: 'A made-up vehicle.', zh: '虚构车辆。' },
+    category: { en: 'Other made-up', zh: '其他虚构' },
+    open: {
+      command: 'open_vehicle',
+      arguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json', visual_definition_path: null },
+    },
   },
 ];
 
@@ -59,7 +67,7 @@ async function serverFiles() {
   await writeFile(join(directory, 'secret.txt'), 'outside dist');
   const vehicleProjectsDirectory = join(directory, 'projects');
   await mkdir(vehicleProjectsDirectory);
-  return { directory, options: { servicePath, host: '127.0.0.1', port: 0, staticDirectory, referenceVehicles, vehicleProjectsDirectory, terminal: null } };
+  return { directory, options: { servicePath, host: '127.0.0.1', port: 0, staticDirectory, startingPoints, vehicleProjectsDirectory, terminal: null } };
 }
 
 /** The person at the terminal, answering the questions with the answers given, in turn; what was asked and told is kept. */
@@ -121,25 +129,18 @@ test('commands are relayed one at a time, each answered with its own answer line
   }
 });
 
-test('reference vehicles with their open arguments, the folder of projects and the built files are served; nothing else is', { timeout: 10000 }, async () => {
+test('the starting points with the commands that open them, the folder of projects and the built files are served; nothing else is', { timeout: 10000 }, async () => {
   const { directory, server, origin, vehicleProjectsDirectory } = await fixture();
   try {
-    const listed = await (await fetch(`${origin}/api/reference_vehicles`)).json();
-    assert.deepEqual(listed, [
-      {
-        name: 'A',
-        title: { en: 'Vehicle A', zh: '车辆 A' },
-        open_arguments: { vehicle_definition_path: '/a.json', startup_state_path: '/a_start.json', contact_record_path: '/a_contact.json', visual_definition_path: '/a_visual.json' },
-      },
-      {
-        name: 'B',
-        title: { en: 'Vehicle B', zh: '车辆 B' },
-        open_arguments: { vehicle_definition_path: '/b.json', startup_state_path: '/b_start.json', contact_record_path: '/b_contact.json', visual_definition_path: null },
-      },
-    ]);
+    assert.deepEqual(await (await fetch(`${origin}/api/project_starting_points`)).json(), startingPoints);
+    assert.deepEqual(
+      await fetchProjectStartingPoints(origin),
+      startingPoints.map(({ open, ...entry }) => ({ ...entry, openCommand: open.command, openArguments: open.arguments })),
+      'the interface reads each starting point whole, the command that opens it unread',
+    );
     assert.deepEqual(await (await fetch(`${origin}/api/vehicle_projects_directory`)).json(), { directory: vehicleProjectsDirectory });
-    assert.match(await (await fetch(`${origin}/?vehicle=A`)).text(), /modelling/);
-    for (const path of ['/api/reference_vehicles/A/visual_definition', '/api/other', '/%2e%2e/secret.txt', '/missing.js']) {
+    assert.match(await (await fetch(`${origin}/?starting_point=A`)).text(), /modelling/);
+    for (const path of ['/api/reference_vehicles', '/api/project_starting_points/A', '/api/other', '/%2e%2e/secret.txt', '/missing.js']) {
       assert.equal((await fetch(`${origin}${path}`)).status, 404, path);
     }
   } finally {

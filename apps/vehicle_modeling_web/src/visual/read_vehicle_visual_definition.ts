@@ -1,8 +1,10 @@
-// The parametric visual definition of a vehicle, read as the scene viewer
+// The parametric visual definition of a project, read as the scene viewer
 // reads it (apps/scene_viewer_web/src/record/visual_definition.ts) and trimmed
 // to what the modelling view draws: the parts and the wheel section. Each part
 // is stated in its own body's frame; sizes are schematic and carry no physics.
-// An appearance names a display role; the view decides how a role looks. Of
+// An appearance names a display role; the view decides how a role looks. A
+// definition need not state a wheel section: without one, wheels, where a
+// project has any, are drawn as for a project with no visual definition. Of
 // wheel_visual only the eight lengths of the section are read: nothing turns
 // in this view, so there is no rim marker, and nothing is labelled. Labels and
 // display_bindings are not read: the modelling view gives no body a role.
@@ -61,7 +63,8 @@ export interface WheelSectionSizes {
 
 export interface VisualDefinition {
   parts: VisualPart[];
-  wheelSection: WheelSectionSizes;
+  /** Null where the definition states none. */
+  wheelSection: WheelSectionSizes | null;
 }
 
 function triple(value: unknown, what: string): [number, number, number] {
@@ -147,8 +150,9 @@ export function readVisualDefinition(document: unknown): VisualDefinition {
         throw new Error(`visual definition: part '${name}' has unknown shape '${String(entry['shape'])}'`);
     }
   });
+  if (!('wheel_visual' in json)) return { parts, wheelSection: null };
   const wheel = json['wheel_visual'];
-  if (typeof wheel !== 'object' || wheel === null || Array.isArray(wheel)) throw new Error('visual definition: wheel_visual is missing or not an object');
+  if (typeof wheel !== 'object' || wheel === null || Array.isArray(wheel)) throw new Error('visual definition: wheel_visual is not an object');
   const length = (key: string): number => positiveNumber((wheel as Record<string, unknown>)[key], `wheel_visual.${key}`);
   const wheelSection: WheelSectionSizes = {
     widthMeters: length('width_meters'),

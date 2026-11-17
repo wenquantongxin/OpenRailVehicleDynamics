@@ -25,11 +25,14 @@
 // saved as a project, with no undo step, the folder listed, IRW opened, the
 // project opened again with its outline and the edited value as they were;
 // unsaved changes through an edit and its undo, Save, and a name the service
-// refuses; get_session at each stage.
-// The reference vehicles are this app's catalogue; the vehicle that does not
-// fit is made of the repository's IRW vehicle and GZ18 contact record. Kinds
-// are told apart by the preview's drawings and properties by their
-// descriptions: no kind and no property is named here.
+// refuses; get_session at each stage. The single rigid body starts a new
+// project from its template: one free rigid body, no contact record, a check
+// that passes, no project file, and a drawing of its part without a wheel
+// section; a template that cannot be read is refused.
+// The starting points are this app's catalogue; the vehicle that does not fit
+// is made of the repository's IRW vehicle and GZ18 contact record. Kinds are
+// told apart by the preview's drawings and properties by their descriptions:
+// no kind and no property is named here.
 // Exits non-zero at the first broken expectation.
 //
 // Usage: npm run check-service -- <service binary> <repository root>
@@ -40,11 +43,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readReferenceVehicleCatalogue, type ReferenceVehicleCatalogueEntry } from '../server/read_reference_vehicle_catalogue.ts';
+import { readProjectStartingPointCatalogue, type ProjectStartingPointCatalogueEntry } from '../server/read_project_starting_point_catalogue.ts';
 import { startVehicleModelingHttpServer } from '../server/vehicle_modeling_http_server.ts';
 import { createModelPalette } from '../src/scene/vehicle_model_view_colors_and_materials.ts';
 import { assignPartsToDrawnBodies, VehiclePreviewScene } from '../src/scene/vehicle_preview_scene.ts';
-import { fetchReferenceVehicles, type ReferenceVehicle } from '../src/service/fetch_reference_vehicles.ts';
+import { fetchProjectStartingPoints, type ProjectStartingPoint } from '../src/service/fetch_project_starting_points.ts';
 import { fetchVehicleProjectsDirectory } from '../src/service/fetch_vehicle_projects_directory.ts';
 import { rowPathOfSubject } from '../src/service/find_model_tree_rows.ts';
 import { modelingServerCommandChannel, type SendCommand } from '../src/service/modeling_server_command_channel.ts';
@@ -73,19 +76,24 @@ if (servicePath === undefined || repositoryRoot === undefined) {
 const library = (folder: string, ...path: string[]): string => resolve(join(repositoryRoot, 'vehicle_library', folder, ...path));
 
 /** The IRW vehicle and start-up state with the GZ18 contact record, which does not fit them. */
-const nonFittingVehicle: ReferenceVehicleCatalogueEntry = {
+const nonFittingVehicle: ProjectStartingPointCatalogueEntry = {
   name: 'IRW_WITH_GZ18_CONTACT_RECORD',
   title: { en: 'IRW vehicle with the GZ18 contact record', zh: 'IRW 车辆配 GZ18 接触记录' },
-  openArguments: {
-    vehicle_definition_path: library('irw', 'vehicle_definition.json'),
-    startup_state_path: library('irw', 'startup_states', 'moving_startup_60kmh.json'),
-    contact_record_path: library('gz18', 'contact_record.json'),
-    visual_definition_path: null,
+  description: { en: 'A vehicle and a contact record that do not fit.', zh: '车辆与接触记录不相配。' },
+  category: { en: 'Checks', zh: '检查' },
+  open: {
+    command: 'open_vehicle',
+    arguments: {
+      vehicle_definition_path: library('irw', 'vehicle_definition.json'),
+      startup_state_path: library('irw', 'startup_states', 'moving_startup_60kmh.json'),
+      contact_record_path: library('gz18', 'contact_record.json'),
+      visual_definition_path: null,
+    },
   },
 };
 
-function referenceVehicle(vehicle: ReferenceVehicle): OpenChoice {
-  return { source: 'reference_vehicle', vehicle };
+function startingAt(startingPoint: ProjectStartingPoint): OpenChoice {
+  return { source: 'starting_point', startingPoint };
 }
 
 function fail(message: string): never {
@@ -147,9 +155,9 @@ async function readEveryElement(session: VehicleEditingSession, elements: Elemen
   return counts;
 }
 
-async function checkVehicle(origin: string, vehicle: ReferenceVehicle): Promise<string> {
+async function checkVehicle(origin: string, vehicle: ProjectStartingPoint): Promise<string> {
   const session = sessionAt(origin);
-  let state = await settled(session, session.open(referenceVehicle(vehicle)));
+  let state = await settled(session, session.open(startingAt(vehicle)));
   const outline = state.outline ?? fail('no outline after opening');
   assert.ok(outline.vehicleName.length > 0);
   assert.equal(state.revision, 0);
@@ -259,9 +267,9 @@ function unusedName(elements: readonly ElementReference[], stem: string): string
  * property sent is found by its description: the name by its value kind, the
  * references a new element must give by being required.
  */
-async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle): Promise<string> {
+async function checkStructuralEditing(origin: string, vehicle: ProjectStartingPoint): Promise<string> {
   const session = sessionAt(origin);
-  let state = await settled(session, session.open(referenceVehicle(vehicle)));
+  let state = await settled(session, session.open(startingAt(vehicle)));
   const opened = state.outline ?? fail('no outline after opening');
   const preview = state.preview ?? fail('no preview after opening');
   const bodyKind = (preview.rigidBodies[0] ?? fail('nothing drawn as a rigid body')).element.kind;
@@ -352,9 +360,9 @@ function readsFree(attachment: Attachment | null): boolean {
  * vehicle opened with. The attached kind, the joint kinds and which property
  * names which end come from the service's description.
  */
-async function checkAttachments(origin: string, vehicle: ReferenceVehicle, withChanges: boolean): Promise<string> {
+async function checkAttachments(origin: string, vehicle: ProjectStartingPoint, withChanges: boolean): Promise<string> {
   const session = sessionAt(origin);
-  let state = await settled(session, session.open(referenceVehicle(vehicle)));
+  let state = await settled(session, session.open(startingAt(vehicle)));
   const opened = state.outline ?? fail('no outline after opening');
   const attachedKind = state.elementKinds.find((kind) => kind.attachment !== null) ?? fail('no kind is described as attached');
   const description = attachedKind.attachment!;
@@ -458,9 +466,9 @@ async function checkAttachments(origin: string, vehicle: ReferenceVehicle, withC
  * service describes as read-only is refused, about its settings. Settings are
  * found as rows that select settings, and properties by their descriptions.
  */
-async function checkSettings(origin: string, vehicle: ReferenceVehicle): Promise<string> {
+async function checkSettings(origin: string, vehicle: ProjectStartingPoint): Promise<string> {
   const session = sessionAt(origin);
-  let state = await settled(session, session.open(referenceVehicle(vehicle)));
+  let state = await settled(session, session.open(startingAt(vehicle)));
   const rows = treeRows(state.modelTree!).filter((row) => row.provided && row.subject !== null && 'settings' in row.subject);
   assert.ok(rows.length > 0, 'the model tree has no settings');
   const wheelRadius = (state.preview ?? fail('no drawing after opening')).wheels[0]?.nominalRollingRadiusMeters ?? fail('no wheel is drawn');
@@ -506,9 +514,9 @@ async function checkSettings(origin: string, vehicle: ReferenceVehicle): Promise
   ].join('\n');
 }
 
-async function checkNonFittingVehicle(origin: string, vehicle: ReferenceVehicle): Promise<string> {
+async function checkNonFittingVehicle(origin: string, vehicle: ProjectStartingPoint): Promise<string> {
   const session = sessionAt(origin);
-  const state = await settled(session, session.open(referenceVehicle(vehicle)));
+  const state = await settled(session, session.open(startingAt(vehicle)));
   assert.equal(checkStatus(state), 'failed', `${vehicle.name} passes its check`);
   const refusals = state.check!.report.refusals;
   assert.ok(refusals.length > 0);
@@ -520,6 +528,58 @@ async function checkNonFittingVehicle(origin: string, vehicle: ReferenceVehicle)
   return [
     `${vehicle.name}: opened, check refused '${refusals[0]}' (${refusals.length} refusal${refusals.length === 1 ? '' : 's'}), no preview,`,
     `  ${outline.elements.length} elements outlined, ${read.properties} properties read`,
+  ].join('\n');
+}
+
+/**
+ * The single rigid body, started as a new project from its template: one free
+ * rigid body, no contact record, a check that passes, no project file and
+ * nothing unsaved, and a drawing of the body's parts with no wheel and no
+ * wheel section. A template that cannot be read is refused and the new
+ * project stays open.
+ */
+async function checkSingleBody(origin: string, startingPoint: ProjectStartingPoint): Promise<string> {
+  const send = modelingServerCommandChannel(origin);
+  const session = new VehicleEditingSession(send);
+  let state = await settled(session, session.start(await fetchVehicleProjectsDirectory(origin), null));
+  state = await openedDiscardingChanges(session, startingAt(startingPoint));
+  const outline = state.outline ?? fail('no outline after starting');
+  const attachedKind = state.elementKinds.find((kind) => kind.attachment !== null) ?? fail('no kind is described as attached');
+  assert.deepEqual(
+    outline.elements.map((element) => element.kind),
+    [attachedKind.kind],
+    `${startingPoint.name} does not start with one rigid body alone`,
+  );
+  const body = outline.elements[0]!;
+  assert.equal(checkStatus(state), 'passed', `${startingPoint.name} does not pass its check: ${state.check?.report.refusals.join('; ')}`);
+  assert.deepEqual([state.vehicleProjectFile, state.hasUnsavedChanges, state.revision, state.canUndo], [null, false, 0, false]);
+  assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: null });
+  const rawOutline = await (await fetch(`${origin}/api/command`, { method: 'POST', body: JSON.stringify({ id: 0, command: 'get_outline' }) })).json();
+  assert.equal(rawOutline.result.contact_record_present, false, `${startingPoint.name} starts with a contact record`);
+  state = await settled(session, session.select({ element: body }));
+  assert.ok(readsFree(state.attachment), `${body.name} does not move freely`);
+
+  const visualDefinition = state.vehicle?.visualDefinition ?? fail(`${startingPoint.name} starts without a visual definition the view can draw: ${state.vehicle?.visualDefinitionProblem}`);
+  assert.equal(visualDefinition.wheelSection, null, 'the single body states a wheel section');
+  const preview = state.preview ?? fail('no preview after a passed check');
+  assert.deepEqual(
+    preview.rigidBodies.map((drawing) => drawing.element),
+    [body],
+  );
+  assert.deepEqual(preview.wheels, []);
+  const parts = assignPartsToDrawnBodies(visualDefinition, preview);
+  assert.deepEqual(parts.withoutBody, []);
+  const bodyParts = parts.byBody.get(elementKey(body)) ?? [];
+  assert.ok(bodyParts.length > 0, `${body.name} is drawn with no part`);
+
+  const opened = state.outline;
+  await session.open(startingAt({ ...startingPoint, openArguments: { ...startingPoint.openArguments, name: 'no_such_template' } }));
+  const refusal = session.state.commandRefusal ?? fail('a template that cannot be read was opened');
+  assert.equal(session.state.outline, opened, 'a refused template changed what is open');
+  return [
+    `${startingPoint.name}: started by ${startingPoint.openCommand} as the new project '${outline.vehicleName}' with no file and nothing unsaved:`,
+    `  one ${attachedKind.kind} '${body.name}', free, no contact record, check passed, drawn with ${bodyParts.length} part${bodyParts.length === 1 ? '' : 's'} (${bodyParts.map((part) => part.kind).join(', ')}) and no wheel section;`,
+    `  a template that cannot be read refused: '${refusal.message}'`,
   ].join('\n');
 }
 
@@ -545,7 +605,7 @@ const savedProjectName = 'check_service_saved_gz18';
  * folder of projects the server was started with, which starts empty. The
  * edited value is found by its description, as in checkVehicle.
  */
-async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: ReferenceVehicle): Promise<string> {
+async function checkProjectSaving(origin: string, gz18: ProjectStartingPoint, irw: ProjectStartingPoint): Promise<string> {
   const send = modelingServerCommandChannel(origin);
   const directory = await fetchVehicleProjectsDirectory(origin);
   const session = new VehicleEditingSession(send);
@@ -554,7 +614,7 @@ async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: R
   assert.ok(state.vehicle !== null && state.outline !== null, 'the start did not resume the open session');
   assert.equal((await serviceSession(send)).open, true);
 
-  state = await openedDiscardingChanges(session, referenceVehicle(gz18));
+  state = await openedDiscardingChanges(session, startingAt(gz18));
   assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: null });
   assert.equal(state.hasUnsavedChanges, false);
   const opened = state.outline ?? fail('no outline after opening');
@@ -599,7 +659,7 @@ async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: R
   session.leaveOpenChoices();
 
   // IRW, from its files: no file, nothing to ask about after the save.
-  await session.open(referenceVehicle(irw));
+  await session.open(startingAt(irw));
   state = await settled(session, Promise.resolve());
   assert.equal(state.pendingOpen, null, 'the session asked about unsaved changes right after saving');
   assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: null });
@@ -636,9 +696,9 @@ async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: R
   ].join('\n');
 }
 
-// The reference vehicles exactly as serve:reference offers them, and the one that does not fit; any free port; a
-// temporary folder of projects, removed at the end.
-const referenceVehicles = await readReferenceVehicleCatalogue(fileURLToPath(new URL('../reference_vehicle_catalogue.json', import.meta.url)));
+// The starting points exactly as serve:starting-points offers them, and the vehicle that does not fit; any free
+// port; a temporary folder of projects, removed at the end.
+const startingPoints = await readProjectStartingPointCatalogue(fileURLToPath(new URL('../project_starting_point_catalogue.json', import.meta.url)));
 const vehicleProjectsDirectory = await mkdtemp(join(tmpdir(), 'orvd-check-service-projects-'));
 try {
   const options = {
@@ -646,7 +706,7 @@ try {
     host: '127.0.0.1',
     port: 0,
     staticDirectory: fileURLToPath(new URL('../dist', import.meta.url)),
-    referenceVehicles: [...referenceVehicles, nonFittingVehicle],
+    startingPoints: [...startingPoints, nonFittingVehicle],
     vehicleProjectsDirectory,
     terminal: null,
   };
@@ -656,11 +716,12 @@ try {
   });
   try {
     const origin = `http://127.0.0.1:${server.port}`;
-    const vehicles = await fetchReferenceVehicles(origin);
-    for (const vehicle of vehicles) {
-      console.log(vehicle.name === nonFittingVehicle.name ? await checkNonFittingVehicle(origin, vehicle) : await checkVehicle(origin, vehicle));
-    }
-    const named = (name: string): ReferenceVehicle => vehicles.find((vehicle) => vehicle.name === name) ?? fail(`the catalogue has no ${name}`);
+    const offered = await fetchProjectStartingPoints(origin);
+    const named = (name: string): ProjectStartingPoint => offered.find((startingPoint) => startingPoint.name === name) ?? fail(`the catalogue has no ${name}`);
+    console.log(await checkVehicle(origin, named('GZ18')));
+    console.log(await checkVehicle(origin, named('IRW')));
+    console.log(await checkNonFittingVehicle(origin, named(nonFittingVehicle.name)));
+    console.log(await checkSingleBody(origin, named('single_body')));
     console.log(await checkAttachments(origin, named('GZ18'), true));
     console.log(await checkAttachments(origin, named('IRW'), false));
     console.log(await checkStructuralEditing(origin, named('GZ18')));

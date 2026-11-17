@@ -8,8 +8,11 @@ import { drawsAnything } from './vehicle_preview_scene.ts';
 // drawing's bounding box and the distance is the smallest at which all eight
 // corners of that box fall inside the picture, less the margin (the fit of
 // apps/scene_viewer_web/src/scene/camera_framing.ts, here for a picture no
-// card covers). Directions are stated in the vehicle's own terms, forward,
-// left and up, which in three's world are +x, -z and +y.
+// card covers). A drawing narrower than three metres along or across is
+// framed as three metres wide there, about the same centre, so that a small
+// one is seen standing on the ground around it rather than filling the picture.
+// Directions are stated in the vehicle's own terms, forward, left and up,
+// which in three's world are +x, -z and +y.
 
 export type ViewPreset = 'overview' | 'side' | 'plan' | 'front';
 
@@ -31,6 +34,22 @@ const presets: Record<ViewPreset, PresetSpec> = {
 };
 
 const localUp = new THREE.Vector3(0, 0, 1);
+
+/** The least width a drawing's footprint is framed as, along and across. */
+const leastFramedFootprintMeters = 3;
+
+/** The box a preset frames: the drawing's, widened about its centre along and across to the least footprint; its height as it is. */
+export function framedBox(bounds: THREE.Box3): THREE.Box3 {
+  const framed = bounds.clone();
+  const centre = bounds.getCenter(new THREE.Vector3());
+  // Three's world is y-up: the footprint lies in x and z.
+  for (const axis of ['x', 'z'] as const) {
+    const half = Math.max(bounds.max[axis] - bounds.min[axis], leastFramedFootprintMeters) / 2;
+    framed.min[axis] = centre[axis] - half;
+    framed.max[axis] = centre[axis] + half;
+  }
+  return framed;
+}
 
 /** The camera basis for a viewing direction in forward-left-up terms, as Object3D.lookAt builds it with the vertical up. */
 function viewBasis(direction: [number, number, number]): { toCamera: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } {
@@ -78,11 +97,12 @@ function worldFromLocal(local: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(local.x, local.z, -local.y);
 }
 
-/** Camera position, look-at target and field of view in three's world for a preset framing the given world box. */
+/** Camera position, look-at target and field of view in three's world for a preset framing the drawing in the given world box. */
 export function presetPlacement(preset: ViewPreset, bounds: THREE.Box3, aspect: number): { position: THREE.Vector3; target: THREE.Vector3; fov: number } {
   const spec = presets[preset];
+  const framed = framedBox(bounds);
   const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((corner) =>
-    localFromWorld(new THREE.Vector3(corner & 1 ? bounds.max.x : bounds.min.x, corner & 2 ? bounds.max.y : bounds.min.y, corner & 4 ? bounds.max.z : bounds.min.z)),
+    localFromWorld(new THREE.Vector3(corner & 1 ? framed.max.x : framed.min.x, corner & 2 ? framed.max.y : framed.min.y, corner & 4 ? framed.max.z : framed.min.z)),
   );
   const target = localFromWorld(bounds.getCenter(new THREE.Vector3()));
   const distance = fitDistanceMeters(corners, target, spec.direction, spec.fov, aspect, spec.margin);

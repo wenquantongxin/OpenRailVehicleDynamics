@@ -1,4 +1,4 @@
-/* ORVD vehicle modelling — a flat, cool, low-saturation desktop tool. Grey
+/* ORVD multibody modelling — a flat, cool, low-saturation desktop tool. Grey
    surfaces and 1 px lines; one muted blue for the chrome's primary button,
    active states and focus; colour otherwise only where it means something:
    the selection (the strongest blue), force elements, joints, the check
@@ -2034,8 +2034,8 @@ table.value.curve {
   gap: 4px;
 }
 
-/* What can be opened, in two columns: reference vehicles as flat cards, one's own projects as a list of names.
-   Over an open session the page covers the 3D view. */
+/* What can be started or opened, in two columns: the starting points of a new project as flat cards under their
+   categories, one's own projects as a list of names. Over an open session the page covers the 3D view. */
 .open-stage {
   position: absolute;
   inset: 0;
@@ -2115,16 +2115,42 @@ table.value.curve {
   overflow-wrap: anywhere;
 }
 
+/* A category only groups: a quiet title over its cards. */
+.open-category {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.open-category-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink2);
+}
+
+.open-category-title .zh {
+  font-weight: 400;
+  font-size: 11px;
+}
+
 .open-choices {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+/* A starting point: its title, its line of description, and its name. */
 .open-choice {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   padding: 9px 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
@@ -2133,8 +2159,31 @@ table.value.curve {
   cursor: pointer;
 }
 
-.open-choice .en {
+.open-choice .choice-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 7px;
+  color: var(--ink0);
+}
+
+.open-choice .choice-title .en {
   font-weight: 600;
+}
+
+.open-choice .choice-title .zh {
+  font-size: 12px;
+}
+
+.open-choice .choice-description {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+.open-choice .choice-description .zh {
+  display: block;
+  font-size: 11.5px;
 }
 
 .open-choice .choice-tag {

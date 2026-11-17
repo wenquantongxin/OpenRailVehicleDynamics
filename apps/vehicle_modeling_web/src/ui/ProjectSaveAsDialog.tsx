@@ -51,8 +51,8 @@ export function ProjectSaveAsDialog(props: {
         }}
       >
         <p className="dialog-note">
-          The project is saved in the folder of projects under this name, and the vehicle takes the name too.
-          <span className="zh">工程以此名称保存到工程文件夹，车辆也随之改用此名称。</span>
+          The project is saved in the folder of projects under this name, and its identity takes the name too.
+          <span className="zh">工程以此名称保存到工程文件夹，其标识也随之改用此名称。</span>
         </p>
         <label className="dialog-field">
           <span className="dialog-field-label">

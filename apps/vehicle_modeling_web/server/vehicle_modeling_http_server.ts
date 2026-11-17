@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
 
-import type { ReferenceVehicleCatalogueEntry } from './read_reference_vehicle_catalogue.ts';
+import type { ProjectStartingPointCatalogueEntry } from './read_project_starting_point_catalogue.ts';
 import { requireOrCreateVehicleProjectsDirectory } from './require_or_create_vehicle_projects_directory.ts';
 import type { TerminalConversation } from './terminal_conversation.ts';
 import { VehicleModelingServiceChildProcess } from './vehicle_modeling_service_child_process.ts';
@@ -14,7 +14,8 @@ export interface VehicleModelingHttpServerOptions {
   host: string;
   port: number;
   staticDirectory: string;
-  referenceVehicles: ReferenceVehicleCatalogueEntry[];
+  /** The starting points a new project can start from, in catalogue order. */
+  startingPoints: ProjectStartingPointCatalogueEntry[];
   /** The folder of projects, an absolute path; the interface passes it to the service's commands that take a folder. */
   vehicleProjectsDirectory: string;
   /** The person who started the server, asked whether a missing folder of projects is to be created; null where nobody can answer. */
@@ -69,7 +70,7 @@ export async function startVehicleModelingHttpServer(options: VehicleModelingHtt
   await requireOrCreateVehicleProjectsDirectory(options.vehicleProjectsDirectory, options.terminal);
   // What the interface asks the server itself, answered the same for the server's whole life.
   const serverAnswers = new Map([
-    ['/api/reference_vehicles', JSON.stringify(options.referenceVehicles.map((vehicle) => ({ name: vehicle.name, title: vehicle.title, open_arguments: vehicle.openArguments })))],
+    ['/api/project_starting_points', JSON.stringify(options.startingPoints)],
     ['/api/vehicle_projects_directory', JSON.stringify({ directory: options.vehicleProjectsDirectory })],
   ]);
   const service = new VehicleModelingServiceChildProcess(options.servicePath, onServiceEnd);

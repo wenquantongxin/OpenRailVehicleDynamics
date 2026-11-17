@@ -1,10 +1,10 @@
 import { checkStatus, type SessionState } from '../session/vehicle_editing_session.ts';
 import { openChoiceName } from './open_choice_and_edited_project_wording.ts';
 
-// Title; Open, Save and Save as; what is being edited: the project's name when
-// the session has a file, otherwise the vehicle's with a plain statement that
-// it is not saved to a file, and a mark while there are unsaved changes; undo
-// and redo; and the check status with the project revision.
+// Title; New / Open, Save and Save as; what is being edited: the project's name
+// when the session has a file, otherwise the new project's with a plain
+// statement that it is not saved to a file, and a mark while there are unsaved
+// changes; undo and redo; and the check status with the project revision.
 
 const checkStatusNames = {
   passed: { en: 'Check passed', zh: '检查通过' },
@@ -41,17 +41,17 @@ export function VehicleModelingTopBar(props: {
             ORVD · Modelling interface <span className="zh">建模界面</span>
           </div>
           <h1 className="title">
-            Vehicle modelling
+            Multibody modelling
             <span className="slash">/</span>
-            <span className="zh">车辆建模</span>
+            <span className="zh">多体建模</span>
           </h1>
         </div>
       </div>
       <div className="top-vehicle">
         <div className="file-actions">
           <button type="button" className="chip" disabled={!opened || busy || state.choosingWhatToOpen} onClick={props.onShowOpenChoices}>
-            <span className="en">Open</span>
-            <span className="zh">打开</span>
+            <span className="en">New / Open</span>
+            <span className="zh">新建/打开</span>
           </button>
           <button type="button" className="chip primary" disabled={!opened || busy} onClick={props.onSave} title="Ctrl+S">
             <span className="en">Save</span>
@@ -69,11 +69,11 @@ export function VehicleModelingTopBar(props: {
             </span>
           ) : opened ? (
             <span className="k">
-              Vehicle, not saved to a file <span className="zh">车辆，未保存为文件</span>
+              New project, not saved to a file <span className="zh">新工程，未保存为文件</span>
             </span>
           ) : (
             <span className="k">
-              Vehicle <span className="zh">车辆</span>
+              Project <span className="zh">工程</span>
             </span>
           )}
           <span className="v">

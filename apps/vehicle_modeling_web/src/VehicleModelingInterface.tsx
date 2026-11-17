@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
 import { assignPartsToDrawnBodies } from './scene/vehicle_preview_scene.ts';
-import { fetchReferenceVehicles, type ReferenceVehicle } from './service/fetch_reference_vehicles.ts';
+import { fetchProjectStartingPoints, type ProjectStartingPoint } from './service/fetch_project_starting_points.ts';
 import { fetchVehicleProjectsDirectory } from './service/fetch_vehicle_projects_directory.ts';
 import { modelingServerCommandChannel } from './service/modeling_server_command_channel.ts';
 import { subjectElement, type AttachmentSetting, type ElementReference, type PropertySubject } from './service/vehicle_modeling_service_protocol.ts';
@@ -31,16 +31,16 @@ const serverOrigin = window.location.origin;
 export function VehicleModelingInterface() {
   const session = useMemo(() => new VehicleEditingSession(modelingServerCommandChannel(serverOrigin)), []);
   const state = useSyncExternalStore(session.subscribe, () => session.state);
-  const [vehicles, setVehicles] = useState<ReferenceVehicle[] | null>(null);
+  const [startingPoints, setStartingPoints] = useState<ProjectStartingPoint[] | null>(null);
   const [startupProblem, setStartupProblem] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<PropertyFocusRequest | null>(null);
 
   useEffect(() => {
     let superseded = false;
     const start = async (): Promise<void> => {
-      const [listed, directory] = await Promise.all([fetchReferenceVehicles(serverOrigin), fetchVehicleProjectsDirectory(serverOrigin)]);
+      const [listed, directory] = await Promise.all([fetchProjectStartingPoints(serverOrigin), fetchVehicleProjectsDirectory(serverOrigin)]);
       if (superseded) return;
-      setVehicles(listed);
+      setStartingPoints(listed);
       let link: StartLink | null = null;
       try {
         link = readStartLinkFromPageAddress(new URLSearchParams(window.location.search), listed);
@@ -143,7 +143,7 @@ export function VehicleModelingInterface() {
         >
           {showStartPage && (
             <VehicleModelingStartPage
-              vehicles={vehicles}
+              startingPoints={startingPoints}
               vehicleProjects={state.vehicleProjects}
               vehicleProjectsDirectory={state.vehicleProjectsDirectory}
               problem={startupProblem ?? state.commandRefusal?.message ?? null}

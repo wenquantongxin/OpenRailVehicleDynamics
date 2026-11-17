@@ -1,4 +1,4 @@
-import type { ReferenceVehicle } from '../service/fetch_reference_vehicles.ts';
+import type { ProjectStartingPoint } from '../service/fetch_project_starting_points.ts';
 import { treeHasSubject } from '../service/find_model_tree_rows.ts';
 import type { SendCommand } from '../service/modeling_server_command_channel.ts';
 import {
@@ -48,13 +48,15 @@ import { readVisualDefinition, type VisualDefinition } from '../visual/read_vehi
 //
 // The session starts from what the service has open: an open session is
 // resumed as it stands, so that reloading the page loses nothing, and a link
-// to a vehicle or a project is followed only when nothing is open. Opening
-// anything while the project has unsaved changes asks first. Save writes to
-// the project file the session is associated with; without one it is Save as,
-// which lists the folder of projects just before saving and asks before
-// replacing another project. The folder is a string from the server, handed
-// to the service as it is: which file a project is and whether a name is
-// acceptable, the service says.
+// to a starting point or a project is followed only when nothing is open. A
+// new project starts from a starting point, by the command the server gives
+// with it, and has no project file until it is saved as one. Opening anything
+// while the project has unsaved changes asks first. Save writes to the project
+// file the session is associated with; without one it is Save as, which lists
+// the folder of projects just before saving and asks before replacing another
+// project. The folder is a string from the server, handed to the service as it
+// is: which file a project is and whether a name is acceptable, the service
+// says.
 //
 // What is selected is a subject: an element, or settings that are not an
 // element. The selection stays true to the project: after every edit, undo,
@@ -79,8 +81,11 @@ export interface OpenedVehicle {
   visualDefinitionProblem: string | null;
 }
 
-/** What can be opened: a reference vehicle from its files, or a project saved in the folder of projects. */
-export type OpenChoice = { source: 'reference_vehicle'; vehicle: ReferenceVehicle } | { source: 'vehicle_project'; name: string };
+/**
+ * What can be opened: a new project from a starting point, by the command the
+ * server gives with it, or a project saved in the folder of projects.
+ */
+export type OpenChoice = { source: 'starting_point'; startingPoint: ProjectStartingPoint } | { source: 'vehicle_project'; name: string };
 
 /** A link the page was opened with: followed only when nothing is open. */
 export interface StartLink {
@@ -208,7 +213,7 @@ export interface SessionState {
   failure: string | null;
   /** What was asked to be opened last, until no open is left to finish; the shown project takes no actions meanwhile. */
   opening: OpenChoice | null;
-  /** The reference vehicles and projects are shown over the open session, to open another. */
+  /** The starting points and the projects are shown over the open session, to open another. */
   choosingWhatToOpen: boolean;
   /** A choice to open made while the project has unsaved changes, waiting until they are discarded or kept. */
   pendingOpen: OpenChoice | null;
@@ -337,9 +342,9 @@ export class VehicleEditingSession {
   }
 
   /**
-   * Opens a reference vehicle or a saved project. While the project has
-   * unsaved changes nothing is opened: the choice waits until the changes are
-   * discarded or kept.
+   * Starts a new project from a starting point, or opens a saved project.
+   * While the project has unsaved changes nothing is opened: the choice waits
+   * until the changes are discarded or kept.
    */
   open(choice: OpenChoice): Promise<void> {
     return this.openUnlessChangesAreUnsaved(choice, false);
@@ -360,7 +365,7 @@ export class VehicleEditingSession {
     this.publish({ pendingOpen: null, choosingWhatToOpen: false });
   }
 
-  /** Shows the reference vehicles and the projects over the open session, the folder listed again. */
+  /** Shows the starting points and the projects over the open session, the folder listed again. */
   showOpenChoices(): Promise<void> {
     this.publish({ choosingWhatToOpen: true, commandRefusal: null });
     return this.enqueueOnShownProject(() => this.listVehicleProjects());
@@ -648,7 +653,9 @@ export class VehicleEditingSession {
   /** Opens the choice; resolves to whether it opened. A refused open keeps the session that was open. */
   private async openNow(choice: OpenChoice): Promise<boolean> {
     const file = choice.source === 'vehicle_project' ? { directory: this.projectsDirectory(), name: choice.name } : null;
-    const opened = choice.source === 'reference_vehicle' ? await this.send('open_vehicle', choice.vehicle.openArguments) : await this.send('open_vehicle_project', { ...file });
+    // A starting point opens by the command the server gives with it, as given: a new project without a file.
+    const opened =
+      choice.source === 'starting_point' ? await this.send(choice.startingPoint.openCommand, choice.startingPoint.openArguments) : await this.send('open_vehicle_project', { ...file });
     if (!opened.ok) {
       this.publish({ commandRefusal: opened.refusal });
       return false;
@@ -784,7 +791,7 @@ export class VehicleEditingSession {
 /** The open session an accepted answer describes; an answer that says nothing is open means the service and the interface disagree. */
 function openSession(answer: Accepted): SessionAfterCommand {
   if (answer.session === null) {
-    throw new Error('the modelling service answered as if no vehicle were open');
+    throw new Error('the modelling service answered as if no project were open');
   }
   return answer.session;
 }

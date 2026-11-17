@@ -95,7 +95,7 @@ export function VehicleModelTree(props: {
       <div className="tree" ref={list}>
         {tree === null ? (
           <p className="panel-empty">
-            Open a vehicle to see its model tree. <span className="zh">打开车辆后显示其模型树。</span>
+            Start or open a project to see its model tree. <span className="zh">新建或打开工程后显示其模型树。</span>
           </p>
         ) : (
           tree.map((row) => <ModelTreeRow key={row.key} row={row} parent={null} depth={0} surroundings={surroundings} />)

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { createModelPalette } from '../src/scene/vehicle_model_view_colors_and_materials.ts';
 import { assignPartsToDrawnBodies, VehiclePreviewScene } from '../src/scene/vehicle_preview_scene.ts';
 import { readPreview, sameElement, type ElementReference } from '../src/service/vehicle_modeling_service_protocol.ts';
-import { readVisualDefinition } from '../src/visual/read_vehicle_visual_definition.ts';
+import { readVisualDefinition, type VisualDefinition } from '../src/visual/read_vehicle_visual_definition.ts';
 
 // The drawing is built from the preview alone: poses, parts in their body's
 // frame, marks at the drawn places, each drawing showing the element the
@@ -265,6 +265,19 @@ test('a wheel stands on its datum, turned about its outward spin axis, and a bod
     near(turning.getWorldPosition(new THREE.Vector3()), datum, `${wheel.name} datum`);
     near(new THREE.Vector3(0, 1, 0).applyQuaternion(turning.getWorldQuaternion(new THREE.Quaternion())), outward, `${wheel.name} axis`);
   }
+});
+
+test('a visual definition that states no wheel section draws the wheels as for a project with no visual definition', () => {
+  const { wheel_visual: _, ...withoutWheelSection } = visualJson;
+  const wheelSize = (definition: VisualDefinition | null): number[] => {
+    const geometry = wheelMeshes(new VehiclePreviewScene(preview, definition, createModelPalette()), leftWheel)[0]!.geometry;
+    geometry.computeBoundingBox();
+    return geometry.boundingBox!.getSize(new THREE.Vector3()).toArray();
+  };
+  const usual = wheelSize(null);
+  assert.deepEqual(wheelSize(readVisualDefinition(withoutWheelSection)), usual);
+  const wide = { ...visualJson, wheel_visual: { ...visualJson.wheel_visual, width_meters: 0.3, back_face_offset_meters: 0.15 } };
+  assert.notDeepEqual(wheelSize(readVisualDefinition(wide)), usual, 'a section that is stated is drawn as stated');
 });
 
 test('a click on a wheel picks the body it turns with', () => {

@@ -42,6 +42,11 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 // session has unsaved changes while its state is not the one last saved or
 // opened. get_session and list_vehicle_projects are answered while nothing is
 // open, with the session's fields null.
+//
+// A template is a project file kept elsewhere, by its folder and name: a new
+// session is opened over it as over a vehicle's own files, with no project
+// file and nothing unsaved; one that cannot be read is refused, and the
+// session that was open stays.
 
 export interface FakeTitle {
   en: string;
@@ -187,6 +192,8 @@ export class FakeVehicleModelingService {
   private readonly vehicles: ReadonlyMap<string, FakeVehicle>;
   private readonly visualDefinitions: ReadonlyMap<string, unknown>;
   private readonly projectsDirectory: string;
+  /** Templates by the path of their project file. */
+  private readonly templates: ReadonlyMap<string, FakeSavedProject>;
   /** The open vehicle's kinds and drawings; null while nothing is open. */
   private vehicle: FakeVehicle | null = null;
   private vehicleName = '';
@@ -205,13 +212,18 @@ export class FakeVehicleModelingService {
 
   /**
    * Vehicles by the vehicle_definition_path that opens them, visual definition
-   * documents by the visual_definition_path that reads them, and the one
-   * folder of projects.
+   * documents by the visual_definition_path that reads them, the one folder of
+   * projects, and templates by the path of their project file,
+   * <directory>/<name>.vehicle_project.json.
    */
-  constructor(vehicles: Record<string, FakeVehicle>, options: { visualDefinitions?: Record<string, unknown>; projectsDirectory?: string } = {}) {
+  constructor(
+    vehicles: Record<string, FakeVehicle>,
+    options: { visualDefinitions?: Record<string, unknown>; projectsDirectory?: string; templates?: Record<string, FakeSavedProject> } = {},
+  ) {
     this.vehicles = new Map(Object.entries(vehicles));
     this.visualDefinitions = new Map(Object.entries(options.visualDefinitions ?? {}));
     this.projectsDirectory = options.projectsDirectory ?? '/fake/projects';
+    this.templates = new Map(Object.entries(options.templates ?? {}));
   }
 
   readonly send: SendCommand = async (command, commandArguments = {}) => {
@@ -355,7 +367,7 @@ export class FakeVehicleModelingService {
     return directory === this.projectsDirectory ? null : `cannot read the folder '${String(directory)}'`;
   }
 
-  /** The open-anywhere commands: the session, the folder, and the two opens. Null for every other command. */
+  /** The open-anywhere commands: the session, the folder, and the three opens. Null for every other command. */
   private sessionOutcome(command: string, commandArguments: Record<string, unknown>): unknown {
     switch (command) {
       case 'get_session':
@@ -383,6 +395,13 @@ export class FakeVehicleModelingService {
         if (unreadable !== null) return this.refused(unreadable);
         if (saved === undefined) return this.refused(`the folder holds no project named '${name}'`);
         this.openProject(saved.vehicle, saved.visualDefinition, { directory, name });
+        return this.accepted({});
+      }
+      case 'new_project_from_template': {
+        const path = `${String(commandArguments['directory'])}/${String(commandArguments['name'])}.vehicle_project.json`;
+        const template = this.templates.get(path);
+        if (template === undefined) return this.refused(`cannot read '${path}'`);
+        this.openProject(template.vehicle, template.visualDefinition, null);
         return this.accepted({});
       }
       default:

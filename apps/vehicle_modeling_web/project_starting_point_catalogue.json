@@ -1,0 +1,37 @@
+[
+  {
+    "name": "single_body",
+    "title": { "en": "Single rigid body", "zh": "单个刚体" },
+    "description": { "en": "One free cube of 1 m and 1 kg, with nothing else.", "zh": "一个边长 1 m、质量 1 kg 的自由立方体，别无他物。" },
+    "category": { "en": "General", "zh": "通用" },
+    "source": { "vehicle_project_template": { "directory": "../../tools/vehicle_modeling_service/project_templates", "name": "single_body" } }
+  },
+  {
+    "name": "GZ18",
+    "title": { "en": "Bogie vehicle with rigid wheelsets", "zh": "刚性轮对转向架车辆" },
+    "description": { "en": "The GZ18 reference vehicle, with its wheel-rail contact.", "zh": "GZ18 参考车辆，带轮轨接触。" },
+    "category": { "en": "Rail vehicle", "zh": "轨道车辆" },
+    "source": {
+      "vehicle_files": {
+        "vehicle_definition_path": "../../vehicle_library/gz18/vehicle_definition.json",
+        "startup_state_path": "../../vehicle_library/gz18/startup_states/moving_startup_60kmh.json",
+        "contact_record_path": "../../vehicle_library/gz18/contact_record.json",
+        "visual_definition_path": "../../vehicle_library/gz18/visualization/visual_definition.json"
+      }
+    }
+  },
+  {
+    "name": "IRW",
+    "title": { "en": "Bogie vehicle with independently rotating wheels", "zh": "独立旋转车轮转向架车辆" },
+    "description": { "en": "The IRW reference vehicle, with its wheel-rail contact.", "zh": "IRW 参考车辆，带轮轨接触。" },
+    "category": { "en": "Rail vehicle", "zh": "轨道车辆" },
+    "source": {
+      "vehicle_files": {
+        "vehicle_definition_path": "../../vehicle_library/irw/vehicle_definition.json",
+        "startup_state_path": "../../vehicle_library/irw/startup_states/moving_startup_60kmh.json",
+        "contact_record_path": "../../vehicle_library/irw/contact_record.json",
+        "visual_definition_path": "../../vehicle_library/irw/visualization/visual_definition.json"
+      }
+    }
+  }
+]

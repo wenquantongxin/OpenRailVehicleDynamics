@@ -68,7 +68,19 @@ test('of wheel_visual, the eight lengths of the section are read and checked; no
     hubRadiusMeters: 0.11,
     hubLengthMeters: 0.13,
   });
-  assert.throws(() => readVisualDefinition(definition([], { wheel_visual: undefined })), /wheel_visual/);
   assert.throws(() => readVisualDefinition(definition([], { wheel_visual: { ...wheelVisual, hub_radius_meters: 0 } })), /hub_radius_meters/);
   assert.throws(() => readVisualDefinition(definition([], { wheel_visual: { ...wheelVisual, back_face_offset_meters: 0.2 } })), /back face/);
+});
+
+test('a definition need not state a wheel section: one without it is read, its parts with it, and states none', () => {
+  // JSON leaves out a key whose value is undefined: this definition has no wheel_visual at all.
+  const read = readVisualDefinition(definition([box], { wheel_visual: undefined }));
+  assert.equal(read.wheelSection, null);
+  assert.deepEqual(
+    read.parts.map((part) => part.name),
+    ['shell'],
+  );
+  for (const stated of [null, [], 'standard']) {
+    assert.throws(() => readVisualDefinition(definition([box], { wheel_visual: stated })), /wheel_visual is not an object/);
+  }
 });

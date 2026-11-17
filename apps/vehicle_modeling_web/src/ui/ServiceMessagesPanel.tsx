@@ -166,7 +166,7 @@ export function ServiceMessagesPanel(props: {
         )}
         {state.vehicle === null && state.failure === null && state.commandRefusal === null && (
           <p className="panel-empty">
-            Check results appear here once a vehicle is open. <span className="zh">打开车辆后在此显示检查结果。</span>
+            Check results appear here once a project is open. <span className="zh">打开工程后在此显示检查结果。</span>
           </p>
         )}
       </div>

@@ -12,10 +12,10 @@ test('the service and the folder of projects are required; the catalogue, host a
   const defaults = parseVehicleModelingServerArguments(['--service', 'bin/service', '--vehicle-projects', 'projects']);
   assert.ok(isAbsolute(defaults.servicePath));
   assert.ok(isAbsolute(defaults.vehicleProjectsDirectory) && defaults.vehicleProjectsDirectory.endsWith('/projects'));
-  assert.deepEqual([defaults.host, defaults.port, defaults.referenceVehiclesPath], ['127.0.0.1', 6651, null]);
-  const given = parseVehicleModelingServerArguments(['--port', '7000', '--host', '0.0.0.0', '--reference-vehicles', 'catalogue.json', '--vehicle-projects', '/p', '--service', 'x']);
+  assert.deepEqual([defaults.host, defaults.port, defaults.startingPointsPath], ['127.0.0.1', 6651, null]);
+  const given = parseVehicleModelingServerArguments(['--port', '7000', '--host', '0.0.0.0', '--starting-points', 'catalogue.json', '--vehicle-projects', '/p', '--service', 'x']);
   assert.deepEqual([given.host, given.port, given.vehicleProjectsDirectory], ['0.0.0.0', 7000, '/p']);
-  assert.ok(given.referenceVehiclesPath !== null && isAbsolute(given.referenceVehiclesPath) && given.referenceVehiclesPath.endsWith('/catalogue.json'));
+  assert.ok(given.startingPointsPath !== null && isAbsolute(given.startingPointsPath) && given.startingPointsPath.endsWith('/catalogue.json'));
 });
 
 test('anything but complete, unrepeated key/value pairs is refused', () => {
@@ -27,7 +27,8 @@ test('anything but complete, unrepeated key/value pairs is refused', () => {
     ['--vehicle-projects', 'p', '--service', 'x', '--port', '0'],
     ['--vehicle-projects', 'p', '--service', 'x', '--port', '80.5'],
     ['--vehicle-projects', 'p', '--service', 'x', '--colour', 'red'],
-    ['--vehicle-projects', 'p', '--service', 'x', '--reference-vehicles', 'a.json', '--reference-vehicles', 'b.json'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--starting-points', 'a.json', '--starting-points', 'b.json'],
+    ['--vehicle-projects', 'p', '--service', 'x', '--reference-vehicles', 'a.json'],
   ]) {
     assert.throws(() => parseVehicleModelingServerArguments(args), Error, args.join(' '));
   }

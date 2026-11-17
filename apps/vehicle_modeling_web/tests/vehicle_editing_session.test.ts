@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { ReferenceVehicle } from '../src/service/fetch_reference_vehicles.ts';
+import type { ProjectStartingPoint } from '../src/service/fetch_project_starting_points.ts';
 import { rowPathOfSubject, rowWithKey } from '../src/service/find_model_tree_rows.ts';
 import type { ElementReference, PropertySubject } from '../src/service/vehicle_modeling_service_protocol.ts';
 import { checkStatus, creationFromOffers, VehicleEditingSession, previewIsStale, type OpenChoice, type SessionState } from '../src/session/vehicle_editing_session.ts';
-import { FakeVehicleModelingService, fakeVehicle } from './fake_vehicle_modeling_service.ts';
+import { FakeVehicleModelingService, fakeVehicle, type FakeSavedProject } from './fake_vehicle_modeling_service.ts';
 
 // The session's sequencing against a service that follows the protocol: what
 // is sent after each action, and that what the session shows is what the
@@ -13,9 +13,13 @@ import { FakeVehicleModelingService, fakeVehicle } from './fake_vehicle_modeling
 
 const projectsDirectory = '/fake/projects';
 
-const vehicle: ReferenceVehicle = {
+/** A starting point of a vehicle's own files, which the service opens by the command the server gives with it. */
+const vehicle: ProjectStartingPoint = {
   name: 'FAKE',
   title: { en: 'Fake vehicle', zh: '假车辆' },
+  description: { en: 'A made-up vehicle.', zh: '虚构车辆。' },
+  category: { en: 'Made-up things', zh: '虚构之物' },
+  openCommand: 'open_vehicle',
   openArguments: {
     vehicle_definition_path: '/fake/vehicle.json',
     startup_state_path: '/fake/startup.json',
@@ -24,20 +28,42 @@ const vehicle: ReferenceVehicle = {
   },
 };
 
-function referenceVehicle(opened: ReferenceVehicle): OpenChoice {
-  return { source: 'reference_vehicle', vehicle: opened };
+/** A starting point of a template, a project file kept elsewhere. */
+const template: ProjectStartingPoint = {
+  name: 'MADE_UP_TEMPLATE',
+  title: { en: 'Made-up template', zh: '虚构模板' },
+  description: { en: 'A made-up template.', zh: '虚构模板。' },
+  category: { en: 'Other made-up things', zh: '其他虚构之物' },
+  openCommand: 'new_project_from_template',
+  openArguments: { directory: '/fake/templates', name: 'made_up' },
+};
+
+function startingAt(point: ProjectStartingPoint): OpenChoice {
+  return { source: 'starting_point', startingPoint: point };
 }
 
 function project(name: string): OpenChoice {
   return { source: 'vehicle_project', name };
 }
 
-const otherVehicle: ReferenceVehicle = { ...vehicle, name: 'OTHER', openArguments: { ...vehicle.openArguments, vehicle_definition_path: '/fake/other.json' } };
+const otherVehicle: ProjectStartingPoint = { ...vehicle, name: 'OTHER', openArguments: { ...vehicle.openArguments, vehicle_definition_path: '/fake/other.json' } };
 
+/** The template's project: the made-up kinds with one free body and nothing else, both its names the template's. */
+function madeUpTemplateProject(): FakeSavedProject {
+  const vehicle = fakeVehicle();
+  vehicle.vehicleName = 'made_up';
+  vehicle.elements = vehicle.elements.filter((element) => element.name === 'body_c');
+  return { vehicle, visualDefinition: null };
+}
+
+/** The fake vehicle and another by their files, and the template by its project file. */
 function serviceWithTwoVehicles(options: ConstructorParameters<typeof FakeVehicleModelingService>[1] = {}): FakeVehicleModelingService {
   const other = fakeVehicle();
   other.vehicleName = 'OTHER';
-  return new FakeVehicleModelingService({ '/fake/vehicle.json': fakeVehicle(), '/fake/other.json': other }, { projectsDirectory, ...options });
+  return new FakeVehicleModelingService(
+    { '/fake/vehicle.json': fakeVehicle(), '/fake/other.json': other },
+    { projectsDirectory, templates: { '/fake/templates/made_up.vehicle_project.json': madeUpTemplateProject() }, ...options },
+  );
 }
 
 /** An element as the subject of a selection or an edit. */
@@ -58,7 +84,7 @@ const spring = { kind: 'kind_spring', name: 'spring_a' };
 /** A session started with nothing open and a link to the fake vehicle, which it followed. */
 async function openedSession(service = serviceWithTwoVehicles()) {
   const session = new VehicleEditingSession(service.send);
-  await session.start(projectsDirectory, { open: referenceVehicle(vehicle), select: null });
+  await session.start(projectsDirectory, { open: startingAt(vehicle), select: null });
   return { service, session };
 }
 
@@ -91,7 +117,7 @@ const openingCommands = ['describe_element_kinds', 'get_visual_definition', 'che
 test('with nothing open, the start lists the folder, follows the link and then selects what it names; it runs once', async () => {
   const service = serviceWithTwoVehicles();
   const session = new VehicleEditingSession(service.send);
-  const link = { open: referenceVehicle(vehicle), select: body };
+  const link = { open: startingAt(vehicle), select: body };
   await Promise.all([session.start(projectsDirectory, link), session.start(projectsDirectory, link)]);
   assert.deepEqual(commands(service), ['get_session', 'list_vehicle_projects', 'open_vehicle', ...openingCommands, 'get_properties']);
   assert.deepEqual(service.log[1]?.commandArguments, { directory: projectsDirectory }, 'the folder is passed as the server named it');
@@ -152,11 +178,47 @@ test('opening sends the given open arguments unread, then reads the kinds, the v
 test('a refused open keeps the vehicle that was open and says why', async () => {
   const { service, session } = await openedSession();
   const before = session.state;
-  await session.open(referenceVehicle({ ...vehicle, openArguments: { vehicle_definition_path: '/missing.json', visual_definition_path: null } }));
+  await session.open(startingAt({ ...vehicle, openArguments: { vehicle_definition_path: '/missing.json', visual_definition_path: null } }));
   assert.equal(commands(service).at(-1), 'open_vehicle');
   assert.equal(session.state.outline, before.outline);
   assert.equal(session.state.vehicle, before.vehicle);
   assert.match(session.state.commandRefusal?.message ?? '', /missing/);
+});
+
+test('a new project starts from a template by the command and arguments its starting point gives: no project file, nothing unsaved, Save asks for a name', async () => {
+  const { service, session } = await openedSession();
+  const sent = service.log.length;
+  await session.open(startingAt(template));
+  assert.deepEqual(commandsSince(service, sent), ['new_project_from_template', ...openingCommands]);
+  assert.deepEqual(service.log[sent]?.commandArguments, template.openArguments, 'the arguments are passed unread');
+  const state = session.state;
+  assert.deepEqual(state.outline, { vehicleName: 'made_up', elements: [{ kind: 'kind_body', name: 'body_c' }] });
+  assert.deepEqual([state.vehicleProjectFile, state.hasUnsavedChanges, state.revision, state.canUndo], [null, false, 0, false]);
+  assert.equal(state.commandRefusal, null);
+  const beforeSave = service.log.length;
+  await session.save();
+  assert.equal(service.log.length, beforeSave, 'without a file nothing is written');
+  assert.equal(session.state.saveAs?.name, '', 'Save asks for a name');
+});
+
+test('a template that cannot be read is refused, and the project that was open stays as it was', async () => {
+  const { service, session } = await openedSession();
+  const before = session.state;
+  await session.open(startingAt({ ...template, openArguments: { directory: '/fake/templates', name: 'missing' } }));
+  assert.equal(commands(service).at(-1), 'new_project_from_template');
+  assert.match(session.state.commandRefusal?.message ?? '', /cannot read '\/fake\/templates\/missing\.vehicle_project\.json'/);
+  assert.equal(session.state.outline, before.outline);
+  assert.equal(session.state.vehicle, before.vehicle);
+});
+
+test('a reload resumes a new project started from a template as it stands, with no file', async () => {
+  const { service, session } = await openedSession();
+  await session.open(startingAt(template));
+  const reloaded = new VehicleEditingSession(service.send);
+  await reloaded.start(projectsDirectory, null);
+  const state = reloaded.state;
+  assert.deepEqual(state.outline, session.state.outline);
+  assert.deepEqual([state.vehicleProjectFile, state.hasUnsavedChanges, state.revision], [null, false, 0]);
 });
 
 test('a reload resumes the open session as it stands: file, unsaved changes, kept drawing; nothing selected, the link not followed', async () => {
@@ -170,7 +232,7 @@ test('a reload resumes the open session as it stands: file, unsaved changes, kep
 
   const reloaded = new VehicleEditingSession(service.send);
   const sent = service.log.length;
-  await reloaded.start(projectsDirectory, { open: referenceVehicle(otherVehicle), select: body });
+  await reloaded.start(projectsDirectory, { open: startingAt(otherVehicle), select: body });
   assert.deepEqual(commandsSince(service, sent), ['get_session', ...openingCommands], 'the link is not followed and the folder not listed');
   const state = reloaded.state;
   assert.deepEqual(state.outline, before.outline);
@@ -179,7 +241,7 @@ test('a reload resumes the open session as it stands: file, unsaved changes, kep
   assert.equal(checkStatus(state), 'failed');
   assert.deepEqual(state.preview, before.preview, 'the drawing the service kept from before the refused check');
   assert.equal(state.selection, null);
-  assert.deepEqual(state.linkNotFollowed, referenceVehicle(otherVehicle));
+  assert.deepEqual(state.linkNotFollowed, startingAt(otherVehicle));
   assert.equal(state.vehicleProjectsDirectory, projectsDirectory);
 });
 
@@ -315,17 +377,17 @@ test('opening anything while there are unsaved changes asks first: keeping on ed
   // An edit still on its way when the open is asked for counts.
   const edited = session.setProperty(subject(body), 'size_quantity', 30);
   const sent = service.log.length;
-  await session.open(referenceVehicle(otherVehicle));
+  await session.open(startingAt(otherVehicle));
   assert.equal(await edited, true);
   assert.equal(commandsSince(service, sent).includes('open_vehicle'), false);
-  assert.deepEqual(session.state.pendingOpen, referenceVehicle(otherVehicle));
+  assert.deepEqual(session.state.pendingOpen, startingAt(otherVehicle));
   assert.equal(session.state.opening, null);
   session.keepEditing();
   assert.equal(session.state.pendingOpen, null);
   assert.equal(session.state.choosingWhatToOpen, false, 'keeping on editing goes back to the project');
   assert.equal(session.state.outline?.vehicleName, 'FAKE');
 
-  await session.open(referenceVehicle(otherVehicle));
+  await session.open(startingAt(otherVehicle));
   await session.discardChangesAndOpen();
   assert.equal(commands(service).filter((command) => command === 'open_vehicle').length, 2);
   assert.equal(session.state.outline?.vehicleName, 'OTHER');
@@ -333,7 +395,7 @@ test('opening anything while there are unsaved changes asks first: keeping on ed
   assert.equal(session.state.hasUnsavedChanges, false);
 
   // Without unsaved changes nothing is asked.
-  await session.open(referenceVehicle(vehicle));
+  await session.open(startingAt(vehicle));
   assert.equal(session.state.pendingOpen, null);
   assert.equal(session.state.outline?.vehicleName, 'FAKE');
 });
@@ -352,7 +414,7 @@ test('the choice of what to open lists the folder again over the session, and ca
   assert.equal(commandsSince(service, sent).length, 1);
 
   await session.showOpenChoices();
-  await session.open(referenceVehicle(otherVehicle));
+  await session.open(startingAt(otherVehicle));
   assert.equal(session.state.choosingWhatToOpen, false, 'opening leaves the choice');
 });
 
@@ -363,7 +425,7 @@ test('a saved project opens as it was saved, tied to its file; one its check ref
   await session.startSaveAs();
   await session.saveAs('refused_by_check', false);
   const saved = session.state.outline;
-  await session.open(referenceVehicle(otherVehicle));
+  await session.open(startingAt(otherVehicle));
 
   const sent = service.log.length;
   await session.open(project('refused_by_check'));
@@ -392,11 +454,11 @@ test('a visual definition the view cannot draw from is reported, the bodies are 
   });
   const drawable = { ...vehicle, openArguments: { ...vehicle.openArguments, visual_definition_path: '/fake/visual.json' } };
   const session = new VehicleEditingSession(service.send);
-  await session.start(projectsDirectory, { open: referenceVehicle(drawable), select: null });
+  await session.start(projectsDirectory, { open: startingAt(drawable), select: null });
   assert.notEqual(session.state.vehicle?.visualDefinition, null);
   assert.equal(session.state.vehicle?.visualDefinitionProblem, null);
 
-  await session.open(referenceVehicle({ ...vehicle, openArguments: { ...vehicle.openArguments, visual_definition_path: '/fake/unusable.json' } }));
+  await session.open(startingAt({ ...vehicle, openArguments: { ...vehicle.openArguments, visual_definition_path: '/fake/unusable.json' } }));
   assert.equal(session.state.vehicle?.visualDefinition, null);
   assert.match(session.state.vehicle?.visualDefinitionProblem ?? '', /parts is not an array/);
   assert.equal(session.state.failure, null);
@@ -702,7 +764,7 @@ test('a failing server ends the session loudly and nothing more is sent', async 
     if (!reachable) throw new Error('the modelling server is gone');
     return service.send(command, commandArguments);
   });
-  await session.start(projectsDirectory, { open: referenceVehicle(vehicle), select: null });
+  await session.start(projectsDirectory, { open: startingAt(vehicle), select: null });
   reachable = false;
   await session.select(subject(body));
   assert.match(session.state.failure ?? '', /gone/);
@@ -721,12 +783,12 @@ test('nothing asked for against the shown project while another vehicle opens is
     if (command === 'get_visual_definition') await gate;
     return service.send(command, commandArguments);
   });
-  await session.start(projectsDirectory, { open: referenceVehicle(vehicle), select: null });
+  await session.start(projectsDirectory, { open: startingAt(vehicle), select: null });
   await session.select(subject(body));
   gate = new Promise((release) => {
     releaseOpen = release;
   });
-  const opening = session.open(referenceVehicle(otherVehicle));
+  const opening = session.open(startingAt(otherVehicle));
   const shownWhileOpening = session.state.opening;
   // The panels still show the first vehicle; everything asked for against it now must not reach the second.
   const edited = session.setProperty(subject(body), 'size_quantity', 99);
@@ -748,7 +810,7 @@ test('nothing asked for against the shown project while another vehicle opens is
   assert.equal(await created, null);
   assert.equal(session.state.creation, null);
   assert.equal(session.state.saveAs, null);
-  assert.deepEqual(shownWhileOpening, referenceVehicle(otherVehicle));
+  assert.deepEqual(shownWhileOpening, startingAt(otherVehicle));
   assert.equal(session.state.opening, null);
 });
 
@@ -760,7 +822,7 @@ test('actions asked for before an open still run first, against the project they
   const sent = service.log.length;
   const edited = session.setProperty(subject(body), 'size_quantity', 12);
   const saved = session.save();
-  const opening = session.open(referenceVehicle(otherVehicle));
+  const opening = session.open(startingAt(otherVehicle));
   assert.equal(await edited, true);
   await saved;
   await opening;

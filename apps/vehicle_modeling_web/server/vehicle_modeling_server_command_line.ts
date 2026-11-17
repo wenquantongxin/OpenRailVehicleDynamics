@@ -1,15 +1,17 @@
-// The vehicle modelling server: serves the built interface and relays its
-// commands to one resident orvd_vehicle_modeling_service.
+// The modelling server: serves the built interface and relays its commands
+// to one resident orvd_vehicle_modeling_service.
 //
 // USAGE
 //
 //   npm run build
-//   npm run serve:reference -- --service <path to orvd_vehicle_modeling_service>
-//                              --vehicle-projects <folder of projects>
+//   npm run serve:starting-points -- --service <path to orvd_vehicle_modeling_service>
+//                                    --vehicle-projects <folder of projects>
 //   open http://127.0.0.1:6651/            (a session the service has open is
-//                                            resumed; otherwise ?vehicle=GZ18
-//                                            opens GZ18, ?project=NAME opens a
-//                                            saved project, and then
+//                                            resumed; otherwise
+//                                            ?starting_point=NAME starts a new
+//                                            project from that starting point,
+//                                            ?project=NAME opens a saved
+//                                            project, and then
 //                                            &select=<kind>:<name> selects an element)
 //
 // For development, run the server as above and `npm run dev` beside it: Vite
@@ -22,14 +24,15 @@
 //                                it does not exist, a server run in a terminal
 //                                asks whether to create it, and one run
 //                                without a terminal refuses to start
-//   --reference-vehicles FILE    the catalogue of reference vehicles the interface
-//                                offers (see read_reference_vehicle_catalogue.ts);
+//   --starting-points FILE       the catalogue of the starting points a new
+//                                project can start from (see
+//                                read_project_starting_point_catalogue.ts);
 //                                without it there are none
 //   --host HOST                  default 127.0.0.1
 //   --port PORT                  default 6651
 // Paths given here are resolved against the working directory when the server
 // starts; under npm that is this app's folder, which holds the catalogue of the
-// repository's reference vehicles, reference_vehicle_catalogue.json.
+// repository's starting points, project_starting_point_catalogue.json.
 //
 // HTTP
 //   POST /api/command
@@ -39,12 +42,13 @@
 //     line, unchanged. Requests are relayed strictly one at a time, in the order
 //     they arrive. A request whose Origin names another host than its Host is
 //     refused with 403, so that no page of another origin drives the service.
-//   GET /api/reference_vehicles
-//     [{"name", "title": {"en", "zh"}, "open_arguments": {...}}, ...] in
-//     catalogue order. open_arguments are the arguments of the service's
-//     open_vehicle command for that vehicle, its visual definition's path among
-//     them (null where the catalogue names none); the interface sends them as
-//     given and reads none of them.
+//   GET /api/project_starting_points
+//     [{"name", "title", "description", "category", "open": {"command",
+//     "arguments"}}, ...] in catalogue order, each text {"en", "zh"}. "open" is
+//     the service command that starts a new project from the starting point,
+//     new_project_from_template for a template and open_vehicle for a
+//     vehicle's own files, with its arguments, their paths absolute; the
+//     interface sends them as given and reads none of them.
 //   GET /api/vehicle_projects_directory
 //     {"directory": "<absolute path>"}: the folder of projects, which the
 //     interface passes to the service's commands that take a folder.
@@ -56,7 +60,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readReferenceVehicleCatalogue } from './read_reference_vehicle_catalogue.ts';
+import { readProjectStartingPointCatalogue } from './read_project_starting_point_catalogue.ts';
 import { terminalConversation } from './terminal_conversation.ts';
 import { startVehicleModelingHttpServer } from './vehicle_modeling_http_server.ts';
 
@@ -65,7 +69,7 @@ export interface VehicleModelingServerArguments {
   vehicleProjectsDirectory: string;
   host: string;
   port: number;
-  referenceVehiclesPath: string | null;
+  startingPointsPath: string | null;
 }
 
 export function parseVehicleModelingServerArguments(args: readonly string[]): VehicleModelingServerArguments {
@@ -73,7 +77,7 @@ export function parseVehicleModelingServerArguments(args: readonly string[]): Ve
   let vehicleProjectsDirectory: string | null = null;
   let host = '127.0.0.1';
   let port = 6651;
-  let referenceVehiclesPath: string | null = null;
+  let startingPointsPath: string | null = null;
   const seen = new Set<string>();
   for (let index = 0; index < args.length; index += 2) {
     const key = args[index]!;
@@ -83,7 +87,7 @@ export function parseVehicleModelingServerArguments(args: readonly string[]): Ve
     seen.add(key);
     if (key === '--service') servicePath = resolve(value);
     else if (key === '--vehicle-projects') vehicleProjectsDirectory = resolve(value);
-    else if (key === '--reference-vehicles') referenceVehiclesPath = resolve(value);
+    else if (key === '--starting-points') startingPointsPath = resolve(value);
     else if (key === '--host') host = value;
     else if (key === '--port') {
       if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535) throw new Error('--port needs a port from 1 to 65535');
@@ -92,20 +96,20 @@ export function parseVehicleModelingServerArguments(args: readonly string[]): Ve
   }
   if (servicePath === null) throw new Error('--service PATH is required');
   if (vehicleProjectsDirectory === null) throw new Error('--vehicle-projects DIRECTORY is required: the folder the projects are saved in');
-  return { servicePath, vehicleProjectsDirectory, host, port, referenceVehiclesPath };
+  return { servicePath, vehicleProjectsDirectory, host, port, startingPointsPath };
 }
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { servicePath, vehicleProjectsDirectory, host, port, referenceVehiclesPath } = parseVehicleModelingServerArguments(process.argv.slice(2));
-    const referenceVehicles = referenceVehiclesPath === null ? [] : await readReferenceVehicleCatalogue(referenceVehiclesPath);
+    const { servicePath, vehicleProjectsDirectory, host, port, startingPointsPath } = parseVehicleModelingServerArguments(process.argv.slice(2));
+    const startingPoints = startingPointsPath === null ? [] : await readProjectStartingPointCatalogue(startingPointsPath);
     const staticDirectory = fileURLToPath(new URL('../dist', import.meta.url));
     const terminal = terminalConversation();
-    const server = await startVehicleModelingHttpServer({ servicePath, host, port, staticDirectory, referenceVehicles, vehicleProjectsDirectory, terminal }, (ending) => {
+    const server = await startVehicleModelingHttpServer({ servicePath, host, port, staticDirectory, startingPoints, vehicleProjectsDirectory, terminal }, (ending) => {
       process.stderr.write(`The modelling service ${ending}; the modelling server stops.\n`);
       process.exit(1);
     });
-    process.stdout.write(`Vehicle modelling: http://${host}:${server.port}/\n`);
+    process.stdout.write(`Multibody modelling: http://${host}:${server.port}/\n`);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

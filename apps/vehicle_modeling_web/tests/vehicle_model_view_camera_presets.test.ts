@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 
-import { framesCamera, presetPlacement, viewPresets } from '../src/scene/vehicle_model_view_camera_presets.ts';
+import { framedBox, framesCamera, presetPlacement, viewPresets } from '../src/scene/vehicle_model_view_camera_presets.ts';
 import { createModelPalette } from '../src/scene/vehicle_model_view_colors_and_materials.ts';
 import { VehiclePreviewScene } from '../src/scene/vehicle_preview_scene.ts';
 import { readPreview } from '../src/service/vehicle_modeling_service_protocol.ts';
@@ -10,7 +10,8 @@ import { readPreview } from '../src/service/vehicle_modeling_service_protocol.ts
 // Each preset is checked the way the view uses it: a real perspective camera
 // placed where the preset says, looking at its target with the vertical up.
 // Every corner of the framed box must project inside the picture, and the
-// box must fill it to the margin, unless the one-metre clearance governed.
+// box must fill it to the margin, unless the one-metre clearance governed. A
+// drawing narrower than three metres along or across is framed as that wide.
 
 const boxes: Record<string, THREE.Box3> = {
   vehicle: new THREE.Box3(new THREE.Vector3(-11, 0, -1.6), new THREE.Vector3(11, 3.9, 1.6)),
@@ -20,9 +21,10 @@ const boxes: Record<string, THREE.Box3> = {
 
 test('every preset frames every box inside the picture, at every aspect', () => {
   for (const preset of viewPresets) {
-    for (const [name, box] of Object.entries(boxes)) {
+    for (const [name, drawn] of Object.entries(boxes)) {
+      const box = framedBox(drawn);
       for (const aspect of [16 / 10, 4 / 3, 0.8]) {
-        const placement = presetPlacement(preset, box, aspect);
+        const placement = presetPlacement(preset, drawn, aspect);
         const camera = new THREE.PerspectiveCamera(placement.fov, aspect, 0.01, 5000);
         camera.position.copy(placement.position);
         camera.lookAt(placement.target);
@@ -43,6 +45,15 @@ test('every preset frames every box inside the picture, at every aspect', () => 
       }
     }
   }
+});
+
+test('a drawing at least three metres along and across is framed as it is; a smaller one as three metres wide about its centre, its height as it is', () => {
+  assert.deepEqual(framedBox(boxes['vehicle']!), boxes['vehicle'], 'a vehicle 22 m long and 3.2 m wide');
+  const cube = new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 1, 0.5));
+  assert.deepEqual(framedBox(cube), new THREE.Box3(new THREE.Vector3(-1.5, 0, -1.5), new THREE.Vector3(1.5, 1, 1.5)));
+  const long = new THREE.Box3(new THREE.Vector3(0, 0, -0.5), new THREE.Vector3(10, 1, 0.5));
+  assert.deepEqual(framedBox(long), new THREE.Box3(new THREE.Vector3(0, 0, -1.5), new THREE.Vector3(10, 1, 1.5)), 'only what is narrow is widened');
+  assert.deepEqual(framedBox(boxes['offset']!), new THREE.Box3(new THREE.Vector3(2, 0.2, -3.25), new THREE.Vector3(9, 1.4, -0.25)), 'about the centre, wherever it is');
 });
 
 test('the plan looks down with forward to the right of the picture', () => {

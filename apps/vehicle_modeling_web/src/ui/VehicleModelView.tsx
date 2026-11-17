@@ -193,7 +193,7 @@ export function VehicleModelView(props: {
       )}
       {viewFailure === null && drawingFailure !== null && (
         <div className="view-notice failure" role="alert">
-          The vehicle cannot be drawn: {drawingFailure} <span className="zh">无法绘制车辆</span>
+          The project cannot be drawn: {drawingFailure} <span className="zh">无法绘制该工程</span>
         </div>
       )}
       {props.children}

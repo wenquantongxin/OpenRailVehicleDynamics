@@ -5,14 +5,17 @@ import { test } from 'node:test';
 
 import ts from 'typescript';
 
-// The interface draws what the service describes and knows none of it: no
-// element kind, no settings word, none of the properties of a rigid body and
-// the joints that attach it, no domain or row of the model tree, and no title
-// the service gives may stand in its source. Kind names, property names and
-// the longer settings words are distinctive and may stand nowhere, comments
-// included; the two short settings words and every title are looked for as a
-// whole text in
-// code and markup, where knowledge of them would act.
+// The interface draws what the service and its server describe and knows none
+// of it: no element kind, no settings word, none of the properties of a rigid
+// body and the joints that attach it, no domain or row of the model tree, no
+// title the service gives, and nothing of the starting points it is offered,
+// their names, titles, descriptions and categories, may stand in its source.
+// Kind names, property names, starting points' names and the longer settings
+// words are distinctive and may stand nowhere, comments included; the two
+// short settings words and every title, description and category are looked
+// for as a whole text in code and markup, where knowledge of them would act.
+// The starting points are read from this app's catalogue, so that every one it
+// offers is looked for.
 
 const elementKinds = [
   'rigid_body',
@@ -56,7 +59,7 @@ const propertyNames = [
 const titles = [
   ['Globals', '全局'],
   ['Gravity', '重力加速度'],
-  ['Vehicle identity', '车辆标识'],
+  ['Model identity', '模型标识'],
   ['Vehicle layout zero', '车辆布局零点'],
   ['Initial conditions', '初始条件'],
   ['Views', '观察视角'],
@@ -103,6 +106,16 @@ const titles = [
   ['Preview placement', '预览摆放'],
 ].flat();
 
+/** The starting points of this app's catalogue: their names, and their titles, descriptions and categories in both languages. */
+const catalogue = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'project_starting_point_catalogue.json'), 'utf8')) as {
+  name: string;
+  title: { en: string; zh: string };
+  description: { en: string; zh: string };
+  category: { en: string; zh: string };
+}[];
+const startingPointNames = catalogue.map((entry) => entry.name);
+const startingPointTexts = catalogue.flatMap((entry) => [entry.title, entry.description, entry.category]).flatMap((text) => [text.en, text.zh]);
+
 const source = join(import.meta.dirname, '..', 'src');
 
 function files(directory: string): string[] {
@@ -126,18 +139,18 @@ function textsOf(path: string, content: string): { text: string; line: number }[
   return found;
 }
 
-test('the interface’s source names no element kind, no settings word, no such property, no row of the model tree and no title the service gives', () => {
+test('the interface’s source names no element kind, no settings word, no such property, no row of the model tree, no title the service gives and no starting point', () => {
   const token = (word: string) => new RegExp(`(?<![A-Za-z0-9_.])${word.replaceAll('.', '\\.')}(?![A-Za-z0-9_])`);
   const found: string[] = [];
   for (const path of files(source)) {
     const content = readFileSync(path, 'utf8');
     const where = relative(source, path);
     content.split('\n').forEach((line, index) => {
-      for (const word of [...elementKinds, ...distinctiveSettingsWords, ...propertyNames]) if (token(word).test(line)) found.push(`${where}:${index + 1}: ${word}`);
+      for (const word of [...elementKinds, ...distinctiveSettingsWords, ...propertyNames, ...startingPointNames]) if (token(word).test(line)) found.push(`${where}:${index + 1}: ${word}`);
     });
     if (!/\.tsx?$/.test(path)) continue;
     for (const { text, line } of textsOf(path, content)) {
-      if (settingsWords.includes(text) || titles.includes(text)) found.push(`${where}:${line}: '${text}'`);
+      if (settingsWords.includes(text) || titles.includes(text) || startingPointTexts.includes(text)) found.push(`${where}:${line}: '${text}'`);
     }
   }
   assert.deepEqual(found, []);
