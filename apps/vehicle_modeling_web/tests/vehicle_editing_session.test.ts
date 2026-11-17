@@ -653,17 +653,18 @@ test('a removal that takes more waits to be confirmed: cancelling keeps everythi
   assert.equal(session.state.revision, 1);
 });
 
-test('a removal the service refuses removes nothing and says why, about the element', async () => {
+test('a removal the service refuses, the element being gone already, asks nothing more and says why, about the element', async () => {
   const { service, session } = await openedSession();
-  await session.select(subject(body));
+  await session.select(subject(spring));
+  // Another page on the same service removed it meanwhile; this session has not read the project since.
+  assert.ok((await service.send('remove_element', { element: spring })).ok);
   const sent = service.log.length;
-  await session.requestRemoval(body);
+  await session.requestRemoval(spring);
   assert.deepEqual(commandsSince(service, sent), ['get_removal_consequences']);
-  assert.deepEqual(session.state.commandRefusal?.subject, subject(body));
-  assert.match(session.state.commandRefusal?.message ?? '', /cannot be removed/);
+  assert.deepEqual(session.state.commandRefusal?.subject, subject(spring));
+  assert.match(session.state.commandRefusal?.message ?? '', /no element named 'spring_a'/);
   assert.equal(session.state.pendingRemoval, null);
-  assert.deepEqual(session.state.selection, subject(body));
-  assert.equal(session.state.revision, 0);
+  assert.deepEqual(session.state.selection, subject(spring));
 });
 
 test('nothing is asked about an element the model tree no longer has, whatever asks', async () => {
@@ -866,9 +867,10 @@ test('a selected body is read with its attachment, and every other subject with 
   await session.select(subject(body));
   assert.deepEqual(
     [session.state.attachment?.joint, session.state.attachment?.heldAt, session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint],
-    [null, null, false, false],
+    [null, null, false, true],
+    'no body is kept free: one that moves freely can take a joint',
   );
-  assert.notEqual(session.state.attachment?.note, null, 'it says why it keeps moving freely');
+  assert.equal(session.state.attachment?.note, null, 'nothing is the matter with it');
   await session.select(subject(spring));
   assert.equal(session.state.attachment, null);
   await session.select({ settings: 'setting_constant' });
@@ -975,10 +977,11 @@ test('a refusal about the joint names the joint and the field at fault; one abou
   assert.equal(session.state.revision, 0);
   assert.deepEqual(session.state.attachmentChange?.body?.element, freeBody, 'the change stays to be corrected');
 
-  await session.select(subject(body));
+  await session.select(subject(otherBody));
   await session.startChangingAttachment();
-  assert.equal(await asked('hinge_a', { end_parent: 'body_c', end_child: 'body_a' }), false, 'it keeps moving freely');
-  assert.deepEqual([session.state.attachmentChange?.refusal?.subject, session.state.attachmentChange?.refusal?.property], [subject(body), null]);
+  const weld = jointSetting('kind_weld', 'weld_b', { end_parent: 'frame_a', end_child: 'body_b' });
+  assert.equal(await session.setAttachment(weld), false, 'body_b.left names the hinge it hangs on, and may name no weld');
+  assert.deepEqual([session.state.attachmentChange?.refusal?.subject, session.state.attachmentChange?.refusal?.property], [subject(otherBody), null]);
   await session.cancelAttachmentChange();
   assert.equal(session.state.attachmentChange, null);
 });
@@ -990,7 +993,7 @@ test('a body left unattached by removing its joint says so in the tree, and has 
   await session.confirmRemoval();
   const bodyRow = rowWithKey(session.state.modelTree!, 'element/kind_body/body_b')!;
   assert.notEqual(bodyRow.note, null, 'its row says it is not attached');
-  assert.deepEqual(rowWithKey(session.state.modelTree!, 'domain/joints')!.attaches, [otherBody, freeBody]);
+  assert.deepEqual(rowWithKey(session.state.modelTree!, 'domain/joints')!.attaches, [body, otherBody, freeBody], 'the free bodies and the unattached one');
   await session.select(subject(otherBody));
   assert.deepEqual([session.state.attachment?.joint, session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint], [null, true, true]);
 
@@ -1010,9 +1013,9 @@ test('the joints row’s "+" attaches one of the bodies it lists, read once chos
   const { service, session } = await openedSession();
   await session.select(subject(spring));
   const joints = rowWithKey(session.state.modelTree!, 'domain/joints')!;
-  assert.deepEqual([joints.creates, joints.attaches], [[], [freeBody]]);
+  assert.deepEqual([joints.creates, joints.attaches], [[], [body, freeBody]], 'it creates nothing and attaches the bodies that move freely');
   await session.startAttaching(joints.key, joints.attaches);
-  assert.deepEqual(session.state.attachmentChange, { fromRow: { rowKey: 'domain/joints', bodies: [freeBody] }, body: null, refusal: null });
+  assert.deepEqual(session.state.attachmentChange, { fromRow: { rowKey: 'domain/joints', bodies: [body, freeBody] }, body: null, refusal: null });
   assert.deepEqual(session.state.selection, subject(spring));
   await session.cancelAttachmentChange();
   assert.equal(session.state.attachmentChange, null);
@@ -1030,5 +1033,5 @@ test('the joints row’s "+" attaches one of the bodies it lists, read once chos
   assert.deepEqual(service.log[sent]?.commandArguments, { body: freeBody, attachment: jointSetting('kind_weld', 'weld_c', { end_parent: 'frame_a', end_child: 'body_c' }) });
   assert.deepEqual([session.state.selection, session.state.attachmentChange], [subject(spring), null]);
   const after = rowWithKey(session.state.modelTree!, 'domain/joints')!;
-  assert.deepEqual([after.attaches, after.children.map((row) => row.key)], [[], ['element/kind_hinge/hinge_b', 'element/kind_weld/weld_c']]);
+  assert.deepEqual([after.attaches, after.children.map((row) => row.key)], [[body], ['element/kind_hinge/hinge_b', 'element/kind_weld/weld_c']]);
 });

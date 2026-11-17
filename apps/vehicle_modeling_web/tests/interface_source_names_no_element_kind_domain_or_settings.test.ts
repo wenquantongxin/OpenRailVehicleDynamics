@@ -32,7 +32,7 @@ const elementKinds = [
   'contact_interface',
 ];
 
-const distinctiveSettingsWords = ['gravity', 'vehicle_identity', 'station_layout', 'contact_computation'];
+const distinctiveSettingsWords = ['gravity', 'vehicle_identity', 'contact_computation'];
 const settingsWords = [...distinctiveSettingsWords, 'wheel', 'rail'];
 
 /** The properties of a rigid body and of the joints that attach it: which end is which and what only a free body has come from the service. */
@@ -52,12 +52,12 @@ const propertyNames = [
   'default_roll_pitch_yaw_angles_radians',
 ];
 
-/** The rows of the model tree and the kinds' titles, in both languages, as the contract states them. */
+/** The titles the service gives, in both languages, as the contracts state them: rows of the model tree, kinds, the attachment's, and property sections. */
 const titles = [
   ['Globals', '全局'],
   ['Gravity', '重力加速度'],
   ['Vehicle identity', '车辆标识'],
-  ['Station layout', '站位布局'],
+  ['Vehicle layout zero', '车辆布局零点'],
   ['Initial conditions', '初始条件'],
   ['Views', '观察视角'],
   ['Bodies', '刚体'],
@@ -98,6 +98,9 @@ const titles = [
   ['Joint', '铰'],
   ['Held at', '挂接在'],
   ['Hangs on a joint', '由铰挂接'],
+  ['Mass and inertia', '质量与惯量'],
+  ['Station along the track, from the vehicle layout zero', '沿线路的站位（相对车辆布局零点）'],
+  ['Preview placement', '预览摆放'],
 ].flat();
 
 const source = join(import.meta.dirname, '..', 'src');

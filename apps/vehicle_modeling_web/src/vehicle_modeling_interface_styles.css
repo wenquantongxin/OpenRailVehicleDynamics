@@ -1360,8 +1360,14 @@ table.value.curve {
   margin-left: 4px;
 }
 
-/* A subject's properties in the sections their descriptions state: a quiet title over each titled run. */
+/* A subject's properties in the sections their descriptions state: a quiet title over each titled run. The English
+   and the Chinese of a title are each kept whole on a line when they fit: a Chinese title that does not fit after
+   the English starts the next line, level with the English, as the tree's titles do. */
 .property-section-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 7px;
   margin: 0;
   padding: 8px 12px 4px;
   font-size: 11.5px;
@@ -1373,7 +1379,6 @@ table.value.curve {
 }
 
 .property-section-title .zh {
-  margin-left: 4px;
   font-weight: 400;
   font-size: 11px;
 }

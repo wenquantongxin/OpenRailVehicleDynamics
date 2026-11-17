@@ -15,10 +15,12 @@
 // body is renamed; on GZ18 every editable number of the tree's settings is
 // set, read back and undone, the wheels are drawn anew at a new nominal
 // rolling radius, and a read-only property is refused. On GZ18 and IRW every
-// rigid body is read with its attachment and nothing else is, and the row of
-// the joints attaches the bodies that can take one and creates nothing; on
-// GZ18 a body created with a joint hangs on it, and one created free that
-// takes a joint and becomes free again reads free. Last,
+// rigid body is read with its attachment and nothing else is; no body is
+// special: every one that moves freely can take a joint and has nothing the
+// matter, and every one can be removed; the row of the joints attaches the
+// bodies that can take one and creates nothing. On GZ18 a body created with a
+// joint hangs on it, and one created free that takes a joint and becomes free
+// again reads free. Last,
 // saving, in a temporary folder of projects removed at the end: GZ18 edited,
 // saved as a project, with no undo step, the folder listed, IRW opened, the
 // project opened again with its outline and the edited value as they were;
@@ -340,9 +342,11 @@ function readsFree(attachment: Attachment | null): boolean {
  * How a rigid body is attached, through the interface's session, structure
  * only. The properties of every element of the kind the service describes as
  * attached come with an attachment, and no other subject's do, settings
- * included. The row listing the joints creates nothing and attaches the free
- * bodies that can take a joint and the unattached ones, and a joint kind is
- * not created alone. With the changes: a body created with a joint hangs on
+ * included. No body is special: every one that moves freely can take a joint
+ * and has nothing the matter, and asking what removing any of them takes is
+ * answered. The row listing the joints creates nothing and attaches every body
+ * that moves freely and the unattached ones, and a joint kind is not created
+ * alone. With the changes: a body created with a joint hangs on
  * it; a body created free takes a joint and becomes free again, and then reads
  * free, its joint gone; undoing the four edits gives back the outline the
  * vehicle opened with. The attached kind, the joint kinds and which property
@@ -368,7 +372,20 @@ async function checkAttachments(origin: string, vehicle: ReferenceVehicle, withC
   const read = [...attachments.values()];
   const hanging = read.filter((attachment) => attachment.joint !== null).length;
   const free = read.filter((attachment) => attachment.joint === null && !attachment.canBecomeFree).length;
-  const keptFree = read.filter((attachment) => attachment.joint === null && !attachment.canBecomeFree && !attachment.canTakeJoint).length;
+  for (const [key, attachment] of attachments) {
+    if (attachment.joint !== null || attachment.canBecomeFree) continue;
+    // Moving freely: nothing keeps it so.
+    assert.ok(attachment.canTakeJoint, `${key} moves freely and cannot take a joint`);
+    assert.equal(attachment.note, null, `${key} moves freely, and its attachment says more: ${attachment.note?.en}`);
+  }
+  // Any of them can be removed: what removing it takes is answered, and nothing is removed until that is confirmed.
+  for (const body of opened.elements.filter((element) => element.kind === attachedKind.kind)) {
+    state = await settled(session, session.requestRemoval(body));
+    const removal = state.pendingRemoval ?? fail(`removing ${body.name} is not asked about`);
+    assert.ok(removal.removedElements.some((each) => sameElement(each, body)), `removing ${body.name} would not remove it`);
+    state = await settled(session, session.cancelRemoval());
+  }
+  assert.deepEqual(state.outline!.elements, opened.elements);
   for (const attachment of read) {
     assert.equal(attachment.heldAt !== null, attachment.joint !== null, 'a body is held at a frame other than exactly when it hangs on a joint');
     if (attachment.joint === null) continue;
@@ -389,10 +406,11 @@ async function checkAttachments(origin: string, vehicle: ReferenceVehicle, withC
     const attachment = attachments.get(elementKey(element));
     return attachment !== undefined && attachment.canTakeJoint && attachment.joint === null;
   });
-  assert.deepEqual(jointsRow.attaches, attachable, 'the joints row attaches other bodies than the free ones that can take a joint and the unattached ones');
+  assert.deepEqual(jointsRow.attaches, attachable, 'the joints row attaches other bodies than the free ones and the unattached ones');
   const lines = [
     `${vehicle.name} attachments: ${attachments.size} ${attachedKind.kind} each read with its attachment, ${opened.elements.length - attachments.size} other elements and ${settingsRows.length} settings with none;`,
-    `  ${hanging} hanging on a joint, each held at a frame of the outline, ${free} free (${keptFree} of them kept free), ${attachments.size - hanging - free} neither;`,
+    `  ${hanging} hanging on a joint, each held at a frame of the outline, ${free} free, each able to take a joint with nothing the matter, ${attachments.size - hanging - free} neither;`,
+    `  every one of the ${attachments.size} answered with what removing it takes;`,
     `  the row listing the ${hanging} joints creates nothing and attaches ${attachable.length}: ${attachable.map((element) => element.name).join(', ')}`,
   ];
   if (!withChanges) return lines.join('\n');

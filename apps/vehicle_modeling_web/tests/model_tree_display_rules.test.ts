@@ -104,7 +104,7 @@ test('an element row shows its kind as a tag in a list that offers several kinds
   assert.equal(showsKindTag(null, hinge, attachingKinds), false);
 });
 
-test('a row has a "+" when it creates something or attaches one of the bodies it lists; the joints row has none once it lists none', async () => {
+test('a row has a "+" when it creates something or attaches one of the bodies it lists, and none once it lists none; the joints row lists every body that moves freely', async () => {
   const service = await openedFakeService();
   const tree = await treeOf(service);
   assert.deepEqual(
@@ -113,10 +113,14 @@ test('a row has a "+" when it creates something or attaches one of the bodies it
       .map((each) => each.key),
     ['domain/bodies', 'frames/body_a', 'frames/body_b', 'frames/body_c', 'domain/joints', 'domain/forces', 'carriers', 'element/kind_carrier/body_b'],
   );
-  assert.deepEqual(row(tree, 'domain/joints').attaches, [{ kind: 'kind_body', name: 'body_c' }], 'body_a is kept free and body_b hangs on its hinge');
+  const bodyA = { kind: 'kind_body', name: 'body_a' };
+  assert.deepEqual(row(tree, 'domain/joints').attaches, [bodyA, { kind: 'kind_body', name: 'body_c' }], 'not body_b, which hangs on its hinge');
   const weld = { kind: 'kind_weld', name: 'weld_c', properties: { end_parent: 'frame_a', end_child: 'body_c' } };
   assert.ok((await service.send('set_attachment', { body: { kind: 'kind_body', name: 'body_c' }, attachment: { joint: weld } })).ok);
-  assert.equal(hasCreateButton(row(await treeOf(service), 'domain/joints')), false);
+  const joints = row(await treeOf(service), 'domain/joints');
+  assert.deepEqual(joints.attaches, [bodyA], 'body_c hangs now; body_a still moves freely');
+  assert.equal(hasCreateButton(joints), true);
+  assert.equal(hasCreateButton({ ...joints, attaches: [] }), false, 'a row listing none has no "+"');
 });
 
 test('revealing a subject opens every row above its own, from the first level down; a subject the tree does not have opens nothing', async () => {

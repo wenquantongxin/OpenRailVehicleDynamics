@@ -199,7 +199,7 @@ test('a body’s properties come with its attachment, every other subject’s wi
     framesOnBody: [{ kind: 'kind_body', name: 'body_b' }],
     framesItCanBeHeldAt: [{ kind: 'kind_body', name: 'body_a' }, frame],
   });
-  assert.deepEqual(readAttachment({ properties: [], attachment: { ...attachment, joint: null, held_at: null, note: { en: 'Kept', zh: '保持' } } })?.note, { en: 'Kept', zh: '保持' });
+  assert.deepEqual(readAttachment({ properties: [], attachment: { ...attachment, joint: null, held_at: null, note: { en: 'A note', zh: '注' } } })?.note, { en: 'A note', zh: '注' });
   assert.throws(() => readAttachment({ properties: [], attachment: without(attachment, 'held_at') }), /held_at is missing/);
   assert.equal(readAttachment({ properties: [], attachment: null }), null);
   assert.throws(() => readAttachment({ properties: [] }), /attachment is missing/);

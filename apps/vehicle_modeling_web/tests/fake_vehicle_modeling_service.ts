@@ -83,12 +83,8 @@ export interface FakeElement {
   name: string;
   /** Values by property name, apart from the element's own name. */
   values: Record<string, unknown>;
-  /** Why the element cannot be removed, where it cannot. */
-  removalRefused?: string;
   /** Whether the record states that the body moves freely in the world. */
   free?: boolean;
-  /** A body everything is measured from, which keeps moving freely. */
-  keepsMovingFreely?: boolean;
 }
 
 /** How a body is held, read from the records: the state, and the joint it hangs on. */
@@ -455,7 +451,6 @@ export class FakeVehicleModelingService {
         const element = this.find(target);
         const subject = target === undefined ? null : { element: target };
         if (element === undefined) return this.refused(`no element named '${target?.name}'`, subject);
-        if (element.removalRefused !== undefined) return this.refused(element.removalRefused, subject);
         const removed = this.removalOf(element);
         if (command === 'remove_element') this.edit(() => (this.elements = this.elements.filter((each) => !removed.some((gone) => gone.kind === each.kind && gone.name === each.name))));
         return this.accepted({ removed_elements: removed.map(({ kind, name }) => ({ kind, name })) });
@@ -577,7 +572,7 @@ export class FakeVehicleModelingService {
     const reference = ({ kind, name }: FakeElement): Element => ({ kind, name });
     const reached = this.reachedFrom(body, joint);
     const words: Record<Holding['state'], { summary: FakeTitle; note: FakeTitle | null }> = {
-      free: { summary: { en: 'Made-up loose in the world', zh: '虚构自由' }, note: body.keepsMovingFreely === true ? { en: 'Made-up kept free', zh: '虚构须自由' } : null },
+      free: { summary: { en: 'Made-up loose in the world', zh: '虚构自由' }, note: null },
       hangs: { summary: { en: 'Made-up hanging', zh: '虚构挂着' }, note: null },
       unattached: { summary: { en: 'Made-up unattached', zh: '虚构未接入' }, note: { en: 'Made-up neither free nor held', zh: '虚构既不自由也未被挂接' } },
       loop: { summary: { en: 'Made-up unclear', zh: '虚构不明' }, note: { en: 'Made-up loop', zh: '虚构成环' } },
@@ -588,7 +583,7 @@ export class FakeVehicleModelingService {
       joint: joint === null ? null : reference(joint),
       held_at: joint === null ? null : reference(this.heldAt(body, joint)),
       can_become_free: state === 'hangs' || state === 'unattached',
-      can_take_joint: state === 'hangs' || state === 'unattached' || (state === 'free' && body.keepsMovingFreely !== true),
+      can_take_joint: state === 'free' || state === 'hangs' || state === 'unattached',
       frames_on_body: this.framesOn(body).map(reference),
       frames_it_can_be_held_at: this.outline()
         .filter((each) => this.isBody(each) && !reached.has(each))
@@ -939,10 +934,11 @@ const ownName: FakePropertyDescription = { name: 'name', value_kind: 'element_na
  * A vehicle of made-up element kinds, one of them without elements. One body
  * shares its name with a carrier, an element of another kind; a frame and a
  * spring refer to the bodies, and the carrier and its interfaces to the body
- * they turn with. body_a moves freely and is kept free; body_b hangs on a
- * hinge from body_a's frame, which one of its interfaces names; body_c moves
- * freely. Its settings: a constant not stated yet, a read-only identity, and
- * wheel settings with a section each.
+ * they turn with. body_a moves freely; body_b hangs on a hinge from body_a's
+ * frame, which one of its interfaces names; body_c moves freely. No body is
+ * special: any can be removed, and any that moves freely can take a joint.
+ * Its settings: a constant not stated yet, a read-only identity, and wheel
+ * settings with a section each.
  */
 export function fakeVehicle(): FakeVehicle {
   const ends = [reference('end_parent', ['kind_frame', 'kind_body']), reference('end_child', ['kind_frame', 'kind_body'])];
@@ -1015,9 +1011,7 @@ export function fakeVehicle(): FakeVehicle {
         kind: 'kind_body',
         name: 'body_a',
         values: { size_quantity: 10, offset_quantity: [0, 0, 0], turn_quantity: identity },
-        removalRefused: 'body_a is what every other place is measured from, so it cannot be removed',
         free: true,
-        keepsMovingFreely: true,
       },
       { kind: 'kind_body', name: 'body_b', values: { size_quantity: 4, turn_quantity: identity } },
       { kind: 'kind_frame', name: 'frame_a', values: { body_ref: 'body_a' } },
