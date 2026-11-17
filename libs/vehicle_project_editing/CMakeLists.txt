@@ -1,7 +1,9 @@
 # The command layer a graphical modelling tool drives over one vehicle project:
-# every element's properties described and read, elements created, edited,
-# renamed and removed at this boundary with undo and redo, saving to a project
-# file, a mechanical check and the preview a 3D view draws. It holds no JSON.
+# the model tree by domains, the properties of every element and of the
+# project's settings described and read, elements created, edited, renamed and
+# removed and settings edited at this boundary with undo and redo, saving to a
+# project file, a mechanical check and the preview a 3D view draws. It holds no
+# JSON.
 # The check reaches the configuration library's declaration rules through its
 # internal directory, which is not installed.
 
@@ -9,12 +11,16 @@ add_library(orvd_vehicle_project_editing STATIC
     src/vehicle_project_editing_session.cc
     src/vehicle_project_element_creation.cc
     src/vehicle_project_element_name_spaces.cc
-    src/vehicle_project_element_properties.cc
     src/vehicle_project_element_property_assignment.cc
     src/vehicle_project_element_references.cc
     src/vehicle_project_element_removal.cc
+    src/vehicle_project_model_tree_by_domains.cc
     src/vehicle_project_preview_computation.cc
-    src/vehicle_project_records_following_elements.cc)
+    src/vehicle_project_property_edit_value_checks.cc
+    src/vehicle_project_property_subjects.cc
+    src/vehicle_project_records_following_elements.cc
+    src/vehicle_project_settings_property_assignment.cc
+    src/vehicle_project_subject_properties.cc)
 
 orvd_configure_first_party_target(orvd_vehicle_project_editing)
 

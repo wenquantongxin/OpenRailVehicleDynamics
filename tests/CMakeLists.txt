@@ -1570,16 +1570,19 @@ add_test(NAME verify_vehicle_project_file_reading_and_writing
              ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-files)
 
 # The editing layer: every property of every element kind is described as
-# what it is and reads and writes the member it names; edits are undone and
-# redone under an increasing revision and refused by element and property;
-# both bundled vehicles pass the mechanical check, a refused assembly is
-# reported and keeps the older preview, and what a vehicle file's declaration
-# rules refuse is refused before any assembly; and the preview puts every body,
-# frame, joint, force-element end and wheel where the assembled model places
-# it.
+# what it is, a rigid body's in its sections, and reads and writes the member
+# it names; edits are undone and redone under an increasing revision and
+# refused by element and property; both bundled vehicles pass the mechanical
+# check, a refused assembly is reported and keeps the older preview, and what
+# a vehicle file's declaration rules refuse is refused before any assembly;
+# and the preview puts every body, frame, joint, force-element end and wheel
+# where the assembled model places it.
 add_executable(verify_vehicle_project_editing
-    vehicle_project_editing/vehicle_project_element_edit_refusal_header_self_containment.cc
-    vehicle_project_editing/vehicle_project_element_properties_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_titles_in_english_and_chinese_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_property_subjects_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_subject_edit_refusal_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_subject_properties_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_model_tree_by_domains_header_self_containment.cc
     vehicle_project_editing/vehicle_project_mechanical_check_report_header_self_containment.cc
     vehicle_project_editing/vehicle_project_preview_header_self_containment.cc
     vehicle_project_editing/vehicle_project_editing_session_header_self_containment.cc
@@ -1636,11 +1639,57 @@ add_test(NAME verify_vehicle_project_editing_session_saving
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
              ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-editing-session-saving)
 
+# The model tree by domains on both bundled vehicles: every element of the
+# outline once, markers under their bodies and contact interfaces under their
+# carriers, joints and force elements one list each, the domains in order and
+# each row's offers; the tree follows edits and keeps the keys of the rows
+# they leave alone; owners a project file lacks are listed as not found; and a
+# project failing its check has the same tree.
+add_executable(verify_vehicle_project_model_tree_by_domains
+    vehicle_project_editing/verify_vehicle_project_model_tree_by_domains.cc)
+orvd_configure_first_party_target(verify_vehicle_project_model_tree_by_domains)
+target_include_directories(verify_vehicle_project_model_tree_by_domains
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_model_tree_by_domains
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_model_tree_by_domains
+         COMMAND verify_vehicle_project_model_tree_by_domains
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
+
+# The project's settings edited through the session on both bundled vehicles:
+# the gravity read, set, undone and stated where none was, judged by the check
+# alone; the wheel's radius reaching the preview; the rail's origin mode and
+# its choices; exactly the contract's read-only properties refused; the
+# contact settings refused without a contact record; and the edits read back
+# after saving and reopening.
+add_executable(verify_vehicle_project_settings_editing
+    vehicle_project_editing/verify_vehicle_project_settings_editing.cc)
+orvd_configure_first_party_target(verify_vehicle_project_settings_editing)
+target_include_directories(verify_vehicle_project_settings_editing
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_settings_editing
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_settings_editing
+         COMMAND verify_vehicle_project_settings_editing
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json
+             ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-settings-editing)
+
 # The modelling service driven through standard input and output on GZ18: the
 # protocol's structure, property descriptions, creation, renaming and removal,
-# saving a project into a directory and opening it again as it was, one
-# response per request and its revisions; the reference vehicle files stay
-# as they were.
+# the model tree of GZ18 and IRW and creating through its offers, settings
+# read, set and refused as subjects, saving a project into a directory and
+# opening it again as it was, one response per request and its revisions; the
+# reference vehicle files stay as they were.
 add_test(NAME verify_vehicle_modeling_service
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/vehicle_project_editing/verify_vehicle_modeling_service.py

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <expected>
 #include <span>
 #include <string>
@@ -15,6 +16,22 @@
 // name: GZ18's wheelset bodies and their contact carriers do.
 
 namespace orvd::vehicle_project_editing::internal {
+
+// The joint kinds and the force element kinds, in ElementKind's order: each
+// group one name space, and one list in the model tree.
+inline constexpr std::array kJointKinds{vehicle_project::ElementKind::kRevoluteJoint,
+                                        vehicle_project::ElementKind::kBallRpyJoint,
+                                        vehicle_project::ElementKind::kWeldJoint};
+inline constexpr std::array kForceElementKinds{
+    vehicle_project::ElementKind::kTranslationalSpringDamper,
+    vehicle_project::ElementKind::kRollSpringDamperCouple,
+    vehicle_project::ElementKind::kSeriesSpringViscousDamper,
+    vehicle_project::ElementKind::kPointToPointSeriesSpringBilinearDamper,
+    vehicle_project::ElementKind::kSaturatedPiecewiseLinearDamper,
+    vehicle_project::ElementKind::kReferenceFrameLinearBushing,
+    vehicle_project::ElementKind::kPointToPointLinearSpringDamper,
+    vehicle_project::ElementKind::kPointToPointHystereticSpring,
+};
 
 // Whether the project holds an element of one of `kinds` named `name`.
 [[nodiscard]] bool ContainsElementOfKinds(const vehicle_project::VehicleProject& project,

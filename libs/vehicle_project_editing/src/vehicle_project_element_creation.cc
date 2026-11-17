@@ -12,17 +12,16 @@
 
 namespace orvd::vehicle_project_editing::internal {
 
-std::expected<vehicle_project::ElementReference, ElementEditRefusal> CreateElement(
+std::expected<vehicle_project::ElementReference, SubjectEditRefusal> CreateElement(
     vehicle_project::VehicleProject& project, vehicle_project::ElementKind kind,
     const std::string& name, const PropertyValuesByName& properties) {
     const vehicle_project::ElementReference element{kind, name};
     const auto refuse = [&element](std::optional<std::string> property_name, std::string reason) {
         return std::unexpected(
-            ElementEditRefusal{element, std::move(property_name), std::move(reason)});
+            SubjectEditRefusal{element, std::move(property_name), std::move(reason)});
     };
     const std::string kind_description(vehicle_project::DescribeElementKind(kind));
-    const std::span<const ElementPropertyDescription> descriptions =
-        DescribeElementProperties(kind);
+    const std::span<const PropertyDescription> descriptions = DescribeElementProperties(kind);
 
     const bool has_records =
         vehicle_project::VisitElementKind(kind, [&project]<typename KindRecords>(KindRecords) {
@@ -36,13 +35,13 @@ std::expected<vehicle_project::ElementReference, ElementEditRefusal> CreateEleme
     // The element's own name is the one property every kind has exactly one
     // of.
     const auto own_name = std::ranges::find(descriptions, PropertyValueKind::kElementName,
-                                            &ElementPropertyDescription::value_kind);
+                                            &PropertyDescription::value_kind);
     const std::expected<void, std::string> available = RequireNameAvailable(project, kind, name);
     if (!available.has_value()) {
         return refuse(std::string(own_name->name), available.error());
     }
     for (const auto& [property_name, value] : properties) {
-        const std::expected<const ElementPropertyDescription*, std::string> described =
+        const std::expected<const PropertyDescription*, std::string> described =
             DescribeElementProperty(kind, property_name);
         if (!described.has_value()) {
             return refuse(property_name, described.error());
@@ -53,7 +52,7 @@ std::expected<vehicle_project::ElementReference, ElementEditRefusal> CreateEleme
                               property_name + "' among its properties");
         }
     }
-    for (const ElementPropertyDescription& description : descriptions) {
+    for (const PropertyDescription& description : descriptions) {
         if (description.value_kind == PropertyValueKind::kElementReference &&
             !description.may_name_none && !properties.contains(description.name)) {
             return refuse(std::string(description.name),
@@ -68,7 +67,7 @@ std::expected<vehicle_project::ElementReference, ElementEditRefusal> CreateEleme
         record.*KindRecords::kElementName = name;
         KindRecords::Records(project)->push_back(std::move(record));
     });
-    for (const ElementPropertyDescription& description : descriptions) {
+    for (const PropertyDescription& description : descriptions) {
         const auto given = properties.find(description.name);
         if (given == properties.end()) {
             continue;

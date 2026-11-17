@@ -5,14 +5,17 @@
 #include <utility>
 
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
+#include "orvd/vehicle_project_editing/vehicle_project_model_tree_by_domains.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
+#include "orvd/vehicle_project_editing/vehicle_project_property_subjects.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 
 // The installed editing session used through its public headers and archive
 // alone: a one-body project has its body's placement edited, which leaves an
 // unsaved change, passes the mechanical check under its own gravity, is drawn
-// where the placement puts it, and has the edit undone, which leaves none.
+// where the placement puts it, and has the edit undone, which leaves none;
+// its model tree lists the body, and its gravity is read and set as settings.
 
 int main() {
     using namespace orvd;
@@ -40,7 +43,7 @@ int main() {
                                                         "carbody"};
         const bool edited =
             session
-                .SetElementProperty(carbody,
+                .SetSubjectProperty(carbody,
                                     "placement.vertical_offset_in_local_track_frame_meters", -1.0)
                 .has_value();
         const bool unsaved_after_edit = session.has_unsaved_changes();
@@ -51,15 +54,26 @@ int main() {
             std::abs(preview->rigid_bodies[0].origin_in_drawing_frame_meters.z() + 1.0) <= 1.0e-12;
         session.Undo();
         const auto readings =
-            vehicle_project_editing::ReadElementProperties(session.project(), carbody);
+            vehicle_project_editing::ReadSubjectProperties(session.project(), carbody);
+        const bool undone =
+            session.revision() == 2 && session.can_redo() && !session.has_unsaved_changes() &&
+            session.project().free_body_placements[0].vertical_offset_in_local_track_frame_meters ==
+                0.0;
+        const auto tree = vehicle_project_editing::DescribeModelTree(session.project());
+        const bool body_in_tree =
+            tree.size() > 1 && tree[1].children.size() == 1 &&
+            tree[1].children[0].subject == vehicle_project_editing::PropertySubject{carbody};
+        const bool gravity_set =
+            session
+                .SetSubjectProperty(vehicle_project_editing::ProjectSettings::kGravity,
+                                    "gravitational_acceleration_meters_per_second_squared", 9.8)
+                .has_value() &&
+            session.project().gravitational_acceleration_meters_per_second_squared == 9.8;
         if (!edited || !unsaved_after_edit || !report.refusals.empty() || !drawn_at_placement ||
-            session.revision() != 2 || !session.can_redo() || session.has_unsaved_changes() ||
-            readings.empty() ||
-            session.project().free_body_placements[0].vertical_offset_in_local_track_frame_meters !=
-                0.0) {
+            !undone || readings.empty() || !body_in_tree || !gravity_set) {
             std::fprintf(stderr,
                          "installed vehicle project editing did not edit, check, draw and undo the "
-                         "project it was given\n");
+                         "project it was given, describe its tree or set its gravity\n");
             return 1;
         }
         std::puts("installed vehicle project editing smoke passed");

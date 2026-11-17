@@ -13,6 +13,7 @@
 #include "vehicle_project_element_name_spaces.h"
 #include "vehicle_project_element_property_tables.h"
 #include "vehicle_project_element_references.h"
+#include "vehicle_project_property_edit_value_checks.h"
 #include "vehicle_project_records_following_elements.h"
 
 namespace orvd::vehicle_project_editing::internal {
@@ -24,66 +25,6 @@ using vehicle_project::ElementKind;
 using vehicle_project::ElementReference;
 using vehicle_project::FreeBodyPlacement;
 using vehicle_project::VehicleProject;
-
-// The value kind of each type a property value holds.
-constexpr PropertyValueKind ValueKindOf(std::type_identity<double>) {
-    return PropertyValueKind::kNumber;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<Eigen::Vector3d>) {
-    return PropertyValueKind::kVector3;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<bool>) {
-    return PropertyValueKind::kBoolean;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<Eigen::Matrix3d>) {
-    return PropertyValueKind::kRotation;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<ElementOwnName>) {
-    return PropertyValueKind::kElementName;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<ReferencedElementName>) {
-    return PropertyValueKind::kElementReference;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<PropertyToken>) {
-    return PropertyValueKind::kToken;
-}
-constexpr PropertyValueKind ValueKindOf(std::type_identity<SaturatedPiecewiseLinearDamperCurve>) {
-    return PropertyValueKind::kSaturatedPiecewiseLinearDamperCurve;
-}
-
-PropertyValueKind ValueKindOf(const PropertyValue& value) {
-    return std::visit(
-        []<typename Held>(const Held&) { return ValueKindOf(std::type_identity<Held>{}); }, value);
-}
-
-// How a refusal names a value kind.
-std::string DescribeValueKind(PropertyValueKind kind) {
-    switch (kind) {
-        case PropertyValueKind::kNumber:
-            return "a number";
-        case PropertyValueKind::kVector3:
-            return "a 3-vector";
-        case PropertyValueKind::kBoolean:
-            return "a boolean";
-        case PropertyValueKind::kRotation:
-            return "a rotation";
-        case PropertyValueKind::kElementName:
-            return "an element's own name";
-        case PropertyValueKind::kElementReference:
-            return "a reference to an element";
-        case PropertyValueKind::kToken:
-            return "a token";
-        case PropertyValueKind::kSaturatedPiecewiseLinearDamperCurve:
-            return "a saturated piecewise-linear damper curve";
-    }
-    // Reached only by a value cast into PropertyValueKind that names none of
-    // its enumerators.
-    return "a value of no known kind";
-}
-
-std::string Quoted(std::string_view text) {
-    return "'" + std::string(text) + "'";
-}
 
 // Whether every number a value holds is finite.
 bool AllFinite(double number) {
@@ -111,6 +52,7 @@ struct MemberEdit {
     VehicleProject& project;
     const ElementReference& element;
     Record& record;
+    std::string_view property_name;
     std::string quoted_property_name;
 };
 
@@ -202,15 +144,6 @@ std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
     return {};
 }
 
-std::string RefuseToken(const std::string& quoted_property_name,
-                        std::span<const std::string_view> tokens, const std::string& given) {
-    std::string choices;
-    for (const std::string_view token : tokens) {
-        choices += (choices.empty() ? "" : ", ") + Quoted(token);
-    }
-    return quoted_property_name + " is one of " + choices + ", not " + Quoted(given);
-}
-
 // A token must be one of its choices.
 template <typename Record>
 std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
@@ -218,7 +151,7 @@ std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
                                               const PropertyValue& value) {
     const std::string& given = std::get<PropertyToken>(value).token;
     if (std::ranges::find(token.tokens, given) == token.tokens.end()) {
-        return std::unexpected(RefuseToken(edit.quoted_property_name, token.tokens, given));
+        return std::unexpected(RefuseTokenOutsideChoices(edit.property_name, token.tokens, given));
     }
     edit.record.*token.member = given;
     return {};
@@ -231,7 +164,7 @@ std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
     const std::string& given = std::get<PropertyToken>(value).token;
     const auto chosen = std::ranges::find(token.tokens, given);
     if (chosen == token.tokens.end()) {
-        return std::unexpected(RefuseToken(edit.quoted_property_name, token.tokens, given));
+        return std::unexpected(RefuseTokenOutsideChoices(edit.property_name, token.tokens, given));
     }
     edit.record.*token.member =
         token.values[static_cast<std::size_t>(chosen - token.tokens.begin())];
@@ -265,7 +198,7 @@ std::expected<void, std::string> AssignBodyKeyed(VehicleProject& project,
                                                  const PropertyValue& value) {
     const double given = std::get<double>(value);
     if (!std::isfinite(given)) {
-        return std::unexpected(Quoted(property.name) + " must be finite");
+        return std::unexpected(QuotePropertyName(property.name) + " must be finite");
     }
     return std::visit(
         [&project, &body, given](auto member) -> std::expected<void, std::string> {
@@ -280,33 +213,29 @@ std::expected<void, std::string> AssignBodyKeyed(VehicleProject& project,
 }
 
 template <typename KindRecords>
-std::expected<ElementReference, ElementEditRefusal> Assign(VehicleProject& project,
+std::expected<ElementReference, SubjectEditRefusal> Assign(VehicleProject& project,
                                                            const ElementReference& element,
                                                            std::string_view property_name,
                                                            const PropertyValue& value) {
     using Record = typename KindRecords::Record;
     const auto refuse = [&element, property_name](std::string reason) {
         return std::unexpected(
-            ElementEditRefusal{element, std::string(property_name), std::move(reason)});
+            SubjectEditRefusal{element, std::string(property_name), std::move(reason)});
     };
     Record* const record = vehicle_project::FindElementRecord<KindRecords>(project, element.name);
     if (record == nullptr) {
         return refuse("this project contains no " + vehicle_project::DescribeElement(element));
     }
-    const std::expected<const ElementPropertyDescription*, std::string> described =
+    const std::expected<const PropertyDescription*, std::string> described =
         DescribeElementProperty(element.kind, property_name);
     if (!described.has_value()) {
         return refuse(described.error());
     }
-    const ElementPropertyDescription& description = **described;
-    const std::string quoted_property_name = Quoted(property_name);
-    if (!description.editable) {
-        return refuse(quoted_property_name + " is read-only");
-    }
-    const PropertyValueKind given_kind = ValueKindOf(value);
-    if (given_kind != description.value_kind) {
-        return refuse(quoted_property_name + " holds " + DescribeValueKind(description.value_kind) +
-                      ", but the value given is " + DescribeValueKind(given_kind));
+    const PropertyDescription& description = **described;
+    const std::expected<void, std::string> editable_with_its_kind =
+        RequireEditableAndGivenItsValueKind(description, value);
+    if (!editable_with_its_kind.has_value()) {
+        return refuse(editable_with_its_kind.error());
     }
 
     const auto index =
@@ -319,7 +248,8 @@ std::expected<ElementReference, ElementEditRefusal> Assign(VehicleProject& proje
                     kBodyKeyedProperties[index - kRecordProperties<Record>.size()], value);
             }
         }
-        const MemberEdit<Record> edit{project, element, *record, quoted_property_name};
+        const MemberEdit<Record> edit{project, element, *record, property_name,
+                                      QuotePropertyName(property_name)};
         return std::visit(
             [&edit, &value](const auto& member) { return AssignMember(edit, member, value); },
             kRecordProperties<Record>[index].member);
@@ -341,7 +271,7 @@ std::string DescribeReferencedKinds(std::span<const ElementKind> referenced_kind
     return described;
 }
 
-std::expected<ElementReference, ElementEditRefusal> AssignElementProperty(
+std::expected<ElementReference, SubjectEditRefusal> AssignElementProperty(
     VehicleProject& project, const ElementReference& element, std::string_view property_name,
     const PropertyValue& value) {
     return vehicle_project::VisitElementKind(element.kind, [&]<typename KindRecords>(KindRecords) {

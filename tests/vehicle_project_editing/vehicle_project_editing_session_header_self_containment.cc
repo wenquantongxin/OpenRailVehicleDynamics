@@ -36,12 +36,12 @@ static_assert(
 static_assert(
     std::is_same_v<
         decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
-                     .SetElementProperty(
-                         std::declval<const orvd::vehicle_project::ElementReference&>(),
+                     .SetSubjectProperty(
+                         std::declval<const orvd::vehicle_project_editing::PropertySubject&>(),
                          std::declval<std::string_view>(),
                          std::declval<const orvd::vehicle_project_editing::PropertyValue&>())),
-        std::expected<orvd::vehicle_project::ElementReference,
-                      orvd::vehicle_project_editing::ElementEditRefusal>>);
+        std::expected<orvd::vehicle_project_editing::PropertySubject,
+                      orvd::vehicle_project_editing::SubjectEditRefusal>>);
 static_assert(std::is_same_v<
               decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
                            .AddElement(std::declval<orvd::vehicle_project::ElementKind>(),
@@ -49,20 +49,20 @@ static_assert(std::is_same_v<
                                        std::declval<const orvd::vehicle_project_editing::
                                                         PropertyValuesByName&>())),
               std::expected<orvd::vehicle_project::ElementReference,
-                            orvd::vehicle_project_editing::ElementEditRefusal>>);
+                            orvd::vehicle_project_editing::SubjectEditRefusal>>);
 static_assert(std::is_same_v<
               decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
                            .RemoveElement(
                                std::declval<const orvd::vehicle_project::ElementReference&>())),
               std::expected<std::vector<orvd::vehicle_project::ElementReference>,
-                            orvd::vehicle_project_editing::ElementEditRefusal>>);
+                            orvd::vehicle_project_editing::SubjectEditRefusal>>);
 static_assert(
     std::is_same_v<
         decltype(std::declval<const orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
                      .CollectRemovalConsequences(
                          std::declval<const orvd::vehicle_project::ElementReference&>())),
         std::expected<std::vector<orvd::vehicle_project::ElementReference>,
-                      orvd::vehicle_project_editing::ElementEditRefusal>>);
+                      orvd::vehicle_project_editing::SubjectEditRefusal>>);
 static_assert(std::is_same_v<
               decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
                            .CheckMechanics()),

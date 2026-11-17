@@ -16,23 +16,11 @@ using vehicle_project::ElementKind;
 // Bodies and frames share the multibody model's frame names, and the vehicle
 // force plan refuses one name for two force elements of any of its kinds.
 constexpr std::array kBodyAndFrameNameSpace{ElementKind::kRigidBody, ElementKind::kFixedFrame};
-constexpr std::array kJointNameSpace{ElementKind::kRevoluteJoint, ElementKind::kBallRpyJoint,
-                                     ElementKind::kWeldJoint};
-constexpr std::array kForceElementNameSpace{
-    ElementKind::kTranslationalSpringDamper,
-    ElementKind::kRollSpringDamperCouple,
-    ElementKind::kSeriesSpringViscousDamper,
-    ElementKind::kPointToPointSeriesSpringBilinearDamper,
-    ElementKind::kSaturatedPiecewiseLinearDamper,
-    ElementKind::kReferenceFrameLinearBushing,
-    ElementKind::kPointToPointLinearSpringDamper,
-    ElementKind::kPointToPointHystereticSpring,
-};
 constexpr std::array kContactCarrierNameSpace{ElementKind::kContactCarrier};
 constexpr std::array kContactInterfaceNameSpace{ElementKind::kContactInterface};
 
 constexpr std::array<std::span<const ElementKind>, 5> kNameSpaces{
-    kBodyAndFrameNameSpace, kJointNameSpace, kForceElementNameSpace, kContactCarrierNameSpace,
+    kBodyAndFrameNameSpace, kJointKinds, kForceElementKinds, kContactCarrierNameSpace,
     kContactInterfaceNameSpace};
 
 // The name the multibody model gives the world's own body and frame

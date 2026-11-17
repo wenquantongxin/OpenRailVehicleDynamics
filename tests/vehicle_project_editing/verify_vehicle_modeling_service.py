@@ -4,7 +4,9 @@ Opens GZ18 with its reference contact record, lists the element kinds, reads,
 edits, creates, renames, removes, checks, previews, undoes, redoes and refuses,
 asserting the protocol's structure and its revision behaviour rather than any
 numeric result. Missing inputs keep the open session; mismatched contact
-declarations open and are reported by checking. Then saves GZ18 as a project,
+declarations open and are reported by checking. Reads the model tree of GZ18
+and IRW, creates through a row's offer, and reads, sets and refuses settings
+through the subject forms. Then saves GZ18 as a project,
 edited and left failing its check, into a directory of projects, lists it,
 and opens each project again after another vehicle to find everything an
 interface reads of it as it was saved; follows the session and its unsaved
@@ -40,12 +42,22 @@ DRAWN_ELEMENT_KINDS = set().union(*DRAWING_LIST_KINDS.values())
 SESSION_FIELDS = ("revision", "can_undo", "can_redo", "has_unsaved_changes")
 NOTHING_OPEN = (None, None, None, None)
 CURVE = "saturated_piecewise_linear_damper_curve"
-# The description fields each value kind adds to name, value_kind and editable.
+# The description fields each value kind adds to name, value_kind, editable
+# and section.
 DESCRIPTION_FIELDS_OF_VALUE_KIND = {
-    "number": set(), "vector3": set(), "boolean": set(), "rotation": set(),
+    "number": set(), "vector3": set(), "boolean": set(), "rotation": set(), "text": set(),
     "element_name": set(), "element_reference": {"referenced_kinds", "optional"},
     "token": {"choices"}, CURVE: {"row_fields"},
 }
+# The model tree's domains, in the contract's order, and whether each is
+# provided.
+DOMAINS = [("Globals", True), ("Bodies", True), ("Joints", True), ("Force elements", True),
+           ("Constraints", False), ("Wheel-rail", True), ("Track", False),
+           ("Substructures", False)]
+SETTINGS_WORDS = ["gravity", "vehicle_identity", "station_layout", "wheel", "rail",
+                  "contact_computation"]
+NODE_FIELDS = {"key", "title", "subject", "provided", "note", "creates", "children"}
+GRAVITY = "gravitational_acceleration_meters_per_second_squared"
 
 
 class Service:
@@ -66,7 +78,7 @@ class Service:
             assert set(response) == {"id", "ok", *SESSION_FIELDS, "result"}, response
         else:
             assert set(response) == {"id", "ok", "error"}, response
-            assert set(response["error"]) == {"element", "property", "message"}, response
+            assert set(response["error"]) == {"subject", "property", "message"}, response
             assert response["error"]["message"], response
         return response
 
@@ -99,15 +111,21 @@ def is_rotation(value):
     return isinstance(value, list) and len(value) == 3 and all(is_vector(row) for row in value)
 
 
+def is_title(value):
+    return (isinstance(value, dict) and set(value) == {"en", "zh"}
+            and all(isinstance(text, str) and text for text in value.values()))
+
+
 def require_description(description):
     """A property description has the fields its value kind gives it: a
     reference the kinds it may name and whether it may name none, a token its
-    choices, a curve its row fields. Every property is editable but a
+    choices, a curve its row fields. Every element property is editable but a
     rotation."""
     value_kind = description["value_kind"]
     assert value_kind in DESCRIPTION_FIELDS_OF_VALUE_KIND, description
-    assert set(description) - {"value"} == ({"name", "value_kind", "editable"} |
+    assert set(description) - {"value"} == ({"name", "value_kind", "editable", "section"} |
                                              DESCRIPTION_FIELDS_OF_VALUE_KIND[value_kind]), description
+    assert description["section"] is None or is_title(description["section"]), description
     assert description["editable"] == (value_kind != "rotation"), description
     if value_kind == "element_reference":
         assert description["referenced_kinds"], description
@@ -176,12 +194,128 @@ def require_drawings_name_outline_elements(preview, outline):
         element for element in outline_elements if element[0] in DRAWN_ELEMENT_KINDS)
 
 
+def rows_of(nodes, above=()):
+    """Every row of the tree, depth first, with the rows above it."""
+    for node in nodes:
+        yield node, above
+        yield from rows_of(node["children"], above + (node,))
+
+
+def element_of(row):
+    return row["subject"]["element"] if row["subject"] and "element" in row["subject"] else None
+
+
+def require_model_tree(service, vehicle_name):
+    """The tree's structure: the domains in order, provided or not; every
+    node's fields; unique keys; every element of the outline exactly once;
+    every settings word once; rows not provided yet empty with their note.
+    Returns the tree's nodes."""
+    nodes = service.accepted("get_model_tree")["result"]["nodes"]
+    assert [(node["title"]["en"], node["provided"]) for node in nodes] == DOMAINS, vehicle_name
+    rows = list(rows_of(nodes))
+    assert all(set(row) == NODE_FIELDS for row, _ in rows)
+    assert len({row["key"] for row, _ in rows}) == len(rows), vehicle_name + ": a key repeats"
+    outline = service.accepted("get_outline")["result"]["elements"]
+    elements = [element_of(row) for row, _ in rows if element_of(row)]
+    assert sorted(map(json.dumps, elements)) == sorted(map(json.dumps, outline)), vehicle_name
+    settings = [row["subject"]["settings"] for row, _ in rows
+                if row["subject"] and "settings" in row["subject"]]
+    assert sorted(settings) == sorted(SETTINGS_WORDS), vehicle_name
+    for row, _ in rows:
+        assert (row["title"] is None) == (element_of(row) is not None), row
+        assert row["title"] is None or is_title(row["title"]), row
+        assert row["note"] is None or is_title(row["note"]), row
+        assert all(set(offer) == {"kind", "fixed_properties"} and offer["kind"] in ELEMENT_KINDS
+                   for offer in row["creates"]), row
+        if not row["provided"]:
+            assert (row["subject"], row["creates"], row["children"]) == (None, [], []), row
+            assert row["note"] is not None, row
+    # Markers hang under the body they name, contact interfaces under the
+    # carrier they name.
+    for row, above in rows:
+        element = element_of(row)
+        if element and element["kind"] == "fixed_frame":
+            body = service.accepted("get_properties", subject={"element": element})
+            body_name = next(prop["value"] for prop in body["result"]["properties"]
+                             if prop["name"] == "body_name")
+            assert element_of(above[-2]) == {"kind": "rigid_body", "name": body_name}, element
+        if element and element["kind"] == "contact_interface":
+            assert element_of(above[-1])["kind"] == "contact_carrier", element
+    return nodes
+
+
+def verify_model_tree_and_settings(executable, gz18, irw):
+    """The model tree of both vehicles, creating through a row's offer, and
+    settings read, set and refused through the subject forms."""
+    service = Service(executable)
+    service.accepted("open_vehicle", **irw)
+    require_model_tree(service, "IRW")
+
+    service.accepted("open_vehicle", **gz18)
+    nodes = require_model_tree(service, "GZ18")
+    carbody = {"kind": "rigid_body", "name": "carbody"}
+    markers = next(child for row, _ in rows_of(nodes) if element_of(row) == carbody
+                   for child in row["children"] if child["creates"])
+    assert markers["creates"] == [{"kind": "fixed_frame",
+                                   "fixed_properties": {"body_name": "carbody"}}]
+    offer = markers["creates"][0]
+    created = service.accepted("add_element", kind=offer["kind"], name="offered_marker",
+                               properties=offer["fixed_properties"])
+    assert created["result"] == {"element": {"kind": "fixed_frame", "name": "offered_marker"}}
+    nodes = require_model_tree(service, "GZ18 with a marker created through an offer")
+    markers = next(child for row, _ in rows_of(nodes) if element_of(row) == carbody
+                   for child in row["children"] if child["creates"])
+    assert created["result"]["element"] in [element_of(row) for row in markers["children"]]
+    service.accepted("undo")
+
+    # Settings through the subject forms.
+    gravity = {"settings": "gravity"}
+    readings = service.accepted("get_properties", subject=gravity)["result"]["properties"]
+    assert [(prop["name"], prop["value_kind"], prop["editable"]) for prop in readings] == [
+        (GRAVITY, "number", True)]
+    stated = readings[0]["value"]
+    before = service.accepted("get_outline")
+    edited = service.accepted("set_property", subject=gravity, property=GRAVITY, value=9.8)
+    assert edited["result"] == {"subject": gravity}
+    assert (edited["revision"], edited["can_undo"], edited["has_unsaved_changes"]) == (
+        before["revision"] + 1, True, True)
+    assert service.accepted("get_properties", subject=gravity)["result"]["properties"][0][
+        "value"] == 9.8
+    service.accepted("undo")
+    assert service.accepted("get_properties", subject=gravity)["result"]["properties"][0][
+        "value"] == stated
+
+    wheel = {"settings": "wheel"}
+    radius = "nominal_rolling_radius_meters"
+    service.accepted("set_property", subject=wheel, property=radius, value=0.45)
+    assert service.accepted("check")["result"]["passed"]
+    preview = service.accepted("get_preview")["result"]["preview"]
+    assert preview["wheels"] and all(drawn["nominal_rolling_radius_meters"] == 0.45
+                                     for drawn in preview["wheels"])
+
+    identity = {"settings": "vehicle_identity"}
+    refusal = service.refused("set_property", subject=identity, property="vehicle_name",
+                              value="renamed")
+    assert refusal["subject"] == identity and refusal["property"] == "vehicle_name"
+    names = service.accepted("get_properties", subject=identity)["result"]["properties"]
+    assert [(prop["name"], prop["value_kind"], prop["editable"]) for prop in names] == [
+        ("vehicle_name", "text", False), ("mechanical_definition_identifier", "text", False)]
+    refusal = service.refused("set_property", subject={"settings": "rail"},
+                              property="profile_origin_mode", value="sideways")
+    assert refusal["subject"] == {"settings": "rail"}
+    assert refusal["property"] == "profile_origin_mode"
+    refusal = service.refused("get_properties", subject={"settings": "colour"})
+    assert refusal["subject"] is None
+    service.finish()
+
+
 def everything_read_of(service):
     """What an interface reads of the open project: the outline, every
     element's properties, the check, the preview without the revision it was
     computed from, and the visual definition."""
     outline = service.accepted("get_outline")["result"]
-    properties = [service.accepted("get_properties", element=element)["result"]["properties"]
+    properties = [service.accepted("get_properties",
+                                   subject={"element": element})["result"]["properties"]
                   for element in outline["elements"]]
     check = service.accepted("check")["result"]
     preview = service.accepted("get_preview")["result"]["preview"]
@@ -227,7 +361,7 @@ def verify_saving_and_reopening(executable, gz18, irw, work_directory):
     for arguments in (without_visual_definition,
                       {**gz18, "visual_definition_path": str(not_an_object)}):
         refusal = service.refused("open_vehicle", **arguments)
-        assert refusal["element"] is None and refusal["property"] is None
+        assert refusal["subject"] is None and refusal["property"] is None
         assert session_of(service.accepted("get_outline")) == (0, False, False, False)
 
     # A vehicle opened from its files has no project file to save to.
@@ -235,11 +369,11 @@ def verify_saving_and_reopening(executable, gz18, irw, work_directory):
     suspension = {"kind": "translational_spring_damper",
                   "name": "front_leading_left_primary_suspension"}
     stiffness = next(prop["value"] for prop in service.accepted(
-        "get_properties", element=suspension)["result"]["properties"]
+        "get_properties", subject={"element": suspension})["result"]["properties"]
         if prop["name"] == "stiffness_newtons_per_meter")
 
     def edit_stiffness(factor):
-        return service.accepted("set_property", element=suspension,
+        return service.accepted("set_property", subject={"element": suspension},
                                 property="stiffness_newtons_per_meter",
                                 value=[component * factor for component in stiffness])
 
@@ -250,7 +384,7 @@ def verify_saving_and_reopening(executable, gz18, irw, work_directory):
     # A name that is not a project name is refused and writes nothing.
     refusal = service.refused("save_vehicle_project_as", directory=str(projects),
                               name="edited gz18")
-    assert refusal["element"] is None and refusal["property"] is None
+    assert refusal["subject"] is None and refusal["property"] is None
     assert session_of(service.accepted("get_outline")) == (3, True, False, True)
     assert list(projects.iterdir()) == []
 
@@ -345,7 +479,7 @@ def main():
     service = Service(executable)
 
     refusal = service.refused("get_outline")
-    assert refusal["element"] is None and refusal["property"] is None
+    assert refusal["subject"] is None and refusal["property"] is None
 
     opened = service.accepted("open_vehicle", **gz18)
     assert (opened["revision"], opened["can_undo"], opened["can_redo"]) == (0, False, False)
@@ -353,7 +487,21 @@ def main():
 
     kinds = service.accepted("describe_element_kinds")["result"]["element_kinds"]
     assert [kind["kind"] for kind in kinds] == ELEMENT_KINDS
+    assert all(set(kind) == {"kind", "title", "properties"} and is_title(kind["title"])
+               for kind in kinds)
+    assert len({kind["title"]["en"] for kind in kinds}) == len(kinds), "two kinds share a title"
     described = {kind["kind"]: kind["properties"] for kind in kinds}
+    # A rigid body's properties are shown in sections, each one run of
+    # consecutive properties; its name and every other kind's properties in
+    # none.
+    body_sections = [prop["section"]["en"] if prop["section"] else None
+                     for prop in described["rigid_body"]]
+    assert body_sections[0] is None and all(body_sections[1:]), body_sections
+    runs = [section for index, section in enumerate(body_sections[1:], start=1)
+            if section != body_sections[index - 1]]
+    assert len(runs) == len(set(runs)) == 4, body_sections
+    assert all(prop["section"] is None for kind, properties in described.items()
+               if kind != "rigid_body" for prop in properties)
     for properties in described.values():
         assert properties
         for description in properties:
@@ -388,7 +536,8 @@ def main():
     assert all(element["kind"] in ELEMENT_KINDS for element in outline["elements"])
 
     def readings_of(element):
-        properties = service.accepted("get_properties", element=element)["result"]["properties"]
+        properties = service.accepted("get_properties",
+                                      subject={"element": element})["result"]["properties"]
         # A reading carries its kind's description; it is editable when its
         # kind's property is and this element holds a value for it, a
         # reference naming none holding the value null.
@@ -431,18 +580,18 @@ def main():
         assert rigid_body_kind[name]["editable"]
         assert jointed_readings[name]["value"] is None and not jointed_readings[name]["editable"]
     assert jointed_readings["mass_kilograms"]["editable"]
-    refusal = service.refused("set_property", element=jointed_body, property=station_offset,
-                              value=1.0)
-    assert refusal["element"] == jointed_body and refusal["property"] == station_offset
+    refusal = service.refused("set_property", subject={"element": jointed_body},
+                              property=station_offset, value=1.0)
+    assert refusal["subject"] == {"element": jointed_body} and refusal["property"] == station_offset
 
     stiffness = properties_of(suspension)["stiffness_newtons_per_meter"]
     assert is_vector(stiffness)
     edited_stiffness = [component * 1.25 for component in stiffness]
 
-    edited = service.accepted("set_property", element=suspension,
+    edited = service.accepted("set_property", subject={"element": suspension},
                               property="stiffness_newtons_per_meter", value=edited_stiffness)
     assert (edited["revision"], edited["can_undo"], edited["can_redo"]) == (1, True, False)
-    assert edited["result"] == {"element": suspension}
+    assert edited["result"] == {"subject": {"element": suspension}}
     assert properties_of(suspension)["stiffness_newtons_per_meter"] == edited_stiffness
 
     # Missing records are refused without replacing the edited session.
@@ -453,7 +602,7 @@ def main():
     )
     for arguments in refused_opens:
         refusal = service.refused("open_vehicle", **arguments)
-        assert refusal["element"] is None and refusal["property"] is None
+        assert refusal["subject"] is None and refusal["property"] is None
         kept = service.accepted("get_outline")
         assert kept["result"]["vehicle_name"] == "GZ18"
         assert (kept["revision"], kept["can_undo"], kept["can_redo"]) == (1, True, False)
@@ -481,10 +630,12 @@ def main():
     stale = service.accepted("get_preview")
     assert stale["revision"] == 2 and stale["result"]["preview"]["project_revision"] == 1
 
-    refusal = service.refused("set_property", element=suspension, property="name", value="")
-    assert refusal["element"] == suspension and refusal["property"] == "name"
-    refusal = service.refused("set_property", element=suspension, property="name", value=1.0)
-    assert refusal["element"] == suspension and refusal["property"] == "name"
+    refusal = service.refused("set_property", subject={"element": suspension}, property="name",
+                              value="")
+    assert refusal["subject"] == {"element": suspension} and refusal["property"] == "name"
+    refusal = service.refused("set_property", subject={"element": suspension}, property="name",
+                              value=1.0)
+    assert refusal["subject"] == {"element": suspension} and refusal["property"] == "name"
     unchanged = service.accepted("get_outline")
     assert (unchanged["revision"], unchanged["can_undo"], unchanged["can_redo"]) == (2, False, True)
     assert properties_of(suspension)["name"] == suspension["name"]
@@ -494,7 +645,7 @@ def main():
     assert properties_of(suspension)["stiffness_newtons_per_meter"] == edited_stiffness
 
     refusal = service.refused("rename_vehicle")
-    assert refusal["element"] is None and refusal["property"] is None
+    assert refusal["subject"] is None and refusal["property"] is None
 
     # Structural edits: a free body is created, a frame on it and a force
     # element from that frame to an existing one; the body is renamed, and
@@ -522,17 +673,17 @@ def main():
 
     refusal = service.refused("add_element", kind="fixed_frame", name="frame_without_body",
                               properties={})
-    assert refusal["element"] == {"kind": "fixed_frame", "name": "frame_without_body"}
+    assert refusal["subject"] == {"element": {"kind": "fixed_frame", "name": "frame_without_body"}}
     assert refusal["property"] == "body_name"
     refusal = service.refused("add_element", kind="fixed_frame", name="frame_with_bad_body",
                               properties={"body_name": 3.0})
-    assert refusal["element"] == {"kind": "fixed_frame", "name": "frame_with_bad_body"}
+    assert refusal["subject"] == {"element": {"kind": "fixed_frame", "name": "frame_with_bad_body"}}
     assert refusal["property"] == "body_name"
 
     renamed_body = {"kind": "rigid_body", "name": "service_crate"}
-    renamed = service.accepted("set_property", element=body, property="name",
+    renamed = service.accepted("set_property", subject={"element": body}, property="name",
                                value=renamed_body["name"])
-    assert renamed["result"] == {"element": renamed_body}
+    assert renamed["result"] == {"subject": {"element": renamed_body}}
     assert properties_of(frame)["body_name"] == renamed_body["name"]
     assert renamed_body in outline_elements() and body not in outline_elements()
 
@@ -554,25 +705,25 @@ def main():
     assert renamed_body in outline_elements() and spring in outline_elements()
 
     refusal = service.refused("remove_element", element={"kind": "rigid_body", "name": "carbody"})
-    assert refusal["element"] == {"kind": "rigid_body", "name": "carbody"}
+    assert refusal["subject"] == {"element": {"kind": "rigid_body", "name": "carbody"}}
     assert refusal["property"] is None
 
     # Values are read as the property's value kind: a token, a reference
     # naming none, and a curve by its row fields.
     lateral_damper = {"kind": "series_spring_viscous_damper", "name": "front_lateral_damper"}
-    refusal = service.refused("set_property", element=lateral_damper, property="axis",
+    refusal = service.refused("set_property", subject={"element": lateral_damper}, property="axis",
                               value="diagonal")
-    assert refusal["element"] == lateral_damper and refusal["property"] == "axis"
+    assert refusal["subject"] == {"element": lateral_damper} and refusal["property"] == "axis"
     joint_name = next(element["name"] for element in outline["elements"]
                       if element["kind"] == "revolute_joint")
     for joint in (joint_name, None):
-        service.accepted("set_property", element=first_interface,
+        service.accepted("set_property", subject={"element": first_interface},
                          property="independent_wheel_revolute_joint_name", value=joint)
         assert properties_of(first_interface)["independent_wheel_revolute_joint_name"] == joint
         # An argument left out is not a null: without its value the edit is
         # refused and the reference keeps what it names.
         before = service.accepted("get_outline")
-        service.refused("set_property", element=first_interface,
+        service.refused("set_property", subject={"element": first_interface},
                         property="independent_wheel_revolute_joint_name")
         assert properties_of(first_interface)["independent_wheel_revolute_joint_name"] == joint
         after = service.accepted("get_outline")
@@ -595,11 +746,12 @@ def main():
                                    if damper["name"] == yaw_damper["name"])
     assert all(set(row) == set(row_fields) for row in curve)
     steeper = [{field: row[field] * 2.0 for field in row_fields} for row in curve]
-    service.accepted("set_property", element=yaw_damper, property="curve", value=steeper)
+    service.accepted("set_property", subject={"element": yaw_damper}, property="curve",
+                     value=steeper)
     assert properties_of(yaw_damper)["curve"] == steeper
-    refusal = service.refused("set_property", element=yaw_damper, property="curve",
+    refusal = service.refused("set_property", subject={"element": yaw_damper}, property="curve",
                               value=[{row_fields[0]: 0.0}])
-    assert refusal["element"] == yaw_damper and refusal["property"] == "curve"
+    assert refusal["subject"] == {"element": yaw_damper} and refusal["property"] == "curve"
 
     # An unfinished project opens; a mismatched contact declaration is
     # reported by check and leaves the preview absent.
@@ -632,6 +784,7 @@ def main():
 
     service.finish()
 
+    verify_model_tree_and_settings(executable, gz18, irw)
     verify_saving_and_reopening(executable, gz18, irw, work_directory)
     assert {path: path.read_bytes() for path in reference_files} == reference_files, (
         "a reference vehicle's file changed")

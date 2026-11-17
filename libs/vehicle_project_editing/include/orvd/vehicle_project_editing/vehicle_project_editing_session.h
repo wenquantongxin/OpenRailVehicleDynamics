@@ -10,10 +10,11 @@
 
 #include "orvd/vehicle_project/vehicle_project.h"
 #include "orvd/vehicle_project/vehicle_project_files_in_directory.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
+#include "orvd/vehicle_project_editing/vehicle_project_property_subjects.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 
 // The command layer a graphical modelling tool drives over one vehicle
 // project: the project being edited, the project file it is associated with if
@@ -24,10 +25,11 @@
 // and nothing here knows a window. Whatever an interface can do through a
 // session, a test can do without one, saving included.
 //
-// An edit sets a property, creates an element or removes one. Each is made on
-// a copy of the project, which becomes the project only when the whole edit
-// is accepted: one undo step and one new revision. A refused edit changes
-// neither the project, the history nor the revision.
+// An edit sets a property of an element or of the project's settings, creates
+// an element or removes one. Each is made on a copy of the project, which
+// becomes the project only when the whole edit is accepted: one undo step and
+// one new revision. A refused edit changes neither the project, the history
+// nor the revision.
 //
 // An edit introduces no reference to an element the project does not contain,
 // but it does not judge the references the project already holds: a project
@@ -87,12 +89,15 @@ class VehicleProjectEditingSession {
     [[nodiscard]] bool can_undo() const { return !undo_snapshots_.empty(); }
     [[nodiscard]] bool can_redo() const { return !redo_snapshots_.empty(); }
 
-    // Sets one property of one element (vehicle_project_element_properties.h) and returns the
-    // element as it is named afterwards.
+    // Sets one property of one subject, an element or settings
+    // (vehicle_project_subject_properties.h), and returns the subject as it is
+    // named afterwards: an element renamed under its new name.
     //
-    // The edit is checked in this order: the project contains the element,
-    // the element's kind has the property, the property is editable, the value
-    // holds the property's value kind, and then by what the property holds:
+    // The edit is checked in this order: the project contains the element, or
+    // holds the record of the settings, which the wheel, the rail and the
+    // contact computation lack while the project has no contact record; the
+    // subject has the property, the property is editable, the value holds the
+    // property's value kind, and then by what the property holds:
     // - a number, a 3-vector or a curve has only finite numbers;
     // - a station offset or a placement offset needs the record holding it,
     //   the body's entry in the mechanical track station layout or its
@@ -112,14 +117,15 @@ class VehicleProjectEditingSession {
     // it a station layout entry and a placement where it has none, at zero
     // offsets and the identity rotation; making it no longer move freely takes
     // both away and is refused for the station layout's reference body.
-    [[nodiscard]] std::expected<vehicle_project::ElementReference, ElementEditRefusal>
-    SetElementProperty(const vehicle_project::ElementReference& element,
-                       std::string_view property_name, const PropertyValue& value);
+    // Settings are judged no further: the check judges the gravity, and a run
+    // the wheel and rail values it assembles.
+    [[nodiscard]] std::expected<PropertySubject, SubjectEditRefusal> SetSubjectProperty(
+        const PropertySubject& subject, std::string_view property_name, const PropertyValue& value);
 
     // Appends a new element of `kind` named `name` to its kind's records and
     // returns it. The element is its record type's default-constructed value
     // with that name and the given properties, which are set as
-    // SetElementProperty sets them, in the order DescribeElementProperties
+    // SetSubjectProperty sets them, in the order DescribeElementProperties
     // lists them; a free body thus gets its station layout entry and placement
     // before their offsets are set.
     //
@@ -129,7 +135,7 @@ class VehicleProjectEditingSession {
     // kind's or is the element's own name, when a reference that cannot name
     // none is not given, or when one given value is refused. A property that
     // is not editable cannot be given either.
-    [[nodiscard]] std::expected<vehicle_project::ElementReference, ElementEditRefusal> AddElement(
+    [[nodiscard]] std::expected<vehicle_project::ElementReference, SubjectEditRefusal> AddElement(
         vehicle_project::ElementKind kind, const std::string& name,
         const PropertyValuesByName& properties);
 
@@ -141,12 +147,12 @@ class VehicleProjectEditingSession {
     //
     // Refused when the project does not contain the element, and for the
     // station layout's reference body.
-    [[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, ElementEditRefusal>
+    [[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, SubjectEditRefusal>
     RemoveElement(const vehicle_project::ElementReference& element);
 
     // What RemoveElement would remove, or why it would be refused. Changes
     // nothing.
-    [[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, ElementEditRefusal>
+    [[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, SubjectEditRefusal>
     CollectRemovalConsequences(const vehicle_project::ElementReference& element) const;
 
     // Returns to the project before the most recent step of the undo history

@@ -45,29 +45,37 @@
 //
 // Response to a refused command
 //   {"id": <id>, "ok": false,
-//    "error": {"element": <element> or null, "property": "<name>" or null,
+//    "error": {"subject": <subject> or null, "property": "<name>" or null,
 //              "message": "<text>"}}
-//   A refused command changes nothing. element and property name what the
-//   refusal concerns when it concerns them; for add_element, element is the
-//   one that was to be created. id is null when the line holds no JSON object
-//   with an id.
+//   A refused command changes nothing. subject and property name what the
+//   refusal concerns when it concerns them; for add_element, subject is the
+//   element that was to be created. id is null when the line holds no JSON
+//   object with an id.
 //
 // Values
-//   element       {"kind": "<element kind>", "name": "<element name>"}
-//   element kind  one of, in this order: rigid_body, fixed_frame,
-//                 revolute_joint, ball_rpy_joint, weld_joint,
-//                 translational_spring_damper, roll_spring_damper_couple,
-//                 series_spring_viscous_damper,
-//                 point_to_point_series_spring_bilinear_damper,
-//                 saturated_piecewise_linear_damper,
-//                 reference_frame_linear_bushing,
-//                 point_to_point_linear_spring_damper,
-//                 point_to_point_hysteretic_spring, contact_carrier,
-//                 contact_interface
-//   vector        [x, y, z]
-//   rotation      [[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]], the rows
-//                 of a rotation matrix; rotation_a_from_b takes b components to
-//                 a components
+//   element        {"kind": "<element kind>", "name": "<element name>"}
+//   element kind   one of, in this order: rigid_body, fixed_frame,
+//                  revolute_joint, ball_rpy_joint, weld_joint,
+//                  translational_spring_damper, roll_spring_damper_couple,
+//                  series_spring_viscous_damper,
+//                  point_to_point_series_spring_bilinear_damper,
+//                  saturated_piecewise_linear_damper,
+//                  reference_frame_linear_bushing,
+//                  point_to_point_linear_spring_damper,
+//                  point_to_point_hysteretic_spring, contact_carrier,
+//                  contact_interface
+//   settings word  one of gravity, vehicle_identity, station_layout, wheel,
+//                  rail, contact_computation: the project's settings, which
+//                  are not elements and are never created, removed, renamed
+//                  or named by a reference
+//   subject        {"element": <element>} or {"settings": "<settings word>"}:
+//                  what has properties
+//   title          {"en": "<text>", "zh": "<text>"}: a text for people, in
+//                  English and in Chinese
+//   vector         [x, y, z]
+//   rotation       [[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]], the
+//                  rows of a rotation matrix; rotation_a_from_b takes b
+//                  components to a components
 //
 // Name spaces
 //   Rigid bodies and fixed frames share one name space, in which "world" is
@@ -78,38 +86,65 @@
 //   instance.
 //
 // Properties
-//   Each element kind has one fixed list of properties, named by its record
-//   members' own names, which state meaning and unit. A rigid body adds where
-//   it is along, across and above the track:
-//   mechanical_track_station_layout.station_offset_meters,
+//   A subject has one fixed list of properties, named by its record members'
+//   own names, which state meaning and unit. An element kind's list holds its
+//   record's members; a rigid body adds where it is along, across and above
+//   the track: mechanical_track_station_layout.station_offset_meters,
 //   placement.lateral_offset_in_local_track_frame_meters and
-//   placement.vertical_offset_in_local_track_frame_meters.
+//   placement.vertical_offset_in_local_track_frame_meters. Settings list their
+//   record's members, a member of a record held inside under the holding
+//   member's name, a dot and its own (friction.static_coefficient):
+//     gravity              the gravitational acceleration the project is
+//                          checked under
+//     vehicle_identity     the vehicle name and the mechanical definition
+//                          identifier
+//     station_layout       the layout's reference body
+//     wheel, rail,         every member of the wheel-rail contact record's
+//     contact_computation  three configuration records
 //   A property is described as
 //     {"name": "<name>", "value_kind": "<value kind>", "editable": <bool>,
+//      "section": <title> or null,
 //      "referenced_kinds": [<element kind>, ...], "optional": <bool>,
 //      "choices": ["<token>", ...], "row_fields": ["<field name>", ...]}
 //   where referenced_kinds and optional are given only for an
 //   element_reference, choices only for a token and row_fields only for a
 //   saturated_piecewise_linear_damper_curve, and holds a value of its value
 //   kind:
-//     number             a JSON number
+//     number             a JSON number; a count held as an integer is one
 //     vector3            a vector
 //     boolean            true or false
 //     rotation           a rotation
+//     text               a string shown as it is: never an element's own name
+//                        and never a reference
 //     element_name       a string: the element's own name; setting it renames
 //                        the element
 //     element_reference  a string naming an element of one of
 //                        referenced_kinds, which all lie in one name space, or
 //                        null where optional is true and it names none
 //     token              a string, one of choices: a force element's axis, a
-//                        wheel's side
+//                        wheel's side, a value of an enumeration
 //     saturated_piecewise_linear_damper_curve
 //                        [{"<row field>": <number>, ...}, ...], each row
 //                        giving every one of row_fields; possibly empty
-//   A value is also null where the element holds no value for the property:
+//   A value is also null where the subject holds no value for the property:
 //   the station offset of a rigid body the mechanical track station layout
-//   does not place, and the placement offsets of a rigid body without a
-//   placement. Every property is editable except a rotation.
+//   does not place, the placement offsets of a rigid body without a
+//   placement, and the gravity of a project that states none.
+//   section is where the property is shown: consecutive properties of one
+//   section form it. A rigid body's properties are shown in the sections
+//   degrees of freedom, mass and inertia, mechanical station (the station
+//   offset, which the dynamics use) and preview placement (the placement
+//   offsets, which only place it in the drawing); every other property is in
+//   none.
+//   Every element property is editable except a rotation. Of the settings,
+//   the gravity, the wheel's nominal_rolling_radius_meters and
+//   wheel_lateral_datum_magnitude_meters, and the rail's track_gauge_meters,
+//   gauge_measuring_depth_meters, pose_rail_cant_radians (the wheel-rail pose
+//   and gauge datum's), geometry_rail_cant_radians (the contact geometry's)
+//   and profile_origin_mode are editable, the gravity also while the project
+//   states none; the rest is read-only. A settings value is judged no
+//   further than being finite: check judges the gravity, and a run the wheel
+//   and rail values it assembles.
 //
 // Commands
 //
@@ -151,12 +186,52 @@
 //
 //   Every other command is refused while nothing is open.
 //
+//   get_model_tree
+//     result: {"nodes": [<node>, ...]}
+//     node: {"key": "<text>", "title": <title> or null,
+//            "subject": <subject> or null, "provided": <bool>,
+//            "note": <title> or null,
+//            "creates": [{"kind": <element kind>,
+//                         "fixed_properties": {"<property name>": <value>,
+//                                              ...}}, ...],
+//            "children": [<node>, ...]}
+//     The project as a model tree divided into domains, made from its records
+//     whatever check would say of them: every element of the outline is one
+//     node, exactly once. The nodes are the domains, in this order:
+//       Globals         the gravity, vehicle identity and station layout
+//                       settings; initial conditions and views, not provided
+//       Bodies          every rigid body, with its markers (the fixed frames
+//                       naming it) and its geometry (a note on the name its
+//                       shapes are stated under); fixed frames naming a body
+//                       the project does not have are under "Owner not found"
+//       Joints          one list of the joints, in outline order
+//       Force elements  one list of the force elements, in outline order
+//       Constraints     not provided
+//       Wheel-rail      the wheel, rail and contact computation settings and
+//                       the contact carriers, each with the contact interfaces
+//                       naming it; interfaces naming a carrier the project does
+//                       not have are under "Owner not found". Without a contact
+//                       record it has no children and a note saying so.
+//       Track           not provided
+//       Substructures   not provided
+//     key is unique in the tree and stays a node's key across edits, except
+//     that an element node's key follows the element's name and the keys of
+//     the nodes below it follow it. title is null for an element node, which
+//     shows the element's name; an element of a list of several kinds shows
+//     its kind's title as a tag. subject is what selecting the node selects,
+//     null for a node that only groups. provided is false for what is not
+//     provided yet: such a node has no subject, no offers and no children, and
+//     its note says what will be there. note is one line shown with the node.
+//     creates lists what the node's "+" creates, each with the properties a
+//     creation is given and cannot change: a marker on its body, a contact
+//     interface on its carrier.
+//
 //   describe_element_kinds
-//     result: {"element_kinds": [{"kind": <element kind>,
+//     result: {"element_kinds": [{"kind": <element kind>, "title": <title>,
 //                                 "properties": [<description>, ...]}, ...]}
-//     Every element kind, in the order above, with its properties described in
-//     the order get_properties returns them. editable says whether the kind's
-//     property can be edited at all.
+//     Every element kind, in the order above, with the name people know it by
+//     and its properties described in the order get_properties returns them.
+//     editable says whether the kind's property can be edited at all.
 //
 //   get_outline
 //     result: {"vehicle_name": "<name>", "elements": [<element>, ...],
@@ -168,24 +243,28 @@
 //     elements lists every element, kind by kind in the order above, each kind
 //     in declaration order: the outline order.
 //
-//   get_properties  {"element": <element>}
+//   get_properties  {"subject": <subject>}
 //     result: {"properties": [<description> with "value": <value>, ...]}
-//     editable says whether this element's property can be edited now. It is
-//     the kind's editable, except that a station offset or a placement offset
-//     whose value is null is not editable; a reference that names none is
-//     null and editable.
+//     editable says whether this subject's property can be edited now. It is
+//     the property's editable, except that a station offset or a placement
+//     offset whose value is null is not editable; a reference that names none
+//     is null and editable, and so is the gravity of a project that states
+//     none. Refused for wheel, rail and contact_computation while the project
+//     has no contact record.
 //
-//   set_property  {"element": <element>, "property": "<name>", "value": <value>}
-//     result: {"element": <element>}, the element after the edit, whose name
-//     differs from the one given after a rename.
+//   set_property  {"subject": <subject>, "property": "<name>", "value": <value>}
+//     result: {"subject": <subject>}, the subject after the edit: an element
+//     whose name differs from the one given after a rename.
 //     value is required, null included: an explicit null makes a reference
 //     that may name none name none. The value is read as the property's value
 //     kind, and a value of another shape is refused. The edit is then refused
-//     unless the element exists, the property is editable, every number in
-//     the value is finite, a station offset or placement offset has the record
-//     holding it, a reference names an element of one of its referenced_kinds
-//     or, where optional, none, a token is one of its choices, and a new name
-//     is not empty and taken by no other element of the element's name space.
+//     unless the element exists or the project holds the settings, which it
+//     holds of wheel, rail and contact_computation only with a contact record,
+//     the property is editable, every number in the value is finite, a
+//     station offset or placement offset has the record holding it, a
+//     reference names an element of one of its referenced_kinds or, where
+//     optional, none, a token is one of its choices, and a new name is not
+//     empty and taken by no other element of the element's name space.
 //     Renaming changes every reference to the element and its group
 //     memberships, and for a rigid body its station layout entry, the
 //     layout's reference body and wheel-pair station list and its placement;
@@ -223,8 +302,9 @@
 //     What remove_element would remove, or its refusal. Changes nothing.
 //
 //   set_property, add_element and remove_element are each one edit: one undo
-//   step and one revision. After any edit, undo or redo an element may be
-//   gone or renamed, so a client reads the outline again.
+//   step and one revision. After any edit, undo, redo or
+//   save_vehicle_project_as an element may be gone, renamed or under another
+//   owner, so a client reads the model tree and the outline again.
 //
 //   undo, redo
 //     result: {}
@@ -328,10 +408,11 @@
 //
 // Example
 //   > {"id": 7, "command": "set_property",
-//      "element": {"kind": "rigid_body", "name": "carbody"},
+//      "subject": {"element": {"kind": "rigid_body", "name": "carbody"}},
 //      "property": "name", "value": ""}
 //   < {"id": 7, "ok": false,
-//      "error": {"element": {"kind": "rigid_body", "name": "carbody"},
+//      "error": {"subject": {"element": {"kind": "rigid_body",
+//                                        "name": "carbody"}},
 //                "property": "name",
 //                "message": "an element's name cannot be empty"}}
 
@@ -365,10 +446,13 @@
 #include "orvd/vehicle_project/vehicle_project_files_in_directory.h"
 #include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
+#include "orvd/vehicle_project_editing/vehicle_project_model_tree_by_domains.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
+#include "orvd/vehicle_project_editing/vehicle_project_property_subjects.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
+#include "orvd/vehicle_project_editing/vehicle_project_titles_in_english_and_chinese.h"
 
 namespace {
 
@@ -379,18 +463,24 @@ using orvd::vehicle_project::ElementReference;
 using orvd::vehicle_project::VehicleProject;
 using orvd::vehicle_project::VehicleProjectFileLocation;
 using orvd::vehicle_project_editing::CurveRowField;
-using orvd::vehicle_project_editing::ElementEditRefusal;
 using orvd::vehicle_project_editing::ElementOwnName;
-using orvd::vehicle_project_editing::ElementPropertyDescription;
-using orvd::vehicle_project_editing::ElementPropertyReading;
 using orvd::vehicle_project_editing::JointLocationDrawing;
 using orvd::vehicle_project_editing::MechanicalCheckReport;
+using orvd::vehicle_project_editing::ModelTreeCreationOffer;
+using orvd::vehicle_project_editing::ModelTreeNode;
+using orvd::vehicle_project_editing::ProjectSettings;
+using orvd::vehicle_project_editing::PropertyDescription;
+using orvd::vehicle_project_editing::PropertyReading;
+using orvd::vehicle_project_editing::PropertySubject;
+using orvd::vehicle_project_editing::PropertyText;
 using orvd::vehicle_project_editing::PropertyToken;
 using orvd::vehicle_project_editing::PropertyValue;
 using orvd::vehicle_project_editing::PropertyValueKind;
 using orvd::vehicle_project_editing::PropertyValuesByName;
 using orvd::vehicle_project_editing::ReferencedElementName;
 using orvd::vehicle_project_editing::SaturatedPiecewiseLinearDamperCurve;
+using orvd::vehicle_project_editing::SubjectEditRefusal;
+using orvd::vehicle_project_editing::Title;
 using orvd::vehicle_project_editing::VehicleProjectEditingSession;
 using orvd::vehicle_project_editing::VehicleProjectPreview;
 
@@ -418,6 +508,8 @@ std::string NameOfValueKind(PropertyValueKind kind) {
             return "boolean";
         case PropertyValueKind::kRotation:
             return "rotation";
+        case PropertyValueKind::kText:
+            return "text";
         case PropertyValueKind::kElementName:
             return "element_name";
         case PropertyValueKind::kElementReference:
@@ -455,6 +547,32 @@ Json EncodeElements(const std::vector<ElementReference>& elements) {
     return encoded;
 }
 
+// The protocol writes settings as their word (vehicle_project_property_subjects.h).
+ProjectSettings ProjectSettingsNamed(std::string_view word) {
+    const std::optional<ProjectSettings> settings =
+        orvd::vehicle_project_editing::FindProjectSettingsWrittenAs(word);
+    if (!settings.has_value()) {
+        throw std::invalid_argument("'" + std::string(word) + "' is not a settings word");
+    }
+    return *settings;
+}
+
+Json EncodeSubject(const PropertySubject& subject) {
+    if (const auto* const element = std::get_if<ElementReference>(&subject)) {
+        return Json{{"element", EncodeElement(*element)}};
+    }
+    return Json{{"settings", std::string(orvd::vehicle_project_editing::ProjectSettingsWord(
+                                 std::get<ProjectSettings>(subject)))}};
+}
+
+Json EncodeTitle(const Title& title) {
+    return Json{{"en", title.en}, {"zh", title.zh}};
+}
+
+Json EncodeOptionalTitle(const std::optional<Title>& title) {
+    return title.has_value() ? EncodeTitle(*title) : Json(nullptr);
+}
+
 // One encoding per type a property value holds.
 Json EncodeValue(double number) {
     return number;
@@ -467,6 +585,9 @@ Json EncodeValue(bool truth) {
 }
 Json EncodeValue(const Eigen::Matrix3d& rotation) {
     return EncodeRotation(rotation);
+}
+Json EncodeValue(const PropertyText& text) {
+    return text.text;
 }
 Json EncodeValue(const ElementOwnName& own_name) {
     return own_name.name;
@@ -493,7 +614,7 @@ Json EncodeCurve(const SaturatedPiecewiseLinearDamperCurve& curve,
 }
 
 Json EncodePropertyValue(const std::optional<PropertyValue>& value,
-                         const ElementPropertyDescription& description) {
+                         const PropertyDescription& description) {
     if (!value.has_value()) {
         return nullptr;
     }
@@ -520,7 +641,7 @@ Eigen::Vector3d DecodeVector(const Json& value) {
 // The property value a JSON value states, read as the value kind the property
 // is described with, or why its shape is not that kind's.
 std::expected<PropertyValue, std::string> DecodePropertyValue(
-    const Json& value, const ElementPropertyDescription& description) {
+    const Json& value, const PropertyDescription& description) {
     const std::string property = "'" + std::string(description.name) + "'";
     switch (description.value_kind) {
         case PropertyValueKind::kNumber:
@@ -548,6 +669,11 @@ std::expected<PropertyValue, std::string> DecodePropertyValue(
                 return rotation;
             }
             return std::unexpected(property + " takes three rows of three numbers");
+        case PropertyValueKind::kText:
+            if (value.is_string()) {
+                return PropertyText{value.get<std::string>()};
+            }
+            return std::unexpected(property + " takes a string");
         case PropertyValueKind::kElementName:
             if (value.is_string()) {
                 return ElementOwnName{value.get<std::string>()};
@@ -600,10 +726,19 @@ ElementReference DecodeElement(const Json& element) {
             element.at("name").get<std::string>()};
 }
 
-Json EncodeDescription(const ElementPropertyDescription& description) {
+// An element when the subject names one, otherwise settings.
+PropertySubject DecodeSubject(const Json& subject) {
+    if (subject.contains("element")) {
+        return DecodeElement(subject.at("element"));
+    }
+    return ProjectSettingsNamed(subject.at("settings").get<std::string>());
+}
+
+Json EncodeDescription(const PropertyDescription& description) {
     Json encoded{{"name", std::string(description.name)},
                  {"value_kind", NameOfValueKind(description.value_kind)},
-                 {"editable", description.editable}};
+                 {"editable", description.editable},
+                 {"section", EncodeOptionalTitle(description.section)}};
     if (description.value_kind == PropertyValueKind::kElementReference) {
         Json referenced_kinds = Json::array();
         for (const ElementKind kind : description.referenced_kinds) {
@@ -643,12 +778,14 @@ Json DescribeElementKinds() {
     Json kinds = Json::array();
     for (const ElementKind kind : orvd::vehicle_project::kElementKinds) {
         Json properties = Json::array();
-        for (const ElementPropertyDescription& description :
+        for (const PropertyDescription& description :
              orvd::vehicle_project_editing::DescribeElementProperties(kind)) {
             properties.push_back(EncodeDescription(description));
         }
         kinds.push_back(
-            Json{{"kind", NameOfElementKind(kind)}, {"properties", std::move(properties)}});
+            Json{{"kind", NameOfElementKind(kind)},
+                 {"title", EncodeTitle(orvd::vehicle_project_editing::ElementKindTitle(kind))},
+                 {"properties", std::move(properties)}});
     }
     return Json{{"element_kinds", std::move(kinds)}};
 }
@@ -667,6 +804,45 @@ Json EncodeOutline(const VehicleProject& project) {
         {"element_groups", EncodeGroups(project.element_groups)},
         {"unplaced_free_bodies", orvd::vehicle_project::CollectUnplacedFreeBodyNames(project)},
         {"contact_record_present", project.contact_record.has_value()}};
+}
+
+Json EncodeCreationOffer(const ModelTreeCreationOffer& offer) {
+    Json fixed_properties = Json::object();
+    for (const auto& [property_name, value] : offer.fixed_properties) {
+        fixed_properties[property_name] = EncodePropertyValue(
+            value,
+            *orvd::vehicle_project_editing::DescribeElementProperty(offer.kind, property_name)
+                 .value());
+    }
+    return Json{{"kind", NameOfElementKind(offer.kind)},
+                {"fixed_properties", std::move(fixed_properties)}};
+}
+
+Json EncodeModelTreeNode(const ModelTreeNode& node) {
+    Json creates = Json::array();
+    for (const ModelTreeCreationOffer& offer : node.creates) {
+        creates.push_back(EncodeCreationOffer(offer));
+    }
+    Json children = Json::array();
+    for (const ModelTreeNode& child : node.children) {
+        children.push_back(EncodeModelTreeNode(child));
+    }
+    return Json{
+        {"key", node.key},
+        {"title", EncodeOptionalTitle(node.title)},
+        {"subject", node.subject.has_value() ? EncodeSubject(*node.subject) : Json(nullptr)},
+        {"provided", node.provided},
+        {"note", EncodeOptionalTitle(node.note)},
+        {"creates", std::move(creates)},
+        {"children", std::move(children)}};
+}
+
+Json EncodeModelTree(const VehicleProject& project) {
+    Json nodes = Json::array();
+    for (const ModelTreeNode& node : orvd::vehicle_project_editing::DescribeModelTree(project)) {
+        nodes.push_back(EncodeModelTreeNode(node));
+    }
+    return Json{{"nodes", std::move(nodes)}};
 }
 
 Json EncodeCheckReport(const MechanicalCheckReport& report) {
@@ -780,16 +956,16 @@ Json AcceptedWhetherOrNotOpen(const Json& id,
                                : AcceptedWithNothingOpen(id, std::move(result));
 }
 
-Json Refused(const Json& id, Json element, Json property, std::string_view message) {
+Json Refused(const Json& id, Json subject, Json property, std::string_view message) {
     return Json{{"id", id},
                 {"ok", false},
-                {"error", Json{{"element", std::move(element)},
+                {"error", Json{{"subject", std::move(subject)},
                                {"property", std::move(property)},
                                {"message", std::string(message)}}}};
 }
 
-Json RefusedEdit(const Json& id, const ElementEditRefusal& refusal) {
-    return Refused(id, EncodeElement(refusal.element),
+Json RefusedEdit(const Json& id, const SubjectEditRefusal& refusal) {
+    return Refused(id, EncodeSubject(refusal.subject),
                    refusal.property_name.has_value() ? Json(*refusal.property_name) : Json(nullptr),
                    refusal.reason);
 }
@@ -855,15 +1031,15 @@ Json EncodeVisualDefinition(const VehicleProject& project) {
 
 Json GetProperties(const Json& id, const Json& request,
                    const VehicleProjectEditingSession& session) {
-    const ElementReference element = DecodeElement(request.at("element"));
-    std::vector<ElementPropertyReading> readings;
+    const PropertySubject subject = DecodeSubject(request.at("subject"));
+    std::vector<PropertyReading> readings;
     try {
-        readings = orvd::vehicle_project_editing::ReadElementProperties(session.project(), element);
+        readings = orvd::vehicle_project_editing::ReadSubjectProperties(session.project(), subject);
     } catch (const std::invalid_argument& refusal) {
-        return Refused(id, EncodeElement(element), nullptr, refusal.what());
+        return Refused(id, EncodeSubject(subject), nullptr, refusal.what());
     }
     Json properties = Json::array();
-    for (const ElementPropertyReading& reading : readings) {
+    for (const PropertyReading& reading : readings) {
         Json property = EncodeDescription(reading.description);
         property["value"] = EncodePropertyValue(reading.value, reading.description);
         properties.push_back(std::move(property));
@@ -871,13 +1047,10 @@ Json GetProperties(const Json& id, const Json& request,
     return Accepted(id, session, Json{{"properties", std::move(properties)}});
 }
 
-// The value given for the property of `kind` named `property_name`, read as
-// the value kind the property is described with, or why it cannot be.
-std::expected<PropertyValue, std::string> DecodeGivenValue(ElementKind kind,
-                                                           const std::string& property_name,
-                                                           const Json& value) {
-    const auto described =
-        orvd::vehicle_project_editing::DescribeElementProperty(kind, property_name);
+// The value given for the property `described`, read as the value kind the
+// property is described with, or why the property or its value is not one.
+std::expected<PropertyValue, std::string> DecodeGivenValue(
+    const std::expected<const PropertyDescription*, std::string>& described, const Json& value) {
     if (!described.has_value()) {
         return std::unexpected(described.error());
     }
@@ -885,18 +1058,19 @@ std::expected<PropertyValue, std::string> DecodeGivenValue(ElementKind kind,
 }
 
 Json SetProperty(const Json& id, const Json& request, VehicleProjectEditingSession& session) {
-    const ElementReference element = DecodeElement(request.at("element"));
+    const PropertySubject subject = DecodeSubject(request.at("subject"));
     const std::string property_name = request.at("property").get<std::string>();
-    const std::expected<PropertyValue, std::string> value =
-        DecodeGivenValue(element.kind, property_name, request.at("value"));
+    const std::expected<PropertyValue, std::string> value = DecodeGivenValue(
+        orvd::vehicle_project_editing::DescribeSubjectProperty(subject, property_name),
+        request.at("value"));
     if (!value.has_value()) {
-        return Refused(id, EncodeElement(element), property_name, value.error());
+        return Refused(id, EncodeSubject(subject), property_name, value.error());
     }
-    const auto edited = session.SetElementProperty(element, property_name, *value);
+    const auto edited = session.SetSubjectProperty(subject, property_name, *value);
     if (!edited.has_value()) {
         return RefusedEdit(id, edited.error());
     }
-    return Accepted(id, session, Json{{"element", EncodeElement(*edited)}});
+    return Accepted(id, session, Json{{"subject", EncodeSubject(*edited)}});
 }
 
 Json AddElement(const Json& id, const Json& request, VehicleProjectEditingSession& session) {
@@ -904,15 +1078,16 @@ Json AddElement(const Json& id, const Json& request, VehicleProjectEditingSessio
                                    request.at("name").get<std::string>()};
     const Json& given = request.at("properties");
     if (!given.is_object()) {
-        return Refused(id, EncodeElement(element), nullptr,
+        return Refused(id, EncodeSubject(element), nullptr,
                        "properties must be an object of property values by property name");
     }
     PropertyValuesByName properties;
     for (const auto& [property_name, given_value] : given.items()) {
-        std::expected<PropertyValue, std::string> value =
-            DecodeGivenValue(element.kind, property_name, given_value);
+        std::expected<PropertyValue, std::string> value = DecodeGivenValue(
+            orvd::vehicle_project_editing::DescribeElementProperty(element.kind, property_name),
+            given_value);
         if (!value.has_value()) {
-            return Refused(id, EncodeElement(element), property_name, value.error());
+            return Refused(id, EncodeSubject(element), property_name, value.error());
         }
         properties.emplace(property_name, std::move(*value));
     }
@@ -971,6 +1146,9 @@ Json Respond(const std::string& line, std::optional<VehicleProjectEditingSession
         VehicleProjectEditingSession& open_session = *session;
         if (command == "describe_element_kinds") {
             return Accepted(id, open_session, DescribeElementKinds());
+        }
+        if (command == "get_model_tree") {
+            return Accepted(id, open_session, EncodeModelTree(open_session.project()));
         }
         if (command == "get_outline") {
             return Accepted(id, open_session, EncodeOutline(open_session.project()));

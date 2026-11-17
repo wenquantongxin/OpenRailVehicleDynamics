@@ -31,10 +31,10 @@ std::size_t DeclarationIndex(const VehicleProject& project, const ElementReferen
 
 }  // namespace
 
-std::expected<std::vector<ElementReference>, ElementEditRefusal> CollectElementsRemovedWith(
+std::expected<std::vector<ElementReference>, SubjectEditRefusal> CollectElementsRemovedWith(
     const VehicleProject& project, const ElementReference& element) {
     const auto refuse = [&element](std::string reason) {
-        return std::unexpected(ElementEditRefusal{element, std::nullopt, std::move(reason)});
+        return std::unexpected(SubjectEditRefusal{element, std::nullopt, std::move(reason)});
     };
     if (!vehicle_project::ContainsElement(project, element)) {
         return refuse("this project contains no " + vehicle_project::DescribeElement(element));

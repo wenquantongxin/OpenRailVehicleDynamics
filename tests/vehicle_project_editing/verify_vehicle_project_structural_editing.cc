@@ -19,10 +19,10 @@
 #include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 #include "orvd/vehicle_project/vehicle_project_invariants.h"
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 #include "vehicle_project/configuration_record_comparison.h"
 #include "vehicle_project/vehicle_project_comparison.h"
 #include "vehicle_project_editing/vehicle_project_editing_verification.h"
@@ -56,13 +56,14 @@ using vehicle_project::ElementKind;
 using vehicle_project::ElementReference;
 using vehicle_project::VehicleProject;
 using vehicle_project_comparison::SameProject;
-using vehicle_project_editing::ElementEditRefusal;
 using vehicle_project_editing::ElementOwnName;
 using vehicle_project_editing::MechanicalCheckReport;
+using vehicle_project_editing::PropertySubject;
 using vehicle_project_editing::PropertyToken;
 using vehicle_project_editing::PropertyValue;
 using vehicle_project_editing::PropertyValuesByName;
 using vehicle_project_editing::ReferencedElementName;
+using vehicle_project_editing::SubjectEditRefusal;
 using vehicle_project_editing::VehicleProjectEditingSession;
 using vehicle_project_editing::VehicleProjectPreview;
 
@@ -121,7 +122,7 @@ MechanicalCheckReport RequireCheckPasses(VehicleProjectEditingSession& session,
 
 // An accepted edit's result, or a failure saying what was refused and why.
 template <typename Value>
-Value RequireAccepted(const std::expected<Value, ElementEditRefusal>& outcome,
+Value RequireAccepted(const std::expected<Value, SubjectEditRefusal>& outcome,
                       const std::string& what) {
     Require(outcome.has_value(),
             what + " was refused: " + (outcome.has_value() ? "" : outcome.error().reason));
@@ -131,15 +132,15 @@ Value RequireAccepted(const std::expected<Value, ElementEditRefusal>& outcome,
 // A refusal names `element` and `property_name` and leaves the project, its
 // history and its revision as they were.
 template <typename Value>
-void RequireRefused(const std::expected<Value, ElementEditRefusal>& outcome,
+void RequireRefused(const std::expected<Value, SubjectEditRefusal>& outcome,
                     const ElementReference& element,
                     const std::optional<std::string>& property_name,
                     const VehicleProjectEditingSession& session, const VehicleProject& before,
                     std::uint64_t revision_before, bool could_undo_before,
                     const std::string& what) {
     Require(!outcome.has_value(), what + " was accepted");
-    const ElementEditRefusal& refusal = outcome.error();
-    Require(refusal.element == element && refusal.property_name == property_name &&
+    const SubjectEditRefusal& refusal = outcome.error();
+    Require(refusal.subject == PropertySubject{element} && refusal.property_name == property_name &&
                 !refusal.reason.empty(),
             what + " was refused without naming its element and property and saying why");
     Require(SameProject(before, session.project()) && session.revision() == revision_before &&
@@ -361,9 +362,9 @@ void VerifyGroupsFollowElements(const ReferenceVehicle& gz18) {
                                .subgroups = {{.name = "wheelset", .members = {body}}}}};
     VehicleProjectEditingSession session(project);
 
-    const ElementReference renamed = RequireAccepted(
-        session.SetElementProperty(body, "name", ElementOwnName{body.name + "_renamed"}),
-        "renaming a grouped body");
+    const auto renamed = std::get<ElementReference>(RequireAccepted(
+        session.SetSubjectProperty(body, "name", ElementOwnName{body.name + "_renamed"}),
+        "renaming a grouped body"));
     std::vector<vehicle_project::ElementGroup> expected = project.element_groups;
     expected.front().subgroups.front().members = {renamed};
     Require(vehicle_project_comparison::SameGroups(expected, session.project().element_groups),
@@ -438,10 +439,10 @@ void VerifyRenamingARigidBody(const ReferenceVehicle& gz18) {
     const std::string old_name = carrier.body_name;
     const std::string new_name = old_name + "_renamed";
 
-    const ElementReference renamed =
-        RequireAccepted(session.SetElementProperty({ElementKind::kRigidBody, old_name}, "name",
-                                                   ElementOwnName{new_name}),
-                        "renaming a GZ18 wheelset body");
+    const auto renamed = std::get<ElementReference>(RequireAccepted(
+        session.SetSubjectProperty(ElementReference{ElementKind::kRigidBody, old_name}, "name",
+                                   ElementOwnName{new_name}),
+        "renaming a GZ18 wheelset body"));
     Require(renamed == ElementReference{ElementKind::kRigidBody, new_name},
             "a rename did not return the renamed body");
 
@@ -511,7 +512,7 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
                                       vehicle.translational_spring_dampers.front().name};
     // One accepted edit first, so that the history holds a step a refusal
     // could disturb.
-    RequireAccepted(session.SetElementProperty(suspension, "damping_newton_seconds_per_meter",
+    RequireAccepted(session.SetSubjectProperty(suspension, "damping_newton_seconds_per_meter",
                                                Eigen::Vector3d(1.0e3, 2.0e3, 3.0e4)),
                     "a GZ18 damping edit");
     const VehicleProject before = session.project();
@@ -522,27 +523,27 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
         RequireRefused(outcome, element, property_name, session, before, revision, true, what);
     };
 
-    require_refused(session.SetElementProperty(suspension, "reference_frame_name",
+    require_refused(session.SetSubjectProperty(suspension, "reference_frame_name",
                                                ReferencedElementName{"absent_frame"}),
                     suspension, "reference_frame_name",
                     "a force element end set to a frame that does not exist");
     const ElementReference frame{ElementKind::kFixedFrame, vehicle.fixed_frames.front().name};
     require_refused(
-        session.SetElementProperty(frame, "body_name",
+        session.SetSubjectProperty(frame, "body_name",
                                    ReferencedElementName{vehicle.revolute_joints.front().name}),
         frame, "body_name", "a fixed frame pointed at a joint");
-    require_refused(session.SetElementProperty(frame, "name",
+    require_refused(session.SetSubjectProperty(frame, "name",
                                                ElementOwnName{vehicle.rigid_bodies.front().name}),
                     frame, "name", "a frame named like a body");
     const ElementReference weld{ElementKind::kWeldJoint, vehicle.weld_joints.front().name};
-    require_refused(session.SetElementProperty(
+    require_refused(session.SetSubjectProperty(
                         weld, "name", ElementOwnName{vehicle.revolute_joints.front().name}),
                     weld, "name", "a weld named like a revolute joint");
     const ElementReference reference_body{
         ElementKind::kRigidBody, vehicle.mechanical_track_station_layout.reference_body_name};
-    require_refused(session.SetElementProperty(reference_body, "name", ElementOwnName{"world"}),
+    require_refused(session.SetSubjectProperty(reference_body, "name", ElementOwnName{"world"}),
                     reference_body, "name", "a body named 'world'");
-    require_refused(session.SetElementProperty(reference_body, "name", ElementOwnName{""}),
+    require_refused(session.SetSubjectProperty(reference_body, "name", ElementOwnName{""}),
                     reference_body, "name", "a body given an empty name");
     const ElementReference new_frame{ElementKind::kFixedFrame, "frame_without_body"};
     require_refused(
@@ -551,13 +552,13 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
         new_frame, "body_name", "a fixed frame created without its body");
     const ElementReference damper{ElementKind::kSeriesSpringViscousDamper,
                                   vehicle.series_spring_viscous_dampers.front().name};
-    require_refused(session.SetElementProperty(damper, "axis", PropertyToken{"diagonal"}), damper,
+    require_refused(session.SetSubjectProperty(damper, "axis", PropertyToken{"diagonal"}), damper,
                     "axis", "an axis outside its choices");
     require_refused(session.RemoveElement(reference_body), reference_body, std::nullopt,
                     "removing the station layout's reference body");
     require_refused(session.CollectRemovalConsequences(reference_body), reference_body,
                     std::nullopt, "asking what removing the station layout's reference body takes");
-    require_refused(session.SetElementProperty(reference_body, "moves_freely_in_world", false),
+    require_refused(session.SetSubjectProperty(reference_body, "moves_freely_in_world", false),
                     reference_body, "moves_freely_in_world",
                     "making the station layout's reference body not move freely");
     const ElementReference body_named_like_frame{ElementKind::kRigidBody, frame.name};
@@ -691,7 +692,7 @@ void VerifyOptionalReference(const ReferenceVehicle& gz18) {
         ElementKind::kContactInterface,
         gz18.contact_record.declaration.interfaces.front().interface_name};
     const std::string joint = gz18.definition.revolute_joints.front().name;
-    RequireAccepted(session.SetElementProperty(interface, "independent_wheel_revolute_joint_name",
+    RequireAccepted(session.SetSubjectProperty(interface, "independent_wheel_revolute_joint_name",
                                                ReferencedElementName{joint}),
                     "naming an independent-wheel joint for a GZ18 interface");
     Require(session.project()
@@ -700,7 +701,7 @@ void VerifyOptionalReference(const ReferenceVehicle& gz18) {
             "the interface does not name the joint it was given");
     Require(!session.CheckMechanics().refusals.empty(),
             "the check accepted a rigid wheelset's interface naming an independent-wheel joint");
-    RequireAccepted(session.SetElementProperty(interface, "independent_wheel_revolute_joint_name",
+    RequireAccepted(session.SetSubjectProperty(interface, "independent_wheel_revolute_joint_name",
                                                ReferencedElementName{std::nullopt}),
                     "clearing the interface's independent-wheel joint");
     Require(SameProject(opened, session.project()),
@@ -733,7 +734,7 @@ void VerifyCurve(const ReferenceVehicle& gz18) {
                                     return refusal.find(damper.name) != std::string::npos;
                                 }),
             "the check did not judge the new damper's empty curve");
-    RequireAccepted(session.SetElementProperty(damper, "curve", beside.curve),
+    RequireAccepted(session.SetSubjectProperty(damper, "curve", beside.curve),
                     "setting the new damper's curve");
     RequireCheckPasses(session, "GZ18 with a new damper and its curve");
 }
@@ -750,7 +751,7 @@ void VerifyFreedomBringsFreeBodyRecords(const ReferenceVehicle& gz18) {
     Require(jointed != gz18.definition.rigid_bodies.end(), "GZ18 has no jointed body");
     const ElementReference body{ElementKind::kRigidBody, jointed->name};
 
-    RequireAccepted(session.SetElementProperty(body, "moves_freely_in_world", true),
+    RequireAccepted(session.SetSubjectProperty(body, "moves_freely_in_world", true),
                     "making a jointed body move freely");
     const vehicle_project::FreeBodyPlacement* const placement =
         FindPlacement(session.project(), body.name);
@@ -760,7 +761,7 @@ void VerifyFreedomBringsFreeBodyRecords(const ReferenceVehicle& gz18) {
             "a body made to move freely did not get a zero station offset and a placement at "
             "zero offsets and the identity rotation");
 
-    RequireAccepted(session.SetElementProperty(body, "moves_freely_in_world", false),
+    RequireAccepted(session.SetSubjectProperty(body, "moves_freely_in_world", false),
                     "making the body no longer move freely");
     Require(SameProject(opened, session.project()),
             "a body made to move freely and back still has a station layout entry or placement");
@@ -781,21 +782,21 @@ void VerifyRepairingAMismatchedContactRecord(const ReferenceVehicle& gz18,
 
     const ElementReference suspension{ElementKind::kTranslationalSpringDamper,
                                       gz18.definition.translational_spring_dampers.front().name};
-    RequireAccepted(session.SetElementProperty(suspension, "damping_newton_seconds_per_meter",
+    RequireAccepted(session.SetSubjectProperty(suspension, "damping_newton_seconds_per_meter",
                                                Eigen::Vector3d(1.0e3, 2.0e3, 3.0e4)),
                     "a damping edit beside a mismatched contact record");
     const configuration::VehicleContactCarrierDeclaration& irw_carrier =
         irw.contact_record.declaration.carriers.front();
     const ElementReference carrier{ElementKind::kContactCarrier, irw_carrier.carrier_name};
     RequireAccepted(
-        session.SetElementProperty(
+        session.SetSubjectProperty(
             carrier, "body_name",
             ReferencedElementName{gz18.contact_record.declaration.carriers.front().body_name}),
         "pointing a mismatched carrier at a GZ18 wheelset");
     const ElementReference interface{
         ElementKind::kContactInterface,
         irw.contact_record.declaration.interfaces.back().interface_name};
-    RequireAccepted(session.SetElementProperty(interface, "interface_name",
+    RequireAccepted(session.SetSubjectProperty(interface, "interface_name",
                                                ElementOwnName{interface.name + "_renamed"}),
                     "renaming an interface whose wheel body GZ18 does not have");
     const std::vector<ElementReference> removed =
@@ -842,7 +843,7 @@ void VerifyAxisTokensPassTheCheck(const ReferenceVehicle& gz18) {
     Require(axis.has_value() && !(*axis)->choices.empty(), "the damper's axis states no choices");
     for (const std::string_view token : (*axis)->choices) {
         RequireAccepted(
-            session.SetElementProperty(damper, "axis", PropertyToken{std::string(token)}),
+            session.SetSubjectProperty(damper, "axis", PropertyToken{std::string(token)}),
             "setting the axis '" + std::string(token) + "'");
         RequireCheckPasses(session,
                            "GZ18 with its lateral damper along '" + std::string(token) + "'");

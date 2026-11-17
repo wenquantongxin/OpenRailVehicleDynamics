@@ -51,7 +51,7 @@ const ElementReference kPrimarySuspension{ElementKind::kTranslationalSpringDampe
 void EditVerticalStiffness(VehicleProjectEditingSession& session,
                            double stiffness_newtons_per_meter) {
     Require(session
-                .SetElementProperty(kPrimarySuspension, "stiffness_newtons_per_meter",
+                .SetSubjectProperty(kPrimarySuspension, "stiffness_newtons_per_meter",
                                     Eigen::Vector3d(1.0e6, 1.0e6, stiffness_newtons_per_meter))
                 .has_value(),
             "a stiffness edit was refused");

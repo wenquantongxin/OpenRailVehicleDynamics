@@ -4,8 +4,8 @@
 #include <string>
 
 #include "orvd/vehicle_project/vehicle_project.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 
 namespace orvd::vehicle_project_editing::internal {
 
@@ -15,7 +15,7 @@ namespace orvd::vehicle_project_editing::internal {
 // rigid body made to move freely has its station offset and placement offsets
 // to set. The checks are those VehicleProjectEditingSession::AddElement
 // states. A refusal may leave the project partly changed.
-[[nodiscard]] std::expected<vehicle_project::ElementReference, ElementEditRefusal> CreateElement(
+[[nodiscard]] std::expected<vehicle_project::ElementReference, SubjectEditRefusal> CreateElement(
     vehicle_project::VehicleProject& project, vehicle_project::ElementKind kind,
     const std::string& name, const PropertyValuesByName& properties);
 

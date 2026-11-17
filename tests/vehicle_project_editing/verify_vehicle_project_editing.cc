@@ -26,12 +26,14 @@
 #include "orvd/configuration/vehicle_contact_record.h"
 #include "orvd/vehicle_project/generate_assembly_inputs_from_vehicle_project.h"
 #include "orvd/vehicle_project/vehicle_project.h"
+#include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 #include "orvd/vehicle_project/vehicle_project_free_body_placements.h"
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
+#include "orvd/vehicle_project_editing/vehicle_project_property_subjects.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 #include "vehicle_project/configuration_record_comparison.h"
 #include "vehicle_project/vehicle_project_comparison.h"
 #include "vehicle_project_editing/vehicle_project_editing_verification.h"
@@ -72,17 +74,18 @@ using vehicle_project::ElementReference;
 using vehicle_project::FreeBodyPlacement;
 using vehicle_project::VehicleProject;
 using vehicle_project_comparison::SameProject;
-using vehicle_project_editing::ElementEditRefusal;
 using vehicle_project_editing::ElementOwnName;
-using vehicle_project_editing::ElementPropertyDescription;
-using vehicle_project_editing::ElementPropertyReading;
 using vehicle_project_editing::MechanicalCheckReport;
+using vehicle_project_editing::PropertyDescription;
+using vehicle_project_editing::PropertyReading;
+using vehicle_project_editing::PropertySubject;
 using vehicle_project_editing::PropertyToken;
 using vehicle_project_editing::PropertyValue;
 using vehicle_project_editing::PropertyValueKind;
 using vehicle_project_editing::ReferencedElementName;
 using vehicle_project_editing::RigidBodyDrawing;
 using vehicle_project_editing::SaturatedPiecewiseLinearDamperCurve;
+using vehicle_project_editing::SubjectEditRefusal;
 using vehicle_project_editing::VehicleProjectEditingSession;
 using vehicle_project_editing::VehicleProjectPreview;
 using vehicle_project_editing::WheelDrawing;
@@ -542,8 +545,8 @@ std::map<PropertyName, std::vector<std::string>> ExpectedTokenChoices() {
 // this test states for the property: a reference's kinds and whether it may
 // name none, a token's choices, and a curve's row fields, which are the
 // members of a curve point under their own names.
-void RequireDescribedAsStated(const ElementPropertyDescription& description,
-                              const PropertyName& property, const std::string& what) {
+void RequireDescribedAsStated(const PropertyDescription& description, const PropertyName& property,
+                              const std::string& what) {
     const std::map<PropertyName, ExpectedReference> references = ExpectedReferences();
     const auto reference = references.find(property);
     Require((description.value_kind == PropertyValueKind::kElementReference) ==
@@ -594,8 +597,8 @@ std::map<PropertyKey, std::optional<PropertyValue>> ReadEveryProperty(
     for (const ExpectedElementKind& kind : kinds) {
         for (const std::string& element_name :
              vehicle_project_editing::CollectElementNames(project, kind.kind)) {
-            for (ElementPropertyReading& reading : vehicle_project_editing::ReadElementProperties(
-                     project, {kind.kind, element_name})) {
+            for (PropertyReading& reading : vehicle_project_editing::ReadSubjectProperties(
+                     project, ElementReference{kind.kind, element_name})) {
                 values.emplace(
                     PropertyKey{kind.kind, element_name, std::string(reading.description.name)},
                     std::move(reading.value));
@@ -614,18 +617,18 @@ void VerifyPropertiesReadTheirMembers(const VehicleProject& probe,
                 "this test lists " + std::to_string(expected.properties.size()) +
                     " properties for " + Describe(element) + ", whose kind needs " +
                     std::to_string(expected.property_count));
-        const std::span<const ElementPropertyDescription> descriptions =
+        const std::span<const PropertyDescription> descriptions =
             vehicle_project_editing::DescribeElementProperties(expected.kind);
-        const std::vector<ElementPropertyReading> readings =
-            vehicle_project_editing::ReadElementProperties(probe, element);
+        const std::vector<PropertyReading> readings =
+            vehicle_project_editing::ReadSubjectProperties(probe, element);
         Require(descriptions.size() == expected.property_count &&
                     readings.size() == expected.property_count,
                 Describe(element) + " is described or read with " +
                     std::to_string(descriptions.size()) + " or " + std::to_string(readings.size()) +
                     " properties instead of " + std::to_string(expected.property_count));
         for (std::size_t index = 0; index < descriptions.size(); ++index) {
-            const ElementPropertyDescription& description = descriptions[index];
-            const ElementPropertyDescription& read_description = readings[index].description;
+            const PropertyDescription& description = descriptions[index];
+            const PropertyDescription& read_description = readings[index].description;
             const ExpectedProperty& property = expected.properties[index];
             const std::string what = Describe(element) + " property '" + property.name + "'";
             Require(description.name == property.name,
@@ -654,10 +657,10 @@ void VerifyPropertiesReadTheirMembers(const VehicleProject& probe,
 void VerifyAbsentValues(const VehicleProject& probe) {
     const auto reading_of = [&probe](const ElementReference& element,
                                      std::string_view property_name) {
-        const std::vector<ElementPropertyReading> readings =
-            vehicle_project_editing::ReadElementProperties(probe, element);
-        const auto reading = std::ranges::find_if(
-            readings, [property_name](const ElementPropertyReading& candidate) {
+        const std::vector<PropertyReading> readings =
+            vehicle_project_editing::ReadSubjectProperties(probe, element);
+        const auto reading =
+            std::ranges::find_if(readings, [property_name](const PropertyReading& candidate) {
                 return candidate.description.name == property_name;
             });
         Require(reading != readings.end(),
@@ -667,7 +670,7 @@ void VerifyAbsentValues(const VehicleProject& probe) {
     const auto require_absent = [&reading_of](const ElementReference& element,
                                               const std::string& property_name,
                                               const std::string& reason) {
-        const ElementPropertyReading reading = reading_of(element, property_name);
+        const PropertyReading reading = reading_of(element, property_name);
         Require(!reading.value.has_value() && !reading.description.editable,
                 "'" + element.name + "' " + reason + ", but its " + property_name +
                     " has a value or reads as editable");
@@ -685,7 +688,7 @@ void VerifyAbsentValues(const VehicleProject& probe) {
     }
     require_absent(jointed_body, "mechanical_track_station_layout.station_offset_meters",
                    "has no entry in the mechanical track station layout");
-    const ElementPropertyReading unplaced_station_offset =
+    const PropertyReading unplaced_station_offset =
         reading_of(unplaced_body, "mechanical_track_station_layout.station_offset_meters");
     Require(unplaced_station_offset.value.has_value() &&
                 SameValue(PropertyValue(probe.vehicle_definition.mechanical_track_station_layout
@@ -694,7 +697,7 @@ void VerifyAbsentValues(const VehicleProject& probe) {
                           *unplaced_station_offset.value) &&
                 unplaced_station_offset.description.editable,
             "'probe_unplaced_body' does not read its own station offset as editable");
-    const ElementPropertyReading no_joint =
+    const PropertyReading no_joint =
         reading_of({ElementKind::kContactInterface, "probe_interface_without_joint"},
                    "independent_wheel_revolute_joint_name");
     Require(no_joint.value.has_value() &&
@@ -714,15 +717,15 @@ void VerifyReadingsStateWhatEditsAccept(const VehicleProject& probe,
         for (const std::string& element_name :
              vehicle_project_editing::CollectElementNames(probe, kind.kind)) {
             const ElementReference element{kind.kind, element_name};
-            for (const ElementPropertyReading& reading :
-                 vehicle_project_editing::ReadElementProperties(probe, element)) {
+            for (const PropertyReading& reading :
+                 vehicle_project_editing::ReadSubjectProperties(probe, element)) {
                 const std::string property_name(reading.description.name);
                 const std::string what = Describe(element) + " property '" + property_name + "'";
                 // A value is absent only from a station offset or a placement
                 // offset, which hold numbers.
                 const PropertyValue value =
                     reading.value.has_value() ? *reading.value : PropertyValue(0.0);
-                const auto edited = session.SetElementProperty(element, property_name, value);
+                const auto edited = session.SetSubjectProperty(element, property_name, value);
                 if (reading.description.editable) {
                     Require(edited.has_value(),
                             what +
@@ -759,8 +762,8 @@ void VerifyElementLookup(const VehicleProject& probe) {
         "a project without a contact record lists contact carriers");
     bool refused = false;
     try {
-        (void)vehicle_project_editing::ReadElementProperties(
-            without_contact, {ElementKind::kContactCarrier, "probe_carrier"});
+        (void)vehicle_project_editing::ReadSubjectProperties(
+            without_contact, ElementReference{ElementKind::kContactCarrier, "probe_carrier"});
     } catch (const std::invalid_argument& error) {
         refused = std::string(error.what()).find("'probe_carrier'") != std::string::npos;
     }
@@ -841,9 +844,9 @@ void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
             const std::string what = Describe(element) + " property '" + property.name + "'";
             const PropertyValue changed =
                 ChangedValue(probe, {kind.kind, property.name}, *original.at(key));
-            const auto written = session.SetElementProperty(element, property.name, changed);
+            const auto written = session.SetSubjectProperty(element, property.name, changed);
             Require(
-                written.has_value() && *written == element,
+                written.has_value() && *written == PropertySubject{element},
                 what + " was not written: " + (written.has_value() ? "" : written.error().reason));
             for (const auto& [read_key, read_value] : ReadEveryProperty(session.project(), kinds)) {
                 if (read_key == key) {
@@ -869,7 +872,7 @@ void VerifyStationOffsetWritesItsLayoutEntry(const VehicleProject& probe) {
     const ElementReference body{ElementKind::kRigidBody, "probe_body"};
     VehicleProjectEditingSession session(probe);
     Require(session
-                .SetElementProperty(body, "mechanical_track_station_layout.station_offset_meters",
+                .SetSubjectProperty(body, "mechanical_track_station_layout.station_offset_meters",
                                     kEditedStationOffsetMeters)
                 .has_value(),
             "the probe body's station offset was not written");
@@ -883,6 +886,55 @@ void VerifyStationOffsetWritesItsLayoutEntry(const VehicleProject& probe) {
     entry->station_offset_meters = kEditedStationOffsetMeters;
     Require(SameProject(expected, session.project()),
             "writing the probe body's station offset changed more than its layout entry");
+}
+
+// A rigid body's properties are shown in the contract's sections, in the order
+// its properties are listed: its name in none, then degrees of freedom, mass
+// and inertia, its mechanical station and its preview placement. No other
+// kind's property, and no settings property, is in a section.
+void VerifyPropertySections() {
+    const std::vector<std::pair<std::string_view, std::optional<std::string_view>>>
+        rigid_body_sections = {
+            {"name", std::nullopt},
+            {"moves_freely_in_world", "Degrees of freedom"},
+            {"mass_kilograms", "Mass and inertia"},
+            {"center_of_mass_in_body_frame_meters", "Mass and inertia"},
+            {"inertia_moments_about_center_of_mass_kilogram_square_meters", "Mass and inertia"},
+            {"inertia_products_about_center_of_mass_kilogram_square_meters", "Mass and inertia"},
+            {"mechanical_track_station_layout.station_offset_meters", "Mechanical station"},
+            {"placement.lateral_offset_in_local_track_frame_meters", "Preview placement"},
+            {"placement.vertical_offset_in_local_track_frame_meters", "Preview placement"}};
+    const std::span<const PropertyDescription> body_descriptions =
+        vehicle_project_editing::DescribeElementProperties(ElementKind::kRigidBody);
+    Require(body_descriptions.size() == rigid_body_sections.size(),
+            "a rigid body has properties this test does not place in a section");
+    for (std::size_t index = 0; index < body_descriptions.size(); ++index) {
+        const PropertyDescription& description = body_descriptions[index];
+        const auto& [name, section] = rigid_body_sections[index];
+        Require(description.name == name &&
+                    description.section.has_value() == section.has_value() &&
+                    (!section.has_value() ||
+                     (description.section->en == *section && !description.section->zh.empty())),
+                "the rigid body property '" + std::string(name) + "' is not in its section");
+    }
+    for (const ElementKind kind : vehicle_project::kElementKinds) {
+        if (kind == ElementKind::kRigidBody) {
+            continue;
+        }
+        for (const PropertyDescription& description :
+             vehicle_project_editing::DescribeElementProperties(kind)) {
+            Require(!description.section.has_value(),
+                    "a " + std::string(vehicle_project::DescribeElementKind(kind)) +
+                        " property is in a section");
+        }
+    }
+    for (const vehicle_project_editing::ProjectSettings settings :
+         vehicle_project_editing::kProjectSettings) {
+        for (const PropertyDescription& description :
+             vehicle_project_editing::DescribeSettingsProperties(settings)) {
+            Require(!description.section.has_value(), "a settings property is in a section");
+        }
+    }
 }
 
 void VerifyPropertyDescriptions() {
@@ -922,7 +974,7 @@ void VerifyPrimarySuspensionEdit(const ReferenceVehicle& gz18) {
     const std::uint64_t opened_revision = session.revision();
     Require(
         session
-            .SetElementProperty(kPrimarySuspension, "stiffness_newtons_per_meter", edited_stiffness)
+            .SetSubjectProperty(kPrimarySuspension, "stiffness_newtons_per_meter", edited_stiffness)
             .has_value(),
         "the GZ18 primary suspension stiffness edit was refused");
     const std::uint64_t edited_revision = session.revision();
@@ -956,7 +1008,7 @@ void VerifyPrimarySuspensionEdit(const ReferenceVehicle& gz18) {
     // A new edit after an undo replaces what could have been redone.
     session.Undo();
     Require(session
-                .SetElementProperty(kPrimarySuspension, "damping_newton_seconds_per_meter",
+                .SetSubjectProperty(kPrimarySuspension, "damping_newton_seconds_per_meter",
                                     Eigen::Vector3d(1.0e3, 2.0e3, 3.0e4))
                 .has_value(),
             "the GZ18 primary suspension damping edit was refused");
@@ -981,7 +1033,7 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
     // One accepted edit first, so that the history holds a step a refusal
     // could disturb.
     Require(session
-                .SetElementProperty(kPrimarySuspension, "damping_newton_seconds_per_meter",
+                .SetSubjectProperty(kPrimarySuspension, "damping_newton_seconds_per_meter",
                                     Eigen::Vector3d(1.0e3, 2.0e3, 3.0e4))
                 .has_value(),
             "the GZ18 primary suspension damping edit was refused");
@@ -1037,11 +1089,11 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
     };
     for (const RefusedEdit& edit : refused_edits) {
         const auto outcome =
-            session.SetElementProperty(edit.element, edit.property_name, edit.value);
+            session.SetSubjectProperty(edit.element, edit.property_name, edit.value);
         Require(!outcome.has_value(), edit.what + " was accepted");
-        const ElementEditRefusal& refusal = outcome.error();
-        Require(refusal.element == edit.element && refusal.property_name == edit.property_name &&
-                    !refusal.reason.empty(),
+        const SubjectEditRefusal& refusal = outcome.error();
+        Require(refusal.subject == PropertySubject{edit.element} &&
+                    refusal.property_name == edit.property_name && !refusal.reason.empty(),
                 edit.what + " was refused without naming its element and property and saying why");
         Require(SameProject(edited, session.project()) && session.revision() == edited_revision &&
                     session.can_undo() && !session.can_redo(),
@@ -1092,7 +1144,7 @@ void VerifyRefusedAssemblyKeepsOlderPreview(const ReferenceVehicle& gz18) {
     // The force plan requires a passive element's stiffness to be finite and
     // non-negative; the edit does not judge that.
     Require(session
-                .SetElementProperty(kPrimarySuspension, "stiffness_newtons_per_meter",
+                .SetSubjectProperty(kPrimarySuspension, "stiffness_newtons_per_meter",
                                     Eigen::Vector3d(0.0, 0.0, -1.4e6))
                 .has_value(),
             "a negative stiffness was refused by the edit, which must leave plausibility to "
@@ -1133,7 +1185,7 @@ void VerifyContactDeclarationRefusalKeepsOlderPreview(const ReferenceVehicle& ir
             "the reference contact interface has no revolute joint");
     const Eigen::Vector3d reversed_axis = -joint->axis_in_parent_frame;
     Require(session
-                .SetElementProperty({ElementKind::kRevoluteJoint, joint_name},
+                .SetSubjectProperty(ElementReference{ElementKind::kRevoluteJoint, joint_name},
                                     "axis_in_parent_frame", reversed_axis)
                 .has_value(),
             "a wheel-axis edit was refused before checking its contact declaration");
@@ -1556,7 +1608,7 @@ void VerifyStationOffsetEditMovesBodyAlongTrack(const ReferenceVehicle& gz18) {
                           &configuration::VehicleFreeBodyStationOffsetDefinition::body_name);
     Require(entry != station_offsets.end(), "GZ18's layout gives its front bogie frame no station");
     Require(session
-                .SetElementProperty(bogie_frame,
+                .SetSubjectProperty(bogie_frame,
                                     "mechanical_track_station_layout.station_offset_meters",
                                     entry->station_offset_meters + kShiftMeters)
                 .has_value(),
@@ -1664,6 +1716,7 @@ int main(int argc, char** argv) {
             editing_verification::LoadReferenceVehicle(argv[4], argv[5], argv[6]);
 
         VerifyPropertyDescriptions();
+        VerifyPropertySections();
         VerifyPrimarySuspensionEdit(gz18);
         VerifyEditRefusals(gz18);
         VerifyReferenceVehicleChecks(gz18);

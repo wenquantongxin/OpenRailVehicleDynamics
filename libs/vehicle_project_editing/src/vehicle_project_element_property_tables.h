@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -15,7 +16,8 @@
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/vehicle_project/vehicle_project.h"
 #include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_properties.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
+#include "orvd/vehicle_project_editing/vehicle_project_titles_in_english_and_chinese.h"
 #include "orvd/wheel_rail_contact/profile_points.h"
 
 // What every member of every element record is: the one place that knows.
@@ -32,7 +34,8 @@
 //
 // DescribeElementProperties lists a kind's properties in its table's order and
 // a rigid body's body-keyed properties after them; reading and assigning walk
-// the same order.
+// the same order. A rigid body's properties also state the section they are
+// shown in.
 
 namespace orvd::vehicle_project_editing::internal {
 
@@ -111,11 +114,37 @@ using RecordMember =
                  ValueTokenMember<Record, wheel_rail_contact::WheelSide>,
                  SaturatedPiecewiseLinearDamperCurve Record::*>;
 
-// One property: a member of the record and that member's own name.
+// The sections a rigid body's properties are shown in.
+enum class PropertySection {
+    kDegreesOfFreedom,
+    kMassAndInertia,
+    // Its station offset, which the dynamics use.
+    kMechanicalStation,
+    // Its placement offsets, which only place it in the drawing.
+    kPreviewPlacement,
+};
+
+inline Title DescribePropertySection(PropertySection section) {
+    switch (section) {
+        case PropertySection::kDegreesOfFreedom:
+            return {.en = "Degrees of freedom", .zh = "自由度"};
+        case PropertySection::kMassAndInertia:
+            return {.en = "Mass and inertia", .zh = "质量与惯量"};
+        case PropertySection::kMechanicalStation:
+            return {.en = "Mechanical station", .zh = "机械站位"};
+        case PropertySection::kPreviewPlacement:
+            return {.en = "Preview placement", .zh = "预览摆放"};
+    }
+    throw std::logic_error("a property section no enumerator of PropertySection names");
+}
+
+// One property: a member of the record, that member's own name, and the
+// section it is shown in where its kind's properties are shown in sections.
 template <typename Record>
 struct RecordProperty {
     std::string_view name;
     RecordMember<Record> member;
+    std::optional<PropertySection> section{};
 };
 
 template <typename Record, typename Name, std::size_t count>
@@ -143,13 +172,17 @@ constexpr auto PropertiesOfRecord(std::type_identity<configuration::VehicleRigid
     using Record = configuration::VehicleRigidBodyDefinition;
     return std::to_array<RecordProperty<Record>>({
         {"name", &Record::name},
-        {"moves_freely_in_world", &Record::moves_freely_in_world},
-        {"mass_kilograms", &Record::mass_kilograms},
-        {"center_of_mass_in_body_frame_meters", &Record::center_of_mass_in_body_frame_meters},
+        {"moves_freely_in_world", &Record::moves_freely_in_world,
+         PropertySection::kDegreesOfFreedom},
+        {"mass_kilograms", &Record::mass_kilograms, PropertySection::kMassAndInertia},
+        {"center_of_mass_in_body_frame_meters", &Record::center_of_mass_in_body_frame_meters,
+         PropertySection::kMassAndInertia},
         {"inertia_moments_about_center_of_mass_kilogram_square_meters",
-         &Record::inertia_moments_about_center_of_mass_kilogram_square_meters},
+         &Record::inertia_moments_about_center_of_mass_kilogram_square_meters,
+         PropertySection::kMassAndInertia},
         {"inertia_products_about_center_of_mass_kilogram_square_meters",
-         &Record::inertia_products_about_center_of_mass_kilogram_square_meters},
+         &Record::inertia_products_about_center_of_mass_kilogram_square_meters,
+         PropertySection::kMassAndInertia},
     });
 }
 
@@ -364,18 +397,21 @@ using BodyKeyedMember =
 struct BodyKeyedProperty {
     std::string_view name;
     BodyKeyedMember member;
+    PropertySection section;
 };
 
 inline constexpr std::array kBodyKeyedProperties{
-    BodyKeyedProperty{
-        "mechanical_track_station_layout.station_offset_meters",
-        &configuration::VehicleFreeBodyStationOffsetDefinition::station_offset_meters},
+    BodyKeyedProperty{"mechanical_track_station_layout.station_offset_meters",
+                      &configuration::VehicleFreeBodyStationOffsetDefinition::station_offset_meters,
+                      PropertySection::kMechanicalStation},
     BodyKeyedProperty{
         "placement.lateral_offset_in_local_track_frame_meters",
-        &vehicle_project::FreeBodyPlacement::lateral_offset_in_local_track_frame_meters},
+        &vehicle_project::FreeBodyPlacement::lateral_offset_in_local_track_frame_meters,
+        PropertySection::kPreviewPlacement},
     BodyKeyedProperty{
         "placement.vertical_offset_in_local_track_frame_meters",
-        &vehicle_project::FreeBodyPlacement::vertical_offset_in_local_track_frame_meters},
+        &vehicle_project::FreeBodyPlacement::vertical_offset_in_local_track_frame_meters,
+        PropertySection::kPreviewPlacement},
 };
 
 }  // namespace orvd::vehicle_project_editing::internal

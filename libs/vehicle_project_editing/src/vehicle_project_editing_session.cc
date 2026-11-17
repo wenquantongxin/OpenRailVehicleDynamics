@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "orvd/configuration/assembled_vehicle_system.h"
 #include "orvd/configuration/vehicle_definition.h"
@@ -17,6 +18,7 @@
 #include "vehicle_project_element_property_assignment.h"
 #include "vehicle_project_element_removal.h"
 #include "vehicle_project_preview_computation.h"
+#include "vehicle_project_settings_property_assignment.h"
 
 namespace orvd::vehicle_project_editing {
 
@@ -31,6 +33,19 @@ void GiveProjectNames(vehicle_project::VehicleProject& project, const std::strin
     project.vehicle_definition.mechanical_definition_identifier = name;
 }
 
+// Sets one property of `subject` in `project`, through the element tables or
+// the settings tables.
+std::expected<PropertySubject, SubjectEditRefusal> AssignSubjectProperty(
+    vehicle_project::VehicleProject& project, const PropertySubject& subject,
+    std::string_view property_name, const PropertyValue& value) {
+    if (const auto* const element = std::get_if<ElementReference>(&subject)) {
+        return internal::AssignElementProperty(project, *element, property_name, value);
+    }
+    return internal::AssignSettingsProperty(project, std::get<ProjectSettings>(subject),
+                                            property_name, value)
+        .transform([&subject] { return subject; });
+}
+
 }  // namespace
 
 VehicleProjectEditingSession::VehicleProjectEditingSession(vehicle_project::VehicleProject project)
@@ -41,24 +56,22 @@ VehicleProjectEditingSession::VehicleProjectEditingSession(
     vehicle_project::VehicleProjectFileLocation associated_file)
     : project_(std::move(project)), associated_file_(std::move(associated_file)) {}
 
-std::expected<ElementReference, ElementEditRefusal>
-VehicleProjectEditingSession::SetElementProperty(const ElementReference& element,
-                                                 std::string_view property_name,
-                                                 const PropertyValue& value) {
+std::expected<PropertySubject, SubjectEditRefusal> VehicleProjectEditingSession::SetSubjectProperty(
+    const PropertySubject& subject, std::string_view property_name, const PropertyValue& value) {
     vehicle_project::VehicleProject edited = project_;
-    std::expected<ElementReference, ElementEditRefusal> assigned =
-        internal::AssignElementProperty(edited, element, property_name, value);
+    std::expected<PropertySubject, SubjectEditRefusal> assigned =
+        AssignSubjectProperty(edited, subject, property_name, value);
     if (assigned.has_value()) {
         AdoptEdit(std::move(edited));
     }
     return assigned;
 }
 
-std::expected<ElementReference, ElementEditRefusal> VehicleProjectEditingSession::AddElement(
+std::expected<ElementReference, SubjectEditRefusal> VehicleProjectEditingSession::AddElement(
     vehicle_project::ElementKind kind, const std::string& name,
     const PropertyValuesByName& properties) {
     vehicle_project::VehicleProject edited = project_;
-    std::expected<ElementReference, ElementEditRefusal> created =
+    std::expected<ElementReference, SubjectEditRefusal> created =
         internal::CreateElement(edited, kind, name, properties);
     if (created.has_value()) {
         AdoptEdit(std::move(edited));
@@ -66,9 +79,9 @@ std::expected<ElementReference, ElementEditRefusal> VehicleProjectEditingSession
     return created;
 }
 
-std::expected<std::vector<ElementReference>, ElementEditRefusal>
+std::expected<std::vector<ElementReference>, SubjectEditRefusal>
 VehicleProjectEditingSession::RemoveElement(const ElementReference& element) {
-    std::expected<std::vector<ElementReference>, ElementEditRefusal> removed =
+    std::expected<std::vector<ElementReference>, SubjectEditRefusal> removed =
         internal::CollectElementsRemovedWith(project_, element);
     if (removed.has_value()) {
         vehicle_project::VehicleProject edited = project_;
@@ -78,7 +91,7 @@ VehicleProjectEditingSession::RemoveElement(const ElementReference& element) {
     return removed;
 }
 
-std::expected<std::vector<ElementReference>, ElementEditRefusal>
+std::expected<std::vector<ElementReference>, SubjectEditRefusal>
 VehicleProjectEditingSession::CollectRemovalConsequences(const ElementReference& element) const {
     return internal::CollectElementsRemovedWith(project_, element);
 }

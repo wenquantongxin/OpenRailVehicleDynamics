@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "orvd/vehicle_project/vehicle_project.h"
-#include "orvd/vehicle_project_editing/vehicle_project_element_edit_refusal.h"
+#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
 
 namespace orvd::vehicle_project_editing::internal {
 
@@ -13,7 +13,7 @@ namespace orvd::vehicle_project_editing::internal {
 // element holding a reference to one taken, transitively, in outline order,
 // kind by kind in ElementKind's order and each kind in declaration order. The
 // checks are those VehicleProjectEditingSession::RemoveElement states.
-[[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, ElementEditRefusal>
+[[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, SubjectEditRefusal>
 CollectElementsRemovedWith(const vehicle_project::VehicleProject& project,
                            const vehicle_project::ElementReference& element);
 
