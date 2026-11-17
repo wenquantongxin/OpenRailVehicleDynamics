@@ -315,12 +315,8 @@ VehicleFreeBodyStationOffsetDefinition ParseFreeBodyStationOffset(const Json& va
 VehicleMechanicalTrackStationLayoutDefinition ParseMechanicalTrackStationLayout(
     const Json& value, const std::string& path) {
     RequireExactKeys(value, path,
-                     {"reference_body_name", "free_body_station_offsets",
-                      "wheel_pair_station_reference_body_names"});
+                     {"free_body_station_offsets", "wheel_pair_station_reference_body_names"});
     VehicleMechanicalTrackStationLayoutDefinition layout;
-    layout.reference_body_name =
-        RequireString(value.at("reference_body_name"), path + ".reference_body_name");
-
     const std::string offsets_path = path + ".free_body_station_offsets";
     const Json& offsets = value.at("free_body_station_offsets");
     RequireArray(offsets, offsets_path);
@@ -436,7 +432,6 @@ Json EncodeVehicleDefinitionToJson(const VehicleDefinition& vehicle, const std::
     result["mechanical_definition_identifier"] = vehicle.mechanical_definition_identifier;
     const auto& layout = vehicle.mechanical_track_station_layout;
     result["mechanical_track_station_layout"] = {
-        {"reference_body_name", layout.reference_body_name},
         {"free_body_station_offsets", EncodeArray(layout.free_body_station_offsets,
                                                   [](const auto& offset) -> Json {
                                                       return {{"body_name", offset.body_name},

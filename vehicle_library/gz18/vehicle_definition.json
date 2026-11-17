@@ -2,7 +2,6 @@
   "vehicle_name": "GZ18",
   "mechanical_definition_identifier": "gz18_reference_mechanics",
   "mechanical_track_station_layout": {
-    "reference_body_name": "carbody",
     "free_body_station_offsets": [
       { "body_name": "carbody", "station_offset_meters": 0.0 },
       { "body_name": "front_bogie_frame", "station_offset_meters": 7.85 },

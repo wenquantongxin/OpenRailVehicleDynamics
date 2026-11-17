@@ -2,7 +2,6 @@
   "vehicle_name": "IRW",
   "mechanical_definition_identifier": "irw_reference_mechanical_definition",
   "mechanical_track_station_layout": {
-    "reference_body_name": "carbody",
     "free_body_station_offsets": [
       {
         "body_name": "carbody",

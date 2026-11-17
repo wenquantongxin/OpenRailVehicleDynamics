@@ -17,9 +17,10 @@
 // The tree is made from the records alone, whatever a check would say of
 // them, and every element of the outline is one row of it, exactly once. Its
 // first level is the domains, in this order:
-// - Globals: the gravity, the vehicle identity and the station layout, which
-//   are settings; initial conditions, views and simulation settings, not
-//   provided yet.
+// - Globals: the gravity and the vehicle identity, which are settings; the
+//   vehicle layout zero, which the free bodies' station offsets are measured
+//   from and which no record names, a row selecting nothing; initial
+//   conditions, views and simulation settings, not provided yet.
 // - Bodies: every rigid body, with its markers, the fixed frames naming it,
 //   and its geometry, a note on the name its shapes are stated under. An
 //   unattached or conflicting body's row carries its attachment's note
@@ -59,7 +60,8 @@ struct ModelTreeNode {
     std::string key;
     // Absent for an element row, which shows its element's name.
     std::optional<Title> title{};
-    // What selecting the row selects; absent for a row that only groups.
+    // What selecting the row selects; absent for a row that only groups or
+    // only says what it is.
     std::optional<PropertySubject> subject{};
     // False for what the product does not provide yet: such a row has no
     // subject, no offers and no children, and its note says what will be

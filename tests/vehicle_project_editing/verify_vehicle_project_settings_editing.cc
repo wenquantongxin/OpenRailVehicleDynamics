@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -26,15 +27,17 @@
 #include "vehicle_project_editing/vehicle_project_editing_verification.h"
 
 // The project's settings edited as an element's properties are, on GZ18 and
-// IRW. The gravity is read, set and undone, and set where the project stated
-// none; a gravity the assembly refuses is the check's to report, not the
-// edit's. The wheel's nominal rolling radius reaches the preview's wheels, the
-// rail's profile origin mode takes each of its choices and nothing else, and a
-// number that is not finite is refused. Exactly the properties the contract
-// leaves read-only are refused, each by name; the wheel, the rail and the
-// contact computation are refused while there is no contact record. A
-// settings edit is one undo step and an unsaved change, and what it wrote is
-// read back after saving and reopening.
+// IRW. The settings are the contract's five, under their words, and no other
+// word, the station layout's included, names settings. The gravity is read,
+// set and undone, and set where the project stated none; a gravity the
+// assembly refuses is the check's to report, not the edit's. The wheel's
+// nominal rolling radius reaches the preview's wheels, the rail's profile
+// origin mode takes each of its choices and nothing else, and a number that is
+// not finite is refused. Exactly the properties the contract leaves read-only
+// are refused, each by name; the wheel, the rail and the contact computation
+// are refused while there is no contact record. A settings edit is one undo
+// step and an unsaved change, and what it wrote is read back after saving and
+// reopening.
 
 namespace {
 
@@ -237,6 +240,32 @@ void VerifyRailOriginMode(const ReferenceVehicle& gz18) {
             "the rail's two cants are not both editable");
 }
 
+// The settings are the contract's five, in its order and under its words,
+// stated here independently of the library; the word the station layout was
+// written as names no settings, as an unknown word does not.
+void VerifySettingsWords() {
+    const std::vector<std::pair<ProjectSettings, std::string_view>> settings_words = {
+        {ProjectSettings::kGravity, "gravity"},
+        {ProjectSettings::kVehicleIdentity, "vehicle_identity"},
+        {ProjectSettings::kWheel, "wheel"},
+        {ProjectSettings::kRail, "rail"},
+        {ProjectSettings::kContactComputation, "contact_computation"}};
+    Require(vehicle_project_editing::kProjectSettings.size() == settings_words.size(),
+            "the project has not the contract's five settings");
+    for (std::size_t index = 0; index < settings_words.size(); ++index) {
+        const auto& [settings, word] = settings_words[index];
+        Require(vehicle_project_editing::kProjectSettings[index] == settings &&
+                    vehicle_project_editing::ProjectSettingsWord(settings) == word &&
+                    vehicle_project_editing::FindProjectSettingsWrittenAs(word) == settings,
+                "the settings written as '" + std::string(word) +
+                    "' are not the contract's, in its order");
+    }
+    for (const std::string_view word : {"station_layout", "colour"}) {
+        Require(!vehicle_project_editing::FindProjectSettingsWrittenAs(word).has_value(),
+                "the word '" + std::string(word) + "' names settings");
+    }
+}
+
 // Exactly the properties the contract leaves read-only are refused, each by
 // name; a count reads as a number and an enumeration as a token.
 void VerifyReadOnlySettings(const ReferenceVehicle& reference) {
@@ -272,18 +301,15 @@ void VerifyReadOnlySettings(const ReferenceVehicle& reference) {
                                            "creep_coefficients_outside_table");
     const PropertyReading identity =
         ReadingOf(session.project(), ProjectSettings::kVehicleIdentity, "vehicle_name");
-    const PropertyReading reference_body =
-        ReadingOf(session.project(), ProjectSettings::kStationLayout, "reference_body_name");
     Require(count.description.value_kind == PropertyValueKind::kNumber &&
                 std::get<double>(*count.value) ==
                     static_cast<double>(
                         reference.contact_record.computation.geometry.outline_sample_count) &&
                 rule.description.value_kind == PropertyValueKind::kToken &&
                 identity.description.value_kind == PropertyValueKind::kText &&
-                std::get<PropertyText>(*identity.value).text == reference.definition.vehicle_name &&
-                reference_body.description.value_kind == PropertyValueKind::kElementReference,
+                std::get<PropertyText>(*identity.value).text == reference.definition.vehicle_name,
             reference.definition.vehicle_name +
-                ": a count, an enumeration, a name or the reference body reads as another kind");
+                ": a count, an enumeration or a name reads as another kind");
 }
 
 void VerifyContactSettingsNeedAContactRecord(const ReferenceVehicle& gz18) {
@@ -362,6 +388,7 @@ int main(int argc, char** argv) {
         std::filesystem::remove_all(work_directory);
         std::filesystem::create_directories(work_directory);
 
+        VerifySettingsWords();
         VerifyGravity(gz18);
         VerifyWheelRadiusReachesPreview(gz18);
         VerifyRailOriginMode(gz18);

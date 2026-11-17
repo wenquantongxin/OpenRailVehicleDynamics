@@ -23,9 +23,9 @@
 // accepted change is one edit, which one undo takes back whole, and each
 // refused one names the body, or the joint and its property at fault, and
 // changes nothing. A free body takes a joint, losing its station layout entry
-// and placement, the joint's child end on it; the station layout's reference
-// body, a joint held on the body's own branch and a joint whose end on the
-// body is elsewhere are refused. A hanging body becomes free, its joint
+// and placement, the joint's child end on it, the car body as much as any;
+// a joint held on the body's own branch and a joint whose end on the body is
+// elsewhere are refused. A hanging body becomes free, its joint
 // removed and the records of a free body added, unless another element names
 // the joint, as an IRW contact interface names its wheel's pivot; it takes
 // a joint of another kind under the same name, and another joint in place of
@@ -56,6 +56,7 @@ using vehicle_project_editing::JointAttachment;
 using vehicle_project_editing::PropertyValuesByName;
 using vehicle_project_editing::ReadRigidBodyAttachment;
 using vehicle_project_editing::ReferencedElementName;
+using vehicle_project_editing::RigidBodyAttachment;
 using vehicle_project_editing::RigidBodyAttachmentState;
 using vehicle_project_editing::VehicleProjectEditingSession;
 
@@ -154,10 +155,39 @@ void VerifyFreeBodyTakingAJoint(const ReferenceVehicle& gz18) {
             "and placement, without the weld");
 }
 
-// Refused, changing nothing: the station layout's reference body taking a
-// joint, naming the body; a joint whose other end is on the body's own
+// GZ18's car body, which nothing singles out, reads free with no note like
+// any free body and takes a joint: hung on the front bogie frame by a weld, it
+// loses its station layout entry and placement, in one edit that one undo
+// takes back.
+void VerifyCarBodyTakingAJoint(const ReferenceVehicle& gz18) {
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
+    const VehicleProject opened = session.project();
+    const RigidBodyAttachment free = ReadRigidBodyAttachment(opened, "carbody");
+    Require(free.state == RigidBodyAttachmentState::kFree && free.can_take_joint &&
+                !free.note.has_value(),
+            "GZ18's car body does not read free, able to take a joint, with no note");
+
+    const ElementReference weld{ElementKind::kWeldJoint, "carbody_weld"};
+    const std::optional<ElementReference> hung_on = RequireAccepted(
+        session.SetRigidBodyAttachment(
+            "carbody", JointAttachment{weld.kind, weld.name, Ends("front_bogie_frame", "carbody")}),
+        "hanging GZ18's car body on the front bogie frame by a weld");
+    const RigidBodyAttachment hung = ReadRigidBodyAttachment(session.project(), "carbody");
+    Require(hung_on == weld && session.revision() == 1 &&
+                !MovesFreely(session.project(), "carbody") &&
+                HasNoFreeBodyRecords(session.project(), "carbody") && hung.joint == weld &&
+                hung.held_at == RigidBody("front_bogie_frame") && !hung.note.has_value(),
+            "GZ18's car body hung on a weld does not hang on it, without a free body's records, "
+            "in one edit");
+    session.Undo();
+    Require(SameProject(opened, session.project()),
+            "one undo did not bring back the free car body with its station layout entry and "
+            "placement, without the weld");
+}
+
+// Refused, changing nothing: a joint whose other end is on the body's own
 // branch, or whose end on the body is not the body's, naming the joint and
-// that end.
+// that end; a kind that is no joint kind, naming the body.
 void VerifyTakingAJointRefusals(const ReferenceVehicle& gz18) {
     VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const VehicleProject before = session.project();
@@ -173,8 +203,6 @@ void VerifyTakingAJointRefusals(const ReferenceVehicle& gz18) {
         RequireRefused(outcome, subject, property_name, session, before, 0, false, what);
     };
 
-    require_refused(take_weld("carbody", "front_bogie_frame", "carbody"), RigidBody("carbody"),
-                    std::nullopt, "the station layout's reference body taking a joint");
     // The axlebox carrier hangs below the wheelset.
     require_refused(take_weld("front_leading_wheelset", "front_leading_right_axlebox_carrier",
                               "front_leading_wheelset"),
@@ -486,6 +514,7 @@ int main(int argc, char** argv) {
         const ReferenceVehicle irw =
             editing_verification::LoadReferenceVehicle(argv[4], argv[5], argv[6]);
         VerifyFreeBodyTakingAJoint(gz18);
+        VerifyCarBodyTakingAJoint(gz18);
         VerifyTakingAJointRefusals(gz18);
         VerifyHangingBodyTakingAnotherKind(gz18);
         VerifyHangingBodyBecomingFree(gz18);

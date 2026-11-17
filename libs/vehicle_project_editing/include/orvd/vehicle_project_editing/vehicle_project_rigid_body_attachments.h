@@ -29,8 +29,7 @@
 // - no loop and no free body: every body of it is unattached;
 // - no loop and more than one free body: every body of it is conflicting.
 //
-// A free body can take a joint, except the station layout's reference body,
-// which keeps moving freely. A body hanging on a joint can become free, or
+// A free body can take a joint. A body hanging on a joint can become free, or
 // take another joint in place of the one it hangs on. An unattached body can
 // become free, or take a joint. Nothing of a conflicting body changes here:
 // removing one of the joints concerned, an ordinary removal, repairs it. A

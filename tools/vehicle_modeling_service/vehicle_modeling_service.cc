@@ -64,10 +64,10 @@
 //                  point_to_point_linear_spring_damper,
 //                  point_to_point_hysteretic_spring, contact_carrier,
 //                  contact_interface
-//   settings word  one of gravity, vehicle_identity, station_layout, wheel,
-//                  rail, contact_computation: the project's settings, which
-//                  are not elements and are never created, removed, renamed
-//                  or named by a reference
+//   settings word  one of gravity, vehicle_identity, wheel, rail,
+//                  contact_computation: the project's settings, which are not
+//                  elements and are never created, removed, renamed or named
+//                  by a reference
 //   subject        {"element": <element>} or {"settings": "<settings word>"}:
 //                  what has properties
 //   title          {"en": "<text>", "zh": "<text>"}: a text for people, in
@@ -100,7 +100,6 @@
 //                          checked under
 //     vehicle_identity     the vehicle name and the mechanical definition
 //                          identifier
-//     station_layout       the layout's reference body
 //     wheel, rail,         every member of the wheel-rail contact record's
 //     contact_computation  three configuration records
 //   A property is described as
@@ -133,9 +132,10 @@
 //   placement, and the gravity of a project that states none.
 //   section is where the property is shown: consecutive properties of one
 //   section form it. A rigid body's properties are shown in the sections mass
-//   and inertia, mechanical station (the station offset, which the dynamics
-//   use) and preview placement (the placement offsets, which only place it in
-//   the drawing), after its attachment; every other property is in none.
+//   and inertia, station along the track from the vehicle layout zero (the
+//   station offset, which the dynamics use) and preview placement (the
+//   placement offsets, which only place it in the drawing), after its
+//   attachment; every other property is in none.
 //   Every element property is editable except a rotation. Of the settings,
 //   the gravity, the wheel's nominal_rolling_radius_meters and
 //   wheel_lateral_datum_magnitude_meters, and the rail's track_gauge_meters,
@@ -199,9 +199,11 @@
 //     The project as a model tree divided into domains, made from its records
 //     whatever check would say of them: every element of the outline is one
 //     node, exactly once. The nodes are the domains, in this order:
-//       Globals         the gravity, vehicle identity and station layout
-//                       settings; initial conditions, views and simulation
-//                       settings, not provided
+//       Globals         the gravity and vehicle identity settings; the
+//                       vehicle layout zero, which the free bodies' station
+//                       offsets are measured from and which no record names,
+//                       a node selecting nothing; initial conditions, views
+//                       and simulation settings, not provided
 //       Bodies          every rigid body, with its markers (the fixed frames
 //                       naming it) and its geometry (a note on the name its
 //                       shapes are stated under); fixed frames naming a body
@@ -221,9 +223,10 @@
 //     the nodes below it follow it. title is null for an element node, which
 //     shows the element's name; an element of a list of several kinds shows
 //     its kind's title as a tag. subject is what selecting the node selects,
-//     null for a node that only groups. provided is false for what is not
-//     provided yet: such a node has no subject, no offers and no children, and
-//     its note says what will be there. note is one line shown with the node:
+//     null for a node that only groups or only says what it is, as the
+//     vehicle layout zero does. provided is false for what is not provided
+//     yet: such a node has no subject, no offers and no children, and its note
+//     says what will be there. note is one line shown with the node:
 //     a rigid body's node carries its attachment's note while the body is
 //     unattached or conflicting. creates lists what the node's "+" creates,
 //     each with the properties a creation is given and cannot change: a marker
@@ -293,14 +296,13 @@
 //     line how the body is held, naming no element; note what is the matter or
 //     why something cannot change; joint is the joint it hangs on, and held_at
 //     the frame it is held at, at that joint's other end: a rigid body or a
-//     fixed frame. A free body can take a joint, except the station layout's
-//     reference body; a hanging or unattached body can become free and can
-//     take a joint; a conflicting one neither: removing one of its joints
-//     repairs it. frames_on_body is what a new joint's end on the body may
-//     name, the body and then its fixed frames, and frames_it_can_be_held_at
-//     what its other end may name: every frame on a body this body does not
-//     reach through joints once the joint it hangs on is taken away, body by
-//     body, each before its fixed frames.
+//     fixed frame. A free body can take a joint; a hanging or unattached body
+//     can become free and can take a joint; a conflicting one neither:
+//     removing one of its joints repairs it. frames_on_body is what a new
+//     joint's end on the body may name, the body and then its fixed frames,
+//     and frames_it_can_be_held_at what its other end may name: every frame on
+//     a body this body does not reach through joints once the joint it hangs
+//     on is taken away, body by body, each before its fixed frames.
 //
 //   set_property  {"subject": <subject>, "property": "<name>", "value": <value>}
 //     result: {"subject": <subject>}, the subject after the edit: an element
@@ -316,9 +318,9 @@
 //     optional, none, a token is one of its choices, and a new name is not
 //     empty and taken by no other element of the element's name space.
 //     Renaming changes every reference to the element and its group
-//     memberships, and for a rigid body its station layout entry, the
-//     layout's reference body and wheel-pair station list and its placement;
-//     the name its shapes are stated under stays. References the project
+//     memberships, and for a rigid body its station layout entry, the layout's
+//     wheel-pair station list and its placement; the name its shapes are
+//     stated under stays. References the project
 //     already holds are not judged here, physical plausibility and the
 //     layout's own consistency neither; check judges them.
 //
@@ -363,8 +365,7 @@
 //     has that joint removed first, so that the new one may take its name, and
 //     every reference to it names the new one, the change being refused,
 //     naming the element, when a reference cannot name the new kind. Refused
-//     for a conflicting body, and for the station layout's reference body
-//     taking a joint. A refusal about the joint names the joint as its
+//     for a conflicting body. A refusal about the joint names the joint as its
 //     subject, with the property at fault; any other names the body.
 //
 //   remove_element  {"element": <element>}
@@ -372,8 +373,7 @@
 //     Removes the element and every element holding a reference to one
 //     removed, transitively, with their station layout entries, placements,
 //     shape names and group memberships; groups stay. removed_elements lists
-//     everything removed, the element included, in outline order. The station
-//     layout's reference body cannot be removed.
+//     everything removed, the element included, in outline order.
 //
 //   get_removal_consequences  {"element": <element>}
 //     result: {"removed_elements": [<element>, ...]}

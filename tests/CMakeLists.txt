@@ -1601,10 +1601,10 @@ add_test(NAME verify_vehicle_project_editing
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
 
 # Structural edits on both bundled vehicles: elements created, removed with
-# everything that refers to them, renamed with every reference and following
-# record, and reconnected, each one undo step; names, references, tokens and
-# the station layout's reference body refused where the contract refuses them;
-# and a third GZ18 axle built from edits alone that passes the check.
+# everything that refers to them, the car bodies included, renamed with every
+# reference and following record, and reconnected, each one undo step; names,
+# references and tokens refused where the contract refuses them; and a third
+# GZ18 axle built from edits alone that passes the check.
 add_executable(verify_vehicle_project_structural_editing
     vehicle_project_editing/verify_vehicle_project_structural_editing.cc)
 orvd_configure_first_party_target(verify_vehicle_project_structural_editing)
@@ -1642,11 +1642,12 @@ add_test(NAME verify_vehicle_project_editing_session_saving
 
 # The model tree by domains on both bundled vehicles: every element of the
 # outline once, markers under their bodies and contact interfaces under their
-# carriers, joints and force elements one list each, the domains in order and
-# each row's offers, the bodies the joints row attaches and the notes of
-# bodies neither free nor hanging on a joint; the tree follows edits and keeps
-# the keys of the rows they leave alone; owners a project file lacks are
-# listed as not found; and a project failing its check has the same tree.
+# carriers, joints and force elements one list each, the domains in order, the
+# vehicle layout zero under Globals and each row's offers, the bodies the
+# joints row attaches and the notes of bodies neither free nor hanging on a
+# joint; the tree follows edits and keeps the keys of the rows they leave
+# alone; owners a project file lacks are listed as not found; and a project
+# failing its check has the same tree.
 add_executable(verify_vehicle_project_model_tree_by_domains
     vehicle_project_editing/verify_vehicle_project_model_tree_by_domains.cc)
 orvd_configure_first_party_target(verify_vehicle_project_model_tree_by_domains)
@@ -1708,11 +1709,12 @@ add_test(NAME verify_vehicle_project_rigid_body_attachment_changes
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
 
 # The project's settings edited through the session on both bundled vehicles:
-# the gravity read, set, undone and stated where none was, judged by the check
-# alone; the wheel's radius reaching the preview; the rail's origin mode and
-# its choices; exactly the contract's read-only properties refused; the
-# contact settings refused without a contact record; and the edits read back
-# after saving and reopening.
+# the contract's five settings words and no other, the station layout's
+# refused like any unknown word; the gravity read, set, undone and stated
+# where none was, judged by the check alone; the wheel's radius reaching the
+# preview; the rail's origin mode and its choices; exactly the contract's
+# read-only properties refused; the contact settings refused without a contact
+# record; and the edits read back after saving and reopening.
 add_executable(verify_vehicle_project_settings_editing
     vehicle_project_editing/verify_vehicle_project_settings_editing.cc)
 orvd_configure_first_party_target(verify_vehicle_project_settings_editing)
@@ -1733,9 +1735,11 @@ add_test(NAME verify_vehicle_project_settings_editing
 # The modelling service driven through standard input and output on GZ18: the
 # protocol's structure, property descriptions, creation, renaming and removal,
 # the model tree of GZ18 and IRW and creating through its offers, settings
-# read, set and refused as subjects, saving a project into a directory and
-# opening it again as it was, one response per request and its revisions; the
-# reference vehicle files stay as they were.
+# read, set and refused as subjects, how rigid bodies are attached, the
+# vehicle layout zero and the car body treated as any body, saving a project
+# into a directory and opening it again as it was, a project file with the
+# station layout's former key refused, one response per request and its
+# revisions; the reference vehicle files stay as they were.
 add_test(NAME verify_vehicle_modeling_service
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/vehicle_project_editing/verify_vehicle_modeling_service.py

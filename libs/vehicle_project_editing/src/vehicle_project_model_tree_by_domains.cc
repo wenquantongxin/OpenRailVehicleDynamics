@@ -63,6 +63,19 @@ ModelTreeNode NotProvidedRow(std::string key, Title title, Title note) {
             .note = std::move(note)};
 }
 
+// The zero the free bodies' station offsets are measured from, which no
+// record names: a row saying what it is, selecting nothing.
+ModelTreeNode DescribeVehicleLayoutZero() {
+    return {.key = "vehicle_layout_zero",
+            .title = Title{.en = "Vehicle layout zero", .zh = "车辆布局零点"},
+            .note = Title{.en = "A static point of the line, where a run places the vehicle; each "
+                                "free body's station offset is measured from it along the track. "
+                                "It belongs to no body and does not move with the vehicle.",
+                          .zh = "线路上的静态点，运行时把车辆放在这里；"
+                                "各自由刚体的站位偏置沿线路方向相对它给出。"
+                                "它不属于任何刚体，也不随车运动。"}};
+}
+
 ModelTreeNode DescribeGlobals() {
     return {
         .key = "globals",
@@ -73,10 +86,7 @@ ModelTreeNode DescribeGlobals() {
                         {.en = "Vehicle identity", .zh = "车辆标识"},
                         Title{.en = "Save as gives the vehicle both names.",
                               .zh = "另存为时设定这两个名称。"}),
-            SettingsRow(ProjectSettings::kStationLayout, {.en = "Station layout", .zh = "站位布局"},
-                        Title{.en = "The body the stations of the free bodies are measured "
-                                    "from.",
-                              .zh = "各自由体站位的度量基准刚体。"}),
+            DescribeVehicleLayoutZero(),
             NotProvidedRow("initial_conditions", {.en = "Initial conditions", .zh = "初始条件"},
                            {.en = "The state a run starts from: the bodies' initial "
                                   "positions and velocities.",

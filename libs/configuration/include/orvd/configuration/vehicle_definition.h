@@ -188,18 +188,18 @@ struct VehicleReferenceFrameLinearBushingDefinition {
         Eigen::Vector3d::Zero()};
 };
 
-// Where one free body sits along the track, measured from the layout reference
-// body. This is mechanical: the same numbers hold wherever on a line the
-// vehicle is placed. They live here rather than in a start-up state, which
-// would otherwise carry a second authority for the same fact.
+// Where one free body sits along the track, measured from the vehicle layout
+// zero. The zero is a static point of the line selected by the run; it belongs
+// to no body and does not move with the vehicle. These mechanical offsets stay
+// the same wherever the vehicle is placed. A start-up state states only the
+// correction to each offset.
 struct VehicleFreeBodyStationOffsetDefinition {
     std::string body_name;
     double station_offset_meters{0.0};
 };
 
-// Which body the longitudinal layout is measured from, where each free body
-// sits relative to it, and which free bodies provide the common station of a
-// left/right wheel pair.
+// Each free body's station offset from the vehicle layout zero, and the free
+// bodies providing the common station of each left/right wheel pair.
 //
 // A start-up assembly needs every free body's station to place it on the line,
 // and later contact consumers need one station seed for each wheel pair. GZ18's
@@ -208,7 +208,6 @@ struct VehicleFreeBodyStationOffsetDefinition {
 // bodies are the contact bodies and will be bound independently. This field
 // states only the shared station role and must not be read as a wrench target.
 struct VehicleMechanicalTrackStationLayoutDefinition {
-    std::string reference_body_name;
     std::vector<VehicleFreeBodyStationOffsetDefinition>
         free_body_station_offsets;
     std::vector<std::string> wheel_pair_station_reference_body_names;

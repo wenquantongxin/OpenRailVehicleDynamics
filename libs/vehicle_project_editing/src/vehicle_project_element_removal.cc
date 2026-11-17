@@ -14,7 +14,6 @@
 namespace orvd::vehicle_project_editing::internal {
 namespace {
 
-using vehicle_project::ElementKind;
 using vehicle_project::ElementReference;
 using vehicle_project::VehicleProject;
 
@@ -38,13 +37,6 @@ std::expected<std::vector<ElementReference>, SubjectEditRefusal> CollectElements
     };
     if (!vehicle_project::ContainsElement(project, element)) {
         return refuse("this project contains no " + vehicle_project::DescribeElement(element));
-    }
-    if (element.kind == ElementKind::kRigidBody) {
-        const std::expected<void, std::string> kept =
-            RequireLayoutKeepsReferenceBody(project, element.name, "removed");
-        if (!kept.has_value()) {
-            return refuse(kept.error());
-        }
     }
 
     std::vector<ElementReference> removed{element};

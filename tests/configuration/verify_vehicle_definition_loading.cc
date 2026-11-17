@@ -26,9 +26,8 @@ constexpr std::string_view kRecord = R"json({
   "vehicle_name": "assembly_fixture",
   "mechanical_definition_identifier": "assembly_fixture_reference_mechanics",
   "mechanical_track_station_layout": {
-    "reference_body_name": "carbody",
     "free_body_station_offsets": [
-      {"station_offset_meters": 0.0, "body_name": "carbody"},
+      {"station_offset_meters": 1.25, "body_name": "carbody"},
       {"station_offset_meters": 8.75,
        "body_name": "front_bogie_leading_wheelset"}
     ],
@@ -277,6 +276,14 @@ void CheckRecordIsMappedAndOwned(const std::filesystem::path& path) {
                 vehicle.reference_frame_linear_bushings.size() == 1,
             "record does not carry the entities it declares");
 
+    const auto& layout = vehicle.mechanical_track_station_layout;
+    Require(layout.free_body_station_offsets.size() == 2 &&
+                layout.free_body_station_offsets[0].body_name == "carbody" &&
+                layout.free_body_station_offsets[0].station_offset_meters == 1.25 &&
+                layout.free_body_station_offsets[1].body_name == "front_bogie_leading_wheelset" &&
+                layout.free_body_station_offsets[1].station_offset_meters == 8.75,
+            "station offsets must retain their values when no body occupies the layout zero");
+
     const auto& linear = vehicle.point_to_point_linear_spring_dampers.at(0);
     const auto& hysteretic = vehicle.point_to_point_hysteretic_springs.at(0);
     Require(linear.name == "linear_link" && linear.reference_frame_name == "longibar_child_frame" &&
@@ -400,6 +407,9 @@ void CheckRejections(const std::filesystem::path& path) {
         {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0,",
                      "\"mass_kilograms\": 30000.0, \"colour\": \"red\","),
          {"$.rigid_bodies[0].colour", "unknown key"}},
+        {ReplaceOnce(valid, "\"mechanical_track_station_layout\": {",
+                     "\"mechanical_track_station_layout\": {\"reference_body_name\": \"carbody\","),
+         {"$.mechanical_track_station_layout.reference_body_name", "unknown key"}},
         {ReplaceOnce(valid, ",\n      \"damping_newton_metre_seconds_per_radian\": 0.0", ""),
          {"$.revolute_joints[0].damping_newton_metre_seconds_per_radian", "required"}},
         {ReplaceOnce(valid, "\"mass_kilograms\": 30000.0", "\"mass_kilograms\": \"heavy\""),
@@ -571,7 +581,6 @@ void CheckMechanicalRecordRoundtrip() {
         .inertia_products_about_center_of_mass_kilogram_square_meters.setZero();
     unfinished.fixed_frames.front().body_name = "missing_body";
     unfinished.fixed_frames.front().rotation_in_body_frame(1, 1) = 2.0;
-    unfinished.mechanical_track_station_layout.reference_body_name.clear();
     unfinished.mechanical_track_station_layout.free_body_station_offsets.front().body_name.clear();
     unfinished.mechanical_track_station_layout.wheel_pair_station_reference_body_names = {""};
     unfinished.translational_spring_dampers.front().reference_frame_name.clear();

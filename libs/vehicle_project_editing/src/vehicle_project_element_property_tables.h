@@ -117,8 +117,9 @@ using RecordMember =
 // The sections a rigid body's properties are shown in.
 enum class PropertySection {
     kMassAndInertia,
-    // Its station offset, which the dynamics use.
-    kMechanicalStation,
+    // Its station offset along the track from the vehicle layout zero, which
+    // the dynamics use.
+    kStationAlongTheTrack,
     // Its placement offsets, which only place it in the drawing.
     kPreviewPlacement,
 };
@@ -127,8 +128,9 @@ inline Title DescribePropertySection(PropertySection section) {
     switch (section) {
         case PropertySection::kMassAndInertia:
             return {.en = "Mass and inertia", .zh = "质量与惯量"};
-        case PropertySection::kMechanicalStation:
-            return {.en = "Mechanical station", .zh = "机械站位"};
+        case PropertySection::kStationAlongTheTrack:
+            return {.en = "Station along the track, from the vehicle layout zero",
+                    .zh = "沿线路的站位（相对车辆布局零点）"};
         case PropertySection::kPreviewPlacement:
             return {.en = "Preview placement", .zh = "预览摆放"};
     }
@@ -400,7 +402,7 @@ struct BodyKeyedProperty {
 inline constexpr std::array kBodyKeyedProperties{
     BodyKeyedProperty{"mechanical_track_station_layout.station_offset_meters",
                       &configuration::VehicleFreeBodyStationOffsetDefinition::station_offset_meters,
-                      PropertySection::kMechanicalStation},
+                      PropertySection::kStationAlongTheTrack},
     BodyKeyedProperty{
         "placement.lateral_offset_in_local_track_frame_meters",
         &vehicle_project::FreeBodyPlacement::lateral_offset_in_local_track_frame_meters,

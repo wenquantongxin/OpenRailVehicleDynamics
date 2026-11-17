@@ -58,7 +58,6 @@ void RenameRecordsFollowingElement(VehicleProject& project, const ElementReferen
         }
     };
     auto& layout = project.vehicle_definition.mechanical_track_station_layout;
-    rename(layout.reference_body_name);
     for (configuration::VehicleFreeBodyStationOffsetDefinition& offset :
          layout.free_body_station_offsets) {
         rename(offset.body_name);
@@ -101,19 +100,6 @@ void AddFreeBodyRecords(VehicleProject& project, const std::string& body_name) {
 void RemoveFreeBodyRecords(VehicleProject& project, const std::string& body_name) {
     EraseStationOffsetEntry(project, body_name);
     ErasePlacement(project, body_name);
-}
-
-std::expected<void, std::string> RequireLayoutKeepsReferenceBody(const VehicleProject& project,
-                                                                 const std::string& body_name,
-                                                                 std::string_view edit) {
-    if (body_name ==
-        project.vehicle_definition.mechanical_track_station_layout.reference_body_name) {
-        return std::unexpected("rigid body '" + body_name +
-                               "' is the mechanical track station layout's reference body, which "
-                               "every station is measured from, so it cannot be " +
-                               std::string(edit));
-    }
-    return {};
 }
 
 }  // namespace orvd::vehicle_project_editing::internal

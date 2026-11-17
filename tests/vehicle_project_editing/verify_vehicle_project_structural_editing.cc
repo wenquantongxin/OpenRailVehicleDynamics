@@ -28,19 +28,19 @@
 // Structural edits on the bundled vehicles, verified against records built
 // here from the loaded ones rather than against recorded outputs: a force
 // element added to GZ18 is exactly one more record and comes and goes with
-// undo and redo; removing an IRW wheel body or a GZ18 wheelset takes exactly
-// what refers to it, transitively, as the consequences said beforehand, with
-// the records that followed it; renaming a body renames it wherever it is
-// referred to, its contact carrier of the same name keeping its own name, and
-// its station layout entry, placement, shape name and group membership
-// follow, by kind; every edit
-// the contract refuses is refused by element and property and changes
-// nothing; edits alone give a GZ18 bogie a third axle that passes the check
-// and is drawn with two more wheels; an optional reference is set and cleared;
-// a new damper's empty curve is judged by the check until a curve is set; a
-// project whose contact record does not fit is repaired one edit at a time; a
-// body created in the session has no shapes; and every axis token is one the
-// check accepts.
+// undo and redo; removing an IRW wheel body, a GZ18 wheelset or either car
+// body takes exactly what refers to it, transitively, as the consequences said
+// beforehand, with the records that followed it; renaming a body renames it
+// wherever it is referred to, its contact carrier of the same name keeping its
+// own name, and its station layout entry, placement, shape name and group
+// membership follow, by kind, and GZ18 with its car body renamed passes the
+// check; every edit the contract refuses is refused by element and property
+// and changes nothing; edits alone give a GZ18 bogie a third axle that passes
+// the check and is drawn with two more wheels; an optional reference is set
+// and cleared; a new damper's empty curve is judged by the check until a curve
+// is set; a project whose contact record does not fit is repaired one edit at
+// a time; a body created in the session has no shapes; and every axis token is
+// one the check accepts.
 
 namespace {
 
@@ -287,7 +287,9 @@ void VerifyRemovingABody(const ReferenceVehicle& reference, const std::string& b
 
 // An IRW wheel body goes with its revolute joint and contact interface; a
 // GZ18 wheelset with its frames, the axlebox carrier pivots on those frames,
-// its contact carrier and its interfaces.
+// its contact carrier and its interfaces. The car body of either vehicle,
+// which nothing singles out, goes with its frames and the welds holding bodies
+// at them.
 void VerifyRemovingBodies(const ReferenceVehicle& gz18, const ReferenceVehicle& irw) {
     const configuration::VehicleContactInterfaceDeclaration& irw_interface =
         irw.contact_record.declaration.interfaces.front();
@@ -306,6 +308,17 @@ void VerifyRemovingBodies(const ReferenceVehicle& gz18, const ReferenceVehicle& 
                         {{ElementKind::kFixedFrame, pivot.parent_frame_name},
                          {ElementKind::kRevoluteJoint, pivot.name},
                          {ElementKind::kContactCarrier, gz18_carrier.carrier_name}});
+    for (const ReferenceVehicle* const vehicle : {&gz18, &irw}) {
+        const configuration::VehicleWeldJointDefinition& weld =
+            vehicle->definition.weld_joints.front();
+        Require(
+            Named(vehicle->definition.fixed_frames, weld.parent_frame_name).body_name == "carbody",
+            vehicle->definition.vehicle_name +
+                "'s first weld no longer holds a body at a frame on the car body");
+        VerifyRemovingABody(*vehicle, "carbody",
+                            {{ElementKind::kFixedFrame, weld.parent_frame_name},
+                             {ElementKind::kWeldJoint, weld.name}});
+    }
 }
 
 // Group memberships follow their elements by kind: renaming GZ18's first
@@ -344,7 +357,7 @@ void VerifyGroupsFollowElements(const ReferenceVehicle& gz18) {
 
 // The definition with `old_name` substituted by `new_name` wherever a body is
 // referred to: the body's own record, the frames fixed to it, joint and force
-// element ends, and the station layout.
+// element ends, and the station layout's offset entries and wheel-pair list.
 void SubstituteBodyName(configuration::VehicleDefinition& vehicle, const std::string& old_name,
                         const std::string& new_name) {
     const auto substitute = [&old_name, &new_name](std::string& name) {
@@ -381,7 +394,6 @@ void SubstituteBodyName(configuration::VehicleDefinition& vehicle, const std::st
     substitute_ends(vehicle.point_to_point_linear_spring_dampers);
     substitute_ends(vehicle.point_to_point_hysteretic_springs);
     auto& layout = vehicle.mechanical_track_station_layout;
-    substitute(layout.reference_body_name);
     for (auto& offset : layout.free_body_station_offsets) {
         substitute(offset.body_name);
     }
@@ -464,6 +476,23 @@ void VerifyRenamingARigidBody(const ReferenceVehicle& gz18) {
             "the renamed body is not drawn with the shapes it had");
 }
 
+// GZ18's car body renamed: it is renamed wherever it is referred to, its
+// station layout entry included, and the check still passes.
+void VerifyRenamingTheCarBody(const ReferenceVehicle& gz18) {
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
+    const VehicleProject opened = session.project();
+    const std::string new_name = "carbody_renamed";
+    RequireAccepted(session.SetSubjectProperty(ElementReference{ElementKind::kRigidBody, "carbody"},
+                                               "name", ElementOwnName{new_name}),
+                    "renaming GZ18's car body");
+    configuration::VehicleDefinition expected = opened.vehicle_definition;
+    SubstituteBodyName(expected, "carbody", new_name);
+    Require(Same(expected, session.project().vehicle_definition),
+            "the project with its car body renamed is not the original with the body's name "
+            "substituted wherever the body is referred to");
+    RequireCheckPasses(session, "GZ18 with its car body renamed");
+}
+
 // --- Refusals ----------------------------------------------------------------
 
 // Each edit the contract refuses is refused by element and property and
@@ -502,12 +531,11 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
     require_refused(session.SetSubjectProperty(
                         weld, "name", ElementOwnName{vehicle.revolute_joints.front().name}),
                     weld, "name", "a weld named like a revolute joint");
-    const ElementReference reference_body{
-        ElementKind::kRigidBody, vehicle.mechanical_track_station_layout.reference_body_name};
-    require_refused(session.SetSubjectProperty(reference_body, "name", ElementOwnName{"world"}),
-                    reference_body, "name", "a body named 'world'");
-    require_refused(session.SetSubjectProperty(reference_body, "name", ElementOwnName{""}),
-                    reference_body, "name", "a body given an empty name");
+    const ElementReference body{ElementKind::kRigidBody, vehicle.rigid_bodies.front().name};
+    require_refused(session.SetSubjectProperty(body, "name", ElementOwnName{"world"}), body, "name",
+                    "a body named 'world'");
+    require_refused(session.SetSubjectProperty(body, "name", ElementOwnName{""}), body, "name",
+                    "a body given an empty name");
     const ElementReference new_frame{ElementKind::kFixedFrame, "frame_without_body"};
     require_refused(
         session.AddElement(new_frame.kind, new_frame.name,
@@ -517,10 +545,6 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
                                   vehicle.series_spring_viscous_dampers.front().name};
     require_refused(session.SetSubjectProperty(damper, "axis", PropertyToken{"diagonal"}), damper,
                     "axis", "an axis outside its choices");
-    require_refused(session.RemoveElement(reference_body), reference_body, std::nullopt,
-                    "removing the station layout's reference body");
-    require_refused(session.CollectRemovalConsequences(reference_body), reference_body,
-                    std::nullopt, "asking what removing the station layout's reference body takes");
     const ElementReference body_named_like_frame{ElementKind::kRigidBody, frame.name};
     require_refused(session.AddRigidBody(body_named_like_frame.name, {}, FreeInWorldAttachment{}),
                     body_named_like_frame, "name", "a body created under a frame's name");
@@ -801,6 +825,7 @@ int main(int argc, char** argv) {
         VerifyAddingAForceElement(gz18);
         VerifyRemovingBodies(gz18, irw);
         VerifyRenamingARigidBody(gz18);
+        VerifyRenamingTheCarBody(gz18);
         VerifyGroupsFollowElements(gz18);
         VerifyStructuralRefusals(gz18);
         VerifyContactElementNeedsContactRecord(gz18);

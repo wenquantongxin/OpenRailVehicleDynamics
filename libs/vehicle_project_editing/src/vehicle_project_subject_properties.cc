@@ -26,7 +26,6 @@ using internal::RecordProperty;
 using internal::ReferenceMember;
 using internal::SettingsRecordMember;
 using internal::SettingsRecordProperty;
-using internal::SettingsReferenceMember;
 using internal::SettingsTokenMember;
 using internal::TextTokenMember;
 using internal::ValueTokenMember;
@@ -247,14 +246,6 @@ PropertyDescription DescribeSettingsMember(std::string_view name,
     return {.name = name, .value_kind = PropertyValueKind::kToken, .choices = token.tokens};
 }
 
-template <typename Record>
-PropertyDescription DescribeSettingsMember(std::string_view name,
-                                           const SettingsReferenceMember<Record>& reference) {
-    return {.name = name,
-            .value_kind = PropertyValueKind::kElementReference,
-            .referenced_kinds = reference.referenced_kinds};
-}
-
 template <typename Records>
 std::span<const PropertyDescription> SettingsDescriptions() {
     using Record = typename Records::Record;
@@ -318,12 +309,6 @@ template <typename Record, typename Value>
 std::optional<PropertyValue> ReadSettingsMember(const Record& record,
                                                 const SettingsTokenMember<Record, Value>& token) {
     return TokenStandingFor(token.member.in_const(record), token.tokens, token.values);
-}
-
-template <typename Record>
-std::optional<PropertyValue> ReadSettingsMember(const Record& record,
-                                                const SettingsReferenceMember<Record>& reference) {
-    return ReferencedElementName{reference.member.in_const(record)};
 }
 
 template <typename Records>

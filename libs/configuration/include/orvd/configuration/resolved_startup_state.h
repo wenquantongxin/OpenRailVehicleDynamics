@@ -231,12 +231,10 @@ struct ResolvedStartupState {
     // velocities are already explicit. No inactive radius or sentinel is
     // carried in that case.
     std::optional<CommonWheelSpinGeneration> common_wheel_spin_generation;
-    // Where the vehicle sits on the line is deliberately absent. A resolved
-    // start-up state is an identity, not a placement: the same one can be
-    // assembled at every finite station of a line or its native straight
-    // continuation, so the station of the layout reference body is a run's
-    // argument to the assembly, not a field here. Storing it would make this
-    // record disagree with the next scene that used it.
+    // The station of the vehicle layout zero is a run's assembly argument.
+    // This static point of the line belongs to no body and does not move with
+    // the vehicle. The same resolved start-up state can be placed at every
+    // finite station of a line or its native straight continuation.
     //
     // The signed vertical shift applied to the rail profile reference frame,
     // along +z_T, before contact geometry is evaluated. Positive lowers the

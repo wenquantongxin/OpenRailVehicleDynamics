@@ -2,7 +2,6 @@
 #include <cstdio>
 #include <exception>
 #include <iterator>
-#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -16,8 +15,8 @@
 
 // How rigid bodies are attached, read from the records alone. On both bundled
 // vehicles as the modelling service opens them: every body stating that it
-// moves freely reads free, and only the station layout's reference body cannot
-// take a joint; every other body hangs on the joint the vehicle's file gives
+// moves freely reads free and can take a joint, the car body as much as any,
+// with no note; every other body hangs on the joint the vehicle's file gives
 // it, the one whose child end is on it, held at that joint's other end. A new
 // joint's end on a body may name the body and its fixed frames, and its other
 // end every frame on a body outside the body's branch. On records a project
@@ -46,9 +45,6 @@ using vehicle_project_editing::Title;
 struct ContractTexts {
     Title free{.en = "Moves freely in the world", .zh = "相对世界自由"};
     Title hanging{.en = "Hangs on a joint", .zh = "由铰挂接"};
-    Title reference_body_note{
-        .en = "The station layout is measured from this body, so it keeps moving freely",
-        .zh = "站位布局以它为基准，它须保持自由"};
     Title not_attached{.en = "Not attached", .zh = "未接入"};
     Title not_attached_note{.en = "Neither free nor held by a joint",
                             .zh = "既没有声明自由，也没有铰把它接到别的刚体上"};
@@ -164,17 +160,13 @@ void VerifyBundledVehicle(const VehicleProject& project) {
                     ": what a new joint's other end may name is not every frame outside its "
                     "branch");
         if (body.moves_freely_in_world) {
-            const bool reference =
-                body.name == vehicle.mechanical_track_station_layout.reference_body_name;
             Require(attachment.state == RigidBodyAttachmentState::kFree &&
                         attachment.summary == texts.free && !attachment.joint.has_value() &&
                         !attachment.held_at.has_value() && !attachment.can_become_free &&
-                        attachment.can_take_joint == !reference &&
-                        attachment.note ==
-                            (reference ? std::optional(texts.reference_body_note) : std::nullopt),
+                        attachment.can_take_joint && !attachment.note.has_value(),
                     what +
                         " states that it moves freely but does not read free, able to take a "
-                        "joint unless it is the station layout's reference body, which says why");
+                        "joint, with no note");
             continue;
         }
         const auto given = std::ranges::find_if(joints, [&](const JointEnds& joint) {

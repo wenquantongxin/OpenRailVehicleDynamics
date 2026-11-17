@@ -888,8 +888,9 @@ void VerifyStationOffsetWritesItsLayoutEntry(const VehicleProject& probe) {
 
 // A rigid body's properties are shown in the contract's sections, in the order
 // its properties are listed: its name in none, then mass and inertia, its
-// mechanical station and its preview placement. No other kind's property, and
-// no settings property, is in a section.
+// station along the track from the vehicle layout zero and its preview
+// placement. No other kind's property, and no settings property, is in a
+// section.
 void VerifyPropertySections() {
     const std::vector<std::pair<std::string_view, std::optional<std::string_view>>>
         rigid_body_sections = {
@@ -898,7 +899,8 @@ void VerifyPropertySections() {
             {"center_of_mass_in_body_frame_meters", "Mass and inertia"},
             {"inertia_moments_about_center_of_mass_kilogram_square_meters", "Mass and inertia"},
             {"inertia_products_about_center_of_mass_kilogram_square_meters", "Mass and inertia"},
-            {"mechanical_track_station_layout.station_offset_meters", "Mechanical station"},
+            {"mechanical_track_station_layout.station_offset_meters",
+             "Station along the track, from the vehicle layout zero"},
             {"placement.lateral_offset_in_local_track_frame_meters", "Preview placement"},
             {"placement.vertical_offset_in_local_track_frame_meters", "Preview placement"}};
     const std::span<const PropertyDescription> body_descriptions =
@@ -914,6 +916,14 @@ void VerifyPropertySections() {
                      (description.section->en == *section && !description.section->zh.empty())),
                 "the rigid body property '" + std::string(name) + "' is not in its section");
     }
+    const auto station = std::ranges::find(body_descriptions,
+                                           "mechanical_track_station_layout.station_offset_meters",
+                                           &PropertyDescription::name);
+    Require(station->section ==
+                vehicle_project_editing::Title{
+                    .en = "Station along the track, from the vehicle layout zero",
+                    .zh = "沿线路的站位（相对车辆布局零点）"},
+            "the station section is not titled in both languages as the contract words it");
     for (const ElementKind kind : vehicle_project::kElementKinds) {
         if (kind == ElementKind::kRigidBody) {
             continue;

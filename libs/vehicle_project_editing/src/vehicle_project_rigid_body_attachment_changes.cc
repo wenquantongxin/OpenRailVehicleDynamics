@@ -114,10 +114,6 @@ AttachmentChange TakeJoint(VehicleProject& project, const ElementReference& body
     if (attachment.state == RigidBodyAttachmentState::kConflicting) {
         return refuse(RefuseConflictingAttachment(body, attachment));
     }
-    if (!attachment.can_take_joint) {
-        return refuse(
-            RequireLayoutKeepsReferenceBody(project, body.name, "attached by a joint").error());
-    }
     if (!IsJointKind(joint.kind)) {
         return refuse("a rigid body is attached by a " + DescribeReferencedKinds(kJointKinds) +
                       ", not by a " +

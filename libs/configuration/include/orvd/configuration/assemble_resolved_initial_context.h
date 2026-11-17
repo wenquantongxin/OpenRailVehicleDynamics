@@ -107,12 +107,12 @@ class ResolvedInitialContext {
 // Places a resolved start-up state on a line and writes it into a fresh runtime
 // context.
 //
-// The station of the vehicle's layout reference body is this run's argument,
-// not a field of the record: the same resolved identity can be assembled at any
-// finite placement, and a record carrying an absolute mileage would disagree
-// with the next scene that used it. Every other body's station is that argument
-// plus its mechanical offset, from the vehicle definition, plus whatever the
-// resolution moved.
+// The vehicle layout zero is a static point of the line whose station is this
+// run's argument. It belongs to no body and does not move with the vehicle.
+// Every free body's initial station is that argument plus its vehicle instance
+// offset, its mechanical offset from the vehicle definition, and its resolved
+// start-up correction. The same start-up state can be placed at any finite
+// station without changing these offsets.
 //
 // Everything is checked before anything is written, and the context is not the
 // caller's until all of it succeeded. A failure part-way therefore leaves no

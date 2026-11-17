@@ -33,16 +33,17 @@
 // `placement.lateral_offset_in_local_track_frame_meters` and
 // `placement.vertical_offset_in_local_track_frame_meters`. The prefixes say
 // which record holds them. A rigid body's properties are shown in sections:
-// mass and inertia, its mechanical station, which the dynamics use, and its
-// preview placement, which only places it in the drawing.
+// mass and inertia, its station along the track from the vehicle layout zero,
+// which the dynamics use, and its preview placement, which only places it in
+// the drawing.
 //
 // Each settings has one fixed list of properties as well: every member of its
 // record, nested records' members included, in declaration order, under the
 // member's own name, prefixed for a nested record's member with the member
 // holding that record (`friction.static_coefficient`). The gravity is the
-// project's, the vehicle identity the vehicle definition's two names, the
-// station layout its reference body, and the wheel, the rail and the contact
-// computation the configuration records of the wheel-rail contact record.
+// project's, the vehicle identity the vehicle definition's two names, and the
+// wheel, the rail and the contact computation the configuration records of the
+// wheel-rail contact record.
 //
 // A description says what a property holds. The element's own name is a
 // property like any other: setting it renames the element. A reference names

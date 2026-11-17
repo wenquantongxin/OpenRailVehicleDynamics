@@ -68,7 +68,6 @@ DeclaredVehicle MakeThreeAxleBogie() {
     result.vehicle.mechanical_definition_identifier = "three_axle_mechanics";
     result.vehicle.rigid_bodies.push_back(FreeBody("bogie"));
     auto& layout = result.vehicle.mechanical_track_station_layout;
-    layout.reference_body_name = "bogie";
     layout.free_body_station_offsets.push_back({"bogie", 0.0});
     for (int axle_index = 0; axle_index < 3; ++axle_index) {
         const std::string wheelset = "wheelset_" + std::to_string(axle_index);
@@ -174,7 +173,6 @@ DeclaredVehicle RenameMechanicalObjects(DeclaredVehicle declared) {
     rename_force_ends(declared.vehicle.point_to_point_linear_spring_dampers);
     rename_force_ends(declared.vehicle.point_to_point_hysteretic_springs);
     auto& layout = declared.vehicle.mechanical_track_station_layout;
-    layout.reference_body_name = frame_names.at(layout.reference_body_name);
     for (auto& offset : layout.free_body_station_offsets) {
         offset.body_name = frame_names.at(offset.body_name);
     }

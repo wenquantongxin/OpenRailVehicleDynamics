@@ -56,24 +56,6 @@ void RequireVehicleMechanicalTrackStationLayoutInvariants(
         }
     }
 
-    if (layout.reference_body_name.empty()) {
-        throw std::invalid_argument(path + ".reference_body_name is empty");
-    }
-    const auto reference = offset_of_body.find(layout.reference_body_name);
-    if (reference == offset_of_body.end()) {
-        throw std::invalid_argument(
-            path + ".reference_body_name names '" +
-            layout.reference_body_name +
-            "', which is not one of the free bodies this layout places");
-    }
-    if (reference->second != 0.0) {
-        throw std::invalid_argument(
-            path + ".reference_body_name names '" +
-            layout.reference_body_name + "', whose station offset is " +
-            std::to_string(reference->second) +
-            " m rather than zero; the other offsets are measured from it");
-    }
-
     std::unordered_set<std::string> station_reference_names;
     for (const std::string& name :
          layout.wheel_pair_station_reference_body_names) {

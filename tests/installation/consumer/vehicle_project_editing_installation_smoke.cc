@@ -24,7 +24,6 @@ int main() {
         vehicle.vehicle_name = "smoke_vehicle";
         vehicle.mechanical_definition_identifier = "smoke_vehicle_mechanics";
         vehicle.mechanical_track_station_layout = {
-            .reference_body_name = "carbody",
             .free_body_station_offsets = {{.body_name = "carbody", .station_offset_meters = 0.0}},
             .wheel_pair_station_reference_body_names = {}};
         vehicle.rigid_bodies.push_back(

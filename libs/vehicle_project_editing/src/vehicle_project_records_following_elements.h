@@ -1,10 +1,8 @@
 #pragma once
 
 #include <algorithm>
-#include <expected>
 #include <memory>
 #include <string>
-#include <string_view>
 
 #include "orvd/configuration/vehicle_definition.h"
 #include "orvd/vehicle_project/vehicle_project.h"
@@ -13,8 +11,8 @@
 // The records that follow an element without being elements, kept in step by
 // every edit that touches the element: its memberships in groups, and for a
 // rigid body its entry in the mechanical track station layout, the layout's
-// reference body name, the layout's wheel-pair station reference list, its
-// drawing placement and the name its shapes are stated under.
+// wheel-pair station reference list, its drawing placement and the name its
+// shapes are stated under.
 
 namespace orvd::vehicle_project_editing::internal {
 
@@ -68,12 +66,5 @@ void AddFreeBodyRecords(vehicle_project::VehicleProject& project, const std::str
 // Takes the station layout entry and the placement from a body that no longer
 // moves freely.
 void RemoveFreeBodyRecords(vehicle_project::VehicleProject& project, const std::string& body_name);
-
-// Refuses an edit that would take the station layout's reference body out of
-// the layout, which `edit` completes the reason with: "removed", or "attached
-// by a joint". Every other body may leave it.
-[[nodiscard]] std::expected<void, std::string> RequireLayoutKeepsReferenceBody(
-    const vehicle_project::VehicleProject& project, const std::string& body_name,
-    std::string_view edit);
 
 }  // namespace orvd::vehicle_project_editing::internal

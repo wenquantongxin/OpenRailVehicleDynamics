@@ -9,7 +9,10 @@ and IRW, creates through a row's offer, and reads, sets and refuses settings
 through the subject forms. Reads how GZ18's rigid bodies are attached, hangs
 a free body on a joint, frees a hanging one and creates one with a joint, each
 one edit, and refuses by subject and property, an IRW wheel's freedom
-included. Then saves GZ18 as a project,
+included. Shows the vehicle layout zero: no settings for it, a row under
+Globals selecting nothing, the car body attached, removed and renamed like any
+body, the station section's title, and a project file holding a key the
+station layout no longer has refused. Then saves GZ18 as a project,
 edited and left failing its check, into a directory of projects, lists it,
 and opens each project again after another vehicle to find everything an
 interface reads of it as it was saved; follows the session and its unsaved
@@ -57,7 +60,7 @@ DESCRIPTION_FIELDS_OF_VALUE_KIND = {
 DOMAINS = [("Globals", True), ("Bodies", True), ("Joints", True), ("Force elements", True),
            ("Constraints", False), ("Wheel-rail", True), ("Track", False),
            ("Substructures", False)]
-SETTINGS_WORDS = ["gravity", "vehicle_identity", "station_layout", "wheel", "rail",
+SETTINGS_WORDS = ["gravity", "vehicle_identity", "wheel", "rail",
                   "contact_computation"]
 NODE_FIELDS = {"key", "title", "subject", "provided", "note", "creates", "attaches", "children"}
 JOINT_KINDS = ELEMENT_KINDS[2:5]
@@ -375,17 +378,14 @@ def verify_attachments(executable, gz18, irw):
     def outline_elements():
         return service.accepted("get_outline")["result"]["elements"]
 
-    # As GZ18's file has it: the car body moves freely and, being the station
-    # layout's reference body, keeps doing so; an axlebox carrier hangs on
-    # its pivot, held at the pivot's parent end, which the summary does not
-    # name. Only a rigid body has an attachment.
+    # As GZ18's file has it: the car body moves freely and can take a joint;
+    # an axlebox carrier hangs on its pivot, held at the pivot's parent end,
+    # which the summary does not name. Only a rigid body has an attachment.
     car_body = attachment_of("carbody")
-    assert (car_body["summary"], car_body["joint"], car_body["held_at"],
+    assert (car_body["summary"], car_body["note"], car_body["joint"], car_body["held_at"],
             car_body["can_become_free"], car_body["can_take_joint"]) == (
-        {"en": "Moves freely in the world", "zh": "相对世界自由"}, None, None, False, False), car_body
-    assert car_body["note"] == {
-        "en": "The station layout is measured from this body, so it keeps moving freely",
-        "zh": "站位布局以它为基准，它须保持自由"}, car_body
+        {"en": "Moves freely in the world", "zh": "相对世界自由"}, None, None, None, False,
+        True), car_body
     carrier = "front_leading_right_axlebox_carrier"
     pivot = {"kind": "revolute_joint", "name": carrier + "_pivot"}
     held_at = carrier + "_pivot_wheelset_side_attachment"
@@ -400,12 +400,11 @@ def verify_attachments(executable, gz18, irw):
     assert reading_of({"element": pivot})["attachment"] is None
     assert reading_of({"settings": "gravity"})["attachment"] is None
 
-    # The joints row attaches the bodies the file states free but the car body.
+    # The joints row attaches every body the file states free.
     nodes = require_model_tree(service, "GZ18")
     vehicle_file = json.loads(Path(gz18["vehicle_definition_path"]).read_text())
     assert nodes[2]["attaches"] == [body(stated["name"]) for stated in vehicle_file["rigid_bodies"]
-                                    if stated["moves_freely_in_world"]
-                                    and stated["name"] != "carbody"], nodes[2]["attaches"]
+                                    if stated["moves_freely_in_world"]], nodes[2]["attaches"]
 
     # The front bogie frame hung on the car body by a weld: one edit, after
     # which it has no station offset or placement and the check passes.
@@ -457,9 +456,9 @@ def verify_attachments(executable, gz18, irw):
     assert box not in outline_elements() and hinge not in outline_elements()
 
     # Refusals, each changing nothing: a joint name already taken names the
-    # joint and its name; the station layout's reference body and a body
-    # created without an attachment name the body; an attachment on another
-    # kind and a joint created through add_element name that element.
+    # joint and its name; a body created without an attachment names the body;
+    # an attachment on another kind and a joint created through add_element
+    # name that element.
     before = service.accepted("get_outline")
     clashing_joint = {"joint": {"kind": pivot["kind"], "name": pivot["name"],
                                 "properties": {"parent_frame_name": "carbody"}}}
@@ -470,10 +469,6 @@ def verify_attachments(executable, gz18, irw):
         "kind": pivot["kind"], "name": pivot["name"],
         "properties": {"parent_frame_name": "carbody", "child_frame_name": bogie}}})
     assert (refusal["subject"], refusal["property"]) == ({"element": pivot}, "name"), refusal
-    refusal = service.refused("set_attachment", body=body("carbody"), attachment={"joint": {
-        "kind": "weld_joint", "name": "carbody_weld",
-        "properties": {"parent_frame_name": bogie, "child_frame_name": "carbody"}}})
-    assert (refusal["subject"], refusal["property"]) == ({"element": body("carbody")}, None)
     refusal = service.refused("add_element", kind="rigid_body", name="unattached_box",
                               properties={})
     assert (refusal["subject"], refusal["property"]) == ({"element": body("unattached_box")},
@@ -500,6 +495,94 @@ def verify_attachments(executable, gz18, irw):
     refusal = service.refused("set_attachment", body=wheel, attachment={"free": True})
     assert (refusal["subject"], refusal["property"]) == ({"element": wheel}, None), refusal
     assert f"contact interface '{interface['interface_name']}'" in refusal["message"], refusal
+    service.finish()
+
+
+def verify_vehicle_layout_zero(executable, gz18, work_directory):
+    """The vehicle layout zero, through commands alone: the settings words, the
+    row under Globals, the car body attached, removed and renamed like any free
+    body, the station section's title, and a project file holding a key the
+    station layout no longer has refused on opening."""
+    service = Service(executable)
+    service.accepted("open_vehicle", **gz18)
+    car_body = {"kind": "rigid_body", "name": "carbody"}
+
+    # Six rows under Globals, the third saying what the station offsets are
+    # measured from, selecting and creating nothing; "station_layout" names no
+    # settings, as an unknown word does not.
+    globals_row = service.accepted("get_model_tree")["result"]["nodes"][0]
+    assert len(globals_row["children"]) == 6, globals_row
+    assert globals_row["children"][2] == {
+        "key": globals_row["children"][2]["key"],
+        "title": {"en": "Vehicle layout zero", "zh": "车辆布局零点"},
+        "subject": None, "provided": True,
+        "note": {"en": "A static point of the line, where a run places the vehicle; each free "
+                       "body's station offset is measured from it along the track. It belongs "
+                       "to no body and does not move with the vehicle.",
+                 "zh": "线路上的静态点，运行时把车辆放在这里；各自由刚体的站位偏置沿线路方向"
+                       "相对它给出。它不属于任何刚体，也不随车运动。"},
+        "creates": [], "attaches": [], "children": []}, globals_row["children"][2]
+    for word in ("station_layout", "colour"):
+        refusal = service.refused("get_properties", subject={"settings": word})
+        assert (refusal["subject"], refusal["property"]) == (None, None), refusal
+
+    # The station section's title.
+    kinds = service.accepted("describe_element_kinds")["result"]["element_kinds"]
+    station_offset = next(prop for prop in kinds[0]["properties"] if prop["name"] == STATION_OFFSET)
+    assert station_offset["section"] == {
+        "en": "Station along the track, from the vehicle layout zero",
+        "zh": "沿线路的站位（相对车辆布局零点）"}, station_offset
+
+    # The car body takes a joint like any free body: hung on the front bogie
+    # frame by a weld, then undone.
+    attachment = service.accepted("get_properties", subject={"element": car_body})["result"][
+        "attachment"]
+    assert (attachment["note"], attachment["can_take_joint"]) == (None, True), attachment
+    weld = {"kind": "weld_joint", "name": "carbody_weld"}
+    hung = service.accepted("set_attachment", body=car_body, attachment={"joint": {
+        "kind": weld["kind"], "name": weld["name"],
+        "properties": {"parent_frame_name": "front_bogie_frame", "child_frame_name": "carbody"}}})
+    assert hung["result"] == {"joint": weld}, hung
+    service.accepted("undo")
+
+    # The car body is removed with what goes with it, as asked beforehand, and
+    # one undo brings everything back.
+    opened_outline = service.accepted("get_outline")["result"]["elements"]
+    consequences = service.accepted("get_removal_consequences", element=car_body)["result"]
+    assert car_body in consequences["removed_elements"], consequences
+    removed = service.accepted("remove_element", element=car_body)
+    assert removed["result"] == consequences, removed
+    remaining = service.accepted("get_outline")["result"]["elements"]
+    assert remaining == [element for element in opened_outline
+                         if element not in consequences["removed_elements"]]
+    service.accepted("undo")
+    assert service.accepted("get_outline")["result"]["elements"] == opened_outline
+
+    # Renamed, it leaves a project that passes its check.
+    renamed = service.accepted("set_property", subject={"element": car_body}, property="name",
+                               value="carbody_renamed")
+    assert renamed["result"] == {"subject": {"element": {"kind": "rigid_body",
+                                                         "name": "carbody_renamed"}}}
+    assert service.accepted("check")["result"]["passed"]
+    service.accepted("undo")
+
+    # A project file whose station layout still names a reference body is
+    # refused on opening, naming the key, and the open session stays.
+    projects = work_directory / "vehicle_projects_with_a_layout_reference_body"
+    projects.mkdir()
+    service.accepted("save_vehicle_project_as", directory=str(projects), name="layout_reference_body")
+    project_path = projects / "layout_reference_body.vehicle_project.json"
+    document = json.loads(project_path.read_text())
+    document["vehicle_definition"]["mechanical_track_station_layout"]["reference_body_name"] = (
+        "carbody")
+    project_path.write_text(json.dumps(document, indent=2) + "\n")
+    before = service.accepted("get_outline")
+    refusal = service.refused("open_vehicle_project", directory=str(projects),
+                              name="layout_reference_body")
+    assert ("$.vehicle_definition.mechanical_track_station_layout.reference_body_name"
+            in refusal["message"]), refusal
+    after = service.accepted("get_outline")
+    assert (after["revision"], after["result"]) == (before["revision"], before["result"])
     service.finish()
 
 
@@ -687,8 +770,8 @@ def main():
     assert len({kind["title"]["en"] for kind in kinds}) == len(kinds), "two kinds share a title"
     described = {kind["kind"]: kind["properties"] for kind in kinds}
     # A rigid body's properties are shown in sections, each one run of
-    # consecutive properties: mass and inertia, mechanical station and preview
-    # placement; its name and every other kind's properties in none.
+    # consecutive properties: mass and inertia, station along the track and
+    # preview placement; its name and every other kind's properties in none.
     body_sections = [prop["section"]["en"] if prop["section"] else None
                      for prop in described["rigid_body"]]
     assert body_sections[0] is None and all(body_sections[1:]), body_sections
@@ -901,10 +984,6 @@ def main():
     service.accepted("undo")
     assert renamed_body in outline_elements() and spring in outline_elements()
 
-    refusal = service.refused("remove_element", element={"kind": "rigid_body", "name": "carbody"})
-    assert refusal["subject"] == {"element": {"kind": "rigid_body", "name": "carbody"}}
-    assert refusal["property"] is None
-
     # Values are read as the property's value kind: a token, a reference
     # naming none, and a curve by its row fields.
     lateral_damper = {"kind": "series_spring_viscous_damper", "name": "front_lateral_damper"}
@@ -984,6 +1063,7 @@ def main():
 
     verify_model_tree_and_settings(executable, gz18, irw)
     verify_attachments(executable, gz18, irw)
+    verify_vehicle_layout_zero(executable, gz18, work_directory)
     verify_saving_and_reopening(executable, gz18, irw, work_directory)
     assert {path: path.read_bytes() for path in reference_files} == reference_files, (
         "a reference vehicle's file changed")

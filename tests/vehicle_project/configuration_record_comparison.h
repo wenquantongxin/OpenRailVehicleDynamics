@@ -109,10 +109,8 @@ inline auto Members(const configuration::VehicleFreeBodyStationOffsetDefinition&
 }
 
 inline auto Members(const configuration::VehicleMechanicalTrackStationLayoutDefinition& layout) {
-    const auto& [reference_body_name, free_body_station_offsets,
-                 wheel_pair_station_reference_body_names] = layout;
-    return std::tie(reference_body_name, free_body_station_offsets,
-                    wheel_pair_station_reference_body_names);
+    const auto& [free_body_station_offsets, wheel_pair_station_reference_body_names] = layout;
+    return std::tie(free_body_station_offsets, wheel_pair_station_reference_body_names);
 }
 
 inline auto Members(const configuration::VehicleDefinition& vehicle) {

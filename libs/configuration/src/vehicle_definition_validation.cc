@@ -59,10 +59,6 @@ void RequireVehicleDefinitionDeclarationInvariants(const VehicleDefinition& vehi
 
     const auto& layout = vehicle.mechanical_track_station_layout;
     const std::string layout_path = path + ".mechanical_track_station_layout";
-    if (layout.reference_body_name.empty()) {
-        throw std::invalid_argument(layout_path +
-                                    ".reference_body_name must be a non-empty rigid-body name");
-    }
     for (std::size_t index = 0; index < layout.free_body_station_offsets.size(); ++index) {
         if (layout.free_body_station_offsets[index].body_name.empty()) {
             throw std::invalid_argument(

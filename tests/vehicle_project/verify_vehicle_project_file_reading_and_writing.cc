@@ -33,9 +33,10 @@
 // vehicles, opened as the modelling service opens them, and unfinished
 // projects are written and read back as the same project, the visual
 // definition equal as a JSON value, and writing what was read gives the same
-// bytes. Reading refuses what is wrong with the document by naming its place;
-// a project name that is not one is refused; a write that fails leaves the
-// directory as it was; and only project files are listed.
+// bytes. Reading refuses what is wrong with the document by naming its place,
+// the key a station layout no longer has included; a project name that is not
+// one is refused; a write that fails leaves the directory as it was; and only
+// project files are listed.
 
 namespace {
 
@@ -342,6 +343,16 @@ void VerifyReadingRefusesFaultyDocuments(const VehicleProject& project,
     Json unknown_key = document;
     unknown_key["vehicle_colour"] = "red";
     RequireReadingRefused(unknown_key.dump(2), directory, {"$.vehicle_colour"}, "an unknown key");
+
+    // A station layout naming a reference body, as a project file written
+    // before the layout lost that name holds it.
+    Json layout_reference_body = document;
+    layout_reference_body["vehicle_definition"]["mechanical_track_station_layout"]
+                         ["reference_body_name"] = "carbody";
+    RequireReadingRefused(
+        layout_reference_body.dump(2), directory,
+        {"$.vehicle_definition.mechanical_track_station_layout.reference_body_name"},
+        "a station layout naming a reference body");
 
     Json missing_key = document;
     missing_key.erase("element_groups");

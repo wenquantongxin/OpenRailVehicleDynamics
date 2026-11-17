@@ -14,7 +14,6 @@
 #include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 #include "vehicle_project_element_name_spaces.h"
 #include "vehicle_project_element_property_tables.h"
-#include "vehicle_project_records_following_elements.h"
 
 namespace orvd::vehicle_project_editing {
 namespace {
@@ -285,15 +284,7 @@ RigidBodyAttachment ReadRigidBodyAttachment(const VehicleProject& project,
     switch (reading.state) {
         case RigidBodyAttachmentState::kFree:
             attachment.summary = {.en = "Moves freely in the world", .zh = "相对世界自由"};
-            attachment.can_take_joint =
-                internal::RequireLayoutKeepsReferenceBody(project, body_name, "attached by a joint")
-                    .has_value();
-            if (!attachment.can_take_joint) {
-                attachment.note = Title{.en =
-                                            "The station layout is measured from this body, so "
-                                            "it keeps moving freely",
-                                        .zh = "站位布局以它为基准，它须保持自由"};
-            }
+            attachment.can_take_joint = true;
             break;
         case RigidBodyAttachmentState::kHangsOnJoint:
             attachment.summary = {.en = "Hangs on a joint", .zh = "由铰挂接"};

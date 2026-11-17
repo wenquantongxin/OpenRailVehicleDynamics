@@ -22,9 +22,6 @@ VehicleBinding CaptureBinding(const VehicleDefinition& vehicle, std::string_view
     binding.vehicle_name = vehicle.vehicle_name;
     binding.mechanical_definition_identifier =
         vehicle.mechanical_definition_identifier;
-    binding.reference_body_name =
-        qualified(vehicle.mechanical_track_station_layout.reference_body_name);
-
     binding.free_body_station_offsets.reserve(
         vehicle.mechanical_track_station_layout.free_body_station_offsets
             .size());

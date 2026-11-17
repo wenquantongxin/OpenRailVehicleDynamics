@@ -29,8 +29,9 @@
 // the carrier it names; joints and force elements are each one list in
 // outline order; the domains come in the contract's order, provided or not;
 // keys are unique; each row offers what the contract says it creates, the
-// joints row nothing; the joints row attaches the free bodies but the station
-// layout's reference body; and no body's row has a note. The tree follows
+// joints row nothing; the vehicle layout zero is the third row under Globals,
+// selecting and creating nothing; the joints row attaches every free body; and
+// no body's row has a note. The tree follows
 // edits, keeping the keys of the rows an edit leaves alone; a body left
 // unattached by a removed joint, and the bodies a joint joins to two free
 // bodies, carry their attachment's note, and the joints row attaches the
@@ -226,17 +227,14 @@ std::vector<ElementReference> BodiesWithNotes(const std::vector<ModelTreeNode>& 
     return bodies;
 }
 
-// The rigid bodies stating that they move freely, in outline order, but the
-// station layout's reference body, and those named in `also`.
-std::vector<ElementReference> FreeBodiesButTheReferenceBody(const VehicleProject& project,
-                                                            std::span<const std::string> also) {
+// The rigid bodies stating that they move freely, and those named in `also`,
+// in outline order.
+std::vector<ElementReference> FreeBodiesAnd(const VehicleProject& project,
+                                            std::span<const std::string> also) {
     std::vector<ElementReference> bodies;
     for (const configuration::VehicleRigidBodyDefinition& body :
          project.vehicle_definition.rigid_bodies) {
-        if ((body.moves_freely_in_world &&
-             body.name !=
-                 project.vehicle_definition.mechanical_track_station_layout.reference_body_name) ||
-            std::ranges::find(also, body.name) != also.end()) {
+        if (body.moves_freely_in_world || std::ranges::find(also, body.name) != also.end()) {
             bodies.push_back({ElementKind::kRigidBody, body.name});
         }
     }
@@ -309,12 +307,12 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
                          OutlineElements(project, vehicle_project::kElementKinds)),
             vehicle_name + ": the tree does not hold every element of the outline exactly once");
 
-    // The settings rows.
+    // The settings rows, the vehicle layout zero, which selects and creates
+    // nothing, and the rows not provided yet.
     const ModelTreeNode& globals = DomainTitled(tree, "Globals");
     Require(globals.children.size() == 6 &&
                 SettingsOf(globals.children[0]) == ProjectSettings::kGravity &&
                 SettingsOf(globals.children[1]) == ProjectSettings::kVehicleIdentity &&
-                SettingsOf(globals.children[2]) == ProjectSettings::kStationLayout &&
                 !globals.children[3].provided && !globals.children[4].provided &&
                 !globals.children[5].provided &&
                 globals.children[5].title == Title{.en = "Simulation settings", .zh = "仿真设置"} &&
@@ -322,8 +320,23 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
                     Title{.en = "Duration, solver, tolerances and parallel threads of a run",
                           .zh = "一次运行的时长、求解器、容差与并行线程数"},
             vehicle_name +
-                ": the globals are not gravity, vehicle identity, station layout and "
-                "three rows not provided yet, the simulation settings last");
+                ": the globals are not gravity, vehicle identity, a third row and three rows "
+                "not provided yet, the simulation settings last");
+    const ModelTreeNode& layout_zero = globals.children[2];
+    Require(layout_zero.provided && !layout_zero.subject.has_value() &&
+                layout_zero.creates.empty() && layout_zero.attaches.empty() &&
+                layout_zero.children.empty() &&
+                layout_zero.title == Title{.en = "Vehicle layout zero", .zh = "车辆布局零点"} &&
+                layout_zero.note ==
+                    Title{.en = "A static point of the line, where a run places the vehicle; "
+                                "each free body's station offset is measured from it along the "
+                                "track. It belongs to no body and does not move with the "
+                                "vehicle.",
+                          .zh = "线路上的静态点，运行时把车辆放在这里；各自由刚体的站位偏置沿"
+                                "线路方向相对它给出。它不属于任何刚体，也不随车运动。"},
+            vehicle_name +
+                ": the third row under Globals is not the vehicle layout zero as the contract "
+                "words it, provided and selecting and creating nothing");
 
     // Bodies with their markers; each marker under the body it names.
     const ModelTreeNode& bodies = DomainTitled(tree, "Bodies");
@@ -361,16 +374,15 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
             vehicle_name + ": a body that is free or hangs on a joint has a note on its row");
 
     // Joints and force elements, each one list in outline order. The joints
-    // row creates nothing; it attaches the free bodies that may take a joint.
+    // row creates nothing; it attaches every free body.
     const ModelTreeNode& joints = DomainTitled(tree, "Joints");
     Require(joints.creates.empty() &&
                 ElementsOf(joints.children) == OutlineElements(project, kJointKinds) &&
                 joints.children.size() == OutlineElements(project, kJointKinds).size(),
             vehicle_name + ": the joints are not one list in outline order creating nothing");
-    Require(joints.attaches == FreeBodiesButTheReferenceBody(project, {}),
+    Require(joints.attaches == FreeBodiesAnd(project, {}),
             vehicle_name +
-                ": the joints row does not attach exactly the free bodies but the station "
-                "layout's reference body, in outline order");
+                ": the joints row does not attach exactly the free bodies, in outline order");
     const ModelTreeNode& force_elements = DomainTitled(tree, "Force elements");
     Require(
         OffersExactly(force_elements, kForceElementKinds) &&
@@ -533,7 +545,7 @@ void VerifyBodyRowsCarryAttachmentNotes(const ReferenceVehicle& gz18) {
             "unattached body");
     const std::array also_attached{carrier};
     Require(DomainTitled(unattached, "Joints").attaches ==
-                FreeBodiesButTheReferenceBody(session.project(), also_attached),
+                FreeBodiesAnd(session.project(), also_attached),
             "the joints row does not attach a body left without its joint");
 
     // A weld joining the car body to a free bogie frame joins the bogie
@@ -560,7 +572,8 @@ void VerifyBodyRowsCarryAttachmentNotes(const ReferenceVehicle& gz18) {
                 "the row of " + Describe(body) +
                     ", joined to two free bodies, does not carry that note");
     }
-    std::vector<ElementReference> attachable = FreeBodiesButTheReferenceBody(joined, {});
+    std::vector<ElementReference> attachable = FreeBodiesAnd(joined, {});
+    std::erase(attachable, joined_bodies[0]);
     std::erase(attachable, joined_bodies[1]);
     Require(DomainTitled(conflicting, "Joints").attaches == attachable,
             "the joints row attaches a body joined to two free bodies, or leaves out another "

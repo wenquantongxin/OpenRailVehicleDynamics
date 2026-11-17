@@ -33,7 +33,7 @@
 // for a held record's member with the holding member's name and a dot. A
 // member is read-only or editable, and states what it holds by its type: a
 // number, a number absent until it is stated, a count, a text, a path read as
-// text, a reference, or a token standing for an enumeration's value.
+// text, or a token standing for an enumeration's value.
 //
 // Reading walks a table in its order; assigning finds one property in it.
 
@@ -70,20 +70,12 @@ struct SettingsTokenMember {
     std::span<const Value> values;
 };
 
-// A member naming an element of `referenced_kinds`.
-template <typename Record>
-struct SettingsReferenceMember {
-    SettingsRecordMember<Record, std::string> member;
-    std::span<const vehicle_project::ElementKind> referenced_kinds;
-};
-
 // What a read-only member holds.
 template <typename Record>
 using ReadOnlySettingsMember =
     std::variant<SettingsRecordMember<Record, double>, SettingsRecordMember<Record, std::size_t>,
                  SettingsRecordMember<Record, std::string>,
                  SettingsRecordMember<Record, std::filesystem::path>,
-                 SettingsReferenceMember<Record>,
                  SettingsTokenMember<Record, wheel_rail_contact::OutsideTableRule>>;
 
 // What an editable member holds.
@@ -141,13 +133,6 @@ constexpr SettingsTokenMember<Record, Value> SettingsToken(
     return {member, tokens.tokens, tokens.values};
 }
 
-template <typename Record, std::size_t count>
-constexpr SettingsReferenceMember<Record> SettingsReference(
-    SettingsRecordMember<Record, std::string> member,
-    const std::array<vehicle_project::ElementKind, count>& referenced_kinds) {
-    return {member, referenced_kinds};
-}
-
 // Every member of each settings record, in declaration order.
 
 constexpr auto PropertiesOfSettingsRecord(std::type_identity<vehicle_project::VehicleProject>) {
@@ -166,16 +151,6 @@ constexpr auto PropertiesOfSettingsRecord(std::type_identity<configuration::Vehi
         {"mechanical_definition_identifier",
          ReadOnlySettingsMember<Record>(
              SettingsMember<&Record::mechanical_definition_identifier>())},
-    });
-}
-
-constexpr auto PropertiesOfSettingsRecord(
-    std::type_identity<configuration::VehicleMechanicalTrackStationLayoutDefinition>) {
-    using Record = configuration::VehicleMechanicalTrackStationLayoutDefinition;
-    return std::to_array<SettingsRecordProperty<Record>>({
-        {"reference_body_name",
-         ReadOnlySettingsMember<Record>(SettingsReference(
-             SettingsMember<&Record::reference_body_name>(), kReferencedRigidBody))},
     });
 }
 
@@ -338,16 +313,6 @@ struct SettingsRecords<ProjectSettings::kVehicleIdentity> {
 };
 
 template <>
-struct SettingsRecords<ProjectSettings::kStationLayout> {
-    using Record = configuration::VehicleMechanicalTrackStationLayoutDefinition;
-    static constexpr std::string_view kSettingsWord = "station_layout";
-    static constexpr std::string_view kSettingsDescription = "station layout";
-    static auto* RecordIn(vehicle_project::ConstOrMutableVehicleProject auto& project) {
-        return &project.vehicle_definition.mechanical_track_station_layout;
-    }
-};
-
-template <>
 struct SettingsRecords<ProjectSettings::kWheel> {
     using Record = configuration::VehicleWheelContactConfiguration;
     static constexpr std::string_view kSettingsWord = "wheel";
@@ -389,8 +354,6 @@ decltype(auto) VisitProjectSettings(ProjectSettings settings, Visitor&& visitor)
             return visitor(SettingsRecords<ProjectSettings::kGravity>{});
         case ProjectSettings::kVehicleIdentity:
             return visitor(SettingsRecords<ProjectSettings::kVehicleIdentity>{});
-        case ProjectSettings::kStationLayout:
-            return visitor(SettingsRecords<ProjectSettings::kStationLayout>{});
         case ProjectSettings::kWheel:
             return visitor(SettingsRecords<ProjectSettings::kWheel>{});
         case ProjectSettings::kRail:

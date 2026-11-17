@@ -47,7 +47,6 @@ struct VehicleFreeBodyStationOffset {
 struct VehicleBinding {
     std::string vehicle_name;
     std::string mechanical_definition_identifier;
-    std::string reference_body_name;
     std::vector<VehicleFreeBodyStationOffset> free_body_station_offsets;
     std::vector<std::string> revolute_joint_names;
     std::vector<std::string> ball_rpy_joint_names;

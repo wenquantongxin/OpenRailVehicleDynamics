@@ -23,9 +23,6 @@ enum class ProjectSettings {
     // The vehicle definition's vehicle name and mechanical definition
     // identifier, which saving a project as a named project sets.
     kVehicleIdentity,
-    // The mechanical track station layout's reference body, which every free
-    // body's station offset is measured from.
-    kStationLayout,
     // The wheel, the rail and the contact computation of the wheel-rail
     // contact record, which a project without the record has none of.
     kWheel,
@@ -35,17 +32,15 @@ enum class ProjectSettings {
 
 // Every settings, in the order ProjectSettings declares them.
 inline constexpr std::array kProjectSettings{
-    ProjectSettings::kGravity,       ProjectSettings::kVehicleIdentity,
-    ProjectSettings::kStationLayout, ProjectSettings::kWheel,
-    ProjectSettings::kRail,          ProjectSettings::kContactComputation,
+    ProjectSettings::kGravity, ProjectSettings::kVehicleIdentity,    ProjectSettings::kWheel,
+    ProjectSettings::kRail,    ProjectSettings::kContactComputation,
 };
 
 // An element, or one of the project's settings.
 using PropertySubject = std::variant<vehicle_project::ElementReference, ProjectSettings>;
 
 // The word the modelling service writes the settings as: "gravity",
-// "vehicle_identity", "station_layout", "wheel", "rail" or
-// "contact_computation".
+// "vehicle_identity", "wheel", "rail" or "contact_computation".
 [[nodiscard]] std::string_view ProjectSettingsWord(ProjectSettings settings);
 
 // The settings written as `word`, or none when no settings are.

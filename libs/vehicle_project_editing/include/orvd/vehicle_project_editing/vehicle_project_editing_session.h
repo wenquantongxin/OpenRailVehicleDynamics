@@ -37,8 +37,8 @@
 // that opens with problems is repaired one edit at a time, and checking keeps
 // reporting what is still wrong. Physical plausibility, a negative stiffness
 // or a non-positive mass for instance, and the station layout's own
-// consistency, such as its reference body keeping a zero station offset, are
-// judged by checking as well.
+// consistency, such as every free body having one station offset, are judged
+// by checking as well.
 //
 // Saving writes the project, whatever state it is in, to a project file
 // (vehicle_project_file_reading_and_writing.h). A session opened from a
@@ -112,9 +112,9 @@ class VehicleProjectEditingSession {
     //   the eight force element kinds do.
     // Renaming changes every reference to the element and every record that
     // follows it: its group memberships and, for a rigid body, its station
-    // layout entry, the layout's reference body name and wheel-pair station
-    // list, its placement and the name its shapes are stated under, which
-    // keeps naming the shapes it named. Whether a rigid body moves freely is
+    // layout entry and the layout's wheel-pair station list, its placement and
+    // the name its shapes are stated under, which keeps naming the shapes it
+    // named. Whether a rigid body moves freely is
     // no property: SetRigidBodyAttachment changes it. Settings are judged no
     // further: the check judges the gravity, and a run the wheel and rail
     // values it assembles.
@@ -172,11 +172,10 @@ class VehicleProjectEditingSession {
     // moving freely and loses its station layout entry and placement; a body
     // hanging on a joint has that joint removed first, so that the new one may
     // take its name, and what named it names the new one. Refused for a
-    // conflicting body, for the station layout's reference body and for a kind
-    // that is no joint kind; naming them, when an element naming the replaced
-    // joint cannot name the new one's kind; and, with the joint as the
-    // refusal's subject, for the joint's name and properties and for an end
-    // that is not where it must be.
+    // conflicting body and for a kind that is no joint kind; naming them, when
+    // an element naming the replaced joint cannot name the new one's kind; and,
+    // with the joint as the refusal's subject, for the joint's name and
+    // properties and for an end that is not where it must be.
     [[nodiscard]] std::expected<std::optional<vehicle_project::ElementReference>,
                                 SubjectEditRefusal>
     SetRigidBodyAttachment(const std::string& body_name,
@@ -188,8 +187,7 @@ class VehicleProjectEditingSession {
     // order: kind by kind in ElementKind's order, each kind in declaration
     // order.
     //
-    // Refused when the project does not contain the element, and for the
-    // station layout's reference body.
+    // Refused when the project does not contain the element.
     [[nodiscard]] std::expected<std::vector<vehicle_project::ElementReference>, SubjectEditRefusal>
     RemoveElement(const vehicle_project::ElementReference& element);
 
