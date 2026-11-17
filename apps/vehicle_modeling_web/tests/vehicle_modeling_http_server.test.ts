@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +8,7 @@ import { test } from 'node:test';
 import { createServer as createViteServer } from 'vite';
 
 import type { ReferenceVehicleCatalogueEntry } from '../server/read_reference_vehicle_catalogue.ts';
+import type { TerminalConversation } from '../server/terminal_conversation.ts';
 import { startVehicleModelingHttpServer } from '../server/vehicle_modeling_http_server.ts';
 import { modellingServerProxy } from '../vite.config.ts';
 
@@ -58,7 +59,29 @@ async function serverFiles() {
   await writeFile(join(directory, 'secret.txt'), 'outside dist');
   const vehicleProjectsDirectory = join(directory, 'projects');
   await mkdir(vehicleProjectsDirectory);
-  return { directory, options: { servicePath, host: '127.0.0.1', port: 0, staticDirectory, referenceVehicles, vehicleProjectsDirectory } };
+  return { directory, options: { servicePath, host: '127.0.0.1', port: 0, staticDirectory, referenceVehicles, vehicleProjectsDirectory, terminal: null } };
+}
+
+/** The person at the terminal, answering the questions with the answers given, in turn; what was asked and told is kept. */
+function personAnswering(...answers: (string | null)[]) {
+  const asked: string[] = [];
+  const told: string[] = [];
+  const terminal: TerminalConversation = {
+    ask: async (question) => {
+      asked.push(question);
+      return answers.shift() ?? null;
+    },
+    tell: (line) => {
+      told.push(line);
+    },
+  };
+  return { terminal, asked, told };
+}
+
+/** How many times the stand-in service has started. */
+async function serviceStarts(directory: string): Promise<number> {
+  const started = await readFile(join(directory, 'started.txt'), 'utf8').catch(() => '');
+  return started.split('\n').filter((line) => line !== '').length;
 }
 
 async function fixture() {
@@ -125,16 +148,51 @@ test('reference vehicles with their open arguments, the folder of projects and t
   }
 });
 
-test('without an existing folder of projects the server does not start, says why, and starts no service', { timeout: 10000 }, async () => {
+test('a missing folder of projects is created, parents included, when the person at the terminal answers yes, and the server starts', { timeout: 10000 }, async () => {
   const { directory, options } = await serverFiles();
   try {
-    for (const vehicleProjectsDirectory of [join(directory, 'absent'), join(directory, 'secret.txt')]) {
-      await assert.rejects(
-        startVehicleModelingHttpServer({ ...options, vehicleProjectsDirectory }, () => {}),
-        new RegExp(`the folder of vehicle projects '${vehicleProjectsDirectory}' is not an existing directory`),
-      );
+    for (const [index, answer] of ['y', 'YES', ' Yes '].entries()) {
+      const vehicleProjectsDirectory = join(directory, `absent_${index}`, 'projects');
+      const person = personAnswering(answer);
+      const server = await startVehicleModelingHttpServer({ ...options, vehicleProjectsDirectory, terminal: person.terminal }, () => {});
+      try {
+        assert.ok((await stat(vehicleProjectsDirectory)).isDirectory());
+        assert.equal(person.asked.length, 1, 'asked once');
+        const question = person.asked[0]!;
+        assert.ok(question.includes(`'${vehicleProjectsDirectory}'`) && /[一-鿿]/.test(question) && question.endsWith('[y/N] '), question);
+        assert.equal(person.told.length, 1);
+        assert.ok(person.told[0]!.includes(`'${vehicleProjectsDirectory}'`), 'and says it created the folder');
+        assert.deepEqual(await (await fetch(`http://127.0.0.1:${server.port}/api/vehicle_projects_directory`)).json(), { directory: vehicleProjectsDirectory });
+      } finally {
+        await server.close();
+      }
     }
-    await assert.rejects(access(join(directory, 'started.txt')), /ENOENT/, 'the service was started');
+    assert.equal(await serviceStarts(directory), 3);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('the server does not start, says why, creates nothing and starts no service for a missing folder answered otherwise, a missing one with nobody to ask, or a file', { timeout: 10000 }, async () => {
+  const { directory, options } = await serverFiles();
+  const refusal = (path: string) => new RegExp(`the folder of vehicle projects '${path}' is not an existing directory`);
+  try {
+    const missing = join(directory, 'absent', 'projects');
+    for (const answer of ['n', 'no', '', 'yess', null]) {
+      const person = personAnswering(answer);
+      await assert.rejects(startVehicleModelingHttpServer({ ...options, vehicleProjectsDirectory: missing, terminal: person.terminal }, () => {}), refusal(missing));
+      assert.equal(person.asked.length, 1, `asked once, answered ${JSON.stringify(answer)}`);
+      assert.deepEqual(person.told, []);
+      await assert.rejects(access(join(directory, 'absent')), /ENOENT/, 'nothing is created');
+    }
+    await assert.rejects(startVehicleModelingHttpServer({ ...options, vehicleProjectsDirectory: missing, terminal: null }, () => {}), refusal(missing));
+    await assert.rejects(access(join(directory, 'absent')), /ENOENT/, 'nothing is created');
+    const file = join(directory, 'secret.txt');
+    for (const person of [null, personAnswering('yes')]) {
+      await assert.rejects(startVehicleModelingHttpServer({ ...options, vehicleProjectsDirectory: file, terminal: person?.terminal ?? null }, () => {}), refusal(file));
+      assert.deepEqual(person?.asked ?? [], [], 'a file is refused without a question');
+    }
+    assert.equal(await serviceStarts(directory), 0, 'no service was started');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

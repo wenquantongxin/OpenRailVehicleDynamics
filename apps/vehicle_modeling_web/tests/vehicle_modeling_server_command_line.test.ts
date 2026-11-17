@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
-import { isAbsolute } from 'node:path';
+import { spawn } from 'node:child_process';
+import { access, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import { parseVehicleModelingServerArguments } from '../server/vehicle_modeling_server_command_line.ts';
 
@@ -31,4 +35,30 @@ test('anything but complete, unrepeated key/value pairs is refused', () => {
 
 test('without a folder of projects the server is not started, and says so', () => {
   assert.throws(() => parseVehicleModelingServerArguments(['--service', 'x']), /--vehicle-projects DIRECTORY is required/);
+});
+
+test('run without a terminal, the server refuses a missing folder of projects without a question, ends with code 1 and creates nothing', { timeout: 20000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'orvd-modelling-command-line-'));
+  try {
+    const missing = join(directory, 'absent', 'projects');
+    const commandLine = fileURLToPath(new URL('../server/vehicle_modeling_server_command_line.ts', import.meta.url));
+    // Standard input and output are pipes here, as for a script.
+    const server = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', commandLine, '--service', join(directory, 'service'), '--vehicle-projects', missing, '--port', '6684'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let output = '';
+    let errors = '';
+    server.stdout.on('data', (chunk) => (output += chunk));
+    server.stderr.on('data', (chunk) => (errors += chunk));
+    // A server that started after all is stopped, so that the test fails instead of waiting.
+    const stopper = setTimeout(() => server.kill(), 10000);
+    const code = await new Promise((ended) => server.once('exit', ended));
+    clearTimeout(stopper);
+    assert.equal(code, 1);
+    assert.equal(output, '', 'nothing is asked');
+    assert.match(errors, new RegExp(`the folder of vehicle projects '${missing}' is not an existing directory`));
+    await assert.rejects(access(join(directory, 'absent')), /ENOENT/, 'nothing is created');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

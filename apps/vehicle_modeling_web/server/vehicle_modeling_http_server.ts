@@ -5,6 +5,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, resolve, sep } from 'node:path';
 
 import type { ReferenceVehicleCatalogueEntry } from './read_reference_vehicle_catalogue.ts';
+import { requireOrCreateVehicleProjectsDirectory } from './require_or_create_vehicle_projects_directory.ts';
+import type { TerminalConversation } from './terminal_conversation.ts';
 import { VehicleModelingServiceChildProcess } from './vehicle_modeling_service_child_process.ts';
 
 export interface VehicleModelingHttpServerOptions {
@@ -15,6 +17,8 @@ export interface VehicleModelingHttpServerOptions {
   referenceVehicles: ReferenceVehicleCatalogueEntry[];
   /** The folder of projects, an absolute path; the interface passes it to the service's commands that take a folder. */
   vehicleProjectsDirectory: string;
+  /** The person who started the server, asked whether a missing folder of projects is to be created; null where nobody can answer. */
+  terminal: TerminalConversation | null;
 }
 
 export interface RunningVehicleModelingHttpServer {
@@ -56,17 +60,13 @@ async function readBody(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** Refuses a folder of projects that is not an existing directory, before anything starts. */
-async function requireExistingDirectory(path: string): Promise<void> {
-  const found = await stat(path).catch(() => null);
-  if (found === null || !found.isDirectory()) {
-    throw new Error(`the folder of vehicle projects '${path}' is not an existing directory`);
-  }
-}
-
-/** Starts the service and the HTTP server; onServiceEnd reports a service that ends on its own. */
+/**
+ * Starts the service and the HTTP server once the folder of projects is
+ * settled, and neither when it is refused; onServiceEnd reports a service that
+ * ends on its own.
+ */
 export async function startVehicleModelingHttpServer(options: VehicleModelingHttpServerOptions, onServiceEnd: (ending: string) => void): Promise<RunningVehicleModelingHttpServer> {
-  await requireExistingDirectory(options.vehicleProjectsDirectory);
+  await requireOrCreateVehicleProjectsDirectory(options.vehicleProjectsDirectory, options.terminal);
   // What the interface asks the server itself, answered the same for the server's whole life.
   const serverAnswers = new Map([
     ['/api/reference_vehicles', JSON.stringify(options.referenceVehicles.map((vehicle) => ({ name: vehicle.name, title: vehicle.title, open_arguments: vehicle.openArguments })))],

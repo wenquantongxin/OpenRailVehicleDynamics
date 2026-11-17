@@ -18,8 +18,10 @@
 // Options are strict key/value pairs:
 //   --service PATH               the service binary (required)
 //   --vehicle-projects DIRECTORY the folder the projects are saved in and opened
-//                                from, an existing directory outside the
-//                                repository (required)
+//                                from, outside the repository (required); when
+//                                it does not exist, a server run in a terminal
+//                                asks whether to create it, and one run
+//                                without a terminal refuses to start
 //   --reference-vehicles FILE    the catalogue of reference vehicles the interface
 //                                offers (see read_reference_vehicle_catalogue.ts);
 //                                without it there are none
@@ -55,6 +57,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { readReferenceVehicleCatalogue } from './read_reference_vehicle_catalogue.ts';
+import { terminalConversation } from './terminal_conversation.ts';
 import { startVehicleModelingHttpServer } from './vehicle_modeling_http_server.ts';
 
 export interface VehicleModelingServerArguments {
@@ -97,7 +100,8 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(
     const { servicePath, vehicleProjectsDirectory, host, port, referenceVehiclesPath } = parseVehicleModelingServerArguments(process.argv.slice(2));
     const referenceVehicles = referenceVehiclesPath === null ? [] : await readReferenceVehicleCatalogue(referenceVehiclesPath);
     const staticDirectory = fileURLToPath(new URL('../dist', import.meta.url));
-    const server = await startVehicleModelingHttpServer({ servicePath, host, port, staticDirectory, referenceVehicles, vehicleProjectsDirectory }, (ending) => {
+    const terminal = terminalConversation();
+    const server = await startVehicleModelingHttpServer({ servicePath, host, port, staticDirectory, referenceVehicles, vehicleProjectsDirectory, terminal }, (ending) => {
       process.stderr.write(`The modelling service ${ending}; the modelling server stops.\n`);
       process.exit(1);
     });
