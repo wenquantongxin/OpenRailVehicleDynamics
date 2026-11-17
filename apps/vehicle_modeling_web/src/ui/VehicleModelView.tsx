@@ -158,7 +158,7 @@ export function VehicleModelView(props: {
             </span>
             <span>
               <i className="swatch joint" />
-              Joint <span className="zh">铰点</span>
+              Joint mark <span className="zh">铰点</span>
             </span>
             <span>
               <i className="swatch body" />

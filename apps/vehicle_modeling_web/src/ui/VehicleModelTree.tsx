@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { subjectKey, type CreationOffer, type ElementKindDescription, type ModelTreeNode, type PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
+import { subjectKey, type CreationOffer, type ElementKindDescription, type ElementReference, type ModelTreeNode, type PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
 import type { OpenedVehicle } from '../session/vehicle_editing_session.ts';
 import { DockedPanelTitleStrip } from './DockedPanelTitleStrip.tsx';
 import { openRowsCarriedOver, rowsAboveSubject, rowsOpenWhenAVehicleOpens, rowsShownByFilter } from './model_tree_display_rules.ts';
@@ -26,6 +26,7 @@ export function VehicleModelTree(props: {
   creatingFromRow: string | null;
   onSelect: (subject: PropertySubject) => void;
   onCreate: (rowKey: string, offers: CreationOffer[]) => void;
+  onAttach: (rowKey: string, bodies: ElementReference[]) => void;
 }) {
   const { tree, selection } = props;
   const [filter, setFilter] = useState('');
@@ -74,6 +75,7 @@ export function VehicleModelTree(props: {
   const filtered = tree === null || filter.trim() === '' ? null : rowsShownByFilter(tree, filter, selection);
   const surroundings = {
     kinds: props.kinds,
+    attachingKinds: props.kinds.flatMap((kind) => kind.attachment?.jointKinds ?? []),
     selection,
     openRows,
     filtered,
@@ -81,6 +83,7 @@ export function VehicleModelTree(props: {
     onToggle: toggle,
     onSelect: props.onSelect,
     onCreate: props.onCreate,
+    onAttach: props.onAttach,
   };
 
   return (

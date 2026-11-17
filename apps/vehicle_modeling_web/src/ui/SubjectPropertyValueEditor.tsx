@@ -1,6 +1,5 @@
 import { curveValueKind, type ElementKindDescription, type ElementReference, type PropertyReading, type PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditRefusal, SetProperty } from '../session/vehicle_editing_session.ts';
-import { BooleanPropertyEditor } from './BooleanPropertyEditor.tsx';
 import { CurvePropertyEditor } from './CurvePropertyEditor.tsx';
 import { ElementNamePropertyEditor } from './ElementNamePropertyEditor.tsx';
 import { ElementReferencePropertyEditor } from './ElementReferencePropertyEditor.tsx';
@@ -45,8 +44,6 @@ export function SubjectPropertyValueEditor(props: SubjectPropertyRowProps) {
       return <ElementReferencePropertyEditor {...committing} frozen={frozen} description={property} value={property.value} elements={props.elements} kinds={props.kinds} />;
     case 'token':
       return <TokenPropertyEditor {...committing} frozen={frozen} propertyName={property.name} choices={property.choices} value={property.value} />;
-    case 'boolean':
-      return <BooleanPropertyEditor {...committing} frozen={frozen} propertyName={property.name} value={property.value} />;
     case curveValueKind:
       return <CurvePropertyEditor {...typing} frozen={frozen} rowFields={property.rowFields} current={property.value ?? []} />;
     case 'rotation':

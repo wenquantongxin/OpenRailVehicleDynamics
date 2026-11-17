@@ -1157,33 +1157,6 @@ table.value.curve {
   color: var(--ink0);
 }
 
-.boolean-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-}
-
-.boolean-field input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.boolean-field .value {
-  display: inline;
-}
-
-.boolean-field .not-given {
-  font-size: 12px;
-  color: var(--ink2);
-}
-
-.boolean-field .not-given .zh {
-  margin-left: 4px;
-}
-
 /* A curve being edited: rows of inputs, each with its remove button, and a button that adds a row. */
 .curve-rows {
   display: flex;
@@ -1468,6 +1441,196 @@ table.value.curve {
 .chooser-choice .zh {
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* A body offered by the joints row's "+" is named by its element name. */
+.chooser-choice.element-choice {
+  font: 400 12.5px/1.45 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+/* How a body is attached: a section of its own before the property sections, the line saying how it is held in
+   the face of values, what is the matter in the quiet face of notes, then the joint it hangs on and Change…. */
+.attachment-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The lines name elements, whose long names break anywhere rather than run past the panel. */
+.attachment-summary,
+.attachment-note,
+.attachment-consequence {
+  overflow-wrap: anywhere;
+}
+
+.attachment-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink0);
+}
+
+.attachment-summary .zh {
+  font-size: 12px;
+  color: var(--ink1);
+}
+
+.attachment-note,
+.attachment-consequence {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+.attachment-note .zh,
+.attachment-consequence .zh {
+  font-size: 11.5px;
+}
+
+/* The joint a body hangs on and the frame it is held at: a column of titles and a column of links, a link's name
+   breaking after its underscores within the panel. */
+.attachment-links {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 5px 10px;
+  margin: 2px 0 0;
+}
+
+.attachment-link-row {
+  display: contents;
+}
+
+/* A title stands on its link's first line: a link's own baseline would be its last. */
+.attachment-links dt {
+  padding-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink2);
+}
+
+.attachment-links dt .zh {
+  font-size: 11px;
+}
+
+.attachment-links dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.attachment-links .element-link {
+  max-width: 100%;
+  line-height: 1.45;
+}
+
+.attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.attachment-change-button {
+  margin-left: auto;
+}
+
+.attachment-change {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.attachment-now {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-label {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink2);
+}
+
+.attachment-label .zh {
+  font-size: 11px;
+}
+
+/* The choice of free or a joint kind: one pressed at a time, wrapping as the panel narrows. */
+.attachment-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.attachment-choice {
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--field);
+  color: var(--ink1);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attachment-choice .zh {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.attachment-choice:hover {
+  border-color: var(--accent);
+}
+
+.attachment-choice[aria-checked='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+}
+
+.attachment-choice:disabled {
+  color: var(--ink3);
+  cursor: not-allowed;
+}
+
+/* In the creation form the attachment follows the name; the joint's fields hang under it, set in by a rule. */
+.attachment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attachment-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink1);
+}
+
+.attachment-title .zh {
+  margin-left: 4px;
+  font-weight: 400;
+  font-size: 11.5px;
+}
+
+.attachment-field .joint-fields {
+  border-left: 2px solid var(--line-strong);
+  margin: 2px 0 0 2px;
+}
+
+.attachment-field .joint-fields .property {
+  padding-left: 10px;
+}
+
+.attachment-field .joint-fields .property:last-child {
+  border-bottom: 0;
 }
 
 /* A text the service gives is shown as it is, a path or an identifier included. */

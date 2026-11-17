@@ -8,7 +8,7 @@ import type { ModelTreeNode } from '../src/service/vehicle_modeling_service_prot
 // are made up and never looked at.
 
 function node(key: string, subject: ModelTreeNode['subject'], children: ModelTreeNode[] = []): ModelTreeNode {
-  return { key, title: subject === null ? { en: `Title of ${key}`, zh: '标题' } : null, subject, provided: true, note: null, creates: [], children };
+  return { key, title: subject === null ? { en: `Title of ${key}`, zh: '标题' } : null, subject, provided: true, note: null, creates: [], attaches: [], children };
 }
 
 const owner = { element: { kind: 'kind_owner', name: 'owner' } };

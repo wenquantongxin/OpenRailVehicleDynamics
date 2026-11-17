@@ -21,7 +21,6 @@ export type FormEntry =
   | { valueKind: 'element_name'; text: string }
   | { valueKind: 'element_reference'; description: ReferenceDescription; chosen: string | null | undefined }
   | { valueKind: 'token'; choices: readonly string[]; chosen: string | undefined }
-  | { valueKind: 'boolean'; chosen: boolean | undefined }
   | { valueKind: typeof curveValueKind; rowFields: readonly string[]; rows: CurveEntry };
 
 /** The form's fields by property name. */
@@ -52,8 +51,6 @@ function blankEntry(property: PropertyDescription): FormEntry {
       return { valueKind: 'element_reference', description: property, chosen: undefined };
     case 'token':
       return { valueKind: 'token', choices: property.choices, chosen: undefined };
-    case 'boolean':
-      return { valueKind: 'boolean', chosen: undefined };
     case curveValueKind:
       return { valueKind: curveValueKind, rowFields: property.rowFields, rows: [] };
     case 'rotation':
@@ -93,7 +90,6 @@ export function readCreationForm(kind: ElementKindDescription, fixed: FixedPrope
       }
       case 'element_reference':
       case 'token':
-      case 'boolean':
         if (entry.chosen !== undefined) properties[property.name] = entry.chosen;
         break;
       case curveValueKind: {

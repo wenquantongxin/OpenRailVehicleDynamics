@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   readAnswer,
+  readAttachment,
   readCreatedElement,
   readEditedSubject,
   readElementKinds,
@@ -18,9 +19,19 @@ import { fakeVehicle } from './fake_vehicle_modeling_service.ts';
 
 // Answers are read leniently, but what the interface uses must be there.
 
-/** The fake vehicle's kinds as describe_element_kinds states them: every description with its section, null included. */
+/** The object without the key: a field the service left out. */
+function without(object: object, key: string): Record<string, unknown> {
+  const { [key]: _, ...rest } = object as Record<string, unknown>;
+  return rest;
+}
+
+/** The fake vehicle's kinds as describe_element_kinds states them: every description with its section and every kind with its attachment, null included. */
 function describedKinds() {
-  return fakeVehicle().kinds.map((kind) => ({ ...kind, properties: kind.properties.map((property) => ({ ...property, section: property.section ?? null })) }));
+  return fakeVehicle().kinds.map((kind) => ({
+    ...kind,
+    properties: kind.properties.map((property) => ({ ...property, section: property.section ?? null })),
+    attachment: kind.attachment ?? null,
+  }));
 }
 
 test('an accepted answer carries the session envelope and a refused one the service’s reason', () => {
@@ -68,7 +79,6 @@ test('every value kind is read with its shape and what its description says, and
       { name: 'n', value_kind: 'number', editable: true, section: null, value: 1.5e-12 },
       { name: 'absent', value_kind: 'number', editable: false, section: null, value: null },
       { name: 'v', value_kind: 'vector3', editable: true, section: null, value: [1, 2, 3] },
-      { name: 'b', value_kind: 'boolean', editable: true, section: null, value: false },
       { name: 'r', value_kind: 'rotation', editable: false, section: null, value: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] },
       { name: 'own', value_kind: 'element_name', editable: true, section: null, value: 'frame_a' },
       { name: 'to', value_kind: 'element_reference', editable: true, section: null, referenced_kinds: ['kind_a', 'kind_b'], optional: false, value: 'body_a' },
@@ -93,7 +103,6 @@ test('every value kind is read with its shape and what its description says, and
       { valueKind: 'number', value: 1.5e-12 },
       { valueKind: 'number', value: null },
       { valueKind: 'vector3', value: [1, 2, 3] },
-      { valueKind: 'boolean', value: false },
       { valueKind: 'rotation', value: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] },
       { valueKind: 'element_name', value: 'frame_a' },
       { valueKind: 'element_reference', referencedKinds: ['kind_a', 'kind_b'], optional: false, value: 'body_a' },
@@ -108,7 +117,8 @@ test('every value kind is read with its shape and what its description says, and
 });
 
 test('a value kind the interface cannot show, a missing description field or a value of the wrong shape fails loudly', () => {
-  for (const gone of ['wheel_side', 'quaternion']) {
+  // A boolean is gone with the one property that held one: no property is true or false any more.
+  for (const gone of ['wheel_side', 'quaternion', 'boolean']) {
     assert.throws(() => readProperties({ properties: [{ name: 'q', value_kind: gone, editable: false, section: null, value: 'a' }] }), new RegExp(gone));
   }
   assert.throws(() => readProperties({ properties: [{ name: 'n', value_kind: 'number', editable: true, value: 1 }] }), /section is missing/);
@@ -138,14 +148,63 @@ test('the element kinds are read with their titles and property descriptions, in
     referencedKinds: ['kind_hinge'],
     optional: true,
   });
-  assert.deepEqual(kinds.find((kind) => kind.kind === 'kind_body')!.properties[2]!.section, { en: 'Size', zh: '大小' });
+  assert.deepEqual(kinds.find((kind) => kind.kind === 'kind_body')!.properties[1]!.section, { en: 'Size', zh: '大小' });
   assert.equal(
     kinds.flatMap((kind) => kind.properties).some((property) => 'value' in property),
     false,
   );
-  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', title: { en: 'A', zh: '甲' } }] }), /properties is missing/);
-  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', properties: [] }] }), /title is missing/);
-  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', title: { en: 'A' }, properties: [] }] }), /zh is missing/);
+  assert.deepEqual(kinds.find((kind) => kind.kind === 'kind_body')!.attachment, {
+    title: { en: 'Made-up holding', zh: '虚构挂接' },
+    freeTitle: { en: 'Made-up loose', zh: '虚构自由' },
+    jointTitle: { en: 'Made-up joint', zh: '虚构铰' },
+    heldAtTitle: { en: 'Made-up held at', zh: '虚构挂在' },
+    jointKinds: ['kind_hinge', 'kind_weld'],
+    bodyEndProperty: 'end_child',
+    otherEndProperty: 'end_parent',
+    freeOnlyProperties: ['offset_quantity'],
+  });
+  assert.deepEqual(
+    kinds.filter((kind) => kind.attachment === null).map((kind) => kind.kind),
+    described.map((kind) => kind.kind).filter((kind) => kind !== 'kind_body'),
+  );
+  const body = described.find((kind) => kind.kind === 'kind_body')!;
+  for (const missing of ['joint_kinds', 'joint_title', 'held_at_title']) {
+    assert.throws(() => readElementKinds({ element_kinds: [{ ...body, attachment: without(body.attachment!, missing) }] }), new RegExp(`${missing} is missing`));
+  }
+  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', title: { en: 'A', zh: '甲' }, properties: [] }] }), /attachment is missing/);
+  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', title: { en: 'A', zh: '甲' }, attachment: null }] }), /properties is missing/);
+  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', properties: [], attachment: null }] }), /title is missing/);
+  assert.throws(() => readElementKinds({ element_kinds: [{ kind: 'kind_a', title: { en: 'A' }, properties: [], attachment: null }] }), /zh is missing/);
+});
+
+test('a body’s properties come with its attachment, every other subject’s with none', () => {
+  const frame = { kind: 'kind_frame', name: 'frame_a' };
+  const attachment = {
+    summary: { en: 'Hanging', zh: '挂着' },
+    note: null,
+    joint: { kind: 'kind_hinge', name: 'hinge_b' },
+    held_at: frame,
+    can_become_free: true,
+    can_take_joint: true,
+    frames_on_body: [{ kind: 'kind_body', name: 'body_b' }],
+    frames_it_can_be_held_at: [{ kind: 'kind_body', name: 'body_a' }, frame],
+  };
+  assert.deepEqual(readAttachment({ properties: [], attachment }), {
+    summary: { en: 'Hanging', zh: '挂着' },
+    note: null,
+    joint: { kind: 'kind_hinge', name: 'hinge_b' },
+    heldAt: frame,
+    canBecomeFree: true,
+    canTakeJoint: true,
+    framesOnBody: [{ kind: 'kind_body', name: 'body_b' }],
+    framesItCanBeHeldAt: [{ kind: 'kind_body', name: 'body_a' }, frame],
+  });
+  assert.deepEqual(readAttachment({ properties: [], attachment: { ...attachment, joint: null, held_at: null, note: { en: 'Kept', zh: '保持' } } })?.note, { en: 'Kept', zh: '保持' });
+  assert.throws(() => readAttachment({ properties: [], attachment: without(attachment, 'held_at') }), /held_at is missing/);
+  assert.equal(readAttachment({ properties: [], attachment: null }), null);
+  assert.throws(() => readAttachment({ properties: [] }), /attachment is missing/);
+  assert.throws(() => readAttachment({ properties: [], attachment: without(attachment, 'can_take_joint') }), /can_take_joint is missing/);
+  assert.throws(() => readAttachment({ properties: [], attachment: { ...attachment, frames_on_body: [{ kind: 'kind_body' }] } }), /name is missing/);
 });
 
 test('the model tree is read row by row: titles, subjects, notes, what each row creates, and the rows under it', () => {
@@ -158,10 +217,21 @@ test('the model tree is read row by row: titles, subjects, notes, what each row 
         provided: true,
         note: { en: 'A note', zh: '注' },
         creates: [{ kind: 'kind_a', fixed_properties: {} }],
+        attaches: [],
         children: [
-          { key: 'an element', title: null, subject: { element: { kind: 'kind_a', name: 'a' } }, provided: true, note: null, creates: [{ kind: 'kind_b', fixed_properties: { owner_ref: 'a' } }], children: [] },
-          { key: 'settings', title: { en: 'Settings', zh: '设置' }, subject: { settings: 'made_up_word' }, provided: true, note: null, creates: [], children: [] },
-          { key: 'later', title: { en: 'Later', zh: '以后' }, subject: null, provided: false, note: { en: 'Comes later.', zh: '以后提供。' }, creates: [], children: [] },
+          {
+            key: 'an element',
+            title: null,
+            subject: { element: { kind: 'kind_a', name: 'a' } },
+            provided: true,
+            note: null,
+            creates: [{ kind: 'kind_b', fixed_properties: { owner_ref: 'a' } }],
+            attaches: [],
+            children: [],
+          },
+          { key: 'settings', title: { en: 'Settings', zh: '设置' }, subject: { settings: 'made_up_word' }, provided: true, note: null, creates: [], attaches: [], children: [] },
+          { key: 'later', title: { en: 'Later', zh: '以后' }, subject: null, provided: false, note: { en: 'Comes later.', zh: '以后提供。' }, creates: [], attaches: [], children: [] },
+          { key: 'links', title: { en: 'Links', zh: '连接' }, subject: null, provided: true, note: null, creates: [], attaches: [{ kind: 'kind_a', name: 'a' }], children: [] },
         ],
       },
     ],
@@ -173,16 +243,29 @@ test('the model tree is read row by row: titles, subjects, notes, what each row 
     provided: true,
     note: { en: 'A note', zh: '注' },
     creates: [{ kind: 'kind_a', fixedProperties: {} }],
+    attaches: [],
     children: [
-      { key: 'an element', title: null, subject: { element: { kind: 'kind_a', name: 'a' } }, provided: true, note: null, creates: [{ kind: 'kind_b', fixedProperties: { owner_ref: 'a' } }], children: [] },
-      { key: 'settings', title: { en: 'Settings', zh: '设置' }, subject: { settings: 'made_up_word' }, provided: true, note: null, creates: [], children: [] },
-      { key: 'later', title: { en: 'Later', zh: '以后' }, subject: null, provided: false, note: { en: 'Comes later.', zh: '以后提供。' }, creates: [], children: [] },
+      {
+        key: 'an element',
+        title: null,
+        subject: { element: { kind: 'kind_a', name: 'a' } },
+        provided: true,
+        note: null,
+        creates: [{ kind: 'kind_b', fixedProperties: { owner_ref: 'a' } }],
+        attaches: [],
+        children: [],
+      },
+      { key: 'settings', title: { en: 'Settings', zh: '设置' }, subject: { settings: 'made_up_word' }, provided: true, note: null, creates: [], attaches: [], children: [] },
+      { key: 'later', title: { en: 'Later', zh: '以后' }, subject: null, provided: false, note: { en: 'Comes later.', zh: '以后提供。' }, creates: [], attaches: [], children: [] },
+      { key: 'links', title: { en: 'Links', zh: '连接' }, subject: null, provided: true, note: null, creates: [], attaches: [{ kind: 'kind_a', name: 'a' }], children: [] },
     ],
   });
-  assert.throws(() => readModelTree({ nodes: [{ key: 'k', title: null, subject: null, provided: true, note: null, creates: [] }] }), /k.children is missing/);
-  assert.throws(() => readModelTree({ nodes: [{ key: 'k', title: null, subject: null, note: null, creates: [], children: [] }] }), /k.provided is missing/);
-  assert.throws(() => readModelTree({ nodes: [{ key: 'k', title: null, subject: { neither: 1 }, provided: true, note: null, creates: [], children: [] }] }), /settings is missing/);
-  assert.throws(() => readModelTree({ nodes: [{ key: 'k', title: null, subject: null, provided: true, note: null, creates: [{ kind: 'kind_a' }], children: [] }] }), /fixed_properties is missing/);
+  const row = { key: 'k', title: null, subject: null, provided: true, note: null, creates: [], attaches: [], children: [] };
+  assert.throws(() => readModelTree({ nodes: [without(row, 'children')] }), /k.children is missing/);
+  assert.throws(() => readModelTree({ nodes: [without(row, 'provided')] }), /k.provided is missing/);
+  assert.throws(() => readModelTree({ nodes: [{ ...row, subject: { neither: 1 } }] }), /settings is missing/);
+  assert.throws(() => readModelTree({ nodes: [{ ...row, creates: [{ kind: 'kind_a' }] }] }), /fixed_properties is missing/);
+  assert.throws(() => readModelTree({ nodes: [without(row, 'attaches')] }), /k.attaches is missing/);
 });
 
 test('a creation names the element it made, an edit the subject it leaves, and a removal everything it takes', () => {
@@ -216,6 +299,7 @@ test('every drawing of a preview names its element, and a rigid body the name it
     [
       [{ kind: 'kind_body', name: 'body_a' }, 'body_a'],
       [{ kind: 'kind_body', name: 'body_b' }, 'body_b'],
+      [{ kind: 'kind_body', name: 'body_c' }, null],
     ],
   );
   const [first] = vehicle.drawings['rigid_bodies'] as Record<string, unknown>[];

@@ -4,7 +4,7 @@ import { assignPartsToDrawnBodies } from './scene/vehicle_preview_scene.ts';
 import { fetchReferenceVehicles, type ReferenceVehicle } from './service/fetch_reference_vehicles.ts';
 import { fetchVehicleProjectsDirectory } from './service/fetch_vehicle_projects_directory.ts';
 import { modelingServerCommandChannel } from './service/modeling_server_command_channel.ts';
-import { subjectElement, type ElementReference, type PropertySubject } from './service/vehicle_modeling_service_protocol.ts';
+import { subjectElement, type AttachmentSetting, type ElementReference, type PropertySubject } from './service/vehicle_modeling_service_protocol.ts';
 import { readStartLinkFromPageAddress } from './session/read_start_link_from_page_address.ts';
 import { VehicleEditingSession, type EditRefusal, type EditValue, type OpenChoice, type StartLink } from './session/vehicle_editing_session.ts';
 import { DiscardUnsavedChangesDialog } from './ui/DiscardUnsavedChangesDialog.tsx';
@@ -97,7 +97,7 @@ export function VehicleModelingInterface() {
   const selectElement = useCallback((element: ElementReference | null) => void session.select(element === null ? null : { element }), [session]);
   const commit = useCallback((subject: PropertySubject, property: string, value: EditValue) => session.setProperty(subject, property, value), [session]);
   const create = useCallback(
-    (kind: string, name: string, properties: Readonly<Record<string, EditValue>>) => session.createElement(kind, name, properties),
+    (kind: string, name: string, properties: Readonly<Record<string, EditValue>>, attachment: AttachmentSetting | null) => session.createElement(kind, name, properties, attachment),
     [session],
   );
   const showRefusal = useCallback(
@@ -127,9 +127,10 @@ export function VehicleModelingInterface() {
           kinds={state.elementKinds}
           openedVehicle={state.vehicle}
           selection={state.selection}
-          creatingFromRow={state.creation?.rowKey ?? null}
+          creatingFromRow={state.creation?.rowKey ?? state.attachmentChange?.fromRow?.rowKey ?? null}
           onSelect={select}
           onCreate={(rowKey, offers) => void session.startCreation(rowKey, offers)}
+          onAttach={(rowKey, bodies) => void session.startAttaching(rowKey, bodies)}
         />
         <VehicleModelView
           vehicle={state.vehicle}
@@ -157,9 +158,14 @@ export function VehicleModelingInterface() {
           focusRequest={focusRequest}
           onCommit={commit}
           onDismissRefusal={() => session.dismissEditRefusal()}
+          onSelectElement={selectElement}
           onChooseCreationOffer={(offer) => void session.chooseCreationOffer(offer)}
           onCreate={create}
           onCancelCreation={() => void session.cancelCreation()}
+          onStartChangingAttachment={() => void session.startChangingAttachment()}
+          onChooseBodyToAttach={(body) => void session.chooseBodyToAttach(body)}
+          onSetAttachment={(setting) => session.setAttachment(setting)}
+          onCancelAttachmentChange={() => void session.cancelAttachmentChange()}
           onRequestRemoval={(element) => void session.requestRemoval(element)}
           onConfirmRemoval={() => void session.confirmRemoval()}
           onCancelRemoval={() => void session.cancelRemoval()}

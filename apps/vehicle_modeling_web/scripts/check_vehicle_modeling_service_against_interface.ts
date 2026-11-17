@@ -14,7 +14,11 @@
 // through the offer of a body's row and stands under that body, also after the
 // body is renamed; on GZ18 every editable number of the tree's settings is
 // set, read back and undone, the wheels are drawn anew at a new nominal
-// rolling radius, and a read-only property is refused. Last,
+// rolling radius, and a read-only property is refused. On GZ18 and IRW every
+// rigid body is read with its attachment and nothing else is, and the row of
+// the joints attaches the bodies that can take one and creates nothing; on
+// GZ18 a body created with a joint hangs on it, and one created free that
+// takes a joint and becomes free again reads free. Last,
 // saving, in a temporary folder of projects removed at the end: GZ18 edited,
 // saved as a project, with no undo step, the folder listed, IRW opened, the
 // project opened again with its outline and the edited value as they were;
@@ -48,6 +52,8 @@ import {
   sameElement,
   sameSubject,
   subjectElement,
+  type Attachment,
+  type AttachmentSetting,
   type ElementReference,
   type ModelTreeNode,
   type PropertyDescription,
@@ -262,9 +268,9 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
   const properties = (kind: string): PropertyDescription[] => (state.elementKinds.find((each) => each.kind === kind) ?? fail(`'${kind}' is not described`)).properties;
   const requiredReferences = (kind: string): ReferenceDescription[] =>
     properties(kind).filter((property): property is ReferenceDescription => property.valueKind === 'element_reference' && !property.optional);
-  const created = async (kind: string, stem: string, given: Record<string, unknown>): Promise<ElementReference> => {
+  const created = async (kind: string, stem: string, given: Record<string, unknown>, attachment: AttachmentSetting | null = null): Promise<ElementReference> => {
     const name = unusedName(opened.elements, stem);
-    const refusal = await session.createElement(kind, name, given as Record<string, string>);
+    const refusal = await session.createElement(kind, name, given as Record<string, string>, attachment);
     assert.equal(refusal, null, `creating a ${kind} was refused: ${refusal?.message}`);
     const element = { kind, name };
     assert.deepEqual(session.state.selection, { element }, 'a created element is selected');
@@ -274,8 +280,8 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
   const under = (element: ElementReference, owner: ElementReference): boolean =>
     (rowPathOfSubject(session.state.modelTree!, { element }) ?? []).some((row) => sameSubject(row.subject, { element: owner }));
 
-  // A body, given nothing but its name: the service's defaults stand for the rest.
-  const body = await created(bodyKind, 'structural_check_body', {});
+  // A body, given nothing but its name and that it moves freely: the service's defaults stand for the rest.
+  const body = await created(bodyKind, 'structural_check_body', {}, { free: true });
   // A frame on it, made through the offer of a row under the body's own row, which fixes what puts it on the body.
   const frameReferences = requiredReferences(frameKind);
   assert.ok(frameReferences.length > 0 && frameReferences.every((reference) => reference.referencedKinds.includes(bodyKind)));
@@ -323,6 +329,107 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
     `  renamed the body to '${renamed.name}' and the frame followed, still under it in the tree; removed it with ${pending.removedElements.length - 1} elements that referred to it,`,
     `  five undos gave back the outline of ${opened.elements.length} elements the vehicle opened with; check ${checkStatus(state)} at revision ${state.revision}`,
   ].join('\n');
+}
+
+/** Whether an attachment reads free: it hangs on no joint, cannot become free and can take a joint. */
+function readsFree(attachment: Attachment | null): boolean {
+  return attachment !== null && attachment.joint === null && !attachment.canBecomeFree && attachment.canTakeJoint;
+}
+
+/**
+ * How a rigid body is attached, through the interface's session, structure
+ * only. The properties of every element of the kind the service describes as
+ * attached come with an attachment, and no other subject's do, settings
+ * included. The row listing the joints creates nothing and attaches the free
+ * bodies that can take a joint and the unattached ones, and a joint kind is
+ * not created alone. With the changes: a body created with a joint hangs on
+ * it; a body created free takes a joint and becomes free again, and then reads
+ * free, its joint gone; undoing the four edits gives back the outline the
+ * vehicle opened with. The attached kind, the joint kinds and which property
+ * names which end come from the service's description.
+ */
+async function checkAttachments(origin: string, vehicle: ReferenceVehicle, withChanges: boolean): Promise<string> {
+  const session = sessionAt(origin);
+  let state = await settled(session, session.open(referenceVehicle(vehicle)));
+  const opened = state.outline ?? fail('no outline after opening');
+  const attachedKind = state.elementKinds.find((kind) => kind.attachment !== null) ?? fail('no kind is described as attached');
+  const description = attachedKind.attachment!;
+  const attachments = new Map<string, Attachment>();
+  for (const element of opened.elements) {
+    state = await settled(session, session.select({ element }));
+    if (element.kind === attachedKind.kind) attachments.set(elementKey(element), state.attachment ?? fail(`${element.name} is read without its attachment`));
+    else assert.equal(state.attachment, null, `${element.kind} ${element.name} is read with an attachment`);
+  }
+  const settingsRows = treeRows(state.modelTree!).filter((row) => row.provided && row.subject !== null && 'settings' in row.subject);
+  for (const row of settingsRows) {
+    state = await settled(session, session.select(row.subject!));
+    assert.equal(state.attachment, null, `the settings '${row.title?.en}' are read with an attachment`);
+  }
+  const read = [...attachments.values()];
+  const hanging = read.filter((attachment) => attachment.joint !== null).length;
+  const free = read.filter((attachment) => attachment.joint === null && !attachment.canBecomeFree).length;
+  const keptFree = read.filter((attachment) => attachment.joint === null && !attachment.canBecomeFree && !attachment.canTakeJoint).length;
+  for (const attachment of read) {
+    assert.equal(attachment.heldAt !== null, attachment.joint !== null, 'a body is held at a frame other than exactly when it hangs on a joint');
+    if (attachment.joint === null) continue;
+    assert.ok(opened.elements.some((element) => sameElement(element, attachment.joint)), `a body hangs on '${attachment.joint.name}', which the outline does not have`);
+    assert.ok(description.jointKinds.includes(attachment.joint.kind), `a body hangs on a ${attachment.joint.kind}, which is no joint kind`);
+    assert.ok(opened.elements.some((element) => sameElement(element, attachment.heldAt)), `a body is held at '${attachment.heldAt!.name}', which the outline does not have`);
+  }
+
+  // The row listing the joints creates nothing; its "+" attaches the free bodies that can take a joint and the unattached ones.
+  const isJoint = (row: ModelTreeNode): boolean => {
+    const element = subjectElement(row.subject);
+    return element !== null && description.jointKinds.includes(element.kind);
+  };
+  const jointsRow = treeRows(state.modelTree!).find((row) => row.children.some(isJoint)) ?? fail('no row lists the joints');
+  assert.equal(jointsRow.children.filter(isJoint).length, hanging, 'the joints are not as many as the bodies hanging on them');
+  assert.deepEqual(jointsRow.creates, [], 'the joints row creates something');
+  const attachable = opened.elements.filter((element) => {
+    const attachment = attachments.get(elementKey(element));
+    return attachment !== undefined && attachment.canTakeJoint && attachment.joint === null;
+  });
+  assert.deepEqual(jointsRow.attaches, attachable, 'the joints row attaches other bodies than the free ones that can take a joint and the unattached ones');
+  const lines = [
+    `${vehicle.name} attachments: ${attachments.size} ${attachedKind.kind} each read with its attachment, ${opened.elements.length - attachments.size} other elements and ${settingsRows.length} settings with none;`,
+    `  ${hanging} hanging on a joint, each held at a frame of the outline, ${free} free (${keptFree} of them kept free), ${attachments.size - hanging - free} neither;`,
+    `  the row listing the ${hanging} joints creates nothing and attaches ${attachable.length}: ${attachable.map((element) => element.name).join(', ')}`,
+  ];
+  if (!withChanges) return lines.join('\n');
+
+  // A joint is not created alone.
+  const jointKind = description.jointKinds[0]!;
+  const alone = await session.createElement(jointKind, unusedName(opened.elements, 'attachment_check_joint'), {}, null);
+  assert.notEqual(alone, null, 'a joint was created alone');
+  // A body created with a joint, held at a body that moves freely, hangs on it.
+  const heldAt = opened.elements.find((element) => readsFree(attachments.get(elementKey(element)) ?? null)) ?? fail('no body reads free');
+  const heldName = unusedName(opened.elements, 'attachment_check_held_body');
+  const heldJoint = { kind: jointKind, name: unusedName(opened.elements, 'attachment_check_held_joint') };
+  const heldRefusal = await session.createElement(attachedKind.kind, heldName, {}, { joint: { ...heldJoint, properties: { [description.otherEndProperty]: heldAt.name } } });
+  assert.equal(heldRefusal, null, `creating a body with a joint was refused: ${heldRefusal?.message}`);
+  assert.deepEqual(session.state.attachment?.joint, heldJoint, 'the body created with a joint does not hang on it');
+  assert.deepEqual(session.state.attachment?.heldAt, heldAt, 'the body created with a joint is not held at the frame it was given');
+  // A body created free takes a joint, and becomes free again: it reads free, its joint gone, and stays selected.
+  const freeBody = { kind: attachedKind.kind, name: unusedName(opened.elements, 'attachment_check_free_body') };
+  assert.equal(await session.createElement(freeBody.kind, freeBody.name, {}, { free: true }), null);
+  assert.ok(readsFree(session.state.attachment), 'a body created free does not read free');
+  await settled(session, session.startChangingAttachment());
+  const takenJoint = { kind: jointKind, name: unusedName(opened.elements, 'attachment_check_taken_joint') };
+  const taken = await session.setAttachment({ joint: { ...takenJoint, properties: { [description.bodyEndProperty]: freeBody.name, [description.otherEndProperty]: heldAt.name } } });
+  assert.equal(taken, true, `taking a joint was refused: ${session.state.attachmentChange?.refusal?.message}`);
+  assert.deepEqual([session.state.selection, session.state.attachment?.joint], [{ element: freeBody }, takenJoint]);
+  await settled(session, session.startChangingAttachment());
+  assert.equal(await session.setAttachment({ free: true }), true, `becoming free was refused: ${session.state.attachmentChange?.refusal?.message}`);
+  assert.ok(readsFree(session.state.attachment), 'the body that took a joint and became free again does not read free');
+  assert.ok(!session.state.outline!.elements.some((element) => sameElement(element, takenJoint)), 'the joint stays after the body became free');
+  for (let step = 0; step < 4; step += 1) state = await settled(session, session.undo());
+  assert.equal(state.canUndo, false);
+  assert.deepEqual(state.outline!.elements, opened.elements);
+  lines.push(
+    `  a joint alone refused ('${alone?.message}'); '${heldName}' created hanging on ${jointKind} '${heldJoint.name}' held at '${heldAt.name}';`,
+    `  '${freeBody.name}' created free, took ${jointKind} '${takenJoint.name}' and became free again, reading free with its joint gone; four undos gave back the outline`,
+  );
+  return lines.join('\n');
 }
 
 /**
@@ -536,6 +643,8 @@ try {
       console.log(vehicle.name === nonFittingVehicle.name ? await checkNonFittingVehicle(origin, vehicle) : await checkVehicle(origin, vehicle));
     }
     const named = (name: string): ReferenceVehicle => vehicles.find((vehicle) => vehicle.name === name) ?? fail(`the catalogue has no ${name}`);
+    console.log(await checkAttachments(origin, named('GZ18'), true));
+    console.log(await checkAttachments(origin, named('IRW'), false));
     console.log(await checkStructuralEditing(origin, named('GZ18')));
     console.log(await checkSettings(origin, named('GZ18')));
     console.log(await checkProjectSaving(origin, named('GZ18'), named('IRW')));

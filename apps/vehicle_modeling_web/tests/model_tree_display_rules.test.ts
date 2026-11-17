@@ -5,6 +5,7 @@ import { rowWithKey } from '../src/service/find_model_tree_rows.ts';
 import { readModelTree, type ModelTreeNode } from '../src/service/vehicle_modeling_service_protocol.ts';
 import {
   elementRowsDirectlyUnder,
+  hasCreateButton,
   matchingElementRowsDirectlyUnder,
   openRowsCarriedOver,
   rowsAboveSubject,
@@ -55,7 +56,7 @@ test('the open rows stay open when the tree is read again: a renamed element’s
   const carried = openRowsCarriedOver(before, renamed, open);
   assert.deepEqual([...carried].sort(), ['domain/bodies', 'domain/contact', 'element/kind_body/body_z', 'frames/body_z']);
 
-  assert.ok((await service.send('add_element', { kind: 'kind_body', name: 'body_c', properties: {} })).ok);
+  assert.ok((await service.send('add_element', { kind: 'kind_body', name: 'body_d', properties: {}, attachment: { free: true } })).ok);
   const grown = await treeOf(service);
   assert.deepEqual([...openRowsCarriedOver(renamed, grown, carried)].sort(), [...carried].sort());
   // Each undo is followed by a reading of its own, as every edit is.
@@ -78,9 +79,10 @@ test('a titled row at any level counts the element rows directly under it and sa
       .filter(showsElementCount)
       .map((each) => [each.key, elementRowsDirectlyUnder(each)]),
     [
-      ['domain/bodies', 2],
+      ['domain/bodies', 3],
       ['frames/body_a', 1],
-      ['domain/links', 1],
+      ['domain/joints', 1],
+      ['domain/forces', 1],
       ['carriers', 1],
     ],
     'the domain of settings and carriers has none directly under it, nor has a row that only creates',
@@ -89,13 +91,32 @@ test('a titled row at any level counts the element rows directly under it and sa
   assert.equal(showsElementCount(row(tree, 'element/kind_carrier/body_b')), false);
 });
 
-test('an element row shows its kind as a tag only in a list that offers several kinds', async () => {
+test('an element row shows its kind as a tag in a list that offers several kinds, and wherever a kind bodies are attached by is listed', async () => {
   const tree = await fakeTree();
-  assert.equal(showsKindTag(row(tree, 'domain/links')), true);
-  assert.equal(showsKindTag(row(tree, 'domain/bodies')), false);
-  assert.equal(showsKindTag(row(tree, 'frames/body_a')), false);
-  assert.equal(showsKindTag(row(tree, 'element/kind_carrier/body_b')), false);
-  assert.equal(showsKindTag(null), false);
+  const attachingKinds = ['kind_hinge', 'kind_weld'];
+  const hinge = { kind: 'kind_hinge', name: 'hinge_b' };
+  assert.equal(showsKindTag(row(tree, 'domain/forces'), { kind: 'kind_spring', name: 'spring_a' }, attachingKinds), true);
+  assert.equal(showsKindTag(row(tree, 'domain/joints'), hinge, attachingKinds), true, 'its row creates nothing: the kinds come with the body it attaches');
+  assert.equal(showsKindTag(row(tree, 'domain/joints'), hinge, ['kind_hinge']), false, 'one kind is no list of types');
+  assert.equal(showsKindTag(row(tree, 'domain/bodies'), { kind: 'kind_body', name: 'body_a' }, attachingKinds), false);
+  assert.equal(showsKindTag(row(tree, 'frames/body_a'), { kind: 'kind_frame', name: 'frame_a' }, attachingKinds), false);
+  assert.equal(showsKindTag(row(tree, 'element/kind_carrier/body_b'), { kind: 'kind_interface', name: 'body_b.left' }, attachingKinds), false);
+  assert.equal(showsKindTag(null, hinge, attachingKinds), false);
+});
+
+test('a row has a "+" when it creates something or attaches one of the bodies it lists; the joints row has none once it lists none', async () => {
+  const service = await openedFakeService();
+  const tree = await treeOf(service);
+  assert.deepEqual(
+    everyRow(tree)
+      .filter(hasCreateButton)
+      .map((each) => each.key),
+    ['domain/bodies', 'frames/body_a', 'frames/body_b', 'frames/body_c', 'domain/joints', 'domain/forces', 'carriers', 'element/kind_carrier/body_b'],
+  );
+  assert.deepEqual(row(tree, 'domain/joints').attaches, [{ kind: 'kind_body', name: 'body_c' }], 'body_a is kept free and body_b hangs on its hinge');
+  const weld = { kind: 'kind_weld', name: 'weld_c', properties: { end_parent: 'frame_a', end_child: 'body_c' } };
+  assert.ok((await service.send('set_attachment', { body: { kind: 'kind_body', name: 'body_c' }, attachment: { joint: weld } })).ok);
+  assert.equal(hasCreateButton(row(await treeOf(service), 'domain/joints')), false);
 });
 
 test('revealing a subject opens every row above its own, from the first level down; a subject the tree does not have opens nothing', async () => {
@@ -122,9 +143,10 @@ test('a filter shows the element rows whose name holds it, whatever the case, wi
       .filter(showsElementCount)
       .map((each) => [each.key, matchingElementRowsDirectlyUnder(each, bodyB.matching), elementRowsDirectlyUnder(each)]),
     [
-      ['domain/bodies', 1, 2],
+      ['domain/bodies', 1, 3],
       ['frames/body_a', 0, 1],
-      ['domain/links', 0, 1],
+      ['domain/joints', 0, 1],
+      ['domain/forces', 0, 1],
       ['carriers', 1, 1],
     ],
     'a body and a carrier hold the name, each counted by the row directly above it; a titled row is never matched',

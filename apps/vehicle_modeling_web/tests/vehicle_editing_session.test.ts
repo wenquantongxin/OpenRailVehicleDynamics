@@ -144,7 +144,7 @@ test('opening sends the given open arguments unread, then reads the kinds, the v
   );
   assert.deepEqual(
     state.outline?.elements.map((element) => element.kind),
-    ['kind_body', 'kind_body', 'kind_frame', 'kind_spring', 'kind_carrier', 'kind_interface', 'kind_interface'],
+    ['kind_body', 'kind_body', 'kind_body', 'kind_frame', 'kind_hinge', 'kind_spring', 'kind_carrier', 'kind_interface', 'kind_interface'],
   );
   assert.equal(state.selection, null);
 });
@@ -411,7 +411,7 @@ test('selecting reads the element’s properties; an element the model tree does
   assert.deepEqual(session.state.selection, subject(body));
   assert.deepEqual(
     session.state.properties.map((property) => property.name),
-    ['name', 'free_flag', 'size_quantity', 'offset_quantity', 'turn_quantity'],
+    ['name', 'size_quantity', 'offset_quantity', 'turn_quantity'],
   );
   const sent = service.log.length;
   await session.select(subject({ kind: 'kind_body', name: 'missing' }));
@@ -435,16 +435,13 @@ test('an accepted edit is followed by check, preview, outline and the selection�
   assert.equal(previewIsStale(state), false);
 });
 
-test('references, tokens, booleans and curves are set by their values, and an optional reference to none', async () => {
+test('references, tokens and curves are set by their values, and an optional reference to none', async () => {
   const { session } = await openedSession();
   await session.select(subject(spring));
   assert.equal(await session.setProperty(subject(spring), 'end_b', 'frame_a'), true);
   assert.equal(await session.setProperty(subject(spring), 'axis_choice', 'axis_z'), true);
   assert.equal(await session.setProperty(subject(spring), 'curve_quantity', [{ speed: 2, push: 8 }]), true);
   assert.deepEqual([valueOf(session.state, 'end_b'), valueOf(session.state, 'axis_choice'), valueOf(session.state, 'curve_quantity')], ['frame_a', 'axis_z', [{ speed: 2, push: 8 }]]);
-  await session.select(subject(body));
-  assert.equal(await session.setProperty(subject(body), 'free_flag', false), true);
-  assert.equal(valueOf(session.state, 'free_flag'), false);
   const wheel = { kind: 'kind_interface', name: 'body_b.left' };
   await session.select(subject(wheel));
   assert.equal(await session.setProperty(subject(wheel), 'hinge_ref', null), true);
@@ -486,13 +483,13 @@ test('a rename keeps the renamed element selected under its new name, and what n
   const { service, session } = await openedSession();
   await session.select(subject(body));
   const sent = service.log.length;
-  assert.equal(await session.setProperty(subject(body), 'name', 'body_c'), true);
-  const renamed = { kind: 'kind_body', name: 'body_c' };
+  assert.equal(await session.setProperty(subject(body), 'name', 'body_d'), true);
+  const renamed = { kind: 'kind_body', name: 'body_d' };
   assert.deepEqual(session.state.selection, subject(renamed));
-  assert.equal(valueOf(session.state, 'name'), 'body_c');
+  assert.equal(valueOf(session.state, 'name'), 'body_d');
   assert.deepEqual(elementsAskedAbout(service, sent), [body, renamed]);
   await session.select(subject(frame));
-  assert.equal(valueOf(session.state, 'body_ref'), 'body_c');
+  assert.equal(valueOf(session.state, 'body_ref'), 'body_d');
   const before = service.log.length;
   assert.equal(await session.setProperty(subject(renamed), 'name', 'body_b'), false, 'a taken name is refused');
   assert.equal(session.state.editRefusal?.property, 'name');
@@ -504,15 +501,15 @@ test('from the moment a rename is asked for until it is answered, the session sa
   const { session } = await openedSession();
   await session.select(subject(body));
   // The panel freezes the element's other fields on this: an edit queued now would carry the name being replaced.
-  const renamed = session.setProperty(subject(body), 'name', 'body_c');
+  const renamed = session.setProperty(subject(body), 'name', 'body_d');
   assert.deepEqual(session.state.renaming, body);
   assert.equal(await renamed, true);
   assert.equal(session.state.renaming, null);
-  const resized = session.setProperty(subject({ kind: 'kind_body', name: 'body_c' }), 'size_quantity', 31);
+  const resized = session.setProperty(subject({ kind: 'kind_body', name: 'body_d' }), 'size_quantity', 31);
   assert.equal(session.state.renaming, null, 'an edit of anything but the name is no rename');
   assert.equal(await resized, true);
-  const refused = session.setProperty(subject({ kind: 'kind_body', name: 'body_c' }), 'name', 'body_b');
-  assert.deepEqual(session.state.renaming, { kind: 'kind_body', name: 'body_c' });
+  const refused = session.setProperty(subject({ kind: 'kind_body', name: 'body_d' }), 'name', 'body_b');
+  assert.deepEqual(session.state.renaming, { kind: 'kind_body', name: 'body_d' });
   assert.equal(await refused, false);
   assert.equal(session.state.renaming, null, 'a refused rename is over too');
 });
@@ -537,7 +534,7 @@ test('undo and redo add revisions and are followed by the same reading as an edi
 test('undo or redo drops a selection the project no longer has, and asks nothing about it', async () => {
   const { service, session } = await openedSession();
   await session.select(subject(body));
-  await session.setProperty(subject(body), 'name', 'body_c');
+  await session.setProperty(subject(body), 'name', 'body_d');
   let sent = service.log.length;
   await session.undo();
   assert.equal(session.state.selection, null);
@@ -560,11 +557,11 @@ test('a row offering one kind opens its form at once, with what the row fixes; a
   assert.deepEqual(creationFromOffers('a row', several), { rowKey: 'a row', offers: several, chosen: null });
 
   const { service, session } = await openedSession();
-  const links = rowWithKey(session.state.modelTree!, 'domain/links')!;
-  await session.startCreation(links.key, links.creates);
-  assert.deepEqual([session.state.creation?.rowKey, session.state.creation?.chosen], ['domain/links', null]);
-  await session.chooseCreationOffer(links.creates[1]!);
-  assert.equal(session.state.creation?.chosen?.kind, 'kind_spring');
+  const forces = rowWithKey(session.state.modelTree!, 'domain/forces')!;
+  await session.startCreation(forces.key, forces.creates);
+  assert.deepEqual([session.state.creation?.rowKey, session.state.creation?.chosen], ['domain/forces', null]);
+  await session.chooseCreationOffer(forces.creates[1]!);
+  assert.equal(session.state.creation?.chosen?.kind, 'kind_bar');
   await session.cancelCreation();
   assert.equal(session.state.creation, null);
   assert.equal(service.log.filter((entry) => entry.command === 'add_element').length, 0, 'nothing is created by choosing');
@@ -579,7 +576,7 @@ test('creating sends what is given beside what the row fixes, then selects the e
   assert.deepEqual(offer, { kind: 'kind_frame', fixedProperties: { body_ref: 'body_b' } });
   assert.equal(session.state.selection, null);
   const sent = service.log.length;
-  assert.equal(await session.createElement(offer.kind, 'frame_b', { ...(offer.fixedProperties as Record<string, string>) }), null);
+  assert.equal(await session.createElement(offer.kind, 'frame_b', { ...(offer.fixedProperties as Record<string, string>) }, null), null);
   assert.deepEqual(commandsSince(service, sent), ['add_element', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
   assert.deepEqual(service.log[sent]?.commandArguments, { kind: 'kind_frame', name: 'frame_b', properties: { body_ref: 'body_b' } });
   const created = { kind: 'kind_frame', name: 'frame_b' };
@@ -595,11 +592,11 @@ test('a refused creation changes nothing and names the property at fault, which 
   const framesOfA = rowWithKey(session.state.modelTree!, 'frames/body_a')!;
   await session.startCreation(framesOfA.key, framesOfA.creates);
   const sent = service.log.length;
-  const taken = await session.createElement('kind_frame', 'frame_a', { body_ref: 'body_a' });
+  const taken = await session.createElement('kind_frame', 'frame_a', { body_ref: 'body_a' }, null);
   assert.equal(taken?.property, 'name');
-  const missing = await session.createElement('kind_frame', 'frame_c', {});
+  const missing = await session.createElement('kind_frame', 'frame_c', {}, null);
   assert.equal(missing?.property, 'body_ref');
-  const dangling = await session.createElement('kind_frame', 'frame_c', { body_ref: 'frame_a' });
+  const dangling = await session.createElement('kind_frame', 'frame_c', { body_ref: 'frame_a' }, null);
   assert.equal(dangling?.property, 'body_ref');
   assert.deepEqual(commandsSince(service, sent), ['add_element', 'add_element', 'add_element']);
   assert.equal(session.state.revision, 0);
@@ -631,7 +628,14 @@ test('a removal that takes more waits to be confirmed: cancelling keeps everythi
   let sent = service.log.length;
   await session.requestRemoval(otherBody);
   assert.deepEqual(commandsSince(service, sent), ['get_removal_consequences']);
-  const goes = [otherBody, spring, { kind: 'kind_carrier', name: 'body_b' }, { kind: 'kind_interface', name: 'body_b.left' }, { kind: 'kind_interface', name: 'body_b.right' }];
+  const goes = [
+    otherBody,
+    { kind: 'kind_hinge', name: 'hinge_b' },
+    spring,
+    { kind: 'kind_carrier', name: 'body_b' },
+    { kind: 'kind_interface', name: 'body_b.left' },
+    { kind: 'kind_interface', name: 'body_b.right' },
+  ];
   assert.deepEqual(session.state.pendingRemoval, { element: otherBody, removedElements: goes });
   sent = service.log.length;
   await session.cancelRemoval();
@@ -725,7 +729,7 @@ test('nothing asked for against the shown project while another vehicle opens is
   const shownWhileOpening = session.state.opening;
   // The panels still show the first vehicle; everything asked for against it now must not reach the second.
   const edited = session.setProperty(subject(body), 'size_quantity', 99);
-  const created = session.createElement('kind_frame', 'frame_b', { body_ref: 'body_a' });
+  const created = session.createElement('kind_frame', 'frame_b', { body_ref: 'body_a' }, null);
   const others = [session.select(subject(spring)), session.undo(), session.redo(), session.requestRemoval(spring), session.startCreation('domain/bodies', [{ kind: 'kind_body', fixedProperties: {} }]), session.save(), session.startSaveAs()];
   releaseOpen();
   await opening;
@@ -844,4 +848,187 @@ test('a selection survives every re-read of the tree, and a frame pointed at ano
   await session.undo();
   assert.deepEqual(rowKeysOf(session.state, subject(frame)), ['domain/bodies', 'element/kind_body/body_a', 'frames/body_a', 'element/kind_frame/frame_a']);
   assert.deepEqual(session.state.selection, subject(frame));
+});
+
+const freeBody = { kind: 'kind_body', name: 'body_c' };
+const hinge = { kind: 'kind_hinge', name: 'hinge_b' };
+
+/** A joint of a kind with its name and properties, as an attachment states it. */
+function jointSetting(kind: string, name: string, properties: Record<string, unknown>) {
+  return { joint: { kind, name, properties } };
+}
+
+test('a selected body is read with its attachment, and every other subject with none', async () => {
+  const { session } = await openedSession();
+  await session.select(subject(otherBody));
+  assert.deepEqual([session.state.attachment?.joint, session.state.attachment?.heldAt], [hinge, frame], 'the joint it hangs on, and the frame at its other end');
+  assert.deepEqual([session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint], [true, true]);
+  await session.select(subject(body));
+  assert.deepEqual(
+    [session.state.attachment?.joint, session.state.attachment?.heldAt, session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint],
+    [null, null, false, false],
+  );
+  assert.notEqual(session.state.attachment?.note, null, 'it says why it keeps moving freely');
+  await session.select(subject(spring));
+  assert.equal(session.state.attachment, null);
+  await session.select({ settings: 'setting_constant' });
+  assert.equal(session.state.attachment, null);
+});
+
+test('a body is created free or hanging on a joint, each in one edit, and is then selected', async () => {
+  const { service, session } = await openedSession();
+  const bodies = rowWithKey(session.state.modelTree!, 'domain/bodies')!;
+  await session.startCreation(bodies.key, bodies.creates);
+  let sent = service.log.length;
+  assert.equal(await session.createElement('kind_body', 'body_free', { size_quantity: 3, offset_quantity: [1, 0, 0] }, { free: true }), null);
+  assert.deepEqual(service.log[sent]?.commandArguments, {
+    kind: 'kind_body',
+    name: 'body_free',
+    properties: { size_quantity: 3, offset_quantity: [1, 0, 0] },
+    attachment: { free: true },
+  });
+  assert.deepEqual(session.state.selection, subject({ kind: 'kind_body', name: 'body_free' }));
+  assert.deepEqual([session.state.attachment?.joint, session.state.attachment?.canBecomeFree], [null, false]);
+
+  await session.startCreation(bodies.key, bodies.creates);
+  sent = service.log.length;
+  assert.equal(await session.createElement('kind_body', 'body_held', { size_quantity: 2 }, jointSetting('kind_weld', 'weld_held', { end_parent: 'frame_a', gap_quantity: 2 })), null);
+  assert.deepEqual(commandsSince(service, sent), ['add_element', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
+  assert.equal(session.state.revision, 2, 'the body and its joint are one edit');
+  assert.deepEqual(session.state.selection, subject({ kind: 'kind_body', name: 'body_held' }));
+  assert.deepEqual(session.state.attachment?.joint, { kind: 'kind_weld', name: 'weld_held' });
+  assert.equal(valueOf(session.state, 'offset_quantity'), null, 'a body held by a joint has no property only a free body has');
+  assert.deepEqual(rowKeysOf(session.state, subject({ kind: 'kind_body', name: 'body_held' })), ['domain/bodies', 'element/kind_body/body_held']);
+});
+
+test('a free body takes a joint in one edit and stays selected; undo makes it free again', async () => {
+  const { service, session } = await openedSession();
+  await session.select(subject(freeBody));
+  assert.deepEqual([session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint, session.state.attachment?.joint], [false, true, null]);
+  await session.startChangingAttachment();
+  assert.deepEqual(session.state.attachmentChange?.body?.element, freeBody);
+  assert.deepEqual(session.state.attachmentChange?.body?.jointProperties, [], 'it hangs on no joint to start from');
+  assert.deepEqual(session.state.attachmentChange?.body?.attachment.framesOnBody, [freeBody]);
+  const sent = service.log.length;
+  const setting = jointSetting('kind_hinge', 'hinge_c', { end_parent: 'frame_a', end_child: 'body_c', axis_quantity: [1, 0, 0] });
+  assert.equal(await session.setAttachment(setting), true);
+  assert.deepEqual(commandsSince(service, sent), ['set_attachment', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
+  assert.deepEqual(service.log[sent]?.commandArguments, { body: freeBody, attachment: setting });
+  assert.deepEqual([session.state.selection, session.state.attachmentChange, session.state.revision], [subject(freeBody), null, 1]);
+  assert.deepEqual(session.state.attachment?.joint, { kind: 'kind_hinge', name: 'hinge_c' });
+  assert.equal(valueOf(session.state, 'offset_quantity'), null);
+  await session.undo();
+  assert.deepEqual([session.state.attachment?.joint, session.state.attachment?.canBecomeFree], [null, false]);
+  assert.equal(outlineHas(session.state, { kind: 'kind_hinge', name: 'hinge_c' }), false);
+  assert.deepEqual(valueOf(session.state, 'offset_quantity'), [0, 0, 0]);
+});
+
+test('a hanging body takes another joint in place of its own, starting from it, and becomes free; what names its joint moves or holds the change back', async () => {
+  const { session } = await openedSession();
+  await session.select(subject(otherBody));
+  await session.startChangingAttachment();
+  assert.deepEqual(
+    session.state.attachmentChange?.body?.jointProperties.map((property) => [property.name, property.value]),
+    [
+      ['name', 'hinge_b'],
+      ['end_parent', 'frame_a'],
+      ['end_child', 'body_b'],
+      ['axis_quantity', [0, 1, 0]],
+    ],
+  );
+  // body_b.left names hinge_b, and may name hinges only.
+  assert.equal(await session.setAttachment({ free: true }), false);
+  assert.deepEqual(session.state.attachmentChange?.refusal?.subject, subject(otherBody));
+  assert.match(session.state.attachmentChange?.refusal?.message ?? '', /body_b\.left/);
+  assert.equal(await session.setAttachment(jointSetting('kind_weld', 'weld_b', { end_parent: 'frame_a', end_child: 'body_b' })), false);
+  assert.match(session.state.attachmentChange?.refusal?.message ?? '', /body_b\.left/);
+  assert.equal(session.state.revision, 0);
+  assert.equal(await session.setAttachment(jointSetting('kind_hinge', 'hinge_b', { end_parent: 'body_a', end_child: 'body_b', axis_quantity: [0, 0, 1] })), true, 'the name of the joint it replaces');
+  await session.select({ element: { kind: 'kind_interface', name: 'body_b.left' } });
+  assert.equal(valueOf(session.state, 'hinge_ref'), 'hinge_b');
+  assert.equal(await session.setProperty({ element: { kind: 'kind_interface', name: 'body_b.left' } }, 'hinge_ref', null), true);
+
+  await session.select(subject(otherBody));
+  await session.startChangingAttachment();
+  assert.equal(await session.setAttachment(jointSetting('kind_weld', 'weld_b', { end_parent: 'frame_a', end_child: 'body_b' })), true);
+  assert.deepEqual(session.state.attachment?.joint, { kind: 'kind_weld', name: 'weld_b' });
+  assert.equal(outlineHas(session.state, hinge), false);
+  await session.startChangingAttachment();
+  assert.equal(await session.setAttachment({ free: true }), true);
+  assert.deepEqual([session.state.attachment?.joint, session.state.attachment?.canBecomeFree], [null, false]);
+  assert.equal(outlineHas(session.state, { kind: 'kind_weld', name: 'weld_b' }), false, 'its joint goes in the same edit');
+  assert.deepEqual(valueOf(session.state, 'offset_quantity'), [0, 0, 0], 'it has the properties of a free body, at zero');
+  assert.equal(session.state.revision, 4);
+});
+
+test('a refusal about the joint names the joint and the field at fault; one about the body names the body', async () => {
+  const { session } = await openedSession();
+  await session.select(subject(freeBody));
+  await session.startChangingAttachment();
+  const asked = (name: string, ends: Record<string, string>) => session.setAttachment(jointSetting('kind_hinge', name, ends));
+  assert.equal(await asked('hinge_b', { end_parent: 'frame_a', end_child: 'body_c' }), false);
+  assert.deepEqual([session.state.attachmentChange?.refusal?.subject, session.state.attachmentChange?.refusal?.property], [subject(hinge), 'name']);
+  assert.equal(await asked('hinge_c', { end_parent: 'frame_a', end_child: 'frame_a' }), false);
+  assert.deepEqual([session.state.attachmentChange?.refusal?.subject, session.state.attachmentChange?.refusal?.property], [subject({ kind: 'kind_hinge', name: 'hinge_c' }), 'end_child']);
+  assert.equal(await asked('hinge_c', { end_parent: 'body_c', end_child: 'body_c' }), false, 'held at itself');
+  assert.equal(session.state.attachmentChange?.refusal?.property, 'end_parent');
+  assert.equal(session.state.revision, 0);
+  assert.deepEqual(session.state.attachmentChange?.body?.element, freeBody, 'the change stays to be corrected');
+
+  await session.select(subject(body));
+  await session.startChangingAttachment();
+  assert.equal(await asked('hinge_a', { end_parent: 'body_c', end_child: 'body_a' }), false, 'it keeps moving freely');
+  assert.deepEqual([session.state.attachmentChange?.refusal?.subject, session.state.attachmentChange?.refusal?.property], [subject(body), null]);
+  await session.cancelAttachmentChange();
+  assert.equal(session.state.attachmentChange, null);
+});
+
+test('a body left unattached by removing its joint says so in the tree, and has two ways out', async () => {
+  const { session } = await openedSession();
+  await session.select(subject(hinge));
+  await session.requestRemoval(hinge);
+  await session.confirmRemoval();
+  const bodyRow = rowWithKey(session.state.modelTree!, 'element/kind_body/body_b')!;
+  assert.notEqual(bodyRow.note, null, 'its row says it is not attached');
+  assert.deepEqual(rowWithKey(session.state.modelTree!, 'domain/joints')!.attaches, [otherBody, freeBody]);
+  await session.select(subject(otherBody));
+  assert.deepEqual([session.state.attachment?.joint, session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint], [null, true, true]);
+
+  await session.startChangingAttachment();
+  assert.equal(await session.setAttachment({ free: true }), true);
+  assert.deepEqual([session.state.attachment?.canBecomeFree, rowWithKey(session.state.modelTree!, 'element/kind_body/body_b')!.note], [false, null]);
+  await session.undo();
+  assert.deepEqual([session.state.attachment?.canBecomeFree, session.state.attachment?.canTakeJoint], [true, true]);
+
+  await session.startChangingAttachment();
+  assert.equal(await session.setAttachment(jointSetting('kind_weld', 'weld_b', { end_parent: 'frame_a', end_child: 'body_b' })), true);
+  assert.deepEqual(session.state.attachment?.joint, { kind: 'kind_weld', name: 'weld_b' });
+  assert.equal(rowWithKey(session.state.modelTree!, 'element/kind_body/body_b')!.note, null);
+});
+
+test('the joints row’s "+" attaches one of the bodies it lists, read once chosen, and the selection stays where it was', async () => {
+  const { service, session } = await openedSession();
+  await session.select(subject(spring));
+  const joints = rowWithKey(session.state.modelTree!, 'domain/joints')!;
+  assert.deepEqual([joints.creates, joints.attaches], [[], [freeBody]]);
+  await session.startAttaching(joints.key, joints.attaches);
+  assert.deepEqual(session.state.attachmentChange, { fromRow: { rowKey: 'domain/joints', bodies: [freeBody] }, body: null, refusal: null });
+  assert.deepEqual(session.state.selection, subject(spring));
+  await session.cancelAttachmentChange();
+  assert.equal(session.state.attachmentChange, null);
+
+  await session.startAttaching(joints.key, joints.attaches);
+  let sent = service.log.length;
+  await session.chooseBodyToAttach(freeBody);
+  assert.deepEqual(commandsSince(service, sent), ['get_properties']);
+  assert.deepEqual(service.log[sent]?.commandArguments, { subject: subject(freeBody) });
+  // Read anew: the assertion above narrowed the earlier reading to nothing.
+  const chosen = session.state.attachmentChange as SessionState['attachmentChange'];
+  assert.deepEqual([chosen?.body?.element, chosen?.body?.attachment.canTakeJoint], [freeBody, true]);
+  sent = service.log.length;
+  assert.equal(await session.setAttachment(jointSetting('kind_weld', 'weld_c', { end_parent: 'frame_a', end_child: 'body_c' })), true);
+  assert.deepEqual(service.log[sent]?.commandArguments, { body: freeBody, attachment: jointSetting('kind_weld', 'weld_c', { end_parent: 'frame_a', end_child: 'body_c' }) });
+  assert.deepEqual([session.state.selection, session.state.attachmentChange], [subject(spring), null]);
+  const after = rowWithKey(session.state.modelTree!, 'domain/joints')!;
+  assert.deepEqual([after.attaches, after.children.map((row) => row.key)], [[], ['element/kind_hinge/hinge_b', 'element/kind_weld/weld_c']]);
 });

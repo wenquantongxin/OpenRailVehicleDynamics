@@ -1,5 +1,4 @@
 import { curveValueKind, type ElementKindDescription, type ElementReference, type PropertyDescription } from '../service/vehicle_modeling_service_protocol.ts';
-import { BooleanCheckbox } from './BooleanCheckbox.tsx';
 import { withCellText, withRowAdded, withRowRemoved } from './editable_curve_table_rules.ts';
 import { EditableCurveTable } from './EditableCurveTable.tsx';
 import type { FormEntry } from './element_creation_form_rules.ts';
@@ -74,8 +73,6 @@ export function ElementCreationPropertyInput(props: {
           onChoose={(token) => onEntry({ ...entry, chosen: token })}
         />
       );
-    case 'boolean':
-      return <BooleanCheckbox propertyName={property.name} value={entry.chosen} disabled={disabled} refused={refused} onChoose={(value) => onEntry({ ...entry, chosen: value })} />;
     case curveValueKind:
       return (
         <EditableCurveTable

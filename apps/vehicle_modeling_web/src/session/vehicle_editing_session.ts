@@ -2,6 +2,7 @@ import type { ReferenceVehicle } from '../service/fetch_reference_vehicles.ts';
 import { treeHasSubject } from '../service/find_model_tree_rows.ts';
 import type { SendCommand } from '../service/modeling_server_command_channel.ts';
 import {
+  readAttachment,
   readCheckReport,
   readCreatedElement,
   readEditedSubject,
@@ -17,6 +18,8 @@ import {
   sameSubject,
   subjectElement,
   type Accepted,
+  type Attachment,
+  type AttachmentSetting,
   type CheckReport,
   type CreationOffer,
   type CurvePoint,
@@ -62,6 +65,12 @@ import { readVisualDefinition, type VisualDefinition } from '../visual/read_vehi
 // under, so from the moment it is asked for until it is answered the session
 // says the element is being renamed, and the element's other properties take
 // no input. Every removal says what it takes and waits to be confirmed.
+//
+// An element that is attached, a rigid body, is read with its attachment: how
+// it is held and what can be changed. Changing it is one edit, asked for from
+// the selected body or from a row's "+" that attaches one of the bodies it
+// lists; the selection stays where it was. A body is created with its
+// attachment.
 
 /** A vehicle the session has open and what it is drawn with: a new one for every open and every resumption. */
 export interface OpenedVehicle {
@@ -99,7 +108,7 @@ export interface CheckOutcome {
 }
 
 /** A value as set_property and add_element take it, of the property's value kind; null names none where a reference is optional. */
-export type EditValue = number | Vector3 | boolean | string | null | readonly CurvePoint[];
+export type EditValue = number | Vector3 | string | null | readonly CurvePoint[];
 
 export interface EditRefusal {
   subject: PropertySubject;
@@ -125,6 +134,27 @@ export function creationFromOffers(rowKey: string, offers: readonly CreationOffe
 }
 
 /** A removal waiting for the user to confirm it. */
+/** A body whose attachment is being changed: its attachment as read then, and the properties of the joint it hangs on, if any. */
+export interface BodyToAttach {
+  element: ElementReference;
+  attachment: Attachment;
+  jointProperties: PropertyReading[];
+}
+
+/**
+ * A change of how a body is attached, while it is being asked for: started
+ * from the selected body, or from a row's "+", whose bodies are then chosen
+ * from.
+ */
+export interface AttachmentChange {
+  /** The row whose "+" started it, with the bodies it attaches; null when the selected body started it. */
+  fromRow: { rowKey: string; bodies: ElementReference[] } | null;
+  /** Null while a body is still to be chosen. */
+  body: BodyToAttach | null;
+  /** The service's refusal of the change last asked for. */
+  refusal: Refusal | null;
+}
+
 export interface PendingRemoval {
   element: ElementReference;
   /** Everything the removal takes, the element itself included, in outline order. */
@@ -158,8 +188,12 @@ export interface SessionState {
   selection: PropertySubject | null;
   /** The selection's properties at the current revision; empty without a selection. */
   properties: PropertyReading[];
+  /** How the selected element is attached, read with its properties; null for every subject that is not attached. */
+  attachment: Attachment | null;
   /** The creation the property panel shows; nothing is selected meanwhile. */
   creation: ElementCreation | null;
+  /** A change of how a body is attached, while it is being asked for. */
+  attachmentChange: AttachmentChange | null;
   /** The element whose rename is on its way to the service; its other properties take no input meanwhile. */
   renaming: ElementReference | null;
   /** A removal waiting to be confirmed. */
@@ -200,7 +234,9 @@ const closedSession: SessionState = {
   preview: null,
   selection: null,
   properties: [],
+  attachment: null,
   creation: null,
+  attachmentChange: null,
   renaming: null,
   pendingRemoval: null,
   removedElements: null,
@@ -215,8 +251,9 @@ const closedSession: SessionState = {
 };
 
 /** What the panel shows once an action has changed what it is about. */
-const nothingPending: Pick<SessionState, 'creation' | 'pendingRemoval' | 'removedElements' | 'commandRefusal'> = {
+const nothingPending: Pick<SessionState, 'creation' | 'attachmentChange' | 'pendingRemoval' | 'removedElements' | 'commandRefusal'> = {
   creation: null,
+  attachmentChange: null,
   pendingRemoval: null,
   removedElements: null,
   commandRefusal: null,
@@ -408,8 +445,62 @@ export class VehicleEditingSession {
   /** Shows what a row's "+" offers instead of the selection: its one kind's form, or a choice between its kinds. */
   startCreation(rowKey: string, offers: readonly CreationOffer[]): Promise<void> {
     return this.enqueueOnShownProject(async () => {
-      this.publish({ ...nothingPending, selection: null, properties: [], creation: creationFromOffers(rowKey, offers) });
+      this.publish({ ...nothingPending, selection: null, properties: [], attachment: null, creation: creationFromOffers(rowKey, offers) });
     });
+  }
+
+  /** Asks how the selected body is to be attached instead; the joint it hangs on is read, for a new joint to start from. */
+  startChangingAttachment(): Promise<void> {
+    return this.enqueueOnShownProject(async () => {
+      const element = subjectElement(this.current.selection);
+      const attachment = this.current.attachment;
+      if (element === null || attachment === null) return;
+      this.publish({ ...nothingPending, attachmentChange: { fromRow: null, body: await this.bodyToAttach(element, attachment), refusal: null } });
+    });
+  }
+
+  /** Shows a row's "+" that attaches one of the bodies it lists, which is chosen first; the selection stays. */
+  startAttaching(rowKey: string, bodies: readonly ElementReference[]): Promise<void> {
+    return this.enqueueOnShownProject(async () => {
+      this.publish({ ...nothingPending, attachmentChange: { fromRow: { rowKey, bodies: [...bodies] }, body: null, refusal: null } });
+    });
+  }
+
+  /** Chooses which of the row's bodies to attach; how it is attached now is read. */
+  chooseBodyToAttach(element: ElementReference): Promise<void> {
+    return this.enqueueOnShownProject(async () => {
+      const change = this.current.attachmentChange;
+      if (change === null || !treeHasSubject(this.current.modelTree, { element })) return;
+      const attachment = readAttachment((await this.accepted('get_properties', { subject: { element } })).result);
+      if (attachment === null) throw new Error(`the modelling service states no attachment for '${element.name}', which a row offers to attach`);
+      this.publish({ attachmentChange: { ...change, body: await this.bodyToAttach(element, attachment), refusal: null } });
+    });
+  }
+
+  cancelAttachmentChange(): Promise<void> {
+    return this.enqueueOnShownProject(async () => {
+      this.publish({ attachmentChange: null });
+    });
+  }
+
+  /**
+   * Sets how the body being changed is attached, as one edit. Resolves to
+   * whether the service accepted it; a refusal stays with the change. The
+   * selection stays where it was.
+   */
+  setAttachment(setting: AttachmentSetting): Promise<boolean> {
+    let accepted = false;
+    return this.enqueueOnShownProject(async () => {
+      const change = this.current.attachmentChange;
+      if (change === null || change.body === null) return;
+      const answer = await this.send('set_attachment', { body: change.body.element, attachment: setting });
+      if (!answer.ok) {
+        this.publish({ attachmentChange: { ...change, refusal: answer.refusal } });
+        return;
+      }
+      this.publish({ ...nothingPending, ...(await this.readProject(this.current.selection, this.current.preview)) });
+      accepted = true;
+    }).then(() => accepted);
   }
 
   /** Chooses which of the offered kinds to create; its form is shown. */
@@ -427,14 +518,14 @@ export class VehicleEditingSession {
   }
 
   /**
-   * Creates an element and selects it. Resolves to the service's refusal, or
-   * to null once the element is created (or when nothing was sent, because a
-   * vehicle is opening).
+   * Creates an element, with its attachment when its kind is attached, and
+   * selects it. Resolves to the service's refusal, or to null once the element
+   * is created (or when nothing was sent, because a vehicle is opening).
    */
-  createElement(kind: string, name: string, properties: Readonly<Record<string, EditValue>>): Promise<Refusal | null> {
+  createElement(kind: string, name: string, properties: Readonly<Record<string, EditValue>>, attachment: AttachmentSetting | null): Promise<Refusal | null> {
     let refusal: Refusal | null = null;
     return this.enqueueOnShownProject(async () => {
-      const answer = await this.send('add_element', { kind, name, properties });
+      const answer = await this.send('add_element', attachment === null ? { kind, name, properties } : { kind, name, properties, attachment });
       if (!answer.ok) {
         refusal = answer.refusal;
         return;
@@ -604,11 +695,17 @@ export class VehicleEditingSession {
 
   private async selectNow(subject: PropertySubject | null): Promise<void> {
     if (subject === null || !treeHasSubject(this.current.modelTree, subject)) {
-      this.publish({ ...nothingPending, selection: null, properties: [] });
+      this.publish({ ...nothingPending, selection: null, properties: [], attachment: null });
       return;
     }
     const answer = await this.accepted('get_properties', { subject });
-    this.publish({ ...nothingPending, ...envelope(answer), selection: subject, properties: readProperties(answer.result) });
+    this.publish({ ...nothingPending, ...envelope(answer), selection: subject, properties: readProperties(answer.result), attachment: readAttachment(answer.result) });
+  }
+
+  /** A body to change the attachment of, with the properties of the joint it hangs on. */
+  private async bodyToAttach(element: ElementReference, attachment: Attachment): Promise<BodyToAttach> {
+    const jointProperties = attachment.joint === null ? [] : readProperties((await this.accepted('get_properties', { subject: { element: attachment.joint } })).result);
+    return { element, attachment, jointProperties };
   }
 
   private step(command: 'undo' | 'redo'): Promise<void> {
@@ -638,11 +735,13 @@ export class VehicleEditingSession {
     const kept = selection !== null && treeHasSubject(modelTree, selection) ? selection : null;
     let last = treed;
     let properties: PropertyReading[] = [];
+    let attachment: Attachment | null = null;
     if (kept !== null) {
       last = await this.accepted('get_properties', { subject: kept });
       properties = readProperties(last.result);
+      attachment = readAttachment(last.result);
     }
-    return { ...envelope(last), check: { revision: openSession(checked).revision, report }, preview, outline, modelTree, selection: kept, properties };
+    return { ...envelope(last), check: { revision: openSession(checked).revision, report }, preview, outline, modelTree, selection: kept, properties, attachment };
   }
 
   /** A command the service has no reason to refuse; a refusal means the interface and the service disagree. */

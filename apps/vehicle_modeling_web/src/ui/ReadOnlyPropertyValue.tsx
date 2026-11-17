@@ -12,7 +12,6 @@ export function ReadOnlyPropertyValue({ property }: { property: PropertyReading 
   }
   switch (property.valueKind) {
     case 'number':
-    case 'boolean':
       return <span className="value">{String(property.value)}</span>;
     case 'vector3':
       return (

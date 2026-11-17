@@ -1,9 +1,19 @@
 import type { CSSProperties } from 'react';
 
-import { elementKey, sameSubject, subjectElement, subjectKey, type CreationOffer, type ElementKindDescription, type ModelTreeNode, type PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
+import {
+  elementKey,
+  sameSubject,
+  subjectElement,
+  subjectKey,
+  type CreationOffer,
+  type ElementKindDescription,
+  type ElementReference,
+  type ModelTreeNode,
+  type PropertySubject,
+} from '../service/vehicle_modeling_service_protocol.ts';
 import { BilingualTitleText } from './BilingualTitleText.tsx';
 import { elementKindTitle } from './find_element_kind_title.ts';
-import { elementRowsDirectlyUnder, matchingElementRowsDirectlyUnder, showsElementCount, showsKindTag, type RowsShownByFilter } from './model_tree_display_rules.ts';
+import { elementRowsDirectlyUnder, hasCreateButton, matchingElementRowsDirectlyUnder, showsElementCount, showsKindTag, type RowsShownByFilter } from './model_tree_display_rules.ts';
 import { WrappableElementName } from './WrappableElementName.tsx';
 
 // One row of the model tree and, while it is open, the rows under it, drawn
@@ -12,11 +22,14 @@ import { WrappableElementName } from './WrappableElementName.tsx';
 // row that selects something selects it; a row that only groups opens and
 // closes, except under a filter, which opens what it shows; a row not provided
 // yet is greyed and takes no input. Indentation carries the level, and a
-// titled row says how many element rows stand directly under it.
+// titled row says how many element rows stand directly under it. A row's "+"
+// creates what it offers, or attaches one of the bodies it lists.
 
 /** What every row of one tree is drawn with. */
 export interface ModelTreeRowSurroundings {
   kinds: readonly ElementKindDescription[];
+  /** The kinds bodies are attached by. */
+  attachingKinds: readonly string[];
   selection: PropertySubject | null;
   openRows: ReadonlySet<string>;
   /** What the filter shows; null while there is no filter. */
@@ -26,6 +39,7 @@ export interface ModelTreeRowSurroundings {
   onToggle: (key: string) => void;
   onSelect: (subject: PropertySubject) => void;
   onCreate: (rowKey: string, offers: CreationOffer[]) => void;
+  onAttach: (rowKey: string, bodies: ElementReference[]) => void;
 }
 
 export function ModelTreeRow(props: { row: ModelTreeNode; parent: ModelTreeNode | null; depth: number; surroundings: ModelTreeRowSurroundings }) {
@@ -46,7 +60,7 @@ export function ModelTreeRow(props: { row: ModelTreeNode; parent: ModelTreeNode 
       {element !== null ? (
         <span className="row-name">
           <WrappableElementName name={element.name} />
-          {showsKindTag(props.parent) && (
+          {showsKindTag(props.parent, element, surroundings.attachingKinds) && (
             <span className="kind-tag">
               <BilingualTitleText title={elementKindTitle(surroundings.kinds, element.kind)} />
             </span>
@@ -106,8 +120,14 @@ export function ModelTreeRow(props: { row: ModelTreeNode; parent: ModelTreeNode 
             {filtered !== null ? `${matchingElementRowsDirectlyUnder(row, filtered.matching)} / ${elementRowsDirectlyUnder(row)}` : elementRowsDirectlyUnder(row)}
           </span>
         )}
-        {row.provided && row.creates.length > 0 && (
-          <button type="button" className="create-button" aria-label="Create" title="Create · 新建" onClick={() => surroundings.onCreate(row.key, row.creates)}>
+        {hasCreateButton(row) && (
+          <button
+            type="button"
+            className="create-button"
+            aria-label="Create"
+            title="Create · 新建"
+            onClick={() => (row.creates.length > 0 ? surroundings.onCreate(row.key, row.creates) : surroundings.onAttach(row.key, row.attaches))}
+          >
             <span aria-hidden="true">+</span>
           </button>
         )}

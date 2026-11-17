@@ -1,13 +1,13 @@
 import { rowPathOfSubject } from '../service/find_model_tree_rows.ts';
-import { sameSubject, subjectElement, type ModelTreeNode, type PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
+import { sameSubject, subjectElement, type ElementReference, type ModelTreeNode, type PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
 
 // The model tree's display rules, apart from its components so that they can
 // be tested without a page: which rows are open when a vehicle opens and which
 // stay open when the tree is read again, how many element rows a row has
-// directly under it, when an element row shows its kind as a tag, what a
-// filter by name shows, and which rows open to reveal a selection. A row is
-// known by its key and by what the service says of it, never by what its title
-// says.
+// directly under it, when an element row shows its kind as a tag, which rows
+// have a "+", what a filter by name shows, and which rows open to reveal a
+// selection. A row is known by its key and by what the service says of it,
+// never by what its title says.
 
 /** Whether a row is an element's row. */
 export function isElementRow(row: ModelTreeNode): boolean {
@@ -71,9 +71,19 @@ export function showsElementCount(row: ModelTreeNode): boolean {
   return !isElementRow(row) && elementRowsDirectlyUnder(row) > 0;
 }
 
-/** Whether an element row shows its kind as a tag: when the row it hangs under offers several kinds, its list is one of types. */
-export function showsKindTag(parent: ModelTreeNode | null): boolean {
-  return parent !== null && parent.creates.length > 1;
+/**
+ * Whether an element row shows its kind as a tag: in a list of types, one
+ * whose row offers several kinds to create, and wherever an element of one of
+ * the kinds bodies are attached by is listed, when there are several such
+ * kinds, for their row offers them only through the body it attaches.
+ */
+export function showsKindTag(parent: ModelTreeNode | null, element: ElementReference, attachingKinds: readonly string[]): boolean {
+  return parent !== null && (parent.creates.length > 1 || (attachingKinds.length > 1 && attachingKinds.includes(element.kind)));
+}
+
+/** Whether a row has a "+": it creates something, or attaches one of the bodies it lists. */
+export function hasCreateButton(row: ModelTreeNode): boolean {
+  return row.provided && (row.creates.length > 0 || row.attaches.length > 0);
 }
 
 /** The rows above the subject's row, from the first level down, which open to reveal it; none when the tree has no such row. */

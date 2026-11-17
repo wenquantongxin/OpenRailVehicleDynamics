@@ -9,7 +9,11 @@ import { fakeVehicle } from './fake_vehicle_modeling_service.ts';
 // empty, and sends only what is filled in, beside what the row's offer fixes.
 
 const kinds = readElementKinds({
-  element_kinds: fakeVehicle().kinds.map((kind) => ({ ...kind, properties: kind.properties.map((property) => ({ ...property, section: property.section ?? null })) })),
+  element_kinds: fakeVehicle().kinds.map((kind) => ({
+    ...kind,
+    properties: kind.properties.map((property) => ({ ...property, section: property.section ?? null })),
+    attachment: kind.attachment ?? null,
+  })),
 });
 const bodyKind = kinds.find((kind) => kind.kind === 'kind_body')!;
 const frameKind = kinds.find((kind) => kind.kind === 'kind_frame')!;
@@ -18,7 +22,7 @@ const springKind = kinds.find((kind) => kind.kind === 'kind_spring')!;
 test('the form asks for every editable property, the name included, in the kind’s order, and no rotation', () => {
   assert.deepEqual(
     formProperties(bodyKind).map((property) => property.name),
-    ['name', 'free_flag', 'size_quantity', 'offset_quantity'],
+    ['name', 'size_quantity', 'offset_quantity'],
   );
 });
 
@@ -41,8 +45,6 @@ test('what is filled in is sent by property, the name on its own', () => {
     name: 'spring_b',
     properties: { end_a: 'frame_a', rate_quantity: [1, 2500, -3], axis_choice: 'axis_y', curve_quantity: [{ speed: 0.1, push: 30 }] },
   });
-  const unticked = readCreationForm(bodyKind, {}, { ...blankEntries(bodyKind, {}), free_flag: { valueKind: 'boolean', chosen: false } });
-  assert.deepEqual(unticked, { outcome: 'ready', name: '', properties: { free_flag: false } }, 'a box once ticked and cleared is filled in');
 });
 
 test('a property the row fixes is shown with its value, takes no entry, and is always sent', () => {

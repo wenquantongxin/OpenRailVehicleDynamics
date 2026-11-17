@@ -15,10 +15,23 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 // Properties belong to subjects: an element, or settings, which are read and
 // edited like an element's properties, and an edit of which is one undo step.
 // The model tree is made from the records alone: bodies with their frames
-// under them, one list of links tagged by kind, carriers with their
-// interfaces under them, a frame or an interface whose owner the project does
-// not have under "owner not found" in the same domain, settings rows, and rows
-// not provided yet.
+// under them, one list of joints tagged by kind, whose "+" attaches a body,
+// one list of forces tagged by kind, carriers with their interfaces under
+// them, a frame or an interface whose owner the project does not have under
+// "owner not found" in the same domain, settings rows, and rows not provided
+// yet.
+//
+// How a body is attached is read from the records alone, as the contract
+// decides: bodies related by joints form a group, and a group without a loop
+// and with exactly one free body has every other body hanging on the joint on
+// its way to the free one; without a free body its bodies are unattached, and
+// with a loop or several free bodies they are conflicting. A body is created
+// with its attachment and changes it in one edit: a joint is created in no
+// other way, a body that becomes free gets the properties only a free body
+// has, at zero, and loses its joint, and one that takes a joint loses them,
+// and the joint it hung on, whose references move to the new joint where they
+// may name it. What the real service refuses is refused here, the joint as
+// the subject of a refusal about the joint.
 //
 // Projects are kept in memory by name, in the one folder the fake is given:
 // another folder cannot be read, a folder made unwritable refuses every save,
@@ -46,10 +59,23 @@ export interface FakePropertyDescription {
   row_fields?: string[];
 }
 
+/** How the elements of a kind are attached, as describe_element_kinds states it. */
+export interface FakeAttachmentDescription {
+  title: FakeTitle;
+  free_title: FakeTitle;
+  joint_title: FakeTitle;
+  held_at_title: FakeTitle;
+  joint_kinds: string[];
+  body_end_property: string;
+  other_end_property: string;
+  free_only_properties: string[];
+}
+
 export interface FakeKind {
   kind: string;
   title: FakeTitle;
   properties: FakePropertyDescription[];
+  attachment?: FakeAttachmentDescription;
 }
 
 export interface FakeElement {
@@ -59,7 +85,14 @@ export interface FakeElement {
   values: Record<string, unknown>;
   /** Why the element cannot be removed, where it cannot. */
   removalRefused?: string;
+  /** Whether the record states that the body moves freely in the world. */
+  free?: boolean;
+  /** A body everything is measured from, which keeps moving freely. */
+  keepsMovingFreely?: boolean;
 }
+
+/** How a body is held, read from the records: the state, and the joint it hangs on. */
+type Holding = { state: 'free' | 'hangs' | 'unattached' | 'loop' | 'several_free'; joint: FakeElement | null };
 
 /** Settings by the word the service names them with: their properties, and the values they hold. */
 export interface FakeSettings {
@@ -91,6 +124,7 @@ interface FakeTreeNode {
   provided: boolean;
   note: FakeTitle | null;
   creates: { kind: string; fixed_properties: Record<string, unknown> }[];
+  attaches: Element[];
   children: FakeTreeNode[];
 }
 
@@ -132,8 +166,6 @@ function defaultValue(property: FakePropertyDescription): unknown {
       return 0;
     case 'vector3':
       return [0, 0, 0];
-    case 'boolean':
-      return false;
     case 'rotation':
       return identity;
     case 'token':
@@ -258,8 +290,6 @@ export class FakeVehicleModelingService {
         return typeof value === 'number' ? null : `'${property.name}' holds a number`;
       case 'vector3':
         return Array.isArray(value) && value.length === 3 && value.every((entry) => typeof entry === 'number') ? null : `'${property.name}' holds three numbers`;
-      case 'boolean':
-        return typeof value === 'boolean' ? null : `'${property.name}' holds true or false`;
       case 'element_name':
         return typeof value === 'string' && value !== '' ? null : 'a name is not empty';
       case 'token':
@@ -398,7 +428,9 @@ export class FakeVehicleModelingService {
       case 'get_visual_definition':
         return this.accepted({ visual_definition: this.visualDefinition });
       case 'describe_element_kinds':
-        return this.accepted({ element_kinds: this.vehicle.kinds.map((kind) => ({ ...kind, properties: kind.properties.map(described) })) });
+        return this.accepted({
+          element_kinds: this.vehicle.kinds.map((kind) => ({ ...kind, properties: kind.properties.map(described), attachment: kind.attachment ?? null })),
+        });
       case 'get_outline':
         return this.accepted({
           vehicle_name: this.vehicleName,
@@ -413,27 +445,10 @@ export class FakeVehicleModelingService {
         return this.properties(commandArguments['subject'] as Subject | undefined);
       case 'set_property':
         return this.setProperty(commandArguments['subject'] as Subject | undefined, String(commandArguments['property']), commandArguments['value']);
-      case 'add_element': {
-        const kind = this.kindOf(String(commandArguments['kind']));
-        const name = commandArguments['name'];
-        const created = { element: { kind: String(commandArguments['kind']), name: String(name) } };
-        if (kind === undefined) return this.refused(`'${String(commandArguments['kind'])}' is not an element kind`, created);
-        const nameProperty = kind.properties.find((property) => property.value_kind === 'element_name')!.name;
-        if (typeof name !== 'string' || name === '') return this.refused('a name is not empty', created, nameProperty);
-        if (this.nameTaken(kind.kind, name)) return this.refused(`the name '${name}' is taken`, created, nameProperty);
-        const given = commandArguments['properties'] as Record<string, unknown>;
-        for (const [propertyName, value] of Object.entries(given)) {
-          const property = kind.properties.find((candidate) => candidate.name === propertyName);
-          if (property === undefined || !property.editable) return this.refused(`'${propertyName}' cannot be given`, created, propertyName);
-          const wrong = this.judge(property, value);
-          if (wrong !== null) return this.refused(wrong, created, propertyName);
-        }
-        const missing = kind.properties.find((property) => property.value_kind === 'element_reference' && property.optional !== true && !(property.name in given));
-        if (missing !== undefined) return this.refused(`'${missing.name}' must name an element`, created, missing.name);
-        const values = Object.fromEntries(kind.properties.filter((property) => property.value_kind !== 'element_name').map((property) => [property.name, defaultValue(property)]));
-        this.edit(() => this.elements.push({ kind: kind.kind, name, values: { ...values, ...structuredClone(given) } }));
-        return this.accepted({ element: created.element });
-      }
+      case 'add_element':
+        return this.addElement(commandArguments);
+      case 'set_attachment':
+        return this.setAttachment(commandArguments['body'] as Element | undefined, commandArguments['attachment']);
       case 'get_removal_consequences':
       case 'remove_element': {
         const target = commandArguments['element'] as Element | undefined;
@@ -475,7 +490,10 @@ export class FakeVehicleModelingService {
     if (subject !== undefined && 'settings' in subject) {
       const settings = this.settings.find((each) => each.word === subject.settings);
       if (settings === undefined) return this.refused(`there are no settings '${subject.settings}'`, subject);
-      return this.accepted({ properties: settings.properties.map((property) => ({ ...described(property), value: this.settingsValue(settings, property.name) })) });
+      return this.accepted({
+        properties: settings.properties.map((property) => ({ ...described(property), value: this.settingsValue(settings, property.name) })),
+        attachment: null,
+      });
     }
     const element = this.find(subject?.element);
     if (element === undefined) return this.refused(`no element named '${subject?.element.name}'`, subject ?? null);
@@ -483,7 +501,243 @@ export class FakeVehicleModelingService {
       const value = property.value_kind === 'element_name' ? element.name : (element.values[property.name] ?? null);
       return { ...described(property), editable: property.editable && (value !== null || property.value_kind === 'element_reference'), value };
     });
-    return this.accepted({ properties });
+    return this.accepted({ properties, attachment: this.isBody(element) ? this.attachmentOf(element) : null });
+  }
+
+  /** The kind whose elements are attached, and how. */
+  private attachedKind(): FakeKind & { attachment: FakeAttachmentDescription } {
+    return this.vehicle!.kinds.find((each) => each.attachment !== undefined) as FakeKind & { attachment: FakeAttachmentDescription };
+  }
+
+  private isBody(element: { kind: string }): boolean {
+    return element.kind === this.attachedKind().kind;
+  }
+
+  private isJoint(element: { kind: string }): boolean {
+    return this.attachedKind().attachment.joint_kinds.includes(element.kind);
+  }
+
+  /** The body and its frames, which a joint's end on it may name. */
+  private framesOn(body: { name: string }): FakeElement[] {
+    return this.outline().filter((each) => (this.isBody(each) && each.name === body.name) || (each.kind === 'kind_frame' && each.values['body_ref'] === body.name));
+  }
+
+  /** The body a frame is on: a body's own name is its frame, and a fixed frame is on the body it names. */
+  private bodyOf(frameName: unknown): FakeElement | undefined {
+    const body = this.elements.find((each) => this.isBody(each) && each.name === frameName);
+    if (body !== undefined) return body;
+    const frame = this.elements.find((each) => each.kind === 'kind_frame' && each.name === frameName);
+    return frame === undefined ? undefined : this.elements.find((each) => this.isBody(each) && each.name === frame.values['body_ref']);
+  }
+
+  /** The joints whose two ends are on two different bodies, with those bodies. */
+  private relatingJoints(): { joint: FakeElement; bodies: [FakeElement, FakeElement] }[] {
+    const { body_end_property: bodyEnd, other_end_property: otherEnd } = this.attachedKind().attachment;
+    return this.elements
+      .filter((each) => this.isJoint(each))
+      .flatMap((joint) => {
+        const held = this.bodyOf(joint.values[bodyEnd]);
+        const holding = this.bodyOf(joint.values[otherEnd]);
+        return held !== undefined && holding !== undefined && held !== holding ? [{ joint, bodies: [held, holding] as [FakeElement, FakeElement] }] : [];
+      });
+  }
+
+  /** The bodies a body reaches through the relating joints, itself included, leaving one joint out. */
+  private reachedFrom(body: FakeElement, leftOut: FakeElement | null): Set<FakeElement> {
+    const reached = new Set([body]);
+    const relating = this.relatingJoints().filter((each) => each.joint !== leftOut);
+    for (let grown = true; grown; ) {
+      grown = false;
+      for (const { bodies } of relating) {
+        if (reached.has(bodies[0]) !== reached.has(bodies[1])) {
+          bodies.forEach((each) => reached.add(each));
+          grown = true;
+        }
+      }
+    }
+    return reached;
+  }
+
+  /** How a body is held, from the records alone and whatever a check would say: group by group. */
+  private holding(body: FakeElement): Holding {
+    const group = this.reachedFrom(body, null);
+    const relating = this.relatingJoints().filter((each) => group.has(each.bodies[0]));
+    if (relating.length >= group.size) return { state: 'loop', joint: null };
+    const free = [...group].filter((each) => each.free === true);
+    if (free.length > 1) return { state: 'several_free', joint: null };
+    if (free.length === 0) return { state: 'unattached', joint: null };
+    if (free[0] === body) return { state: 'free', joint: null };
+    const onTheWay = relating.find(({ joint, bodies }) => bodies.includes(body) && !this.reachedFrom(body, joint).has(free[0]!))!;
+    return { state: 'hangs', joint: onTheWay.joint };
+  }
+
+  /** A body's attachment as get_properties states it, in made-up words. */
+  private attachmentOf(body: FakeElement) {
+    const { state, joint } = this.holding(body);
+    const reference = ({ kind, name }: FakeElement): Element => ({ kind, name });
+    const reached = this.reachedFrom(body, joint);
+    const words: Record<Holding['state'], { summary: FakeTitle; note: FakeTitle | null }> = {
+      free: { summary: { en: 'Made-up loose in the world', zh: '虚构自由' }, note: body.keepsMovingFreely === true ? { en: 'Made-up kept free', zh: '虚构须自由' } : null },
+      hangs: { summary: { en: 'Made-up hanging', zh: '虚构挂着' }, note: null },
+      unattached: { summary: { en: 'Made-up unattached', zh: '虚构未接入' }, note: { en: 'Made-up neither free nor held', zh: '虚构既不自由也未被挂接' } },
+      loop: { summary: { en: 'Made-up unclear', zh: '虚构不明' }, note: { en: 'Made-up loop', zh: '虚构成环' } },
+      several_free: { summary: { en: 'Made-up unclear', zh: '虚构不明' }, note: { en: 'Made-up several free', zh: '虚构多个自由' } },
+    };
+    return {
+      ...words[state],
+      joint: joint === null ? null : reference(joint),
+      held_at: joint === null ? null : reference(this.heldAt(body, joint)),
+      can_become_free: state === 'hangs' || state === 'unattached',
+      can_take_joint: state === 'hangs' || state === 'unattached' || (state === 'free' && body.keepsMovingFreely !== true),
+      frames_on_body: this.framesOn(body).map(reference),
+      frames_it_can_be_held_at: this.outline()
+        .filter((each) => this.isBody(each) && !reached.has(each))
+        .flatMap((each) => this.framesOn(each))
+        .map(reference),
+    };
+  }
+
+  /** The frame at the joint's end that is not on the body, whichever end of the record that is: a body, or else a fixed frame. */
+  private heldAt(body: FakeElement, joint: FakeElement): FakeElement {
+    const { body_end_property: bodyEnd, other_end_property: otherEnd } = this.attachedKind().attachment;
+    const other = this.bodyOf(joint.values[bodyEnd]) === body ? joint.values[otherEnd] : joint.values[bodyEnd];
+    return (this.elements.find((each) => this.isBody(each) && each.name === other) ?? this.elements.find((each) => each.kind === 'kind_frame' && each.name === other))!;
+  }
+
+  /** The elements with a reference to the element, with the reference. */
+  private referencesTo(element: FakeElement): { element: FakeElement; property: FakePropertyDescription }[] {
+    return this.elements.flatMap((each) =>
+      this.kindOf(each.kind)!
+        .properties.filter((property) => property.value_kind === 'element_reference' && property.referenced_kinds!.includes(element.kind) && each.values[property.name] === element.name)
+        .map((property) => ({ element: each, property })),
+    );
+  }
+
+  /**
+   * A new element's values from what it is given, or why they are refused,
+   * about the subject given: the name and every property as add_element reads
+   * them. The properties left out are not given and not required; a name may
+   * be one the replaced element has.
+   */
+  private newElementValues(
+    kind: FakeKind,
+    name: unknown,
+    given: Record<string, unknown>,
+    subject: Subject,
+    leftOut: readonly string[],
+    replaced: FakeElement | null,
+  ): { values: Record<string, unknown> } | Refused {
+    const nameProperty = kind.properties.find((property) => property.value_kind === 'element_name')!.name;
+    if (typeof name !== 'string' || name === '') return this.refused('a name is not empty', subject, nameProperty);
+    if (this.nameTaken(kind.kind, name) && !(replaced?.kind === kind.kind && replaced.name === name)) return this.refused(`the name '${name}' is taken`, subject, nameProperty);
+    for (const [propertyName, value] of Object.entries(given)) {
+      const property = kind.properties.find((candidate) => candidate.name === propertyName);
+      if (property === undefined || !property.editable || leftOut.includes(propertyName)) return this.refused(`'${propertyName}' cannot be given`, subject, propertyName);
+      const wrong = this.judge(property, value);
+      if (wrong !== null) return this.refused(wrong, subject, propertyName);
+    }
+    const missing = kind.properties.find(
+      (property) => property.value_kind === 'element_reference' && property.optional !== true && !leftOut.includes(property.name) && !(property.name in given),
+    );
+    if (missing !== undefined) return this.refused(`'${missing.name}' must name an element`, subject, missing.name);
+    const defaults = Object.fromEntries(kind.properties.filter((property) => property.value_kind !== 'element_name').map((property) => [property.name, defaultValue(property)]));
+    return { values: { ...defaults, ...structuredClone(given) } };
+  }
+
+  /**
+   * The joint a body is to take, from the attachment asked for, or why it is
+   * refused: about the joint, with the property at fault, or about the body.
+   * A new body's end is the body itself and is not given; an existing body's
+   * end names it or one of its frames, and its other end a frame it does not
+   * reach once the joint it hangs on is taken away.
+   */
+  private jointToTake(asked: unknown, body: FakeElement, bodyIsNew: boolean, hungOn: FakeElement | null): { joint: FakeElement } | Refused {
+    const { joint_kinds: jointKinds, body_end_property: bodyEnd, other_end_property: otherEnd } = this.attachedKind().attachment;
+    const joint = (asked as { joint?: { kind?: unknown; name?: unknown; properties?: unknown } } | null)?.joint;
+    const kind = this.kindOf(String(joint?.kind));
+    if (joint === undefined || kind === undefined || !jointKinds.includes(kind.kind)) {
+      return this.refused(`a body moves freely or is attached by one of ${jointKinds.join(', ')}`, { element: { kind: body.kind, name: body.name } });
+    }
+    const subject = { element: { kind: kind.kind, name: String(joint.name) } };
+    const read = this.newElementValues(kind, joint.name, (joint.properties ?? {}) as Record<string, unknown>, subject, bodyIsNew ? [bodyEnd] : [], hungOn);
+    if ('refused' in read) return read;
+    const values = bodyIsNew ? { ...read.values, [bodyEnd]: body.name } : read.values;
+    if (!bodyIsNew) {
+      if (!this.framesOn(body).some((each) => each.name === values[bodyEnd])) return this.refused(`'${String(values[bodyEnd])}' is not on '${body.name}'`, subject, bodyEnd);
+      const heldAt = this.attachmentOf(body).frames_it_can_be_held_at;
+      if (!heldAt.some((each) => each.name === values[otherEnd])) return this.refused(`holding '${body.name}' at '${String(values[otherEnd])}' would close a loop`, subject, otherEnd);
+    }
+    return { joint: { kind: kind.kind, name: joint.name as string, values } };
+  }
+
+  private addElement(commandArguments: Record<string, unknown>): unknown {
+    const kind = this.kindOf(String(commandArguments['kind']));
+    const name = commandArguments['name'];
+    const created = { element: { kind: String(commandArguments['kind']), name: String(name) } };
+    if (kind === undefined) return this.refused(`'${String(commandArguments['kind'])}' is not an element kind`, created);
+    if (this.isJoint(kind)) return this.refused('a joint is made by stating how a body is attached', created);
+    const attachment = commandArguments['attachment'];
+    if (kind.attachment === undefined && attachment !== undefined) return this.refused('only a rigid body is attached', created);
+    if (kind.attachment !== undefined && attachment === undefined) return this.refused('a rigid body is created with how it is attached', created);
+    const given = commandArguments['properties'] as Record<string, unknown>;
+    const read = this.newElementValues(kind, name, given, created, [], null);
+    if ('refused' in read) return read;
+    const element: FakeElement = { kind: kind.kind, name: name as string, values: read.values };
+    if (kind.attachment === undefined) {
+      this.edit(() => this.elements.push(element));
+      return this.accepted({ element: created.element });
+    }
+    if ((attachment as { free?: unknown }).free === true) {
+      this.edit(() => this.elements.push({ ...element, free: true }));
+      return this.accepted({ element: created.element });
+    }
+    const freeOnly = kind.attachment.free_only_properties;
+    const givenFreeOnly = freeOnly.find((property) => property in given);
+    if (givenFreeOnly !== undefined) return this.refused(`only a body that moves freely has '${givenFreeOnly}'`, created, givenFreeOnly);
+    for (const property of freeOnly) delete element.values[property];
+    const taken = this.jointToTake(attachment, element, true, null);
+    if ('refused' in taken) return taken;
+    this.edit(() => this.elements.push(element, taken.joint));
+    return this.accepted({ element: created.element });
+  }
+
+  private setAttachment(target: Element | undefined, asked: unknown): unknown {
+    const body = this.find(target);
+    const subject = target === undefined ? null : { element: target };
+    if (body === undefined || !this.isBody(body)) return this.refused(`no rigid body is named '${target?.name}'`, subject);
+    const { joint: hungOn } = this.holding(body);
+    const now = this.attachmentOf(body);
+    const freeOnly = this.attachedKind().attachment.free_only_properties;
+    if ((asked as { free?: unknown } | null)?.free === true) {
+      if (!now.can_become_free) return this.refused(`'${body.name}' cannot become free`, subject);
+      const naming = hungOn === null ? [] : this.referencesTo(hungOn);
+      if (naming.length > 0) {
+        return this.refused(`${naming.map(({ element }) => `'${element.name}'`).join(', ')} names '${hungOn!.name}': remove the joint with what names it`, subject);
+      }
+      const bodyKind = this.kindOf(body.kind)!;
+      this.edit(() => {
+        this.elements = this.elements.filter((each) => each !== hungOn);
+        body.free = true;
+        for (const property of bodyKind.properties.filter((each) => freeOnly.includes(each.name))) body.values[property.name] = defaultValue(property);
+      });
+      return this.accepted({ joint: null });
+    }
+    if (!now.can_take_joint) return this.refused(`'${body.name}' cannot take a joint`, subject);
+    const taken = this.jointToTake(asked, body, false, hungOn);
+    if ('refused' in taken) return taken;
+    const references = hungOn === null ? [] : this.referencesTo(hungOn);
+    const stuck = references.find(({ property }) => !property.referenced_kinds!.includes(taken.joint.kind));
+    if (stuck !== undefined) return this.refused(`'${stuck.element.name}' names '${hungOn!.name}' and cannot name a ${taken.joint.kind}`, subject);
+    this.edit(() => {
+      this.elements = this.elements.filter((each) => each !== hungOn);
+      for (const { element, property } of references) element.values[property.name] = taken.joint.name;
+      this.elements.push(taken.joint);
+      if (body.free === true) {
+        body.free = false;
+        for (const property of freeOnly) delete body.values[property];
+      }
+    });
+    return this.accepted({ joint: { kind: taken.joint.kind, name: taken.joint.name } });
   }
 
   private setProperty(subject: Subject | undefined, name: string, value: unknown): unknown {
@@ -526,20 +780,24 @@ export class FakeVehicleModelingService {
   /**
    * The model tree made from the records: what belongs to an element hangs
    * under it, a type is a tag of one list, and one whose owner the project
-   * does not have is listed under "owner not found" in its domain.
+   * does not have is listed under "owner not found" in its domain. A body's
+   * row says what is the matter with how it is attached; the joints' "+"
+   * attaches the free bodies that can take a joint and the unattached ones.
    */
   private modelTree(): FakeTreeNode[] {
     const outline = this.outline();
     const of = (kind: string): FakeElement[] => outline.filter((each) => each.kind === kind);
     const offer = (kind: string, fixed: Record<string, unknown> = {}) => ({ kind, fixed_properties: fixed });
-    const row = (element: FakeElement, children: FakeTreeNode[] = [], creates: FakeTreeNode['creates'] = []): FakeTreeNode => ({
+    const row = (element: FakeElement, children: FakeTreeNode[] = [], more: Partial<FakeTreeNode> = {}): FakeTreeNode => ({
       key: `element/${element.kind}/${element.name}`,
       title: null,
       subject: { element: { kind: element.kind, name: element.name } },
       provided: true,
       note: null,
-      creates,
+      creates: [],
+      attaches: [],
       children,
+      ...more,
     });
     const group = (key: string, title: FakeTitle, children: FakeTreeNode[], more: Partial<FakeTreeNode> = {}): FakeTreeNode => ({
       key,
@@ -548,17 +806,41 @@ export class FakeVehicleModelingService {
       provided: true,
       note: null,
       creates: [],
+      attaches: [],
       children,
       ...more,
     });
-    const settingsRow = (word: string, title: FakeTitle): FakeTreeNode => ({ key: `settings/${word}`, title, subject: { settings: word }, provided: true, note: null, creates: [], children: [] });
-    const notProvided = (key: string, title: FakeTitle): FakeTreeNode => ({ key, title, subject: null, provided: false, note: { en: 'Comes later.', zh: '以后提供。' }, creates: [], children: [] });
+    const settingsRow = (word: string, title: FakeTitle): FakeTreeNode => ({
+      key: `settings/${word}`,
+      title,
+      subject: { settings: word },
+      provided: true,
+      note: null,
+      creates: [],
+      attaches: [],
+      children: [],
+    });
+    const notProvided = (key: string, title: FakeTitle): FakeTreeNode => ({
+      key,
+      title,
+      subject: null,
+      provided: false,
+      note: { en: 'Comes later.', zh: '以后提供。' },
+      creates: [],
+      attaches: [],
+      children: [],
+    });
     const ownerNotFound = (key: string, children: FakeTreeNode[]): FakeTreeNode[] => (children.length === 0 ? [] : [group(key, { en: 'Owner not found', zh: '归属未解析' }, children)]);
     const bodies = of('kind_body');
     const frames = of('kind_frame');
     const carriers = of('kind_carrier');
     const interfaces = of('kind_interface');
     const owned = (element: FakeElement, reference: string, owners: FakeElement[]): boolean => owners.some((owner) => owner.name === element.values[reference]);
+    const attachable = bodies.filter((body) => {
+      const attachment = this.attachmentOf(body);
+      return attachment.can_take_joint && attachment.joint === null;
+    });
+    const troubled = (body: FakeElement): FakeTitle | null => (['unattached', 'loop', 'several_free'].includes(this.holding(body).state) ? this.attachmentOf(body).note : null);
     return [
       group('domain/settings', { en: 'Fake settings', zh: '假设置' }, [
         settingsRow('setting_constant', { en: 'A constant', zh: '常量' }),
@@ -570,15 +852,19 @@ export class FakeVehicleModelingService {
         { en: 'Fake bodies', zh: '假刚体' },
         [
           ...bodies.map((body) =>
-            row(body, [
-              group(
-                `frames/${body.name}`,
-                { en: 'Frames', zh: '坐标系' },
-                frames.filter((frame) => frame.values['body_ref'] === body.name).map((frame) => row(frame)),
-                { creates: [offer('kind_frame', { body_ref: body.name })] },
-              ),
-              group(`shapes/${body.name}`, { en: 'Shapes', zh: '形状' }, [], { note: { en: `Stated under ${body.name}`, zh: `以 ${body.name} 为名` } }),
-            ]),
+            row(
+              body,
+              [
+                group(
+                  `frames/${body.name}`,
+                  { en: 'Frames', zh: '坐标系' },
+                  frames.filter((frame) => frame.values['body_ref'] === body.name).map((frame) => row(frame)),
+                  { creates: [offer('kind_frame', { body_ref: body.name })] },
+                ),
+                group(`shapes/${body.name}`, { en: 'Shapes', zh: '形状' }, [], { note: { en: `Stated under ${body.name}`, zh: `以 ${body.name} 为名` } }),
+              ],
+              { note: troubled(body) },
+            ),
           ),
           ...ownerNotFound(
             'frames/owner_not_found',
@@ -588,10 +874,16 @@ export class FakeVehicleModelingService {
         { creates: [offer('kind_body')] },
       ),
       group(
-        'domain/links',
-        { en: 'Fake links', zh: '假连接' },
-        outline.filter((each) => each.kind === 'kind_hinge' || each.kind === 'kind_spring').map((each) => row(each)),
-        { creates: [offer('kind_hinge'), offer('kind_spring')] },
+        'domain/joints',
+        { en: 'Fake joints', zh: '假铰' },
+        outline.filter((each) => this.isJoint(each)).map((each) => row(each)),
+        { attaches: attachable.map(({ kind, name }) => ({ kind, name })) },
+      ),
+      group(
+        'domain/forces',
+        { en: 'Fake forces', zh: '假力' },
+        outline.filter((each) => each.kind === 'kind_spring' || each.kind === 'kind_bar').map((each) => row(each)),
+        { creates: [offer('kind_spring'), offer('kind_bar')] },
       ),
       notProvided('domain/later', { en: 'Later domain', zh: '以后的域' }),
       group('domain/contact', { en: 'Fake contact', zh: '假接触' }, [
@@ -604,7 +896,7 @@ export class FakeVehicleModelingService {
               row(
                 carrier,
                 interfaces.filter((each) => each.values['carrier_ref'] === carrier.name).map((each) => row(each)),
-                [offer('kind_interface', { carrier_ref: carrier.name })],
+                { creates: [offer('kind_interface', { carrier_ref: carrier.name })] },
               ),
             ),
             ...ownerNotFound(
@@ -647,10 +939,13 @@ const ownName: FakePropertyDescription = { name: 'name', value_kind: 'element_na
  * A vehicle of made-up element kinds, one of them without elements. One body
  * shares its name with a carrier, an element of another kind; a frame and a
  * spring refer to the bodies, and the carrier and its interfaces to the body
- * they turn with. Its settings: a constant not stated yet, a read-only
- * identity, and wheel settings with a section each.
+ * they turn with. body_a moves freely and is kept free; body_b hangs on a
+ * hinge from body_a's frame, which one of its interfaces names; body_c moves
+ * freely. Its settings: a constant not stated yet, a read-only identity, and
+ * wheel settings with a section each.
  */
 export function fakeVehicle(): FakeVehicle {
+  const ends = [reference('end_parent', ['kind_frame', 'kind_body']), reference('end_child', ['kind_frame', 'kind_body'])];
   return {
     vehicleName: 'FAKE',
     kinds: [
@@ -659,17 +954,31 @@ export function fakeVehicle(): FakeVehicle {
         title: { en: 'Made-up body', zh: '虚构体' },
         properties: [
           ownName,
-          { name: 'free_flag', value_kind: 'boolean', editable: true, section: { en: 'Freedom', zh: '自由' } },
           { name: 'size_quantity', value_kind: 'number', editable: true, section: { en: 'Size', zh: '大小' } },
           { name: 'offset_quantity', value_kind: 'vector3', editable: true, section: { en: 'Placing', zh: '摆放' } },
           { name: 'turn_quantity', value_kind: 'rotation', editable: false, section: { en: 'Placing', zh: '摆放' } },
         ],
+        attachment: {
+          title: { en: 'Made-up holding', zh: '虚构挂接' },
+          free_title: { en: 'Made-up loose', zh: '虚构自由' },
+          joint_title: { en: 'Made-up joint', zh: '虚构铰' },
+          held_at_title: { en: 'Made-up held at', zh: '虚构挂在' },
+          joint_kinds: ['kind_hinge', 'kind_weld'],
+          body_end_property: 'end_child',
+          other_end_property: 'end_parent',
+          free_only_properties: ['offset_quantity'],
+        },
       },
       { kind: 'kind_frame', title: { en: 'Made-up frame', zh: '虚构坐标系' }, properties: [ownName, reference('body_ref', ['kind_body'])] },
       {
         kind: 'kind_hinge',
         title: { en: 'Made-up hinge', zh: '虚构铰链' },
-        properties: [ownName, reference('end_a', ['kind_frame', 'kind_body']), reference('end_b', ['kind_frame', 'kind_body'])],
+        properties: [ownName, ...ends, { name: 'axis_quantity', value_kind: 'vector3', editable: true }],
+      },
+      {
+        kind: 'kind_weld',
+        title: { en: 'Made-up weld', zh: '虚构焊' },
+        properties: [ownName, ...ends, { name: 'axis_quantity', value_kind: 'number', editable: true }, { name: 'gap_quantity', value_kind: 'number', editable: true }],
       },
       {
         kind: 'kind_spring',
@@ -682,6 +991,11 @@ export function fakeVehicle(): FakeVehicle {
           { name: 'axis_choice', value_kind: 'token', editable: true, choices: ['axis_x', 'axis_y', 'axis_z'] },
           { name: 'curve_quantity', value_kind: 'saturated_piecewise_linear_damper_curve', editable: true, row_fields: ['speed', 'push'] },
         ],
+      },
+      {
+        kind: 'kind_bar',
+        title: { en: 'Made-up bar', zh: '虚构杆' },
+        properties: [ownName, reference('end_a', ['kind_frame', 'kind_body']), reference('end_b', ['kind_frame', 'kind_body'])],
       },
       { kind: 'kind_carrier', title: { en: 'Made-up carrier', zh: '虚构承载' }, properties: [ownName, reference('carrier_body', ['kind_body'])] },
       {
@@ -700,11 +1014,14 @@ export function fakeVehicle(): FakeVehicle {
       {
         kind: 'kind_body',
         name: 'body_a',
-        values: { free_flag: true, size_quantity: 10, offset_quantity: [0, 0, 0], turn_quantity: identity },
+        values: { size_quantity: 10, offset_quantity: [0, 0, 0], turn_quantity: identity },
         removalRefused: 'body_a is what every other place is measured from, so it cannot be removed',
+        free: true,
+        keepsMovingFreely: true,
       },
-      { kind: 'kind_body', name: 'body_b', values: { free_flag: false, size_quantity: 4, offset_quantity: [0, 0, 0], turn_quantity: identity } },
+      { kind: 'kind_body', name: 'body_b', values: { size_quantity: 4, turn_quantity: identity } },
       { kind: 'kind_frame', name: 'frame_a', values: { body_ref: 'body_a' } },
+      { kind: 'kind_hinge', name: 'hinge_b', values: { end_parent: 'frame_a', end_child: 'body_b', axis_quantity: [0, 1, 0] } },
       {
         kind: 'kind_spring',
         name: 'spring_a',
@@ -720,8 +1037,9 @@ export function fakeVehicle(): FakeVehicle {
         },
       },
       { kind: 'kind_carrier', name: 'body_b', values: { carrier_body: 'body_b' } },
-      { kind: 'kind_interface', name: 'body_b.left', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: null, side: 'left' } },
+      { kind: 'kind_interface', name: 'body_b.left', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: 'hinge_b', side: 'left' } },
       { kind: 'kind_interface', name: 'body_b.right', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: null, side: 'right' } },
+      { kind: 'kind_body', name: 'body_c', values: { size_quantity: 2, offset_quantity: [0, 0, 0], turn_quantity: identity }, free: true },
     ],
     settings: [
       { word: 'setting_constant', properties: [{ name: 'constant_quantity', value_kind: 'number', editable: true }], values: { constant_quantity: null } },
@@ -740,9 +1058,10 @@ export function fakeVehicle(): FakeVehicle {
       rigid_bodies: [
         { element: { kind: 'kind_body', name: 'body_a' }, rotation_drawing_from_body: identity, origin_in_drawing_frame_meters: [0, 0, -1], visual_definition_body_name: 'body_a' },
         { element: { kind: 'kind_body', name: 'body_b' }, rotation_drawing_from_body: identity, origin_in_drawing_frame_meters: [5, 0, -0.5], visual_definition_body_name: 'body_b' },
+        { element: { kind: 'kind_body', name: 'body_c' }, rotation_drawing_from_body: identity, origin_in_drawing_frame_meters: [-5, 0, -1], visual_definition_body_name: null },
       ],
       fixed_frames: [{ element: { kind: 'kind_frame', name: 'frame_a' }, rotation_drawing_from_frame: identity, origin_in_drawing_frame_meters: [0, 0, -1] }],
-      revolute_joints: [],
+      revolute_joints: [{ element: { kind: 'kind_hinge', name: 'hinge_b' }, location_in_drawing_frame_meters: [5, 0, -0.5], axis_in_drawing_frame: [0, 1, 0] }],
       ball_rpy_joints: [],
       weld_joints: [],
       force_elements: [

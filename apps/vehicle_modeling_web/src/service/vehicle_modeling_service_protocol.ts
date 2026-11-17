@@ -88,6 +88,8 @@ export interface ModelTreeNode {
   /** One line shown with the row. */
   note: BilingualTitle | null;
   creates: CreationOffer[];
+  /** The bodies the row's "+" attaches, in outline order. */
+  attaches: ElementReference[];
   children: ModelTreeNode[];
 }
 
@@ -113,7 +115,6 @@ export const curveValueKind = 'saturated_piecewise_linear_damper_curve';
 export type PropertyValue =
   | { valueKind: 'number'; value: number | null }
   | { valueKind: 'vector3'; value: Vector3 | null }
-  | { valueKind: 'boolean'; value: boolean | null }
   | { valueKind: 'rotation'; value: Rotation | null }
   /** The element's own name; setting it renames the element. */
   | { valueKind: 'element_name'; value: string | null }
@@ -135,12 +136,57 @@ type WithoutValue<Reading> = Reading extends unknown ? Omit<Reading, 'value'> : 
 /** What a property is, without a value: as describe_element_kinds states it for a kind. */
 export type PropertyDescription = WithoutValue<PropertyReading>;
 
-/** An element kind, its name for people, and its properties in the order get_properties returns them. */
+/**
+ * How the elements of a kind are attached, as describe_element_kinds states
+ * it for the one kind that is: free in the world, or by a joint of one of the
+ * joint kinds, whose one end is on the element and whose other end names the
+ * frame it is held at.
+ */
+export interface AttachmentDescription {
+  title: BilingualTitle;
+  freeTitle: BilingualTitle;
+  /** What the joint an element hangs on is shown under. */
+  jointTitle: BilingualTitle;
+  /** What the frame it is held at is shown under. */
+  heldAtTitle: BilingualTitle;
+  jointKinds: string[];
+  /** The joint's property naming its end on the attached element. */
+  bodyEndProperty: string;
+  /** The joint's property naming the frame the element is held at. */
+  otherEndProperty: string;
+  /** The element's properties only one that moves freely has. */
+  freeOnlyProperties: string[];
+}
+
+/** An element kind, its name for people, its properties in the order get_properties returns them, and how its elements are attached. */
 export interface ElementKindDescription {
   kind: string;
   title: BilingualTitle;
   properties: PropertyDescription[];
+  /** Null for every kind but the one whose elements are attached. */
+  attachment: AttachmentDescription | null;
 }
+
+/** How an element is attached now and what can be changed, as get_properties states it with its properties. */
+export interface Attachment {
+  /** One short line saying how it is held, naming no element. */
+  summary: BilingualTitle;
+  /** One line more: what is the matter, or why something cannot be changed. */
+  note: BilingualTitle | null;
+  /** The joint it hangs on. */
+  joint: ElementReference | null;
+  /** The frame at that joint's other end: an element of a kind a frame is, a body or a fixed frame. */
+  heldAt: ElementReference | null;
+  canBecomeFree: boolean;
+  canTakeJoint: boolean;
+  /** What the joint's end on it may name: itself, then its frames. */
+  framesOnBody: ElementReference[];
+  /** What the joint's other end may name. */
+  framesItCanBeHeldAt: ElementReference[];
+}
+
+/** What an attachment is set to: moving freely, or a joint of a kind, with its name and properties. */
+export type AttachmentSetting = { free: true } | { joint: { kind: string; name: string; properties: Readonly<Record<string, unknown>> } };
 
 /** A body or fixed frame drawn at its pose; `rotationDrawingFromLocal` takes its own components to the drawing frame. */
 export interface PosedDrawing {
@@ -345,7 +391,6 @@ function propertyDescription(property: unknown): PropertyDescription {
   switch (valueKind) {
     case 'number':
     case 'vector3':
-    case 'boolean':
     case 'rotation':
     case 'element_name':
     case 'text':
@@ -375,8 +420,6 @@ function propertyReading(property: unknown): PropertyReading {
       return { ...description, value: nullable(value, (present) => number(present, what)) };
     case 'vector3':
       return { ...description, value: nullable(value, (present) => vector(present, what)) };
-    case 'boolean':
-      return { ...description, value: nullable(value, (present) => truth(present, what)) };
     case 'rotation':
       return { ...description, value: nullable(value, (present) => rotation(present, what)) };
     case 'element_name':
@@ -393,12 +436,48 @@ export function readProperties(result: unknown): PropertyReading[] {
   return list(field(result, 'properties', 'properties'), 'properties').map(propertyReading);
 }
 
-export function readElementKinds(result: unknown): ElementKindDescription[] {
-  return list(field(result, 'element_kinds', 'describe_element_kinds'), 'element_kinds').map((entry) => ({
-    kind: text(field(entry, 'kind', 'element kind'), 'element kind.kind'),
-    title: readTitle(field(entry, 'title', 'element kind'), 'element kind.title'),
-    properties: list(field(entry, 'properties', 'element kind'), 'element kind.properties').map(propertyDescription),
+function elementList(value: unknown, what: string): ElementReference[] {
+  return list(value, what).map((element) => readElement(element, what));
+}
+
+/** The attachment get_properties states beside a subject's properties; null for every subject but an attached element. */
+export function readAttachment(result: unknown): Attachment | null {
+  return nullable(field(result, 'attachment', 'properties'), (attachment) => ({
+    summary: readTitle(field(attachment, 'summary', 'attachment'), 'attachment.summary'),
+    note: nullable(field(attachment, 'note', 'attachment'), (note) => readTitle(note, 'attachment.note')),
+    joint: nullable(field(attachment, 'joint', 'attachment'), (joint) => readElement(joint, 'attachment.joint')),
+    heldAt: nullable(field(attachment, 'held_at', 'attachment'), (heldAt) => readElement(heldAt, 'attachment.held_at')),
+    canBecomeFree: truth(field(attachment, 'can_become_free', 'attachment'), 'attachment.can_become_free'),
+    canTakeJoint: truth(field(attachment, 'can_take_joint', 'attachment'), 'attachment.can_take_joint'),
+    framesOnBody: elementList(field(attachment, 'frames_on_body', 'attachment'), 'attachment.frames_on_body'),
+    framesItCanBeHeldAt: elementList(field(attachment, 'frames_it_can_be_held_at', 'attachment'), 'attachment.frames_it_can_be_held_at'),
   }));
+}
+
+function attachmentDescription(value: unknown, kind: string): AttachmentDescription {
+  const what = `${kind}.attachment`;
+  return {
+    title: readTitle(field(value, 'title', what), `${what}.title`),
+    freeTitle: readTitle(field(value, 'free_title', what), `${what}.free_title`),
+    jointTitle: readTitle(field(value, 'joint_title', what), `${what}.joint_title`),
+    heldAtTitle: readTitle(field(value, 'held_at_title', what), `${what}.held_at_title`),
+    jointKinds: texts(field(value, 'joint_kinds', what), `${what}.joint_kinds`),
+    bodyEndProperty: text(field(value, 'body_end_property', what), `${what}.body_end_property`),
+    otherEndProperty: text(field(value, 'other_end_property', what), `${what}.other_end_property`),
+    freeOnlyProperties: texts(field(value, 'free_only_properties', what), `${what}.free_only_properties`),
+  };
+}
+
+export function readElementKinds(result: unknown): ElementKindDescription[] {
+  return list(field(result, 'element_kinds', 'describe_element_kinds'), 'element_kinds').map((entry) => {
+    const kind = text(field(entry, 'kind', 'element kind'), 'element kind.kind');
+    return {
+      kind,
+      title: readTitle(field(entry, 'title', kind), `${kind}.title`),
+      properties: list(field(entry, 'properties', kind), `${kind}.properties`).map(propertyDescription),
+      attachment: nullable(field(entry, 'attachment', kind), (attachment) => attachmentDescription(attachment, kind)),
+    };
+  });
 }
 
 function modelTreeNode(node: unknown): ModelTreeNode {
@@ -413,6 +492,7 @@ function modelTreeNode(node: unknown): ModelTreeNode {
       kind: text(field(offer, 'kind', `${key} offer`), `${key} offer.kind`),
       fixedProperties: field(offer, 'fixed_properties', `${key} offer`) as Readonly<Record<string, unknown>>,
     })),
+    attaches: elementList(field(node, 'attaches', key), `${key}.attaches`),
     children: list(field(node, 'children', key), `${key}.children`).map(modelTreeNode),
   };
 }

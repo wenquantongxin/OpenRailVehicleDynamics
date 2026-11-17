@@ -6,10 +6,12 @@ import { test } from 'node:test';
 import ts from 'typescript';
 
 // The interface draws what the service describes and knows none of it: no
-// element kind, no settings word, no domain or row of the model tree, and no
-// kind's title may stand in its source. Kind names and the longer settings
-// words are distinctive and may stand nowhere, comments included; the two
-// short settings words and every title are looked for as a whole text in
+// element kind, no settings word, none of the properties of a rigid body and
+// the joints that attach it, no domain or row of the model tree, and no title
+// the service gives may stand in its source. Kind names, property names and
+// the longer settings words are distinctive and may stand nowhere, comments
+// included; the two short settings words and every title are looked for as a
+// whole text in
 // code and markup, where knowledge of them would act.
 
 const elementKinds = [
@@ -32,6 +34,23 @@ const elementKinds = [
 
 const distinctiveSettingsWords = ['gravity', 'vehicle_identity', 'station_layout', 'contact_computation'];
 const settingsWords = [...distinctiveSettingsWords, 'wheel', 'rail'];
+
+/** The properties of a rigid body and of the joints that attach it: which end is which and what only a free body has come from the service. */
+const propertyNames = [
+  'moves_freely_in_world',
+  'mass_kilograms',
+  'center_of_mass_in_body_frame_meters',
+  'inertia_moments_about_center_of_mass_kilogram_square_meters',
+  'inertia_products_about_center_of_mass_kilogram_square_meters',
+  'mechanical_track_station_layout.station_offset_meters',
+  'placement.lateral_offset_in_local_track_frame_meters',
+  'placement.vertical_offset_in_local_track_frame_meters',
+  'parent_frame_name',
+  'child_frame_name',
+  'axis_in_parent_frame',
+  'damping_newton_metre_seconds_per_radian',
+  'default_roll_pitch_yaw_angles_radians',
+];
 
 /** The rows of the model tree and the kinds' titles, in both languages, as the contract states them. */
 const titles = [
@@ -70,6 +89,15 @@ const titles = [
   ['Point-to-point hysteretic spring', '点对点迟滞弹簧'],
   ['Contact carrier', '接触承载体'],
   ['Wheel-rail contact', '轮轨接触'],
+  ['Simulation settings', '仿真设置'],
+  ['Attachment', '挂接'],
+  ['Free in the world', '相对世界自由'],
+  ['Moves freely in the world', '相对世界自由'],
+  ['Not attached', '未接入'],
+  ['Attachment unclear', '挂接不明'],
+  ['Joint', '铰'],
+  ['Held at', '挂接在'],
+  ['Hangs on a joint', '由铰挂接'],
 ].flat();
 
 const source = join(import.meta.dirname, '..', 'src');
@@ -95,14 +123,14 @@ function textsOf(path: string, content: string): { text: string; line: number }[
   return found;
 }
 
-test('the interface’s source names no element kind, no settings word, no row of the model tree and no kind’s title', () => {
-  const token = (word: string) => new RegExp(`(?<![A-Za-z0-9_])${word}(?![A-Za-z0-9_])`);
+test('the interface’s source names no element kind, no settings word, no such property, no row of the model tree and no title the service gives', () => {
+  const token = (word: string) => new RegExp(`(?<![A-Za-z0-9_.])${word.replaceAll('.', '\\.')}(?![A-Za-z0-9_])`);
   const found: string[] = [];
   for (const path of files(source)) {
     const content = readFileSync(path, 'utf8');
     const where = relative(source, path);
     content.split('\n').forEach((line, index) => {
-      for (const word of [...elementKinds, ...distinctiveSettingsWords]) if (token(word).test(line)) found.push(`${where}:${index + 1}: ${word}`);
+      for (const word of [...elementKinds, ...distinctiveSettingsWords, ...propertyNames]) if (token(word).test(line)) found.push(`${where}:${index + 1}: ${word}`);
     });
     if (!/\.tsx?$/.test(path)) continue;
     for (const { text, line } of textsOf(path, content)) {
