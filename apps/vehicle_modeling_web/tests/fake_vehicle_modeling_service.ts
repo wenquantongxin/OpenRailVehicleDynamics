@@ -2,14 +2,23 @@ import type { SendCommand } from '../src/service/modeling_server_command_channel
 import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts';
 
 // An in-memory stand-in for orvd_vehicle_modeling_service that follows its
-// protocol: kinds described with their properties, revisions that only grow,
-// undo and redo, a check that refuses any negative number, and a preview that
-// only a passing check replaces, of the elements that still exist. Edits are
-// refused as the real service refuses them: a missing target, a name already
-// taken in its kind, a reference to nothing of a kind it may name, a required
-// reference left out. Removing an element removes everything that refers to
-// it, and a rename updates every reference to the renamed element. Kinds and
-// names are made up on purpose: the interface must not depend on them.
+// protocol: kinds described with their titles and properties, revisions that
+// only grow, undo and redo, a check that refuses any negative number, and a
+// preview that only a passing check replaces, of the elements that still
+// exist. Edits are refused as the real service refuses them: a missing
+// target, a name already taken in its kind, a reference to nothing of a kind
+// it may name, a required reference left out, a read-only property. Removing
+// an element removes everything that refers to it, and a rename updates every
+// reference to the renamed element. Kinds, settings and titles are made up on
+// purpose: the interface must not depend on them.
+//
+// Properties belong to subjects: an element, or settings, which are read and
+// edited like an element's properties, and an edit of which is one undo step.
+// The model tree is made from the records alone: bodies with their frames
+// under them, one list of links tagged by kind, carriers with their
+// interfaces under them, a frame or an interface whose owner the project does
+// not have under "owner not found" in the same domain, settings rows, and rows
+// not provided yet.
 //
 // Projects are kept in memory by name, in the one folder the fake is given:
 // another folder cannot be read, a folder made unwritable refuses every save,
@@ -18,14 +27,19 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 // step: the name is the document's identity, not an edit. Unsaved changes
 // follow undo and redo: every edit makes a project state of its own, and the
 // session has unsaved changes while its state is not the one last saved or
-// opened.
-// get_session and list_vehicle_projects are answered while nothing is open,
-// with the session's fields null.
+// opened. get_session and list_vehicle_projects are answered while nothing is
+// open, with the session's fields null.
+
+export interface FakeTitle {
+  en: string;
+  zh: string;
+}
 
 export interface FakePropertyDescription {
   name: string;
   value_kind: string;
   editable: boolean;
+  section?: FakeTitle;
   referenced_kinds?: string[];
   optional?: boolean;
   choices?: string[];
@@ -34,6 +48,7 @@ export interface FakePropertyDescription {
 
 export interface FakeKind {
   kind: string;
+  title: FakeTitle;
   properties: FakePropertyDescription[];
 }
 
@@ -46,10 +61,18 @@ export interface FakeElement {
   removalRefused?: string;
 }
 
+/** Settings by the word the service names them with: their properties, and the values they hold. */
+export interface FakeSettings {
+  word: string;
+  properties: FakePropertyDescription[];
+  values: Record<string, unknown>;
+}
+
 export interface FakeVehicle {
   vehicleName: string;
   kinds: FakeKind[];
   elements: FakeElement[];
+  settings: FakeSettings[];
   /** The preview lists, without project_revision. */
   drawings: Record<string, unknown>;
 }
@@ -59,10 +82,23 @@ interface Element {
   name: string;
 }
 
+type Subject = { element: Element } | { settings: string };
+
+interface FakeTreeNode {
+  key: string;
+  title: FakeTitle | null;
+  subject: Subject | null;
+  provided: boolean;
+  note: FakeTitle | null;
+  creates: { kind: string; fixed_properties: Record<string, unknown> }[];
+  children: FakeTreeNode[];
+}
+
 /** What an edit changes and undo restores, with the state's own number: no two edits make the same state. */
 interface ProjectState {
   vehicleName: string;
   elements: FakeElement[];
+  settings: FakeSettings[];
   stateNumber: number;
 }
 
@@ -72,7 +108,7 @@ export interface FakeSavedProject {
   visualDefinition: unknown;
 }
 
-type Refused = { refused: { element: unknown; property: unknown; message: string } };
+type Refused = { refused: { subject: unknown; property: unknown; message: string } };
 
 /** The service's rule for a project name, which the interface never applies: it shows the refusal. */
 const projectName = /^[A-Za-z0-9._-]+$/;
@@ -109,6 +145,11 @@ function defaultValue(property: FakePropertyDescription): unknown {
   }
 }
 
+/** A description as the service states it: every field it has, a section of null included. */
+function described(property: FakePropertyDescription): Record<string, unknown> {
+  return { ...property, section: property.section ?? null };
+}
+
 export class FakeVehicleModelingService {
   readonly log: { command: string; commandArguments: Record<string, unknown> }[] = [];
   /** The projects of the folder, by name. */
@@ -122,6 +163,7 @@ export class FakeVehicleModelingService {
   private vehicle: FakeVehicle | null = null;
   private vehicleName = '';
   private elements: FakeElement[] = [];
+  private settings: FakeSettings[] = [];
   private stateNumber = 0;
   private stateNumbersGiven = 0;
   /** The state last saved or, before any save, opened. */
@@ -169,6 +211,7 @@ export class FakeVehicleModelingService {
     this.vehicle = structuredClone(vehicle);
     this.vehicleName = vehicle.vehicleName;
     this.elements = structuredClone(vehicle.elements);
+    this.settings = structuredClone(vehicle.settings);
     this.visualDefinition = structuredClone(visualDefinition);
     this.projectFile = projectFile;
     this.stateNumber = ++this.stateNumbersGiven;
@@ -181,12 +224,12 @@ export class FakeVehicleModelingService {
 
   /** Writes the open project as the named one; the caller has checked the folder and the name. */
   private saveProject(name: string, vehicleName: string): void {
-    const vehicle = { ...this.vehicle!, vehicleName, elements: this.elements };
+    const vehicle = { ...this.vehicle!, vehicleName, elements: this.elements, settings: this.settings };
     this.savedProjects.set(name, structuredClone({ vehicle, visualDefinition: this.visualDefinition }));
   }
 
-  private refused(message: string, element: unknown = null, property: unknown = null): Refused {
-    return { refused: { element, property, message } };
+  private refused(message: string, subject: Subject | null = null, property: unknown = null): Refused {
+    return { refused: { subject, property, message } };
   }
 
   private kindOf(kind: string): FakeKind | undefined {
@@ -201,6 +244,11 @@ export class FakeVehicleModelingService {
   private outline(): FakeElement[] {
     const order = this.vehicle!.kinds.map((each) => each.kind);
     return [...this.elements].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  }
+
+  /** A settings value as it is read: the identity's text is the vehicle's name, which only Save as sets. */
+  private settingsValue(settings: FakeSettings, property: string): unknown {
+    return settings.word === 'setting_identity' ? this.vehicleName : (settings.values[property] ?? null);
   }
 
   /** Whether the value fits the property, or why not. */
@@ -257,7 +305,7 @@ export class FakeVehicleModelingService {
   }
 
   private projectState(): ProjectState {
-    return structuredClone({ vehicleName: this.vehicleName, elements: this.elements, stateNumber: this.stateNumber });
+    return structuredClone({ vehicleName: this.vehicleName, elements: this.elements, settings: this.settings, stateNumber: this.stateNumber });
   }
 
   private edit(change: () => void): void {
@@ -320,8 +368,6 @@ export class FakeVehicleModelingService {
     const sessionOutcome = this.sessionOutcome(command, commandArguments);
     if (sessionOutcome !== null) return sessionOutcome;
     if (this.vehicle === null) return this.refused('no vehicle is open; send open_vehicle first');
-    const target = commandArguments['element'] as Element | undefined;
-    const element = this.find(target);
     switch (command) {
       case 'save_vehicle_project': {
         if (this.projectFile === null) return this.refused('the session has no project file; save it as a project first');
@@ -352,7 +398,7 @@ export class FakeVehicleModelingService {
       case 'get_visual_definition':
         return this.accepted({ visual_definition: this.visualDefinition });
       case 'describe_element_kinds':
-        return this.accepted({ element_kinds: this.vehicle.kinds });
+        return this.accepted({ element_kinds: this.vehicle.kinds.map((kind) => ({ ...kind, properties: kind.properties.map(described) })) });
       case 'get_outline':
         return this.accepted({
           vehicle_name: this.vehicleName,
@@ -361,45 +407,16 @@ export class FakeVehicleModelingService {
           unplaced_free_bodies: [],
           contact_record_present: true,
         });
-      case 'get_properties': {
-        if (element === undefined) return this.refused(`no element named '${target?.name}'`, target);
-        const properties = this.kindOf(element.kind)!.properties.map((property) => {
-          const value = property.value_kind === 'element_name' ? element.name : (element.values[property.name] ?? null);
-          return { ...property, editable: property.editable && (value !== null || property.value_kind === 'element_reference'), value };
-        });
-        return this.accepted({ properties });
-      }
-      case 'set_property': {
-        const name = String(commandArguments['property']);
-        const property = element === undefined ? undefined : this.kindOf(element.kind)!.properties.find((candidate) => candidate.name === name);
-        if (element === undefined || property === undefined || !property.editable) return this.refused(`'${name}' cannot be set`, target, name);
-        const value = commandArguments['value'];
-        const wrong = this.judge(property, value);
-        if (wrong !== null) return this.refused(wrong, target, name);
-        if (property.value_kind === 'element_name' && value !== element.name && this.nameTaken(element.kind, value as string)) {
-          return this.refused(`the name '${String(value)}' is taken`, target, name);
-        }
-        this.edit(() => {
-          const edited = this.find(element)!;
-          if (property.value_kind !== 'element_name') {
-            edited.values[name] = value;
-            return;
-          }
-          for (const other of this.elements) {
-            for (const reference of this.kindOf(other.kind)!.properties) {
-              if (reference.value_kind === 'element_reference' && reference.referenced_kinds!.includes(edited.kind) && other.values[reference.name] === edited.name) {
-                other.values[reference.name] = value;
-              }
-            }
-          }
-          edited.name = value as string;
-        });
-        return this.accepted({ element: { kind: element.kind, name: property.value_kind === 'element_name' ? value : element.name } });
-      }
+      case 'get_model_tree':
+        return this.accepted({ nodes: this.modelTree() });
+      case 'get_properties':
+        return this.properties(commandArguments['subject'] as Subject | undefined);
+      case 'set_property':
+        return this.setProperty(commandArguments['subject'] as Subject | undefined, String(commandArguments['property']), commandArguments['value']);
       case 'add_element': {
         const kind = this.kindOf(String(commandArguments['kind']));
         const name = commandArguments['name'];
-        const created = { kind: commandArguments['kind'], name };
+        const created = { element: { kind: String(commandArguments['kind']), name: String(name) } };
         if (kind === undefined) return this.refused(`'${String(commandArguments['kind'])}' is not an element kind`, created);
         const nameProperty = kind.properties.find((property) => property.value_kind === 'element_name')!.name;
         if (typeof name !== 'string' || name === '') return this.refused('a name is not empty', created, nameProperty);
@@ -415,12 +432,15 @@ export class FakeVehicleModelingService {
         if (missing !== undefined) return this.refused(`'${missing.name}' must name an element`, created, missing.name);
         const values = Object.fromEntries(kind.properties.filter((property) => property.value_kind !== 'element_name').map((property) => [property.name, defaultValue(property)]));
         this.edit(() => this.elements.push({ kind: kind.kind, name, values: { ...values, ...structuredClone(given) } }));
-        return this.accepted({ element: created });
+        return this.accepted({ element: created.element });
       }
       case 'get_removal_consequences':
       case 'remove_element': {
-        if (element === undefined) return this.refused(`no element named '${target?.name}'`, target);
-        if (element.removalRefused !== undefined) return this.refused(element.removalRefused, target);
+        const target = commandArguments['element'] as Element | undefined;
+        const element = this.find(target);
+        const subject = target === undefined ? null : { element: target };
+        if (element === undefined) return this.refused(`no element named '${target?.name}'`, subject);
+        if (element.removalRefused !== undefined) return this.refused(element.removalRefused, subject);
         const removed = this.removalOf(element);
         if (command === 'remove_element') this.edit(() => (this.elements = this.elements.filter((each) => !removed.some((gone) => gone.kind === each.kind && gone.name === each.name))));
         return this.accepted({ removed_elements: removed.map(({ kind, name }) => ({ kind, name })) });
@@ -431,7 +451,7 @@ export class FakeVehicleModelingService {
         const restored = from.pop();
         if (restored === undefined) return this.refused(`there is no step to ${command}`);
         to.push(this.projectState());
-        ({ vehicleName: this.vehicleName, elements: this.elements, stateNumber: this.stateNumber } = restored);
+        ({ vehicleName: this.vehicleName, elements: this.elements, settings: this.settings, stateNumber: this.stateNumber } = restored);
         this.revision += 1;
         return this.accepted({});
       }
@@ -451,13 +471,163 @@ export class FakeVehicleModelingService {
     }
   }
 
-  /** The vehicle's drawings of the elements that exist now. */
+  private properties(subject: Subject | undefined): unknown {
+    if (subject !== undefined && 'settings' in subject) {
+      const settings = this.settings.find((each) => each.word === subject.settings);
+      if (settings === undefined) return this.refused(`there are no settings '${subject.settings}'`, subject);
+      return this.accepted({ properties: settings.properties.map((property) => ({ ...described(property), value: this.settingsValue(settings, property.name) })) });
+    }
+    const element = this.find(subject?.element);
+    if (element === undefined) return this.refused(`no element named '${subject?.element.name}'`, subject ?? null);
+    const properties = this.kindOf(element.kind)!.properties.map((property) => {
+      const value = property.value_kind === 'element_name' ? element.name : (element.values[property.name] ?? null);
+      return { ...described(property), editable: property.editable && (value !== null || property.value_kind === 'element_reference'), value };
+    });
+    return this.accepted({ properties });
+  }
+
+  private setProperty(subject: Subject | undefined, name: string, value: unknown): unknown {
+    if (subject !== undefined && 'settings' in subject) {
+      const settings = this.settings.find((each) => each.word === subject.settings);
+      const property = settings?.properties.find((candidate) => candidate.name === name);
+      if (settings === undefined || property === undefined) return this.refused(`'${name}' cannot be set`, subject, name);
+      if (!property.editable) return this.refused(`'${name}' is read-only`, subject, name);
+      const wrong = this.judge(property, value);
+      if (wrong !== null) return this.refused(wrong, subject, name);
+      this.edit(() => (this.settings.find((each) => each.word === settings.word)!.values[name] = value));
+      return this.accepted({ subject });
+    }
+    const element = this.find(subject?.element);
+    const property = element === undefined ? undefined : this.kindOf(element.kind)!.properties.find((candidate) => candidate.name === name);
+    if (element === undefined || property === undefined || !property.editable) return this.refused(`'${name}' cannot be set`, subject ?? null, name);
+    const wrong = this.judge(property, value);
+    if (wrong !== null) return this.refused(wrong, subject!, name);
+    if (property.value_kind === 'element_name' && value !== element.name && this.nameTaken(element.kind, value as string)) {
+      return this.refused(`the name '${String(value)}' is taken`, subject!, name);
+    }
+    this.edit(() => {
+      const edited = this.find(element)!;
+      if (property.value_kind !== 'element_name') {
+        edited.values[name] = value;
+        return;
+      }
+      for (const other of this.elements) {
+        for (const reference of this.kindOf(other.kind)!.properties) {
+          if (reference.value_kind === 'element_reference' && reference.referenced_kinds!.includes(edited.kind) && other.values[reference.name] === edited.name) {
+            other.values[reference.name] = value;
+          }
+        }
+      }
+      edited.name = value as string;
+    });
+    return this.accepted({ subject: { element: { kind: element.kind, name: property.value_kind === 'element_name' ? value : element.name } } });
+  }
+
+  /**
+   * The model tree made from the records: what belongs to an element hangs
+   * under it, a type is a tag of one list, and one whose owner the project
+   * does not have is listed under "owner not found" in its domain.
+   */
+  private modelTree(): FakeTreeNode[] {
+    const outline = this.outline();
+    const of = (kind: string): FakeElement[] => outline.filter((each) => each.kind === kind);
+    const offer = (kind: string, fixed: Record<string, unknown> = {}) => ({ kind, fixed_properties: fixed });
+    const row = (element: FakeElement, children: FakeTreeNode[] = [], creates: FakeTreeNode['creates'] = []): FakeTreeNode => ({
+      key: `element/${element.kind}/${element.name}`,
+      title: null,
+      subject: { element: { kind: element.kind, name: element.name } },
+      provided: true,
+      note: null,
+      creates,
+      children,
+    });
+    const group = (key: string, title: FakeTitle, children: FakeTreeNode[], more: Partial<FakeTreeNode> = {}): FakeTreeNode => ({
+      key,
+      title,
+      subject: null,
+      provided: true,
+      note: null,
+      creates: [],
+      children,
+      ...more,
+    });
+    const settingsRow = (word: string, title: FakeTitle): FakeTreeNode => ({ key: `settings/${word}`, title, subject: { settings: word }, provided: true, note: null, creates: [], children: [] });
+    const notProvided = (key: string, title: FakeTitle): FakeTreeNode => ({ key, title, subject: null, provided: false, note: { en: 'Comes later.', zh: '以后提供。' }, creates: [], children: [] });
+    const ownerNotFound = (key: string, children: FakeTreeNode[]): FakeTreeNode[] => (children.length === 0 ? [] : [group(key, { en: 'Owner not found', zh: '归属未解析' }, children)]);
+    const bodies = of('kind_body');
+    const frames = of('kind_frame');
+    const carriers = of('kind_carrier');
+    const interfaces = of('kind_interface');
+    const owned = (element: FakeElement, reference: string, owners: FakeElement[]): boolean => owners.some((owner) => owner.name === element.values[reference]);
+    return [
+      group('domain/settings', { en: 'Fake settings', zh: '假设置' }, [
+        settingsRow('setting_constant', { en: 'A constant', zh: '常量' }),
+        settingsRow('setting_identity', { en: 'Identity', zh: '标识' }),
+        notProvided('settings/later', { en: 'Later settings', zh: '以后的设置' }),
+      ]),
+      group(
+        'domain/bodies',
+        { en: 'Fake bodies', zh: '假刚体' },
+        [
+          ...bodies.map((body) =>
+            row(body, [
+              group(
+                `frames/${body.name}`,
+                { en: 'Frames', zh: '坐标系' },
+                frames.filter((frame) => frame.values['body_ref'] === body.name).map((frame) => row(frame)),
+                { creates: [offer('kind_frame', { body_ref: body.name })] },
+              ),
+              group(`shapes/${body.name}`, { en: 'Shapes', zh: '形状' }, [], { note: { en: `Stated under ${body.name}`, zh: `以 ${body.name} 为名` } }),
+            ]),
+          ),
+          ...ownerNotFound(
+            'frames/owner_not_found',
+            frames.filter((frame) => !owned(frame, 'body_ref', bodies)).map((frame) => row(frame)),
+          ),
+        ],
+        { creates: [offer('kind_body')] },
+      ),
+      group(
+        'domain/links',
+        { en: 'Fake links', zh: '假连接' },
+        outline.filter((each) => each.kind === 'kind_hinge' || each.kind === 'kind_spring').map((each) => row(each)),
+        { creates: [offer('kind_hinge'), offer('kind_spring')] },
+      ),
+      notProvided('domain/later', { en: 'Later domain', zh: '以后的域' }),
+      group('domain/contact', { en: 'Fake contact', zh: '假接触' }, [
+        settingsRow('setting_wheel', { en: 'Wheel-ish', zh: '轮' }),
+        group(
+          'carriers',
+          { en: 'Carriers', zh: '承载体' },
+          [
+            ...carriers.map((carrier) =>
+              row(
+                carrier,
+                interfaces.filter((each) => each.values['carrier_ref'] === carrier.name).map((each) => row(each)),
+                [offer('kind_interface', { carrier_ref: carrier.name })],
+              ),
+            ),
+            ...ownerNotFound(
+              'carriers/owner_not_found',
+              interfaces.filter((each) => !owned(each, 'carrier_ref', carriers)).map((each) => row(each)),
+            ),
+          ],
+          { creates: [offer('kind_carrier')], note: { en: 'What carries the contacts', zh: '承载接触者' } },
+        ),
+      ]),
+    ];
+  }
+
+  /** The vehicle's drawings of the elements that exist now; its wheels as large as the wheel settings say. */
   private drawingsOfElements(): Record<string, unknown> {
     const exists = (drawn: unknown): boolean => this.find(drawn as Element) !== undefined;
+    const radius = this.settings.find((each) => each.word === 'setting_wheel')?.values['radius_quantity'];
     return Object.fromEntries(
       Object.entries(this.vehicle!.drawings).map(([list, drawings]) => [
         list,
-        (drawings as Record<string, unknown>[]).filter((drawing) => exists(list === 'not_drawable_elements' ? drawing : drawing['element'])),
+        (drawings as Record<string, unknown>[])
+          .filter((drawing) => exists(list === 'not_drawable_elements' ? drawing : drawing['element']))
+          .map((drawing) => (list === 'wheels' && typeof radius === 'number' ? { ...drawing, nominal_rolling_radius_meters: radius } : drawing)),
       ]),
     );
   }
@@ -477,7 +647,8 @@ const ownName: FakePropertyDescription = { name: 'name', value_kind: 'element_na
  * A vehicle of made-up element kinds, one of them without elements. One body
  * shares its name with a carrier, an element of another kind; a frame and a
  * spring refer to the bodies, and the carrier and its interfaces to the body
- * they turn with.
+ * they turn with. Its settings: a constant not stated yet, a read-only
+ * identity, and wheel settings with a section each.
  */
 export function fakeVehicle(): FakeVehicle {
   return {
@@ -485,18 +656,24 @@ export function fakeVehicle(): FakeVehicle {
     kinds: [
       {
         kind: 'kind_body',
+        title: { en: 'Made-up body', zh: '虚构体' },
         properties: [
           ownName,
-          { name: 'free_flag', value_kind: 'boolean', editable: true },
-          { name: 'size_quantity', value_kind: 'number', editable: true },
-          { name: 'offset_quantity', value_kind: 'vector3', editable: true },
-          { name: 'turn_quantity', value_kind: 'rotation', editable: false },
+          { name: 'free_flag', value_kind: 'boolean', editable: true, section: { en: 'Freedom', zh: '自由' } },
+          { name: 'size_quantity', value_kind: 'number', editable: true, section: { en: 'Size', zh: '大小' } },
+          { name: 'offset_quantity', value_kind: 'vector3', editable: true, section: { en: 'Placing', zh: '摆放' } },
+          { name: 'turn_quantity', value_kind: 'rotation', editable: false, section: { en: 'Placing', zh: '摆放' } },
         ],
       },
-      { kind: 'kind_frame', properties: [ownName, reference('body_ref', ['kind_body'])] },
-      { kind: 'kind_hinge', properties: [ownName, reference('end_a', ['kind_frame', 'kind_body']), reference('end_b', ['kind_frame', 'kind_body'])] },
+      { kind: 'kind_frame', title: { en: 'Made-up frame', zh: '虚构坐标系' }, properties: [ownName, reference('body_ref', ['kind_body'])] },
+      {
+        kind: 'kind_hinge',
+        title: { en: 'Made-up hinge', zh: '虚构铰链' },
+        properties: [ownName, reference('end_a', ['kind_frame', 'kind_body']), reference('end_b', ['kind_frame', 'kind_body'])],
+      },
       {
         kind: 'kind_spring',
+        title: { en: 'Made-up spring', zh: '虚构弹簧' },
         properties: [
           ownName,
           reference('end_a', ['kind_frame', 'kind_body']),
@@ -506,9 +683,10 @@ export function fakeVehicle(): FakeVehicle {
           { name: 'curve_quantity', value_kind: 'saturated_piecewise_linear_damper_curve', editable: true, row_fields: ['speed', 'push'] },
         ],
       },
-      { kind: 'kind_carrier', properties: [ownName, reference('carrier_body', ['kind_body'])] },
+      { kind: 'kind_carrier', title: { en: 'Made-up carrier', zh: '虚构承载' }, properties: [ownName, reference('carrier_body', ['kind_body'])] },
       {
         kind: 'kind_interface',
+        title: { en: 'Made-up interface', zh: '虚构接口' },
         properties: [
           ownName,
           reference('carrier_ref', ['kind_carrier']),
@@ -544,6 +722,19 @@ export function fakeVehicle(): FakeVehicle {
       { kind: 'kind_carrier', name: 'body_b', values: { carrier_body: 'body_b' } },
       { kind: 'kind_interface', name: 'body_b.left', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: null, side: 'left' } },
       { kind: 'kind_interface', name: 'body_b.right', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: null, side: 'right' } },
+    ],
+    settings: [
+      { word: 'setting_constant', properties: [{ name: 'constant_quantity', value_kind: 'number', editable: true }], values: { constant_quantity: null } },
+      { word: 'setting_identity', properties: [{ name: 'identity_text', value_kind: 'text', editable: false }], values: {} },
+      {
+        word: 'setting_wheel',
+        properties: [
+          { name: 'radius_quantity', value_kind: 'number', editable: true, section: { en: 'Size', zh: '大小' } },
+          { name: 'profile_text', value_kind: 'text', editable: false, section: { en: 'Shape', zh: '形状' } },
+          { name: 'mode_choice', value_kind: 'token', editable: true, choices: ['mode_a', 'mode_b'], section: { en: 'Shape', zh: '形状' } },
+        ],
+        values: { radius_quantity: 0.43, profile_text: 'made_up_profile.txt', mode_choice: 'mode_a' },
+      },
     ],
     drawings: {
       rigid_bodies: [

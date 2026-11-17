@@ -9,7 +9,12 @@
 // the frame follows; removing the body takes the frame and the force element
 // with it; undoing everything gives back the outline the vehicle opened with.
 // Then a vehicle whose contact record does not fit it: it opens, its check
-// refuses it, there is no drawing, and its outline and properties read. Last,
+// refuses it, there is no drawing, and its outline and properties read. The
+// model tree holds every element of each outline once; a frame is created
+// through the offer of a body's row and stands under that body, also after the
+// body is renamed; on GZ18 every editable number of the tree's settings is
+// set, read back and undone, the wheels are drawn anew at a new nominal
+// rolling radius, and a read-only property is refused. Last,
 // saving, in a temporary folder of projects removed at the end: GZ18 edited,
 // saved as a project, with no undo step, the folder listed, IRW opened, the
 // project opened again with its outline and the edited value as they were;
@@ -35,12 +40,16 @@ import { createModelPalette } from '../src/scene/vehicle_model_view_colors_and_m
 import { assignPartsToDrawnBodies, VehiclePreviewScene } from '../src/scene/vehicle_preview_scene.ts';
 import { fetchReferenceVehicles, type ReferenceVehicle } from '../src/service/fetch_reference_vehicles.ts';
 import { fetchVehicleProjectsDirectory } from '../src/service/fetch_vehicle_projects_directory.ts';
+import { rowPathOfSubject } from '../src/service/find_model_tree_rows.ts';
 import { modelingServerCommandChannel, type SendCommand } from '../src/service/modeling_server_command_channel.ts';
 import {
   elementKey,
   readServiceSessionDescription,
   sameElement,
+  sameSubject,
+  subjectElement,
   type ElementReference,
+  type ModelTreeNode,
   type PropertyDescription,
   type PropertyReading,
   type ServiceSessionDescription,
@@ -88,12 +97,17 @@ async function settled(session: VehicleEditingSession, action: Promise<unknown>)
 async function editableNumbers(session: VehicleEditingSession, elements: ElementReference[]): Promise<{ element: ElementReference; property: PropertyReading & { valueKind: 'number' } }[]> {
   const found = [];
   for (const element of elements) {
-    const state = await settled(session, session.select(element));
+    const state = await settled(session, session.select({ element: element }));
     for (const property of state.properties) {
       if (property.editable && property.valueKind === 'number') found.push({ element, property });
     }
   }
   return found;
+}
+
+/** Every row of the tree, at any depth, each after the rows above it. */
+function treeRows(tree: readonly ModelTreeNode[]): ModelTreeNode[] {
+  return tree.flatMap((row) => [row, ...treeRows(row.children)]);
 }
 
 function sessionAt(origin: string): VehicleEditingSession {
@@ -108,7 +122,7 @@ function sessionAt(origin: string): VehicleEditingSession {
 async function readEveryElement(session: VehicleEditingSession, elements: ElementReference[]): Promise<{ properties: number; absent: number; namingNone: number }> {
   const counts = { properties: 0, absent: 0, namingNone: 0 };
   for (const element of elements) {
-    const state = await settled(session, session.select(element));
+    const state = await settled(session, session.select({ element: element }));
     assert.ok(state.properties.length > 0, `${element.kind} ${element.name} has no properties`);
     for (const property of state.properties) {
       if (property.value !== null) continue;
@@ -138,6 +152,13 @@ async function checkVehicle(origin: string, vehicle: ReferenceVehicle): Promise<
   const kinds = [...new Set(outline.elements.map((element) => element.kind))];
   // The outline lists the elements kind by kind: each kind is one run.
   assert.equal(kinds.length, outline.elements.filter((element, index) => outline.elements[index - 1]?.kind !== element.kind).length);
+  // The model tree holds every element of the outline exactly once, whatever it nests under what.
+  const inTree = treeRows(state.modelTree ?? fail('no model tree after opening')).flatMap((row) => {
+    const element = subjectElement(row.subject);
+    return element === null ? [] : [elementKey(element)];
+  });
+  assert.deepEqual([...inTree].sort(), outline.elements.map(elementKey).sort(), `${vehicle.name}'s model tree does not hold each element of the outline once`);
+  const firstLevel = (state.modelTree ?? []).length;
   // The interface does not read contact_record_present; it is reported to tell which service was checked.
   const rawOutline = await (await fetch(`${origin}/api/command`, { method: 'POST', body: JSON.stringify({ id: 0, command: 'get_outline' }) })).json();
 
@@ -172,8 +193,8 @@ async function checkVehicle(origin: string, vehicle: ReferenceVehicle): Promise<
   const numbers = await editableNumbers(session, outline.elements.filter((element, index) => outline.elements.findIndex((other) => other.kind === element.kind) === index));
   const edited = numbers.find((entry) => entry.property.value! > 0) ?? fail('no editable positive number');
   const doubled = 2 * edited.property.value!;
-  await settled(session, session.select(edited.element));
-  assert.equal(await session.setProperty(edited.element, edited.property.name, doubled), true);
+  await settled(session, session.select({ element: edited.element }));
+  assert.equal(await session.setProperty({ element: edited.element }, edited.property.name, doubled), true);
   state = session.state;
   assert.equal(state.revision, 1);
   assert.equal(state.canUndo, true);
@@ -184,8 +205,8 @@ async function checkVehicle(origin: string, vehicle: ReferenceVehicle): Promise<
   // An edit the check refuses: the negative of an editable positive number, until one is refused.
   let refused: SessionState | null = null;
   for (const entry of numbers.filter((candidate) => candidate.property.value! > 0)) {
-    await settled(session, session.select(entry.element));
-    assert.equal(await session.setProperty(entry.element, entry.property.name, -entry.property.value!), true);
+    await settled(session, session.select({ element: entry.element }));
+    assert.equal(await session.setProperty({ element: entry.element }, entry.property.name, -entry.property.value!), true);
     if (checkStatus(session.state) === 'failed') {
       refused = session.state;
       break;
@@ -207,7 +228,8 @@ async function checkVehicle(origin: string, vehicle: ReferenceVehicle): Promise<
   assert.equal(checkStatus(state), 'failed');
 
   return [
-    `${vehicle.name}: ${outline.elements.length} elements in ${kinds.length} kinds, ${read.properties} properties read, ${read.absent} without a value and none of those editable,`,
+    `${vehicle.name}: ${outline.elements.length} elements in ${kinds.length} kinds, each once in a model tree of ${firstLevel} first-level rows and ${inTree.length} element rows,`,
+    `  ${read.properties} properties read, ${read.absent} without a value and none of those editable,`,
     `  ${read.namingNone} optional references naming none, each of them editable,`,
     `  contact_record_present ${String(rawOutline.result.contact_record_present)},`,
     `  ${drawn.drawings.length} drawings, each of its own element; ${sharedNames} of them share their name with an element of another kind,`,
@@ -240,21 +262,30 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
   const properties = (kind: string): PropertyDescription[] => (state.elementKinds.find((each) => each.kind === kind) ?? fail(`'${kind}' is not described`)).properties;
   const requiredReferences = (kind: string): ReferenceDescription[] =>
     properties(kind).filter((property): property is ReferenceDescription => property.valueKind === 'element_reference' && !property.optional);
-  const created = async (kind: string, stem: string, given: Record<string, string>): Promise<ElementReference> => {
+  const created = async (kind: string, stem: string, given: Record<string, unknown>): Promise<ElementReference> => {
     const name = unusedName(opened.elements, stem);
-    const refusal = await session.createElement(kind, name, given);
+    const refusal = await session.createElement(kind, name, given as Record<string, string>);
     assert.equal(refusal, null, `creating a ${kind} was refused: ${refusal?.message}`);
     const element = { kind, name };
-    assert.deepEqual(session.state.selection, element, 'a created element is selected');
+    assert.deepEqual(session.state.selection, { element }, 'a created element is selected');
     return element;
   };
+  /** Whether the element's row stands under the owner's row in the model tree. */
+  const under = (element: ElementReference, owner: ElementReference): boolean =>
+    (rowPathOfSubject(session.state.modelTree!, { element }) ?? []).some((row) => sameSubject(row.subject, { element: owner }));
 
   // A body, given nothing but its name: the service's defaults stand for the rest.
   const body = await created(bodyKind, 'structural_check_body', {});
-  // A frame on it: every reference a frame must give names the body.
+  // A frame on it, made through the offer of a row under the body's own row, which fixes what puts it on the body.
   const frameReferences = requiredReferences(frameKind);
   assert.ok(frameReferences.length > 0 && frameReferences.every((reference) => reference.referencedKinds.includes(bodyKind)));
-  const frame = await created(frameKind, 'structural_check_frame', Object.fromEntries(frameReferences.map((reference) => [reference.name, body.name])));
+  const bodyRow = rowPathOfSubject(session.state.modelTree!, { element: body })?.at(-1) ?? fail('the new body has no row in the model tree');
+  const offering = treeRows(bodyRow.children).find((row) => row.creates.some((offer) => offer.kind === frameKind)) ?? fail('no row under the new body offers a frame');
+  await settled(session, session.startCreation(offering.key, offering.creates));
+  const frameOffer = session.state.creation?.chosen ?? fail('the row under the body offers more than a frame');
+  assert.ok(Object.keys(frameOffer.fixedProperties).length > 0, 'the frame offered under the body fixes nothing');
+  const frame = await created(frameKind, 'structural_check_frame', frameOffer.fixedProperties);
+  assert.ok(under(frame, body), 'the frame made through the body\'s offer does not stand under the body');
   // A force element from that frame to a frame the vehicle had.
   const ends = requiredReferences(forceKind);
   assert.ok(ends.length >= 2 && ends.every((end) => end.referencedKinds.includes(frameKind)), 'a force element names the frames at its ends');
@@ -264,14 +295,15 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
   // Renaming the selected body: the selection and the frame on it follow.
   const nameProperty = properties(bodyKind).find((property) => property.valueKind === 'element_name') ?? fail('a body has no name to set');
   const renamed = { kind: bodyKind, name: unusedName(opened.elements, 'structural_check_body_renamed') };
-  await settled(session, session.select(body));
-  assert.equal(await session.setProperty(body, nameProperty.name, renamed.name), true, `the rename was refused: ${session.state.editRefusal?.message}`);
-  assert.deepEqual(session.state.selection, renamed);
-  state = await settled(session, session.select(frame));
+  await settled(session, session.select({ element: body }));
+  assert.equal(await session.setProperty({ element: body }, nameProperty.name, renamed.name), true, `the rename was refused: ${session.state.editRefusal?.message}`);
+  assert.deepEqual(session.state.selection, { element: renamed });
+  assert.ok(under(frame, renamed), 'the frame does not stand under the renamed body');
+  state = await settled(session, session.select({ element: frame }));
   for (const reference of frameReferences) assert.equal(state.properties.find((property) => property.name === reference.name)?.value, renamed.name);
 
   // Removing the body takes the frame and the force element with it; it waits to be confirmed.
-  await settled(session, session.select(renamed));
+  await settled(session, session.select({ element: renamed }));
   state = await settled(session, session.requestRemoval(renamed));
   const pending = state.pendingRemoval ?? fail('removing the body would take nothing but the body');
   for (const goes of [renamed, frame, force]) assert.ok(pending.removedElements.some((each) => sameElement(each, goes)), `${goes.name} would not be removed with the body`);
@@ -286,9 +318,66 @@ async function checkStructuralEditing(origin: string, vehicle: ReferenceVehicle)
   assert.deepEqual(state.outline!.elements, opened.elements);
 
   return [
-    `${vehicle.name} structural editing: created ${bodyKind} '${body.name}', ${frameKind} '${frame.name}' on it and ${forceKind} '${force.name}' from it to '${vehicleFrame.name}',`,
-    `  renamed the body to '${renamed.name}' and the frame followed, removed it with ${pending.removedElements.length - 1} elements that referred to it,`,
+    `${vehicle.name} structural editing: created ${bodyKind} '${body.name}', ${frameKind} '${frame.name}' through the offer of '${offering.title?.en}' under it`,
+    `  (fixing ${Object.keys(frameOffer.fixedProperties).join(', ')}), and ${forceKind} '${force.name}' from it to '${vehicleFrame.name}';`,
+    `  renamed the body to '${renamed.name}' and the frame followed, still under it in the tree; removed it with ${pending.removedElements.length - 1} elements that referred to it,`,
     `  five undos gave back the outline of ${opened.elements.length} elements the vehicle opened with; check ${checkStatus(state)} at revision ${state.revision}`,
+  ].join('\n');
+}
+
+/**
+ * The settings of the model tree through the interface's session: every
+ * editable number of every settings row is set to another value, read back as
+ * sent and undone, one step each; the one the drawing's wheels have as their
+ * nominal rolling radius draws them anew at the new radius; a property the
+ * service describes as read-only is refused, about its settings. Settings are
+ * found as rows that select settings, and properties by their descriptions.
+ */
+async function checkSettings(origin: string, vehicle: ReferenceVehicle): Promise<string> {
+  const session = sessionAt(origin);
+  let state = await settled(session, session.open(referenceVehicle(vehicle)));
+  const rows = treeRows(state.modelTree!).filter((row) => row.provided && row.subject !== null && 'settings' in row.subject);
+  assert.ok(rows.length > 0, 'the model tree has no settings');
+  const wheelRadius = (state.preview ?? fail('no drawing after opening')).wheels[0]?.nominalRollingRadiusMeters ?? fail('no wheel is drawn');
+  const valueOf = (name: string): unknown => session.state.properties.find((property) => property.name === name)?.value;
+  const edited: string[] = [];
+  let wheelsRedrawnAt: number | null = null;
+  let readOnly: { row: ModelTreeNode; property: string; value: unknown } | null = null;
+  for (const row of rows) {
+    state = await settled(session, session.select(row.subject));
+    for (const property of state.properties) {
+      if (!property.editable) {
+        readOnly ??= { row, property: property.name, value: property.value };
+        continue;
+      }
+      if (property.valueKind !== 'number') continue;
+      const before = property.value;
+      const changed = before === null || before === 0 ? 0.01 : before * 1.25;
+      const revision = session.state.revision;
+      assert.equal(await session.setProperty(row.subject!, property.name, changed), true, `${row.title?.en}: setting ${property.name} was refused: ${session.state.editRefusal?.message}`);
+      assert.deepEqual([session.state.revision, valueOf(property.name)], [revision + 1, changed], `${row.title?.en}: ${property.name} did not read back as set`);
+      if (before === wheelRadius) {
+        const preview = session.state.preview ?? fail('no drawing after setting the radius');
+        assert.equal(preview.projectRevision, session.state.revision, `the check refused a nominal rolling radius of ${changed}: ${session.state.check?.report.refusals.join('; ')}`);
+        assert.ok(preview.wheels.every((wheel) => wheel.nominalRollingRadiusMeters === changed), 'the wheels are not drawn at the new radius');
+        wheelsRedrawnAt = changed;
+      }
+      state = await settled(session, session.undo());
+      assert.equal(valueOf(property.name), before, `${row.title?.en}: undo did not restore ${property.name}`);
+      edited.push(`${row.title?.en} · ${property.name}`);
+    }
+  }
+  assert.ok(edited.length > 0, 'no settings number can be set');
+  assert.ok(wheelsRedrawnAt !== null, 'no settings number is the wheels\' nominal rolling radius in the drawing');
+  const refusedOne = readOnly ?? fail('no settings property is read-only');
+  const refused = await modelingServerCommandChannel(origin)('set_property', { subject: refusedOne.row.subject, property: refusedOne.property, value: refusedOne.value });
+  if (refused.ok) fail(`${refusedOne.row.title?.en}: the read-only ${refusedOne.property} was set`);
+  assert.ok(sameSubject(refused.refusal.subject, refusedOne.row.subject), 'the refusal is not about the settings');
+  return [
+    `${vehicle.name} settings: ${rows.length} settings rows (${rows.map((row) => row.title?.en).join(', ')});`,
+    `  ${edited.length} editable numbers each set, read back and undone: ${edited.join(', ')};`,
+    `  the wheels drawn anew at a nominal rolling radius of ${wheelsRedrawnAt} (from ${wheelRadius}); '${refusedOne.row.title?.en} · ${refusedOne.property}' refused as read-only:`,
+    `  '${refused.refusal.message}'`,
   ].join('\n');
 }
 
@@ -347,7 +436,7 @@ async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: R
   const numbers = await editableNumbers(session, opened.elements.filter((element, index) => opened.elements.findIndex((other) => other.kind === element.kind) === index));
   const edited = numbers.find((entry) => entry.property.value! > 0) ?? fail('no editable positive number');
   const doubled = 2 * edited.property.value!;
-  assert.equal(await session.setProperty(edited.element, edited.property.name, doubled), true);
+  assert.equal(await session.setProperty({ element: edited.element }, edited.property.name, doubled), true);
   assert.equal(session.state.hasUnsavedChanges, true);
   const { revision: revisionBeforeSaving, canUndo: canUndoBeforeSaving, canRedo: canRedoBeforeSaving } = session.state;
 
@@ -397,17 +486,17 @@ async function checkProjectSaving(origin: string, gz18: ReferenceVehicle, irw: R
   assert.deepEqual([state.revision, state.canUndo, state.hasUnsavedChanges], [0, false, false]);
   assert.deepEqual(state.outline, savedOutline);
   assert.equal(checkStatus(state), savedCheck);
-  state = await settled(session, session.select(edited.element));
+  state = await settled(session, session.select({ element: edited.element }));
   assert.equal(state.properties.find((property) => property.name === edited.property.name)?.value, doubled);
   assert.deepEqual(await serviceSession(send), { open: true, vehicleProjectFile: { directory, name: savedProjectName } });
 
   // Unsaved changes follow undo; Save writes to the file and leaves nothing unsaved.
   const tripled = 3 * edited.property.value!;
-  assert.equal(await session.setProperty(edited.element, edited.property.name, tripled), true);
+  assert.equal(await session.setProperty({ element: edited.element }, edited.property.name, tripled), true);
   assert.equal(session.state.hasUnsavedChanges, true);
   state = await settled(session, session.undo());
   assert.equal(state.hasUnsavedChanges, false, 'undoing the one edit since opening left changes unsaved');
-  assert.equal(await session.setProperty(edited.element, edited.property.name, tripled), true);
+  assert.equal(await session.setProperty({ element: edited.element }, edited.property.name, tripled), true);
   state = await settled(session, session.save());
   assert.equal(state.hasUnsavedChanges, false);
   assert.equal((await readdir(directory)).length, 1);
@@ -434,6 +523,7 @@ try {
     staticDirectory: fileURLToPath(new URL('../dist', import.meta.url)),
     referenceVehicles: [...referenceVehicles, nonFittingVehicle],
     vehicleProjectsDirectory,
+    terminal: null,
   };
   const server = await startVehicleModelingHttpServer(options, (ending) => {
     console.error(`check-service: the service ${ending}`);
@@ -447,6 +537,7 @@ try {
     }
     const named = (name: string): ReferenceVehicle => vehicles.find((vehicle) => vehicle.name === name) ?? fail(`the catalogue has no ${name}`);
     console.log(await checkStructuralEditing(origin, named('GZ18')));
+    console.log(await checkSettings(origin, named('GZ18')));
     console.log(await checkProjectSaving(origin, named('GZ18'), named('IRW')));
     console.log('check-service: passed');
   } catch (error) {

@@ -1,4 +1,4 @@
-import { curveValueKind, type ElementKindDescription, type PropertyDescription, type Refusal } from '../service/vehicle_modeling_service_protocol.ts';
+import { curveValueKind, type ElementKindDescription, type PropertyDescription, type PropertyReading, type Refusal } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditValue } from '../session/vehicle_editing_session.ts';
 import { numberFromText } from './decimal_number_text_reading.ts';
 import { readCurveEntry, type CurveEntry } from './editable_curve_table_rules.ts';
@@ -6,9 +6,11 @@ import type { ReferenceDescription } from './element_reference_picker_rules.ts';
 
 // The creation form's rules, apart from its component so that they can be
 // tested without a page. The form asks for the element's name and every
-// property its kind lets be edited, each empty at first. Only what is filled
-// in is sent: the service's defaults stand for the rest. The name is sent on
-// its own, the other properties by name.
+// property its kind lets be edited, each empty at first, apart from the
+// properties the row's offer fixes: those are shown with their values, cannot
+// be changed, and are always sent. Of the rest only what is filled in is
+// sent: the service's defaults stand for it. The name is sent on its own, the
+// other properties by name.
 
 /**
  * What one field of the form holds, beside what its input needs to know of
@@ -25,9 +27,17 @@ export type FormEntry =
 /** The form's fields by property name. */
 export type FormEntries = Readonly<Record<string, FormEntry>>;
 
-/** The properties the form asks for: every one the kind lets be edited, the name included, in the kind's order. */
+/** The properties the offer fixes, by name, with their values. */
+export type FixedProperties = Readonly<Record<string, unknown>>;
+
+/** The properties the form shows: every one the kind lets be edited, the name included, in the kind's order; a fixed one is shown, not entered. */
 export function formProperties(kind: ElementKindDescription): PropertyDescription[] {
   return kind.properties.filter((property) => property.editable);
+}
+
+/** A fixed property as the form shows it: with its value, and not editable. */
+export function fixedPropertyReading(property: PropertyDescription, fixed: FixedProperties): PropertyReading {
+  return { ...property, editable: false, value: fixed[property.name] } as PropertyReading;
 }
 
 function blankEntry(property: PropertyDescription): FormEntry {
@@ -47,12 +57,13 @@ function blankEntry(property: PropertyDescription): FormEntry {
     case curveValueKind:
       return { valueKind: curveValueKind, rowFields: property.rowFields, rows: [] };
     case 'rotation':
-      throw new Error(`${property.name}: a rotation is described as editable, which the creation form cannot enter`);
+    case 'text':
+      throw new Error(`${property.name}: a ${property.valueKind} is described as editable, which the creation form cannot enter`);
   }
 }
 
-export function blankEntries(kind: ElementKindDescription): FormEntries {
-  return Object.fromEntries(formProperties(kind).map((property) => [property.name, blankEntry(property)]));
+export function blankEntries(kind: ElementKindDescription, fixed: FixedProperties): FormEntries {
+  return Object.fromEntries(formProperties(kind).filter((property) => !(property.name in fixed)).map((property) => [property.name, blankEntry(property)]));
 }
 
 export type FormReading =
@@ -60,11 +71,12 @@ export type FormReading =
   | { outcome: 'unreadable'; property: string; at: number }
   | { outcome: 'ready'; name: string; properties: Record<string, EditValue> };
 
-/** What add_element is sent for the form as it is filled in. */
-export function readCreationForm(kind: ElementKindDescription, entries: FormEntries): FormReading {
+/** What add_element is sent for the form as it is filled in: the fixed properties, and what is entered. */
+export function readCreationForm(kind: ElementKindDescription, fixed: FixedProperties, entries: FormEntries): FormReading {
   let name = '';
-  const properties: Record<string, EditValue> = {};
+  const properties: Record<string, EditValue> = { ...(fixed as Record<string, EditValue>) };
   for (const property of formProperties(kind)) {
+    if (property.name in fixed) continue;
     const entry = entries[property.name]!;
     switch (entry.valueKind) {
       case 'element_name':

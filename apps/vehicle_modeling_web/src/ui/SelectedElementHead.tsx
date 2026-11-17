@@ -1,16 +1,18 @@
-import type { ElementReference, Refusal } from '../service/vehicle_modeling_service_protocol.ts';
-import { identifierLabel } from './identifier_display_labels.ts';
+import type { BilingualTitle, ElementReference, Refusal } from '../service/vehicle_modeling_service_protocol.ts';
+import { BilingualTitleText } from './BilingualTitleText.tsx';
 import { WrappableElementName } from './WrappableElementName.tsx';
 
-// The head of the property panel for the selected element: its kind, its
-// name, the control that removes it, and the service's reason when it
+// The head of the property panel for the selected element: its kind's title,
+// its name, the control that removes it, and the service's reason when it
 // refused to remove it.
 
-export function SelectedElementHead(props: { selection: ElementReference; removalPending: boolean; refusal: Refusal | null; onRemove: () => void }) {
+export function SelectedElementHead(props: { selection: ElementReference; kindTitle: BilingualTitle; removalPending: boolean; refusal: Refusal | null; onRemove: () => void }) {
   return (
     <div className="selection-head">
       <div className="selection-title">
-        <span className="selection-kind">{identifierLabel(props.selection.kind)}</span>
+        <span className="selection-kind">
+          <BilingualTitleText title={props.kindTitle} />
+        </span>
         <span className="selection-name">
           <WrappableElementName name={props.selection.name} />
         </span>

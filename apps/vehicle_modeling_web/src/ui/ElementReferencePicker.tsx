@@ -1,7 +1,9 @@
 import { useEffect, useId, useState } from 'react';
 
-import { elementKey, sameElement, type ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
+import { elementKey, sameElement, type ElementKindDescription, type ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
+import { BilingualTitleText } from './BilingualTitleText.tsx';
 import { choicesShowKind, referenceChoices, type ReferenceDescription } from './element_reference_picker_rules.ts';
+import { elementKindTitle } from './find_element_kind_title.ts';
 import { identifierLabel } from './identifier_display_labels.ts';
 import { WrappableElementName } from './WrappableElementName.tsx';
 
@@ -9,11 +11,14 @@ import { WrappableElementName } from './WrappableElementName.tsx';
 // from the outline. Focusing it lists the choices; typing narrows them; the
 // arrow keys move through them and Enter takes one; Escape, or leaving the
 // field, takes none. Where the property may name more than one kind, every
-// choice shows its kind; where it is optional, none is a choice.
+// choice shows its kind by the kind's title; where it is optional, none is a
+// choice.
 
 export function ElementReferencePicker(props: {
   description: ReferenceDescription;
   elements: readonly ElementReference[];
+  /** The kinds' descriptions, whose titles name the choices' kinds. */
+  kinds: readonly ElementKindDescription[];
   /** The name held; null names none; undefined where a creation form has no choice yet. */
   value: string | null | undefined;
   disabled: boolean;
@@ -93,7 +98,7 @@ export function ElementReferencePicker(props: {
             }
           }}
         />
-        {kindShown && <span className="reference-kind">{identifierLabel(named.kind)}</span>}
+        {kindShown && <span className="reference-kind">{elementKindTitle(props.kinds, named.kind).en}</span>}
       </div>
       {open && (
         <ul className="reference-choices" role="listbox" id={listId}>
@@ -123,7 +128,11 @@ export function ElementReferencePicker(props: {
                   <span className="choice-name">
                     <WrappableElementName name={choice.name} />
                   </span>
-                  {showKind && <span className="choice-kind">{identifierLabel(choice.kind)}</span>}
+                  {showKind && (
+                    <span className="choice-kind">
+                      <BilingualTitleText title={elementKindTitle(props.kinds, choice.kind)} />
+                    </span>
+                  )}
                 </>
               )}
             </li>

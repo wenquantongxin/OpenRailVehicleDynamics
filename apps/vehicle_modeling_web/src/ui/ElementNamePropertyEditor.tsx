@@ -1,4 +1,4 @@
-import type { ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
+import type { PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditRefusal, SetProperty } from '../session/vehicle_editing_session.ts';
 import { FieldRefusalMessage } from './FieldRefusalMessage.tsx';
 import { identifierLabel } from './identifier_display_labels.ts';
@@ -10,18 +10,18 @@ import { takesTyping } from './typed_property_field_commit_rules.ts';
 // Whether a name may be taken is the service's to judge.
 
 export function ElementNamePropertyEditor(props: {
-  element: ElementReference;
+  subject: PropertySubject;
   propertyName: string;
   current: string;
   refusal: EditRefusal | null;
   onCommit: SetProperty;
   onDismissRefusal: () => void;
 }) {
-  const { element, propertyName, current, refusal } = props;
+  const { subject, propertyName, current, refusal } = props;
   const { field, type, commit, revert } = useTypedFieldCommit<string, string>({
     refusedEntry: refusal === null ? null : String(refusal.value),
     read: (text) => (text === current ? { outcome: 'unchanged' } : { outcome: 'changed', value: text }),
-    send: (name) => props.onCommit(element, propertyName, name),
+    send: (name) => props.onCommit(subject, propertyName, name),
     onRevert: () => {
       if (refusal !== null) props.onDismissRefusal();
     },

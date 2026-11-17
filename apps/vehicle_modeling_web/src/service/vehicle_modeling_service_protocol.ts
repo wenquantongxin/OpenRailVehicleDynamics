@@ -9,6 +9,18 @@ export interface ElementReference {
   name: string;
 }
 
+/** A name for people, in English and Chinese, as the service gives it. */
+export interface BilingualTitle {
+  en: string;
+  zh: string;
+}
+
+/**
+ * What has properties: an element, or settings that are not an element. The
+ * settings word is the service's; the interface passes it on and never reads it.
+ */
+export type PropertySubject = { element: ElementReference } | { settings: string };
+
 export type Vector3 = [number, number, number];
 /** Three rows of a rotation matrix. */
 export type Rotation = [Vector3, Vector3, Vector3];
@@ -31,8 +43,8 @@ export interface Accepted {
 }
 
 export interface Refusal {
-  /** What the refusal concerns, when it concerns an element or a property. */
-  element: ElementReference | null;
+  /** What the refusal concerns, when it concerns a subject or a property of one; for add_element, the element that was to be created. */
+  subject: PropertySubject | null;
   property: string | null;
   message: string;
 }
@@ -54,6 +66,31 @@ export interface Outline {
   elements: ElementReference[];
 }
 
+/** What a row's "+" creates: an element kind, with the properties the row fixes for it. */
+export interface CreationOffer {
+  kind: string;
+  fixedProperties: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A row of the model tree, as the service describes it: the interface draws
+ * what it is given and knows none of the rows.
+ */
+export interface ModelTreeNode {
+  /** Unique in the tree, and the same for the same row across edits, a rename of its element excepted. */
+  key: string;
+  /** Null for an element's row, which shows the element's name. */
+  title: BilingualTitle | null;
+  /** What selecting the row selects; null for a row that only groups. */
+  subject: PropertySubject | null;
+  /** False while what the row stands for is not provided yet. */
+  provided: boolean;
+  /** One line shown with the row. */
+  note: BilingualTitle | null;
+  creates: CreationOffer[];
+  children: ModelTreeNode[];
+}
+
 export interface CheckReport {
   passed: boolean;
   refusals: string[];
@@ -71,7 +108,7 @@ export const curveValueKind = 'saturated_piecewise_linear_damper_curve';
  * A property value by its value kind, beside what the kind says about the
  * value: the kinds a reference may name and whether it may name none, the
  * choices of a token, the fields of a curve's rows. A value is null where the
- * element holds no value, and where an optional reference names none.
+ * subject holds no value, and where an optional reference names none.
  */
 export type PropertyValue =
   | { valueKind: 'number'; value: number | null }
@@ -82,18 +119,26 @@ export type PropertyValue =
   | { valueKind: 'element_name'; value: string | null }
   | { valueKind: 'element_reference'; referencedKinds: string[]; optional: boolean; value: string | null }
   | { valueKind: 'token'; choices: string[]; value: string | null }
-  | { valueKind: typeof curveValueKind; rowFields: string[]; value: CurvePoint[] | null };
+  | { valueKind: typeof curveValueKind; rowFields: string[]; value: CurvePoint[] | null }
+  /** A text shown as it is: never an element's own name and never a reference. */
+  | { valueKind: 'text'; value: string | null };
 
-export type PropertyReading = { name: string; editable: boolean } & PropertyValue;
+export type PropertyReading = {
+  name: string;
+  editable: boolean;
+  /** The section the property is shown in; consecutive properties with the same section form one. */
+  section: BilingualTitle | null;
+} & PropertyValue;
 
 type WithoutValue<Reading> = Reading extends unknown ? Omit<Reading, 'value'> : never;
 
 /** What a property is, without a value: as describe_element_kinds states it for a kind. */
 export type PropertyDescription = WithoutValue<PropertyReading>;
 
-/** An element kind and its properties, in the order get_properties returns them. */
+/** An element kind, its name for people, and its properties in the order get_properties returns them. */
 export interface ElementKindDescription {
   kind: string;
+  title: BilingualTitle;
   properties: PropertyDescription[];
 }
 
@@ -204,6 +249,18 @@ function nullable<T>(value: unknown, read: (present: unknown) => T): T | null {
   return value === null ? null : read(value);
 }
 
+function readTitle(value: unknown, what: string): BilingualTitle {
+  return { en: text(field(value, 'en', what), `${what}.en`), zh: text(field(value, 'zh', what), `${what}.zh`) };
+}
+
+/** A subject: an element, or settings by the service's word for them. */
+export function readSubject(value: unknown, what: string): PropertySubject {
+  if (typeof value === 'object' && value !== null && 'element' in value) {
+    return { element: readElement(field(value, 'element', what), `${what}.element`) };
+  }
+  return { settings: text(field(value, 'settings', what), `${what}.settings`) };
+}
+
 export function readAnswer(json: unknown): ServiceAnswer {
   if (field(json, 'ok', 'answer') === true) {
     // While nothing is open the four session fields are null; the revision says which it is.
@@ -226,7 +283,7 @@ export function readAnswer(json: unknown): ServiceAnswer {
   return {
     ok: false,
     refusal: {
-      element: nullable(field(error, 'element', 'error'), (element) => readElement(element, 'error.element')),
+      subject: nullable(field(error, 'subject', 'error'), (subject) => readSubject(subject, 'error.subject')),
       property: nullable(field(error, 'property', 'error'), (property) => text(property, 'error.property')),
       message: text(field(error, 'message', 'error'), 'error.message'),
     },
@@ -280,13 +337,18 @@ function curve(value: unknown, rowFields: readonly string[], what: string): Curv
 function propertyDescription(property: unknown): PropertyDescription {
   const name = text(field(property, 'name', 'property'), 'property.name');
   const valueKind = text(field(property, 'value_kind', name), `${name}.value_kind`);
-  const described = { name, editable: truth(field(property, 'editable', name), `${name}.editable`) };
+  const described = {
+    name,
+    editable: truth(field(property, 'editable', name), `${name}.editable`),
+    section: nullable(field(property, 'section', name), (section) => readTitle(section, `${name}.section`)),
+  };
   switch (valueKind) {
     case 'number':
     case 'vector3':
     case 'boolean':
     case 'rotation':
     case 'element_name':
+    case 'text':
       return { ...described, valueKind };
     case 'element_reference':
       return {
@@ -320,6 +382,7 @@ function propertyReading(property: unknown): PropertyReading {
     case 'element_name':
     case 'element_reference':
     case 'token':
+    case 'text':
       return { ...description, value: nullable(value, (present) => text(present, what)) };
     case curveValueKind:
       return { ...description, value: nullable(value, (present) => curve(present, description.rowFields, what)) };
@@ -333,13 +396,40 @@ export function readProperties(result: unknown): PropertyReading[] {
 export function readElementKinds(result: unknown): ElementKindDescription[] {
   return list(field(result, 'element_kinds', 'describe_element_kinds'), 'element_kinds').map((entry) => ({
     kind: text(field(entry, 'kind', 'element kind'), 'element kind.kind'),
+    title: readTitle(field(entry, 'title', 'element kind'), 'element kind.title'),
     properties: list(field(entry, 'properties', 'element kind'), 'element kind.properties').map(propertyDescription),
   }));
 }
 
-/** The element an accepted set_property or add_element leaves: after a rename, under its new name. */
-export function readEditedElement(result: unknown): ElementReference {
-  return readElement(field(result, 'element', 'edit result'), 'edit result.element');
+function modelTreeNode(node: unknown): ModelTreeNode {
+  const key = text(field(node, 'key', 'model tree row'), 'model tree row.key');
+  return {
+    key,
+    title: nullable(field(node, 'title', key), (title) => readTitle(title, `${key}.title`)),
+    subject: nullable(field(node, 'subject', key), (subject) => readSubject(subject, `${key}.subject`)),
+    provided: truth(field(node, 'provided', key), `${key}.provided`),
+    note: nullable(field(node, 'note', key), (note) => readTitle(note, `${key}.note`)),
+    creates: list(field(node, 'creates', key), `${key}.creates`).map((offer) => ({
+      kind: text(field(offer, 'kind', `${key} offer`), `${key} offer.kind`),
+      fixedProperties: field(offer, 'fixed_properties', `${key} offer`) as Readonly<Record<string, unknown>>,
+    })),
+    children: list(field(node, 'children', key), `${key}.children`).map(modelTreeNode),
+  };
+}
+
+/** The model tree as get_model_tree describes it: its first-level rows, each with the rows under it. */
+export function readModelTree(result: unknown): ModelTreeNode[] {
+  return list(field(result, 'nodes', 'get_model_tree'), 'get_model_tree.nodes').map(modelTreeNode);
+}
+
+/** The element an accepted add_element created. */
+export function readCreatedElement(result: unknown): ElementReference {
+  return readElement(field(result, 'element', 'add_element'), 'add_element.element');
+}
+
+/** The subject an accepted set_property leaves: an element under its new name after a rename. */
+export function readEditedSubject(result: unknown): PropertySubject {
+  return readSubject(field(result, 'subject', 'set_property'), 'set_property.subject');
 }
 
 /** What remove_element removed, or get_removal_consequences says it would: the element and everything with it. */
@@ -413,4 +503,20 @@ export function elementKey(element: ElementReference): string {
 
 export function sameElement(a: ElementReference | null, b: ElementReference | null): boolean {
   return a !== null && b !== null && a.kind === b.kind && a.name === b.name;
+}
+
+/** The element a subject is, or null for settings. */
+export function subjectElement(subject: PropertySubject | null): ElementReference | null {
+  return subject !== null && 'element' in subject ? subject.element : null;
+}
+
+export function sameSubject(a: PropertySubject | null, b: PropertySubject | null): boolean {
+  if (a === null || b === null) return false;
+  if ('element' in a) return 'element' in b && sameElement(a.element, b.element);
+  return 'settings' in b && a.settings === b.settings;
+}
+
+/** One string per subject, for keys: an element's, or the settings word's. */
+export function subjectKey(subject: PropertySubject): string {
+  return 'element' in subject ? `element/${elementKey(subject.element)}` : `settings/${subject.settings}`;
 }

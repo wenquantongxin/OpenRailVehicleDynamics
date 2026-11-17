@@ -1,0 +1,113 @@
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { test } from 'node:test';
+
+import ts from 'typescript';
+
+// The interface draws what the service describes and knows none of it: no
+// element kind, no settings word, no domain or row of the model tree, and no
+// kind's title may stand in its source. Kind names and the longer settings
+// words are distinctive and may stand nowhere, comments included; the two
+// short settings words and every title are looked for as a whole text in
+// code and markup, where knowledge of them would act.
+
+const elementKinds = [
+  'rigid_body',
+  'fixed_frame',
+  'revolute_joint',
+  'ball_rpy_joint',
+  'weld_joint',
+  'translational_spring_damper',
+  'roll_spring_damper_couple',
+  'series_spring_viscous_damper',
+  'point_to_point_series_spring_bilinear_damper',
+  'saturated_piecewise_linear_damper',
+  'reference_frame_linear_bushing',
+  'point_to_point_linear_spring_damper',
+  'point_to_point_hysteretic_spring',
+  'contact_carrier',
+  'contact_interface',
+];
+
+const distinctiveSettingsWords = ['gravity', 'vehicle_identity', 'station_layout', 'contact_computation'];
+const settingsWords = [...distinctiveSettingsWords, 'wheel', 'rail'];
+
+/** The rows of the model tree and the kinds' titles, in both languages, as the contract states them. */
+const titles = [
+  ['Globals', '全局'],
+  ['Gravity', '重力加速度'],
+  ['Vehicle identity', '车辆标识'],
+  ['Station layout', '站位布局'],
+  ['Initial conditions', '初始条件'],
+  ['Views', '观察视角'],
+  ['Bodies', '刚体'],
+  ['Markers', '标记点'],
+  ['Geometry', '几何'],
+  ['Owner not found', '归属未解析'],
+  ['Joints', '铰'],
+  ['Force elements', '力元'],
+  ['Constraints', '约束'],
+  ['Wheel-rail', '轮轨'],
+  ['Wheel', '车轮'],
+  ['Rail', '钢轨'],
+  ['Contact computation', '接触计算'],
+  ['Contact carriers', '接触承载体'],
+  ['Track', '线路'],
+  ['Substructures', '子结构'],
+  ['Rigid body', '刚体'],
+  ['Marker', '标记点'],
+  ['Revolute joint', '转动铰'],
+  ['Ball joint', '球铰'],
+  ['Weld joint', '固结铰'],
+  ['Translational spring-damper', '平动弹簧阻尼'],
+  ['Roll spring-damper couple', '侧滚弹簧阻尼力偶'],
+  ['Series spring and viscous damper', '串联弹簧粘滞阻尼'],
+  ['Point-to-point series spring and bilinear damper', '点对点串联弹簧双线性阻尼'],
+  ['Saturated piecewise-linear damper', '饱和分段线性阻尼'],
+  ['Linear bushing in the reference frame', '参考坐标系线性衬套'],
+  ['Point-to-point linear spring-damper', '点对点线性弹簧阻尼'],
+  ['Point-to-point hysteretic spring', '点对点迟滞弹簧'],
+  ['Contact carrier', '接触承载体'],
+  ['Wheel-rail contact', '轮轨接触'],
+].flat();
+
+const source = join(import.meta.dirname, '..', 'src');
+
+function files(directory: string): string[] {
+  return readdirSync(directory).flatMap((name) => {
+    const path = join(directory, name);
+    return statSync(path).isDirectory() ? files(path) : [path];
+  });
+}
+
+/** Every string, template text and markup text of a file, trimmed, with its line. */
+function textsOf(path: string, content: string): { text: string; line: number }[] {
+  const file = ts.createSourceFile(path, content, ts.ScriptTarget.ES2022, true, path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const found: { text: string; line: number }[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isStringLiteralLike(node) || ts.isJsxText(node) || ts.isTemplateLiteralToken(node)) {
+      found.push({ text: node.text.trim(), line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1 });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
+}
+
+test('the interface’s source names no element kind, no settings word, no row of the model tree and no kind’s title', () => {
+  const token = (word: string) => new RegExp(`(?<![A-Za-z0-9_])${word}(?![A-Za-z0-9_])`);
+  const found: string[] = [];
+  for (const path of files(source)) {
+    const content = readFileSync(path, 'utf8');
+    const where = relative(source, path);
+    content.split('\n').forEach((line, index) => {
+      for (const word of [...elementKinds, ...distinctiveSettingsWords]) if (token(word).test(line)) found.push(`${where}:${index + 1}: ${word}`);
+    });
+    if (!/\.tsx?$/.test(path)) continue;
+    for (const { text, line } of textsOf(path, content)) {
+      if (settingsWords.includes(text) || titles.includes(text)) found.push(`${where}:${line}: '${text}'`);
+    }
+  }
+  assert.deepEqual(found, []);
+});

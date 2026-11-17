@@ -17,8 +17,11 @@ export function numberFromText(text: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-/** Reads the texts of a field's inputs against the values they show: one for a number, three for a vector. */
-export function readNumberEntry(texts: readonly string[], current: readonly number[]): EntryReading<number[]> {
+/**
+ * Reads the texts of a field's inputs against the values they show: one for a
+ * number, three for a vector, null where the subject holds no value yet.
+ */
+export function readNumberEntry(texts: readonly string[], current: readonly (number | null)[]): EntryReading<number[]> {
   const values = texts.map(numberFromText);
   const at = values.indexOf(null);
   if (at >= 0) {

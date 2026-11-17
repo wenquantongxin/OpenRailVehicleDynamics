@@ -1,9 +1,12 @@
 import type { ReferenceVehicle } from '../service/fetch_reference_vehicles.ts';
+import { treeHasSubject } from '../service/find_model_tree_rows.ts';
 import type { SendCommand } from '../service/modeling_server_command_channel.ts';
 import {
   readCheckReport,
-  readEditedElement,
+  readCreatedElement,
+  readEditedSubject,
   readElementKinds,
+  readModelTree,
   readOutline,
   readPreview,
   readProperties,
@@ -11,15 +14,19 @@ import {
   readServiceSessionDescription,
   readVehicleProjectNames,
   readVisualDefinitionDocument,
-  sameElement,
+  sameSubject,
+  subjectElement,
   type Accepted,
   type CheckReport,
+  type CreationOffer,
   type CurvePoint,
   type ElementKindDescription,
   type ElementReference,
+  type ModelTreeNode,
   type Outline,
   type Preview,
   type PropertyReading,
+  type PropertySubject,
   type Refusal,
   type SessionAfterCommand,
   type Vector3,
@@ -46,14 +53,15 @@ import { readVisualDefinition, type VisualDefinition } from '../visual/read_vehi
 // to the service as it is: which file a project is and whether a name is
 // acceptable, the service says.
 //
-// The selection stays true to the project: after every edit, undo or redo the
-// outline is read again, a selection the outline no longer has is dropped, and
-// a renamed selection follows its new name. Nothing is ever asked about an
-// element the outline does not have. A rename changes the name every other
-// edit of the element is sent under, so from the moment it is asked for until
-// it is answered the session says the element is being renamed, and the
-// element's other properties take no input. Every removal says what it takes
-// and waits to be confirmed.
+// What is selected is a subject: an element, or settings that are not an
+// element. The selection stays true to the project: after every edit, undo,
+// redo or Save as the model tree is read again, a selection the tree no longer
+// has is dropped, a renamed element follows its new name, and selected
+// settings stay selected. Nothing is ever asked about a subject the tree does
+// not have. A rename changes the name every other edit of the element is sent
+// under, so from the moment it is asked for until it is answered the session
+// says the element is being renamed, and the element's other properties take
+// no input. Every removal says what it takes and waits to be confirmed.
 
 /** A vehicle the session has open and what it is drawn with: a new one for every open and every resumption. */
 export interface OpenedVehicle {
@@ -94,14 +102,27 @@ export interface CheckOutcome {
 export type EditValue = number | Vector3 | boolean | string | null | readonly CurvePoint[];
 
 export interface EditRefusal {
-  element: ElementReference;
+  subject: PropertySubject;
   property: string;
   value: EditValue;
   message: string;
 }
 
-/** Sets one property of an element; resolves to whether the service accepted the edit. */
-export type SetProperty = (element: ElementReference, property: string, value: EditValue) => Promise<boolean>;
+/** Sets one property of a subject; resolves to whether the service accepted the edit. */
+export type SetProperty = (subject: PropertySubject, property: string, value: EditValue) => Promise<boolean>;
+
+/** A creation from a row's "+": the row, the kinds it offers, and the one chosen, whose form is shown. */
+export interface ElementCreation {
+  rowKey: string;
+  offers: CreationOffer[];
+  /** Null while several kinds are offered and none is chosen yet. */
+  chosen: CreationOffer | null;
+}
+
+/** What a row's "+" starts: the creation form at once when it offers one kind, a choice of kinds first when it offers several. */
+export function creationFromOffers(rowKey: string, offers: readonly CreationOffer[]): ElementCreation {
+  return { rowKey, offers: [...offers], chosen: offers.length === 1 ? offers[0]! : null };
+}
 
 /** A removal waiting for the user to confirm it. */
 export interface PendingRemoval {
@@ -127,16 +148,18 @@ export interface SessionState {
   canUndo: boolean;
   canRedo: boolean;
   outline: Outline | null;
-  /** Every element kind with its properties, as the service describes them; empty while no vehicle is open. */
+  /** The model tree as the service describes the project; null while no vehicle is open. */
+  modelTree: ModelTreeNode[] | null;
+  /** Every element kind with its title and properties, as the service describes them; empty while no vehicle is open. */
   elementKinds: ElementKindDescription[];
   check: CheckOutcome | null;
   /** The preview of the last check that passed; older than the project when its revision is lower. */
   preview: Preview | null;
-  selection: ElementReference | null;
+  selection: PropertySubject | null;
   /** The selection's properties at the current revision; empty without a selection. */
   properties: PropertyReading[];
-  /** The kind whose creation form the property panel shows; nothing is selected meanwhile. */
-  creatingKind: string | null;
+  /** The creation the property panel shows; nothing is selected meanwhile. */
+  creation: ElementCreation | null;
   /** The element whose rename is on its way to the service; its other properties take no input meanwhile. */
   renaming: ElementReference | null;
   /** A removal waiting to be confirmed. */
@@ -171,12 +194,13 @@ const closedSession: SessionState = {
   canUndo: false,
   canRedo: false,
   outline: null,
+  modelTree: null,
   elementKinds: [],
   check: null,
   preview: null,
   selection: null,
   properties: [],
-  creatingKind: null,
+  creation: null,
   renaming: null,
   pendingRemoval: null,
   removedElements: null,
@@ -191,8 +215,8 @@ const closedSession: SessionState = {
 };
 
 /** What the panel shows once an action has changed what it is about. */
-const nothingPending: Pick<SessionState, 'creatingKind' | 'pendingRemoval' | 'removedElements' | 'commandRefusal'> = {
-  creatingKind: null,
+const nothingPending: Pick<SessionState, 'creation' | 'pendingRemoval' | 'removedElements' | 'commandRefusal'> = {
+  creation: null,
   pendingRemoval: null,
   removedElements: null,
   commandRefusal: null,
@@ -211,10 +235,6 @@ export function checkStatus(state: SessionState): CheckStatus {
 /** The preview shows an older project than the current revision. */
 export function previewIsStale(state: SessionState): boolean {
   return state.preview !== null && state.preview.projectRevision < state.revision;
-}
-
-function outlineHas(outline: Outline | null, element: ElementReference): boolean {
-  return outline !== null && outline.elements.some((each) => sameElement(each, element));
 }
 
 /** The vehicle as drawn with the document it carries: one the view cannot draw from is a display problem, and the bodies are drawn as markers. */
@@ -275,7 +295,7 @@ export class VehicleEditingSession {
       this.publish({ opening: link.open });
       const opened = await this.openNow(link.open);
       this.publish({ opening: null });
-      if (opened && link.select !== null) await this.selectNow(link.select);
+      if (opened && link.select !== null) await this.selectNow({ element: link.select });
     });
   }
 
@@ -380,21 +400,29 @@ export class VehicleEditingSession {
     });
   }
 
-  /** Selects an element and reads its properties; an element the outline does not have leaves nothing selected. */
-  select(element: ElementReference | null): Promise<void> {
-    return this.enqueueOnShownProject(() => this.selectNow(element));
+  /** Selects a subject and reads its properties; a subject the tree does not have leaves nothing selected. */
+  select(subject: PropertySubject | null): Promise<void> {
+    return this.enqueueOnShownProject(() => this.selectNow(subject));
   }
 
-  /** Shows the creation form of a kind instead of the selection. */
-  startCreation(kind: string): Promise<void> {
+  /** Shows what a row's "+" offers instead of the selection: its one kind's form, or a choice between its kinds. */
+  startCreation(rowKey: string, offers: readonly CreationOffer[]): Promise<void> {
     return this.enqueueOnShownProject(async () => {
-      this.publish({ ...nothingPending, selection: null, properties: [], creatingKind: kind });
+      this.publish({ ...nothingPending, selection: null, properties: [], creation: creationFromOffers(rowKey, offers) });
+    });
+  }
+
+  /** Chooses which of the offered kinds to create; its form is shown. */
+  chooseCreationOffer(offer: CreationOffer): Promise<void> {
+    return this.enqueueOnShownProject(async () => {
+      const creation = this.current.creation;
+      if (creation !== null) this.publish({ creation: { ...creation, chosen: offer } });
     });
   }
 
   cancelCreation(): Promise<void> {
     return this.enqueueOnShownProject(async () => {
-      this.publish({ creatingKind: null });
+      this.publish({ creation: null });
     });
   }
 
@@ -411,7 +439,7 @@ export class VehicleEditingSession {
         refusal = answer.refusal;
         return;
       }
-      this.publish({ ...nothingPending, ...(await this.readProject(readEditedElement(answer.result), this.current.preview)) });
+      this.publish({ ...nothingPending, ...(await this.readProject({ element: readCreatedElement(answer.result) }, this.current.preview)) });
     }).then(() => refusal);
   }
 
@@ -420,18 +448,19 @@ export class VehicleEditingSession {
    * stays selected under its new name; until the rename is answered the
    * element is being renamed.
    */
-  setProperty(element: ElementReference, property: string, value: EditValue): Promise<boolean> {
+  setProperty(subject: PropertySubject, property: string, value: EditValue): Promise<boolean> {
     let accepted = false;
-    const renames = this.pendingOpens === 0 && this.isOwnName(element.kind, property);
+    const element = subjectElement(subject);
+    const renames = this.pendingOpens === 0 && element !== null && this.isOwnName(element.kind, property);
     if (renames) this.publish({ renaming: element });
     return this.enqueueOnShownProject(async () => {
-      if (!outlineHas(this.current.outline, element)) return;
-      const answer = await this.send('set_property', { element, property, value });
+      if (!treeHasSubject(this.current.modelTree, subject)) return;
+      const answer = await this.send('set_property', { subject, property, value });
       if (!answer.ok) {
-        this.publish({ editRefusal: { element, property, value, message: answer.refusal.message }, commandRefusal: null });
+        this.publish({ editRefusal: { subject, property, value, message: answer.refusal.message }, commandRefusal: null });
         return;
       }
-      const selection = sameElement(this.current.selection, element) ? readEditedElement(answer.result) : this.current.selection;
+      const selection = sameSubject(this.current.selection, subject) ? readEditedSubject(answer.result) : this.current.selection;
       this.publish({ ...nothingPending, ...(await this.readProject(selection, this.current.preview)), editRefusal: null });
       accepted = true;
     }).then(() => {
@@ -443,7 +472,7 @@ export class VehicleEditingSession {
   /** Asks the service what removing the element would take; the removal then waits for confirmRemoval or cancelRemoval. */
   requestRemoval(element: ElementReference): Promise<void> {
     return this.enqueueOnShownProject(async () => {
-      if (!outlineHas(this.current.outline, element)) return;
+      if (!treeHasSubject(this.current.modelTree, { element })) return;
       const answer = await this.send('get_removal_consequences', { element });
       if (!answer.ok) {
         this.publish({ ...nothingPending, commandRefusal: answer.refusal });
@@ -549,10 +578,11 @@ export class VehicleEditingSession {
     const checked = await this.accepted('check');
     const preview = readPreview((await this.accepted('get_preview')).result);
     const outlined = await this.accepted('get_outline');
+    const treed = await this.accepted('get_model_tree');
     const { vehicleProjectsDirectory, vehicleProjects, opening } = this.current;
     return {
       ...closedSession,
-      ...envelope(outlined),
+      ...envelope(treed),
       started: true,
       vehicleProjectsDirectory,
       vehicleProjects,
@@ -563,6 +593,7 @@ export class VehicleEditingSession {
       check: { revision: openSession(checked).revision, report: readCheckReport(checked.result) },
       preview,
       outline: readOutline(outlined.result),
+      modelTree: readModelTree(treed.result),
     };
   }
 
@@ -571,13 +602,13 @@ export class VehicleEditingSession {
     this.publish(listed.ok ? { vehicleProjects: readVehicleProjectNames(listed.result) } : { commandRefusal: listed.refusal });
   }
 
-  private async selectNow(element: ElementReference | null): Promise<void> {
-    if (element === null || !outlineHas(this.current.outline, element)) {
+  private async selectNow(subject: PropertySubject | null): Promise<void> {
+    if (subject === null || !treeHasSubject(this.current.modelTree, subject)) {
       this.publish({ ...nothingPending, selection: null, properties: [] });
       return;
     }
-    const answer = await this.accepted('get_properties', { element });
-    this.publish({ ...nothingPending, ...envelope(answer), selection: element, properties: readProperties(answer.result) });
+    const answer = await this.accepted('get_properties', { subject });
+    this.publish({ ...nothingPending, ...envelope(answer), selection: subject, properties: readProperties(answer.result) });
   }
 
   private step(command: 'undo' | 'redo'): Promise<void> {
@@ -594,23 +625,24 @@ export class VehicleEditingSession {
   /**
    * Everything shown after the project changed: the check, the preview when
    * the check passed (otherwise the one given, which the service kept), the
-   * outline and the selection's properties, when the outline still has the
-   * selection.
+   * outline, the model tree, and the selection's properties when the tree
+   * still has the selection.
    */
-  private async readProject(selection: ElementReference | null, keptPreview: Preview | null): Promise<Partial<SessionState>> {
+  private async readProject(selection: PropertySubject | null, keptPreview: Preview | null): Promise<Partial<SessionState>> {
     const checked = await this.accepted('check');
     const report = readCheckReport(checked.result);
     const preview = report.passed ? readPreview((await this.accepted('get_preview')).result) : keptPreview;
-    const outlined = await this.accepted('get_outline');
-    const outline = readOutline(outlined.result);
-    const kept = selection !== null && outlineHas(outline, selection) ? selection : null;
-    let last = outlined;
+    const outline = readOutline((await this.accepted('get_outline')).result);
+    const treed = await this.accepted('get_model_tree');
+    const modelTree = readModelTree(treed.result);
+    const kept = selection !== null && treeHasSubject(modelTree, selection) ? selection : null;
+    let last = treed;
     let properties: PropertyReading[] = [];
     if (kept !== null) {
-      last = await this.accepted('get_properties', { element: kept });
+      last = await this.accepted('get_properties', { subject: kept });
       properties = readProperties(last.result);
     }
-    return { ...envelope(last), check: { revision: openSession(checked).revision, report }, preview, outline, selection: kept, properties };
+    return { ...envelope(last), check: { revision: openSession(checked).revision, report }, preview, outline, modelTree, selection: kept, properties };
   }
 
   /** A command the service has no reason to refuse; a refusal means the interface and the service disagree. */

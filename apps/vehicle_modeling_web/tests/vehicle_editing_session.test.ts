@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { ReferenceVehicle } from '../src/service/fetch_reference_vehicles.ts';
-import type { ElementReference } from '../src/service/vehicle_modeling_service_protocol.ts';
-import { checkStatus, VehicleEditingSession, previewIsStale, type OpenChoice, type SessionState } from '../src/session/vehicle_editing_session.ts';
+import { rowPathOfSubject, rowWithKey } from '../src/service/find_model_tree_rows.ts';
+import type { ElementReference, PropertySubject } from '../src/service/vehicle_modeling_service_protocol.ts';
+import { checkStatus, creationFromOffers, VehicleEditingSession, previewIsStale, type OpenChoice, type SessionState } from '../src/session/vehicle_editing_session.ts';
 import { FakeVehicleModelingService, fakeVehicle } from './fake_vehicle_modeling_service.ts';
 
 // The session's sequencing against a service that follows the protocol: what
@@ -39,6 +40,16 @@ function serviceWithTwoVehicles(options: ConstructorParameters<typeof FakeVehicl
   return new FakeVehicleModelingService({ '/fake/vehicle.json': fakeVehicle(), '/fake/other.json': other }, { projectsDirectory, ...options });
 }
 
+/** An element as the subject of a selection or an edit. */
+function subject(element: ElementReference): PropertySubject {
+  return { element };
+}
+
+/** The keys of the subject's row and the rows above it, from the first level down. */
+function rowKeysOf(state: SessionState, selected: PropertySubject): string[] {
+  return (rowPathOfSubject(state.modelTree!, selected) ?? []).map((row) => row.key);
+}
+
 const body = { kind: 'kind_body', name: 'body_a' };
 const otherBody = { kind: 'kind_body', name: 'body_b' };
 const frame = { kind: 'kind_frame', name: 'frame_a' };
@@ -69,10 +80,13 @@ function outlineHas(state: SessionState, element: ElementReference): boolean {
 
 /** Every element the service was asked about, by get_properties, set_property or a removal. */
 function elementsAskedAbout(service: FakeVehicleModelingService, since: number): unknown[] {
-  return service.log.slice(since).flatMap((entry) => (entry.commandArguments['element'] === undefined ? [] : [entry.commandArguments['element']]));
+  return service.log.slice(since).flatMap((entry) => {
+    const asked = (entry.commandArguments['subject'] as { element?: unknown } | undefined)?.element ?? entry.commandArguments['element'];
+    return asked === undefined ? [] : [asked];
+  });
 }
 
-const openingCommands = ['describe_element_kinds', 'get_visual_definition', 'check', 'get_preview', 'get_outline'];
+const openingCommands = ['describe_element_kinds', 'get_visual_definition', 'check', 'get_preview', 'get_outline', 'get_model_tree'];
 
 test('with nothing open, the start lists the folder, follows the link and then selects what it names; it runs once', async () => {
   const service = serviceWithTwoVehicles();
@@ -85,7 +99,7 @@ test('with nothing open, the start lists the folder, follows the link and then s
   const state = session.state;
   assert.equal(state.started, true);
   assert.deepEqual(state.vehicleProjects, []);
-  assert.deepEqual(state.selection, body);
+  assert.deepEqual(state.selection, subject(body));
   assert.equal(state.vehicleProjectFile, null);
   assert.equal(state.hasUnsavedChanges, false);
   assert.equal(state.linkNotFollowed, null);
@@ -103,7 +117,7 @@ test('with nothing open, a link to a saved project opens it from the folder, tie
   assert.deepEqual(service.log[2]?.commandArguments, { directory: projectsDirectory, name: 'mine' });
   assert.deepEqual(session.state.vehicleProjectFile, { directory: projectsDirectory, name: 'mine' });
   assert.equal(session.state.outline?.vehicleName, 'mine');
-  assert.deepEqual(session.state.selection, body);
+  assert.deepEqual(session.state.selection, subject(body));
 });
 
 test('without a link the start lists the folder and opens nothing', async () => {
@@ -149,8 +163,8 @@ test('a reload resumes the open session as it stands: file, unsaved changes, kep
   const { service, session } = await openedSession();
   await session.startSaveAs();
   await session.saveAs('mine', false);
-  await session.select(spring);
-  await session.setProperty(spring, 'rate_quantity', [-1, 2, 3]);
+  await session.select(subject(spring));
+  await session.setProperty(subject(spring), 'rate_quantity', [-1, 2, 3]);
   const before = session.state;
   assert.equal(previewIsStale(before), true, 'the check refused the edit and the older drawing is kept');
 
@@ -171,8 +185,8 @@ test('a reload resumes the open session as it stands: file, unsaved changes, kep
 
 test('Save without a file asks for a name; Save as writes, renames the vehicle and ties the session to the file; then Save writes there', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
-  await session.setProperty(body, 'size_quantity', 12);
+  await session.select(subject(body));
+  await session.setProperty(subject(body), 'size_quantity', 12);
   assert.equal(session.state.hasUnsavedChanges, true);
   let sent = service.log.length;
   await session.save();
@@ -181,7 +195,7 @@ test('Save without a file asks for a name; Save as writes, renames the vehicle a
 
   sent = service.log.length;
   await session.saveAs('mine', false);
-  assert.deepEqual(commandsSince(service, sent), ['list_vehicle_projects', 'save_vehicle_project_as', 'check', 'get_preview', 'get_outline', 'get_properties', 'list_vehicle_projects']);
+  assert.deepEqual(commandsSince(service, sent), ['list_vehicle_projects', 'save_vehicle_project_as', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties', 'list_vehicle_projects']);
   assert.deepEqual(service.log[sent + 1]?.commandArguments, { directory: projectsDirectory, name: 'mine' });
   let state = session.state;
   assert.equal(state.saveAs, null);
@@ -191,9 +205,9 @@ test('Save without a file asks for a name; Save as writes, renames the vehicle a
   assert.equal(state.revision, 2, 'renaming the vehicle is one revision');
   assert.equal(state.preview?.projectRevision, 2);
   assert.deepEqual(state.vehicleProjects, ['mine']);
-  assert.deepEqual(state.selection, body);
+  assert.deepEqual(state.selection, subject(body));
 
-  await session.setProperty(body, 'size_quantity', 13);
+  await session.setProperty(subject(body), 'size_quantity', 13);
   assert.equal(session.state.hasUnsavedChanges, true);
   sent = service.log.length;
   await session.save();
@@ -210,7 +224,7 @@ test('Save without a file asks for a name; Save as writes, renames the vehicle a
   assert.equal(session.state.hasUnsavedChanges, false);
   // After save, undo and a new edit, the saved state cannot be reached any more: changes stay unsaved until a save.
   await session.undo();
-  await session.setProperty(body, 'size_quantity', 14);
+  await session.setProperty(subject(body), 'size_quantity', 14);
   await session.undo();
   assert.deepEqual([session.state.hasUnsavedChanges, session.state.canRedo], [true, true]);
   await session.redo();
@@ -222,8 +236,8 @@ test('Save as adds no undo step: undo after it keeps the new name, and Save then
   await session.startSaveAs();
   await session.saveAs('mine', false);
   assert.deepEqual([session.state.revision, session.state.canUndo, session.state.canRedo], [1, false, false], 'one revision for the new name, nothing to undo');
-  await session.select(body);
-  await session.setProperty(body, 'size_quantity', 15);
+  await session.select(subject(body));
+  await session.setProperty(subject(body), 'size_quantity', 15);
   await session.startSaveAs();
   await session.saveAs('mine_again', false);
   assert.deepEqual([session.state.canUndo, session.state.canRedo], [true, false]);
@@ -254,8 +268,8 @@ test('Save as onto another project of the folder asks first: another name leaves
   await session.saveAs('other', false);
   await session.startSaveAs();
   await session.saveAs('mine', false);
-  await session.select(body);
-  await session.setProperty(body, 'size_quantity', 21);
+  await session.select(subject(body));
+  await session.setProperty(subject(body), 'size_quantity', 21);
 
   await session.startSaveAs();
   let sent = service.log.length;
@@ -296,10 +310,10 @@ test('a refused Save as keeps the dialog with the name typed and the service’s
 
 test('opening anything while there are unsaved changes asks first: keeping on editing opens nothing, discarding opens it', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   await session.showOpenChoices();
   // An edit still on its way when the open is asked for counts.
-  const edited = session.setProperty(body, 'size_quantity', 30);
+  const edited = session.setProperty(subject(body), 'size_quantity', 30);
   const sent = service.log.length;
   await session.open(referenceVehicle(otherVehicle));
   assert.equal(await edited, true);
@@ -344,8 +358,8 @@ test('the choice of what to open lists the folder again over the session, and ca
 
 test('a saved project opens as it was saved, tied to its file; one its check refuses opens with no drawing', async () => {
   const { service, session } = await openedSession();
-  await session.select(spring);
-  await session.setProperty(spring, 'rate_quantity', [-1, 2, 3]);
+  await session.select(subject(spring));
+  await session.setProperty(subject(spring), 'rate_quantity', [-1, 2, 3]);
   await session.startSaveAs();
   await session.saveAs('refused_by_check', false);
   const saved = session.state.outline;
@@ -362,7 +376,7 @@ test('a saved project opens as it was saved, tied to its file; one its check ref
   assert.equal(checkStatus(state), 'failed');
   assert.equal(state.preview, null);
   assert.ok(state.check!.report.refusals.length > 0);
-  await session.select(spring);
+  await session.select(subject(spring));
   assert.deepEqual(valueOf(session.state, 'rate_quantity'), [-1, 2, 3]);
 
   await session.open(project('no_such_project'));
@@ -386,21 +400,21 @@ test('a visual definition the view cannot draw from is reported, the bodies are 
   assert.equal(session.state.vehicle?.visualDefinition, null);
   assert.match(session.state.vehicle?.visualDefinitionProblem ?? '', /parts is not an array/);
   assert.equal(session.state.failure, null);
-  assert.equal(await session.setProperty(body, 'size_quantity', 3), true);
+  assert.equal(await session.setProperty(subject(body), 'size_quantity', 3), true);
   assert.equal(session.state.revision, 1);
   assert.match(session.state.vehicle?.visualDefinitionProblem ?? '', /parts is not an array/, 'the problem stays with the project it is about');
 });
 
-test('selecting reads the element’s properties; an element the outline does not have is not asked about and leaves nothing selected', async () => {
+test('selecting reads the element’s properties; an element the model tree does not have is not asked about and leaves nothing selected', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
-  assert.deepEqual(session.state.selection, body);
+  await session.select(subject(body));
+  assert.deepEqual(session.state.selection, subject(body));
   assert.deepEqual(
     session.state.properties.map((property) => property.name),
     ['name', 'free_flag', 'size_quantity', 'offset_quantity', 'turn_quantity'],
   );
   const sent = service.log.length;
-  await session.select({ kind: 'kind_body', name: 'missing' });
+  await session.select(subject({ kind: 'kind_body', name: 'missing' }));
   assert.equal(service.log.length, sent);
   assert.equal(session.state.selection, null);
   assert.deepEqual(session.state.properties, []);
@@ -408,10 +422,10 @@ test('selecting reads the element’s properties; an element the outline does no
 
 test('an accepted edit is followed by check, preview, outline and the selection’s properties', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   const sent = service.log.length;
-  assert.equal(await session.setProperty(body, 'size_quantity', 12.5), true);
-  assert.deepEqual(commandsSince(service, sent), ['set_property', 'check', 'get_preview', 'get_outline', 'get_properties']);
+  assert.equal(await session.setProperty(subject(body), 'size_quantity', 12.5), true);
+  assert.deepEqual(commandsSince(service, sent), ['set_property', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
   const state = session.state;
   assert.equal(state.revision, 1);
   assert.equal(state.canUndo, true);
@@ -423,28 +437,28 @@ test('an accepted edit is followed by check, preview, outline and the selection�
 
 test('references, tokens, booleans and curves are set by their values, and an optional reference to none', async () => {
   const { session } = await openedSession();
-  await session.select(spring);
-  assert.equal(await session.setProperty(spring, 'end_b', 'frame_a'), true);
-  assert.equal(await session.setProperty(spring, 'axis_choice', 'axis_z'), true);
-  assert.equal(await session.setProperty(spring, 'curve_quantity', [{ speed: 2, push: 8 }]), true);
+  await session.select(subject(spring));
+  assert.equal(await session.setProperty(subject(spring), 'end_b', 'frame_a'), true);
+  assert.equal(await session.setProperty(subject(spring), 'axis_choice', 'axis_z'), true);
+  assert.equal(await session.setProperty(subject(spring), 'curve_quantity', [{ speed: 2, push: 8 }]), true);
   assert.deepEqual([valueOf(session.state, 'end_b'), valueOf(session.state, 'axis_choice'), valueOf(session.state, 'curve_quantity')], ['frame_a', 'axis_z', [{ speed: 2, push: 8 }]]);
-  await session.select(body);
-  assert.equal(await session.setProperty(body, 'free_flag', false), true);
+  await session.select(subject(body));
+  assert.equal(await session.setProperty(subject(body), 'free_flag', false), true);
   assert.equal(valueOf(session.state, 'free_flag'), false);
   const wheel = { kind: 'kind_interface', name: 'body_b.left' };
-  await session.select(wheel);
-  assert.equal(await session.setProperty(wheel, 'hinge_ref', null), true);
+  await session.select(subject(wheel));
+  assert.equal(await session.setProperty(subject(wheel), 'hinge_ref', null), true);
   assert.equal(valueOf(session.state, 'hinge_ref'), null);
-  assert.equal(await session.setProperty(wheel, 'hinge_ref', 'no_such_hinge'), false);
+  assert.equal(await session.setProperty(subject(wheel), 'hinge_ref', 'no_such_hinge'), false);
   assert.equal(session.state.editRefusal?.property, 'hinge_ref');
 });
 
 test('an edit the check refuses keeps the older preview, which is then stale', async () => {
   const { service, session } = await openedSession();
-  await session.select(spring);
+  await session.select(subject(spring));
   const sent = service.log.length;
-  assert.equal(await session.setProperty(spring, 'rate_quantity', [-1, 2, 3]), true);
-  assert.deepEqual(commandsSince(service, sent), ['set_property', 'check', 'get_outline', 'get_properties']);
+  assert.equal(await session.setProperty(subject(spring), 'rate_quantity', [-1, 2, 3]), true);
+  assert.deepEqual(commandsSince(service, sent), ['set_property', 'check', 'get_outline', 'get_model_tree', 'get_properties']);
   const state = session.state;
   assert.equal(checkStatus(state), 'failed');
   assert.equal(state.check?.report.refusals.length, 1);
@@ -454,50 +468,50 @@ test('an edit the check refuses keeps the older preview, which is then stale', a
 
 test('a refused edit changes nothing, reads nothing again and is kept until the next edit', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   const before = session.state;
   const sent = service.log.length;
-  assert.equal(await session.setProperty(body, 'size_quantity', [1, 2, 3]), false);
+  assert.equal(await session.setProperty(subject(body), 'size_quantity', [1, 2, 3]), false);
   assert.deepEqual(commandsSince(service, sent), ['set_property']);
   assert.equal(session.state.revision, before.revision);
   assert.equal(session.state.properties, before.properties);
-  assert.deepEqual(session.state.editRefusal?.element, body);
+  assert.deepEqual(session.state.editRefusal?.subject, subject(body));
   assert.equal(session.state.editRefusal?.property, 'size_quantity');
   assert.deepEqual(session.state.editRefusal?.value, [1, 2, 3]);
-  await session.setProperty(body, 'size_quantity', 11);
+  await session.setProperty(subject(body), 'size_quantity', 11);
   assert.equal(session.state.editRefusal, null);
 });
 
 test('a rename keeps the renamed element selected under its new name, and what named it follows', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   const sent = service.log.length;
-  assert.equal(await session.setProperty(body, 'name', 'body_c'), true);
+  assert.equal(await session.setProperty(subject(body), 'name', 'body_c'), true);
   const renamed = { kind: 'kind_body', name: 'body_c' };
-  assert.deepEqual(session.state.selection, renamed);
+  assert.deepEqual(session.state.selection, subject(renamed));
   assert.equal(valueOf(session.state, 'name'), 'body_c');
   assert.deepEqual(elementsAskedAbout(service, sent), [body, renamed]);
-  await session.select(frame);
+  await session.select(subject(frame));
   assert.equal(valueOf(session.state, 'body_ref'), 'body_c');
   const before = service.log.length;
-  assert.equal(await session.setProperty(renamed, 'name', 'body_b'), false, 'a taken name is refused');
+  assert.equal(await session.setProperty(subject(renamed), 'name', 'body_b'), false, 'a taken name is refused');
   assert.equal(session.state.editRefusal?.property, 'name');
   assert.deepEqual(commandsSince(service, before), ['set_property']);
-  assert.deepEqual(session.state.selection, frame);
+  assert.deepEqual(session.state.selection, subject(frame));
 });
 
 test('from the moment a rename is asked for until it is answered, the session says the element is being renamed', async () => {
   const { session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   // The panel freezes the element's other fields on this: an edit queued now would carry the name being replaced.
-  const renamed = session.setProperty(body, 'name', 'body_c');
+  const renamed = session.setProperty(subject(body), 'name', 'body_c');
   assert.deepEqual(session.state.renaming, body);
   assert.equal(await renamed, true);
   assert.equal(session.state.renaming, null);
-  const resized = session.setProperty({ kind: 'kind_body', name: 'body_c' }, 'size_quantity', 31);
+  const resized = session.setProperty(subject({ kind: 'kind_body', name: 'body_c' }), 'size_quantity', 31);
   assert.equal(session.state.renaming, null, 'an edit of anything but the name is no rename');
   assert.equal(await resized, true);
-  const refused = session.setProperty({ kind: 'kind_body', name: 'body_c' }, 'name', 'body_b');
+  const refused = session.setProperty(subject({ kind: 'kind_body', name: 'body_c' }), 'name', 'body_b');
   assert.deepEqual(session.state.renaming, { kind: 'kind_body', name: 'body_c' });
   assert.equal(await refused, false);
   assert.equal(session.state.renaming, null, 'a refused rename is over too');
@@ -505,11 +519,11 @@ test('from the moment a rename is asked for until it is answered, the session sa
 
 test('undo and redo add revisions and are followed by the same reading as an edit', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
-  await session.setProperty(body, 'size_quantity', 20);
+  await session.select(subject(body));
+  await session.setProperty(subject(body), 'size_quantity', 20);
   const sent = service.log.length;
   await session.undo();
-  assert.deepEqual(commandsSince(service, sent), ['undo', 'check', 'get_preview', 'get_outline', 'get_properties']);
+  assert.deepEqual(commandsSince(service, sent), ['undo', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
   assert.equal(session.state.revision, 2);
   assert.deepEqual([session.state.canUndo, session.state.canRedo], [false, true]);
   assert.equal(session.state.hasUnsavedChanges, false, 'undo went back to the state it was opened in');
@@ -522,41 +536,64 @@ test('undo and redo add revisions and are followed by the same reading as an edi
 
 test('undo or redo drops a selection the project no longer has, and asks nothing about it', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
-  await session.setProperty(body, 'name', 'body_c');
+  await session.select(subject(body));
+  await session.setProperty(subject(body), 'name', 'body_c');
   let sent = service.log.length;
   await session.undo();
   assert.equal(session.state.selection, null);
-  assert.deepEqual(commandsSince(service, sent), ['undo', 'check', 'get_preview', 'get_outline']);
+  assert.deepEqual(commandsSince(service, sent), ['undo', 'check', 'get_preview', 'get_outline', 'get_model_tree']);
   assert.ok(outlineHas(session.state, body));
-  await session.select(body);
+  await session.select(subject(body));
   sent = service.log.length;
   await session.redo();
   assert.equal(session.state.selection, null, 'redo renamed the selection away again');
   assert.deepEqual(elementsAskedAbout(service, sent), []);
 });
 
-test('creating an element sends only what is given, then selects it and reads its properties', async () => {
+test('a row offering one kind opens its form at once, with what the row fixes; a row offering several asks for a kind first', async () => {
+  const one = [{ kind: 'kind_a', fixedProperties: { owner_ref: 'a' } }];
+  const several = [
+    { kind: 'kind_a', fixedProperties: {} },
+    { kind: 'kind_b', fixedProperties: {} },
+  ];
+  assert.deepEqual(creationFromOffers('a row', one), { rowKey: 'a row', offers: one, chosen: one[0] });
+  assert.deepEqual(creationFromOffers('a row', several), { rowKey: 'a row', offers: several, chosen: null });
+
   const { service, session } = await openedSession();
-  await session.select(body);
-  await session.startCreation('kind_frame');
-  assert.equal(session.state.creatingKind, 'kind_frame');
+  const links = rowWithKey(session.state.modelTree!, 'domain/links')!;
+  await session.startCreation(links.key, links.creates);
+  assert.deepEqual([session.state.creation?.rowKey, session.state.creation?.chosen], ['domain/links', null]);
+  await session.chooseCreationOffer(links.creates[1]!);
+  assert.equal(session.state.creation?.chosen?.kind, 'kind_spring');
+  await session.cancelCreation();
+  assert.equal(session.state.creation, null);
+  assert.equal(service.log.filter((entry) => entry.command === 'add_element').length, 0, 'nothing is created by choosing');
+});
+
+test('creating sends what is given beside what the row fixes, then selects the element, read under the row it was created from', async () => {
+  const { service, session } = await openedSession();
+  await session.select(subject(body));
+  const framesOfB = rowWithKey(session.state.modelTree!, 'frames/body_b')!;
+  await session.startCreation(framesOfB.key, framesOfB.creates);
+  const offer = session.state.creation!.chosen!;
+  assert.deepEqual(offer, { kind: 'kind_frame', fixedProperties: { body_ref: 'body_b' } });
   assert.equal(session.state.selection, null);
   const sent = service.log.length;
-  assert.equal(await session.createElement('kind_frame', 'frame_b', { body_ref: 'body_b' }), null);
-  assert.deepEqual(commandsSince(service, sent), ['add_element', 'check', 'get_preview', 'get_outline', 'get_properties']);
+  assert.equal(await session.createElement(offer.kind, 'frame_b', { ...(offer.fixedProperties as Record<string, string>) }), null);
+  assert.deepEqual(commandsSince(service, sent), ['add_element', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
   assert.deepEqual(service.log[sent]?.commandArguments, { kind: 'kind_frame', name: 'frame_b', properties: { body_ref: 'body_b' } });
   const created = { kind: 'kind_frame', name: 'frame_b' };
-  assert.deepEqual(session.state.selection, created);
+  assert.deepEqual(session.state.selection, subject(created));
   assert.equal(valueOf(session.state, 'body_ref'), 'body_b');
-  assert.equal(session.state.creatingKind, null);
+  assert.equal(session.state.creation, null);
   assert.equal(session.state.revision, 1);
-  assert.ok(outlineHas(session.state, created));
+  assert.deepEqual(rowKeysOf(session.state, subject(created)), ['domain/bodies', 'element/kind_body/body_b', 'frames/body_b', 'element/kind_frame/frame_b']);
 });
 
 test('a refused creation changes nothing and names the property at fault, which the form shows', async () => {
   const { service, session } = await openedSession();
-  await session.startCreation('kind_frame');
+  const framesOfA = rowWithKey(session.state.modelTree!, 'frames/body_a')!;
+  await session.startCreation(framesOfA.key, framesOfA.creates);
   const sent = service.log.length;
   const taken = await session.createElement('kind_frame', 'frame_a', { body_ref: 'body_a' });
   assert.equal(taken?.property, 'name');
@@ -566,12 +603,12 @@ test('a refused creation changes nothing and names the property at fault, which 
   assert.equal(dangling?.property, 'body_ref');
   assert.deepEqual(commandsSince(service, sent), ['add_element', 'add_element', 'add_element']);
   assert.equal(session.state.revision, 0);
-  assert.equal(session.state.creatingKind, 'kind_frame', 'the form stays open for correction');
+  assert.equal(session.state.creation?.chosen?.kind, 'kind_frame', 'the form stays open for correction');
 });
 
 test('a removal that takes the element alone also waits to be confirmed, and undo brings the element back', async () => {
   const { service, session } = await openedSession();
-  await session.select(spring);
+  await session.select(subject(spring));
   let sent = service.log.length;
   await session.requestRemoval(spring);
   assert.deepEqual(commandsSince(service, sent), ['get_removal_consequences']);
@@ -579,7 +616,7 @@ test('a removal that takes the element alone also waits to be confirmed, and und
   assert.ok(outlineHas(session.state, spring));
   sent = service.log.length;
   await session.confirmRemoval();
-  assert.deepEqual(commandsSince(service, sent), ['remove_element', 'check', 'get_preview', 'get_outline']);
+  assert.deepEqual(commandsSince(service, sent), ['remove_element', 'check', 'get_preview', 'get_outline', 'get_model_tree']);
   assert.equal(session.state.selection, null);
   assert.deepEqual(session.state.removedElements, [spring]);
   assert.equal(outlineHas(session.state, spring), false);
@@ -590,7 +627,7 @@ test('a removal that takes the element alone also waits to be confirmed, and und
 
 test('a removal that takes more waits to be confirmed: cancelling keeps everything, confirming removes all it named', async () => {
   const { service, session } = await openedSession();
-  await session.select(otherBody);
+  await session.select(subject(otherBody));
   let sent = service.log.length;
   await session.requestRemoval(otherBody);
   assert.deepEqual(commandsSince(service, sent), ['get_removal_consequences']);
@@ -600,11 +637,11 @@ test('a removal that takes more waits to be confirmed: cancelling keeps everythi
   await session.cancelRemoval();
   assert.equal(service.log.length, sent);
   assert.equal(session.state.pendingRemoval, null);
-  assert.deepEqual(session.state.selection, otherBody);
+  assert.deepEqual(session.state.selection, subject(otherBody));
   await session.requestRemoval(otherBody);
   sent = service.log.length;
   await session.confirmRemoval();
-  assert.deepEqual(commandsSince(service, sent), ['remove_element', 'check', 'get_preview', 'get_outline']);
+  assert.deepEqual(commandsSince(service, sent), ['remove_element', 'check', 'get_preview', 'get_outline', 'get_model_tree']);
   assert.deepEqual(session.state.removedElements, goes);
   assert.ok(goes.every((element) => !outlineHas(session.state, element)));
   assert.equal(session.state.selection, null);
@@ -614,26 +651,26 @@ test('a removal that takes more waits to be confirmed: cancelling keeps everythi
 
 test('a removal the service refuses removes nothing and says why, about the element', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   const sent = service.log.length;
   await session.requestRemoval(body);
   assert.deepEqual(commandsSince(service, sent), ['get_removal_consequences']);
-  assert.deepEqual(session.state.commandRefusal?.element, body);
+  assert.deepEqual(session.state.commandRefusal?.subject, subject(body));
   assert.match(session.state.commandRefusal?.message ?? '', /cannot be removed/);
   assert.equal(session.state.pendingRemoval, null);
-  assert.deepEqual(session.state.selection, body);
+  assert.deepEqual(session.state.selection, subject(body));
   assert.equal(session.state.revision, 0);
 });
 
-test('nothing is asked about an element the outline no longer has, whatever asks', async () => {
+test('nothing is asked about an element the model tree no longer has, whatever asks', async () => {
   const { service, session } = await openedSession();
-  await session.select(spring);
+  await session.select(subject(spring));
   await session.requestRemoval(spring);
   await session.confirmRemoval();
   const sent = service.log.length;
   // A stale drawing still shows the spring; a field of it may still commit.
-  await session.select(spring);
-  assert.equal(await session.setProperty(spring, 'axis_choice', 'axis_y'), false);
+  await session.select(subject(spring));
+  assert.equal(await session.setProperty(subject(spring), 'axis_choice', 'axis_y'), false);
   await session.requestRemoval(spring);
   assert.equal(service.log.length, sent);
   assert.equal(session.state.selection, null);
@@ -642,9 +679,9 @@ test('nothing is asked about an element the outline no longer has, whatever asks
 test('actions asked for together run one after another', async () => {
   const { service, session } = await openedSession();
   const sent = service.log.length;
-  await Promise.all([session.select(body), session.setProperty(body, 'size_quantity', 3), session.select(spring)]);
-  assert.deepEqual(commandsSince(service, sent), ['get_properties', 'set_property', 'check', 'get_preview', 'get_outline', 'get_properties', 'get_properties']);
-  assert.deepEqual(session.state.selection, spring);
+  await Promise.all([session.select(subject(body)), session.setProperty(subject(body), 'size_quantity', 3), session.select(subject(spring))]);
+  assert.deepEqual(commandsSince(service, sent), ['get_properties', 'set_property', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties', 'get_properties']);
+  assert.deepEqual(session.state.selection, subject(spring));
 });
 
 test('a check of an earlier revision does not count as the current status', async () => {
@@ -662,11 +699,11 @@ test('a failing server ends the session loudly and nothing more is sent', async 
   });
   await session.start(projectsDirectory, { open: referenceVehicle(vehicle), select: null });
   reachable = false;
-  await session.select(body);
+  await session.select(subject(body));
   assert.match(session.state.failure ?? '', /gone/);
   reachable = true;
   const sent = service.log.length;
-  await session.select(body);
+  await session.select(subject(body));
   await session.save();
   assert.equal(service.log.length, sent);
 });
@@ -680,16 +717,16 @@ test('nothing asked for against the shown project while another vehicle opens is
     return service.send(command, commandArguments);
   });
   await session.start(projectsDirectory, { open: referenceVehicle(vehicle), select: null });
-  await session.select(body);
+  await session.select(subject(body));
   gate = new Promise((release) => {
     releaseOpen = release;
   });
   const opening = session.open(referenceVehicle(otherVehicle));
   const shownWhileOpening = session.state.opening;
   // The panels still show the first vehicle; everything asked for against it now must not reach the second.
-  const edited = session.setProperty(body, 'size_quantity', 99);
+  const edited = session.setProperty(subject(body), 'size_quantity', 99);
   const created = session.createElement('kind_frame', 'frame_b', { body_ref: 'body_a' });
-  const others = [session.select(spring), session.undo(), session.redo(), session.requestRemoval(spring), session.startCreation('kind_body'), session.save(), session.startSaveAs()];
+  const others = [session.select(subject(spring)), session.undo(), session.redo(), session.requestRemoval(spring), session.startCreation('domain/bodies', [{ kind: 'kind_body', fixedProperties: {} }]), session.save(), session.startSaveAs()];
   releaseOpen();
   await opening;
   await Promise.all(others);
@@ -698,13 +735,13 @@ test('nothing asked for against the shown project while another vehicle opens is
     sinceOpen.map((entry) => entry.command),
     ['open_vehicle', ...openingCommands],
   );
-  await session.select(body);
+  await session.select(subject(body));
   assert.equal(session.state.outline?.vehicleName, 'OTHER');
   assert.equal(session.state.revision, 0);
   assert.equal(valueOf(session.state, 'size_quantity'), 10);
   assert.equal(await edited, false);
   assert.equal(await created, null);
-  assert.equal(session.state.creatingKind, null);
+  assert.equal(session.state.creation, null);
   assert.equal(session.state.saveAs, null);
   assert.deepEqual(shownWhileOpening, referenceVehicle(otherVehicle));
   assert.equal(session.state.opening, null);
@@ -712,11 +749,11 @@ test('nothing asked for against the shown project while another vehicle opens is
 
 test('actions asked for before an open still run first, against the project they were asked for', async () => {
   const { service, session } = await openedSession();
-  await session.select(body);
+  await session.select(subject(body));
   await session.startSaveAs();
   await session.saveAs('mine', false);
   const sent = service.log.length;
-  const edited = session.setProperty(body, 'size_quantity', 12);
+  const edited = session.setProperty(subject(body), 'size_quantity', 12);
   const saved = session.save();
   const opening = session.open(referenceVehicle(otherVehicle));
   assert.equal(await edited, true);
@@ -726,11 +763,85 @@ test('actions asked for before an open still run first, against the project they
     'set_property',
     'check',
     'get_preview',
-    'get_outline',
+    'get_outline', 'get_model_tree',
     'get_properties',
     'save_vehicle_project',
     'open_vehicle',
     ...openingCommands,
   ]);
   assert.equal(session.state.pendingOpen, null, 'the save before it left nothing unsaved');
+});
+
+test('opening reads the model tree after the outline, and the tree has every element of the outline once', async () => {
+  const { session } = await openedSession();
+  const inTree: unknown[] = [];
+  const collect = (rows: NonNullable<SessionState['modelTree']>): void => {
+    for (const row of rows) {
+      if (row.subject !== null && 'element' in row.subject) inTree.push(row.subject.element);
+      collect(row.children);
+    }
+  };
+  collect(session.state.modelTree!);
+  const byKey = (each: unknown) => JSON.stringify(each);
+  assert.deepEqual(inTree.map(byKey).sort(), session.state.outline!.elements.map(byKey).sort());
+});
+
+test('settings are selected and edited like an element, one undo step each, and stay selected through undo, redo and Save as', async () => {
+  const { service, session } = await openedSession();
+  const constant = { settings: 'setting_constant' };
+  let sent = service.log.length;
+  await session.select(constant);
+  assert.deepEqual(commandsSince(service, sent), ['get_properties']);
+  assert.deepEqual(service.log[sent]?.commandArguments, { subject: constant });
+  assert.deepEqual(session.state.selection, constant);
+  assert.deepEqual(
+    session.state.properties.map((property) => [property.name, property.editable, property.value]),
+    [['constant_quantity', true, null]],
+    'a value not stated yet can be set',
+  );
+
+  sent = service.log.length;
+  assert.equal(await session.setProperty(constant, 'constant_quantity', 9.81), true);
+  assert.deepEqual(commandsSince(service, sent), ['set_property', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
+  assert.deepEqual(service.log[sent]?.commandArguments, { subject: constant, property: 'constant_quantity', value: 9.81 });
+  assert.deepEqual([session.state.revision, session.state.canUndo, session.state.hasUnsavedChanges], [1, true, true]);
+  assert.equal(valueOf(session.state, 'constant_quantity'), 9.81);
+  await session.undo();
+  assert.deepEqual(session.state.selection, constant, 'undo keeps the settings selected');
+  assert.equal(valueOf(session.state, 'constant_quantity'), null);
+  await session.redo();
+  assert.equal(valueOf(session.state, 'constant_quantity'), 9.81);
+
+  const identity = { settings: 'setting_identity' };
+  await session.select(identity);
+  await session.startSaveAs();
+  await session.saveAs('mine', false);
+  assert.deepEqual(session.state.selection, identity, 'Save as keeps the settings selected');
+  assert.equal(valueOf(session.state, 'identity_text'), 'mine', 'and reads them again');
+});
+
+test('a refused settings edit is kept at its field, about the settings, and changes nothing', async () => {
+  const { service, session } = await openedSession();
+  const identity = { settings: 'setting_identity' };
+  await session.select(identity);
+  const sent = service.log.length;
+  assert.equal(await session.setProperty(identity, 'identity_text', 'other'), false);
+  assert.deepEqual(commandsSince(service, sent), ['set_property']);
+  assert.deepEqual(session.state.editRefusal, { subject: identity, property: 'identity_text', value: 'other', message: "'identity_text' is read-only" });
+  assert.equal(session.state.revision, 0);
+  assert.deepEqual(session.state.selection, identity);
+});
+
+test('a selection survives every re-read of the tree, and a frame pointed at another body stays selected under it', async () => {
+  const { session } = await openedSession();
+  await session.select(subject(frame));
+  assert.deepEqual(rowKeysOf(session.state, subject(frame)), ['domain/bodies', 'element/kind_body/body_a', 'frames/body_a', 'element/kind_frame/frame_a']);
+  await session.setProperty(subject(body), 'size_quantity', 11);
+  assert.deepEqual(session.state.selection, subject(frame), 'an edit elsewhere re-reads the tree and keeps the selection');
+  assert.equal(await session.setProperty(subject(frame), 'body_ref', 'body_b'), true);
+  assert.deepEqual(session.state.selection, subject(frame));
+  assert.deepEqual(rowKeysOf(session.state, subject(frame)), ['domain/bodies', 'element/kind_body/body_b', 'frames/body_b', 'element/kind_frame/frame_a']);
+  await session.undo();
+  assert.deepEqual(rowKeysOf(session.state, subject(frame)), ['domain/bodies', 'element/kind_body/body_a', 'frames/body_a', 'element/kind_frame/frame_a']);
+  assert.deepEqual(session.state.selection, subject(frame));
 });

@@ -1,16 +1,19 @@
 import { useEffect, useId, useRef } from 'react';
 
+import type { ElementKindDescription } from '../service/vehicle_modeling_service_protocol.ts';
 import type { PendingRemoval } from '../session/vehicle_editing_session.ts';
 import { ElementsRemovedWithElementList } from './ElementsRemovedWithElementList.tsx';
-import { identifierLabel } from './identifier_display_labels.ts';
+import { elementKindTitle } from './find_element_kind_title.ts';
+import { kindTitleInASentence } from './kind_title_in_a_sentence.ts';
 
 // The question every removal asks: what would go, and a choice between
 // removing and keeping it. An element nothing refers to goes alone, and the
 // question says so; otherwise everything that goes with it is listed. Cancel
 // has the focus, and Escape cancels.
 
-export function ElementRemovalConfirmation(props: { removal: PendingRemoval; onConfirm: () => void; onCancel: () => void }) {
+export function ElementRemovalConfirmation(props: { removal: PendingRemoval; kinds: readonly ElementKindDescription[]; onConfirm: () => void; onCancel: () => void }) {
   const { element, removedElements } = props.removal;
+  const kindTitle = elementKindTitle(props.kinds, element.kind);
   const alone = removedElements.length === 1;
   const cancel = useRef<HTMLButtonElement>(null);
   const questionId = useId();
@@ -30,15 +33,15 @@ export function ElementRemovalConfirmation(props: { removal: PendingRemoval; onC
         {alone ? (
           <>
             <p className="removal-question">
-              Remove this {identifierLabel(element.kind)}? Nothing refers to it, so it goes alone.
-              <span className="zh">删除该元素？没有其他元素引用它，只删除它本身。</span>
+              Remove this {kindTitleInASentence(kindTitle)}? Nothing refers to it, so it goes alone.
+              <span className="zh">删除该{kindTitle.zh}？没有其他元素引用它，只删除它本身。</span>
             </p>
             <p className="removal-note">
               Undo brings it back. <span className="zh">撤销可恢复。</span>
             </p>
           </>
         ) : (
-          <ElementsRemovedWithElementList element={element} removedElements={removedElements} />
+          <ElementsRemovedWithElementList element={element} removedElements={removedElements} kinds={props.kinds} />
         )}
       </div>
       <div className="form-buttons">

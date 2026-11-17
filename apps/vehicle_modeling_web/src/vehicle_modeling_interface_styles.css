@@ -642,42 +642,165 @@ input {
   scrollbar-width: thin;
 }
 
-.tree-kind {
+/* The model tree. Indentation and weight carry the levels, not colour: a first-level row is set apart by weight and
+   a line under its branch; every level below steps in by one indent. An element row shows its name in the
+   monospace face, and in a list of types its kind as a quiet tag; a titled row shows its title. A note is a quiet
+   second line; a row not provided yet is greyed. */
+.tree-branch:has(> .tree-row.first-level) {
   border-bottom: 1px solid var(--line);
 }
 
-/* A kind's row: the toggle that opens it, and the button that creates one. */
-.kind-head {
+.tree-row {
+  --indent: 14px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  min-height: 26px;
+  padding-left: calc(4px + var(--depth) * var(--indent));
 }
 
-.kind-head.creating {
+.tree-row:hover {
+  background: var(--panel-head);
+}
+
+.tree-row.selected {
+  background: var(--selection-tint);
+  box-shadow: inset 2px 0 0 var(--selection);
+}
+
+.tree-row.creating {
   background: var(--accent-tint);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.kind-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  padding: 6px 4px 6px 10px;
+.tree-row.not-provided:hover {
+  background: transparent;
+}
+
+.row-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 26px;
+  padding: 0;
   border: 0;
   background: transparent;
-  text-align: left;
   color: var(--ink2);
   cursor: pointer;
 }
 
-.kind-head:hover,
-.element-row:hover {
-  background: var(--panel-head);
+span.row-toggle {
+  cursor: default;
 }
 
-.kind-head.creating:hover {
-  background: var(--accent-tint);
+.row-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 4px 4px 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--ink1);
+  line-height: 1.4;
+}
+
+button.row-label {
+  cursor: pointer;
+}
+
+.tree-row:hover .row-label,
+.tree-row.selected .row-label {
+  color: var(--ink0);
+}
+
+.row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 4px;
+}
+
+.row-title .zh {
+  font-size: 12px;
+}
+
+/* The space before "not provided yet" is the title's, so that the mark, wrapped under a long title, starts where the
+   title does. */
+.tree-row.not-provided .row-title .zh {
+  margin-right: 6px;
+}
+
+.tree-row.first-level .row-title .en {
+  font-weight: 600;
+  color: var(--ink0);
+}
+
+.tree-row.first-level .row-title .zh {
+  color: var(--ink1);
+}
+
+.tree-row.titled:not(.first-level) .row-title .en {
+  font-weight: 500;
+}
+
+.row-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1px 8px;
+  font: 400 12px/1.45 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.kind-tag {
+  font: 400 11px/1.4 var(--sans);
+  color: var(--ink2);
+}
+
+/* A kind's Chinese title is short and is kept whole, on the next line when it does not fit. Here and in the other
+   titles and notes that may wrap, the space between the English and the Chinese parts them, not a margin, which
+   would indent the Chinese when it starts a line. */
+.kind-tag .zh {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.row-note,
+.not-provided-mark {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink2);
+}
+
+.row-note .zh,
+.not-provided-mark .zh {
+  font-size: 11px;
+}
+
+.tree-row.not-provided .row-title .en,
+.tree-row.not-provided .row-title .zh,
+.tree-row.not-provided .not-provided-mark,
+.tree-row.not-provided .not-provided-mark .zh,
+.tree-row.not-provided .row-note,
+.tree-row.not-provided .row-note .zh {
+  color: var(--ink3);
+  font-weight: 400;
+}
+
+/* The count and "+" stand on the row's first line, as the chevron does, whatever lines a note or a tag adds below. */
+.row-count {
+  flex: none;
+  margin-left: 6px;
+  font: 400 11.5px/26px var(--mono);
+  color: var(--ink2);
+}
+
+/* Where no "+" follows, the count keeps the column the others stand in. */
+.row-count:last-child {
+  margin-right: 32px;
 }
 
 .create-button {
@@ -686,7 +809,7 @@ input {
   place-items: center;
   width: 22px;
   height: 22px;
-  margin: 0 6px 0 4px;
+  margin: 2px 6px 0 4px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 2px;
@@ -702,44 +825,6 @@ input {
   background: var(--field);
   color: var(--accent-deep);
   outline: none;
-}
-
-.kind-name {
-  flex: 1;
-  font-weight: 600;
-  color: var(--ink0);
-}
-
-.kind-name::first-letter {
-  text-transform: uppercase;
-}
-
-.kind-count {
-  font: 400 11.5px var(--mono);
-  color: var(--ink2);
-}
-
-.element-row {
-  display: block;
-  width: 100%;
-  padding: 3px 10px 3px 26px;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  font: 400 12px/1.45 var(--mono);
-  color: var(--ink1);
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-.element-row:hover {
-  color: var(--ink0);
-}
-
-.element-row.selected {
-  background: var(--selection-tint);
-  color: var(--ink0);
-  box-shadow: inset 2px 0 0 var(--selection);
 }
 
 /* ---------- property panel ---------- */
@@ -839,8 +924,8 @@ input {
   color: var(--ink2);
 }
 
-.property.editable .property-kind::after {
-  content: ' · editable';
+.property-kind .zh {
+  margin-left: 3px;
 }
 
 .value {
@@ -1052,6 +1137,10 @@ table.value.curve {
   color: var(--ink2);
 }
 
+.choice-kind .zh {
+  font-size: 11px;
+}
+
 .choice-none {
   color: var(--ink2);
 }
@@ -1178,6 +1267,18 @@ table.value.curve {
   display: block;
 }
 
+/* Under a property the row's offer fixes: a quiet line, so that the head keeps the room of every other head. */
+.fixed-note {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink2);
+}
+
+.fixed-note .zh {
+  font-size: 11px;
+}
+
 .form-actions {
   flex: none;
   display: flex;
@@ -1284,6 +1385,95 @@ table.value.curve {
 
 .removal-note .zh {
   margin-left: 4px;
+}
+
+/* A subject's properties in the sections their descriptions state: a quiet title over each titled run. */
+.property-section-title {
+  margin: 0;
+  padding: 8px 12px 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink2);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.property-section-title .zh {
+  margin-left: 4px;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.property-section + .property-section .property-section-title {
+  border-top: 1px solid var(--line-strong);
+}
+
+/* Settings are named by their row's title, not in the monospace face of element names. */
+.selection-name.settings-title {
+  font: 600 13px/1.4 var(--sans);
+}
+
+.selection-name.settings-title .zh {
+  margin-left: 4px;
+  font-weight: 400;
+  font-size: 12.5px;
+}
+
+/* A kind's Chinese title is kept whole, as in the tree's tags. */
+.selection-kind .zh {
+  white-space: nowrap;
+}
+
+.creation-row {
+  margin-left: 8px;
+  color: var(--ink2);
+}
+
+.creation-row::before {
+  content: '·';
+  margin-right: 8px;
+}
+
+.creation-row.element-name {
+  font-family: var(--mono);
+}
+
+/* The choice of a kind a row's "+" asks for first. */
+.chooser-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+/* A block, so that a title's Chinese follows its English on the same line when there is room, and starts the next
+   line, whole, when there is not. */
+.chooser-choice {
+  display: block;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--field);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chooser-choice:hover,
+.chooser-choice:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.chooser-choice .zh {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* A text the service gives is shown as it is, a path or an identifier included. */
+.value.text {
+  font: 400 12px/1.45 var(--mono);
+  overflow-wrap: anywhere;
 }
 
 /* ---------- message area ---------- */

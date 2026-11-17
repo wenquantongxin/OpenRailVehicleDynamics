@@ -1,4 +1,4 @@
-import type { ElementReference, Vector3 } from '../service/vehicle_modeling_service_protocol.ts';
+import type { PropertySubject, Vector3 } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditRefusal, SetProperty } from '../session/vehicle_editing_session.ts';
 import { readNumberEntry } from './decimal_number_text_reading.ts';
 import { FieldRefusalMessage } from './FieldRefusalMessage.tsx';
@@ -7,28 +7,29 @@ import { useTypedFieldCommit } from './property_field_commit_hooks.ts';
 import { takesTyping } from './typed_property_field_commit_rules.ts';
 import { UnreadableNumberMessage } from './UnreadableNumberMessage.tsx';
 
-// An editable number or vector of the selected element. It commits on Enter
+// An editable number or vector of the selected subject. It commits on Enter
 // or when focus leaves the field, and nothing is sent when its value did not
-// change. A refused edit keeps the text entered and shows the service's reason.
+// change; a number the subject holds no value for yet shows an empty field. A
+// refused edit keeps the text entered and shows the service's reason.
 
 export function NumberAndVectorPropertyEditor(props: {
-  element: ElementReference;
+  subject: PropertySubject;
   propertyName: string;
-  /** One number, or the three of a vector. */
-  current: readonly number[];
+  /** One number, or the three of a vector; null where the subject holds no value yet. */
+  current: readonly (number | null)[];
   refusal: EditRefusal | null;
   /** Takes no input: the element's rename is on its way. */
   frozen: boolean;
   onCommit: SetProperty;
   onDismissRefusal: () => void;
 }) {
-  const { element, propertyName, current, refusal } = props;
-  const shown = current.map(String);
+  const { subject, propertyName, current, refusal } = props;
+  const shown = current.map((value) => (value === null ? '' : String(value)));
   const { field, type, commit, revert } = useTypedFieldCommit<readonly string[], number[]>({
     // A field shown again after its edit was refused starts from the refused value.
     refusedEntry: refusal === null ? null : [refusal.value].flat().map(String),
     read: (texts) => readNumberEntry(texts, current),
-    send: (values) => props.onCommit(element, propertyName, current.length === 1 ? values[0]! : (values as Vector3)),
+    send: (values) => props.onCommit(subject, propertyName, current.length === 1 ? values[0]! : (values as Vector3)),
     onRevert: () => {
       if (refusal !== null) props.onDismissRefusal();
     },

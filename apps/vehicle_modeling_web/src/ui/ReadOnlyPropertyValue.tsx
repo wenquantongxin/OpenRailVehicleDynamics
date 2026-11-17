@@ -4,7 +4,7 @@ import { ReadOnlyRotationGrid } from './ReadOnlyRotationGrid.tsx';
 import { WrappableElementName } from './WrappableElementName.tsx';
 
 // A property value that is shown, not edited. Numbers keep their full
-// precision; an absent value is a dash.
+// precision, a text is shown as it is, and an absent value is a dash.
 
 export function ReadOnlyPropertyValue({ property }: { property: PropertyReading }) {
   if (property.value === null) {
@@ -34,5 +34,7 @@ export function ReadOnlyPropertyValue({ property }: { property: PropertyReading 
       return <ReadOnlyRotationGrid rows={property.value} />;
     case curveValueKind:
       return <ReadOnlyCurveTable rowFields={property.rowFields} rows={property.value} />;
+    case 'text':
+      return <span className="value text">{property.value}</span>;
   }
 }

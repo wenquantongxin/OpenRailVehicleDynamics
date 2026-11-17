@@ -13,7 +13,7 @@ const carrier = { kind: 'kind_carrier', name: 'body_a' };
 const elements = [bodyA, frameA, frameB, carrier];
 
 function description(referencedKinds: string[], optional: boolean): ReferenceDescription {
-  return { name: 'to', editable: true, valueKind: 'element_reference', referencedKinds, optional };
+  return { name: 'to', editable: true, section: null, valueKind: 'element_reference', referencedKinds, optional };
 }
 
 test('only the elements of the kinds the property may name are offered, in outline order', () => {

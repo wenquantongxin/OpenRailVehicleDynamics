@@ -3,9 +3,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { framesCamera, viewPresets, type ViewPreset } from '../scene/vehicle_model_view_camera_presets.ts';
 import { VehicleModelViewport } from '../scene/vehicle_model_viewport.ts';
 import { drawsAnything, type PartsDisplay, type SceneDisplay } from '../scene/vehicle_preview_scene.ts';
-import type { ElementReference, Preview } from '../service/vehicle_modeling_service_protocol.ts';
+import type { ElementKindDescription, ElementReference, Preview } from '../service/vehicle_modeling_service_protocol.ts';
 import type { OpenedVehicle } from '../session/vehicle_editing_session.ts';
-import { identifierLabel } from './identifier_display_labels.ts';
+import { elementKindTitle } from './find_element_kind_title.ts';
 
 // The 3D view with its controls: view presets, how body parts are shown, the
 // fixed frames switch, a legend, and a badge when the drawing is older than
@@ -33,6 +33,8 @@ export function VehicleModelView(props: {
   selection: ElementReference | null;
   /** The latest check's refusals, shown while there is no drawing. */
   checkRefusals: string[];
+  /** The element kinds with their titles, which name a drawing under the pointer. */
+  kinds: readonly ElementKindDescription[];
   onPick: (element: ElementReference | null) => void;
   /** Shown over the view, such as the choice of what to open. */
   children?: ReactNode;
@@ -43,6 +45,8 @@ export function VehicleModelView(props: {
   const fittedVehicle = useRef<OpenedVehicle | null>(null);
   const onPick = useRef(props.onPick);
   onPick.current = props.onPick;
+  const kinds = useRef(props.kinds);
+  kinds.current = props.kinds;
   const [display, setDisplay] = useState<SceneDisplay>({ parts: 'solid', frames: false });
   const [viewFailure, setViewFailure] = useState<string | null>(null);
   const [drawingFailure, setDrawingFailure] = useState<string | null>(null);
@@ -53,7 +57,7 @@ export function VehicleModelView(props: {
       created = new VehicleModelViewport(container.current!, {
         // A click on empty space clears the selection.
         pick: (drawing) => onPick.current(drawing === null ? null : drawing.element),
-        describe: (drawing) => `${identifierLabel(drawing.element.kind)} · ${drawing.element.name}`,
+        describe: (drawing) => `${elementKindTitle(kinds.current, drawing.element.kind).en} · ${drawing.element.name}`,
       });
     } catch (error) {
       setViewFailure(error instanceof Error ? error.message : String(error));
@@ -150,11 +154,11 @@ export function VehicleModelView(props: {
           <div className="legend" aria-hidden="true">
             <span>
               <i className="swatch force" />
-              Force element <span className="zh">力元</span>
+              Force element <span className="zh">力元连线</span>
             </span>
             <span>
               <i className="swatch joint" />
-              Joint <span className="zh">铰</span>
+              Joint <span className="zh">铰点</span>
             </span>
             <span>
               <i className="swatch body" />

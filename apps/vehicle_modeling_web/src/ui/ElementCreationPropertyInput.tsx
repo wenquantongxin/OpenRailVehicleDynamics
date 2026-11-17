@@ -1,4 +1,4 @@
-import { curveValueKind, type ElementReference, type PropertyDescription } from '../service/vehicle_modeling_service_protocol.ts';
+import { curveValueKind, type ElementKindDescription, type ElementReference, type PropertyDescription } from '../service/vehicle_modeling_service_protocol.ts';
 import { BooleanCheckbox } from './BooleanCheckbox.tsx';
 import { withCellText, withRowAdded, withRowRemoved } from './editable_curve_table_rules.ts';
 import { EditableCurveTable } from './EditableCurveTable.tsx';
@@ -9,7 +9,16 @@ import { NumberTextInputs } from './NumberTextInputs.tsx';
 import { TokenChoiceSelect } from './TokenChoiceSelect.tsx';
 
 /** The input of one property in the creation form, by the property's value kind; it holds what is entered, unsent. */
-export function ElementCreationPropertyInput(props: { property: PropertyDescription; entry: FormEntry; elements: readonly ElementReference[]; disabled: boolean; unreadableAt: number | null; refused: boolean; onEntry: (entry: FormEntry) => void }) {
+export function ElementCreationPropertyInput(props: {
+  property: PropertyDescription;
+  entry: FormEntry;
+  elements: readonly ElementReference[];
+  kinds: readonly ElementKindDescription[];
+  disabled: boolean;
+  unreadableAt: number | null;
+  refused: boolean;
+  onEntry: (entry: FormEntry) => void;
+}) {
   const { property, entry, disabled, refused, onEntry } = props;
   switch (entry.valueKind) {
     case 'element_name':
@@ -47,6 +56,7 @@ export function ElementCreationPropertyInput(props: { property: PropertyDescript
         <ElementReferencePicker
           description={entry.description}
           elements={props.elements}
+          kinds={props.kinds}
           value={entry.chosen}
           disabled={disabled}
           refused={refused}

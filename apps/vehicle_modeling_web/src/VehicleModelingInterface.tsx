@@ -4,18 +4,20 @@ import { assignPartsToDrawnBodies } from './scene/vehicle_preview_scene.ts';
 import { fetchReferenceVehicles, type ReferenceVehicle } from './service/fetch_reference_vehicles.ts';
 import { fetchVehicleProjectsDirectory } from './service/fetch_vehicle_projects_directory.ts';
 import { modelingServerCommandChannel } from './service/modeling_server_command_channel.ts';
-import type { ElementReference } from './service/vehicle_modeling_service_protocol.ts';
+import { subjectElement, type ElementReference, type PropertySubject } from './service/vehicle_modeling_service_protocol.ts';
 import { readStartLinkFromPageAddress } from './session/read_start_link_from_page_address.ts';
 import { VehicleEditingSession, type EditRefusal, type EditValue, type OpenChoice, type StartLink } from './session/vehicle_editing_session.ts';
 import { DiscardUnsavedChangesDialog } from './ui/DiscardUnsavedChangesDialog.tsx';
-import type { PropertyFocusRequest } from './ui/ElementPropertyList.tsx';
-import { ElementPropertyPanel } from './ui/ElementPropertyPanel.tsx';
+
 import { editedProjectInSentence, openChoiceInSentence } from './ui/open_choice_and_edited_project_wording.ts';
 import { ProjectSaveAsDialog } from './ui/ProjectSaveAsDialog.tsx';
+import { SelectionPropertyPanel } from './ui/SelectionPropertyPanel.tsx';
 import { ServiceMessagesPanel } from './ui/ServiceMessagesPanel.tsx';
-import { VehicleElementTree } from './ui/VehicleElementTree.tsx';
+import type { PropertyFocusRequest } from './ui/SubjectPropertyList.tsx';
+
 import { VehicleModelingStartPage } from './ui/VehicleModelingStartPage.tsx';
 import { VehicleModelingTopBar } from './ui/VehicleModelingTopBar.tsx';
+import { VehicleModelTree } from './ui/VehicleModelTree.tsx';
 import { VehicleModelView } from './ui/VehicleModelView.tsx';
 
 // The modelling interface: top bar, component tree, 3D view, property panel
@@ -91,17 +93,17 @@ export function VehicleModelingInterface() {
     [state.vehicle, state.preview],
   );
   const open = useCallback((choice: OpenChoice) => void session.open(choice), [session]);
-  const select = useCallback((element: ElementReference | null) => void session.select(element), [session]);
-  const commit = useCallback((element: ElementReference, property: string, value: EditValue) => session.setProperty(element, property, value), [session]);
+  const select = useCallback((subject: PropertySubject | null) => void session.select(subject), [session]);
+  const selectElement = useCallback((element: ElementReference | null) => void session.select(element === null ? null : { element }), [session]);
+  const commit = useCallback((subject: PropertySubject, property: string, value: EditValue) => session.setProperty(subject, property, value), [session]);
   const create = useCallback(
     (kind: string, name: string, properties: Readonly<Record<string, EditValue>>) => session.createElement(kind, name, properties),
     [session],
   );
-  const elementKinds = useMemo(() => state.elementKinds.map((kind) => kind.kind), [state.elementKinds]);
   const showRefusal = useCallback(
     (refusal: EditRefusal) => {
-      void session.select(refusal.element);
-      setFocusRequest((previous) => ({ element: refusal.element, property: refusal.property, serial: (previous?.serial ?? 0) + 1 }));
+      void session.select(refusal.subject);
+      setFocusRequest((previous) => ({ subject: refusal.subject, property: refusal.property, serial: (previous?.serial ?? 0) + 1 }));
     },
     [session],
   );
@@ -119,21 +121,24 @@ export function VehicleModelingInterface() {
       />
       {/* While a vehicle opens, the panels still show the project it replaces and take no input. */}
       <div className="workspace" inert={state.opening !== null}>
-        <VehicleElementTree
-          kinds={elementKinds}
-          outline={state.outline}
+        <VehicleModelTree
+          tree={state.modelTree}
+          elementCount={state.outline?.elements.length ?? null}
+          kinds={state.elementKinds}
+          openedVehicle={state.vehicle}
           selection={state.selection}
-          creatingKind={state.creatingKind}
+          creatingFromRow={state.creation?.rowKey ?? null}
           onSelect={select}
-          onCreate={(kind) => void session.startCreation(kind)}
+          onCreate={(rowKey, offers) => void session.startCreation(rowKey, offers)}
         />
         <VehicleModelView
           vehicle={state.vehicle}
           preview={state.preview}
           revision={state.revision}
-          selection={state.selection}
+          selection={subjectElement(state.selection)}
           checkRefusals={state.check?.report.refusals ?? []}
-          onPick={select}
+          kinds={state.elementKinds}
+          onPick={selectElement}
         >
           {showStartPage && (
             <VehicleModelingStartPage
@@ -147,18 +152,19 @@ export function VehicleModelingInterface() {
             />
           )}
         </VehicleModelView>
-        <ElementPropertyPanel
+        <SelectionPropertyPanel
           state={state}
           focusRequest={focusRequest}
           onCommit={commit}
           onDismissRefusal={() => session.dismissEditRefusal()}
+          onChooseCreationOffer={(offer) => void session.chooseCreationOffer(offer)}
           onCreate={create}
           onCancelCreation={() => void session.cancelCreation()}
           onRequestRemoval={(element) => void session.requestRemoval(element)}
           onConfirmRemoval={() => void session.confirmRemoval()}
           onCancelRemoval={() => void session.cancelRemoval()}
         />
-        <ServiceMessagesPanel state={state} partsWithoutBody={partsWithoutBody} onSelect={select} onShowRefusal={showRefusal} />
+        <ServiceMessagesPanel state={state} partsWithoutBody={partsWithoutBody} onSelect={selectElement} onShowRefusal={showRefusal} />
       </div>
       {state.saveAs !== null && state.vehicleProjectsDirectory !== null && (
         <ProjectSaveAsDialog

@@ -1,4 +1,4 @@
-import type { CurvePoint, ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
+import type { CurvePoint, PropertySubject } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditRefusal, SetProperty } from '../session/vehicle_editing_session.ts';
 import { curveEntryOf, readCurveEntry, withCellText, withRowAdded, withRowRemoved, type CurveEntry } from './editable_curve_table_rules.ts';
 import { EditableCurveTable } from './EditableCurveTable.tsx';
@@ -7,12 +7,12 @@ import { useTypedFieldCommit } from './property_field_commit_hooks.ts';
 import { takesTyping } from './typed_property_field_commit_rules.ts';
 import { UnreadableNumberMessage } from './UnreadableNumberMessage.tsx';
 
-// An editable curve of the selected element. Rows are changed, added and
+// An editable curve of the selected subject. Rows are changed, added and
 // removed in the table, and the whole curve is committed as one edit on
 // Enter or when focus leaves the table; Escape reverts it.
 
 export function CurvePropertyEditor(props: {
-  element: ElementReference;
+  subject: PropertySubject;
   propertyName: string;
   rowFields: readonly string[];
   current: readonly CurvePoint[];
@@ -22,12 +22,12 @@ export function CurvePropertyEditor(props: {
   onCommit: SetProperty;
   onDismissRefusal: () => void;
 }) {
-  const { element, propertyName, rowFields, current, refusal } = props;
+  const { subject, propertyName, rowFields, current, refusal } = props;
   const shown = curveEntryOf(current, rowFields);
   const { field, type, commit, revert } = useTypedFieldCommit<CurveEntry, CurvePoint[]>({
     refusedEntry: refusal === null ? null : curveEntryOf(refusal.value as readonly CurvePoint[], rowFields),
     read: (entry) => readCurveEntry(entry, rowFields, current),
-    send: (curve) => props.onCommit(element, propertyName, curve),
+    send: (curve) => props.onCommit(subject, propertyName, curve),
     onRevert: () => {
       if (refusal !== null) props.onDismissRefusal();
     },

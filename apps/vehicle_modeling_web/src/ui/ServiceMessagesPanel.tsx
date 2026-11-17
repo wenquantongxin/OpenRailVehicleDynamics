@@ -1,9 +1,12 @@
-import { elementKey, type ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
+import { rowPathOfSubject } from '../service/find_model_tree_rows.ts';
+import { elementKey, subjectElement, type ElementReference } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditRefusal, SessionState } from '../session/vehicle_editing_session.ts';
 import type { VisualPart } from '../visual/read_vehicle_visual_definition.ts';
+import { BilingualTitleText } from './BilingualTitleText.tsx';
 import { CollapsibleMessageGroup } from './CollapsibleMessageGroup.tsx';
 import { DockedPanelTitleStrip } from './DockedPanelTitleStrip.tsx';
 import { ElementLinkButton } from './ElementLinkButton.tsx';
+import { elementKindTitle } from './find_element_kind_title.ts';
 import { identifierLabel } from './identifier_display_labels.ts';
 import { openChoiceInSentence } from './open_choice_and_edited_project_wording.ts';
 import { WrappableElementName } from './WrappableElementName.tsx';
@@ -26,6 +29,8 @@ export function ServiceMessagesPanel(props: {
   const { state } = props;
   const report = state.check?.report ?? null;
   const notDrawable = state.preview?.notDrawableElements ?? [];
+  const refusedElement = subjectElement(state.editRefusal?.subject ?? null);
+  const refusedSettingsTitle = state.editRefusal === null || refusedElement !== null ? null : (rowPathOfSubject(state.modelTree ?? [], state.editRefusal.subject)?.at(-1)?.title ?? null);
   return (
     <section className="panel messages-panel" aria-label="Messages">
       <DockedPanelTitleStrip en="Messages" zh="消息" detail={state.check === null ? undefined : `check at revision ${state.check.revision}`} />
@@ -80,7 +85,7 @@ export function ServiceMessagesPanel(props: {
             <p className="removal-summary">
               {state.removedElements.map((element) => (
                 <span key={elementKey(element)} className="removed-element">
-                  <span className="link-kind">{identifierLabel(element.kind)}</span> <WrappableElementName name={element.name} />
+                  <span className="link-kind">{elementKindTitle(state.elementKinds, element.kind).en}</span> <WrappableElementName name={element.name} />
                 </span>
               ))}
             </p>
@@ -95,7 +100,8 @@ export function ServiceMessagesPanel(props: {
               Edit refused <span className="zh">修改被拒绝</span>
             </b>
             <span className="refused-target">
-              <WrappableElementName name={state.editRefusal.element.name} /> · {identifierLabel(state.editRefusal.property)}
+              {refusedElement !== null && <WrappableElementName name={refusedElement.name} />}
+              {refusedSettingsTitle !== null && <BilingualTitleText title={refusedSettingsTitle} />} · {identifierLabel(state.editRefusal.property)}
             </span>
             <span>{state.editRefusal.message}</span>
           </button>
@@ -142,7 +148,7 @@ export function ServiceMessagesPanel(props: {
             </h3>
             <div className="element-links">
               {notDrawable.map((element) => (
-                <ElementLinkButton key={elementKey(element)} element={element} onSelect={props.onSelect} />
+                <ElementLinkButton key={elementKey(element)} element={element} kindTitle={elementKindTitle(state.elementKinds, element.kind)} onSelect={props.onSelect} />
               ))}
             </div>
           </section>
