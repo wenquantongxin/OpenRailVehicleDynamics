@@ -1583,6 +1583,7 @@ add_executable(verify_vehicle_project_editing
     vehicle_project_editing/vehicle_project_subject_edit_refusal_header_self_containment.cc
     vehicle_project_editing/vehicle_project_subject_properties_header_self_containment.cc
     vehicle_project_editing/vehicle_project_model_tree_by_domains_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_rigid_body_attachments_header_self_containment.cc
     vehicle_project_editing/vehicle_project_mechanical_check_report_header_self_containment.cc
     vehicle_project_editing/vehicle_project_preview_header_self_containment.cc
     vehicle_project_editing/vehicle_project_editing_session_header_self_containment.cc
@@ -1642,9 +1643,10 @@ add_test(NAME verify_vehicle_project_editing_session_saving
 # The model tree by domains on both bundled vehicles: every element of the
 # outline once, markers under their bodies and contact interfaces under their
 # carriers, joints and force elements one list each, the domains in order and
-# each row's offers; the tree follows edits and keeps the keys of the rows
-# they leave alone; owners a project file lacks are listed as not found; and a
-# project failing its check has the same tree.
+# each row's offers, the bodies the joints row attaches and the notes of
+# bodies neither free nor hanging on a joint; the tree follows edits and keeps
+# the keys of the rows they leave alone; owners a project file lacks are
+# listed as not found; and a project failing its check has the same tree.
 add_executable(verify_vehicle_project_model_tree_by_domains
     vehicle_project_editing/verify_vehicle_project_model_tree_by_domains.cc)
 orvd_configure_first_party_target(verify_vehicle_project_model_tree_by_domains)
@@ -1654,6 +1656,50 @@ target_link_libraries(verify_vehicle_project_model_tree_by_domains
     PRIVATE orvd_vehicle_project_editing)
 add_test(NAME verify_vehicle_project_model_tree_by_domains
          COMMAND verify_vehicle_project_model_tree_by_domains
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
+
+# How rigid bodies are attached, read from the records alone: on both bundled
+# vehicles every free body reads free and every other body hangs on the joint
+# its file gives it; on records a project file can hold, reversed joints,
+# unattached bodies and groups, loops, groups with two free bodies and joints
+# relating nothing.
+add_executable(verify_vehicle_project_rigid_body_attachment_reading
+    vehicle_project_editing/verify_vehicle_project_rigid_body_attachment_reading.cc)
+orvd_configure_first_party_target(verify_vehicle_project_rigid_body_attachment_reading)
+target_include_directories(verify_vehicle_project_rigid_body_attachment_reading
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_rigid_body_attachment_reading
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_rigid_body_attachment_reading
+         COMMAND verify_vehicle_project_rigid_body_attachment_reading
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json)
+
+# Changing how a rigid body is attached and creating one with its attachment,
+# through the session on both bundled vehicles: becoming free, taking a joint
+# and replacing one, each one edit; the refusals by body, or by joint and
+# property; IRW's wheel pivots named by their contact interfaces; unattached
+# and conflicting bodies; and GZ18 still passing its check after a bogie frame
+# is hung on the car body, an axlebox carrier made free and a body created
+# with a joint.
+add_executable(verify_vehicle_project_rigid_body_attachment_changes
+    vehicle_project_editing/verify_vehicle_project_rigid_body_attachment_changes.cc)
+orvd_configure_first_party_target(verify_vehicle_project_rigid_body_attachment_changes)
+target_include_directories(verify_vehicle_project_rigid_body_attachment_changes
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_rigid_body_attachment_changes
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_rigid_body_attachment_changes
+         COMMAND verify_vehicle_project_rigid_body_attachment_changes
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json

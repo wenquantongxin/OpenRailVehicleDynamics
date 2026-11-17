@@ -50,6 +50,24 @@ static_assert(std::is_same_v<
                                                         PropertyValuesByName&>())),
               std::expected<orvd::vehicle_project::ElementReference,
                             orvd::vehicle_project_editing::SubjectEditRefusal>>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
+                     .AddRigidBody(
+                         std::declval<const std::string&>(),
+                         std::declval<const orvd::vehicle_project_editing::PropertyValuesByName&>(),
+                         std::declval<
+                             const orvd::vehicle_project_editing::RigidBodyAttachmentChoice&>())),
+        std::expected<orvd::vehicle_project::ElementReference,
+                      orvd::vehicle_project_editing::SubjectEditRefusal>>);
+static_assert(
+    std::is_same_v<
+        decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
+                     .SetRigidBodyAttachment(std::declval<const std::string&>(),
+                                             std::declval<const orvd::vehicle_project_editing::
+                                                              RigidBodyAttachmentChoice&>())),
+        std::expected<std::optional<orvd::vehicle_project::ElementReference>,
+                      orvd::vehicle_project_editing::SubjectEditRefusal>>);
 static_assert(std::is_same_v<
               decltype(std::declval<orvd::vehicle_project_editing::VehicleProjectEditingSession&>()
                            .RemoveElement(

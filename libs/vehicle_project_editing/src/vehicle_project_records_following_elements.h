@@ -70,8 +70,8 @@ void AddFreeBodyRecords(vehicle_project::VehicleProject& project, const std::str
 void RemoveFreeBodyRecords(vehicle_project::VehicleProject& project, const std::string& body_name);
 
 // Refuses an edit that would take the station layout's reference body out of
-// the layout, which `edit` completes the reason with: "removed", or "made not
-// to move freely". Every other body may leave it.
+// the layout, which `edit` completes the reason with: "removed", or "attached
+// by a joint". Every other body may leave it.
 [[nodiscard]] std::expected<void, std::string> RequireLayoutKeepsReferenceBody(
     const vehicle_project::VehicleProject& project, const std::string& body_name,
     std::string_view edit);

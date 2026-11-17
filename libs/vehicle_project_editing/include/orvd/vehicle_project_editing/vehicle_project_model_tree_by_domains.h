@@ -18,14 +18,19 @@
 // them, and every element of the outline is one row of it, exactly once. Its
 // first level is the domains, in this order:
 // - Globals: the gravity, the vehicle identity and the station layout, which
-//   are settings; initial conditions and views, not provided yet.
+//   are settings; initial conditions, views and simulation settings, not
+//   provided yet.
 // - Bodies: every rigid body, with its markers, the fixed frames naming it,
-//   and its geometry, a note on the name its shapes are stated under. Fixed
-//   frames naming a body the project does not have are listed under "Owner
-//   not found", where they can be seen and repaired.
+//   and its geometry, a note on the name its shapes are stated under. An
+//   unattached or conflicting body's row carries its attachment's note
+//   (vehicle_project_rigid_body_attachments.h). Fixed frames naming a body the
+//   project does not have are listed under "Owner not found", where they can
+//   be seen and repaired.
 // - Joints and force elements: each one list, in outline order. A kind is a
 //   tag of the rows of such a list, not a level of it, and a kind without
-//   elements has no row.
+//   elements has no row. The joints row creates no joint on its own: it
+//   attaches one of the bodies it lists, the free bodies that can take a joint
+//   and the unattached ones.
 // - Constraints: not provided yet.
 // - Wheel-rail: the wheel, the rail and the contact computation, which are
 //   settings, and the contact carriers, each with the contact interfaces
@@ -34,7 +39,8 @@
 //   rows and a note saying so.
 // - Track and substructures: not provided yet.
 // A row's offers say what its "+" creates and with which properties fixed: a
-// marker on its body, a contact interface on its carrier.
+// marker on its body, a contact interface on its carrier. A row with neither
+// offers nor bodies to attach has no "+".
 //
 // A row keeps its key across edits; an element row's key follows its
 // element's name, and the rows below an element row follow it.
@@ -62,6 +68,9 @@ struct ModelTreeNode {
     // One line shown with the row.
     std::optional<Title> note{};
     std::vector<ModelTreeCreationOffer> creates{};
+    // The rigid bodies the row's "+" attaches, in outline order: empty but for
+    // the joints row.
+    std::vector<vehicle_project::ElementReference> attaches{};
     std::vector<ModelTreeNode> children{};
 };
 

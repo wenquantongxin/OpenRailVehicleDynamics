@@ -69,33 +69,6 @@ std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
     return {};
 }
 
-// A boolean is written as given. A rigid body's, whether it moves freely in
-// the world, brings with it the records a free body has, and the station
-// layout's reference body keeps moving freely.
-template <typename Record>
-std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit, bool Record::* member,
-                                              const PropertyValue& value) {
-    const bool given = std::get<bool>(value);
-    bool& stated = edit.record.*member;
-    if (given == stated) {
-        return {};
-    }
-    if constexpr (std::is_same_v<Record, VehicleRigidBodyDefinition>) {
-        if (given) {
-            AddFreeBodyRecords(edit.project, edit.record.name);
-        } else {
-            const std::expected<void, std::string> kept = RequireLayoutKeepsReferenceBody(
-                edit.project, edit.record.name, "made not to move freely");
-            if (!kept.has_value()) {
-                return kept;
-            }
-            RemoveFreeBodyRecords(edit.project, edit.record.name);
-        }
-    }
-    stated = given;
-    return {};
-}
-
 // The element's own name: a rename, which every reference to the element and
 // every record following it take part in.
 template <typename Record>

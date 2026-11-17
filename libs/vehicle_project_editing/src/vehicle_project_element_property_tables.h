@@ -23,19 +23,20 @@
 // What every member of every element record is: the one place that knows.
 //
 // Each record type has a table listing its members in declaration order, each
-// under its own name, with what it holds. A number, a 3-vector, a boolean, a
-// rotation and a curve say so by their types. A text member is the element's
-// own name when it is the member ElementKindRecords states as kElementName;
-// every other text member is a reference, stating the kinds it may name, or a
-// token, stating its choices. These references are the one statement of which
-// element names which: checking a reference that is set, finding what a
-// removal takes with it, following a rename and describing a reference to an
-// interface all read them here.
+// under its own name, with what it holds. A number, a 3-vector, a rotation and
+// a curve say so by their types. A text member is the element's own name when
+// it is the member ElementKindRecords states as kElementName; every other text
+// member is a reference, stating the kinds it may name, or a token, stating
+// its choices. These references are the one statement of which element names
+// which: checking a reference that is set, finding what a removal takes with
+// it, following a rename and describing a reference to an interface all read
+// them here.
 //
 // DescribeElementProperties lists a kind's properties in its table's order and
 // a rigid body's body-keyed properties after them; reading and assigning walk
 // the same order. A rigid body's properties also state the section they are
-// shown in.
+// shown in. Whether a rigid body moves freely in the world is no property: its
+// attachment states it (vehicle_project_rigid_body_attachments.h).
 
 namespace orvd::vehicle_project_editing::internal {
 
@@ -107,16 +108,14 @@ struct ValueTokenMember {
 // A pointer to one member of `Record`, with what the member holds.
 template <typename Record>
 using RecordMember =
-    std::variant<double Record::*, Eigen::Vector3d Record::*, bool Record::*,
-                 Eigen::Matrix3d Record::*, std::string Record::*,
-                 ReferenceMember<Record, std::string>,
+    std::variant<double Record::*, Eigen::Vector3d Record::*, Eigen::Matrix3d Record::*,
+                 std::string Record::*, ReferenceMember<Record, std::string>,
                  ReferenceMember<Record, std::optional<std::string>>, TextTokenMember<Record>,
                  ValueTokenMember<Record, wheel_rail_contact::WheelSide>,
                  SaturatedPiecewiseLinearDamperCurve Record::*>;
 
 // The sections a rigid body's properties are shown in.
 enum class PropertySection {
-    kDegreesOfFreedom,
     kMassAndInertia,
     // Its station offset, which the dynamics use.
     kMechanicalStation,
@@ -126,8 +125,6 @@ enum class PropertySection {
 
 inline Title DescribePropertySection(PropertySection section) {
     switch (section) {
-        case PropertySection::kDegreesOfFreedom:
-            return {.en = "Degrees of freedom", .zh = "自由度"};
         case PropertySection::kMassAndInertia:
             return {.en = "Mass and inertia", .zh = "质量与惯量"};
         case PropertySection::kMechanicalStation:
@@ -168,12 +165,12 @@ constexpr ValueTokenMember<Record, Value> Token(Value Record::* member,
 // Every member of each element record, in declaration order, under its own
 // name.
 
+// A rigid body's moves_freely_in_world is left out: the body's attachment
+// states it.
 constexpr auto PropertiesOfRecord(std::type_identity<configuration::VehicleRigidBodyDefinition>) {
     using Record = configuration::VehicleRigidBodyDefinition;
     return std::to_array<RecordProperty<Record>>({
         {"name", &Record::name},
-        {"moves_freely_in_world", &Record::moves_freely_in_world,
-         PropertySection::kDegreesOfFreedom},
         {"mass_kilograms", &Record::mass_kilograms, PropertySection::kMassAndInertia},
         {"center_of_mass_in_body_frame_meters", &Record::center_of_mass_in_body_frame_meters,
          PropertySection::kMassAndInertia},

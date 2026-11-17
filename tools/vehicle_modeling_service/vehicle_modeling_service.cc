@@ -88,8 +88,10 @@
 // Properties
 //   A subject has one fixed list of properties, named by its record members'
 //   own names, which state meaning and unit. An element kind's list holds its
-//   record's members; a rigid body adds where it is along, across and above
-//   the track: mechanical_track_station_layout.station_offset_meters,
+//   record's members. A rigid body's leaves out whether it moves freely in the
+//   world, which its attachment states, and adds where it is along, across and
+//   above the track, which only a free body has:
+//   mechanical_track_station_layout.station_offset_meters,
 //   placement.lateral_offset_in_local_track_frame_meters and
 //   placement.vertical_offset_in_local_track_frame_meters. Settings list their
 //   record's members, a member of a record held inside under the holding
@@ -112,7 +114,6 @@
 //   kind:
 //     number             a JSON number; a count held as an integer is one
 //     vector3            a vector
-//     boolean            true or false
 //     rotation           a rotation
 //     text               a string shown as it is: never an element's own name
 //                        and never a reference
@@ -131,11 +132,10 @@
 //   does not place, the placement offsets of a rigid body without a
 //   placement, and the gravity of a project that states none.
 //   section is where the property is shown: consecutive properties of one
-//   section form it. A rigid body's properties are shown in the sections
-//   degrees of freedom, mass and inertia, mechanical station (the station
-//   offset, which the dynamics use) and preview placement (the placement
-//   offsets, which only place it in the drawing); every other property is in
-//   none.
+//   section form it. A rigid body's properties are shown in the sections mass
+//   and inertia, mechanical station (the station offset, which the dynamics
+//   use) and preview placement (the placement offsets, which only place it in
+//   the drawing), after its attachment; every other property is in none.
 //   Every element property is editable except a rotation. Of the settings,
 //   the gravity, the wheel's nominal_rolling_radius_meters and
 //   wheel_lateral_datum_magnitude_meters, and the rail's track_gauge_meters,
@@ -194,12 +194,14 @@
 //            "creates": [{"kind": <element kind>,
 //                         "fixed_properties": {"<property name>": <value>,
 //                                              ...}}, ...],
+//            "attaches": [<element>, ...],
 //            "children": [<node>, ...]}
 //     The project as a model tree divided into domains, made from its records
 //     whatever check would say of them: every element of the outline is one
 //     node, exactly once. The nodes are the domains, in this order:
 //       Globals         the gravity, vehicle identity and station layout
-//                       settings; initial conditions and views, not provided
+//                       settings; initial conditions, views and simulation
+//                       settings, not provided
 //       Bodies          every rigid body, with its markers (the fixed frames
 //                       naming it) and its geometry (a note on the name its
 //                       shapes are stated under); fixed frames naming a body
@@ -221,17 +223,37 @@
 //     its kind's title as a tag. subject is what selecting the node selects,
 //     null for a node that only groups. provided is false for what is not
 //     provided yet: such a node has no subject, no offers and no children, and
-//     its note says what will be there. note is one line shown with the node.
-//     creates lists what the node's "+" creates, each with the properties a
-//     creation is given and cannot change: a marker on its body, a contact
-//     interface on its carrier.
+//     its note says what will be there. note is one line shown with the node:
+//     a rigid body's node carries its attachment's note while the body is
+//     unattached or conflicting. creates lists what the node's "+" creates,
+//     each with the properties a creation is given and cannot change: a marker
+//     on its body, a contact interface on its carrier. attaches lists, in
+//     outline order, the rigid bodies the node's "+" attaches by a joint
+//     (set_attachment): the joints node lists the free bodies that can take a
+//     joint and the unattached ones, and creates nothing; every other node's
+//     attaches is empty. A node with neither has no "+".
 //
 //   describe_element_kinds
 //     result: {"element_kinds": [{"kind": <element kind>, "title": <title>,
+//                                 "attachment": <attachment description>
+//                                               or null,
 //                                 "properties": [<description>, ...]}, ...]}
+//     attachment description:
+//       {"title": <title>, "free_title": <title>, "joint_title": <title>,
+//        "held_at_title": <title>, "joint_kinds": [<element kind>, ...],
+//        "body_end_property": "<name>", "other_end_property": "<name>",
+//        "free_only_properties": ["<name>", ...]}
 //     Every element kind, in the order above, with the name people know it by
 //     and its properties described in the order get_properties returns them.
 //     editable says whether the kind's property can be edited at all.
+//     attachment is null but for the rigid body, which states how it is
+//     attached: free in the world, titled free_title, or by a joint of one of
+//     joint_kinds, whose body_end_property (child_frame_name) names the body or
+//     one of its fixed frames and whose other_end_property (parent_frame_name)
+//     the frame it is held at. The joint a body hangs on is shown under
+//     joint_title and the frame it is held at under held_at_title.
+//     free_only_properties are the rigid body's properties only a free body
+//     has: its station offset and placement offsets.
 //
 //   get_outline
 //     result: {"vehicle_name": "<name>", "elements": [<element>, ...],
@@ -244,13 +266,41 @@
 //     in declaration order: the outline order.
 //
 //   get_properties  {"subject": <subject>}
-//     result: {"properties": [<description> with "value": <value>, ...]}
+//     result: {"properties": [<description> with "value": <value>, ...],
+//              "attachment": <attachment> or null}
+//     attachment: {"summary": <title>, "note": <title> or null,
+//                  "joint": <element> or null, "held_at": <element> or null,
+//                  "can_become_free": <bool>, "can_take_joint": <bool>,
+//                  "frames_on_body": [<element>, ...],
+//                  "frames_it_can_be_held_at": [<element>, ...]}
 //     editable says whether this subject's property can be edited now. It is
 //     the property's editable, except that a station offset or a placement
 //     offset whose value is null is not editable; a reference that names none
 //     is null and editable, and so is the gravity of a project that states
 //     none. Refused for wheel, rail and contact_computation while the project
 //     has no contact record.
+//     attachment is null but for a rigid body, whose attachment is read from
+//     the records alone, whatever check would say of them. A joint relates two
+//     bodies when its two ends name frames on two different bodies of the
+//     project, a body's name being its own frame and a fixed frame being on
+//     the body it names; a joint with an end naming no such frame, or with both
+//     ends on one body, relates nothing. Bodies related directly or through
+//     others form a group: if its joints close a loop, every body of it is
+//     conflicting; otherwise, with exactly one free body, that body is free and
+//     every other one hangs on the joint on its way to it, whichever end of the
+//     record is on it; with none, every body of it is unattached; with more
+//     than one, every body of it is conflicting. summary says in one short
+//     line how the body is held, naming no element; note what is the matter or
+//     why something cannot change; joint is the joint it hangs on, and held_at
+//     the frame it is held at, at that joint's other end: a rigid body or a
+//     fixed frame. A free body can take a joint, except the station layout's
+//     reference body; a hanging or unattached body can become free and can
+//     take a joint; a conflicting one neither: removing one of its joints
+//     repairs it. frames_on_body is what a new joint's end on the body may
+//     name, the body and then its fixed frames, and frames_it_can_be_held_at
+//     what its other end may name: every frame on a body this body does not
+//     reach through joints once the joint it hangs on is taken away, body by
+//     body, each before its fixed frames.
 //
 //   set_property  {"subject": <subject>, "property": "<name>", "value": <value>}
 //     result: {"subject": <subject>}, the subject after the edit: an element
@@ -268,16 +318,13 @@
 //     Renaming changes every reference to the element and its group
 //     memberships, and for a rigid body its station layout entry, the
 //     layout's reference body and wheel-pair station list and its placement;
-//     the name its shapes are stated under stays. Making a rigid body move
-//     freely gives it a station layout entry and a placement where it has
-//     none, at zero offsets and the identity rotation; making it no longer
-//     move freely takes both away, and is refused for the station layout's
-//     reference body. References the project already holds are not judged
-//     here, physical plausibility and the layout's own consistency neither;
-//     check judges them.
+//     the name its shapes are stated under stays. References the project
+//     already holds are not judged here, physical plausibility and the
+//     layout's own consistency neither; check judges them.
 //
 //   add_element  {"kind": <element kind>, "name": "<name>",
-//                 "properties": {"<property name>": <value>, ...}}
+//                 "properties": {"<property name>": <value>, ...},
+//                 "attachment": <attachment choice>}
 //     result: {"element": <element>}
 //     Appends a new element to its kind's records: the record's default value
 //     with this name and the given properties, each read and checked as
@@ -285,9 +332,40 @@
 //     empty: it may leave any property out, except a reference that cannot
 //     name none, and cannot hold the element's own name or a property that is
 //     not editable. The name is refused as a rename's would be. A contact kind
-//     needs the project to have a contact record. A new rigid body that moves
-//     freely gets its station layout entry and placement before their offsets
-//     are set, and has no shapes.
+//     needs the project to have a contact record. A joint kind is refused: a
+//     joint is created only as a rigid body's attachment. attachment is
+//     required for a rigid body and refused for every other kind; a new rigid
+//     body is attached as set_attachment attaches one, in the same edit, a
+//     joint's end on the body naming the new body and left out of the joint's
+//     properties. The properties only a free body has are set once the body
+//     is attached, so a body attached by a joint is refused them. A new rigid
+//     body has no shapes.
+//
+//   set_attachment  {"body": <element>, "attachment": <attachment choice>}
+//     result: {"joint": <element> or null}, the joint the body hangs on
+//     afterwards, null when it moves freely.
+//     attachment choice: {"free": true}
+//                        or {"joint": {"kind": <joint kind>, "name": "<name>",
+//                                      "properties": {"<property name>":
+//                                                     <value>, ...}}}
+//     Changes how a rigid body is attached, as its attachment allows. Becoming
+//     free states that the body moves freely and gives it a station layout
+//     entry and a placement where it has none, at zero offsets and the
+//     identity rotation, so that it is drawn there until it is placed; the
+//     joint it hung on is removed, and while another element names that joint
+//     the change is refused, naming them: remove_element takes such a joint
+//     with what names it. Taking a joint creates one of the chosen kind with
+//     the name and properties given, read and checked as add_element reads and
+//     checks an element's, both ends included: child_frame_name names the body
+//     or one of its fixed frames, parent_frame_name a frame of
+//     frames_it_can_be_held_at. A free body then no longer moves freely and
+//     loses its station layout entry and placement; a body hanging on a joint
+//     has that joint removed first, so that the new one may take its name, and
+//     every reference to it names the new one, the change being refused,
+//     naming the element, when a reference cannot name the new kind. Refused
+//     for a conflicting body, and for the station layout's reference body
+//     taking a joint. A refusal about the joint names the joint as its
+//     subject, with the property at fault; any other names the body.
 //
 //   remove_element  {"element": <element>}
 //     result: {"removed_elements": [<element>, ...]}
@@ -301,8 +379,8 @@
 //     result: {"removed_elements": [<element>, ...]}
 //     What remove_element would remove, or its refusal. Changes nothing.
 //
-//   set_property, add_element and remove_element are each one edit: one undo
-//   step and one revision. After any edit, undo, redo or
+//   set_property, add_element, set_attachment and remove_element are each one
+//   edit: one undo step and one revision. After any edit, undo, redo or
 //   save_vehicle_project_as an element may be gone, renamed or under another
 //   owner, so a client reads the model tree and the outline again.
 //
@@ -450,6 +528,7 @@
 #include "orvd/vehicle_project_editing/vehicle_project_model_tree_by_domains.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
 #include "orvd/vehicle_project_editing/vehicle_project_property_subjects.h"
+#include "orvd/vehicle_project_editing/vehicle_project_rigid_body_attachments.h"
 #include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
 #include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 #include "orvd/vehicle_project_editing/vehicle_project_titles_in_english_and_chinese.h"
@@ -464,6 +543,8 @@ using orvd::vehicle_project::VehicleProject;
 using orvd::vehicle_project::VehicleProjectFileLocation;
 using orvd::vehicle_project_editing::CurveRowField;
 using orvd::vehicle_project_editing::ElementOwnName;
+using orvd::vehicle_project_editing::FreeInWorldAttachment;
+using orvd::vehicle_project_editing::JointAttachment;
 using orvd::vehicle_project_editing::JointLocationDrawing;
 using orvd::vehicle_project_editing::MechanicalCheckReport;
 using orvd::vehicle_project_editing::ModelTreeCreationOffer;
@@ -478,6 +559,9 @@ using orvd::vehicle_project_editing::PropertyValue;
 using orvd::vehicle_project_editing::PropertyValueKind;
 using orvd::vehicle_project_editing::PropertyValuesByName;
 using orvd::vehicle_project_editing::ReferencedElementName;
+using orvd::vehicle_project_editing::RigidBodyAttachment;
+using orvd::vehicle_project_editing::RigidBodyAttachmentChoice;
+using orvd::vehicle_project_editing::RigidBodyAttachmentDescription;
 using orvd::vehicle_project_editing::SaturatedPiecewiseLinearDamperCurve;
 using orvd::vehicle_project_editing::SubjectEditRefusal;
 using orvd::vehicle_project_editing::Title;
@@ -504,8 +588,6 @@ std::string NameOfValueKind(PropertyValueKind kind) {
             return "number";
         case PropertyValueKind::kVector3:
             return "vector3";
-        case PropertyValueKind::kBoolean:
-            return "boolean";
         case PropertyValueKind::kRotation:
             return "rotation";
         case PropertyValueKind::kText:
@@ -580,9 +662,6 @@ Json EncodeValue(double number) {
 Json EncodeValue(const Eigen::Vector3d& vector) {
     return EncodeVector(vector);
 }
-Json EncodeValue(bool truth) {
-    return truth;
-}
 Json EncodeValue(const Eigen::Matrix3d& rotation) {
     return EncodeRotation(rotation);
 }
@@ -654,11 +733,6 @@ std::expected<PropertyValue, std::string> DecodePropertyValue(
                 return DecodeVector(value);
             }
             return std::unexpected(property + " takes an array of three numbers");
-        case PropertyValueKind::kBoolean:
-            if (value.is_boolean()) {
-                return value.get<bool>();
-            }
-            return std::unexpected(property + " takes true or false");
         case PropertyValueKind::kRotation:
             if (value.is_array() && value.size() == 3 &&
                 std::ranges::all_of(value, [](const Json& row) { return IsNumbers(row, 3); })) {
@@ -774,6 +848,25 @@ Json EncodeGroups(const std::vector<ElementGroup>& groups) {
     return encoded;
 }
 
+Json EncodeAttachmentDescription(const RigidBodyAttachmentDescription& description) {
+    Json joint_kinds = Json::array();
+    for (const ElementKind kind : description.joint_kinds) {
+        joint_kinds.push_back(NameOfElementKind(kind));
+    }
+    Json free_only_properties = Json::array();
+    for (const std::string_view property_name : description.free_only_properties) {
+        free_only_properties.push_back(std::string(property_name));
+    }
+    return Json{{"title", EncodeTitle(description.title)},
+                {"free_title", EncodeTitle(description.free_title)},
+                {"joint_title", EncodeTitle(description.joint_title)},
+                {"held_at_title", EncodeTitle(description.held_at_title)},
+                {"joint_kinds", std::move(joint_kinds)},
+                {"body_end_property", std::string(description.body_end_property)},
+                {"other_end_property", std::string(description.other_end_property)},
+                {"free_only_properties", std::move(free_only_properties)}};
+}
+
 Json DescribeElementKinds() {
     Json kinds = Json::array();
     for (const ElementKind kind : orvd::vehicle_project::kElementKinds) {
@@ -782,12 +875,29 @@ Json DescribeElementKinds() {
              orvd::vehicle_project_editing::DescribeElementProperties(kind)) {
             properties.push_back(EncodeDescription(description));
         }
-        kinds.push_back(
-            Json{{"kind", NameOfElementKind(kind)},
-                 {"title", EncodeTitle(orvd::vehicle_project_editing::ElementKindTitle(kind))},
-                 {"properties", std::move(properties)}});
+        kinds.push_back(Json{
+            {"kind", NameOfElementKind(kind)},
+            {"title", EncodeTitle(orvd::vehicle_project_editing::ElementKindTitle(kind))},
+            {"attachment", kind == ElementKind::kRigidBody
+                               ? EncodeAttachmentDescription(
+                                     orvd::vehicle_project_editing::DescribeRigidBodyAttachment())
+                               : Json(nullptr)},
+            {"properties", std::move(properties)}});
     }
     return Json{{"element_kinds", std::move(kinds)}};
+}
+
+Json EncodeAttachment(const RigidBodyAttachment& attachment) {
+    return Json{
+        {"summary", EncodeTitle(attachment.summary)},
+        {"note", EncodeOptionalTitle(attachment.note)},
+        {"joint", attachment.joint.has_value() ? EncodeElement(*attachment.joint) : Json(nullptr)},
+        {"held_at",
+         attachment.held_at.has_value() ? EncodeElement(*attachment.held_at) : Json(nullptr)},
+        {"can_become_free", attachment.can_become_free},
+        {"can_take_joint", attachment.can_take_joint},
+        {"frames_on_body", EncodeElements(attachment.frames_on_body)},
+        {"frames_it_can_be_held_at", EncodeElements(attachment.frames_it_can_be_held_at)}};
 }
 
 Json EncodeOutline(const VehicleProject& project) {
@@ -834,6 +944,7 @@ Json EncodeModelTreeNode(const ModelTreeNode& node) {
         {"provided", node.provided},
         {"note", EncodeOptionalTitle(node.note)},
         {"creates", std::move(creates)},
+        {"attaches", EncodeElements(node.attaches)},
         {"children", std::move(children)}};
 }
 
@@ -1044,7 +1155,15 @@ Json GetProperties(const Json& id, const Json& request,
         property["value"] = EncodePropertyValue(reading.value, reading.description);
         properties.push_back(std::move(property));
     }
-    return Accepted(id, session, Json{{"properties", std::move(properties)}});
+    const auto* const element = std::get_if<ElementReference>(&subject);
+    return Accepted(
+        id, session,
+        Json{{"properties", std::move(properties)},
+             {"attachment",
+              element != nullptr && element->kind == ElementKind::kRigidBody
+                  ? EncodeAttachment(orvd::vehicle_project_editing::ReadRigidBodyAttachment(
+                        session.project(), element->name))
+                  : Json(nullptr)}});
 }
 
 // The value given for the property `described`, read as the value kind the
@@ -1073,13 +1192,14 @@ Json SetProperty(const Json& id, const Json& request, VehicleProjectEditingSessi
     return Accepted(id, session, Json{{"subject", EncodeSubject(*edited)}});
 }
 
-Json AddElement(const Json& id, const Json& request, VehicleProjectEditingSession& session) {
-    const ElementReference element{ElementKindNamed(request.at("kind").get<std::string>()),
-                                   request.at("name").get<std::string>()};
-    const Json& given = request.at("properties");
+// The properties given for `element`, each read as the value kind its kind's
+// property is described with, or the refusal of the first that cannot be.
+std::expected<PropertyValuesByName, SubjectEditRefusal> DecodeGivenProperties(
+    const ElementReference& element, const Json& given) {
     if (!given.is_object()) {
-        return Refused(id, EncodeSubject(element), nullptr,
-                       "properties must be an object of property values by property name");
+        return std::unexpected(
+            SubjectEditRefusal{element, std::nullopt,
+                               "properties must be an object of property values by property name"});
     }
     PropertyValuesByName properties;
     for (const auto& [property_name, given_value] : given.items()) {
@@ -1087,15 +1207,90 @@ Json AddElement(const Json& id, const Json& request, VehicleProjectEditingSessio
             orvd::vehicle_project_editing::DescribeElementProperty(element.kind, property_name),
             given_value);
         if (!value.has_value()) {
-            return Refused(id, EncodeSubject(element), property_name, value.error());
+            return std::unexpected(SubjectEditRefusal{element, property_name, value.error()});
         }
         properties.emplace(property_name, std::move(*value));
     }
-    const auto created = session.AddElement(element.kind, element.name, properties);
+    return properties;
+}
+
+// How `body` is to be attached: {"free": true}, or a joint with its kind, name
+// and properties, read as add_element reads an element's; or the refusal of
+// what cannot be read, the joint being the subject of one about it.
+std::expected<RigidBodyAttachmentChoice, SubjectEditRefusal> DecodeAttachmentChoice(
+    const ElementReference& body, const Json& attachment) {
+    if (attachment.contains("free")) {
+        if (attachment.at("free") != true) {
+            return std::unexpected(SubjectEditRefusal{
+                body, std::nullopt, "a body attached free in the world states \"free\": true"});
+        }
+        return FreeInWorldAttachment{};
+    }
+    const Json& joint = attachment.at("joint");
+    const ElementReference joint_element{ElementKindNamed(joint.at("kind").get<std::string>()),
+                                         joint.at("name").get<std::string>()};
+    std::expected<PropertyValuesByName, SubjectEditRefusal> properties =
+        DecodeGivenProperties(joint_element, joint.at("properties"));
+    if (!properties.has_value()) {
+        return std::unexpected(properties.error());
+    }
+    return JointAttachment{.kind = joint_element.kind,
+                           .name = joint_element.name,
+                           .properties = *std::move(properties)};
+}
+
+Json AddElement(const Json& id, const Json& request, VehicleProjectEditingSession& session) {
+    const ElementReference element{ElementKindNamed(request.at("kind").get<std::string>()),
+                                   request.at("name").get<std::string>()};
+    const std::expected<PropertyValuesByName, SubjectEditRefusal> properties =
+        DecodeGivenProperties(element, request.at("properties"));
+    if (!properties.has_value()) {
+        return RefusedEdit(id, properties.error());
+    }
+    if (element.kind != ElementKind::kRigidBody) {
+        if (request.contains("attachment")) {
+            return Refused(id, EncodeSubject(element), nullptr,
+                           "only a rigid body is created with an attachment");
+        }
+        const auto created = session.AddElement(element.kind, element.name, *properties);
+        if (!created.has_value()) {
+            return RefusedEdit(id, created.error());
+        }
+        return Accepted(id, session, Json{{"element", EncodeElement(*created)}});
+    }
+    if (!request.contains("attachment")) {
+        return Refused(id, EncodeSubject(element), nullptr,
+                       "a rigid body is created with its attachment");
+    }
+    const std::expected<RigidBodyAttachmentChoice, SubjectEditRefusal> attachment =
+        DecodeAttachmentChoice(element, request.at("attachment"));
+    if (!attachment.has_value()) {
+        return RefusedEdit(id, attachment.error());
+    }
+    const auto created = session.AddRigidBody(element.name, *properties, *attachment);
     if (!created.has_value()) {
         return RefusedEdit(id, created.error());
     }
     return Accepted(id, session, Json{{"element", EncodeElement(*created)}});
+}
+
+Json SetAttachment(const Json& id, const Json& request, VehicleProjectEditingSession& session) {
+    const ElementReference body = DecodeElement(request.at("body"));
+    if (body.kind != ElementKind::kRigidBody) {
+        return Refused(id, EncodeSubject(body), nullptr, "only a rigid body is attached");
+    }
+    const std::expected<RigidBodyAttachmentChoice, SubjectEditRefusal> attachment =
+        DecodeAttachmentChoice(body, request.at("attachment"));
+    if (!attachment.has_value()) {
+        return RefusedEdit(id, attachment.error());
+    }
+    const auto changed = session.SetRigidBodyAttachment(body.name, *attachment);
+    if (!changed.has_value()) {
+        return RefusedEdit(id, changed.error());
+    }
+    return Accepted(
+        id, session,
+        Json{{"joint", changed->has_value() ? EncodeElement(**changed) : Json(nullptr)}});
 }
 
 Json RemoveElement(const Json& id, const Json& request, VehicleProjectEditingSession& session) {
@@ -1161,6 +1356,9 @@ Json Respond(const std::string& line, std::optional<VehicleProjectEditingSession
         }
         if (command == "add_element") {
             return AddElement(id, request, open_session);
+        }
+        if (command == "set_attachment") {
+            return SetAttachment(id, request, open_session);
         }
         if (command == "remove_element") {
             return RemoveElement(id, request, open_session);

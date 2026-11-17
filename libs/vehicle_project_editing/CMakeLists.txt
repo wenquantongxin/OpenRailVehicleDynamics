@@ -1,9 +1,9 @@
 # The command layer a graphical modelling tool drives over one vehicle project:
 # the model tree by domains, the properties of every element and of the
-# project's settings described and read, elements created, edited, renamed and
-# removed and settings edited at this boundary with undo and redo, saving to a
-# project file, a mechanical check and the preview a 3D view draws. It holds no
-# JSON.
+# project's settings described and read, how each rigid body is attached read
+# and changed, elements created, edited, renamed and removed and settings
+# edited at this boundary with undo and redo, saving to a project file, a
+# mechanical check and the preview a 3D view draws. It holds no JSON.
 # The check reaches the configuration library's declaration rules through its
 # internal directory, which is not installed.
 
@@ -19,6 +19,8 @@ add_library(orvd_vehicle_project_editing STATIC
     src/vehicle_project_property_edit_value_checks.cc
     src/vehicle_project_property_subjects.cc
     src/vehicle_project_records_following_elements.cc
+    src/vehicle_project_rigid_body_attachment_changes.cc
+    src/vehicle_project_rigid_body_attachments.cc
     src/vehicle_project_settings_property_assignment.cc
     src/vehicle_project_subject_properties.cc)
 

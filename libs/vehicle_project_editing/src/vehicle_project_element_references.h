@@ -17,6 +17,13 @@ namespace orvd::vehicle_project_editing::internal {
     const vehicle_project::VehicleProject& project,
     const vehicle_project::ElementReference& target);
 
+// The elements holding a reference that names `target` and may not name an
+// element of `kind`, each once: those a replacement of `target` of that kind
+// would leave naming nothing they may name.
+[[nodiscard]] std::vector<vehicle_project::ElementReference> CollectReferringElementsUnableToName(
+    const vehicle_project::VehicleProject& project, const vehicle_project::ElementReference& target,
+    vehicle_project::ElementKind kind);
+
 // Makes every reference that names `target` name `new_name` instead.
 void RedirectReferences(vehicle_project::VehicleProject& project,
                         const vehicle_project::ElementReference& target,

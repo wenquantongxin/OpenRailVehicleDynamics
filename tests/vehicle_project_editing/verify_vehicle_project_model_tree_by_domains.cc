@@ -28,11 +28,15 @@
 // each marker hangs under the body it names and each contact interface under
 // the carrier it names; joints and force elements are each one list in
 // outline order; the domains come in the contract's order, provided or not;
-// keys are unique; and each row offers what the contract says it creates. The
-// tree follows edits, keeping the keys of the rows an edit leaves alone;
-// markers and interfaces whose owner the project does not have are listed
-// under "Owner not found", and records repeating a kind and a name each have a
-// row of their own; a project without a contact record has an empty
+// keys are unique; each row offers what the contract says it creates, the
+// joints row nothing; the joints row attaches the free bodies but the station
+// layout's reference body; and no body's row has a note. The tree follows
+// edits, keeping the keys of the rows an edit leaves alone; a body left
+// unattached by a removed joint, and the bodies a joint joins to two free
+// bodies, carry their attachment's note, and the joints row attaches the
+// former; markers and interfaces whose owner the project does not have are
+// listed under "Owner not found", and records repeating a kind and a name each
+// have a row of their own; a project without a contact record has an empty
 // wheel-rail domain with its note; and a project that fails its check has the
 // same tree.
 
@@ -210,6 +214,35 @@ bool OffersOneOnOwner(const ModelTreeNode& row, ElementKind kind, const std::str
                ReferencedElementName{owner};
 }
 
+// The rigid bodies, in outline order, whose rows carry a note.
+std::vector<ElementReference> BodiesWithNotes(const std::vector<ModelTreeNode>& tree) {
+    std::vector<ElementReference> bodies;
+    for (const ModelTreeNode& row : DomainTitled(tree, "Bodies").children) {
+        const ElementReference* const body = ElementOf(row);
+        if (body != nullptr && row.note.has_value()) {
+            bodies.push_back(*body);
+        }
+    }
+    return bodies;
+}
+
+// The rigid bodies stating that they move freely, in outline order, but the
+// station layout's reference body, and those named in `also`.
+std::vector<ElementReference> FreeBodiesButTheReferenceBody(const VehicleProject& project,
+                                                            std::span<const std::string> also) {
+    std::vector<ElementReference> bodies;
+    for (const configuration::VehicleRigidBodyDefinition& body :
+         project.vehicle_definition.rigid_bodies) {
+        if ((body.moves_freely_in_world &&
+             body.name !=
+                 project.vehicle_definition.mechanical_track_station_layout.reference_body_name) ||
+            std::ranges::find(also, body.name) != also.end()) {
+            bodies.push_back({ElementKind::kRigidBody, body.name});
+        }
+    }
+    return bodies;
+}
+
 std::optional<ProjectSettings> SettingsOf(const ModelTreeNode& row) {
     if (!row.subject.has_value() || !std::holds_alternative<ProjectSettings>(*row.subject)) {
         return std::nullopt;
@@ -217,7 +250,8 @@ std::optional<ProjectSettings> SettingsOf(const ModelTreeNode& row) {
     return std::get<ProjectSettings>(*row.subject);
 }
 
-// Two trees with the same rows, keys, titles, subjects, notes and offers.
+// Two trees with the same rows, keys, titles, subjects, notes, offers and
+// bodies to attach.
 bool SameTree(const std::vector<ModelTreeNode>& first, const std::vector<ModelTreeNode>& second) {
     return std::ranges::equal(
         first, second, [](const ModelTreeNode& left, const ModelTreeNode& right) {
@@ -235,7 +269,7 @@ bool SameTree(const std::vector<ModelTreeNode>& first, const std::vector<ModelTr
                    left.subject == right.subject && left.provided == right.provided &&
                    left.note == right.note &&
                    std::ranges::equal(left.creates, right.creates, same_offer) &&
-                   SameTree(left.children, right.children);
+                   left.attaches == right.attaches && SameTree(left.children, right.children);
         });
 }
 
@@ -277,14 +311,19 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
 
     // The settings rows.
     const ModelTreeNode& globals = DomainTitled(tree, "Globals");
-    Require(globals.children.size() == 5 &&
+    Require(globals.children.size() == 6 &&
                 SettingsOf(globals.children[0]) == ProjectSettings::kGravity &&
                 SettingsOf(globals.children[1]) == ProjectSettings::kVehicleIdentity &&
                 SettingsOf(globals.children[2]) == ProjectSettings::kStationLayout &&
-                !globals.children[3].provided && !globals.children[4].provided,
+                !globals.children[3].provided && !globals.children[4].provided &&
+                !globals.children[5].provided &&
+                globals.children[5].title == Title{.en = "Simulation settings", .zh = "仿真设置"} &&
+                globals.children[5].note ==
+                    Title{.en = "Duration, solver, tolerances and parallel threads of a run",
+                          .zh = "一次运行的时长、求解器、容差与并行线程数"},
             vehicle_name +
                 ": the globals are not gravity, vehicle identity, station layout and "
-                "two rows not provided yet");
+                "three rows not provided yet, the simulation settings last");
 
     // Bodies with their markers; each marker under the body it names.
     const ModelTreeNode& bodies = DomainTitled(tree, "Bodies");
@@ -318,15 +357,20 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
     }
     Require(ChildTitled(bodies, "Owner not found") == nullptr,
             vehicle_name + ": every marker's body exists, yet some are under 'Owner not found'");
+    Require(BodiesWithNotes(tree).empty(),
+            vehicle_name + ": a body that is free or hangs on a joint has a note on its row");
 
-    // Joints and force elements, each one list in outline order.
+    // Joints and force elements, each one list in outline order. The joints
+    // row creates nothing; it attaches the free bodies that may take a joint.
     const ModelTreeNode& joints = DomainTitled(tree, "Joints");
-    Require(OffersExactly(joints, kJointKinds) &&
+    Require(joints.creates.empty() &&
                 ElementsOf(joints.children) == OutlineElements(project, kJointKinds) &&
                 joints.children.size() == OutlineElements(project, kJointKinds).size(),
+            vehicle_name + ": the joints are not one list in outline order creating nothing");
+    Require(joints.attaches == FreeBodiesButTheReferenceBody(project, {}),
             vehicle_name +
-                ": the joints are not one list in outline order offering every joint "
-                "kind");
+                ": the joints row does not attach exactly the free bodies but the station "
+                "layout's reference body, in outline order");
     const ModelTreeNode& force_elements = DomainTitled(tree, "Force elements");
     Require(
         OffersExactly(force_elements, kForceElementKinds) &&
@@ -373,7 +417,8 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
                     " are not those naming it");
     }
 
-    // No element row but a carrier's creates anything.
+    // No element row but a carrier's creates anything, and no row but the
+    // joints row attaches anything.
     for (const VisitedRow& visited : RowsOf(tree)) {
         const ElementReference* const element = ElementOf(*visited.row);
         if (element != nullptr && element->kind != ElementKind::kContactCarrier) {
@@ -381,6 +426,8 @@ void VerifyEveryElementOnceInItsPlace(const VehicleProject& project) {
                     vehicle_name + ": the row of " + Describe(*element) +
                         " has a title or offers to create");
         }
+        Require(visited.row == &joints || visited.row->attaches.empty(),
+                vehicle_name + ": a row other than the joints row attaches bodies");
     }
 }
 
@@ -464,6 +511,60 @@ void VerifyTreeFollowsEdits(const ReferenceVehicle& gz18) {
                 SameElements(ElementsInTree(after_removal),
                              OutlineElements(session.project(), vehicle_project::kElementKinds)),
             "removing a body did not take its markers' rows with it");
+}
+
+// A body's row carries its attachment's note while the body is unattached or
+// conflicting, and only then.
+void VerifyBodyRowsCarryAttachmentNotes(const ReferenceVehicle& gz18) {
+    // Removing the pivot an axlebox carrier hangs on leaves the carrier
+    // unattached: its row says so, and the joints row attaches it.
+    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
+    const std::string carrier = "front_leading_right_axlebox_carrier";
+    Require(session.RemoveElement({ElementKind::kRevoluteJoint, carrier + "_pivot"}).has_value(),
+            "removing the pivot of an axlebox carrier was refused");
+    const std::vector<ModelTreeNode> unattached =
+        vehicle_project_editing::DescribeModelTree(session.project());
+    Require(BodiesWithNotes(unattached) ==
+                    std::vector<ElementReference>{{ElementKind::kRigidBody, carrier}} &&
+                RowOf(unattached, {ElementKind::kRigidBody, carrier})->note ==
+                    Title{.en = "Neither free nor held by a joint",
+                          .zh = "既没有声明自由，也没有铰把它接到别的刚体上"},
+            "the row of a body left without its joint does not alone carry the note of an "
+            "unattached body");
+    const std::array also_attached{carrier};
+    Require(DomainTitled(unattached, "Joints").attaches ==
+                FreeBodiesButTheReferenceBody(session.project(), also_attached),
+            "the joints row does not attach a body left without its joint");
+
+    // A weld joining the car body to a free bogie frame joins the bogie
+    // frame, the car body and the bodies welded to it to two free bodies:
+    // their rows say so, and the joints row attaches neither free body.
+    VehicleProject joined = PlacedProjectWithContact(gz18);
+    joined.vehicle_definition.weld_joints.push_back({.name = "carbody_to_front_bogie_frame",
+                                                     .parent_frame_name = "carbody",
+                                                     .child_frame_name = "front_bogie_frame"});
+    const std::vector<ModelTreeNode> conflicting =
+        vehicle_project_editing::DescribeModelTree(joined);
+    const std::vector<ElementReference> joined_bodies = {
+        {ElementKind::kRigidBody, "carbody"},
+        {ElementKind::kRigidBody, "front_bogie_frame"},
+        {ElementKind::kRigidBody, "front_carbody_interface_body"},
+        {ElementKind::kRigidBody, "rear_carbody_interface_body"}};
+    Require(BodiesWithNotes(conflicting) == joined_bodies,
+            "the rows carrying a note are not those of the bodies joined to two free bodies");
+    for (const ElementReference& body : joined_bodies) {
+        Require(RowOf(conflicting, body)->note ==
+                    Title{.en = "It is joined through joints to more than one free body; remove "
+                                "one of the joints between them",
+                          .zh = "它经由铰连到了不止一个自由刚体，请删除其间的一个铰"},
+                "the row of " + Describe(body) +
+                    ", joined to two free bodies, does not carry that note");
+    }
+    std::vector<ElementReference> attachable = FreeBodiesButTheReferenceBody(joined, {});
+    std::erase(attachable, joined_bodies[1]);
+    Require(DomainTitled(conflicting, "Joints").attaches == attachable,
+            "the joints row attaches a body joined to two free bodies, or leaves out another "
+            "free body");
 }
 
 void VerifyRecordsAProjectFileCanHold(const ReferenceVehicle& gz18) {
@@ -550,6 +651,7 @@ int main(int argc, char** argv) {
         VerifyEveryElementOnceInItsPlace(PlacedProjectWithContact(gz18));
         VerifyEveryElementOnceInItsPlace(PlacedProjectWithContact(irw));
         VerifyTreeFollowsEdits(gz18);
+        VerifyBodyRowsCarryAttachmentNotes(gz18);
         VerifyRecordsAProjectFileCanHold(gz18);
         std::puts("vehicle project model tree by domains passed for GZ18 and IRW");
         return 0;

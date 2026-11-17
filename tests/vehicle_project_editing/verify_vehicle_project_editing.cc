@@ -42,9 +42,10 @@
 // every property of every element kind is described, read from the member of
 // its name and, except a rotation, editable; a reference states the kinds it
 // may name and whether it may name none, a token its choices and a curve its
-// row fields, as stated here from the contract; every property but a name and
-// a body's freedom, which the structural editing verification covers, is
-// written to its own member and to nothing else; an edit of a GZ18 primary
+// row fields, as stated here from the contract; every property but a name,
+// which the structural editing verification covers, is written to its own
+// member and to nothing else, and a rigid body has no property saying whether
+// it moves freely, which its attachment states; an edit of a GZ18 primary
 // suspension changes that one member and is undone and redone with a revision
 // that only increases; each kind of refused edit names its element and
 // property and changes nothing; both bundled vehicles pass the
@@ -125,8 +126,6 @@ PropertyValueKind KindOfHeldValue(const PropertyValue& value) {
                 return PropertyValueKind::kNumber;
             } else if constexpr (std::is_same_v<Held, Eigen::Vector3d>) {
                 return PropertyValueKind::kVector3;
-            } else if constexpr (std::is_same_v<Held, bool>) {
-                return PropertyValueKind::kBoolean;
             } else if constexpr (std::is_same_v<Held, Eigen::Matrix3d>) {
                 return PropertyValueKind::kRotation;
             } else if constexpr (std::is_same_v<Held, ElementOwnName>) {
@@ -293,7 +292,8 @@ struct ExpectedElementKind {
     ElementKind kind;
     std::string element_name;
     // How many properties the kind must have: the members of its record,
-    // counted by the structured binding in Members(), and for a rigid body its
+    // counted by the structured binding in Members(), and for a rigid body
+    // those but whether it moves freely, which its attachment states, and its
     // station offset and its two placement offsets.
     std::size_t property_count;
     // Each property name paired with the probe member of the same name.
@@ -339,9 +339,8 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
     return {
         {ElementKind::kRigidBody,
          body.name,
-         MemberCount(body) + 3,
+         MemberCount(body) - 1 + 3,
          {{"name", own_name(body.name)},
-          {"moves_freely_in_world", body.moves_freely_in_world},
           {"mass_kilograms", body.mass_kilograms},
           {"center_of_mass_in_body_frame_meters", body.center_of_mass_in_body_frame_meters},
           {"inertia_moments_about_center_of_mass_kilogram_square_meters",
@@ -814,7 +813,7 @@ PropertyValue ChangedValue(const VehicleProject& probe, const PropertyName& prop
                                  .force_newtons = curve.back().force_newtons + 2.0});
                 return curve;
             } else {
-                Fail("a name, a boolean or a rotation is not written here");
+                Fail("a name or a rotation is not written here");
             }
         },
         value);
@@ -823,8 +822,8 @@ PropertyValue ChangedValue(const VehicleProject& probe, const PropertyName& prop
 // Writing each editable property changes the member of its name and nothing
 // else. Since the reads above are shown to come from the member each property
 // names, reading every property after a write shows which member the write
-// reached. An element's name and a body's freedom also change the records
-// that follow them; the structural editing verification covers those.
+// reached. An element's name also changes the records that follow it; the
+// structural editing verification covers those.
 void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
                                        std::span<const ExpectedElementKind> kinds) {
     VehicleProjectEditingSession session(probe);
@@ -835,8 +834,7 @@ void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
         for (const ExpectedProperty& property : kind.properties) {
             const PropertyValueKind value_kind = KindOfHeldValue(property.value);
             if (read_only.contains({kind.kind, property.name}) ||
-                value_kind == PropertyValueKind::kElementName ||
-                value_kind == PropertyValueKind::kBoolean) {
+                value_kind == PropertyValueKind::kElementName) {
                 continue;
             }
             const ElementReference element{kind.kind, kind.element_name};
@@ -889,14 +887,13 @@ void VerifyStationOffsetWritesItsLayoutEntry(const VehicleProject& probe) {
 }
 
 // A rigid body's properties are shown in the contract's sections, in the order
-// its properties are listed: its name in none, then degrees of freedom, mass
-// and inertia, its mechanical station and its preview placement. No other
-// kind's property, and no settings property, is in a section.
+// its properties are listed: its name in none, then mass and inertia, its
+// mechanical station and its preview placement. No other kind's property, and
+// no settings property, is in a section.
 void VerifyPropertySections() {
     const std::vector<std::pair<std::string_view, std::optional<std::string_view>>>
         rigid_body_sections = {
             {"name", std::nullopt},
-            {"moves_freely_in_world", "Degrees of freedom"},
             {"mass_kilograms", "Mass and inertia"},
             {"center_of_mass_in_body_frame_meters", "Mass and inertia"},
             {"inertia_moments_about_center_of_mass_kilogram_square_meters", "Mass and inertia"},

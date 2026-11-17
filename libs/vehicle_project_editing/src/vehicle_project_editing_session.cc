@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -18,6 +19,7 @@
 #include "vehicle_project_element_property_assignment.h"
 #include "vehicle_project_element_removal.h"
 #include "vehicle_project_preview_computation.h"
+#include "vehicle_project_rigid_body_attachment_changes.h"
 #include "vehicle_project_settings_property_assignment.h"
 
 namespace orvd::vehicle_project_editing {
@@ -70,6 +72,10 @@ std::expected<PropertySubject, SubjectEditRefusal> VehicleProjectEditingSession:
 std::expected<ElementReference, SubjectEditRefusal> VehicleProjectEditingSession::AddElement(
     vehicle_project::ElementKind kind, const std::string& name,
     const PropertyValuesByName& properties) {
+    if (std::optional<std::string> reason = internal::RefuseCreationWithoutAttachment(kind)) {
+        return std::unexpected(
+            SubjectEditRefusal{ElementReference{kind, name}, std::nullopt, std::move(*reason)});
+    }
     vehicle_project::VehicleProject edited = project_;
     std::expected<ElementReference, SubjectEditRefusal> created =
         internal::CreateElement(edited, kind, name, properties);
@@ -77,6 +83,30 @@ std::expected<ElementReference, SubjectEditRefusal> VehicleProjectEditingSession
         AdoptEdit(std::move(edited));
     }
     return created;
+}
+
+std::expected<ElementReference, SubjectEditRefusal> VehicleProjectEditingSession::AddRigidBody(
+    const std::string& name, const PropertyValuesByName& properties,
+    const RigidBodyAttachmentChoice& attachment) {
+    vehicle_project::VehicleProject edited = project_;
+    std::expected<ElementReference, SubjectEditRefusal> created =
+        internal::CreateRigidBodyWithAttachment(edited, name, properties, attachment);
+    if (created.has_value()) {
+        AdoptEdit(std::move(edited));
+    }
+    return created;
+}
+
+std::expected<std::optional<ElementReference>, SubjectEditRefusal>
+VehicleProjectEditingSession::SetRigidBodyAttachment(const std::string& body_name,
+                                                     const RigidBodyAttachmentChoice& attachment) {
+    vehicle_project::VehicleProject edited = project_;
+    std::expected<std::optional<ElementReference>, SubjectEditRefusal> changed =
+        internal::ChangeRigidBodyAttachment(edited, body_name, attachment);
+    if (changed.has_value()) {
+        AdoptEdit(std::move(edited));
+    }
+    return changed;
 }
 
 std::expected<std::vector<ElementReference>, SubjectEditRefusal>

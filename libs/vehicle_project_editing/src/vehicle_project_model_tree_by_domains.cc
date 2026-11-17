@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
+#include "orvd/vehicle_project_editing/vehicle_project_rigid_body_attachments.h"
 #include "vehicle_project_element_name_spaces.h"
 
 namespace orvd::vehicle_project_editing {
@@ -83,6 +84,9 @@ ModelTreeNode DescribeGlobals() {
             NotProvidedRow(
                 "views", {.en = "Views", .zh = "观察视角"},
                 {.en = "Saved viewpoints of the 3D view.", .zh = "三维视图的保存视角。"}),
+            NotProvidedRow("simulation_settings", {.en = "Simulation settings", .zh = "仿真设置"},
+                           {.en = "Duration, solver, tolerances and parallel threads of a run",
+                            .zh = "一次运行的时长、求解器、容差与并行线程数"}),
         }};
 }
 
@@ -110,6 +114,12 @@ ModelTreeNode DescribeBodies(const VehicleProject& project, ElementRowKeys& keys
     for (const configuration::VehicleRigidBodyDefinition& body :
          project.vehicle_definition.rigid_bodies) {
         ModelTreeNode body_row = ElementRow(keys, {ElementKind::kRigidBody, body.name});
+        // An unattached or conflicting body's row says what is the matter.
+        const RigidBodyAttachment attachment = ReadRigidBodyAttachment(project, body.name);
+        if (attachment.state == RigidBodyAttachmentState::kUnattached ||
+            attachment.state == RigidBodyAttachmentState::kConflicting) {
+            body_row.note = attachment.note;
+        }
         ModelTreeNode markers{
             .key = "markers:" + body_row.key,
             .title = Title{.en = "Markers", .zh = "标记点"},
@@ -151,12 +161,39 @@ ModelTreeNode DescribeElementList(const VehicleProject& project, ElementRowKeys&
                                   std::span<const ElementKind> kinds) {
     ModelTreeNode list{.key = std::move(key), .title = std::move(title)};
     for (const ElementKind kind : kinds) {
-        list.creates.push_back({.kind = kind});
         for (const std::string& name : CollectElementNames(project, kind)) {
             list.children.push_back(ElementRow(keys, {kind, name}));
         }
     }
     return list;
+}
+
+// The joints. The row's "+" creates no joint on its own: it attaches one of the
+// bodies hanging on no joint that can take one, the free bodies that can and
+// the unattached ones.
+ModelTreeNode DescribeJoints(const VehicleProject& project, ElementRowKeys& keys) {
+    ModelTreeNode joints = DescribeElementList(project, keys, "joints",
+                                               {.en = "Joints", .zh = "铰"}, internal::kJointKinds);
+    for (const configuration::VehicleRigidBodyDefinition& body :
+         project.vehicle_definition.rigid_bodies) {
+        const RigidBodyAttachment attachment = ReadRigidBodyAttachment(project, body.name);
+        if ((attachment.state == RigidBodyAttachmentState::kFree && attachment.can_take_joint) ||
+            attachment.state == RigidBodyAttachmentState::kUnattached) {
+            joints.attaches.push_back({ElementKind::kRigidBody, body.name});
+        }
+    }
+    return joints;
+}
+
+// The force elements, each kind of which the row creates.
+ModelTreeNode DescribeForceElements(const VehicleProject& project, ElementRowKeys& keys) {
+    ModelTreeNode force_elements =
+        DescribeElementList(project, keys, "force_elements", {.en = "Force elements", .zh = "力元"},
+                            internal::kForceElementKinds);
+    for (const ElementKind kind : internal::kForceElementKinds) {
+        force_elements.creates.push_back({.kind = kind});
+    }
+    return force_elements;
 }
 
 // The contact carriers, each with the interfaces naming it, then the
@@ -230,11 +267,8 @@ std::vector<ModelTreeNode> DescribeModelTree(const VehicleProject& project) {
     std::vector<ModelTreeNode> domains;
     domains.push_back(DescribeGlobals());
     domains.push_back(DescribeBodies(project, keys));
-    domains.push_back(DescribeElementList(project, keys, "joints", {.en = "Joints", .zh = "铰"},
-                                          internal::kJointKinds));
-    domains.push_back(DescribeElementList(project, keys, "force_elements",
-                                          {.en = "Force elements", .zh = "力元"},
-                                          internal::kForceElementKinds));
+    domains.push_back(DescribeJoints(project, keys));
+    domains.push_back(DescribeForceElements(project, keys));
     domains.push_back(NotProvidedRow(
         "constraints", {.en = "Constraints", .zh = "约束"},
         {.en = "Constraints that close kinematic loops.", .zh = "闭合运动链的约束。"}));

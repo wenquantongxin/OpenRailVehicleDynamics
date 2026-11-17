@@ -55,11 +55,6 @@ PropertyDescription DescribeMember(std::string_view name, Eigen::Vector3d Record
 }
 
 template <typename Record>
-PropertyDescription DescribeMember(std::string_view name, bool Record::*) {
-    return Described(name, PropertyValueKind::kBoolean);
-}
-
-template <typename Record>
 PropertyDescription DescribeMember(std::string_view name, Eigen::Matrix3d Record::*) {
     return Described(name, PropertyValueKind::kRotation);
 }

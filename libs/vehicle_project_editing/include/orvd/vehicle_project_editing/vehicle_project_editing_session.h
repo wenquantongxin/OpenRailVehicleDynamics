@@ -13,6 +13,7 @@
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
 #include "orvd/vehicle_project_editing/vehicle_project_property_subjects.h"
+#include "orvd/vehicle_project_editing/vehicle_project_rigid_body_attachments.h"
 #include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
 #include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 
@@ -25,11 +26,11 @@
 // and nothing here knows a window. Whatever an interface can do through a
 // session, a test can do without one, saving included.
 //
-// An edit sets a property of an element or of the project's settings, creates
-// an element or removes one. Each is made on a copy of the project, which
-// becomes the project only when the whole edit is accepted: one undo step and
-// one new revision. A refused edit changes neither the project, the history
-// nor the revision.
+// An edit sets a property of an element or of the project's settings, changes
+// how a rigid body is attached, creates an element or removes one. Each is
+// made on a copy of the project, which becomes the project only when the
+// whole edit is accepted: one undo step and one new revision. A refused edit
+// changes neither the project, the history nor the revision.
 //
 // An edit introduces no reference to an element the project does not contain,
 // but it does not judge the references the project already holds: a project
@@ -113,12 +114,10 @@ class VehicleProjectEditingSession {
     // follows it: its group memberships and, for a rigid body, its station
     // layout entry, the layout's reference body name and wheel-pair station
     // list, its placement and the name its shapes are stated under, which
-    // keeps naming the shapes it named. Making a rigid body move freely gives
-    // it a station layout entry and a placement where it has none, at zero
-    // offsets and the identity rotation; making it no longer move freely takes
-    // both away and is refused for the station layout's reference body.
-    // Settings are judged no further: the check judges the gravity, and a run
-    // the wheel and rail values it assembles.
+    // keeps naming the shapes it named. Whether a rigid body moves freely is
+    // no property: SetRigidBodyAttachment changes it. Settings are judged no
+    // further: the check judges the gravity, and a run the wheel and rail
+    // values it assembles.
     [[nodiscard]] std::expected<PropertySubject, SubjectEditRefusal> SetSubjectProperty(
         const PropertySubject& subject, std::string_view property_name, const PropertyValue& value);
 
@@ -126,18 +125,62 @@ class VehicleProjectEditingSession {
     // returns it. The element is its record type's default-constructed value
     // with that name and the given properties, which are set as
     // SetSubjectProperty sets them, in the order DescribeElementProperties
-    // lists them; a free body thus gets its station layout entry and placement
-    // before their offsets are set.
+    // lists them.
     //
-    // Refused, naming the property at fault where one is, when the kind
-    // belongs to a contact record the project does not have, when the name is
-    // refused as a rename's would be, when a property given is not one of the
-    // kind's or is the element's own name, when a reference that cannot name
-    // none is not given, or when one given value is refused. A property that
-    // is not editable cannot be given either.
+    // Refused for a rigid body, which AddRigidBody creates with its
+    // attachment, and for a joint kind, a joint being created only as a rigid
+    // body's attachment. Refused, naming the property at fault where one is,
+    // when the kind belongs to a contact record the project does not have,
+    // when the name is refused as a rename's would be, when a property given
+    // is not one of the kind's or is the element's own name, when a reference
+    // that cannot name none is not given, or when one given value is refused.
+    // A property that is not editable cannot be given either.
     [[nodiscard]] std::expected<vehicle_project::ElementReference, SubjectEditRefusal> AddElement(
         vehicle_project::ElementKind kind, const std::string& name,
         const PropertyValuesByName& properties);
+
+    // Appends a new rigid body named `name` with the given properties,
+    // attached as `attachment` states: free in the world, or by a new joint
+    // whose end on the body, its child_frame_name, names the new body and is
+    // therefore not given. One edit, the joint included. The properties only a
+    // free body has, its station offset and placement offsets, are set once it
+    // is attached, so that a body attached by a joint has none to set.
+    //
+    // Refused as AddElement refuses an element's name and properties, as
+    // SetRigidBodyAttachment refuses taking the joint, and when the joint's
+    // properties give its end on the body.
+    [[nodiscard]] std::expected<vehicle_project::ElementReference, SubjectEditRefusal> AddRigidBody(
+        const std::string& name, const PropertyValuesByName& properties,
+        const RigidBodyAttachmentChoice& attachment);
+
+    // Changes how the rigid body named `body_name` is attached
+    // (vehicle_project_rigid_body_attachments.h) and returns the joint it hangs
+    // on afterwards, none when it moves freely. One edit.
+    //
+    // Becoming free: the body is stated to move freely, and gets a station
+    // layout entry and a placement where it has none, at zero offsets and the
+    // identity rotation; the joint it hung on is removed. Refused for a body
+    // already free and for a conflicting one, and, naming them, while other
+    // elements name the joint it hangs on: such a joint goes, with what names
+    // it, only by RemoveElement.
+    //
+    // Taking a joint: a joint of the attachment's kind is created with its
+    // name and properties, checked as AddElement checks an element's; its
+    // child_frame_name names the body or one of its fixed frames, and its
+    // parent_frame_name a frame on a body the body does not reach through
+    // joints once the joint it hangs on is taken away. A free body stops
+    // moving freely and loses its station layout entry and placement; a body
+    // hanging on a joint has that joint removed first, so that the new one may
+    // take its name, and what named it names the new one. Refused for a
+    // conflicting body, for the station layout's reference body and for a kind
+    // that is no joint kind; naming them, when an element naming the replaced
+    // joint cannot name the new one's kind; and, with the joint as the
+    // refusal's subject, for the joint's name and properties and for an end
+    // that is not where it must be.
+    [[nodiscard]] std::expected<std::optional<vehicle_project::ElementReference>,
+                                SubjectEditRefusal>
+    SetRigidBodyAttachment(const std::string& body_name,
+                           const RigidBodyAttachmentChoice& attachment);
 
     // Removes `element`, every element holding a reference to an element
     // removed, transitively, and the records following each of them, keeping

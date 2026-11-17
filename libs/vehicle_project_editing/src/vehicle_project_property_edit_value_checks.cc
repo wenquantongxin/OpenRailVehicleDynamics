@@ -14,9 +14,6 @@ constexpr PropertyValueKind ValueKindOf(std::type_identity<double>) {
 constexpr PropertyValueKind ValueKindOf(std::type_identity<Eigen::Vector3d>) {
     return PropertyValueKind::kVector3;
 }
-constexpr PropertyValueKind ValueKindOf(std::type_identity<bool>) {
-    return PropertyValueKind::kBoolean;
-}
 constexpr PropertyValueKind ValueKindOf(std::type_identity<Eigen::Matrix3d>) {
     return PropertyValueKind::kRotation;
 }
@@ -48,8 +45,6 @@ std::string DescribeValueKind(PropertyValueKind kind) {
             return "a number";
         case PropertyValueKind::kVector3:
             return "a 3-vector";
-        case PropertyValueKind::kBoolean:
-            return "a boolean";
         case PropertyValueKind::kRotation:
             return "a rotation";
         case PropertyValueKind::kText:

@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <exception>
-#include <expected>
 #include <memory>
 #include <optional>
 #include <string>
@@ -21,7 +20,6 @@
 #include "orvd/vehicle_project_editing/vehicle_project_editing_session.h"
 #include "orvd/vehicle_project_editing/vehicle_project_mechanical_check_report.h"
 #include "orvd/vehicle_project_editing/vehicle_project_preview.h"
-#include "orvd/vehicle_project_editing/vehicle_project_subject_edit_refusal.h"
 #include "orvd/vehicle_project_editing/vehicle_project_subject_properties.h"
 #include "vehicle_project/configuration_record_comparison.h"
 #include "vehicle_project/vehicle_project_comparison.h"
@@ -39,10 +37,10 @@
 // the contract refuses is refused by element and property and changes
 // nothing; edits alone give a GZ18 bogie a third axle that passes the check
 // and is drawn with two more wheels; an optional reference is set and cleared;
-// a new damper's empty curve is judged by the check until a curve is set;
-// a body's freedom brings and takes its free-body records; a project whose
-// contact record does not fit is repaired one edit at a time; a body created
-// in the session has no shapes; and every axis token is one the check accepts.
+// a new damper's empty curve is judged by the check until a curve is set; a
+// project whose contact record does not fit is repaired one edit at a time; a
+// body created in the session has no shapes; and every axis token is one the
+// check accepts.
 
 namespace {
 
@@ -52,18 +50,20 @@ using editing_verification::PlacedProject;
 using editing_verification::PlacedProjectWithContact;
 using editing_verification::ReferenceVehicle;
 using editing_verification::Require;
+using editing_verification::RequireAccepted;
+using editing_verification::RequireCheckPasses;
+using editing_verification::RequireRefused;
 using vehicle_project::ElementKind;
 using vehicle_project::ElementReference;
 using vehicle_project::VehicleProject;
 using vehicle_project_comparison::SameProject;
 using vehicle_project_editing::ElementOwnName;
+using vehicle_project_editing::FreeInWorldAttachment;
 using vehicle_project_editing::MechanicalCheckReport;
-using vehicle_project_editing::PropertySubject;
 using vehicle_project_editing::PropertyToken;
 using vehicle_project_editing::PropertyValue;
 using vehicle_project_editing::PropertyValuesByName;
 using vehicle_project_editing::ReferencedElementName;
-using vehicle_project_editing::SubjectEditRefusal;
 using vehicle_project_editing::VehicleProjectEditingSession;
 using vehicle_project_editing::VehicleProjectPreview;
 
@@ -109,43 +109,6 @@ std::vector<ElementReference> Outline(const VehicleProject& project) {
         }
     }
     return elements;
-}
-
-MechanicalCheckReport RequireCheckPasses(VehicleProjectEditingSession& session,
-                                         const std::string& what) {
-    const MechanicalCheckReport report = session.CheckMechanics();
-    Require(report.refusals.empty(),
-            what + " did not pass the check: " +
-                (report.refusals.empty() ? std::string() : report.refusals.front()));
-    return report;
-}
-
-// An accepted edit's result, or a failure saying what was refused and why.
-template <typename Value>
-Value RequireAccepted(const std::expected<Value, SubjectEditRefusal>& outcome,
-                      const std::string& what) {
-    Require(outcome.has_value(),
-            what + " was refused: " + (outcome.has_value() ? "" : outcome.error().reason));
-    return *outcome;
-}
-
-// A refusal names `element` and `property_name` and leaves the project, its
-// history and its revision as they were.
-template <typename Value>
-void RequireRefused(const std::expected<Value, SubjectEditRefusal>& outcome,
-                    const ElementReference& element,
-                    const std::optional<std::string>& property_name,
-                    const VehicleProjectEditingSession& session, const VehicleProject& before,
-                    std::uint64_t revision_before, bool could_undo_before,
-                    const std::string& what) {
-    Require(!outcome.has_value(), what + " was accepted");
-    const SubjectEditRefusal& refusal = outcome.error();
-    Require(refusal.subject == PropertySubject{element} && refusal.property_name == property_name &&
-                !refusal.reason.empty(),
-            what + " was refused without naming its element and property and saying why");
-    Require(SameProject(before, session.project()) && session.revision() == revision_before &&
-                session.can_undo() == could_undo_before && !session.can_redo(),
-            what + " changed the project, its history or its revision");
 }
 
 // --- Adding ------------------------------------------------------------------
@@ -558,16 +521,14 @@ void VerifyStructuralRefusals(const ReferenceVehicle& gz18) {
                     "removing the station layout's reference body");
     require_refused(session.CollectRemovalConsequences(reference_body), reference_body,
                     std::nullopt, "asking what removing the station layout's reference body takes");
-    require_refused(session.SetSubjectProperty(reference_body, "moves_freely_in_world", false),
-                    reference_body, "moves_freely_in_world",
-                    "making the station layout's reference body not move freely");
     const ElementReference body_named_like_frame{ElementKind::kRigidBody, frame.name};
-    require_refused(session.AddElement(body_named_like_frame.kind, body_named_like_frame.name, {}),
+    require_refused(session.AddRigidBody(body_named_like_frame.name, {}, FreeInWorldAttachment{}),
                     body_named_like_frame, "name", "a body created under a frame's name");
     const ElementReference named_twice{ElementKind::kRigidBody, "named_twice"};
-    require_refused(session.AddElement(named_twice.kind, named_twice.name,
-                                       {{"name", ElementOwnName{"named_twice"}}}),
-                    named_twice, "name", "a body created with its own name among its properties");
+    require_refused(
+        session.AddRigidBody(named_twice.name, {{"name", ElementOwnName{"named_twice"}}},
+                             FreeInWorldAttachment{}),
+        named_twice, "name", "a body created with its own name among its properties");
 }
 
 // A contact element needs the contact record its kind belongs to.
@@ -605,10 +566,9 @@ void VerifyBuildingAThirdAxle(const ReferenceVehicle& gz18) {
         *FindPlacement(project, leading_name);
     const std::string wheelset = "front_third_wheelset";
     RequireAccepted(
-        session.AddElement(
-            ElementKind::kRigidBody, wheelset,
-            {{"moves_freely_in_world", true},
-             {"mass_kilograms", leading.mass_kilograms},
+        session.AddRigidBody(
+            wheelset,
+            {{"mass_kilograms", leading.mass_kilograms},
              {"center_of_mass_in_body_frame_meters", leading.center_of_mass_in_body_frame_meters},
              {"inertia_moments_about_center_of_mass_kilogram_square_meters",
               leading.inertia_moments_about_center_of_mass_kilogram_square_meters},
@@ -619,7 +579,8 @@ void VerifyBuildingAThirdAxle(const ReferenceVehicle& gz18) {
              {"placement.lateral_offset_in_local_track_frame_meters",
               leading_placement.lateral_offset_in_local_track_frame_meters},
              {"placement.vertical_offset_in_local_track_frame_meters",
-              leading_placement.vertical_offset_in_local_track_frame_meters}}),
+              leading_placement.vertical_offset_in_local_track_frame_meters}},
+            FreeInWorldAttachment{}),
         "adding the third wheelset body");
 
     for (const std::string side : {"left", "right"}) {
@@ -681,7 +642,7 @@ void VerifyBuildingAThirdAxle(const ReferenceVehicle& gz18) {
     }
 }
 
-// --- References, curves and freedom ----------------------------------------
+// --- References and curves ---------------------------------------------------
 
 // An interface's optional independent-wheel joint is set, which the check
 // then judges, and cleared again, which restores the opened project.
@@ -739,34 +700,6 @@ void VerifyCurve(const ReferenceVehicle& gz18) {
     RequireCheckPasses(session, "GZ18 with a new damper and its curve");
 }
 
-// Making a jointed body move freely gives it a station layout entry and a
-// placement, at zero offsets and the identity rotation; making it no longer
-// move freely takes both away again.
-void VerifyFreedomBringsFreeBodyRecords(const ReferenceVehicle& gz18) {
-    VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
-    const VehicleProject opened = session.project();
-    const auto jointed =
-        std::ranges::find(gz18.definition.rigid_bodies, false,
-                          &configuration::VehicleRigidBodyDefinition::moves_freely_in_world);
-    Require(jointed != gz18.definition.rigid_bodies.end(), "GZ18 has no jointed body");
-    const ElementReference body{ElementKind::kRigidBody, jointed->name};
-
-    RequireAccepted(session.SetSubjectProperty(body, "moves_freely_in_world", true),
-                    "making a jointed body move freely");
-    const vehicle_project::FreeBodyPlacement* const placement =
-        FindPlacement(session.project(), body.name);
-    Require(StationOffsetOf(session.project(), body.name).station_offset_meters == 0.0 &&
-                placement != nullptr &&
-                vehicle_project_comparison::SamePlacement({.body_name = body.name}, *placement),
-            "a body made to move freely did not get a zero station offset and a placement at "
-            "zero offsets and the identity rotation");
-
-    RequireAccepted(session.SetSubjectProperty(body, "moves_freely_in_world", false),
-                    "making the body no longer move freely");
-    Require(SameProject(opened, session.project()),
-            "a body made to move freely and back still has a station layout entry or placement");
-}
-
 // --- Repairing and shapes ----------------------------------------------------
 
 // GZ18 opened with IRW's contact record, whose carriers and interfaces name
@@ -816,11 +749,11 @@ void VerifyCreatedBodyHasNoShapes(const ReferenceVehicle& gz18) {
     VehicleProjectEditingSession session(PlacedProjectWithContact(gz18));
     const ElementReference body{ElementKind::kRigidBody, "created_box"};
     RequireAccepted(
-        session.AddElement(body.kind, body.name,
-                           {{"moves_freely_in_world", true},
-                            {"mass_kilograms", 1.0},
-                            {"inertia_moments_about_center_of_mass_kilogram_square_meters",
-                             Eigen::Vector3d::Ones().eval()}}),
+        session.AddRigidBody(body.name,
+                             {{"mass_kilograms", 1.0},
+                              {"inertia_moments_about_center_of_mass_kilogram_square_meters",
+                               Eigen::Vector3d::Ones().eval()}},
+                             FreeInWorldAttachment{}),
         "creating a free body");
     Require(FindVisualDefinitionName(session.project(), body.name) == nullptr,
             "a body created in the session has a name its shapes are stated under");
@@ -874,7 +807,6 @@ int main(int argc, char** argv) {
         VerifyBuildingAThirdAxle(gz18);
         VerifyOptionalReference(gz18);
         VerifyCurve(gz18);
-        VerifyFreedomBringsFreeBodyRecords(gz18);
         VerifyRepairingAMismatchedContactRecord(gz18, irw);
         VerifyCreatedBodyHasNoShapes(gz18);
         VerifyAxisTokensPassTheCheck(gz18);

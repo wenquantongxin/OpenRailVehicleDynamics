@@ -24,16 +24,17 @@
 // kind's record, in declaration order, named by the member's own name, which
 // already states its meaning and unit (`stiffness_newtons_per_meter`). The
 // contact carriers and interfaces list the members of their declarations. A
-// rigid body then adds where it is along, across and above the track, from
-// records outside its own: its entry in the mechanical track station layout,
-// `mechanical_track_station_layout.station_offset_meters`, and the two
+// rigid body's list leaves out whether it moves freely in the world, which its
+// attachment states (vehicle_project_rigid_body_attachments.h), and adds where
+// it is along, across and above the track, from records outside its own and
+// which only a free body has: its entry in the mechanical track station
+// layout, `mechanical_track_station_layout.station_offset_meters`, and the two
 // offsets of its drawing placement,
 // `placement.lateral_offset_in_local_track_frame_meters` and
 // `placement.vertical_offset_in_local_track_frame_meters`. The prefixes say
 // which record holds them. A rigid body's properties are shown in sections:
-// degrees of freedom, mass and inertia, its mechanical station, which the
-// dynamics use, and its preview placement, which only places it in the
-// drawing.
+// mass and inertia, its mechanical station, which the dynamics use, and its
+// preview placement, which only places it in the drawing.
 //
 // Each settings has one fixed list of properties as well: every member of its
 // record, nested records' members included, in declaration order, under the
@@ -71,8 +72,6 @@ enum class PropertyValueKind {
     kNumber,
     // Eigen::Vector3d
     kVector3,
-    // bool
-    kBoolean,
     // Eigen::Matrix3d, a rotation matrix.
     kRotation,
     // PropertyText
@@ -122,7 +121,7 @@ using SaturatedPiecewiseLinearDamperCurve =
 
 // One property's value, held as the type its value kind names.
 using PropertyValue =
-    std::variant<double, Eigen::Vector3d, bool, Eigen::Matrix3d, PropertyText, ElementOwnName,
+    std::variant<double, Eigen::Vector3d, Eigen::Matrix3d, PropertyText, ElementOwnName,
                  ReferencedElementName, PropertyToken, SaturatedPiecewiseLinearDamperCurve>;
 
 // Property values by property name, as a new element is given them.

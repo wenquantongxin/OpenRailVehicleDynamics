@@ -75,6 +75,22 @@ std::vector<ElementReference> CollectReferringElements(
     return referring;
 }
 
+std::vector<ElementReference> CollectReferringElementsUnableToName(
+    const vehicle_project::VehicleProject& project, const ElementReference& target,
+    ElementKind kind) {
+    std::vector<ElementReference> unable;
+    ForEachReference(project,
+                     [&unable, &target, kind](const ElementReference& holder, const auto& name,
+                                              std::span<const ElementKind> referenced_kinds) {
+                         if (NamesTarget(referenced_kinds, name, target) &&
+                             std::ranges::find(referenced_kinds, kind) == referenced_kinds.end() &&
+                             std::ranges::find(unable, holder) == unable.end()) {
+                             unable.push_back(holder);
+                         }
+                     });
+    return unable;
+}
+
 void RedirectReferences(vehicle_project::VehicleProject& project, const ElementReference& target,
                         const std::string& new_name) {
     ForEachReference(project, [&target, &new_name](const ElementReference&, auto& name,
