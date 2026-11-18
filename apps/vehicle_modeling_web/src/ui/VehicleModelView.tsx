@@ -168,6 +168,12 @@ export function VehicleModelView(props: {
               <i className="swatch selected" />
               Selected <span className="zh">选中</span>
             </span>
+            <span className="legend-axes">
+              <b className="axis-letter axis-x">x</b>
+              <b className="axis-letter axis-y">y</b>
+              <b className="axis-letter axis-z">z</b>
+              Axes <span className="zh">坐标轴</span>
+            </span>
           </div>
         </>
       )}

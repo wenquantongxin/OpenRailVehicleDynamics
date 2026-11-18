@@ -5,6 +5,7 @@ import { ElementNamePropertyEditor } from './ElementNamePropertyEditor.tsx';
 import { ElementReferencePropertyEditor } from './ElementReferencePropertyEditor.tsx';
 import { NumberAndVectorPropertyEditor } from './NumberAndVectorPropertyEditor.tsx';
 import { ReadOnlyPropertyValue } from './ReadOnlyPropertyValue.tsx';
+import { RotationAnglesPropertyEditor } from './RotationAnglesPropertyEditor.tsx';
 import { TokenPropertyEditor } from './TokenPropertyEditor.tsx';
 
 /** One property of the selected subject, as its row and its editor are given it. */
@@ -24,8 +25,8 @@ export interface SubjectPropertyRowProps {
 
 /**
  * The property's value in the editor of its value kind when it is editable;
- * otherwise only shown, as rotations and texts always are. A number the
- * subject holds no value for yet is entered in an empty field.
+ * otherwise only shown, as texts always are. A number the subject holds no
+ * value for yet is entered in an empty field.
  */
 export function SubjectPropertyValueEditor(props: SubjectPropertyRowProps) {
   const { property } = props;
@@ -47,6 +48,7 @@ export function SubjectPropertyValueEditor(props: SubjectPropertyRowProps) {
     case curveValueKind:
       return <CurvePropertyEditor {...typing} frozen={frozen} rowFields={property.rowFields} current={property.value ?? []} />;
     case 'rotation':
+      return <RotationAnglesPropertyEditor {...typing} frozen={frozen} current={property.value} />;
     case 'text':
       return <ReadOnlyPropertyValue property={property} />;
   }

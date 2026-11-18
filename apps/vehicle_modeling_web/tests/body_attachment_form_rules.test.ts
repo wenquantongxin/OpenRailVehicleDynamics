@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { readElementKinds, readProperties } from '../src/service/vehicle_modeling_service_protocol.ts';
+import { readElementKinds, readProperties, type ElementKindDescription, type PropertyReading, type RotationReading } from '../src/service/vehicle_modeling_service_protocol.ts';
 import {
   attachmentChoices,
   bodyKindAsked,
@@ -45,9 +45,13 @@ test('the choices are free, where it is offered, then each joint kind, where a j
 });
 
 test('a new body is asked for the properties only a free body has only while free is chosen', () => {
-  assert.deepEqual(names(bodyKindAsked(bodyKind, description, { free: true })), ['name', 'size_quantity', 'offset_quantity']);
+  assert.deepEqual(names(bodyKindAsked(bodyKind, description, { free: true })), ['name', 'size_quantity', 'offset_quantity', 'turn_quantity']);
   assert.deepEqual(names(bodyKindAsked(bodyKind, description, { jointKind: 'kind_hinge' })), ['name', 'size_quantity']);
-  const entries = { ...blankEntries(bodyKind, {}), offset_quantity: { valueKind: 'vector3' as const, texts: ['1', '2', '3'] } };
+  const entries = {
+    ...blankEntries(bodyKind, {}),
+    offset_quantity: { valueKind: 'vector3' as const, texts: ['1', '2', '3'] },
+    turn_quantity: { valueKind: 'rotation' as const, texts: ['0', '0', '1'] },
+  };
   assert.deepEqual(readCreationForm(bodyKindAsked(bodyKind, description, { jointKind: 'kind_hinge' }), {}, entries), { outcome: 'ready', name: '', properties: {} }, 'nor sent');
 });
 
@@ -86,6 +90,31 @@ test('a form changing from one joint kind to another keeps what was entered of t
   const chosen = withReferenceChosen(entered, 'end_parent', 'frame_a');
   assert.deepEqual(readCreationForm(weldKind, {}, entriesCarriedOver(weldKind, chosen)), { outcome: 'ready', name: 'held', properties: { end_parent: 'frame_a' } });
   assert.deepEqual(withReferenceChosen(chosen, 'end_parent', 'body_a'), chosen, 'a choice made is kept');
+});
+
+test('a rotation starts from another’s angles and is kept across kinds as a vector is; one whose record holds no rotation starts empty', () => {
+  const turnable = (kind: string): ElementKindDescription => ({
+    kind,
+    title: { en: kind, zh: kind },
+    attachment: null,
+    properties: [
+      { name: 'name', valueKind: 'element_name', editable: true, section: null },
+      { name: 'turn', valueKind: 'rotation', editable: true, section: null },
+    ],
+  });
+  const named: PropertyReading = { name: 'name', valueKind: 'element_name', editable: true, section: null, value: 'turned' };
+  const turn = (value: RotationReading): PropertyReading => ({ name: 'turn', valueKind: 'rotation', editable: true, section: null, value });
+  const quarterTurn: RotationReading = { matrixRows: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], rollPitchYawRadians: [0, 0, 1.5] };
+  const started = entriesStartingFrom(turnable('kind_a'), [named, turn(quarterTurn)]);
+  const sent = { outcome: 'ready', name: 'turned', properties: { turn: { roll_pitch_yaw_radians: [0, 0, 1.5] } } };
+  assert.deepEqual(readCreationForm(turnable('kind_a'), {}, started), sent);
+  assert.deepEqual(readCreationForm(turnable('kind_b'), {}, entriesCarriedOver(turnable('kind_b'), started)), sent);
+  const noRotation: RotationReading = { matrixRows: [[1, 0, 0], [0, 1, 0], [0, 0, 2]], rollPitchYawRadians: null };
+  assert.deepEqual(readCreationForm(turnable('kind_a'), {}, entriesStartingFrom(turnable('kind_a'), [named, turn(noRotation)])), {
+    outcome: 'ready',
+    name: 'turned',
+    properties: {},
+  });
 });
 
 test('a refusal is about the joint when it names an element of the joint kind chosen, and about the body otherwise', () => {

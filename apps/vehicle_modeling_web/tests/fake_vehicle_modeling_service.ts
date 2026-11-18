@@ -3,14 +3,14 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 
 // An in-memory stand-in for orvd_vehicle_modeling_service that follows its
 // protocol: kinds described with their titles and properties, revisions that
-// only grow, undo and redo, a check that refuses any negative number, and a
-// preview that only a passing check replaces, of the elements that still
-// exist. Edits are refused as the real service refuses them: a missing
-// target, a name already taken in its kind, a reference to nothing of a kind
-// it may name, a required reference left out, a read-only property. Removing
-// an element removes everything that refers to it, and a rename updates every
-// reference to the renamed element. Kinds, settings and titles are made up on
-// purpose: the interface must not depend on them.
+// only grow, undo and redo, a check that refuses any negative number outside
+// a rotation, and a preview that only a passing check replaces, of the
+// elements that still exist. Edits are refused as the real service refuses
+// them: a missing target, a name already taken in its kind, a reference to
+// nothing of a kind it may name, a required reference left out, a read-only
+// property. Removing an element removes everything that refers to it, and a
+// rename updates every reference to the renamed element. Kinds, settings and
+// titles are made up on purpose: the interface must not depend on them.
 //
 // Properties belong to subjects: an element, or settings, which are read and
 // edited like an element's properties, and an edit of which is one undo step.
@@ -30,8 +30,9 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 // other way, a body that becomes free gets the properties only a free body
 // has, at zero, and loses its joint, and one that takes a joint loses them,
 // and the joint it hung on, whose references move to the new joint where they
-// may name it. What the real service refuses is refused here, the joint as
-// the subject of a refusal about the joint.
+// may name it; a body on a joint cannot be given them. What the real service
+// refuses is refused here, the joint as the subject of a refusal about the
+// joint.
 //
 // Projects are kept in memory by name, in the one folder the fake is given:
 // another folder cannot be read, a folder made unwritable refuses every save,
@@ -47,6 +48,13 @@ import { readAnswer } from '../src/service/vehicle_modeling_service_protocol.ts'
 // session is opened over it as over a vehicle's own files, with no project
 // file and nothing unsaved; one that cannot be read is refused, and the
 // session that was open stays.
+//
+// A rotation is given as three finite angles in radians and is then held as
+// the service holds it: the matrix R = Rz(yaw) Ry(pitch) Rx(roll), read back
+// with the angles that give it in the service's ranges, roll and yaw in
+// (-pi, pi] and pitch in [-pi/2, pi/2], yaw 0 where pitch is a quarter turn. A
+// record may hold what is no rotation, read as it is: a matrix with no
+// angles, or, for a quaternion not of unit length, neither part.
 
 export interface FakeTitle {
   en: string;
@@ -160,6 +168,30 @@ const identity = [
   [0, 0, 1],
 ];
 
+/** A rotation property's value aligned with the frame it is stated in. */
+const aligned = { matrix_rows: identity, roll_pitch_yaw_radians: [0, 0, 0] };
+
+/** The rotation three angles give, as the service holds and reads it back. */
+function heldRotation([roll, pitch, yaw]: readonly number[]): { matrix_rows: number[][]; roll_pitch_yaw_radians: number[] } {
+  const [cr, sr, cp, sp, cy, sy] = [Math.cos(roll!), Math.sin(roll!), Math.cos(pitch!), Math.sin(pitch!), Math.cos(yaw!), Math.sin(yaw!)];
+  const rows = [
+    [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+    [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+    [-sp, cp * sr, cp * cr],
+  ];
+  const readPitch = Math.asin(Math.max(-1, Math.min(1, -rows[2]![0]!)));
+  // Where pitch is a quarter turn, roll and yaw turn about the same axis: yaw is 0 and roll carries the rest.
+  const quarterTurn = Math.abs(Math.cos(readPitch)) < 1e-12;
+  const readRoll = quarterTurn ? Math.atan2(-rows[1]![2]!, rows[1]![1]!) : Math.atan2(rows[2]![1]!, rows[2]![2]!);
+  const readYaw = quarterTurn ? 0 : Math.atan2(rows[1]![0]!, rows[0]![0]!);
+  return { matrix_rows: rows, roll_pitch_yaw_radians: [readRoll, readPitch, readYaw] };
+}
+
+/** What the record holds for a value given: a rotation as its angles give it, anything else as it is. */
+function heldValue(property: FakePropertyDescription, given: unknown): unknown {
+  return property.value_kind === 'rotation' ? heldRotation((given as { roll_pitch_yaw_radians: number[] }).roll_pitch_yaw_radians) : structuredClone(given);
+}
+
 /** The value a new element holds for a property it is not given. */
 function defaultValue(property: FakePropertyDescription): unknown {
   switch (property.value_kind) {
@@ -168,7 +200,7 @@ function defaultValue(property: FakePropertyDescription): unknown {
     case 'vector3':
       return [0, 0, 0];
     case 'rotation':
-      return identity;
+      return aligned;
     case 'token':
       return property.choices![0];
     case 'saturated_piecewise_linear_damper_curve':
@@ -311,6 +343,13 @@ export class FakeVehicleModelingService {
         return Array.isArray(value) && value.every((row) => property.row_fields!.every((rowField) => typeof (row as Record<string, unknown>)[rowField] === 'number'))
           ? null
           : `'${property.name}' holds rows of ${property.row_fields!.join(' and ')}`;
+      case 'rotation': {
+        const angles = (value as { roll_pitch_yaw_radians?: unknown } | null)?.roll_pitch_yaw_radians;
+        const byAnglesAlone = typeof value === 'object' && value !== null && Object.keys(value).length === 1;
+        return byAnglesAlone && Array.isArray(angles) && angles.length === 3 && angles.every((angle) => typeof angle === 'number' && Number.isFinite(angle))
+          ? null
+          : `'${property.name}' takes three finite angles in radians`;
+      }
       default:
         return `'${property.name}' cannot be set`;
     }
@@ -485,9 +524,10 @@ export class FakeVehicleModelingService {
         return this.accepted({});
       }
       case 'check': {
+        const isRotation = (kind: string, property: string): boolean => this.kindOf(kind)!.properties.some((each) => each.name === property && each.value_kind === 'rotation');
         const refusals = this.elements.flatMap((each) =>
           Object.entries(each.values)
-            .filter(([, value]) => negativeNumbers(value))
+            .filter(([property, value]) => !isRotation(each.kind, property) && negativeNumbers(value))
             .map(([property]) => `${each.name}: ${property} is negative`),
         );
         if (refusals.length === 0) this.preview = { project_revision: this.revision, ...this.drawingsOfElements() };
@@ -655,7 +695,8 @@ export class FakeVehicleModelingService {
     );
     if (missing !== undefined) return this.refused(`'${missing.name}' must name an element`, subject, missing.name);
     const defaults = Object.fromEntries(kind.properties.filter((property) => property.value_kind !== 'element_name').map((property) => [property.name, defaultValue(property)]));
-    return { values: { ...defaults, ...structuredClone(given) } };
+    const held = Object.fromEntries(Object.entries(given).map(([propertyName, value]) => [propertyName, heldValue(kind.properties.find((each) => each.name === propertyName)!, value)]));
+    return { values: { ...defaults, ...held } };
   }
 
   /**
@@ -762,12 +803,15 @@ export class FakeVehicleModelingService {
       if (!property.editable) return this.refused(`'${name}' is read-only`, subject, name);
       const wrong = this.judge(property, value);
       if (wrong !== null) return this.refused(wrong, subject, name);
-      this.edit(() => (this.settings.find((each) => each.word === settings.word)!.values[name] = value));
+      this.edit(() => (this.settings.find((each) => each.word === settings.word)!.values[name] = heldValue(property, value)));
       return this.accepted({ subject });
     }
     const element = this.find(subject?.element);
     const property = element === undefined ? undefined : this.kindOf(element.kind)!.properties.find((candidate) => candidate.name === name);
     if (element === undefined || property === undefined || !property.editable) return this.refused(`'${name}' cannot be set`, subject ?? null, name);
+    if (this.isBody(element) && element.free !== true && this.attachedKind().attachment.free_only_properties.includes(name)) {
+      return this.refused(`'${element.name}' moves with a joint and has no '${name}'`, subject!, name);
+    }
     const wrong = this.judge(property, value);
     if (wrong !== null) return this.refused(wrong, subject!, name);
     if (property.value_kind === 'element_name' && value !== element.name && this.nameTaken(element.kind, value as string)) {
@@ -776,7 +820,7 @@ export class FakeVehicleModelingService {
     this.edit(() => {
       const edited = this.find(element)!;
       if (property.value_kind !== 'element_name') {
-        edited.values[name] = value;
+        edited.values[name] = heldValue(property, value);
         return;
       }
       for (const other of this.elements) {
@@ -956,8 +1000,11 @@ const ownName: FakePropertyDescription = { name: 'name', value_kind: 'element_na
  * they turn with. body_a moves freely; body_b hangs on a hinge from body_a's
  * frame, which one of its interfaces names; body_c moves freely. No body is
  * special: any can be removed, and any that moves freely can take a joint.
- * Its settings: a constant not stated yet, a read-only identity, and wheel
- * settings with a section each.
+ * Three rotations: a free body's turn, which a body hanging on a joint does
+ * not have, a frame's and a carrier's. body_a's record holds a quaternion
+ * not of unit length and the carrier's a matrix that is no rotation; the
+ * others are aligned. Its settings: a constant not stated yet, a read-only
+ * identity, and wheel settings with a section each.
  */
 export function fakeVehicle(): FakeVehicle {
   const ends = [reference('end_parent', ['kind_frame', 'kind_body']), reference('end_child', ['kind_frame', 'kind_body'])];
@@ -971,7 +1018,7 @@ export function fakeVehicle(): FakeVehicle {
           ownName,
           { name: 'size_quantity', value_kind: 'number', editable: true, section: { en: 'Size', zh: '大小' } },
           { name: 'offset_quantity', value_kind: 'vector3', editable: true, section: { en: 'Placing', zh: '摆放' } },
-          { name: 'turn_quantity', value_kind: 'rotation', editable: false, section: { en: 'Placing', zh: '摆放' } },
+          { name: 'turn_quantity', value_kind: 'rotation', editable: true, section: { en: 'Placing', zh: '摆放' } },
         ],
         attachment: {
           title: { en: 'Made-up holding', zh: '虚构挂接' },
@@ -981,10 +1028,14 @@ export function fakeVehicle(): FakeVehicle {
           joint_kinds: ['kind_hinge', 'kind_weld'],
           body_end_property: 'end_child',
           other_end_property: 'end_parent',
-          free_only_properties: ['offset_quantity'],
+          free_only_properties: ['offset_quantity', 'turn_quantity'],
         },
       },
-      { kind: 'kind_frame', title: { en: 'Made-up frame', zh: '虚构坐标系' }, properties: [ownName, reference('body_ref', ['kind_body'])] },
+      {
+        kind: 'kind_frame',
+        title: { en: 'Made-up frame', zh: '虚构坐标系' },
+        properties: [ownName, reference('body_ref', ['kind_body']), { name: 'frame_turn', value_kind: 'rotation', editable: true }],
+      },
       {
         kind: 'kind_hinge',
         title: { en: 'Made-up hinge', zh: '虚构铰链' },
@@ -1012,7 +1063,11 @@ export function fakeVehicle(): FakeVehicle {
         title: { en: 'Made-up bar', zh: '虚构杆' },
         properties: [ownName, reference('end_a', ['kind_frame', 'kind_body']), reference('end_b', ['kind_frame', 'kind_body'])],
       },
-      { kind: 'kind_carrier', title: { en: 'Made-up carrier', zh: '虚构承载' }, properties: [ownName, reference('carrier_body', ['kind_body'])] },
+      {
+        kind: 'kind_carrier',
+        title: { en: 'Made-up carrier', zh: '虚构承载' },
+        properties: [ownName, reference('carrier_body', ['kind_body']), { name: 'profile_turn', value_kind: 'rotation', editable: true }],
+      },
       {
         kind: 'kind_interface',
         title: { en: 'Made-up interface', zh: '虚构接口' },
@@ -1029,11 +1084,11 @@ export function fakeVehicle(): FakeVehicle {
       {
         kind: 'kind_body',
         name: 'body_a',
-        values: { size_quantity: 10, offset_quantity: [0, 0, 0], turn_quantity: identity },
+        values: { size_quantity: 10, offset_quantity: [0, 0, 0], turn_quantity: { matrix_rows: null, roll_pitch_yaw_radians: null } },
         free: true,
       },
-      { kind: 'kind_body', name: 'body_b', values: { size_quantity: 4, turn_quantity: identity } },
-      { kind: 'kind_frame', name: 'frame_a', values: { body_ref: 'body_a' } },
+      { kind: 'kind_body', name: 'body_b', values: { size_quantity: 4 } },
+      { kind: 'kind_frame', name: 'frame_a', values: { body_ref: 'body_a', frame_turn: aligned } },
       { kind: 'kind_hinge', name: 'hinge_b', values: { end_parent: 'frame_a', end_child: 'body_b', axis_quantity: [0, 1, 0] } },
       {
         kind: 'kind_spring',
@@ -1049,10 +1104,24 @@ export function fakeVehicle(): FakeVehicle {
           ],
         },
       },
-      { kind: 'kind_carrier', name: 'body_b', values: { carrier_body: 'body_b' } },
+      {
+        kind: 'kind_carrier',
+        name: 'body_b',
+        values: {
+          carrier_body: 'body_b',
+          profile_turn: {
+            matrix_rows: [
+              [1, 0, 0],
+              [0, 1, 0],
+              [0, 0, 2],
+            ],
+            roll_pitch_yaw_radians: null,
+          },
+        },
+      },
       { kind: 'kind_interface', name: 'body_b.left', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: 'hinge_b', side: 'left' } },
       { kind: 'kind_interface', name: 'body_b.right', values: { carrier_ref: 'body_b', wheel_body_ref: 'body_b', hinge_ref: null, side: 'right' } },
-      { kind: 'kind_body', name: 'body_c', values: { size_quantity: 2, offset_quantity: [0, 0, 0], turn_quantity: identity }, free: true },
+      { kind: 'kind_body', name: 'body_c', values: { size_quantity: 2, offset_quantity: [0, 0, 0], turn_quantity: aligned }, free: true },
     ],
     settings: [
       { word: 'setting_constant', properties: [{ name: 'constant_quantity', value_kind: 'number', editable: true }], values: { constant_quantity: null } },

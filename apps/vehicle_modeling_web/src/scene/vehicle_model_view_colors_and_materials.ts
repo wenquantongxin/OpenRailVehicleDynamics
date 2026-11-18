@@ -84,6 +84,8 @@ export interface ModelPalette {
   frameDot: THREE.Material;
   /** Coloured per vertex: x red, y green, z blue. */
   frameAxes: THREE.LineBasicMaterial;
+  /** A selected frame's axes, drawn over everything, so that its orientation shows even inside a part. */
+  selectedFrameAxes: THREE.LineBasicMaterial;
   /** The drafting outline around a box shell. */
   shellOutline: THREE.LineBasicMaterial;
   selectedPart: THREE.Material;
@@ -111,6 +113,7 @@ export function createModelPalette(): ModelPalette {
     joint: matte(viewColors.joint),
     frameDot: matte('#5d6976'),
     frameAxes: new THREE.LineBasicMaterial({ vertexColors: true }),
+    selectedFrameAxes: new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, depthWrite: false, transparent: true }),
     shellOutline: new THREE.LineBasicMaterial({ color: '#9aa4ae', transparent: true, opacity: 0.85, depthWrite: false }),
     selectedPart: matte(viewColors.selection, { emissive: viewColors.selection, emissiveIntensity: 0.25 }),
     selectedTranslucentPart: createXrayMaterial(viewColors.selection, 0.22, 0.65, 1.6),
@@ -126,6 +129,7 @@ export function createModelPalette(): ModelPalette {
     palette.joint,
     palette.frameDot,
     palette.frameAxes,
+    palette.selectedFrameAxes,
     palette.shellOutline,
     palette.selectedPart,
     palette.selectedTranslucentPart,

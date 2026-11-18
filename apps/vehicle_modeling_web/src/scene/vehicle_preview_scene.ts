@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import { elementKey, sameElement, type ElementReference, type Preview, type Rotation, type Vector3 } from '../service/vehicle_modeling_service_protocol.ts';
+import { elementKey, sameElement, type ElementReference, type MatrixRows, type Preview, type Vector3 } from '../service/vehicle_modeling_service_protocol.ts';
 import type { VisualDefinition, VisualPart, WheelSectionSizes } from '../visual/read_vehicle_visual_definition.ts';
 import { buildWheelSection, standardWheelSectionSizes, type WheelSection } from './schematic_wheel_section_geometry.ts';
 import { viewColors, type ModelPalette } from './vehicle_model_view_colors_and_materials.ts';
@@ -8,7 +8,7 @@ import { axesLines, cylinderBetween, roundedBoxOutline, solidPartMesh } from './
 
 // The three.js drawing of one preview. Everything is built in the drawing
 // frame (+x forward, +y right, +z down, metres) under a root group turned the
-// way the scene viewer turns its root: +90 degrees about x maps (x, y, z) of
+// way the scene viewer turns its root: a quarter turn about x maps (x, y, z) of
 // the drawing frame to (x, -z, y) of three's y-up world, so nothing else
 // permutes axes. A rigid body is a group at its pose holding its visual
 // definition parts in its own frame. A wheel is a part of the body it turns
@@ -21,7 +21,9 @@ import { axesLines, cylinderBetween, roundedBoxOutline, solidPartMesh } from './
 //
 // Marks keep a schematic size in metres but are never drawn smaller than a
 // few pixels, so that they can be seen and picked in a whole-vehicle view; a
-// selected mark is drawn larger and over everything.
+// selected mark is drawn larger and over everything. A selected frame's axes
+// are drawn over everything too, and never shorter on screen than can be read,
+// so that its orientation shows at any distance and inside a part.
 
 export type PartsDisplay = 'solid' | 'xray' | 'hidden';
 
@@ -45,6 +47,9 @@ const markSizes = {
 
 /** The least radius a mark is drawn with, in pixels. */
 const markPixels = { usual: 3.5, selected: 7 };
+
+/** The least length a selected frame's axes are drawn with, in pixels. */
+const selectedFrameAxisPixels = 64;
 
 /** A click counts on a mark within this multiple of its drawn radius. */
 const pickMargin = 1.6;
@@ -89,7 +94,7 @@ interface PickTarget {
   letsRayThrough: boolean;
 }
 
-function posedGroup(rotation: Rotation, origin: Vector3): THREE.Group {
+function posedGroup(rotation: MatrixRows, origin: Vector3): THREE.Group {
   const [[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]] = rotation;
   const group = new THREE.Group();
   new THREE.Matrix4()
@@ -151,6 +156,8 @@ export class VehiclePreviewScene {
   private readonly bodyDrawings = new Map<string, Drawing>();
   /** The visual definition's own axes parts, shown with the frames. */
   private readonly bodyAxes: THREE.Object3D[] = [];
+  /** Each fixed frame's axis lines, by its drawing. */
+  private readonly frameAxes = new Map<Drawing, THREE.LineSegments>();
   private readonly palette: ModelPalette;
   private display: SceneDisplay = { parts: 'solid', frames: false };
   private highlighted: ElementReference | null = null;
@@ -242,16 +249,16 @@ export class VehiclePreviewScene {
       const group = posedGroup(frame.rotationDrawingFromLocal, frame.originInDrawingFrameMeters);
       this.root.add(group);
       const dot = new THREE.Mesh(new THREE.SphereGeometry(markSizes.frameDotRadius, 12, 8), this.palette.frameDot);
-      this.add(
-        {
-          element: frame.element,
-          layer: 'frames',
-          parts: [],
-          marks: [mark(dot, 'point', markSizes.frameDotRadius, this.palette.frameDot)],
-          companions: [axesLines(markSizes.frameAxisLength, [viewColors.axisX, viewColors.axisY, viewColors.axisZ], this.palette.frameAxes)],
-        },
-        group,
-      );
+      const axes = axesLines(markSizes.frameAxisLength, [viewColors.axisX, viewColors.axisY, viewColors.axisZ], this.palette.frameAxes);
+      const drawing: Drawing = {
+        element: frame.element,
+        layer: 'frames',
+        parts: [],
+        marks: [mark(dot, 'point', markSizes.frameDotRadius, this.palette.frameDot)],
+        companions: [axes],
+      };
+      this.add(drawing, group);
+      this.frameAxes.set(drawing, axes);
     }
   }
 
@@ -329,9 +336,14 @@ export class VehiclePreviewScene {
     return picked?.drawing ?? null;
   }
 
-  /** Grows every mark to its least size on screen for this camera; call before rendering. */
+  /** Grows every mark, and a selected frame's axes, to its least size on screen for this camera; call before rendering. */
   fitMarksToScreen(camera: THREE.PerspectiveCamera, heightPixels: number): void {
     const metersPerPixelPerMeter = (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / heightPixels;
+    for (const [drawing, axes] of this.frameAxes) {
+      const metersPerPixel = axes.getWorldPosition(markWorldPosition).distanceTo(camera.position) * metersPerPixelPerMeter;
+      const selected = sameElement(drawing.element, this.highlighted);
+      axes.scale.setScalar(selected ? Math.max(1, (selectedFrameAxisPixels * metersPerPixel) / markSizes.frameAxisLength) : 1);
+    }
     for (const drawing of this.drawings) {
       const pixels = sameElement(drawing.element, this.highlighted) ? markPixels.selected : markPixels.usual;
       for (const each of drawing.marks) {
@@ -370,6 +382,11 @@ export class VehiclePreviewScene {
         if (visible) this.pickTargets.set(each.proxy, { drawing, overEverything: selected, letsRayThrough: false });
       }
       for (const companion of drawing.companions) companion.visible = visible;
+      const axes = this.frameAxes.get(drawing);
+      if (axes !== undefined) {
+        axes.material = selected ? palette.selectedFrameAxes : palette.frameAxes;
+        axes.renderOrder = selected ? 10 : 0;
+      }
     }
     for (const axes of this.bodyAxes) axes.visible = this.display.frames;
   }

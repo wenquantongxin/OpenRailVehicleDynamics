@@ -20,8 +20,12 @@
 // matter, and every one can be removed; the row of the joints attaches the
 // bodies that can take one and creates nothing. On GZ18 a body created with a
 // joint hangs on it, and one created free that takes a joint and becomes free
-// again reads free. Last,
-// saving, in a temporary folder of projects removed at the end: GZ18 edited,
+// again reads free. On GZ18 and IRW every rotation is read with its matrix
+// and the three angles in radians that give it; on GZ18 a marker's
+// orientation and a free body's placement are set by three angles, read back
+// with them and drawn turned, and undone to what the record held; a marker is
+// created with its orientation. Last, saving, in a temporary folder of
+// projects removed at the end: GZ18 edited,
 // saved as a project, with no undo step, the folder listed, IRW opened, the
 // project opened again with its outline and the edited value as they were;
 // unsaved changes through an edit and its undo, Save, and a name the service
@@ -54,6 +58,7 @@ import { modelingServerCommandChannel, type SendCommand } from '../src/service/m
 import {
   elementKey,
   readServiceSessionDescription,
+  rotationByAngles,
   sameElement,
   sameSubject,
   subjectElement,
@@ -63,7 +68,9 @@ import {
   type ModelTreeNode,
   type PropertyDescription,
   type PropertyReading,
+  type RotationReading,
   type ServiceSessionDescription,
+  type Vector3,
 } from '../src/service/vehicle_modeling_service_protocol.ts';
 import { checkStatus, VehicleEditingSession, previewIsStale, type OpenChoice, type SessionState } from '../src/session/vehicle_editing_session.ts';
 import type { ReferenceDescription } from '../src/ui/element_reference_picker_rules.ts';
@@ -133,14 +140,22 @@ function sessionAt(origin: string): VehicleEditingSession {
 /**
  * Reads the properties of every element: each has some, all in value kinds the
  * interface shows. A value the element does not hold is never editable, apart
- * from an optional reference that names none, which is.
+ * from an optional reference that names none, which is. The rotations held are
+ * counted, and those read with both their matrix and their angles.
  */
-async function readEveryElement(session: VehicleEditingSession, elements: ElementReference[]): Promise<{ properties: number; absent: number; namingNone: number }> {
-  const counts = { properties: 0, absent: 0, namingNone: 0 };
+async function readEveryElement(
+  session: VehicleEditingSession,
+  elements: ElementReference[],
+): Promise<{ properties: number; absent: number; namingNone: number; rotations: number; rotationsWithBothParts: number }> {
+  const counts = { properties: 0, absent: 0, namingNone: 0, rotations: 0, rotationsWithBothParts: 0 };
   for (const element of elements) {
     const state = await settled(session, session.select({ element: element }));
     assert.ok(state.properties.length > 0, `${element.kind} ${element.name} has no properties`);
     for (const property of state.properties) {
+      if (property.valueKind === 'rotation' && property.value !== null) {
+        counts.rotations += 1;
+        if (property.value.matrixRows !== null && property.value.rollPitchYawRadians !== null) counts.rotationsWithBothParts += 1;
+      }
       if (property.value !== null) continue;
       if (property.valueKind === 'element_reference' && property.optional) {
         assert.equal(property.editable, true, `${element.name}.${property.name} names none and cannot be set`);
@@ -180,6 +195,8 @@ async function checkVehicle(origin: string, vehicle: ProjectStartingPoint): Prom
 
   const read = await readEveryElement(session, outline.elements);
   state = session.state;
+  assert.ok(read.rotations > 0, `${vehicle.name} holds no rotation`);
+  assert.equal(read.rotationsWithBothParts, read.rotations, `of ${vehicle.name}'s rotations only ${read.rotationsWithBothParts} of ${read.rotations} read with their matrix and angles`);
 
   // The drawing: every drawing shows one outline element and no element is drawn twice; the visual parts all find their body.
   const preview = state.preview ?? fail('no preview after a passed check');
@@ -246,6 +263,7 @@ async function checkVehicle(origin: string, vehicle: ProjectStartingPoint): Prom
   return [
     `${vehicle.name}: ${outline.elements.length} elements in ${kinds.length} kinds, each once in a model tree of ${firstLevel} first-level rows and ${inTree.length} element rows,`,
     `  ${read.properties} properties read, ${read.absent} without a value and none of those editable,`,
+    `  ${read.rotations} rotations held, each read with its matrix and the three angles in radians that give it,`,
     `  ${read.namingNone} optional references naming none, each of them editable,`,
     `  contact_record_present ${String(rawOutline.result.contact_record_present)},`,
     `  ${drawn.drawings.length} drawings, each of its own element; ${sharedNames} of them share their name with an element of another kind,`,
@@ -338,6 +356,86 @@ async function checkStructuralEditing(origin: string, vehicle: ProjectStartingPo
     `  (fixing ${Object.keys(frameOffer.fixedProperties).join(', ')}), and ${forceKind} '${force.name}' from it to '${vehicleFrame.name}';`,
     `  renamed the body to '${renamed.name}' and the frame followed, still under it in the tree; removed it with ${pending.removedElements.length - 1} elements that referred to it,`,
     `  five undos gave back the outline of ${opened.elements.length} elements the vehicle opened with; check ${checkStatus(state)} at revision ${state.revision}`,
+  ].join('\n');
+}
+
+/** Whether two triples of angles are the same but for rounding. */
+function sameAngles(read: readonly number[] | null, sent: readonly number[]): boolean {
+  return read !== null && read.every((angle, index) => Math.abs(angle - sent[index]!) < 1e-12);
+}
+
+/**
+ * Orientations through the interface's session: a marker's and a free body's
+ * placement are set by three angles in radians, read back with those angles
+ * and a matrix, drawn turned, and undone to what the record held, bit for bit;
+ * a marker is created with its orientation. The marker is the first frame
+ * drawn and the body the first drawn body whose rotation can be set; each
+ * rotation is found by its value kind.
+ */
+async function checkOrientationEditing(origin: string, vehicle: ProjectStartingPoint): Promise<string> {
+  const session = sessionAt(origin);
+  let state = await settled(session, session.open(startingAt(vehicle)));
+  const opened = state.outline ?? fail('no outline after opening');
+  const rotationOf = (properties: readonly PropertyReading[]): (PropertyReading & { valueKind: 'rotation' }) | undefined =>
+    properties.find((property): property is PropertyReading & { valueKind: 'rotation' } => property.valueKind === 'rotation' && property.editable);
+  const drawnRotation = (element: ElementReference): unknown =>
+    [...session.state.preview!.fixedFrames, ...session.state.preview!.rigidBodies].find((drawing) => sameElement(drawing.element, element))?.rotationDrawingFromLocal;
+
+  /** Sets the element's rotation by the angles, checks what is read back and drawn, and undoes it. */
+  const turned = async (element: ElementReference, angles: Vector3): Promise<string> => {
+    state = await settled(session, session.select({ element }));
+    const held = rotationOf(state.properties) ?? fail(`${element.name} has no rotation that can be set`);
+    const before = { value: held.value, drawn: drawnRotation(element) };
+    assert.equal(await session.setProperty({ element }, held.name, rotationByAngles(angles)), true, `turning ${element.name} was refused: ${session.state.editRefusal?.message}`);
+    state = session.state;
+    const after = state.properties.find((property) => property.name === held.name)!.value as RotationReading;
+    assert.ok(sameAngles(after.rollPitchYawRadians, angles), `${element.name}'s angles read back as ${String(after.rollPitchYawRadians)}`);
+    assert.notEqual(after.matrixRows, null, `${element.name}'s rotation reads back without a matrix`);
+    assert.equal(checkStatus(state), 'passed', `turning ${element.name} was refused by the check: ${state.check?.report.refusals.join('; ')}`);
+    assert.equal(state.preview?.projectRevision, state.revision);
+    assert.notDeepEqual(drawnRotation(element), before.drawn, `${element.name} is not drawn turned`);
+    state = await settled(session, session.undo());
+    assert.deepEqual(state.properties.find((property) => property.name === held.name)?.value, before.value, `undo does not give back ${element.name}'s rotation as the record held it`);
+    assert.deepEqual(drawnRotation(element), before.drawn);
+    return `${element.kind} '${element.name}' turned to (${angles.map((angle) => angle.toFixed(4)).join(', ')}) rad`;
+  };
+
+  const preview = state.preview ?? fail('no preview after opening');
+  const marker = (preview.fixedFrames[0] ?? fail('nothing drawn as a fixed frame')).element;
+  const markerTurned = await turned(marker, [Math.PI / 6, -Math.PI / 12, Math.PI / 2]);
+  let freeBody: ElementReference | null = null;
+  for (const drawing of preview.rigidBodies) {
+    state = await settled(session, session.select({ element: drawing.element }));
+    if (rotationOf(state.properties) !== undefined) {
+      freeBody = drawing.element;
+      break;
+    }
+  }
+  const bodyTurned = await turned(freeBody ?? fail('no drawn body has a placement rotation that can be set'), [Math.PI / 60, 0, 0]);
+
+  // A marker created with its orientation, through the offer of the first drawn body's row.
+  const bodyRow = rowPathOfSubject(session.state.modelTree!, { element: preview.rigidBodies[0]!.element })?.at(-1) ?? fail('the first drawn body has no row');
+  const offering = treeRows(bodyRow.children).find((row) => row.creates.some((offer) => offer.kind === marker.kind)) ?? fail('no row under the body offers a marker');
+  await settled(session, session.startCreation(offering.key, offering.creates));
+  const offer = session.state.creation?.chosen ?? fail('the row under the body offers more than a marker');
+  const markerKind = state.elementKinds.find((kind) => kind.kind === marker.kind) ?? fail('the marker kind is not described');
+  const rotationName = markerKind.properties.find((property) => property.valueKind === 'rotation' && property.editable)?.name ?? fail('a marker is created without its orientation');
+  const createdMarker = { kind: marker.kind, name: unusedName(opened.elements, 'orientation_check_marker') };
+  const createdAngles: Vector3 = [0, 0, Math.PI / 2];
+  const refusal = await session.createElement(marker.kind, createdMarker.name, { ...(offer.fixedProperties as Record<string, string>), [rotationName]: rotationByAngles(createdAngles) }, null);
+  assert.equal(refusal, null, `creating a marker with its orientation was refused: ${refusal?.message}`);
+  state = session.state;
+  assert.deepEqual(state.selection, { element: createdMarker });
+  const createdRotation = state.properties.find((property) => property.name === rotationName)!.value as RotationReading;
+  assert.ok(sameAngles(createdRotation.rollPitchYawRadians, createdAngles), `the new marker's angles read back as ${String(createdRotation.rollPitchYawRadians)}`);
+  state = await settled(session, session.undo());
+  assert.equal(state.canUndo, false);
+  assert.deepEqual(state.outline!.elements, opened.elements);
+
+  return [
+    `${vehicle.name} orientations: ${markerTurned} and ${bodyTurned},`,
+    `  each read back with those angles and a matrix, drawn turned, the check passing, and undone to the record as it was;`,
+    `  ${marker.kind} '${createdMarker.name}' created with yaw ${createdAngles[2].toFixed(4)} rad read back with it, and undone`,
   ].join('\n');
 }
 
@@ -725,6 +823,7 @@ try {
     console.log(await checkAttachments(origin, named('GZ18'), true));
     console.log(await checkAttachments(origin, named('IRW'), false));
     console.log(await checkStructuralEditing(origin, named('GZ18')));
+    console.log(await checkOrientationEditing(origin, named('GZ18')));
     console.log(await checkSettings(origin, named('GZ18')));
     console.log(await checkProjectSaving(origin, named('GZ18'), named('IRW')));
     console.log('check-service: passed');

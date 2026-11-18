@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  isRotationByAngles,
   readAnswer,
   readAttachment,
   readCreatedElement,
@@ -14,6 +15,7 @@ import {
   readServiceSessionDescription,
   readVehicleProjectNames,
   readVisualDefinitionDocument,
+  rotationByAngles,
 } from '../src/service/vehicle_modeling_service_protocol.ts';
 import { fakeVehicle } from './fake_vehicle_modeling_service.ts';
 
@@ -79,7 +81,7 @@ test('every value kind is read with its shape and what its description says, and
       { name: 'n', value_kind: 'number', editable: true, section: null, value: 1.5e-12 },
       { name: 'absent', value_kind: 'number', editable: false, section: null, value: null },
       { name: 'v', value_kind: 'vector3', editable: true, section: null, value: [1, 2, 3] },
-      { name: 'r', value_kind: 'rotation', editable: false, section: null, value: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] },
+      { name: 'r', value_kind: 'rotation', editable: true, section: null, value: { matrix_rows: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], roll_pitch_yaw_radians: [0, 0, 1.5] } },
       { name: 'own', value_kind: 'element_name', editable: true, section: null, value: 'frame_a' },
       { name: 'to', value_kind: 'element_reference', editable: true, section: null, referenced_kinds: ['kind_a', 'kind_b'], optional: false, value: 'body_a' },
       { name: 'maybe', value_kind: 'element_reference', editable: true, section: null, referenced_kinds: ['kind_c'], optional: true, value: null },
@@ -103,7 +105,7 @@ test('every value kind is read with its shape and what its description says, and
       { valueKind: 'number', value: 1.5e-12 },
       { valueKind: 'number', value: null },
       { valueKind: 'vector3', value: [1, 2, 3] },
-      { valueKind: 'rotation', value: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] },
+      { valueKind: 'rotation', value: { matrixRows: [[0, -1, 0], [1, 0, 0], [0, 0, 1]], rollPitchYawRadians: [0, 0, 1.5] } },
       { valueKind: 'element_name', value: 'frame_a' },
       { valueKind: 'element_reference', referencedKinds: ['kind_a', 'kind_b'], optional: false, value: 'body_a' },
       { valueKind: 'element_reference', referencedKinds: ['kind_c'], optional: true, value: null },
@@ -129,6 +131,48 @@ test('a value kind the interface cannot show, a missing description field or a v
   const curve = { name: 'c', value_kind: 'saturated_piecewise_linear_damper_curve', editable: true, section: null, row_fields: ['speed', 'push'] };
   assert.throws(() => readProperties({ properties: [{ ...curve, value: [{ speed: 1 }] }] }), /push is missing/);
   assert.throws(() => readProperties({ properties: [{ name: 'c', value_kind: curve.value_kind, editable: true, section: null, value: [] }] }), /row_fields is missing/);
+});
+
+test('a rotation is read as its matrix and the three angles in radians that give it, either part null where the record holds no rotation', () => {
+  const rotation = (value: unknown) => ({ name: 'r', value_kind: 'rotation', editable: true, section: null, value });
+  const quarterTurn = [
+    [0, -1, 0],
+    [1, 0, 0],
+    [0, 0, 1],
+  ];
+  const noRotation = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 2],
+  ];
+  const read = readProperties({
+    properties: [
+      rotation({ matrix_rows: quarterTurn, roll_pitch_yaw_radians: [0, 0, 1.5707963267948966] }),
+      rotation({ matrix_rows: noRotation, roll_pitch_yaw_radians: null }),
+      rotation({ matrix_rows: null, roll_pitch_yaw_radians: null }),
+      { ...rotation(null), editable: false },
+    ],
+  });
+  assert.deepEqual(
+    read.map((property) => property.value),
+    [
+      { matrixRows: quarterTurn, rollPitchYawRadians: [0, 0, 1.5707963267948966] },
+      { matrixRows: noRotation, rollPitchYawRadians: null },
+      { matrixRows: null, rollPitchYawRadians: null },
+      null,
+    ],
+    'a matrix that is no rotation has no angles; a quaternion not of unit length has neither part; a subject without the rotation, no value',
+  );
+  assert.throws(() => readProperties({ properties: [rotation({ matrix_rows: quarterTurn })] }), /roll_pitch_yaw_radians is missing/);
+  assert.throws(() => readProperties({ properties: [rotation({ roll_pitch_yaw_radians: [0, 0, 0] })] }), /matrix_rows is missing/);
+  assert.throws(() => readProperties({ properties: [rotation(quarterTurn)] }), /matrix_rows is missing/, 'the three rows alone are the preview’s form, not a value’s');
+  assert.throws(() => readProperties({ properties: [rotation({ matrix_rows: quarterTurn, roll_pitch_yaw_radians: [0, 0] })] }), /three entries/);
+});
+
+test('a rotation is sent as its three angles in radians and nothing else', () => {
+  assert.deepEqual(rotationByAngles([0.5, -0.25, 3]), { roll_pitch_yaw_radians: [0.5, -0.25, 3] });
+  assert.equal(isRotationByAngles(rotationByAngles([0, 0, 0])), true);
+  for (const other of [[0, 0, 0], 'a name', null, 1, [{ speed: 1, push: 2 }]]) assert.equal(isRotationByAngles(other), false);
 });
 
 test('the element kinds are read with their titles and property descriptions, in the service’s order', () => {
@@ -161,7 +205,7 @@ test('the element kinds are read with their titles and property descriptions, in
     jointKinds: ['kind_hinge', 'kind_weld'],
     bodyEndProperty: 'end_child',
     otherEndProperty: 'end_parent',
-    freeOnlyProperties: ['offset_quantity'],
+    freeOnlyProperties: ['offset_quantity', 'turn_quantity'],
   });
   assert.deepEqual(
     kinds.filter((kind) => kind.attachment === null).map((kind) => kind.kind),

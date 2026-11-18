@@ -40,6 +40,7 @@ function carriedEntry(blank: FormEntry, kept: FormEntry): FormEntry {
   switch (blank.valueKind) {
     case 'number':
     case 'vector3':
+    case 'rotation':
       return kept.valueKind === blank.valueKind ? { ...blank, texts: kept.texts } : blank;
     case 'element_name':
       return kept.valueKind === 'element_name' ? { ...blank, text: kept.text } : blank;
@@ -68,6 +69,7 @@ function entryOfReading(reading: PropertyReading): FormEntry | null {
     case curveValueKind:
       return reading.value === null ? null : { valueKind: curveValueKind, rowFields: reading.rowFields, rows: curveEntryOf(reading.value, reading.rowFields) };
     case 'rotation':
+      return reading.value?.rollPitchYawRadians == null ? null : { valueKind: 'rotation', texts: reading.value.rollPitchYawRadians.map(String) };
     case 'text':
       return null;
   }

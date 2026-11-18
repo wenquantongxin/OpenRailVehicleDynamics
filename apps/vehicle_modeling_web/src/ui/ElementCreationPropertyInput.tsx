@@ -5,6 +5,7 @@ import type { FormEntry } from './element_creation_form_rules.ts';
 import { ElementReferencePicker } from './ElementReferencePicker.tsx';
 import { identifierLabel } from './identifier_display_labels.ts';
 import { NumberTextInputs } from './NumberTextInputs.tsx';
+import { RollPitchYawAngleInputs } from './RollPitchYawAngleInputs.tsx';
 import { TokenChoiceSelect } from './TokenChoiceSelect.tsx';
 
 /** The input of one property in the creation form, by the property's value kind; it holds what is entered, unsent. */
@@ -41,6 +42,19 @@ export function ElementCreationPropertyInput(props: {
         <div className={`number-fields count-${entry.texts.length}`}>
           <NumberTextInputs
             propertyName={property.name}
+            texts={entry.texts}
+            changed={entry.texts.map(() => false)}
+            unreadableAt={props.unreadableAt}
+            refused={refused}
+            readOnly={disabled}
+            onText={(position, text) => onEntry({ ...entry, texts: entry.texts.map((each, index) => (index === position ? text : each)) })}
+          />
+        </div>
+      );
+    case 'rotation':
+      return (
+        <div className="number-fields angle-fields">
+          <RollPitchYawAngleInputs
             texts={entry.texts}
             changed={entry.texts.map(() => false)}
             unreadableAt={props.unreadableAt}

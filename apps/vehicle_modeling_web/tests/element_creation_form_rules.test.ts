@@ -19,10 +19,10 @@ const bodyKind = kinds.find((kind) => kind.kind === 'kind_body')!;
 const frameKind = kinds.find((kind) => kind.kind === 'kind_frame')!;
 const springKind = kinds.find((kind) => kind.kind === 'kind_spring')!;
 
-test('the form asks for every editable property, the name included, in the kind’s order, and no rotation', () => {
+test('the form asks for every editable property, the name and a rotation included, in the kind’s order', () => {
   assert.deepEqual(
     formProperties(bodyKind).map((property) => property.name),
-    ['name', 'size_quantity', 'offset_quantity'],
+    ['name', 'size_quantity', 'offset_quantity', 'turn_quantity'],
   );
 });
 
@@ -50,10 +50,10 @@ test('what is filled in is sent by property, the name on its own', () => {
 test('a property the row fixes is shown with its value, takes no entry, and is always sent', () => {
   const fixed = { body_ref: 'body_b' };
   const entries = blankEntries(frameKind, fixed);
-  assert.deepEqual(Object.keys(entries), ['name'], 'only what is not fixed is entered');
+  assert.deepEqual(Object.keys(entries), ['name', 'frame_turn'], 'only what is not fixed is entered');
   assert.deepEqual(
     formProperties(frameKind).map((property) => property.name),
-    ['name', 'body_ref'],
+    ['name', 'body_ref', 'frame_turn'],
     'the fixed property keeps its place in the form',
   );
   const shown = fixedPropertyReading(frameKind.properties.find((property) => property.name === 'body_ref')!, fixed);
@@ -79,5 +79,32 @@ test('a refusal is shown at the property it names when the form shows it, and at
   assert.equal(refusedField(springKind, { subject: null, property: 'end_a', message: 'no' }), 'end_a');
   assert.equal(refusedField(springKind, { subject: null, property: 'name', message: 'taken' }), 'name');
   assert.equal(refusedField(springKind, { subject: null, property: null, message: 'no contact record' }), null);
-  assert.equal(refusedField(bodyKind, { subject: null, property: 'turn_quantity', message: 'not editable' }), null);
+  assert.equal(refusedField(bodyKind, { subject: null, property: 'carrier_body', message: 'not of this kind' }), null);
+});
+
+test('a rotation is entered as its three angles in radians: sent together when all three are filled in, not at all when none is', () => {
+  const fixed = { body_ref: 'body_b' };
+  const named = { ...blankEntries(frameKind, fixed), name: { valueKind: 'element_name' as const, text: 'frame_b' } };
+  assert.deepEqual(readCreationForm(frameKind, fixed, named), { outcome: 'ready', name: 'frame_b', properties: { body_ref: 'body_b' } }, 'left empty, it is not sent');
+  const turned = { ...named, frame_turn: { valueKind: 'rotation' as const, texts: ['0', '-0.25', '1.5707963267948966'] } };
+  assert.deepEqual(readCreationForm(frameKind, fixed, turned), {
+    outcome: 'ready',
+    name: 'frame_b',
+    properties: { body_ref: 'body_b', frame_turn: { roll_pitch_yaw_radians: [0, -0.25, 1.5707963267948966] } },
+  });
+});
+
+test('a rotation filled in only in part, or with a text that is no number, is pointed at and nothing is sent', () => {
+  const fixed = { body_ref: 'body_b' };
+  const entries = blankEntries(frameKind, fixed);
+  assert.deepEqual(readCreationForm(frameKind, fixed, { ...entries, frame_turn: { valueKind: 'rotation', texts: ['', '', '1.5'] } }), {
+    outcome: 'unreadable',
+    property: 'frame_turn',
+    at: 0,
+  });
+  assert.deepEqual(readCreationForm(frameKind, fixed, { ...entries, frame_turn: { valueKind: 'rotation', texts: ['0', 'pi/2', '0'] } }), {
+    outcome: 'unreadable',
+    property: 'frame_turn',
+    at: 1,
+  });
 });

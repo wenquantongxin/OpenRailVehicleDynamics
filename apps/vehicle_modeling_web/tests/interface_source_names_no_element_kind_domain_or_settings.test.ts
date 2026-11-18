@@ -7,9 +7,10 @@ import ts from 'typescript';
 
 // The interface draws what the service and its server describe and knows none
 // of it: no element kind, no settings word, none of the properties of a rigid
-// body and the joints that attach it, no domain or row of the model tree, no
-// title the service gives, and nothing of the starting points it is offered,
-// their names, titles, descriptions and categories, may stand in its source.
+// body and the joints that attach it nor of the three orientations a project
+// holds, no domain or row of the model tree, no title the service gives, and
+// nothing of the starting points it is offered, their names, titles,
+// descriptions and categories, may stand in its source.
 // Kind names, property names, starting points' names and the longer settings
 // words are distinctive and may stand nowhere, comments included; the two
 // short settings words and every title, description and category are looked
@@ -38,7 +39,10 @@ const elementKinds = [
 const distinctiveSettingsWords = ['gravity', 'vehicle_identity', 'contact_computation'];
 const settingsWords = [...distinctiveSettingsWords, 'wheel', 'rail'];
 
-/** The properties of a rigid body and of the joints that attach it: which end is which and what only a free body has come from the service. */
+/**
+ * The properties of a rigid body and of the joints that attach it: which end is which and what only a free body has
+ * come from the service; and the three orientations a project holds, which the service names as rotations.
+ */
 const propertyNames = [
   'moves_freely_in_world',
   'mass_kilograms',
@@ -53,6 +57,9 @@ const propertyNames = [
   'axis_in_parent_frame',
   'damping_newton_metre_seconds_per_radian',
   'default_roll_pitch_yaw_angles_radians',
+  'placement.rotation_local_track_from_body',
+  'rotation_in_body_frame',
+  'rotation_body_from_nonspinning_wheel_profile',
 ];
 
 /** The titles the service gives, in both languages, as the contracts state them: rows of the model tree, kinds, the attachment's, and property sections. */

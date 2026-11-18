@@ -45,3 +45,17 @@ test('an unchanged value is not sent, and a text that is no number is pointed at
   assert.equal(unreadable.send, null);
   assert.equal(unreadable.state.unreadableAt, 1);
 });
+
+test('a rotation’s three angles commit as a vector’s three numbers: together, unchanged ones not at all, one emptied or no number pointed at', () => {
+  const angles = readAgainst([0, 0, 1.5]);
+  assert.deepEqual(afterCommit(afterTyping(resting, ['0.5', '0', '1.5']), angles).send, { value: [0.5, 0, 1.5] });
+  assert.equal(afterCommit(afterTyping(resting, ['0', '0', '1.50']), angles).reverted, true);
+  assert.equal(afterCommit(afterTyping(resting, ['0', '', '1.5']), angles).state.unreadableAt, 1);
+  assert.equal(afterCommit(afterTyping(resting, ['0', '0', 'pi/2']), angles).state.unreadableAt, 2);
+});
+
+test('where the record holds no rotation the angles start empty, and any three angles replace what it holds', () => {
+  const none = (texts: readonly string[]) => readNumberEntry(texts, [null, null, null]);
+  assert.deepEqual(afterCommit(afterTyping(resting, ['0', '0', '0']), none).send, { value: [0, 0, 0] });
+  assert.equal(afterCommit(afterTyping(resting, ['', '0', '0']), none).state.unreadableAt, 0, 'a rotation filled in only in part is not sent');
+});

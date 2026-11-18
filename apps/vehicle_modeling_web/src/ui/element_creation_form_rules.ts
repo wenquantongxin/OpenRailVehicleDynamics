@@ -1,4 +1,4 @@
-import { curveValueKind, type ElementKindDescription, type PropertyDescription, type PropertyReading, type Refusal } from '../service/vehicle_modeling_service_protocol.ts';
+import { curveValueKind, rotationByAngles, type ElementKindDescription, type PropertyDescription, type PropertyReading, type Refusal, type Vector3 } from '../service/vehicle_modeling_service_protocol.ts';
 import type { EditValue } from '../session/vehicle_editing_session.ts';
 import { numberFromText } from './decimal_number_text_reading.ts';
 import { readCurveEntry, type CurveEntry } from './editable_curve_table_rules.ts';
@@ -10,14 +10,15 @@ import type { ReferenceDescription } from './element_reference_picker_rules.ts';
 // properties the row's offer fixes: those are shown with their values, cannot
 // be changed, and are always sent. Of the rest only what is filled in is
 // sent: the service's defaults stand for it. The name is sent on its own, the
-// other properties by name.
+// other properties by name. A rotation is entered as its three angles in
+// radians, as a vector's three numbers are.
 
 /**
  * What one field of the form holds, beside what its input needs to know of
  * the property. A choice not made yet is undefined; null names none.
  */
 export type FormEntry =
-  | { valueKind: 'number' | 'vector3'; texts: readonly string[] }
+  | { valueKind: 'number' | 'vector3' | 'rotation'; texts: readonly string[] }
   | { valueKind: 'element_name'; text: string }
   | { valueKind: 'element_reference'; description: ReferenceDescription; chosen: string | null | undefined }
   | { valueKind: 'token'; choices: readonly string[]; chosen: string | undefined }
@@ -44,7 +45,8 @@ function blankEntry(property: PropertyDescription): FormEntry {
     case 'number':
       return { valueKind: 'number', texts: [''] };
     case 'vector3':
-      return { valueKind: 'vector3', texts: ['', '', ''] };
+    case 'rotation':
+      return { valueKind: property.valueKind, texts: ['', '', ''] };
     case 'element_name':
       return { valueKind: 'element_name', text: '' };
     case 'element_reference':
@@ -53,9 +55,8 @@ function blankEntry(property: PropertyDescription): FormEntry {
       return { valueKind: 'token', choices: property.choices, chosen: undefined };
     case curveValueKind:
       return { valueKind: curveValueKind, rowFields: property.rowFields, rows: [] };
-    case 'rotation':
     case 'text':
-      throw new Error(`${property.name}: a ${property.valueKind} is described as editable, which the creation form cannot enter`);
+      throw new Error(`${property.name}: a text is described as editable, which the creation form cannot enter`);
   }
 }
 
@@ -80,12 +81,15 @@ export function readCreationForm(kind: ElementKindDescription, fixed: FixedPrope
         name = entry.text;
         break;
       case 'number':
-      case 'vector3': {
+      case 'vector3':
+      case 'rotation': {
         if (entry.texts.every((text) => text.trim() === '')) break;
         const values = entry.texts.map(numberFromText);
         const at = values.indexOf(null);
         if (at >= 0) return { outcome: 'unreadable', property: property.name, at };
-        properties[property.name] = entry.valueKind === 'number' ? values[0]! : (values as [number, number, number]);
+        if (entry.valueKind === 'number') properties[property.name] = values[0]!;
+        else if (entry.valueKind === 'vector3') properties[property.name] = values as Vector3;
+        else properties[property.name] = rotationByAngles(values as Vector3);
         break;
       }
       case 'element_reference':

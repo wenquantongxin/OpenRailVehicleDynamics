@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import type { ProjectStartingPoint } from '../src/service/fetch_project_starting_points.ts';
 import { rowPathOfSubject, rowWithKey } from '../src/service/find_model_tree_rows.ts';
-import type { ElementReference, PropertySubject } from '../src/service/vehicle_modeling_service_protocol.ts';
+import { readProperties, rotationByAngles, type ElementReference, type PropertySubject, type RotationReading } from '../src/service/vehicle_modeling_service_protocol.ts';
 import { checkStatus, creationFromOffers, VehicleEditingSession, previewIsStale, type OpenChoice, type SessionState } from '../src/session/vehicle_editing_session.ts';
 import { FakeVehicleModelingService, fakeVehicle, type FakeSavedProject } from './fake_vehicle_modeling_service.ts';
 
@@ -512,6 +512,63 @@ test('references, tokens and curves are set by their values, and an optional ref
   assert.equal(session.state.editRefusal?.property, 'hinge_ref');
 });
 
+/** A subject's property as the service answers get_properties for it now, asked directly. */
+async function answeredNow(service: FakeVehicleModelingService, about: PropertySubject, property: string): Promise<unknown> {
+  const answer = await service.send('get_properties', { subject: about });
+  assert.ok(answer.ok);
+  return readProperties(answer.result).find((each) => each.name === property)?.value;
+}
+
+const quarterTurn = Math.PI / 2;
+
+test('an orientation is set by its three angles in radians, shown as the service reads it back, and undone in one step', async () => {
+  const { service, session } = await openedSession();
+  await session.select(subject(frame));
+  const aligned = valueOf(session.state, 'frame_turn') as RotationReading;
+  assert.deepEqual(aligned.rollPitchYawRadians, [0, 0, 0]);
+  const sent = service.log.length;
+  assert.equal(await session.setProperty(subject(frame), 'frame_turn', rotationByAngles([0, 0, 3 * quarterTurn])), true);
+  assert.deepEqual(commandsSince(service, sent), ['set_property', 'check', 'get_preview', 'get_outline', 'get_model_tree', 'get_properties']);
+  assert.deepEqual(service.log[sent]?.commandArguments, { subject: subject(frame), property: 'frame_turn', value: { roll_pitch_yaw_radians: [0, 0, 3 * quarterTurn] } });
+  const turned = valueOf(session.state, 'frame_turn') as RotationReading;
+  assert.deepEqual(turned, await answeredNow(service, subject(frame), 'frame_turn'), 'what the service holds, not what was typed');
+  assert.ok(Math.abs(turned.rollPitchYawRadians![2] + quarterTurn) < 1e-12, 'three quarter turns one way are read back as one the other way');
+  assert.deepEqual([session.state.revision, session.state.hasUnsavedChanges, session.state.preview?.projectRevision], [1, true, 1]);
+  await session.undo();
+  assert.deepEqual(valueOf(session.state, 'frame_turn'), aligned);
+  assert.deepEqual([session.state.canUndo, session.state.hasUnsavedChanges], [false, false], 'the edit was one undo step');
+});
+
+test('a refused orientation changes nothing and is kept with the angles sent, at its property', async () => {
+  const { service, session } = await openedSession();
+  await session.select(subject(otherBody));
+  const held = session.state.properties.find((property) => property.name === 'turn_quantity');
+  assert.deepEqual([held?.editable, held?.value], [false, null], 'a body on a joint has no placement, and so no turn');
+  const sent = service.log.length;
+  assert.equal(await session.setProperty(subject(otherBody), 'turn_quantity', rotationByAngles([0, 0, quarterTurn])), false);
+  assert.deepEqual(commandsSince(service, sent), ['set_property']);
+  assert.equal(session.state.revision, 0);
+  const refusal = session.state.editRefusal;
+  assert.deepEqual([refusal?.subject, refusal?.property, refusal?.value], [subject(otherBody), 'turn_quantity', { roll_pitch_yaw_radians: [0, 0, quarterTurn] }]);
+});
+
+test('a record that holds no rotation is read as it is, with its matrix or with neither part, and three angles replace it', async () => {
+  const { service, session } = await openedSession();
+  const carrier = { kind: 'kind_carrier', name: 'body_b' };
+  await session.select(subject(carrier));
+  const matrixOnly = session.state.properties.find((property) => property.name === 'profile_turn')!;
+  assert.equal(matrixOnly.editable, true);
+  assert.equal((matrixOnly.value as RotationReading).rollPitchYawRadians, null);
+  assert.notEqual((matrixOnly.value as RotationReading).matrixRows, null);
+  await session.select(subject(body));
+  assert.deepEqual(valueOf(session.state, 'turn_quantity'), { matrixRows: null, rollPitchYawRadians: null });
+  assert.equal(await session.setProperty(subject(body), 'turn_quantity', rotationByAngles([0, 0, 0])), true);
+  const replaced = valueOf(session.state, 'turn_quantity') as RotationReading;
+  assert.deepEqual(replaced, await answeredNow(service, subject(body), 'turn_quantity'));
+  assert.deepEqual(replaced.rollPitchYawRadians, [0, 0, 0]);
+  assert.notEqual(replaced.matrixRows, null);
+});
+
 test('an edit the check refuses keeps the older preview, which is then stale', async () => {
   const { service, session } = await openedSession();
   await session.select(subject(spring));
@@ -647,6 +704,23 @@ test('creating sends what is given beside what the row fixes, then selects the e
   assert.equal(session.state.creation, null);
   assert.equal(session.state.revision, 1);
   assert.deepEqual(rowKeysOf(session.state, subject(created)), ['domain/bodies', 'element/kind_body/body_b', 'frames/body_b', 'element/kind_frame/frame_b']);
+});
+
+test('a marker is created with its orientation given by three angles, and aligned with its body when none is given', async () => {
+  const { service, session } = await openedSession();
+  const sent = service.log.length;
+  assert.equal(await session.createElement('kind_frame', 'frame_b', { body_ref: 'body_b', frame_turn: rotationByAngles([quarterTurn / 3, 0, 0]) }, null), null);
+  assert.deepEqual(service.log[sent]?.commandArguments, {
+    kind: 'kind_frame',
+    name: 'frame_b',
+    properties: { body_ref: 'body_b', frame_turn: { roll_pitch_yaw_radians: [quarterTurn / 3, 0, 0] } },
+  });
+  const created = { kind: 'kind_frame', name: 'frame_b' };
+  assert.deepEqual(session.state.selection, subject(created));
+  assert.deepEqual(valueOf(session.state, 'frame_turn'), await answeredNow(service, subject(created), 'frame_turn'));
+  assert.ok(Math.abs((valueOf(session.state, 'frame_turn') as RotationReading).rollPitchYawRadians![0] - quarterTurn / 3) < 1e-12);
+  assert.equal(await session.createElement('kind_frame', 'frame_c', { body_ref: 'body_b' }, null), null);
+  assert.deepEqual((valueOf(session.state, 'frame_turn') as RotationReading).rollPitchYawRadians, [0, 0, 0]);
 });
 
 test('a refused creation changes nothing and names the property at fault, which the form shows', async () => {

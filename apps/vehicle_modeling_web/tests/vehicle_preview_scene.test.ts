@@ -234,6 +234,30 @@ test('marks are never drawn smaller than their least size on screen, and never s
   assert.ok(bar.mesh.scale.x > 1);
 });
 
+test('a selected frame’s axes are drawn over everything and grown to be read from afar; a frame not selected keeps its axes as they are', () => {
+  const palette = createModelPalette();
+  const scene = build(palette);
+  const axes = drawingOf(scene, frameNamedLikeBody).companions[0] as THREE.LineSegments;
+  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 1000);
+  camera.position.copy(world(4, 1, -1)).add(new THREE.Vector3(0, 0, 200));
+  scene.setDisplay({ parts: 'solid', frames: true });
+  scene.fitMarksToScreen(camera, 800);
+  assert.deepEqual([axes.scale.x, axes.material, axes.renderOrder], [1, palette.frameAxes, 0]);
+  scene.setHighlight(frameNamedLikeBody);
+  scene.fitMarksToScreen(camera, 800);
+  assert.equal(axes.material, palette.selectedFrameAxes);
+  assert.equal(palette.selectedFrameAxes.depthTest, false, 'drawn over the parts around it');
+  assert.ok(axes.renderOrder > 0);
+  assert.ok(axes.scale.x > 1, 'grown when seen from afar');
+  camera.position.copy(world(4, 1, -1)).add(new THREE.Vector3(0, 0, 0.5));
+  scene.fitMarksToScreen(camera, 800);
+  assert.equal(axes.scale.x, 1, 'never drawn shorter than they are');
+  scene.setHighlight(turnedBody);
+  camera.position.copy(world(4, 1, -1)).add(new THREE.Vector3(0, 0, 200));
+  scene.fitMarksToScreen(camera, 800);
+  assert.deepEqual([axes.scale.x, axes.material], [1, palette.frameAxes], 'as they were once another element is selected');
+});
+
 /** The meshes of one wheel: those standing for its contact interface. */
 function wheelMeshes(scene: VehiclePreviewScene, wheel: ElementReference): THREE.Mesh[] {
   return scene.drawings.flatMap((drawing) => drawing.parts.filter((part) => sameElement(part.ownElement, wheel)).map((part) => part.mesh));

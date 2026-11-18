@@ -31,6 +31,7 @@ import {
   type PropertyReading,
   type PropertySubject,
   type Refusal,
+  type RotationByAngles,
   type SessionAfterCommand,
   type Vector3,
   type VehicleProjectFile,
@@ -113,7 +114,7 @@ export interface CheckOutcome {
 }
 
 /** A value as set_property and add_element take it, of the property's value kind; null names none where a reference is optional. */
-export type EditValue = number | Vector3 | string | null | readonly CurvePoint[];
+export type EditValue = number | Vector3 | string | null | readonly CurvePoint[] | RotationByAngles;
 
 export interface EditRefusal {
   subject: PropertySubject;

@@ -22,8 +22,32 @@ export interface BilingualTitle {
 export type PropertySubject = { element: ElementReference } | { settings: string };
 
 export type Vector3 = [number, number, number];
-/** Three rows of a rotation matrix. */
-export type Rotation = [Vector3, Vector3, Vector3];
+/** Three rows of a 3x3 matrix: a rotation in the preview's drawings; in a rotation property, what the record holds. */
+export type MatrixRows = [Vector3, Vector3, Vector3];
+
+/**
+ * A rotation property's value as read. The matrix is what the record holds, null where it holds a quaternion that is
+ * not of unit length. The angles are the three in radians that give it, roll about x, pitch about y and yaw about z,
+ * turned about the fixed axes in that order; null where what the record holds is no rotation.
+ */
+export interface RotationReading {
+  matrixRows: MatrixRows | null;
+  rollPitchYawRadians: Vector3 | null;
+}
+
+/** A rotation as set_property and add_element take it: three angles in radians, which replace what the record holds. */
+export interface RotationByAngles {
+  roll_pitch_yaw_radians: Vector3;
+}
+
+export function rotationByAngles(rollPitchYawRadians: Vector3): RotationByAngles {
+  return { roll_pitch_yaw_radians: rollPitchYawRadians };
+}
+
+/** Whether a value sent is a rotation given by its angles. */
+export function isRotationByAngles(value: unknown): value is RotationByAngles {
+  return typeof value === 'object' && value !== null && 'roll_pitch_yaw_radians' in value;
+}
 
 /** The open session after an accepted command, as every accepted answer states it. */
 export interface SessionAfterCommand {
@@ -115,7 +139,7 @@ export const curveValueKind = 'saturated_piecewise_linear_damper_curve';
 export type PropertyValue =
   | { valueKind: 'number'; value: number | null }
   | { valueKind: 'vector3'; value: Vector3 | null }
-  | { valueKind: 'rotation'; value: Rotation | null }
+  | { valueKind: 'rotation'; value: RotationReading | null }
   /** The element's own name; setting it renames the element. */
   | { valueKind: 'element_name'; value: string | null }
   | { valueKind: 'element_reference'; referencedKinds: string[]; optional: boolean; value: string | null }
@@ -191,7 +215,7 @@ export type AttachmentSetting = { free: true } | { joint: { kind: string; name: 
 /** A body or fixed frame drawn at its pose; `rotationDrawingFromLocal` takes its own components to the drawing frame. */
 export interface PosedDrawing {
   element: ElementReference;
-  rotationDrawingFromLocal: Rotation;
+  rotationDrawingFromLocal: MatrixRows;
   originInDrawingFrameMeters: Vector3;
 }
 
@@ -277,7 +301,7 @@ function vector(value: unknown, what: string): Vector3 {
   return [number(entries[0], what), number(entries[1], what), number(entries[2], what)];
 }
 
-function rotation(value: unknown, what: string): Rotation {
+function matrixRows(value: unknown, what: string): MatrixRows {
   const rows = list(value, what);
   if (rows.length !== 3) throw new Error(`modelling service answer: ${what} does not have three rows`);
   return [vector(rows[0], `${what} row 0`), vector(rows[1], `${what} row 1`), vector(rows[2], `${what} row 2`)];
@@ -293,6 +317,14 @@ export function readElement(value: unknown, what: string): ElementReference {
 
 function nullable<T>(value: unknown, read: (present: unknown) => T): T | null {
   return value === null ? null : read(value);
+}
+
+/** A rotation property's value: either part may be null where the record holds no rotation. */
+function rotationReading(value: unknown, what: string): RotationReading {
+  return {
+    matrixRows: nullable(field(value, 'matrix_rows', what), (rows) => matrixRows(rows, `${what}.matrix_rows`)),
+    rollPitchYawRadians: nullable(field(value, 'roll_pitch_yaw_radians', what), (angles) => vector(angles, `${what}.roll_pitch_yaw_radians`)),
+  };
 }
 
 function readTitle(value: unknown, what: string): BilingualTitle {
@@ -421,7 +453,7 @@ function propertyReading(property: unknown): PropertyReading {
     case 'vector3':
       return { ...description, value: nullable(value, (present) => vector(present, what)) };
     case 'rotation':
-      return { ...description, value: nullable(value, (present) => rotation(present, what)) };
+      return { ...description, value: nullable(value, (present) => rotationReading(present, what)) };
     case 'element_name':
     case 'element_reference':
     case 'token':
@@ -520,7 +552,7 @@ export function readRemovedElements(result: unknown): ElementReference[] {
 function posed(value: unknown, rotationKey: string, what: string): PosedDrawing {
   return {
     element: readElement(field(value, 'element', what), `${what}.element`),
-    rotationDrawingFromLocal: rotation(field(value, rotationKey, what), `${what}.${rotationKey}`),
+    rotationDrawingFromLocal: matrixRows(field(value, rotationKey, what), `${what}.${rotationKey}`),
     originInDrawingFrameMeters: vector(field(value, 'origin_in_drawing_frame_meters', what), `${what}.origin_in_drawing_frame_meters`),
   };
 }
