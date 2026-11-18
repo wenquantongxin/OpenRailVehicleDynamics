@@ -40,7 +40,8 @@
 
 // The editing layer, verified by properties rather than recorded outputs:
 // every property of every element kind is described, read from the member of
-// its name and, except a rotation, editable; a reference states the kinds it
+// its name, a rotation as its matrix and angles, and editable; a reference
+// states the kinds it
 // may name and whether it may name none, a token its choices and a curve its
 // row fields, as stated here from the contract; every property but a name,
 // which the structural editing verification covers, is written to its own
@@ -78,6 +79,7 @@ using vehicle_project_comparison::SameProject;
 using vehicle_project_editing::ElementOwnName;
 using vehicle_project_editing::MechanicalCheckReport;
 using vehicle_project_editing::PropertyDescription;
+using vehicle_project_editing::PropertyOrientation;
 using vehicle_project_editing::PropertyReading;
 using vehicle_project_editing::PropertySubject;
 using vehicle_project_editing::PropertyToken;
@@ -126,7 +128,7 @@ PropertyValueKind KindOfHeldValue(const PropertyValue& value) {
                 return PropertyValueKind::kNumber;
             } else if constexpr (std::is_same_v<Held, Eigen::Vector3d>) {
                 return PropertyValueKind::kVector3;
-            } else if constexpr (std::is_same_v<Held, Eigen::Matrix3d>) {
+            } else if constexpr (std::is_same_v<Held, PropertyOrientation>) {
                 return PropertyValueKind::kRotation;
             } else if constexpr (std::is_same_v<Held, ElementOwnName>) {
                 return PropertyValueKind::kElementName;
@@ -141,12 +143,30 @@ PropertyValueKind KindOfHeldValue(const PropertyValue& value) {
         value);
 }
 
+// An orientation as expected: the matrix bit for bit where one is expected,
+// since reading never rewrites a record, and the angles to a few rounding
+// steps, since they are computed.
+bool SameOrientation(const PropertyOrientation& expected, const PropertyOrientation& actual) {
+    constexpr double kAngleToleranceRadians = 1.0e-14;
+    return (!expected.matrix.has_value() || expected.matrix == actual.matrix) &&
+           expected.roll_pitch_yaw_radians.has_value() ==
+               actual.roll_pitch_yaw_radians.has_value() &&
+           (!expected.roll_pitch_yaw_radians.has_value() ||
+            (*expected.roll_pitch_yaw_radians - *actual.roll_pitch_yaw_radians)
+                    .cwiseAbs()
+                    .maxCoeff() <= kAngleToleranceRadians);
+}
+
 bool SameValue(const PropertyValue& expected, const PropertyValue& actual) {
     return expected.index() == actual.index() &&
            std::visit(
                [&actual](const auto& expected_value) {
                    using Held = std::remove_cvref_t<decltype(expected_value)>;
-                   return Same(expected_value, std::get<Held>(actual));
+                   if constexpr (std::is_same_v<Held, PropertyOrientation>) {
+                       return SameOrientation(expected_value, std::get<Held>(actual));
+                   } else {
+                       return Same(expected_value, std::get<Held>(actual));
+                   }
                },
                expected);
 }
@@ -279,6 +299,8 @@ VehicleProject MakePropertyProbeProject() {
     return {.vehicle_definition = std::move(vehicle),
             .contact_record = std::move(contact_record),
             .free_body_placements = {{.body_name = "probe_body",
+                                      .rotation_local_track_from_body = Eigen::Quaterniond(
+                                          Eigen::AngleAxisd(0.5, Eigen::Vector3d::UnitY())),
                                       .lateral_offset_in_local_track_frame_meters = 5.1,
                                       .vertical_offset_in_local_track_frame_meters = 5.2}}};
 }
@@ -294,7 +316,7 @@ struct ExpectedElementKind {
     // How many properties the kind must have: the members of its record,
     // counted by the structured binding in Members(), and for a rigid body
     // those but whether it moves freely, which its attachment states, and its
-    // station offset and its two placement offsets.
+    // station offset and its placement's two offsets and rotation.
     std::size_t property_count;
     // Each property name paired with the probe member of the same name.
     std::vector<ExpectedProperty> properties;
@@ -339,7 +361,7 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
     return {
         {ElementKind::kRigidBody,
          body.name,
-         MemberCount(body) - 1 + 3,
+         MemberCount(body) - 1 + 4,
          {{"name", own_name(body.name)},
           {"mass_kilograms", body.mass_kilograms},
           {"center_of_mass_in_body_frame_meters", body.center_of_mass_in_body_frame_meters},
@@ -352,14 +374,22 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
           {"placement.lateral_offset_in_local_track_frame_meters",
            placement.lateral_offset_in_local_track_frame_meters},
           {"placement.vertical_offset_in_local_track_frame_meters",
-           placement.vertical_offset_in_local_track_frame_meters}}},
+           placement.vertical_offset_in_local_track_frame_meters},
+          // A half radian about y, as the probe's placement is turned.
+          {"placement.rotation_local_track_from_body",
+           PropertyOrientation{
+               .matrix = placement.rotation_local_track_from_body.toRotationMatrix(),
+               .roll_pitch_yaw_radians = Eigen::Vector3d(0.0, 0.5, 0.0)}}}},
         {ElementKind::kFixedFrame,
          frame.name,
          MemberCount(frame),
          {{"name", own_name(frame.name)},
           {"body_name", reference(frame.body_name)},
           {"position_in_body_frame_meters", frame.position_in_body_frame_meters},
-          {"rotation_in_body_frame", frame.rotation_in_body_frame}}},
+          // 0.3 radian about z, as the probe's frame is turned.
+          {"rotation_in_body_frame",
+           PropertyOrientation{.matrix = frame.rotation_in_body_frame,
+                               .roll_pitch_yaw_radians = Eigen::Vector3d(0.0, 0.0, 0.3)}}}},
         {ElementKind::kRevoluteJoint,
          revolute.name,
          MemberCount(revolute),
@@ -467,8 +497,10 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
          MemberCount(carrier),
          {{"carrier_name", own_name(carrier.carrier_name)},
           {"body_name", reference(carrier.body_name)},
+          // 0.4 radian about x, as the probe's carrier is turned.
           {"rotation_body_from_nonspinning_wheel_profile",
-           carrier.rotation_body_from_nonspinning_wheel_profile}}},
+           PropertyOrientation{.matrix = carrier.rotation_body_from_nonspinning_wheel_profile,
+                               .roll_pitch_yaw_radians = Eigen::Vector3d(0.4, 0.0, 0.0)}}}},
         {ElementKind::kContactInterface,
          interface.interface_name,
          MemberCount(interface),
@@ -482,13 +514,6 @@ std::vector<ExpectedElementKind> ExpectedProbeProperties(const VehicleProject& p
 }
 
 using PropertyName = std::pair<ElementKind, std::string>;
-
-// The properties that cannot be edited, stated here independently of the
-// descriptions: the rotations. Every other property is editable.
-std::set<PropertyName> ReadOnlyProperties() {
-    return {{ElementKind::kFixedFrame, "rotation_in_body_frame"},
-            {ElementKind::kContactCarrier, "rotation_body_from_nonspinning_wheel_profile"}};
-}
 
 struct ExpectedReference {
     std::vector<ElementKind> referenced_kinds;
@@ -609,7 +634,6 @@ std::map<PropertyKey, std::optional<PropertyValue>> ReadEveryProperty(
 
 void VerifyPropertiesReadTheirMembers(const VehicleProject& probe,
                                       std::span<const ExpectedElementKind> kinds) {
-    const std::set<PropertyName> read_only = ReadOnlyProperties();
     for (const ExpectedElementKind& expected : kinds) {
         const ElementReference element{expected.kind, expected.element_name};
         Require(expected.properties.size() == expected.property_count,
@@ -640,8 +664,7 @@ void VerifyPropertiesReadTheirMembers(const VehicleProject& probe,
                     what + " is read with another description");
             Require(description.value_kind == KindOfHeldValue(property.value),
                     what + " is described with the wrong value kind");
-            Require(description.editable != read_only.contains({expected.kind, property.name}),
-                    what + " is not editable exactly when this test calls it read-only");
+            Require(description.editable, what + " is not editable");
             RequireDescribedAsStated(description, {expected.kind, property.name}, what);
             Require(readings[index].value.has_value() &&
                         SameValue(property.value, *readings[index].value),
@@ -681,7 +704,8 @@ void VerifyAbsentValues(const VehicleProject& probe) {
     for (const ElementReference& body : {jointed_body, unplaced_body}) {
         for (const std::string property_name :
              {"placement.lateral_offset_in_local_track_frame_meters",
-              "placement.vertical_offset_in_local_track_frame_meters"}) {
+              "placement.vertical_offset_in_local_track_frame_meters",
+              "placement.rotation_local_track_from_body"}) {
             require_absent(body, property_name, "has no placement");
         }
     }
@@ -706,6 +730,22 @@ void VerifyAbsentValues(const VehicleProject& probe) {
             "none that can be edited");
 }
 
+// The value an edit gives to write a reading's own value back: the value
+// itself, but for a rotation its angles alone, the form an edit gives a
+// rotation in. A value is absent only from a station offset, which holds a
+// number, and from a placement's offsets and rotation; for those, a value of
+// the property's kind: a number, or the angles of no turn.
+PropertyValue ValueWrittenBack(const PropertyReading& reading) {
+    if (reading.description.value_kind == PropertyValueKind::kRotation) {
+        return PropertyOrientation{
+            .roll_pitch_yaw_radians =
+                reading.value.has_value()
+                    ? std::get<PropertyOrientation>(*reading.value).roll_pitch_yaw_radians
+                    : Eigen::Vector3d::Zero().eval()};
+    }
+    return reading.value.has_value() ? *reading.value : PropertyValue(0.0);
+}
+
 // What a reading calls editable is exactly what an edit accepts: writing an
 // editable reading's own value back is accepted, and an edit of every other
 // reading, with a value of its kind, is refused.
@@ -720,11 +760,8 @@ void VerifyReadingsStateWhatEditsAccept(const VehicleProject& probe,
                  vehicle_project_editing::ReadSubjectProperties(probe, element)) {
                 const std::string property_name(reading.description.name);
                 const std::string what = Describe(element) + " property '" + property_name + "'";
-                // A value is absent only from a station offset or a placement
-                // offset, which hold numbers.
-                const PropertyValue value =
-                    reading.value.has_value() ? *reading.value : PropertyValue(0.0);
-                const auto edited = session.SetSubjectProperty(element, property_name, value);
+                const auto edited =
+                    session.SetSubjectProperty(element, property_name, ValueWrittenBack(reading));
                 if (reading.description.editable) {
                     Require(edited.has_value(),
                             what +
@@ -812,8 +849,12 @@ PropertyValue ChangedValue(const VehicleProject& probe, const PropertyName& prop
                                      curve.back().relative_velocity_meters_per_second + 1.0,
                                  .force_newtons = curve.back().force_newtons + 2.0});
                 return curve;
+            } else if constexpr (std::is_same_v<Held, PropertyOrientation>) {
+                return PropertyOrientation{.roll_pitch_yaw_radians =
+                                               *held.roll_pitch_yaw_radians +
+                                               Eigen::Vector3d(0.1, 0.2, 0.3)};
             } else {
-                Fail("a name or a rotation is not written here");
+                Fail("a name is not written here");
             }
         },
         value);
@@ -829,12 +870,9 @@ void VerifyPropertiesWriteTheirMembers(const VehicleProject& probe,
     VehicleProjectEditingSession session(probe);
     const std::map<PropertyKey, std::optional<PropertyValue>> original =
         ReadEveryProperty(probe, kinds);
-    const std::set<PropertyName> read_only = ReadOnlyProperties();
     for (const ExpectedElementKind& kind : kinds) {
         for (const ExpectedProperty& property : kind.properties) {
-            const PropertyValueKind value_kind = KindOfHeldValue(property.value);
-            if (read_only.contains({kind.kind, property.name}) ||
-                value_kind == PropertyValueKind::kElementName) {
+            if (KindOfHeldValue(property.value) == PropertyValueKind::kElementName) {
                 continue;
             }
             const ElementReference element{kind.kind, kind.element_name};
@@ -889,8 +927,8 @@ void VerifyStationOffsetWritesItsLayoutEntry(const VehicleProject& probe) {
 // A rigid body's properties are shown in the contract's sections, in the order
 // its properties are listed: its name in none, then mass and inertia, its
 // station along the track from the vehicle layout zero and its preview
-// placement. No other kind's property, and no settings property, is in a
-// section.
+// placement, the placement's rotation after its two offsets. No other kind's
+// property, and no settings property, is in a section.
 void VerifyPropertySections() {
     const std::vector<std::pair<std::string_view, std::optional<std::string_view>>>
         rigid_body_sections = {
@@ -902,7 +940,8 @@ void VerifyPropertySections() {
             {"mechanical_track_station_layout.station_offset_meters",
              "Station along the track, from the vehicle layout zero"},
             {"placement.lateral_offset_in_local_track_frame_meters", "Preview placement"},
-            {"placement.vertical_offset_in_local_track_frame_meters", "Preview placement"}};
+            {"placement.vertical_offset_in_local_track_frame_meters", "Preview placement"},
+            {"placement.rotation_local_track_from_body", "Preview placement"}};
     const std::span<const PropertyDescription> body_descriptions =
         vehicle_project_editing::DescribeElementProperties(ElementKind::kRigidBody);
     Require(body_descriptions.size() == rigid_body_sections.size(),
@@ -1062,10 +1101,20 @@ void VerifyEditRefusals(const ReferenceVehicle& gz18) {
          Eigen::Vector3d(0.0, 0.0, 1.0e6)},
         {"an edit of a property the kind does not have", kPrimarySuspension, "stiffness",
          Eigen::Vector3d(0.0, 0.0, 1.0e6)},
-        {"an edit of a property that is not editable",
+        {"an edit of a rotation with an angle that is not finite",
          {ElementKind::kFixedFrame, gz18.definition.fixed_frames.front().name},
          "rotation_in_body_frame",
-         Eigen::Matrix3d::Identity().eval()},
+         PropertyOrientation{.roll_pitch_yaw_radians = Eigen::Vector3d(0.0, not_a_number, 0.0)}},
+        {"an edit of a rotation given by its matrix",
+         {ElementKind::kContactCarrier,
+          gz18.contact_record.declaration.carriers.front().carrier_name},
+         "rotation_body_from_nonspinning_wheel_profile",
+         PropertyOrientation{.matrix = Eigen::Matrix3d::Identity()}},
+        {"an edit of a rotation giving its matrix beside its angles",
+         {ElementKind::kFixedFrame, gz18.definition.fixed_frames.front().name},
+         "rotation_in_body_frame",
+         PropertyOrientation{.matrix = Eigen::Matrix3d::Identity(),
+                             .roll_pitch_yaw_radians = Eigen::Vector3d::Zero()}},
         {"an edit with a value of the wrong kind", kPrimarySuspension,
          "stiffness_newtons_per_meter", 1.0e6},
         {"an edit with a number that is not finite",

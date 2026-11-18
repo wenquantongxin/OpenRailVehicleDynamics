@@ -94,10 +94,11 @@
 //   own names, which state meaning and unit. An element kind's list holds its
 //   record's members. A rigid body's leaves out whether it moves freely in the
 //   world, which its attachment states, and adds where it is along, across and
-//   above the track, which only a free body has:
-//   mechanical_track_station_layout.station_offset_meters,
-//   placement.lateral_offset_in_local_track_frame_meters and
-//   placement.vertical_offset_in_local_track_frame_meters. Settings list their
+//   above the track and how it is turned in the drawing, which only a free
+//   body has: mechanical_track_station_layout.station_offset_meters,
+//   placement.lateral_offset_in_local_track_frame_meters,
+//   placement.vertical_offset_in_local_track_frame_meters and
+//   placement.rotation_local_track_from_body. Settings list their
 //   record's members, a member of a record held inside under the holding
 //   member's name, a dot and its own (friction.static_coefficient):
 //     gravity              the gravitational acceleration the project is
@@ -117,7 +118,12 @@
 //   kind:
 //     number             a JSON number; a count held as an integer is one
 //     vector3            a vector
-//     rotation           a rotation
+//     rotation           an orientation:
+//                        {"matrix_rows": <rotation> or null,
+//                         "roll_pitch_yaw_radians": [roll, pitch, yaw] or null}
+//                        as read, and {"roll_pitch_yaw_radians": [roll, pitch,
+//                        yaw]} and nothing else as set_property and
+//                        add_element take it
 //     text               a string shown as it is: never an element's own name
 //                        and never a reference
 //     element_name       a string: the element's own name; setting it renames
@@ -132,16 +138,31 @@
 //                        giving every one of row_fields; possibly empty
 //   A value is also null where the subject holds no value for the property:
 //   the station offset of a rigid body the mechanical track station layout
-//   does not place, the placement offsets of a rigid body without a
-//   placement, and the gravity of a project that states none.
+//   does not place, the placement offsets and rotation of a rigid body without
+//   a placement, and the gravity of a project that states none.
+//   An orientation is stated by three angles in radians: roll about x, pitch
+//   about y and yaw about z, the axes being those of the frame it is stated in
+//   (a marker's body's for rotation_in_body_frame), fixed, applied in that
+//   order, R = Rz(yaw) Ry(pitch) Rx(roll): the kernel's convention and unit
+//   for its Ball-RPY joint. Reading gives the matrix the record holds, or the
+//   matrix of the placement's quaternion, and three angles that give it, roll
+//   and yaw in (-pi, pi] and pitch in [-pi/2, pi/2]; where pitch is pi/2 or
+//   -pi/2, yaw is 0 and roll carries the rest. A record holding what is no
+//   rotation, by the rule the check applies to it, is read as it is and never
+//   repaired: a matrix that is not orthonormal and right-handed within 1e-12
+//   has null angles, and a placement's quaternion whose norm is not one within
+//   1e-12 has null rows and angles. An edit gives the three angles, all
+//   finite, and the record then holds the rotation they give, a matrix or a
+//   unit quaternion: that is also how such a record is repaired. Reading never
+//   rewrites a record.
 //   section is where the property is shown: consecutive properties of one
 //   section form it. A rigid body's properties are shown in the sections mass
 //   and inertia, station along the track from the vehicle layout zero (the
 //   station offset, which the dynamics use) and preview placement (the
-//   placement offsets, which only place it in the drawing), after its
-//   attachment; every other property is in none.
-//   Every element property is editable except a rotation. Of the settings,
-//   the gravity, the wheel's nominal_rolling_radius_meters and
+//   placement offsets and rotation, which only place and turn it in the
+//   drawing), after its attachment; every other property is in none.
+//   Every element property is editable. Of the settings, the gravity, the
+//   wheel's nominal_rolling_radius_meters and
 //   wheel_lateral_datum_magnitude_meters, and the rail's track_gauge_meters,
 //   gauge_measuring_depth_meters, pose_rail_cant_radians (the wheel-rail pose
 //   and gauge datum's), geometry_rail_cant_radians (the contact geometry's)
@@ -292,11 +313,12 @@
 //                  "frames_on_body": [<element>, ...],
 //                  "frames_it_can_be_held_at": [<element>, ...]}
 //     editable says whether this subject's property can be edited now. It is
-//     the property's editable, except that a station offset or a placement
-//     offset whose value is null is not editable; a reference that names none
-//     is null and editable, and so is the gravity of a project that states
-//     none. Refused for wheel, rail and contact_computation while the project
-//     has no contact record.
+//     the property's editable, except that a station offset, a placement
+//     offset or a placement rotation whose value is null is not editable; a
+//     rotation whose record holds no rotation has a value and is editable, a
+//     reference that names none is null and editable, and so is the gravity of
+//     a project that states none. Refused for wheel, rail and
+//     contact_computation while the project has no contact record.
 //     attachment is null but for a rigid body, whose attachment is read from
 //     the records alone, whatever check would say of them. A joint relates two
 //     bodies when its two ends name frames on two different bodies of the
@@ -328,8 +350,9 @@
 //     unless the element exists or the project holds the settings, which it
 //     holds of wheel, rail and contact_computation only with a contact record,
 //     the property is editable, every number in the value is finite, a
-//     station offset or placement offset has the record holding it, a
-//     reference names an element of one of its referenced_kinds or, where
+//     rotation's three angles included, a station offset or a placement
+//     offset or rotation has the record holding it, a reference names an
+//     element of one of its referenced_kinds or, where
 //     optional, none, a token is one of its choices, and a new name is not
 //     empty and taken by no other element of the element's name space.
 //     Renaming changes every reference to the element and its group
@@ -566,6 +589,7 @@ using orvd::vehicle_project_editing::ModelTreeCreationOffer;
 using orvd::vehicle_project_editing::ModelTreeNode;
 using orvd::vehicle_project_editing::ProjectSettings;
 using orvd::vehicle_project_editing::PropertyDescription;
+using orvd::vehicle_project_editing::PropertyOrientation;
 using orvd::vehicle_project_editing::PropertyReading;
 using orvd::vehicle_project_editing::PropertySubject;
 using orvd::vehicle_project_editing::PropertyText;
@@ -677,8 +701,12 @@ Json EncodeValue(double number) {
 Json EncodeValue(const Eigen::Vector3d& vector) {
     return EncodeVector(vector);
 }
-Json EncodeValue(const Eigen::Matrix3d& rotation) {
-    return EncodeRotation(rotation);
+Json EncodeValue(const PropertyOrientation& orientation) {
+    return Json{{"matrix_rows", orientation.matrix.has_value() ? EncodeRotation(*orientation.matrix)
+                                                               : Json(nullptr)},
+                {"roll_pitch_yaw_radians", orientation.roll_pitch_yaw_radians.has_value()
+                                               ? EncodeVector(*orientation.roll_pitch_yaw_radians)
+                                               : Json(nullptr)}};
 }
 Json EncodeValue(const PropertyText& text) {
     return text.text;
@@ -749,15 +777,15 @@ std::expected<PropertyValue, std::string> DecodePropertyValue(
             }
             return std::unexpected(property + " takes an array of three numbers");
         case PropertyValueKind::kRotation:
-            if (value.is_array() && value.size() == 3 &&
-                std::ranges::all_of(value, [](const Json& row) { return IsNumbers(row, 3); })) {
-                Eigen::Matrix3d rotation;
-                for (int row = 0; row < 3; ++row) {
-                    rotation.row(row) = DecodeVector(value[row]).transpose();
-                }
-                return rotation;
+            if (value.is_object() && value.size() == 1 &&
+                value.contains("roll_pitch_yaw_radians") &&
+                IsNumbers(value.at("roll_pitch_yaw_radians"), 3)) {
+                return PropertyOrientation{.roll_pitch_yaw_radians =
+                                               DecodeVector(value.at("roll_pitch_yaw_radians"))};
             }
-            return std::unexpected(property + " takes three rows of three numbers");
+            return std::unexpected(property +
+                                   " takes {\"roll_pitch_yaw_radians\": [roll, pitch, yaw]} and "
+                                   "nothing else");
         case PropertyValueKind::kText:
             if (value.is_string()) {
                 return PropertyText{value.get<std::string>()};

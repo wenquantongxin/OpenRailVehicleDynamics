@@ -29,10 +29,11 @@
 // it is along, across and above the track, from records outside its own and
 // which only a free body has: its entry in the mechanical track station
 // layout, `mechanical_track_station_layout.station_offset_meters`, and the two
-// offsets of its drawing placement,
-// `placement.lateral_offset_in_local_track_frame_meters` and
-// `placement.vertical_offset_in_local_track_frame_meters`. The prefixes say
-// which record holds them. A rigid body's properties are shown in sections:
+// offsets and the rotation of its drawing placement,
+// `placement.lateral_offset_in_local_track_frame_meters`,
+// `placement.vertical_offset_in_local_track_frame_meters` and
+// `placement.rotation_local_track_from_body`. The prefixes say which record
+// holds them. A rigid body's properties are shown in sections:
 // mass and inertia, its station along the track from the vehicle layout zero,
 // which the dynamics use, and its preview placement, which only places it in
 // the drawing.
@@ -52,15 +53,18 @@
 // name none. A token is one of a fixed set of choices, which its description
 // lists, and a curve's description lists the fields of its rows. A text is
 // shown as it is: never an element's own name and never a reference. A count
-// held as an integer is a number, and an enumeration a token.
+// held as an integer is a number, and an enumeration a token. A rotation, a
+// marker's or a carrier's matrix or a placement's quaternion, is read and
+// edited as an orientation stated by three angles
+// (vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians.h).
 //
-// Every element property can be edited except a rotation. Of the settings,
-// the gravity, the wheel's nominal rolling radius and lateral datum, and the
-// rail's gauge, gauge measuring depth, two cants and profile origin mode can
-// be edited; nothing here judges them beyond their being finite. A
-// description states whether its property can be edited at all; a reading
-// states whether one subject's property can be edited now, which an element's
-// station offset or placement offset cannot while the record holding it is
+// Every element property can be edited. Of the settings, the gravity, the
+// wheel's nominal rolling radius and lateral datum, and the rail's gauge,
+// gauge measuring depth, two cants and profile origin mode can be edited;
+// nothing here judges them beyond their being finite. A description states
+// whether its property can be edited at all; a reading states whether one
+// subject's property can be edited now, which an element's station offset or
+// placement offsets and rotation cannot while the record holding them is
 // missing. The gravity can be edited while the project states none. Edits go
 // through VehicleProjectEditingSession, which validates them and keeps their
 // history.
@@ -73,7 +77,7 @@ enum class PropertyValueKind {
     kNumber,
     // Eigen::Vector3d
     kVector3,
-    // Eigen::Matrix3d, a rotation matrix.
+    // PropertyOrientation
     kRotation,
     // PropertyText
     kText,
@@ -116,13 +120,30 @@ struct PropertyToken {
     friend bool operator==(const PropertyToken&, const PropertyToken&) = default;
 };
 
+// The value of a rotation property: an orientation stated by roll, pitch and
+// yaw in radians (vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians.h).
+//
+// A reading gives the matrix the record holds, or the matrix of the
+// quaternion it holds, and three angles that give it. A record holding what
+// is no rotation, by the rule the check applies to it, is read as it is and
+// never repaired: a matrix that is not orthonormal and right-handed has no
+// angles, and a quaternion that is not of unit length has neither matrix nor
+// angles. An edit gives the three angles alone, and the record then holds the
+// rotation they give.
+struct PropertyOrientation {
+    std::optional<Eigen::Matrix3d> matrix{};
+    std::optional<Eigen::Vector3d> roll_pitch_yaw_radians{};
+
+    friend bool operator==(const PropertyOrientation&, const PropertyOrientation&) = default;
+};
+
 // The non-negative half of a saturated piecewise-linear damper's odd curve.
 using SaturatedPiecewiseLinearDamperCurve =
     std::vector<configuration::VehicleSaturatedPiecewiseLinearDamperPointDefinition>;
 
 // One property's value, held as the type its value kind names.
 using PropertyValue =
-    std::variant<double, Eigen::Vector3d, Eigen::Matrix3d, PropertyText, ElementOwnName,
+    std::variant<double, Eigen::Vector3d, PropertyOrientation, PropertyText, ElementOwnName,
                  ReferencedElementName, PropertyToken, SaturatedPiecewiseLinearDamperCurve>;
 
 // Property values by property name, as a new element is given them.
@@ -164,9 +185,9 @@ struct PropertyReading {
     PropertyDescription description;
     // Absent where the subject holds no value for the property: a rigid body
     // the mechanical track station layout does not place has no station
-    // offset, a rigid body without a placement has no placement offsets, and
-    // a project that states no gravity has none. A reference that names none
-    // has a value: a ReferencedElementName holding no name.
+    // offset, a rigid body without a placement has no placement offsets and
+    // rotation, and a project that states no gravity has none. A reference
+    // that names none has a value: a ReferencedElementName holding no name.
     std::optional<PropertyValue> value;
 };
 

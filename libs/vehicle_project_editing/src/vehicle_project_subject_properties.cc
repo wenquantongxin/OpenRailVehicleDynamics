@@ -10,6 +10,7 @@
 
 #include "orvd/vehicle_project/vehicle_project_element_kind_records.h"
 #include "vehicle_project_element_property_tables.h"
+#include "vehicle_project_orientation_property_values.h"
 #include "vehicle_project_records_following_elements.h"
 #include "vehicle_project_settings_property_tables.h"
 
@@ -34,11 +35,9 @@ using vehicle_project::ElementReference;
 using vehicle_project::VehicleProject;
 using vehicle_project::VisitElementKind;
 
-// Every property can be edited except a rotation, which nothing edits yet.
+// Every element property can be edited.
 PropertyDescription Described(std::string_view name, PropertyValueKind value_kind) {
-    return {.name = name,
-            .value_kind = value_kind,
-            .editable = value_kind != PropertyValueKind::kRotation};
+    return {.name = name, .value_kind = value_kind, .editable = true};
 }
 
 // The description of each kind of member.
@@ -97,6 +96,17 @@ PropertyDescription DescribeMember(std::string_view name,
     return description;
 }
 
+// What a body-keyed member holds: an offset is a number, a placement's
+// quaternion a rotation.
+template <typename KeyedRecord>
+PropertyValueKind BodyKeyedValueKind(double KeyedRecord::*) {
+    return PropertyValueKind::kNumber;
+}
+
+PropertyValueKind BodyKeyedValueKind(Eigen::Quaterniond vehicle_project::FreeBodyPlacement::*) {
+    return PropertyValueKind::kRotation;
+}
+
 std::optional<Title> DescribeSection(std::optional<internal::PropertySection> section) {
     if (!section.has_value()) {
         return std::nullopt;
@@ -120,7 +130,11 @@ std::span<const PropertyDescription> Descriptions() {
         }
         if constexpr (std::is_same_v<Record, VehicleRigidBodyDefinition>) {
             for (const internal::BodyKeyedProperty& property : kBodyKeyedProperties) {
-                described.push_back(Described(property.name, PropertyValueKind::kNumber));
+                described.push_back(std::visit(
+                    [&property](auto member) {
+                        return Described(property.name, BodyKeyedValueKind(member));
+                    },
+                    property.member));
                 described.back().section = DescribeSection(property.section);
             }
         }
@@ -134,6 +148,17 @@ std::span<const PropertyDescription> Descriptions() {
 template <typename Record, typename Value>
 PropertyValue ReadMember(const Record& record, Value Record::* member) {
     return PropertyValue(std::in_place_type<Value>, record.*member);
+}
+
+// A carrier's basis and a marker's matrix, the only other record's matrix, are
+// rotations by different rules of the check's.
+template <typename Record>
+PropertyValue ReadMember(const Record& record, Eigen::Matrix3d Record::* member) {
+    if constexpr (std::is_same_v<Record, configuration::VehicleContactCarrierDeclaration>) {
+        return internal::ReadOrientationOfCarrierBasis(record.*member);
+    } else {
+        return internal::ReadOrientationOfMarker(record.*member);
+    }
 }
 
 template <typename Record>
@@ -170,6 +195,15 @@ PropertyValue ReadMember(const Record& record, const ValueTokenMember<Record, Va
     return TokenStandingFor(record.*token.member, token.tokens, token.values);
 }
 
+// The value a body-keyed member holds, as a property value.
+PropertyValue ReadBodyKeyedValue(double offset) {
+    return offset;
+}
+
+PropertyValue ReadBodyKeyedValue(const Eigen::Quaterniond& rotation) {
+    return internal::ReadOrientationOfPlacement(rotation);
+}
+
 template <typename KindRecords>
 std::vector<PropertyReading> ReadProperties(const VehicleProject& project,
                                             const ElementReference& element) {
@@ -201,15 +235,15 @@ std::vector<PropertyReading> ReadProperties(const VehicleProject& project,
                          if (keyed == nullptr) {
                              return std::nullopt;
                          }
-                         return keyed->*member;
+                         return ReadBodyKeyedValue(keyed->*member);
                      },
                      property.member)});
         }
     }
     // A property whose value is absent for this element is not editable for
-    // it. The assignment refuses exactly these edits: a station offset or
-    // placement offset whose record is missing is the only editable property
-    // a value can be absent from.
+    // it. The assignment refuses exactly these edits: a station offset or a
+    // placement offset or rotation whose record is missing is the only
+    // editable property a value can be absent from.
     for (PropertyReading& reading : readings) {
         reading.description.editable = reading.description.editable && reading.value.has_value();
     }

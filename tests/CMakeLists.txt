@@ -1584,6 +1584,7 @@ add_executable(verify_vehicle_project_editing
     vehicle_project_editing/vehicle_project_subject_properties_header_self_containment.cc
     vehicle_project_editing/vehicle_project_model_tree_by_domains_header_self_containment.cc
     vehicle_project_editing/vehicle_project_rigid_body_attachments_header_self_containment.cc
+    vehicle_project_editing/vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians_header_self_containment.cc
     vehicle_project_editing/vehicle_project_mechanical_check_report_header_self_containment.cc
     vehicle_project_editing/vehicle_project_preview_header_self_containment.cc
     vehicle_project_editing/vehicle_project_editing_session_header_self_containment.cc
@@ -1731,6 +1732,45 @@ add_test(NAME verify_vehicle_project_settings_editing
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
              ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json
              ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-settings-editing)
+
+# The roll-pitch-yaw convention orientations are read and edited in, from
+# what it means: quarter turns about each axis and the product Rz Ry Rx
+# written out; the angles read from a rotation give it again over a grid,
+# pitch at pi/2 and -pi/2 included, where yaw reads 0.
+add_executable(verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians
+    vehicle_project_editing/verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians.cc)
+orvd_configure_first_party_target(verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians)
+target_include_directories(verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians
+         COMMAND verify_vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians)
+
+# The three orientations a project holds, read and edited as roll, pitch and
+# yaw in radians on both bundled vehicles: every rotation read as its record
+# holds it with angles giving it; a marker, a carrier and a placement turned,
+# read back and drawn so, each one undo step; angles that are not finite and
+# a jointed body's placement refused; a marker created turned or aligned;
+# edited orientations saved and reopened equal, read ones saved to the same
+# bytes; and records holding no rotation read as they are, reported by the
+# check and repaired by three angles, judged as the check judges them.
+add_executable(verify_vehicle_project_orientation_editing
+    vehicle_project_editing/verify_vehicle_project_orientation_editing.cc)
+orvd_configure_first_party_target(verify_vehicle_project_orientation_editing)
+target_include_directories(verify_vehicle_project_orientation_editing
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(verify_vehicle_project_orientation_editing
+    PRIVATE orvd_vehicle_project_editing)
+add_test(NAME verify_vehicle_project_orientation_editing
+         COMMAND verify_vehicle_project_orientation_editing
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/gz18/contact_record.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/vehicle_definition.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/startup_states/moving_startup_60kmh.json
+             ${CMAKE_SOURCE_DIR}/vehicle_library/irw/contact_record.json
+             ${CMAKE_CURRENT_BINARY_DIR}/vehicle-project-orientation-editing)
 
 # The project templates the modelling service starts new projects from: each
 # a project file in the writer's own form, giving the same bytes when read and

@@ -43,9 +43,9 @@ auto* FindBodyKeyedRecord(Project& project, const std::string& body_name,
     return FindStationOffsetEntry(project, body_name);
 }
 
-template <vehicle_project::ConstOrMutableVehicleProject Project>
+template <vehicle_project::ConstOrMutableVehicleProject Project, typename Value>
 auto* FindBodyKeyedRecord(Project& project, const std::string& body_name,
-                          double vehicle_project::FreeBodyPlacement::*) {
+                          Value vehicle_project::FreeBodyPlacement::*) {
     return FindPlacement(project, body_name);
 }
 

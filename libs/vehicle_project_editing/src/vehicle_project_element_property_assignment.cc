@@ -1,6 +1,7 @@
 #include "vehicle_project_element_property_assignment.h"
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -13,6 +14,7 @@
 #include "vehicle_project_element_name_spaces.h"
 #include "vehicle_project_element_property_tables.h"
 #include "vehicle_project_element_references.h"
+#include "vehicle_project_orientation_property_values.h"
 #include "vehicle_project_property_edit_value_checks.h"
 #include "vehicle_project_records_following_elements.h"
 
@@ -32,9 +34,6 @@ bool AllFinite(double number) {
 }
 bool AllFinite(const Eigen::Vector3d& vector) {
     return vector.allFinite();
-}
-bool AllFinite(const Eigen::Matrix3d& rotation) {
-    return rotation.allFinite();
 }
 bool AllFinite(const SaturatedPiecewiseLinearDamperCurve& curve) {
     return std::ranges::all_of(
@@ -57,7 +56,7 @@ struct MemberEdit {
 };
 
 // A number, a 3-vector or a curve is written as given when every number in it
-// is finite. A rotation would be too, but no rotation is editable.
+// is finite.
 template <typename Record, typename Value>
 std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
                                               Value Record::* member, const PropertyValue& value) {
@@ -66,6 +65,20 @@ std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
         return std::unexpected(edit.quoted_property_name + " must be finite");
     }
     edit.record.*member = given;
+    return {};
+}
+
+// A rotation matrix holds the rotation the edit's three angles give.
+template <typename Record>
+std::expected<void, std::string> AssignMember(const MemberEdit<Record>& edit,
+                                              Eigen::Matrix3d Record::* member,
+                                              const PropertyValue& value) {
+    const std::expected<Eigen::Matrix3d, std::string> rotation =
+        RotationGivenByEdit(edit.property_name, std::get<PropertyOrientation>(value));
+    if (!rotation.has_value()) {
+        return std::unexpected(rotation.error());
+    }
+    edit.record.*member = *rotation;
     return {};
 }
 
@@ -154,32 +167,53 @@ std::string MissingBodyKeyedRecord(const VehicleRigidBodyDefinition& body,
                      "layout gives it no station offset";
 }
 
+template <typename Value>
 std::string MissingBodyKeyedRecord(const VehicleRigidBodyDefinition& body,
-                                   double FreeBodyPlacement::*) {
+                                   Value FreeBodyPlacement::*) {
     return body.moves_freely_in_world
                ? "free body '" + body.name +
-                     "' has no placement, and a placement offset needs an existing placement"
+                     "' has no placement, and its placement's offsets and rotation need one"
                : "rigid body '" + body.name +
                      "' does not move freely in the world, so it has no placement";
 }
 
-// A station offset or a placement offset is written to the record keyed by
-// the body's name, which must exist.
+// What a body-keyed member is given: an offset the finite number given, a
+// placement's quaternion the rotation the three angles given give.
+template <typename KeyedRecord>
+std::expected<double, std::string> BodyKeyedValueGiven(std::string_view property_name,
+                                                       double KeyedRecord::*,
+                                                       const PropertyValue& value) {
+    const double given = std::get<double>(value);
+    if (!std::isfinite(given)) {
+        return std::unexpected(QuotePropertyName(property_name) + " must be finite");
+    }
+    return given;
+}
+
+std::expected<Eigen::Quaterniond, std::string> BodyKeyedValueGiven(
+    std::string_view property_name, Eigen::Quaterniond FreeBodyPlacement::*,
+    const PropertyValue& value) {
+    return RotationGivenByEdit(property_name, std::get<PropertyOrientation>(value))
+        .transform([](const Eigen::Matrix3d& rotation) { return Eigen::Quaterniond(rotation); });
+}
+
+// A station offset, a placement offset or a placement rotation is written to
+// the record keyed by the body's name, which must exist.
 std::expected<void, std::string> AssignBodyKeyed(VehicleProject& project,
                                                  const VehicleRigidBodyDefinition& body,
                                                  const BodyKeyedProperty& property,
                                                  const PropertyValue& value) {
-    const double given = std::get<double>(value);
-    if (!std::isfinite(given)) {
-        return std::unexpected(QuotePropertyName(property.name) + " must be finite");
-    }
     return std::visit(
-        [&project, &body, given](auto member) -> std::expected<void, std::string> {
+        [&](auto member) -> std::expected<void, std::string> {
+            const auto given = BodyKeyedValueGiven(property.name, member, value);
+            if (!given.has_value()) {
+                return std::unexpected(given.error());
+            }
             auto* const keyed = FindBodyKeyedRecord(project, body.name, member);
             if (keyed == nullptr) {
                 return std::unexpected(MissingBodyKeyedRecord(body, member));
             }
-            keyed->*member = given;
+            keyed->*member = *given;
             return {};
         },
         property.member);

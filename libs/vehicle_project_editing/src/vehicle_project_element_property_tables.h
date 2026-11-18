@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -120,7 +121,7 @@ enum class PropertySection {
     // Its station offset along the track from the vehicle layout zero, which
     // the dynamics use.
     kStationAlongTheTrack,
-    // Its placement offsets, which only place it in the drawing.
+    // Its placement offsets and rotation, which only place it in the drawing.
     kPreviewPlacement,
 };
 
@@ -386,12 +387,14 @@ consteval bool ListsOwnNameAsTheOnlyPlainText() {
 // The rigid-body properties held outside the body's own record, each in a
 // record keyed by the body's name (vehicle_project_records_following_elements.h): its station
 // offset in the vehicle definition's mechanical track station layout, and the
-// lateral and vertical offsets of its drawing placement, so that the three
-// state where along, across and above the track the body is. Each is named
-// after its record's member, prefixed with where that record lives.
+// lateral and vertical offsets and the rotation of its drawing placement, so
+// that they state where along, across and above the track the body is and
+// how it is turned in the drawing. Each is named after its record's member,
+// prefixed with where that record lives.
 using BodyKeyedMember =
     std::variant<double configuration::VehicleFreeBodyStationOffsetDefinition::*,
-                 double vehicle_project::FreeBodyPlacement::*>;
+                 double vehicle_project::FreeBodyPlacement::*,
+                 Eigen::Quaterniond vehicle_project::FreeBodyPlacement::*>;
 
 struct BodyKeyedProperty {
     std::string_view name;
@@ -411,6 +414,9 @@ inline constexpr std::array kBodyKeyedProperties{
         "placement.vertical_offset_in_local_track_frame_meters",
         &vehicle_project::FreeBodyPlacement::vertical_offset_in_local_track_frame_meters,
         PropertySection::kPreviewPlacement},
+    BodyKeyedProperty{"placement.rotation_local_track_from_body",
+                      &vehicle_project::FreeBodyPlacement::rotation_local_track_from_body,
+                      PropertySection::kPreviewPlacement},
 };
 
 }  // namespace orvd::vehicle_project_editing::internal

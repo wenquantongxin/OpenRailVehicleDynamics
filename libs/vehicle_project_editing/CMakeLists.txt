@@ -15,12 +15,14 @@ add_library(orvd_vehicle_project_editing STATIC
     src/vehicle_project_element_references.cc
     src/vehicle_project_element_removal.cc
     src/vehicle_project_model_tree_by_domains.cc
+    src/vehicle_project_orientation_property_values.cc
     src/vehicle_project_preview_computation.cc
     src/vehicle_project_property_edit_value_checks.cc
     src/vehicle_project_property_subjects.cc
     src/vehicle_project_records_following_elements.cc
     src/vehicle_project_rigid_body_attachment_changes.cc
     src/vehicle_project_rigid_body_attachments.cc
+    src/vehicle_project_rotation_from_and_to_roll_pitch_yaw_radians.cc
     src/vehicle_project_settings_property_assignment.cc
     src/vehicle_project_subject_properties.cc)
 

@@ -100,9 +100,12 @@ class VehicleProjectEditingSession {
     // subject has the property, the property is editable, the value holds the
     // property's value kind, and then by what the property holds:
     // - a number, a 3-vector or a curve has only finite numbers;
-    // - a station offset or a placement offset needs the record holding it,
-    //   the body's entry in the mechanical track station layout or its
-    //   placement;
+    // - a rotation is given by its three angles alone, all finite, and the
+    //   record then holds the rotation they give: a matrix, or a unit
+    //   quaternion for a placement;
+    // - a station offset, a placement offset or a placement rotation needs the
+    //   record holding it, the body's entry in the mechanical track station
+    //   layout or its placement;
     // - a reference names an element of a kind it may name, or names none
     //   where it may;
     // - a token is one of its choices;

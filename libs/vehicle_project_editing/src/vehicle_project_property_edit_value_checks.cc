@@ -14,7 +14,7 @@ constexpr PropertyValueKind ValueKindOf(std::type_identity<double>) {
 constexpr PropertyValueKind ValueKindOf(std::type_identity<Eigen::Vector3d>) {
     return PropertyValueKind::kVector3;
 }
-constexpr PropertyValueKind ValueKindOf(std::type_identity<Eigen::Matrix3d>) {
+constexpr PropertyValueKind ValueKindOf(std::type_identity<PropertyOrientation>) {
     return PropertyValueKind::kRotation;
 }
 constexpr PropertyValueKind ValueKindOf(std::type_identity<PropertyText>) {

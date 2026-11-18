@@ -70,6 +70,9 @@ JOINT_KINDS = ELEMENT_KINDS[2:5]
 STATION_OFFSET = "mechanical_track_station_layout.station_offset_meters"
 PLACEMENT_OFFSETS = ["placement.lateral_offset_in_local_track_frame_meters",
                      "placement.vertical_offset_in_local_track_frame_meters"]
+PLACEMENT_ROTATION = "placement.rotation_local_track_from_body"
+FREE_ONLY_PROPERTIES = [STATION_OFFSET, *PLACEMENT_OFFSETS, PLACEMENT_ROTATION]
+IDENTITY_ROWS = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 ATTACHMENT_FIELDS = {"summary", "note", "joint", "held_at", "can_become_free", "can_take_joint",
                      "frames_on_body", "frames_it_can_be_held_at"}
 GRAVITY = "gravitational_acceleration_meters_per_second_squared"
@@ -134,14 +137,13 @@ def is_title(value):
 def require_description(description):
     """A property description has the fields its value kind gives it: a
     reference the kinds it may name and whether it may name none, a token its
-    choices, a curve its row fields. Every element property is editable but a
-    rotation."""
+    choices, a curve its row fields. Every element property is editable."""
     value_kind = description["value_kind"]
     assert value_kind in DESCRIPTION_FIELDS_OF_VALUE_KIND, description
     assert set(description) - {"value"} == ({"name", "value_kind", "editable", "section"} |
                                              DESCRIPTION_FIELDS_OF_VALUE_KIND[value_kind]), description
     assert description["section"] is None or is_title(description["section"]), description
-    assert description["editable"] == (value_kind != "rotation"), description
+    assert description["editable"], description
     if value_kind == "element_reference":
         assert description["referenced_kinds"], description
         assert all(kind in ELEMENT_KINDS for kind in description["referenced_kinds"]), description
@@ -350,7 +352,7 @@ def verify_attachments(executable, gz18, irw):
         "held_at_title": {"en": "Held at", "zh": "挂接在"},
         "joint_kinds": JOINT_KINDS, "body_end_property": "child_frame_name",
         "other_end_property": "parent_frame_name",
-        "free_only_properties": [STATION_OFFSET, *PLACEMENT_OFFSETS]}, description
+        "free_only_properties": FREE_ONLY_PROPERTIES}, description
     assert all(name in described["rigid_body"] for name in description["free_only_properties"])
     assert all({description["body_end_property"], description["other_end_property"]} <=
                set(described[kind]) for kind in JOINT_KINDS)
@@ -421,7 +423,7 @@ def verify_attachments(executable, gz18, irw):
     assert (hung["revision"], hung["can_undo"]) == (before["revision"] + 1, True), hung
     hung_attachment = attachment_of(bogie)
     assert (hung_attachment["joint"], hung_attachment["held_at"]) == (weld, body("carbody"))
-    assert all(values_of(bogie)[name] is None for name in [STATION_OFFSET, *PLACEMENT_OFFSETS])
+    assert all(values_of(bogie)[name] is None for name in FREE_ONLY_PROPERTIES)
     assert service.accepted("check")["result"]["passed"]
     service.accepted("undo")
     assert attachment_of(bogie)["joint"] is None and weld not in outline_elements()
@@ -432,6 +434,8 @@ def verify_attachments(executable, gz18, irw):
     assert freed["result"] == {"joint": None}, freed
     assert pivot not in outline_elements()
     assert all(values_of(carrier)[name] == 0.0 for name in [STATION_OFFSET, *PLACEMENT_OFFSETS])
+    assert values_of(carrier)[PLACEMENT_ROTATION] == {"matrix_rows": IDENTITY_ROWS,
+                                                      "roll_pitch_yaw_radians": [0.0, 0.0, 0.0]}
     assert service.accepted("check")["result"]["passed"]
     service.accepted("undo")
     assert attachment_of(carrier)["joint"] == pivot
@@ -619,7 +623,9 @@ def verify_new_project_from_template(executable, templates, work_directory):
         "center_of_mass_in_body_frame_meters": [0.0, 0.0, 0.0],
         "inertia_moments_about_center_of_mass_kilogram_square_meters": [1.0 / 6.0] * 3,
         "inertia_products_about_center_of_mass_kilogram_square_meters": [0.0, 0.0, 0.0],
-        STATION_OFFSET: 0.0, PLACEMENT_OFFSETS[0]: 0.0, PLACEMENT_OFFSETS[1]: -0.5}, values
+        STATION_OFFSET: 0.0, PLACEMENT_OFFSETS[0]: 0.0, PLACEMENT_OFFSETS[1]: -0.5,
+        PLACEMENT_ROTATION: {"matrix_rows": IDENTITY_ROWS,
+                             "roll_pitch_yaw_radians": [0.0, 0.0, 0.0]}}, values
     gravity = service.accepted("get_properties", subject={"settings": "gravity"})["result"]
     assert gravity["properties"][0]["value"] == 9.81, gravity
     assert service.accepted("check")["result"]["passed"]
@@ -679,6 +685,110 @@ def verify_new_project_from_template(executable, templates, work_directory):
     assert service.accepted("check")["result"]["passed"]
     service.finish()
     assert template_path.read_bytes() == template_bytes, "the template was written"
+
+
+def product_of_rows(first, second):
+    """The product of two 3x3 matrices given as rows."""
+    return [[sum(first[row][k] * second[k][column] for k in range(3)) for column in range(3)]
+            for row in range(3)]
+
+
+def rotation_rows_of(roll, pitch, yaw):
+    """Rz(yaw) Ry(pitch) Rx(roll), each factor written out."""
+    about_z = [[math.cos(yaw), -math.sin(yaw), 0.0], [math.sin(yaw), math.cos(yaw), 0.0],
+               [0.0, 0.0, 1.0]]
+    about_y = [[math.cos(pitch), 0.0, math.sin(pitch)], [0.0, 1.0, 0.0],
+               [-math.sin(pitch), 0.0, math.cos(pitch)]]
+    about_x = [[1.0, 0.0, 0.0], [0.0, math.cos(roll), -math.sin(roll)],
+               [0.0, math.sin(roll), math.cos(roll)]]
+    return product_of_rows(product_of_rows(about_z, about_y), about_x)
+
+
+def near(first, second, tolerance=1.0e-12):
+    """Two numbers, vectors or rows of rows within the tolerance."""
+    if isinstance(first, list):
+        return len(first) == len(second) and all(map(near, first, second,
+                                                     [tolerance] * len(first)))
+    return abs(first - second) <= tolerance
+
+
+def verify_orientations(executable, irw, templates):
+    """Orientations through commands alone: a rotation read as its matrix and
+    the radians that give it, on IRW's carriers and a turned marker; a
+    placement turned and a marker created turned on the single rigid body,
+    read back and drawn so; and the other forms of a rotation refused."""
+    service = Service(executable)
+    service.accepted("open_vehicle", **irw)
+
+    def orientation_of(element, property_name):
+        properties = service.accepted("get_properties", subject={"element": element})["result"][
+            "properties"]
+        reading = next(prop for prop in properties if prop["name"] == property_name)
+        assert reading["value_kind"] == "rotation" and reading["editable"], reading
+        value = reading["value"]
+        assert set(value) == {"matrix_rows", "roll_pitch_yaw_radians"}, value
+        return value
+
+    # IRW's carriers hold the half turn about x that turns a wheel profile's
+    # basis into the body's; one of its markers is turned about z.
+    contact_record = json.loads(Path(irw["contact_record_path"]).read_text())
+    carrier = contact_record["declaration"]["carriers"][0]
+    stated = [[row[axis] for axis in "xyz"]
+              for row in carrier["rotation_body_from_nonspinning_wheel_profile"]]
+    read = orientation_of({"kind": "contact_carrier", "name": carrier["carrier_name"]},
+                          "rotation_body_from_nonspinning_wheel_profile")
+    assert read["matrix_rows"] == stated, read
+    assert read["roll_pitch_yaw_radians"] == [math.pi, 0.0, 0.0], read
+    vehicle_file = json.loads(Path(irw["vehicle_definition_path"]).read_text())
+    turned = next(frame for frame in vehicle_file["fixed_frames"]
+                  if frame["rotation_in_body_frame"]["form"] == "matrix_rows"
+                  and frame["rotation_in_body_frame"]["rows"][0]["x"] < 0.5)
+    read = orientation_of({"kind": "fixed_frame", "name": turned["name"]},
+                          "rotation_in_body_frame")
+    assert read["matrix_rows"] == [[row[axis] for axis in "xyz"]
+                                   for row in turned["rotation_in_body_frame"]["rows"]], read
+    assert near(rotation_rows_of(*read["roll_pitch_yaw_radians"]), read["matrix_rows"]), read
+
+    # The single rigid body turned by half a radian of roll, and a marker
+    # created on it a quarter turn of yaw from it; the preview draws both.
+    service.accepted("new_project_from_template", directory=str(templates), name="single_body")
+    body = {"kind": "rigid_body", "name": "body"}
+    turned_placement = service.accepted("set_property", subject={"element": body},
+                                        property=PLACEMENT_ROTATION,
+                                        value={"roll_pitch_yaw_radians": [0.5, 0.0, 0.0]})
+    assert (turned_placement["revision"], turned_placement["can_undo"],
+            turned_placement["has_unsaved_changes"]) == (1, True, True), turned_placement
+    read = orientation_of(body, PLACEMENT_ROTATION)
+    assert near(read["roll_pitch_yaw_radians"], [0.5, 0.0, 0.0]), read
+    assert near(read["matrix_rows"], rotation_rows_of(0.5, 0.0, 0.0)), read
+    marker = {"kind": "fixed_frame", "name": "turned_marker"}
+    service.accepted("add_element", kind="fixed_frame", name=marker["name"], properties={
+        "body_name": "body",
+        "rotation_in_body_frame": {"roll_pitch_yaw_radians": [0.0, 0.0, math.pi / 2]}})
+    read = orientation_of(marker, "rotation_in_body_frame")
+    assert near(read["roll_pitch_yaw_radians"], [0.0, 0.0, math.pi / 2]), read
+    assert service.accepted("check")["result"]["passed"]
+    preview = service.accepted("get_preview")["result"]["preview"]
+    drawn_body = next(drawn for drawn in preview["rigid_bodies"] if drawn["element"] == body)
+    drawn_marker = next(drawn for drawn in preview["fixed_frames"] if drawn["element"] == marker)
+    assert near(drawn_body["rotation_drawing_from_body"], rotation_rows_of(0.5, 0.0, 0.0))
+    assert near(drawn_marker["rotation_drawing_from_frame"],
+                product_of_rows(rotation_rows_of(0.5, 0.0, 0.0),
+                                rotation_rows_of(0.0, 0.0, math.pi / 2))), drawn_marker
+
+    # A rotation is given by its radians alone: rows, rows beside the
+    # radians, or two angles are refused, naming the property.
+    before = service.accepted("get_outline")
+    for value in (IDENTITY_ROWS, {"matrix_rows": IDENTITY_ROWS},
+                  {"matrix_rows": IDENTITY_ROWS, "roll_pitch_yaw_radians": [0.0, 0.0, 0.0]},
+                  {"roll_pitch_yaw_radians": [0.0, 0.0]}):
+        refusal = service.refused("set_property", subject={"element": marker},
+                                  property="rotation_in_body_frame", value=value)
+        assert (refusal["subject"], refusal["property"]) == (
+            {"element": marker}, "rotation_in_body_frame"), refusal
+    after = service.accepted("get_outline")
+    assert (after["revision"], after["result"]) == (before["revision"], before["result"])
+    service.finish()
 
 
 def everything_read_of(service):
@@ -951,8 +1061,7 @@ def main():
     # edit those properties, this body cannot, and an edit of one is refused.
     jointed_body = {"kind": "rigid_body", "name": "front_leading_left_axlebox_carrier"}
     jointed_readings = readings_of(jointed_body)
-    for name in (station_offset, "placement.lateral_offset_in_local_track_frame_meters",
-                 "placement.vertical_offset_in_local_track_frame_meters"):
+    for name in FREE_ONLY_PROPERTIES:
         assert rigid_body_kind[name]["editable"]
         assert jointed_readings[name]["value"] is None and not jointed_readings[name]["editable"]
     assert jointed_readings["mass_kilograms"]["editable"]
@@ -1162,6 +1271,7 @@ def main():
     verify_attachments(executable, gz18, irw)
     verify_vehicle_layout_zero(executable, gz18, work_directory)
     verify_new_project_from_template(executable, templates, work_directory)
+    verify_orientations(executable, irw, templates)
     verify_saving_and_reopening(executable, gz18, irw, work_directory)
     assert {path: path.read_bytes() for path in reference_files} == reference_files, (
         "a reference vehicle's file changed")
